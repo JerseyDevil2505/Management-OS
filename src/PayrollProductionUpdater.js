@@ -244,14 +244,6 @@ const XLSX = window.XLSX || await import('xlsx');
         <p className="text-gray-600">
           Automate bimonthly payroll processing and production tracking with built-in data cleaning and analytics
         </p>
-        <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded">
-          <h3 className="text-sm font-semibold text-blue-800 mb-1">📅 Typical Usage Schedule:</h3>
-          <div className="text-sm text-blue-700">
-            • <strong>Bimonthly Reports:</strong> Run 2 business days before pay period ends<br/>
-            • <strong>Month-End Reports:</strong> Run at the end of each month for final reconciliation<br/>
-            • <strong>Ad-Hoc Reports:</strong> Can be run anytime for progress tracking
-          </div>
-        </div>
       </div>
 
       {/* Tab Navigation */}
@@ -491,32 +483,7 @@ const XLSX = window.XLSX || await import('xlsx');
                 </div>
               )}
             </div>
-
-            {/* Color Coding Information */}
-            <div className="mt-6 p-4 bg-white rounded-lg border border-gray-200">
-              <h4 className="font-semibold text-gray-800 mb-3 flex items-center">
-                🎨 Color Coding System
-              </h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                <div className="flex items-center p-3 rounded-lg border border-blue-200 bg-blue-50">
-                  <div className="w-6 h-6 bg-blue-200 border border-blue-300 rounded mr-3"></div>
-                  <div>
-                    <div className="font-medium text-blue-800">🏭 Commercial Inspectors</div>
-                    <div className="text-blue-600">Excel "Slipstream" blue scheme for inspected rows</div>
-                  </div>
-                </div>
-                <div className="flex items-center p-3 rounded-lg border border-green-200 bg-green-50">
-                  <div className="w-6 h-6 bg-green-200 border border-green-300 rounded mr-3"></div>
-                  <div>
-                    <div className="font-medium text-green-800">🏠 Residential Inspectors</div>
-                    <div className="text-green-600">Excel "Slipstream" green scheme for inspected rows</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+       )}
 
       {/* Upload Tab */}
       {activeTab === 'upload' && (
@@ -1311,15 +1278,7 @@ const XLSX = window.XLSX || await import('xlsx');
             </div>
           </div>
         </div>
-        
-        <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded">
-          <h4 className="font-semibold text-yellow-800 mb-2">💰 Payroll Calculation:</h4>
-          <div className="text-sm text-yellow-700">
-            <strong>$2.00 per property bonus</strong> for Class 2 & 3A properties only, calculated from work completed since the "Last Payroll Update" date. Perfect for bimonthly and monthly payroll processing.
-          </div>
-        </div>
-      </div>
-    </div>
+     </div>
   );
 };
 
