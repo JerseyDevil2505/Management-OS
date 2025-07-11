@@ -8,7 +8,7 @@ const PayrollProductionUpdater = () => {
   const [excelFile, setExcelFile] = useState(null);
   const [processing, setProcessing] = useState(false);
   const [results, setResults] = useState(null);
-  const [activeTab, setActiveTab] = useState('upload');
+  const [activeTab, setActiveTab] = useState('inspectors');
   const [jobs, setJobs] = useState({});
   const [currentJobName, setCurrentJobName] = useState('');
   const [jobMetrics, setJobMetrics] = useState(null);
@@ -737,6 +737,16 @@ const PayrollProductionUpdater = () => {
         <div className="border-b border-gray-200">
           <nav className="-mb-px flex space-x-8">
             <button
+              onClick={() => setActiveTab('inspectors')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'inspectors'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              👥 Inspector Management
+            </button>
+            <button
               onClick={() => setActiveTab('upload')}
               className={`py-2 px-1 border-b-2 font-medium text-sm ${
                 activeTab === 'upload'
@@ -769,6 +779,169 @@ const PayrollProductionUpdater = () => {
           </nav>
         </div>
       </div>
+
+      {/* Inspector Management Tab */}
+      {activeTab === 'inspectors' && (
+        <div className="space-y-6">
+          <div className="bg-gradient-to-r from-blue-50 to-green-50 rounded-lg border-2 border-blue-200 p-6">
+            <div className="flex items-center mb-6">
+              <Settings className="w-8 h-8 mr-3 text-blue-600" />
+              <div>
+                <h2 className="text-2xl font-bold text-gray-800">👥 Inspector Management</h2>
+                <p className="text-gray-600 mt-1">Manage inspector profiles for payroll tracking and color coding</p>
+              </div>
+            </div>
+            
+            {/* Add New Inspector */}
+            <div className="mb-6 p-6 bg-white rounded-lg border shadow-sm">
+              <h3 className="text-lg font-semibold mb-4 text-gray-700 flex items-center">
+                ➕ Add New Inspector
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Initials *</label>
+                  <input
+                    type="text"
+                    placeholder="e.g., AM"
+                    value={newInspector.initials}
+                    onChange={(e) => setNewInspector({...newInspector, initials: e.target.value.toUpperCase()})}
+                    className="w-full p-3 border rounded-lg text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    maxLength="3"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">2-3 uppercase letters</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Full Name *</label>
+                  <input
+                    type="text"
+                    placeholder="e.g., Arcadio Martinez"
+                    value={newInspector.name}
+                    onChange={(e) => setNewInspector({...newInspector, name: e.target.value})}
+                    className="w-full p-3 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Inspector's full name</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Inspector Type *</label>
+                  <select
+                    value={newInspector.type}
+                    onChange={(e) => setNewInspector({...newInspector, type: e.target.value})}
+                    className="w-full p-3 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="residential">🏠 Residential</option>
+                    <option value="commercial">🏢 Commercial</option>
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">Determines color coding</p>
+                </div>
+                <div className="flex items-end">
+                  <button
+                    onClick={() => {
+                      if (newInspector.initials && newInspector.name) {
+                        setInspectorDefinitions({
+                          ...inspectorDefinitions,
+                          [newInspector.initials]: {
+                            name: newInspector.name,
+                            type: newInspector.type
+                          }
+                        });
+                        setNewInspector({ initials: '', name: '', type: 'residential' });
+                      }
+                    }}
+                    disabled={!newInspector.initials || !newInspector.name}
+                    className="w-full px-4 py-3 bg-green-500 text-white rounded-lg text-sm font-medium hover:bg-green-600 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Add Inspector
+                  </button>
+                </div>
+              </div>
+            </div>
+            
+            {/* Current Inspectors */}
+            <div className="p-6 bg-white rounded-lg border shadow-sm">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold text-gray-700 flex items-center">
+                  📋 Current Inspectors
+                </h3>
+                <div className="text-sm text-gray-600 bg-gray-100 px-3 py-1 rounded-full">
+                  {Object.keys(inspectorDefinitions).length} inspector{Object.keys(inspectorDefinitions).length !== 1 ? 's' : ''} configured
+                </div>
+              </div>
+              
+              {Object.keys(inspectorDefinitions).length === 0 ? (
+                <div className="text-center text-gray-500 py-12">
+                  <div className="text-4xl mb-4">👥</div>
+                  <h4 className="text-lg font-medium mb-2">No Inspectors Configured</h4>
+                  <p className="text-sm">Add your first inspector above to get started with payroll tracking and color coding!</p>
+                </div>
+              ) : (
+                <div className="space-y-3 max-h-96 overflow-y-auto">
+                  {Object.entries(inspectorDefinitions).map(([initials, info]) => (
+                    <div key={initials} className={`flex justify-between items-center p-4 rounded-lg border-l-4 transition-all hover:shadow-md ${
+                      info.type === 'commercial' ? 'bg-blue-50 border-blue-400 hover:bg-blue-100' : 'bg-green-50 border-green-400 hover:bg-green-100'
+                    }`}>
+                      <div className="flex items-center flex-1">
+                        <div className="flex items-center justify-center w-12 h-12 rounded-full bg-white border-2 border-current mr-4">
+                          <span className={`font-bold text-lg ${
+                            info.type === 'commercial' ? 'text-blue-600' : 'text-green-600'
+                          }`}>
+                            {initials}
+                          </span>
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3">
+                            <span className="font-semibold text-lg text-gray-800">{info.name}</span>
+                            <span className={`px-3 py-1 text-xs font-medium rounded-full ${
+                              info.type === 'commercial' ? 'bg-blue-200 text-blue-800' : 'bg-green-200 text-green-800'
+                            }`}>
+                              {info.type === 'commercial' ? '🏢 Commercial' : '🏠 Residential'}
+                            </span>
+                          </div>
+                          <div className="text-sm text-gray-600 mt-1">
+                            Color coding: {info.type === 'commercial' ? 'Blue scheme for commercial properties' : 'Green scheme for residential properties'}
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          const updated = {...inspectorDefinitions};
+                          delete updated[initials];
+                          setInspectorDefinitions(updated);
+                        }}
+                        className="ml-4 text-red-500 hover:text-red-700 text-sm font-medium px-4 py-2 rounded hover:bg-red-50 transition-colors border border-red-200 hover:border-red-300"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Color Coding Information */}
+            <div className="mt-6 p-4 bg-white rounded-lg border border-gray-200">
+              <h4 className="font-semibold text-gray-800 mb-3 flex items-center">
+                🎨 Color Coding System
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <div className="flex items-center p-3 rounded-lg border border-blue-200 bg-blue-50">
+                  <div className="w-6 h-6 bg-blue-200 border border-blue-300 rounded mr-3"></div>
+                  <div>
+                    <div className="font-medium text-blue-800">Commercial Inspectors</div>
+                    <div className="text-blue-600">Excel "Slipstream" blue scheme for inspected rows</div>
+                  </div>
+                </div>
+                <div className="flex items-center p-3 rounded-lg border border-green-200 bg-green-50">
+                  <div className="w-6 h-6 bg-green-200 border border-green-300 rounded mr-3"></div>
+                  <div>
+                    <div className="font-medium text-green-800">Residential Inspectors</div>
+                    <div className="text-green-600">Excel "Slipstream" green scheme for inspected rows</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Upload Tab */}
       {activeTab === 'upload' && (
@@ -806,100 +979,6 @@ const PayrollProductionUpdater = () => {
                   </select>
                 </div>
               )}
-            </div>
-          </div>
-
-          {/* Inspector Management Section - Always Visible */}
-          <div className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-green-50 rounded-lg border-2 border-blue-200">
-            <div className="flex items-center mb-4">
-              <Settings className="w-6 h-6 mr-2 text-blue-600" />
-              <h3 className="text-xl font-semibold text-gray-800">👥 Inspector Management</h3>
-            </div>
-            
-            <div className="space-y-4">
-              {/* Add New Inspector */}
-              <div className="p-4 bg-white rounded-lg border shadow-sm">
-                <h4 className="font-semibold mb-3 text-gray-700">➕ Add New Inspector</h4>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                  <input
-                    type="text"
-                    placeholder="Initials (e.g., AM)"
-                    value={newInspector.initials}
-                    onChange={(e) => setNewInspector({...newInspector, initials: e.target.value.toUpperCase()})}
-                    className="p-3 border rounded-lg text-sm font-medium"
-                    maxLength="3"
-                  />
-                  <input
-                    type="text"
-                    placeholder="Full Name (e.g., Arcadio Martinez)"
-                    value={newInspector.name}
-                    onChange={(e) => setNewInspector({...newInspector, name: e.target.value})}
-                    className="p-3 border rounded-lg text-sm"
-                  />
-                  <select
-                    value={newInspector.type}
-                    onChange={(e) => setNewInspector({...newInspector, type: e.target.value})}
-                    className="p-3 border rounded-lg text-sm"
-                  >
-                    <option value="residential">🏠 Residential</option>
-                    <option value="commercial">🏢 Commercial</option>
-                  </select>
-                  <button
-                    onClick={() => {
-                      if (newInspector.initials && newInspector.name) {
-                        setInspectorDefinitions({
-                          ...inspectorDefinitions,
-                          [newInspector.initials]: {
-                            name: newInspector.name,
-                            type: newInspector.type
-                          }
-                        });
-                        setNewInspector({ initials: '', name: '', type: 'residential' });
-                      }
-                    }}
-                    className="px-4 py-3 bg-green-500 text-white rounded-lg text-sm font-medium hover:bg-green-600 transition-colors"
-                  >
-                    Add Inspector
-                  </button>
-                </div>
-              </div>
-              
-              {/* Current Inspectors */}
-              <div className="p-4 bg-white rounded-lg border shadow-sm">
-                <h4 className="font-semibold mb-3 text-gray-700">📋 Current Inspectors ({Object.keys(inspectorDefinitions).length})</h4>
-                <div className="space-y-2 max-h-48 overflow-y-auto">
-                  {Object.entries(inspectorDefinitions).map(([initials, info]) => (
-                    <div key={initials} className={`flex justify-between items-center p-3 rounded-lg border-l-4 ${
-                      info.type === 'commercial' ? 'bg-blue-50 border-blue-400' : 'bg-green-50 border-green-400'
-                    }`}>
-                      <div className="flex items-center">
-                        <span className="font-bold text-lg mr-3">{initials}</span>
-                        <span className="text-gray-700">{info.name}</span>
-                        <span className={`ml-3 px-3 py-1 text-xs font-medium rounded-full ${
-                          info.type === 'commercial' ? 'bg-blue-200 text-blue-800' : 'bg-green-200 text-green-800'
-                        }`}>
-                          {info.type === 'commercial' ? '🏢 Commercial' : '🏠 Residential'}
-                        </span>
-                      </div>
-                      <button
-                        onClick={() => {
-                          const updated = {...inspectorDefinitions};
-                          delete updated[initials];
-                          setInspectorDefinitions(updated);
-                        }}
-                        className="text-red-500 hover:text-red-700 text-sm font-medium px-3 py-1 rounded hover:bg-red-50 transition-colors"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  ))}
-                  {Object.keys(inspectorDefinitions).length === 0 && (
-                    <div className="text-center text-gray-500 py-6">
-                      <p>No inspectors defined yet. Add your first inspector above!</p>
-                    </div>
-                  )}
-                </div>
-              </div>
             </div>
           </div>
 
