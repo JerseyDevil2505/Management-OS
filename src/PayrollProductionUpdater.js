@@ -51,8 +51,8 @@ const PayrollProductionUpdater = () => {
   try {
     const excelArrayBuffer = await readFileAsArrayBuffer(file);
     
-    // Import XLSX library (note: this should be available in the React environment)
-    const XLSX = await import('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
+  // Use the SheetJS library that should be available
+const XLSX = window.XLSX || await import('xlsx');  
     
     // Read the Excel file
     const workbook = XLSX.read(excelArrayBuffer, {
