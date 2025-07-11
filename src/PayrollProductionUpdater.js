@@ -2084,78 +2084,80 @@ const PayrollProductionUpdater = () => {
               </div>
             ) : (
               <div className="space-y-4">
-                {Object.entries(jobs).map(([jobName, jobData]) => (
-                  <div key={jobName} className="bg-white p-6 rounded-lg shadow-md border border-gray-200">
-                    <div className="flex justify-between items-start mb-4">
-                      <div>
-                        <h3 className="text-lg font-semibold text-gray-800">{jobName}</h3>
-                        <p className="text-sm text-gray-600">
-                          Processed: {new Date(jobData.date).toLocaleString()}
-                        </p>
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => {
-                            setJobMetrics(jobData.metrics);
-                            setActiveTab('metrics');
-                          }}
-                          className="px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600"
-                        >
-                          View Metrics
-                        </button>
-                        <button
-                          onClick={() => {
-                            setCurrentJobName(jobName);
-                            setActiveTab('upload');
-                          }}
-                          className="px-3 py-1 bg-green-500 text-white rounded text-sm hover:bg-green-600"
-                        >
-                          Reload Job
-                        </button>
-                      </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                      <div className="text-center p-3 bg-blue-50 rounded">
-                        <div className="text-xl font-bold text-blue-600">
-                          {jobData.metrics.overallCompletion.percentage.toFixed(1)}%
+                {Object.entries(jobs).map(([jobName, jobData]) => {
+                  return (
+                    <div key={jobName} className="bg-white p-6 rounded-lg shadow-md border border-gray-200">
+                      <div className="flex justify-between items-start mb-4">
+                        <div>
+                          <h3 className="text-lg font-semibold text-gray-800">{jobName}</h3>
+                          <p className="text-sm text-gray-600">
+                            Processed: {new Date(jobData.date).toLocaleString()}
+                          </p>
                         </div>
-                        <div className="text-xs text-gray-600">Overall Complete</div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              setJobMetrics(jobData.metrics);
+                              setActiveTab('metrics');
+                            }}
+                            className="px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600"
+                          >
+                            View Metrics
+                          </button>
+                          <button
+                            onClick={() => {
+                              setCurrentJobName(jobName);
+                              setActiveTab('upload');
+                            }}
+                            className="px-3 py-1 bg-green-500 text-white rounded text-sm hover:bg-green-600"
+                          >
+                            Reload Job
+                          </button>
+                        </div>
                       </div>
                       
-                      <div className="text-center p-3 bg-green-50 rounded">
-                        <div className="text-xl font-bold text-green-600">
-                          {jobData.metrics.interiorInspections.class2_3A.percentage.toFixed(1)}%
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div className="text-center p-3 bg-blue-50 rounded">
+                          <div className="text-xl font-bold text-blue-600">
+                            {jobData.metrics.overallCompletion.percentage.toFixed(1)}%
+                          </div>
+                          <div className="text-xs text-gray-600">Overall Complete</div>
                         </div>
-                        <div className="text-xs text-gray-600">Interior Entry Rate</div>
+                        
+                        <div className="text-center p-3 bg-green-50 rounded">
+                          <div className="text-xl font-bold text-green-600">
+                            {jobData.metrics.interiorInspections.class2_3A.percentage.toFixed(1)}%
+                          </div>
+                          <div className="text-xs text-gray-600">Interior Entry Rate</div>
+                        </div>
+                        
+                        <div className="text-center p-3 bg-purple-50 rounded">
+                          <div className="text-xl font-bold text-purple-600">
+                            {jobData.metrics.pricingInspections.class4ABC.percentage.toFixed(1)}%
+                          </div>
+                          <div className="text-xs text-gray-600">Pricing Rate</div>
+                        </div>
+                        
+                        <div className="text-center p-3 bg-orange-50 rounded">
+                          <div className="text-xl font-bold text-orange-600">
+                            {jobData.metrics.projectedCompletion.businessDaysToComplete || 'N/A'}
+                          </div>
+                          <div className="text-xs text-gray-600">Days to Complete</div>
+                        </div>
                       </div>
                       
-                      <div className="text-center p-3 bg-purple-50 rounded">
-                        <div className="text-xl font-bold text-purple-600">
-                          {jobData.metrics.pricingInspections.class4ABC.percentage.toFixed(1)}%
+                      <div className="mt-4 pt-3 border-t border-gray-200">
+                        <div className="flex justify-between text-sm text-gray-600">
+                          <span>Total Properties: {jobData.metrics.overallCompletion.total.toLocaleString()}</span>
+                          <span>Active Inspectors: {Object.keys(jobData.metrics.inspectorActivity).length}</span>
+                          {jobData.metrics.projectedCompletion.estimatedFinishDate && (
+                            <span>Est. Finish: {jobData.metrics.projectedCompletion.estimatedFinishDate.toLocaleDateString()}</span>
+                          )}
                         </div>
-                        <div className="text-xs text-gray-600">Pricing Rate</div>
-                      </div>
-                      
-                      <div className="text-center p-3 bg-orange-50 rounded">
-                        <div className="text-xl font-bold text-orange-600">
-                          {jobData.metrics.projectedCompletion.businessDaysToComplete || 'N/A'}
-                        </div>
-                        <div className="text-xs text-gray-600">Days to Complete</div>
                       </div>
                     </div>
-                    
-                    <div className="mt-4 pt-3 border-t border-gray-200">
-                      <div className="flex justify-between text-sm text-gray-600">
-                        <span>Total Properties: {jobData.metrics.overallCompletion.total.toLocaleString()}</span>
-                        <span>Active Inspectors: {Object.keys(jobData.metrics.inspectorActivity).length}</span>
-                        {jobData.metrics.projectedCompletion.estimatedFinishDate && (
-                          <span>Est. Finish: {jobData.metrics.projectedCompletion.estimatedFinishDate.toLocaleDateString()}</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
