@@ -849,6 +849,16 @@ const PayrollProductionUpdater = () => {
               📁 Upload & Process
             </button>
             <button
+              onClick={() => setActiveTab('payroll')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'payroll'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              💰 Payroll Processing
+            </button>
+            <button
               onClick={() => setActiveTab('metrics')}
               className={`py-2 px-1 border-b-2 font-medium text-sm ${
                 activeTab === 'metrics'
@@ -1137,7 +1147,7 @@ const PayrollProductionUpdater = () => {
               </div>
               
               <div>
-                <label className="block text-sm font-medium mb-1">Last Payroll Update</label>
+                <label className="block text-sm font-medium mb-1">Payroll Process Date</label>
                 <input
                   type="date"
                   value={settings.lastUpdateDate}
@@ -1145,32 +1155,6 @@ const PayrollProductionUpdater = () => {
                   className="w-full p-2 border rounded-md"
                 />
                 <p className="text-xs text-gray-500 mt-1">Calculate pay for work since this date</p>
-              </div>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">Pay Per Property ($)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={settings.payPerProperty}
-                  onChange={(e) => setSettings({...settings, payPerProperty: parseFloat(e.target.value) || 0})}
-                  className="w-full p-2 border rounded-md"
-                />
-                <p className="text-xs text-gray-500 mt-1">Bonus for Class 2 & 3A properties</p>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium mb-1">Target Property Classes</label>
-                <input
-                  type="text"
-                  value={settings.targetPropertyClasses.join(', ')}
-                  onChange={(e) => setSettings({...settings, targetPropertyClasses: e.target.value.split(',').map(c => c.trim())})}
-                  className="w-full p-2 border rounded-md"
-                  placeholder="2, 3A"
-                />
-                <p className="text-xs text-gray-500 mt-1">Classes eligible for bonus pay</p>
               </div>
             </div>
             
@@ -1251,44 +1235,23 @@ const PayrollProductionUpdater = () => {
                 <label className="flex items-center">
                   <input
                     type="checkbox"
-                    checked={settings.autoMarkInspected}
-                    onChange={(e) => setSettings({...settings, autoMarkInspected: e.target.checked})}
-                    className="mr-2"
-                  />
-                  <span className="text-sm">Auto-mark "YES" in Inspected column</span>
-                </label>
-                
-                <label className="flex items-center">
-                  <input
-                    type="checkbox"
                     checked={settings.applyColorCoding}
                     onChange={(e) => setSettings({...settings, applyColorCoding: e.target.checked})}
                     className="mr-2"
                   />
-                  <span className="text-sm">Apply color coding</span>
-                </label>
-                
-                <label className="flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={settings.useSlipstreamColors}
-                    onChange={(e) => setSettings({...settings, useSlipstreamColors: e.target.checked})}
-                    className="mr-2"
-                    disabled={!settings.applyColorCoding}
-                  />
-                  <span className="text-sm">Use Excel "Slipstream" color scheme</span>
+                  <span className="text-sm">Apply color coding to export</span>
                 </label>
               </div>
             </div>
           </div>
 
           {/* File Upload Section */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
-              <Upload className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-              <h3 className="text-lg font-semibold mb-2">Upload CSV File</h3>
-              <p className="text-sm text-gray-600 mb-4">
-                Select the REVAL PRODUCTION CSV file
+          <div className="mb-6">
+            <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center bg-gradient-to-br from-blue-50 to-green-50">
+              <Upload className="w-16 h-16 mx-auto mb-4 text-blue-500" />
+              <h3 className="text-xl font-semibold mb-2 text-gray-800">Upload CSV Production File</h3>
+              <p className="text-sm text-gray-600 mb-6">
+                Select your REVAL PRODUCTION CSV file for processing and analytics
               </p>
               <input
                 ref={csvInputRef}
@@ -1299,40 +1262,19 @@ const PayrollProductionUpdater = () => {
               />
               <button
                 onClick={() => csvInputRef.current.click()}
-                className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
+                className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 font-medium text-lg"
               >
                 Choose CSV File
               </button>
               {csvFile && (
-                <p className="mt-2 text-sm text-green-600">
-                  ✓ {csvFile.name}
-                </p>
-              )}
-            </div>
-
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
-              <Upload className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-              <h3 className="text-lg font-semibold mb-2">Upload Excel File</h3>
-              <p className="text-sm text-gray-600 mb-4">
-                Select the Production Excel file to update
-              </p>
-              <input
-                ref={excelInputRef}
-                type="file"
-                accept=".xlsx,.xls"
-                onChange={(e) => handleFileUpload(e.target.files[0], 'excel')}
-                className="hidden"
-              />
-              <button
-                onClick={() => excelInputRef.current.click()}
-                className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600"
-              >
-                Choose Excel File
-              </button>
-              {excelFile && (
-                <p className="mt-2 text-sm text-green-600">
-                  ✓ {excelFile.name}
-                </p>
+                <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                  <p className="text-green-700 font-medium">
+                    ✓ File Ready: {csvFile.name}
+                  </p>
+                  <p className="text-sm text-green-600 mt-1">
+                    File loaded and ready for processing
+                  </p>
+                </div>
               )}
             </div>
           </div>
@@ -1341,11 +1283,21 @@ const PayrollProductionUpdater = () => {
           <div className="text-center mb-6">
             <button
               onClick={processFiles}
-              disabled={!csvFile || !excelFile || !currentJobName.trim() || processing}
-              className="px-8 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-lg font-semibold"
+              disabled={!csvFile || !currentJobName.trim() || processing}
+              className="px-12 py-4 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-xl font-bold shadow-lg"
             >
-              {processing ? 'Processing...' : 'Update Production Data'}
+              {processing ? (
+                <span className="flex items-center gap-3">
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                  Scrubbing & Validating...
+                </span>
+              ) : (
+                '🧹 Scrub & Validate Data'
+              )}
             </button>
+            <p className="text-sm text-gray-600 mt-2">
+              Clean data, validate inspectors, and generate analytics
+            </p>
           </div>
 
           {/* Results Section */}
@@ -1594,6 +1546,155 @@ const PayrollProductionUpdater = () => {
                 <strong>$2.00 per property bonus</strong> for Class 2 & 3A properties only, calculated from work completed since the "Last Payroll Update" date. Perfect for bimonthly and monthly payroll processing.
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Payroll Processing Tab */}
+      {activeTab === 'payroll' && (
+        <div className="space-y-6">
+          <div className="bg-gradient-to-r from-green-50 to-blue-50 rounded-lg border-2 border-green-200 p-6">
+            <div className="flex items-center mb-6">
+              <div className="text-4xl mr-4">💰</div>
+              <div>
+                <h2 className="text-2xl font-bold text-gray-800">Payroll Processing</h2>
+                <p className="text-gray-600 mt-1">Calculate field pay bonuses for Class 2 & 3A properties</p>
+              </div>
+            </div>
+            
+            {/* Payroll Settings */}
+            <div className="mb-6 p-6 bg-white rounded-lg border shadow-sm">
+              <h3 className="text-lg font-semibold mb-4 text-gray-700">⚙️ Payroll Settings</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Payroll Process Date</label>
+                  <input
+                    type="date"
+                    value={settings.lastUpdateDate}
+                    onChange={(e) => setSettings({...settings, lastUpdateDate: e.target.value})}
+                    className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Calculate pay for work since this date</p>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Pay Rate Per Property</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-3 text-gray-500">$</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={settings.payPerProperty}
+                      onChange={(e) => setSettings({...settings, payPerProperty: parseFloat(e.target.value) || 0})}
+                      className="w-full pl-8 p-3 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">Bonus amount per eligible property</p>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Eligible Property Classes</label>
+                  <input
+                    type="text"
+                    value={settings.targetPropertyClasses.join(', ')}
+                    readOnly
+                    className="w-full p-3 border rounded-lg bg-gray-50 text-gray-600"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Fixed: Class 2 & 3A properties only</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Payroll Status */}
+            {results && results.payrollAnalytics ? (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-gray-700">📊 Payroll Summary</h3>
+                  <div className="text-sm text-gray-600 bg-blue-100 px-3 py-1 rounded-full">
+                    Stats as of {new Date().toLocaleString()}
+                  </div>
+                </div>
+                
+                {/* Summary Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                  <div className="text-center p-4 bg-white rounded-lg shadow border-l-4 border-green-500">
+                    <div className="text-3xl font-bold text-green-600">${results.payrollAnalytics.totalPayroll.toFixed(2)}</div>
+                    <div className="text-sm text-gray-600">Total Field Pay</div>
+                  </div>
+                  <div className="text-center p-4 bg-white rounded-lg shadow border-l-4 border-blue-500">
+                    <div className="text-3xl font-bold text-blue-600">{results.payrollAnalytics.eligibleProperties}</div>
+                    <div className="text-sm text-gray-600">Eligible Properties</div>
+                  </div>
+                  <div className="text-center p-4 bg-white rounded-lg shadow border-l-4 border-purple-500">
+                    <div className="text-3xl font-bold text-purple-600">{Object.keys(results.payrollAnalytics.inspectorStats).length}</div>
+                    <div className="text-sm text-gray-600">Active Inspectors</div>
+                  </div>
+                  <div className="text-center p-4 bg-white rounded-lg shadow border-l-4 border-orange-500">
+                    <div className="text-3xl font-bold text-orange-600">${settings.payPerProperty.toFixed(2)}</div>
+                    <div className="text-sm text-gray-600">Rate Per Property</div>
+                  </div>
+                </div>
+
+                {/* Inspector Payroll Breakdown */}
+                <div className="bg-white p-6 rounded-lg shadow-sm border">
+                  <h4 className="font-semibold text-gray-800 mb-4">👥 Inspector Payroll Breakdown</h4>
+                  <div className="space-y-3">
+                    {Object.entries(results.payrollAnalytics.inspectorStats).map(([initials, stats]) => (
+                      <div key={initials} className={`p-4 rounded-lg border-l-4 ${
+                        stats.type === 'commercial' 
+                          ? 'bg-blue-50 border-blue-500' 
+                          : 'bg-green-50 border-green-500'
+                      }`}>
+                        <div className="flex justify-between items-center">
+                          <div className="flex items-center gap-3">
+                            <span className={`font-bold text-lg ${
+                              stats.type === 'commercial' ? 'text-blue-800' : 'text-green-800'
+                            }`}>
+                              {initials}
+                            </span>
+                            <span className="text-gray-700">{stats.name}</span>
+                            <span className={`px-2 py-1 text-xs rounded font-medium ${
+                              stats.type === 'commercial' ? 'bg-blue-200 text-blue-800' : 'bg-green-200 text-green-800'
+                            }`}>
+                              {stats.type === 'commercial' ? '🏭 commercial' : '🏠 residential'}
+                            </span>
+                          </div>
+                          <div className="text-right">
+                            <div className={`text-2xl font-bold ${
+                              stats.type === 'commercial' ? 'text-blue-600' : 'text-green-600'
+                            }`}>
+                              ${stats.payrollAmount.toFixed(2)}
+                            </div>
+                            <div className="text-sm text-gray-600">
+                              {stats.eligibleProperties} eligible properties
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    
+                    {Object.keys(results.payrollAnalytics.inspectorStats).length === 0 && (
+                      <div className="text-center text-gray-500 py-8">
+                        <div className="text-4xl mb-2">📋</div>
+                        <p>No payroll data available. Process a job first in the Upload & Process tab.</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center text-gray-500 py-12 bg-white rounded-lg border-2 border-dashed border-gray-300">
+                <div className="text-6xl mb-4">💼</div>
+                <h3 className="text-xl font-semibold mb-2">No Payroll Data Yet</h3>
+                <p className="text-gray-600 mb-4">Upload and process a CSV file to calculate payroll bonuses</p>
+                <button
+                  onClick={() => setActiveTab('upload')}
+                  className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 font-medium"
+                >
+                  Go to Upload & Process
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
