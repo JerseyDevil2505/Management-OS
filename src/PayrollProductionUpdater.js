@@ -198,7 +198,6 @@ const XLSX = window.XLSX || await import('xlsx');
         name: currentJobName.trim(),
         date: new Date().toISOString(),
         csvData: [],
-        excelData: excelFile ? true : false,
         results: mockResults,
         metrics: mockMetrics,
         settings: {...settings},
@@ -645,7 +644,7 @@ const XLSX = window.XLSX || await import('xlsx');
           </div>
 
           {/* File Upload Section */}
-          <div className="mb-6 space-y-6">
+          <div className="mb-6">
             {/* CSV Upload - Required */}
             <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center bg-gradient-to-br from-blue-50 to-green-50">
               <Upload className="w-16 h-16 mx-auto mb-4 text-blue-500" />
@@ -677,43 +676,6 @@ const XLSX = window.XLSX || await import('xlsx');
                 </div>
               )}
             </div>
-
-            {/* Excel Upload - Optional */}
-            <div className="border-2 border-dashed border-gray-200 rounded-lg p-6 text-center bg-gray-50">
-              <div className="w-12 h-12 mx-auto mb-4 text-gray-400">📊</div>
-              <h3 className="text-lg font-semibold mb-2 text-gray-700">Upload Excel File (Optional)</h3>
-              <p className="text-sm text-gray-500 mb-4">
-                Upload Excel file to enable data matching and Excel export with color coding
-              </p>
-              <input
-                ref={excelInputRef}
-                type="file"
-                accept=".xlsx,.xls"
-                onChange={(e) => handleFileUpload(e.target.files[0], 'excel')}
-                className="hidden"
-              />
-              <button
-                onClick={() => excelInputRef.current.click()}
-                className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 font-medium"
-              >
-                Choose Excel File
-              </button>
-              {excelFile && (
-                <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                  <p className="text-blue-700 font-medium">
-                    ✓ Excel File: {excelFile.name}
-                  </p>
-                  <p className="text-sm text-blue-600 mt-1">
-                    Excel matching and export enabled
-                  </p>
-                </div>
-              )}
-              {!excelFile && (
-                <div className="mt-3 text-xs text-gray-500">
-                  Without Excel: CSV-only processing for payroll analytics
-                </div>
-              )}
-            </div>
           </div>
 
           {/* Process Button */}
@@ -729,11 +691,11 @@ const XLSX = window.XLSX || await import('xlsx');
                   Processing & Analyzing...
                 </span>
               ) : (
-                excelFile ? '🔄 Process & Update Excel' : '📊 Analyze CSV Data'
+                '📊 Analyze CSV Data'
               )}
             </button>
             <p className="text-sm text-gray-600 mt-2">
-              {excelFile ? 'Update Excel file with CSV data and apply color coding' : 'Generate payroll analytics and job metrics from CSV'}
+              Generate payroll analytics and job metrics from CSV data
             </p>
           </div>
 
@@ -1243,10 +1205,9 @@ const XLSX = window.XLSX || await import('xlsx');
         <ol className="list-decimal list-inside space-y-1 text-sm text-blue-700">
           <li>Enter a unique job name to track this project</li>
           <li>Upload your CSV file (e.g., "2026.1526.REVAL PRODUCTION.csv")</li>
-          <li>Optionally upload your Excel file (e.g., "1525Production.xlsx") for data matching</li>
           <li>Configure validation and cleaning settings</li>
           <li>Set "Last Payroll Update" date for bimonthly/monthly reporting</li>
-          <li>Click "Analyze CSV Data" or "Process & Update Excel" to process</li>
+          <li>Click "Analyze CSV Data" to process</li>
           <li>The tool will process data and generate comprehensive analytics</li>
           <li>Enhanced data validation and cleaning rules will be applied:
             <ul className="list-disc list-inside ml-4 mt-1 space-y-1">
@@ -1257,10 +1218,9 @@ const XLSX = window.XLSX || await import('xlsx');
               <li>Validate Block/Lot number formats</li>
             </ul>
           </li>
-          <li>Apply Excel "Slipstream" color coding for inspected properties (if Excel uploaded)</li>
+          <li>Apply color coding for inspected properties in future exports</li>
           <li>Review comprehensive job metrics and completion analytics</li>
           <li>View projected completion dates based on inspector productivity</li>
-          <li>Download the updated Excel file with all formatting applied (if Excel uploaded)</li>
         </ol>
         
         <div className="mt-4 p-3 bg-white rounded border border-blue-200">
