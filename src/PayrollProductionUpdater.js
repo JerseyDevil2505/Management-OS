@@ -12,14 +12,26 @@ const PayrollProductionUpdater = () => {
   const [jobs, setJobs] = useState({});
   const [currentJobName, setCurrentJobName] = useState('');
   const [jobMetrics, setJobMetrics] = useState(null);
-  const [inspectorDefinitions, setInspectorDefinitions] = useState({
-    // Example inspector definitions - can be customized
-    'MX': { name: 'Inspector MX', type: 'residential' },
-    'DE': { name: 'Inspector DE', type: 'commercial' },
-    'RR': { name: 'Inspector RR', type: 'commercial' },
-    'SD': { name: 'Inspector SD', type: 'residential' },
-    'AS': { name: 'Inspector AS', type: 'residential' },
-    'AM': { name: 'Arcadio Martinez', type: 'residential' }
+  const [inspectorDefinitions, setInspectorDefinitions] = useState(() => {
+    // Load from localStorage on initialization
+    try {
+      const saved = localStorage.getItem('payroll-inspector-definitions');
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch (error) {
+      console.error('Error loading inspector definitions from localStorage:', error);
+    }
+    
+    // Default inspector definitions if nothing saved
+    return {
+      'MX': { name: 'Inspector MX', type: 'residential' },
+      'DE': { name: 'Inspector DE', type: 'commercial' },
+      'RR': { name: 'Inspector RR', type: 'commercial' },
+      'SD': { name: 'Inspector SD', type: 'residential' },
+      'AS': { name: 'Inspector AS', type: 'residential' },
+      'AM': { name: 'Arcadio Martinez', type: 'residential' }
+    };
   });
   const [showInspectorManager, setShowInspectorManager] = useState(false);
   const [newInspector, setNewInspector] = useState({ initials: '', name: '', type: 'residential' });
@@ -43,6 +55,16 @@ const PayrollProductionUpdater = () => {
   const csvInputRef = useRef();
   const excelInputRef = useRef();
   const inspectorImportRef = useRef();
+
+  // Custom hook to update inspector definitions and save to localStorage
+  const updateInspectorDefinitions = (newDefinitions) => {
+    setInspectorDefinitions(newDefinitions);
+    try {
+      localStorage.setItem('payroll-inspector-definitions', JSON.stringify(newDefinitions));
+    } catch (error) {
+      console.error('Error saving inspector definitions to localStorage:', error);
+    }
+  };
 
   const handleFileUpload = (file, type) => {
     if (type === 'csv') {
@@ -101,10 +123,16 @@ const PayrollProductionUpdater = () => {
       }
       
       // Merge with existing inspectors
-      setInspectorDefinitions(prev => ({
-        ...prev,
-        ...importedInspectors
-      }));
+      setInspectorDefinitions(prev => {
+        const updated = { ...prev, ...importedInspectors };
+        // Save to localStorage
+        try {
+          localStorage.setItem('payroll-inspector-definitions', JSON.stringify(updated));
+        } catch (error) {
+          console.error('Error saving to localStorage:', error);
+        }
+        return updated;
+      });
       
       // Show success message
       alert(`Import complete!\n✅ Imported: ${importCount} inspectors\n⚠️ Skipped: ${skippedCount} (already exist or invalid format)\n\nOnly Residential and Commercial inspectors were imported.`);
@@ -964,8 +992,13 @@ const PayrollProductionUpdater = () => {
                 <h3 className="text-lg font-semibold text-gray-700 flex items-center">
                   📋 Current Inspectors
                 </h3>
-                <div className="text-sm text-gray-600 bg-gray-100 px-3 py-1 rounded-full">
-                  {Object.keys(inspectorDefinitions).length} inspector{Object.keys(inspectorDefinitions).length !== 1 ? 's' : ''} configured
+                <div className="flex items-center gap-3">
+                  <div className="text-sm text-gray-600 bg-gray-100 px-3 py-1 rounded-full">
+                    {Object.keys(inspectorDefinitions).length} inspector{Object.keys(inspectorDefinitions).length !== 1 ? 's' : ''} configured
+                  </div>
+                  <div className="text-xs text-green-600 bg-green-100 px-2 py-1 rounded-full flex items-center gap-1">
+                    💾 Auto-saved locally
+                  </div>
                 </div>
               </div>
               
@@ -1007,7 +1040,7 @@ const PayrollProductionUpdater = () => {
                         onClick={() => {
                           const updated = {...inspectorDefinitions};
                           delete updated[initials];
-                          setInspectorDefinitions(updated);
+                          updateInspectorDefinitions(updated);
                         }}
                         className="ml-4 text-red-500 hover:text-red-700 text-sm font-medium px-4 py-2 rounded hover:bg-red-50 transition-colors border border-red-200 hover:border-red-300"
                       >
