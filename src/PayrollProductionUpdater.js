@@ -48,16 +48,63 @@ const PayrollProductionUpdater = () => {
   };
 
   const importInspectorsFromExcel = async (file) => {
-    try {
-      const excelArrayBuffer = await readFileAsArrayBuffer(file);
-      // Note: In a real implementation, you'd use a library like xlsx to read Excel files
-      // For this demo, we'll just show the interface
-      alert('Excel import feature would be implemented with xlsx library in production');
-    } catch (error) {
-      console.error('Import error:', error);
-      alert(`Error importing inspectors: ${error.message}`);
-    }
-  };
+  try {
+    const excelArrayBuffer = await readFileAsArrayBuffer(file);
+    
+    // Import XLSX library (note: this should be available in the React environment)
+    const XLSX = await import('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
+    
+    // Read the Excel file
+    const workbook = XLSX.read(excelArrayBuffer, {
+      cellStyles: true,
+      cellFormulas: true,
+      cellDates: true,
+      cellNF: true,
+      sheetStubs: true
+    });
+    
+    // Get the first sheet
+    const firstSheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[firstSheetName];
+    
+    // Convert to JSON with headers
+    const data = XLSX.utils.sheet_to_json(worksheet);
+    
+    const newInspectors = {};
+    let importCount = 0;
+    
+    data.forEach(row => {
+      const inspectorName = row['Inspector'];
+      const role = row['Role'];
+      
+      // Only import Residential and Commercial inspectors
+      if (inspectorName && role && (role === 'Residential' || role === 'Commercial')) {
+        // Extract initials from name format "Last, First (XX)"
+        const initialsMatch = inspectorName.match(/\(([A-Z]{2,3})\)/);
+        if (initialsMatch) {
+          const initials = initialsMatch[1];
+          // Remove initials from name to get clean full name
+          const fullName = inspectorName.replace(/\s*\([A-Z]{2,3}\)/, '').trim();
+          
+          newInspectors[initials] = {
+            name: fullName,
+            type: role.toLowerCase()
+          };
+          importCount++;
+        }
+      }
+    });
+    
+    // Merge with existing inspectors (avoid duplicates)
+    setInspectorDefinitions(prev => ({...prev, ...newInspectors}));
+    
+    alert(`Successfully imported ${importCount} inspectors from Excel file!\n\nImported inspectors:\n${Object.entries(newInspectors).map(([initials, info]) => `${initials} - ${info.name} (${info.type})`).join('\n')}`);
+    
+  } catch (error) {
+    console.error('Import error:', error);
+    alert(`Error importing inspectors: ${error.message}`);
+  }
+};
 
   const processFiles = async () => {
     if (!csvFile) {
