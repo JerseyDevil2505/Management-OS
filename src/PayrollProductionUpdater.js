@@ -144,8 +144,8 @@ const PayrollProductionUpdater = () => {
   };
 
   const processFiles = async () => {
-    if (!csvFile || !excelFile) {
-      alert('Please upload both CSV and Excel files');
+    if (!csvFile) {
+      alert('Please upload a CSV file');
       return;
     }
 
@@ -164,34 +164,17 @@ const PayrollProductionUpdater = () => {
         skipEmptyLines: true
       });
 
-      // Read Excel file
-      const excelArrayBuffer = await readFileAsArrayBuffer(excelFile);
-      const workbook = XLSX.read(excelArrayBuffer, { cellDates: true });
-      
-      // Find the production sheet
-      const productionSheetName = workbook.SheetNames.find(name => 
-        name.includes('REVAL PRODUCTION') || name.includes('Production')
-      );
-      
-      if (!productionSheetName) {
-        throw new Error('Could not find production sheet in Excel file');
-      }
-
-      const productionSheet = workbook.Sheets[productionSheetName];
-      const excelData = XLSX.utils.sheet_to_json(productionSheet, { header: 1 });
-      
-      // Process the update
-      const updateResults = await updateProductionData(csvData.data, excelData, workbook, productionSheetName);
+      // Process the CSV data directly (no Excel matching)
+      const updateResults = await updateProductionData(csvData.data);
       
       // Calculate comprehensive metrics
-      const metrics = calculateJobMetrics(csvData.data, excelData);
+      const metrics = calculateJobMetrics(csvData.data);
       
       // Store job data
       const jobData = {
         name: currentJobName.trim(),
         date: new Date().toISOString(),
         csvData: csvData.data,
-        excelData: excelData,
         results: updateResults,
         metrics: metrics,
         settings: {...settings},
@@ -201,10 +184,10 @@ const PayrollProductionUpdater = () => {
       setJobs(prev => ({...prev, [currentJobName.trim()]: jobData}));
       setResults(updateResults);
       setJobMetrics(metrics);
-      setActiveTab('metrics');
+      setActiveTab('payroll');
     } catch (error) {
       console.error('Processing error:', error);
-      alert(`Error processing files: ${error.message}`);
+      alert(`Error processing file: ${error.message}`);
     } finally {
       setProcessing(false);
     }
