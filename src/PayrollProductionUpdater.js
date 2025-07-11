@@ -13,17 +13,7 @@ const PayrollProductionUpdater = () => {
   const [currentJobName, setCurrentJobName] = useState('');
   const [jobMetrics, setJobMetrics] = useState(null);
   const [inspectorDefinitions, setInspectorDefinitions] = useState(() => {
-    // Load from localStorage on initialization
-    try {
-      const saved = localStorage.getItem('payroll-inspector-definitions');
-      if (saved) {
-        return JSON.parse(saved);
-      }
-    } catch (error) {
-      console.error('Error loading inspector definitions from localStorage:', error);
-    }
-    
-    // Default inspector definitions if nothing saved
+    // Default inspector definitions
     return {
       'MX': { name: 'Inspector MX', type: 'residential' },
       'DE': { name: 'Inspector DE', type: 'commercial' },
@@ -56,14 +46,9 @@ const PayrollProductionUpdater = () => {
   const excelInputRef = useRef();
   const inspectorImportRef = useRef();
 
-  // Custom hook to update inspector definitions and save to localStorage
+  // Custom hook to update inspector definitions and keep in memory
   const updateInspectorDefinitions = (newDefinitions) => {
     setInspectorDefinitions(newDefinitions);
-    try {
-      localStorage.setItem('payroll-inspector-definitions', JSON.stringify(newDefinitions));
-    } catch (error) {
-      console.error('Error saving inspector definitions to localStorage:', error);
-    }
   };
 
   const handleFileUpload = (file, type) => {
@@ -125,12 +110,6 @@ const PayrollProductionUpdater = () => {
       // Merge with existing inspectors
       setInspectorDefinitions(prev => {
         const updated = { ...prev, ...importedInspectors };
-        // Save to localStorage
-        try {
-          localStorage.setItem('payroll-inspector-definitions', JSON.stringify(updated));
-        } catch (error) {
-          console.error('Error saving to localStorage:', error);
-        }
         return updated;
       });
       
@@ -156,25 +135,61 @@ const PayrollProductionUpdater = () => {
 
     setProcessing(true);
     try {
+      console.log('Starting file processing...');
+      
       // Read CSV file
       const csvText = await readFileAsText(csvFile);
+      console.log('CSV file read successfully, length:', csvText.length);
+      
       const csvData = Papa.parse(csvText, {
         header: true,
         dynamicTyping: true,
         skipEmptyLines: true
       });
-
-      // Process the CSV data directly (no Excel matching)
-      const updateResults = await updateProductionData(csvData.data);
       
-      // Calculate comprehensive metrics
-      const metrics = calculateJobMetrics(csvData.data);
+      console.log('CSV parsed successfully, rows:', csvData.data.length);
+      console.log('CSV columns:', csvData.meta.fields);
+
+      let updateResults;
+      
+      if (excelFile) {
+        console.log('Processing with Excel file...');
+        // Process with Excel file for matching and updating
+        const excelArrayBuffer = await readFileAsArrayBuffer(excelFile);
+        const workbook = XLSX.read(excelArrayBuffer, { cellDates: true });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        const excelData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+        
+        console.log('Excel data loaded, rows:', excelData.length);
+        updateResults = await updateProductionData(csvData.data, excelData, workbook, sheetName);
+      } else {
+        console.log('Processing CSV-only mode...');
+        // Process CSV-only for analytics and payroll calculation
+        updateResults = await processCSVOnly(csvData.data);
+      }
+      
+      console.log('Processing complete, calculating metrics...');
+      
+      // Calculate comprehensive metrics using Excel data if available, otherwise CSV
+      let metricsData = null;
+      if (excelFile) {
+        const excelArrayBuffer = await readFileAsArrayBuffer(excelFile);
+        const workbook = XLSX.read(excelArrayBuffer, { cellDates: true });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        metricsData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+      }
+      
+      const metrics = calculateJobMetrics(csvData.data, metricsData);
+      
+      console.log('Metrics calculated successfully');
       
       // Store job data
       const jobData = {
         name: currentJobName.trim(),
         date: new Date().toISOString(),
         csvData: csvData.data,
+        excelData: excelFile ? true : false,
         results: updateResults,
         metrics: metrics,
         settings: {...settings},
@@ -193,7 +208,165 @@ const PayrollProductionUpdater = () => {
     }
   };
 
+  const processCSVOnly = async (csvData) => {
+    // Validate input data
+    if (!csvData || !Array.isArray(csvData) || csvData.length === 0) {
+      throw new Error('Invalid CSV data: No data provided or empty array');
+    }
+
+    const results = {
+      totalMatches: csvData.length,
+      updatedRecords: 0,
+      cleanedPreStart: 0,
+      cleanedOrphaned: 0,
+      validationErrors: 0,
+      duplicatesFound: 0,
+      invalidInitials: 0,
+      missingDates: 0,
+      markedInspected: 0,
+      colorCodedRows: 0,
+      errors: [],
+      warnings: [],
+      summary: [],
+      payrollAnalytics: {
+        inspectorStats: {},
+        totalPayroll: 0,
+        eligibleProperties: 0,
+        inspectionTypes: {
+          exterior: 0,
+          interior: 0,
+          commercial: 0
+        }
+      }
+    };
+
+    const startDate = new Date(settings.startDate);
+    const lastUpdateDate = new Date(settings.lastUpdateDate);
+    const inspectorStats = {};
+    
+    const initInspector = (initials) => {
+      if (!inspectorStats[initials]) {
+        inspectorStats[initials] = {
+          name: inspectorDefinitions[initials]?.name || `Inspector ${initials}`,
+          type: inspectorDefinitions[initials]?.type || 'residential',
+          totalProperties: 0,
+          eligibleProperties: 0,
+          payrollAmount: 0,
+          inspectionTypes: {
+            exterior: 0,
+            interior: 0,
+            commercial: 0
+          },
+          recentWork: []
+        };
+      }
+    };
+    
+    const isValidInitials = (initials) => {
+      if (!initials || typeof initials !== 'string') return false;
+      return /^[A-Z]{2,3}$/.test(initials.trim().toUpperCase());
+    };
+    
+    const isEligibleForPay = (propertyClass) => {
+      return settings.targetPropertyClasses.includes(propertyClass);
+    };
+    
+    const isRecentWork = (dateValue) => {
+      return dateValue && !isNaN(dateValue.getTime()) && dateValue >= lastUpdateDate;
+    };
+
+    // Track duplicates
+    const seenBlockLots = new Set();
+    csvData.forEach(row => {
+      const key = `${row.BLOCK}-${row.LOT}`;
+      if (seenBlockLots.has(key)) {
+        results.duplicatesFound++;
+        results.warnings.push(`Duplicate Block/Lot combination: ${key}`);
+      } else {
+        seenBlockLots.add(key);
+      }
+    });
+
+    // Process each CSV row for payroll analytics
+    csvData.forEach(row => {
+      const propertyClass = row.PROPERTY_CLASS;
+      const isEligible = isEligibleForPay(propertyClass);
+      
+      // Track inspector work for payroll
+      const trackInspectorWork = (initials, dateValue, inspectionType) => {
+        if (initials && isValidInitials(initials)) {
+          initInspector(initials);
+          inspectorStats[initials].totalProperties++;
+          
+          if (isRecentWork(dateValue)) {
+            inspectorStats[initials].recentWork.push({
+              block: row.BLOCK,
+              lot: row.LOT,
+              date: dateValue,
+              propertyClass,
+              inspectionType,
+              eligible: isEligible
+            });
+            
+            if (isEligible) {
+              inspectorStats[initials].eligibleProperties++;
+              inspectorStats[initials].payrollAmount += settings.payPerProperty;
+              results.payrollAnalytics.eligibleProperties++;
+            }
+            
+            inspectorStats[initials].inspectionTypes[inspectionType]++;
+            results.payrollAnalytics.inspectionTypes[inspectionType]++;
+          }
+        }
+      };
+
+      // Check all inspector fields
+      if (row.MEASUREBY) trackInspectorWork(row.MEASUREBY, new Date(row.MEASUREDT), 'exterior');
+      if (row.LISTBY) trackInspectorWork(row.LISTBY, new Date(row.LISTDT), 'interior');
+      if (row.PRICEBY) trackInspectorWork(row.PRICEBY, new Date(row.PRICEDT), 'commercial');
+      
+      // Check field call inspectors
+      for (let i = 1; i <= 7; i++) {
+        const fieldCallBy = row[`FIELDCALL_${i}`];
+        const fieldCallDt = row[`FIELDCALLDT_${i}`];
+        if (fieldCallBy) trackInspectorWork(fieldCallBy, new Date(fieldCallDt), 'exterior');
+      }
+
+      // Validation checks
+      if (row.MEASUREBY && !isValidInitials(row.MEASUREBY)) {
+        results.invalidInitials++;
+        results.warnings.push(`Invalid initials format "${row.MEASUREBY}" for Block ${row.BLOCK}, Lot ${row.LOT}`);
+      }
+      
+      if (row.MEASUREBY && !row.MEASUREDT) {
+        results.missingDates++;
+        results.warnings.push(`Initials "${row.MEASUREBY}" without date for Block ${row.BLOCK}, Lot ${row.LOT}`);
+      }
+
+      // Check if should be marked as inspected
+      if (row.MEASUREBY && row.MEASUREDT) {
+        results.markedInspected++;
+      }
+    });
+
+    // Finalize payroll analytics
+    results.payrollAnalytics.inspectorStats = inspectorStats;
+    results.payrollAnalytics.totalPayroll = Object.values(inspectorStats)
+      .reduce((total, inspector) => total + inspector.payrollAmount, 0);
+
+    return results;
+  };
+
   const updateProductionData = async (csvData, excelData, workbook, sheetName) => {
+    // Validate input data
+    if (!csvData || !Array.isArray(csvData) || csvData.length === 0) {
+      throw new Error('Invalid CSV data: No data provided or empty array');
+    }
+    
+    if (!excelData || !Array.isArray(excelData) || excelData.length === 0) {
+      throw new Error('Invalid Excel data: No data provided or empty array');
+    }
+
     const results = {
       totalMatches: 0,
       updatedRecords: 0,
@@ -580,7 +753,19 @@ const PayrollProductionUpdater = () => {
     return results;
   };
 
-  const calculateJobMetrics = (csvData, excelData) => {
+  const calculateJobMetrics = (csvData, excelData = null) => {
+    // Validate CSV data
+    if (!csvData || !Array.isArray(csvData) || csvData.length === 0) {
+      console.warn('Invalid CSV data provided to calculateJobMetrics');
+      return {
+        overallCompletion: { total: 0, inspected: 0, percentage: 0 },
+        interiorInspections: { class2_3A: { total: 0, listed: 0, percentage: 0 } },
+        pricingInspections: { class4ABC: { total: 0, priced: 0, percentage: 0 } },
+        inspectorActivity: {},
+        projectedCompletion: { remainingProperties: 0, businessDaysToComplete: 0, estimatedFinishDate: null }
+      };
+    }
+
     const metrics = {
       overallCompletion: {
         total: 0,
@@ -609,91 +794,170 @@ const PayrollProductionUpdater = () => {
       }
     };
 
-    // Find column indices
-    const headers = excelData[0];
-    const inspectedCol = headers.findIndex(h => h && h.toString().toUpperCase().includes('INSPECTED'));
-    const propertyClassCol = headers.findIndex(h => h && (h.toString().toUpperCase().includes('PROPERTY_CLASS') || h.toString().toUpperCase().includes('MODIV')));
-    const listByCol = headers.findIndex(h => h && h.toString().toUpperCase().includes('LISTBY'));
-    const priceByCol = headers.findIndex(h => h && h.toString().toUpperCase().includes('PRICEBY'));
-    const listDtCol = headers.findIndex(h => h && h.toString().toUpperCase().includes('LISTDT'));
-    const priceDtCol = headers.findIndex(h => h && h.toString().toUpperCase().includes('PRICEDT'));
+    // Use Excel data if available, otherwise use CSV data for metrics
+    const dataToAnalyze = excelData || csvData;
+    const isExcelData = Array.isArray(excelData) && excelData.length > 0;
 
-    // Process each row for metrics
-    for (let i = 1; i < excelData.length; i++) {
-      const row = excelData[i];
-      const inspected = row[inspectedCol];
-      const propertyClass = row[propertyClassCol];
-      const listBy = row[listByCol];
-      const priceBy = row[priceByCol];
-      const listDt = row[listDtCol];
-      const priceDt = row[priceDtCol];
+    if (isExcelData) {
+      // Process Excel data (array of arrays)
+      const headers = dataToAnalyze[0];
+      const inspectedCol = headers.findIndex(h => h && h.toString().toUpperCase().includes('INSPECTED'));
+      const propertyClassCol = headers.findIndex(h => h && (h.toString().toUpperCase().includes('PROPERTY_CLASS') || h.toString().toUpperCase().includes('MODIV')));
+      const listByCol = headers.findIndex(h => h && h.toString().toUpperCase().includes('LISTBY'));
+      const priceByCol = headers.findIndex(h => h && h.toString().toUpperCase().includes('PRICEBY'));
+      const listDtCol = headers.findIndex(h => h && h.toString().toUpperCase().includes('LISTDT'));
+      const priceDtCol = headers.findIndex(h => h && h.toString().toUpperCase().includes('PRICEDT'));
 
-      metrics.overallCompletion.total++;
-      
-      // Overall completion tracking
-      if (inspected && inspected.toString().toUpperCase() === 'YES') {
-        metrics.overallCompletion.inspected++;
-      }
+      // Process each row for metrics
+      for (let i = 1; i < dataToAnalyze.length; i++) {
+        const row = dataToAnalyze[i];
+        const inspected = row[inspectedCol];
+        const propertyClass = row[propertyClassCol];
+        const listBy = row[listByCol];
+        const priceBy = row[priceByCol];
+        const listDt = row[listDtCol];
+        const priceDt = row[priceDtCol];
 
-      // Interior inspections for Class 2 and 3A
-      if (propertyClass && ['2', '3A'].includes(propertyClass.toString())) {
-        metrics.interiorInspections.class2_3A.total++;
-        if (listBy) {
-          metrics.interiorInspections.class2_3A.listed++;
-          
-          // Track inspector activity
-          const initials = listBy.toString().toUpperCase();
-          if (!metrics.inspectorActivity[initials]) {
-            metrics.inspectorActivity[initials] = {
-              name: inspectorDefinitions[initials]?.name || `Inspector ${initials}`,
-              type: inspectorDefinitions[initials]?.type || 'residential',
-              dailyAverage: 0,
-              recentWork: 0,
-              lastWorkDate: null
-            };
+        metrics.overallCompletion.total++;
+        
+        // Overall completion tracking
+        if (inspected && inspected.toString().toUpperCase() === 'YES') {
+          metrics.overallCompletion.inspected++;
+        }
+
+        // Interior inspections for Class 2 and 3A
+        if (propertyClass && ['2', '3A'].includes(propertyClass.toString())) {
+          metrics.interiorInspections.class2_3A.total++;
+          if (listBy) {
+            metrics.interiorInspections.class2_3A.listed++;
+            
+            // Track inspector activity
+            const initials = listBy.toString().toUpperCase();
+            if (!metrics.inspectorActivity[initials]) {
+              metrics.inspectorActivity[initials] = {
+                name: inspectorDefinitions[initials]?.name || `Inspector ${initials}`,
+                type: inspectorDefinitions[initials]?.type || 'residential',
+                dailyAverage: 0,
+                recentWork: 0,
+                lastWorkDate: null
+              };
+            }
+            
+            if (listDt) {
+              const workDate = new Date(listDt);
+              if (!isNaN(workDate.getTime())) {
+                metrics.inspectorActivity[initials].recentWork++;
+                if (!metrics.inspectorActivity[initials].lastWorkDate || workDate > metrics.inspectorActivity[initials].lastWorkDate) {
+                  metrics.inspectorActivity[initials].lastWorkDate = workDate;
+                }
+              }
+            }
           }
-          
-          if (listDt) {
-            const workDate = new Date(listDt);
-            if (!isNaN(workDate.getTime())) {
-              metrics.inspectorActivity[initials].recentWork++;
-              if (!metrics.inspectorActivity[initials].lastWorkDate || workDate > metrics.inspectorActivity[initials].lastWorkDate) {
-                metrics.inspectorActivity[initials].lastWorkDate = workDate;
+        }
+
+        // Pricing inspections for Class 4A, 4B, 4C
+        if (propertyClass && ['4A', '4B', '4C'].includes(propertyClass.toString())) {
+          metrics.pricingInspections.class4ABC.total++;
+          if (priceBy) {
+            metrics.pricingInspections.class4ABC.priced++;
+            
+            // Track inspector activity
+            const initials = priceBy.toString().toUpperCase();
+            if (!metrics.inspectorActivity[initials]) {
+              metrics.inspectorActivity[initials] = {
+                name: inspectorDefinitions[initials]?.name || `Inspector ${initials}`,
+                type: inspectorDefinitions[initials]?.type || 'commercial',
+                dailyAverage: 0,
+                recentWork: 0,
+                lastWorkDate: null
+              };
+            }
+            
+            if (priceDt) {
+              const workDate = new Date(priceDt);
+              if (!isNaN(workDate.getTime())) {
+                metrics.inspectorActivity[initials].recentWork++;
+                if (!metrics.inspectorActivity[initials].lastWorkDate || workDate > metrics.inspectorActivity[initials].lastWorkDate) {
+                  metrics.inspectorActivity[initials].lastWorkDate = workDate;
+                }
               }
             }
           }
         }
       }
+    } else {
+      // Process CSV data (array of objects)
+      dataToAnalyze.forEach(row => {
+        metrics.overallCompletion.total++;
+        
+        // For CSV-only processing, determine completion based on inspection data
+        const hasInspectionData = row.MEASUREBY || row.LISTBY || row.PRICEBY || 
+          row.FIELDCALL_1 || row.FIELDCALL_2 || row.FIELDCALL_3 || row.FIELDCALL_4;
+        
+        if (hasInspectionData) {
+          metrics.overallCompletion.inspected++;
+        }
 
-      // Pricing inspections for Class 4A, 4B, 4C
-      if (propertyClass && ['4A', '4B', '4C'].includes(propertyClass.toString())) {
-        metrics.pricingInspections.class4ABC.total++;
-        if (priceBy) {
-          metrics.pricingInspections.class4ABC.priced++;
-          
-          // Track inspector activity
-          const initials = priceBy.toString().toUpperCase();
-          if (!metrics.inspectorActivity[initials]) {
-            metrics.inspectorActivity[initials] = {
-              name: inspectorDefinitions[initials]?.name || `Inspector ${initials}`,
-              type: inspectorDefinitions[initials]?.type || 'commercial',
-              dailyAverage: 0,
-              recentWork: 0,
-              lastWorkDate: null
-            };
-          }
-          
-          if (priceDt) {
-            const workDate = new Date(priceDt);
-            if (!isNaN(workDate.getTime())) {
-              metrics.inspectorActivity[initials].recentWork++;
-              if (!metrics.inspectorActivity[initials].lastWorkDate || workDate > metrics.inspectorActivity[initials].lastWorkDate) {
-                metrics.inspectorActivity[initials].lastWorkDate = workDate;
+        // Interior inspections for Class 2 and 3A
+        if (row.PROPERTY_CLASS && ['2', '3A'].includes(row.PROPERTY_CLASS.toString())) {
+          metrics.interiorInspections.class2_3A.total++;
+          if (row.LISTBY) {
+            metrics.interiorInspections.class2_3A.listed++;
+            
+            // Track inspector activity
+            const initials = row.LISTBY.toString().toUpperCase();
+            if (!metrics.inspectorActivity[initials]) {
+              metrics.inspectorActivity[initials] = {
+                name: inspectorDefinitions[initials]?.name || `Inspector ${initials}`,
+                type: inspectorDefinitions[initials]?.type || 'residential',
+                dailyAverage: 0,
+                recentWork: 0,
+                lastWorkDate: null
+              };
+            }
+            
+            if (row.LISTDT) {
+              const workDate = new Date(row.LISTDT);
+              if (!isNaN(workDate.getTime())) {
+                metrics.inspectorActivity[initials].recentWork++;
+                if (!metrics.inspectorActivity[initials].lastWorkDate || workDate > metrics.inspectorActivity[initials].lastWorkDate) {
+                  metrics.inspectorActivity[initials].lastWorkDate = workDate;
+                }
               }
             }
           }
         }
-      }
+
+        // Pricing inspections for Class 4A, 4B, 4C
+        if (row.PROPERTY_CLASS && ['4A', '4B', '4C'].includes(row.PROPERTY_CLASS.toString())) {
+          metrics.pricingInspections.class4ABC.total++;
+          if (row.PRICEBY) {
+            metrics.pricingInspections.class4ABC.priced++;
+            
+            // Track inspector activity
+            const initials = row.PRICEBY.toString().toUpperCase();
+            if (!metrics.inspectorActivity[initials]) {
+              metrics.inspectorActivity[initials] = {
+                name: inspectorDefinitions[initials]?.name || `Inspector ${initials}`,
+                type: inspectorDefinitions[initials]?.type || 'commercial',
+                dailyAverage: 0,
+                recentWork: 0,
+                lastWorkDate: null
+              };
+            }
+            
+            if (row.PRICEDT) {
+              const workDate = new Date(row.PRICEDT);
+              if (!isNaN(workDate.getTime())) {
+                metrics.inspectorActivity[initials].recentWork++;
+                if (!metrics.inspectorActivity[initials].lastWorkDate || workDate > metrics.inspectorActivity[initials].lastWorkDate) {
+                  metrics.inspectorActivity[initials].lastWorkDate = workDate;
+                }
+              }
+            }
+          }
+        }
+      });
     }
 
     // Calculate percentages
@@ -982,101 +1246,7 @@ const PayrollProductionUpdater = () => {
             {/* Current Inspectors */}
             <div className="p-6 bg-white rounded-lg border shadow-sm">
               <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-semibold text-gray-700 flex items-center">
-                  📋 Current Inspectors
-                </h3>
-                <div className="flex items-center gap-3">
-                  <div className="text-sm text-gray-600 bg-gray-100 px-3 py-1 rounded-full">
-                    {Object.keys(inspectorDefinitions).length} inspector{Object.keys(inspectorDefinitions).length !== 1 ? 's' : ''} configured
-                  </div>
-                  <div className="text-xs text-green-600 bg-green-100 px-2 py-1 rounded-full flex items-center gap-1">
-                    💾 Auto-saved locally
-                  </div>
-                </div>
-              </div>
-              
-              {Object.keys(inspectorDefinitions).length === 0 ? (
-                <div className="text-center text-gray-500 py-12">
-                  <div className="text-4xl mb-4">👥</div>
-                  <h4 className="text-lg font-medium mb-2">No Inspectors Configured</h4>
-                  <p className="text-sm">Add your first inspector above to get started with payroll tracking and color coding!</p>
-                </div>
-              ) : (
-                <div className="space-y-3 max-h-96 overflow-y-auto">
-                  {Object.entries(inspectorDefinitions).map(([initials, info]) => (
-                    <div key={initials} className={`flex justify-between items-center p-4 rounded-lg border-l-4 transition-all hover:shadow-md ${
-                      info.type === 'commercial' ? 'bg-blue-50 border-blue-400 hover:bg-blue-100' : 'bg-green-50 border-green-400 hover:bg-green-100'
-                    }`}>
-                      <div className="flex items-center flex-1">
-                        <div className="flex items-center justify-center w-12 h-12 rounded-full bg-white border-2 border-current mr-4">
-                          <span className={`font-bold text-lg ${
-                            info.type === 'commercial' ? 'text-blue-600' : 'text-green-600'
-                          }`}>
-                            {initials}
-                          </span>
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3">
-                            <span className="font-semibold text-lg text-gray-800">{info.name}</span>
-                            <span className={`px-3 py-1 text-xs font-medium rounded-full ${
-                              info.type === 'commercial' ? 'bg-blue-200 text-blue-800' : 'bg-green-200 text-green-800'
-                            }`}>
-                              {info.type === 'commercial' ? '🏭 Commercial' : '🏠 Residential'}
-                            </span>
-                          </div>
-                          <div className="text-sm text-gray-600 mt-1">
-                            Color coding: {info.type === 'commercial' ? 'Blue scheme for commercial/warehouse properties' : 'Green scheme for residential/home properties'}
-                          </div>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => {
-                          const updated = {...inspectorDefinitions};
-                          delete updated[initials];
-                          updateInspectorDefinitions(updated);
-                        }}
-                        className="ml-4 text-red-500 hover:text-red-700 text-sm font-medium px-4 py-2 rounded hover:bg-red-50 transition-colors border border-red-200 hover:border-red-300"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Color Coding Information */}
-            <div className="mt-6 p-4 bg-white rounded-lg border border-gray-200">
-              <h4 className="font-semibold text-gray-800 mb-3 flex items-center">
-                🎨 Color Coding System
-              </h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                <div className="flex items-center p-3 rounded-lg border border-blue-200 bg-blue-50">
-                  <div className="w-6 h-6 bg-blue-200 border border-blue-300 rounded mr-3"></div>
-                  <div>
-                    <div className="font-medium text-blue-800">🏭 Commercial Inspectors</div>
-                    <div className="text-blue-600">Excel "Slipstream" blue scheme for inspected rows</div>
-                  </div>
-                </div>
-                <div className="flex items-center p-3 rounded-lg border border-green-200 bg-green-50">
-                  <div className="w-6 h-6 bg-green-200 border border-green-300 rounded mr-3"></div>
-                  <div>
-                    <div className="font-medium text-green-800">🏠 Residential Inspectors</div>
-                    <div className="text-green-600">Excel "Slipstream" green scheme for inspected rows</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Upload Tab */}
-      {activeTab === 'upload' && (
-        <div>
-          {/* Job Name Input */}
-          <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-            <h3 className="text-lg font-semibold text-yellow-800 mb-3">🏷️ Job Information</h3>
+                <h3 className="text-lg font-semibold text-yellow-800 mb-3">🏷️ Job Information</h3>
             <div className="flex gap-4 items-end">
               <div className="flex-1">
                 <label className="block text-sm font-medium text-yellow-700 mb-2">
@@ -1086,7 +1256,7 @@ const PayrollProductionUpdater = () => {
                   type="text"
                   value={currentJobName}
                   onChange={(e) => setCurrentJobName(e.target.value)}
-                  placeholder="e.g., Township Revaluation 2025, Downtown Commercial Project"
+                  placeholder="e.g., CCDD-Municipality Name"
                   className="w-full p-3 border border-yellow-300 rounded-lg text-sm focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
                 />
                 <p className="text-xs text-yellow-600 mt-1">
@@ -1229,10 +1399,11 @@ const PayrollProductionUpdater = () => {
           </div>
 
           {/* File Upload Section */}
-          <div className="mb-6">
+          <div className="mb-6 space-y-6">
+            {/* CSV Upload - Required */}
             <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center bg-gradient-to-br from-blue-50 to-green-50">
               <Upload className="w-16 h-16 mx-auto mb-4 text-blue-500" />
-              <h3 className="text-xl font-semibold mb-2 text-gray-800">Upload CSV Production File</h3>
+              <h3 className="text-xl font-semibold mb-2 text-gray-800">Upload CSV Production File *</h3>
               <p className="text-sm text-gray-600 mb-6">
                 Select your REVAL PRODUCTION CSV file for processing and analytics
               </p>
@@ -1255,8 +1426,45 @@ const PayrollProductionUpdater = () => {
                     ✓ File Ready: {csvFile.name}
                   </p>
                   <p className="text-sm text-green-600 mt-1">
-                    File loaded and ready for processing
+                    CSV file loaded and ready for processing
                   </p>
+                </div>
+              )}
+            </div>
+
+            {/* Excel Upload - Optional */}
+            <div className="border-2 border-dashed border-gray-200 rounded-lg p-6 text-center bg-gray-50">
+              <div className="w-12 h-12 mx-auto mb-4 text-gray-400">📊</div>
+              <h3 className="text-lg font-semibold mb-2 text-gray-700">Upload Excel File (Optional)</h3>
+              <p className="text-sm text-gray-500 mb-4">
+                Upload Excel file to enable data matching and Excel export with color coding
+              </p>
+              <input
+                ref={excelInputRef}
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={(e) => handleFileUpload(e.target.files[0], 'excel')}
+                className="hidden"
+              />
+              <button
+                onClick={() => excelInputRef.current.click()}
+                className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 font-medium"
+              >
+                Choose Excel File
+              </button>
+              {excelFile && (
+                <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-blue-700 font-medium">
+                    ✓ Excel File: {excelFile.name}
+                  </p>
+                  <p className="text-sm text-blue-600 mt-1">
+                    Excel matching and export enabled
+                  </p>
+                </div>
+              )}
+              {!excelFile && (
+                <div className="mt-3 text-xs text-gray-500">
+                  Without Excel: CSV-only processing for payroll analytics
                 </div>
               )}
             </div>
@@ -1272,14 +1480,14 @@ const PayrollProductionUpdater = () => {
               {processing ? (
                 <span className="flex items-center gap-3">
                   <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                  Scrubbing & Validating...
+                  Processing & Analyzing...
                 </span>
               ) : (
-                '🧹 Scrub & Validate Data'
+                excelFile ? '🔄 Process & Update Excel' : '📊 Analyze CSV Data'
               )}
             </button>
             <p className="text-sm text-gray-600 mt-2">
-              Clean data, validate inspectors, and generate analytics
+              {excelFile ? 'Update Excel file with CSV data and apply color coding' : 'Generate payroll analytics and job metrics from CSV'}
             </p>
           </div>
 
@@ -1485,11 +1693,11 @@ const PayrollProductionUpdater = () => {
             <ol className="list-decimal list-inside space-y-1 text-sm text-blue-700">
               <li>Enter a unique job name to track this project</li>
               <li>Upload your CSV file (e.g., "2026.1526.REVAL PRODUCTION.csv")</li>
-              <li>Upload your Excel file (e.g., "1525Production.xlsx")</li>
+              <li>Optionally upload your Excel file (e.g., "1525Production.xlsx") for data matching</li>
               <li>Configure validation and cleaning settings</li>
               <li>Set "Last Payroll Update" date for bimonthly/monthly reporting</li>
-              <li>Click "Update Production Data" to process</li>
-              <li>The tool will match BLOCK/LOT combinations and update columns Q and T-AM</li>
+              <li>Click "Analyze CSV Data" or "Process & Update Excel" to process</li>
+              <li>The tool will process data and generate comprehensive analytics</li>
               <li>Enhanced data validation and cleaning rules will be applied:
                 <ul className="list-disc list-inside ml-4 mt-1 space-y-1">
                   <li>Remove dates before project start date</li>
@@ -1499,10 +1707,10 @@ const PayrollProductionUpdater = () => {
                   <li>Validate Block/Lot number formats</li>
                 </ul>
               </li>
-              <li>Apply Excel "Slipstream" color coding for inspected properties</li>
+              <li>Apply Excel "Slipstream" color coding for inspected properties (if Excel uploaded)</li>
               <li>Review comprehensive job metrics and completion analytics</li>
               <li>View projected completion dates based on inspector productivity</li>
-              <li>Download the updated Excel file with all formatting applied</li>
+              <li>Download the updated Excel file with all formatting applied (if Excel uploaded)</li>
             </ol>
             
             <div className="mt-4 p-3 bg-white rounded border border-blue-200">
@@ -1957,4 +2165,98 @@ const PayrollProductionUpdater = () => {
   );
 };
 
-export default PayrollProductionUpdater;
+export default PayrollProductionUpdater;gray-700 flex items-center">
+                  📋 Current Inspectors
+                </h3>
+                <div className="flex items-center gap-3">
+                  <div className="text-sm text-gray-600 bg-gray-100 px-3 py-1 rounded-full">
+                    {Object.keys(inspectorDefinitions).length} inspector{Object.keys(inspectorDefinitions).length !== 1 ? 's' : ''} configured
+                  </div>
+                  <div className="text-xs text-green-600 bg-green-100 px-2 py-1 rounded-full flex items-center gap-1">
+                    💾 Saved in session
+                  </div>
+                </div>
+              </div>
+              
+              {Object.keys(inspectorDefinitions).length === 0 ? (
+                <div className="text-center text-gray-500 py-12">
+                  <div className="text-4xl mb-4">👥</div>
+                  <h4 className="text-lg font-medium mb-2">No Inspectors Configured</h4>
+                  <p className="text-sm">Add your first inspector above to get started with payroll tracking and color coding!</p>
+                </div>
+              ) : (
+                <div className="space-y-3 max-h-96 overflow-y-auto">
+                  {Object.entries(inspectorDefinitions).map(([initials, info]) => (
+                    <div key={initials} className={`flex justify-between items-center p-4 rounded-lg border-l-4 transition-all hover:shadow-md ${
+                      info.type === 'commercial' ? 'bg-blue-50 border-blue-400 hover:bg-blue-100' : 'bg-green-50 border-green-400 hover:bg-green-100'
+                    }`}>
+                      <div className="flex items-center flex-1">
+                        <div className="flex items-center justify-center w-12 h-12 rounded-full bg-white border-2 border-current mr-4">
+                          <span className={`font-bold text-lg ${
+                            info.type === 'commercial' ? 'text-blue-600' : 'text-green-600'
+                          }`}>
+                            {initials}
+                          </span>
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3">
+                            <span className="font-semibold text-lg text-gray-800">{info.name}</span>
+                            <span className={`px-3 py-1 text-xs font-medium rounded-full ${
+                              info.type === 'commercial' ? 'bg-blue-200 text-blue-800' : 'bg-green-200 text-green-800'
+                            }`}>
+                              {info.type === 'commercial' ? '🏭 Commercial' : '🏠 Residential'}
+                            </span>
+                          </div>
+                          <div className="text-sm text-gray-600 mt-1">
+                            Color coding: {info.type === 'commercial' ? 'Blue scheme for commercial/warehouse properties' : 'Green scheme for residential/home properties'}
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          const updated = {...inspectorDefinitions};
+                          delete updated[initials];
+                          updateInspectorDefinitions(updated);
+                        }}
+                        className="ml-4 text-red-500 hover:text-red-700 text-sm font-medium px-4 py-2 rounded hover:bg-red-50 transition-colors border border-red-200 hover:border-red-300"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Color Coding Information */}
+            <div className="mt-6 p-4 bg-white rounded-lg border border-gray-200">
+              <h4 className="font-semibold text-gray-800 mb-3 flex items-center">
+                🎨 Color Coding System
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <div className="flex items-center p-3 rounded-lg border border-blue-200 bg-blue-50">
+                  <div className="w-6 h-6 bg-blue-200 border border-blue-300 rounded mr-3"></div>
+                  <div>
+                    <div className="font-medium text-blue-800">🏭 Commercial Inspectors</div>
+                    <div className="text-blue-600">Excel "Slipstream" blue scheme for inspected rows</div>
+                  </div>
+                </div>
+                <div className="flex items-center p-3 rounded-lg border border-green-200 bg-green-50">
+                  <div className="w-6 h-6 bg-green-200 border border-green-300 rounded mr-3"></div>
+                  <div>
+                    <div className="font-medium text-green-800">🏠 Residential Inspectors</div>
+                    <div className="text-green-600">Excel "Slipstream" green scheme for inspected rows</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Upload Tab */}
+      {activeTab === 'upload' && (
+        <div>
+          {/* Job Name Input */}
+          <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <h3 className="text-lg font-semibold text-
