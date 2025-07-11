@@ -275,15 +275,8 @@ const PayrollProductionUpdater = () => {
         const propertyClass = csvRow.PROPERTY_CLASS || excelRow[targetColumns.PROPERTY_CLASS];
         const isEligible = isEligibleForPay(propertyClass);
         
-        // Check if property has been inspected (has any inspection data)
-        const hasInspectionData = hasAnyInspectionData(csvRow);
-        
-        // Set "YES" in Inspected column if property has inspection data
-        if (settings.autoMarkInspected && hasInspectionData && targetColumns.INSPECTED !== -1) {
-          excelRow[targetColumns.INSPECTED] = 'YES';
-          results.markedInspected++;
-          updated = true;
-        }
+        // Process all field updates first (including data scrubbing)
+        let fieldUpdatesCompleted = false;
 
         // Track inspector work for payroll
         const trackInspectorWork = (initials, dateValue, inspectionType) => {
@@ -410,6 +403,21 @@ const PayrollProductionUpdater = () => {
 
         if (updated) {
           results.updatedRecords++;
+        }
+
+        // AFTER all data scrubbing, check if row should be marked as inspected
+        if (settings.autoMarkInspected && targetColumns.INSPECTED !== -1) {
+          const hasValidInspectorData = (
+            (excelRow[targetColumns.MEASUREBY] && excelRow[targetColumns.MEASUREDT]) ||
+            (excelRow[targetColumns.LISTBY] && excelRow[targetColumns.LISTDT]) ||
+            (excelRow[targetColumns.PRICEBY] && excelRow[targetColumns.PRICEDT])
+          );
+          
+          if (hasValidInspectorData) {
+            excelRow[targetColumns.INSPECTED] = 'YES';
+            results.markedInspected++;
+            updated = true;
+          }
         }
       }
     }
