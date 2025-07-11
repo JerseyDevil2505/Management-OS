@@ -1276,8 +1276,7 @@ const XLSX = window.XLSX || await import('xlsx');
               <div className="w-4 h-4 bg-white border border-gray-300 rounded mr-2"></div>
               <span><strong>Uninspected Properties:</strong> No highlighting</span>
             </div>
-          </div>
-        </div>
+         </div>
      </div>
   );
 };
