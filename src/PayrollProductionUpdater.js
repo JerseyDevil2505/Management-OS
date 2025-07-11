@@ -483,6 +483,9 @@ const XLSX = window.XLSX || await import('xlsx');
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      )}
        )}
 
       {/* Upload Tab */}
