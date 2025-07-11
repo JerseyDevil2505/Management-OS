@@ -42,12 +42,76 @@ const PayrollProductionUpdater = () => {
   
   const csvInputRef = useRef();
   const excelInputRef = useRef();
+  const inspectorImportRef = useRef();
 
   const handleFileUpload = (file, type) => {
     if (type === 'csv') {
       setCsvFile(file);
     } else {
       setExcelFile(file);
+    }
+  };
+
+  const importInspectorsFromExcel = async (file) => {
+    try {
+      const excelArrayBuffer = await readFileAsArrayBuffer(file);
+      const workbook = XLSX.read(excelArrayBuffer, { cellDates: true });
+      
+      // Use the first sheet
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+      const data = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+      
+      const importedInspectors = {};
+      let importCount = 0;
+      let skippedCount = 0;
+      
+      // Process each row (skip header row 0)
+      for (let i = 1; i < data.length; i++) {
+        const row = data[i];
+        const nameWithInitials = row[1]; // Column B
+        const role = row[5]; // Column F
+        
+        // Only process Residential and Commercial roles
+        if (role && (role === 'Residential' || role === 'Commercial')) {
+          if (nameWithInitials && typeof nameWithInitials === 'string') {
+            // Extract initials from parentheses like "Aguilar, Jared (JA)" -> "JA"
+            const initialsMatch = nameWithInitials.match(/\(([A-Z]{2,3})\)/);
+            if (initialsMatch) {
+              const initials = initialsMatch[1];
+              // Extract name (everything before the parentheses, trimmed)
+              const name = nameWithInitials.replace(/\s*\([^)]*\)/, '').trim();
+              
+              // Convert role to lowercase for consistency
+              const inspectorType = role.toLowerCase();
+              
+              // Only add if initials don't already exist
+              if (!inspectorDefinitions[initials]) {
+                importedInspectors[initials] = {
+                  name: name,
+                  type: inspectorType
+                };
+                importCount++;
+              } else {
+                skippedCount++;
+              }
+            }
+          }
+        }
+      }
+      
+      // Merge with existing inspectors
+      setInspectorDefinitions(prev => ({
+        ...prev,
+        ...importedInspectors
+      }));
+      
+      // Show success message
+      alert(`Import complete!\n✅ Imported: ${importCount} inspectors\n⚠️ Skipped: ${skippedCount} (already exist or invalid format)\n\nOnly Residential and Commercial inspectors were imported.`);
+      
+    } catch (error) {
+      console.error('Import error:', error);
+      alert(`Error importing inspectors: ${error.message}`);
     }
   };
 
@@ -797,61 +861,99 @@ const PayrollProductionUpdater = () => {
               <h3 className="text-lg font-semibold mb-4 text-gray-700 flex items-center">
                 ➕ Add New Inspector
               </h3>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Initials *</label>
+              
+              {/* Import from Excel Option */}
+              <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <h4 className="font-semibold text-blue-800 mb-3 flex items-center">
+                  📊 Import from Excel File
+                </h4>
+                <p className="text-sm text-blue-700 mb-3">
+                  Import inspectors directly from your staff Excel file. The system will read Column B (names with initials) and Column F (roles), importing only Residential and Commercial inspectors.
+                </p>
+                <div className="flex items-center gap-4">
                   <input
-                    type="text"
-                    placeholder="e.g., AM"
-                    value={newInspector.initials}
-                    onChange={(e) => setNewInspector({...newInspector, initials: e.target.value.toUpperCase()})}
-                    className="w-full p-3 border rounded-lg text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    maxLength="3"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">2-3 uppercase letters</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Full Name *</label>
-                  <input
-                    type="text"
-                    placeholder="e.g., Arcadio Martinez"
-                    value={newInspector.name}
-                    onChange={(e) => setNewInspector({...newInspector, name: e.target.value})}
-                    className="w-full p-3 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">Inspector's full name</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Inspector Type *</label>
-                  <select
-                    value={newInspector.type}
-                    onChange={(e) => setNewInspector({...newInspector, type: e.target.value})}
-                    className="w-full p-3 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="residential">🏠 Residential</option>
-                    <option value="commercial">🏢 Commercial</option>
-                  </select>
-                  <p className="text-xs text-gray-500 mt-1">Determines color coding</p>
-                </div>
-                <div className="flex items-end">
-                  <button
-                    onClick={() => {
-                      if (newInspector.initials && newInspector.name) {
-                        setInspectorDefinitions({
-                          ...inspectorDefinitions,
-                          [newInspector.initials]: {
-                            name: newInspector.name,
-                            type: newInspector.type
-                          }
-                        });
-                        setNewInspector({ initials: '', name: '', type: 'residential' });
+                    ref={inspectorImportRef}
+                    type="file"
+                    accept=".xlsx,.xls"
+                    onChange={(e) => {
+                      if (e.target.files[0]) {
+                        importInspectorsFromExcel(e.target.files[0]);
                       }
                     }}
-                    disabled={!newInspector.initials || !newInspector.name}
-                    className="w-full px-4 py-3 bg-green-500 text-white rounded-lg text-sm font-medium hover:bg-green-600 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                    className="hidden"
+                  />
+                  <button
+                    onClick={() => inspectorImportRef.current.click()}
+                    className="px-4 py-2 bg-blue-500 text-white rounded-lg text-sm font-medium hover:bg-blue-600 transition-colors flex items-center gap-2"
                   >
-                    Add Inspector
+                    <Upload className="w-4 h-4" />
+                    Import from Excel
                   </button>
+                  <div className="text-xs text-blue-600">
+                    Expected format: "Last, First (XX)" in Column B, "Residential" or "Commercial" in Column F
+                  </div>
+                </div>
+              </div>
+              
+              {/* Manual Add Form */}
+              <div className="border-t border-gray-200 pt-4">
+                <h4 className="font-semibold text-gray-700 mb-3">Manual Entry</h4>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Initials *</label>
+                    <input
+                      type="text"
+                      placeholder="e.g., AM"
+                      value={newInspector.initials}
+                      onChange={(e) => setNewInspector({...newInspector, initials: e.target.value.toUpperCase()})}
+                      className="w-full p-3 border rounded-lg text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      maxLength="3"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">2-3 uppercase letters</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Full Name *</label>
+                    <input
+                      type="text"
+                      placeholder="e.g., Arcadio Martinez"
+                      value={newInspector.name}
+                      onChange={(e) => setNewInspector({...newInspector, name: e.target.value})}
+                      className="w-full p-3 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Inspector's full name</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Inspector Type *</label>
+                    <select
+                      value={newInspector.type}
+                      onChange={(e) => setNewInspector({...newInspector, type: e.target.value})}
+                      className="w-full p-3 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value="residential">🏠 Residential</option>
+                      <option value="commercial">🏢 Commercial</option>
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1">Determines color coding</p>
+                  </div>
+                  <div className="flex items-end">
+                    <button
+                      onClick={() => {
+                        if (newInspector.initials && newInspector.name) {
+                          setInspectorDefinitions({
+                            ...inspectorDefinitions,
+                            [newInspector.initials]: {
+                              name: newInspector.name,
+                              type: newInspector.type
+                            }
+                          });
+                          setNewInspector({ initials: '', name: '', type: 'residential' });
+                        }
+                      }}
+                      disabled={!newInspector.initials || !newInspector.name}
+                      className="w-full px-4 py-3 bg-green-500 text-white rounded-lg text-sm font-medium hover:bg-green-600 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                    >
+                      Add Inspector
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
