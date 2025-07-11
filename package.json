@@ -1,0 +1,114 @@
+{
+  "name": "payroll-production-updater",
+  "version": "1.0.0",
+  "description": "Automated payroll and production tracking tool for property assessment inspectors with bimonthly reporting, data cleaning, and Excel formatting",
+  "main": "index.html",
+  "scripts": {
+    "start": "npx http-server -p 3000 -o",
+    "dev": "npx live-server --port=3000 --entry-file=index.html",
+    "build": "echo 'This is a client-side application - no build step required'",
+    "lint": "npx eslint *.js",
+    "format": "npx prettier --write *.html *.js *.css",
+    "validate": "npx html-validate index.html"
+  },
+  "keywords": [
+    "payroll",
+    "property-assessment",
+    "inspector-tracking",
+    "excel-automation",
+    "csv-processing",
+    "bimonthly-reporting",
+    "data-cleaning",
+    "production-tracking",
+    "real-estate",
+    "assessment-tools"
+  ],
+  "author": {
+    "name": "Your Name",
+    "email": "your.email@example.com",
+    "url": "https://github.com/yourusername"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/payroll-production-updater.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/payroll-production-updater/issues"
+  },
+  "homepage": "https://github.com/yourusername/payroll-production-updater#readme",
+  "engines": {
+    "node": ">=14.0.0",
+    "npm": ">=6.0.0"
+  },
+  "browserslist": [
+    "> 1%",
+    "last 2 versions",
+    "not dead",
+    "not ie 11"
+  ],
+  "dependencies": {
+    "xlsx": "^0.18.5",
+    "papaparse": "^5.4.1"
+  },
+  "devDependencies": {
+    "http-server": "^14.1.1",
+    "live-server": "^1.2.2",
+    "eslint": "^8.57.0",
+    "prettier": "^3.2.5",
+    "html-validate": "^8.15.0"
+  },
+  "files": [
+    "index.html",
+    "README.md",
+    "LICENSE",
+    "DISCLAIMER.md"
+  ],
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/yourusername"
+  },
+  "config": {
+    "payroll": {
+      "defaultPayRate": 2.00,
+      "targetPropertyClasses": ["2", "3A"],
+      "colorScheme": "slipstream"
+    },
+    "validation": {
+      "initialsPattern": "^[A-Z]{2,3}$",
+      "maxFileSize": "50MB",
+      "supportedFormats": ["csv", "xlsx", "xls"]
+    }
+  },
+  "metadata": {
+    "industry": "Property Assessment",
+    "useCase": "Bimonthly Payroll Processing",
+    "dataTypes": ["CSV", "Excel"],
+    "features": [
+      "Data Cleaning",
+      "Payroll Calculation",
+      "Color Coding",
+      "Inspector Management",
+      "Validation Rules",
+      "Analytics Dashboard"
+    ]
+  },
+  "security": {
+    "clientSideOnly": true,
+    "noDataTransmission": true,
+    "noDataStorage": true,
+    "browserProcessing": true
+  },
+  "compatibility": {
+    "browsers": {
+      "chrome": ">=88",
+      "firefox": ">=85",
+      "safari": ">=14",
+      "edge": ">=88"
+    },
+    "fileFormats": {
+      "input": ["CSV", "XLSX", "XLS"],
+      "output": ["XLSX"]
+    }
+  }
+}
