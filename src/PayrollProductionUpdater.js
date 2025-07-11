@@ -10,17 +10,7 @@ const PayrollProductionUpdater = () => {
   const [jobs, setJobs] = useState({});
   const [currentJobName, setCurrentJobName] = useState('');
   const [jobMetrics, setJobMetrics] = useState(null);
-  const [inspectorDefinitions, setInspectorDefinitions] = useState(() => {
-    // Default inspector definitions
-    return {
-      'MX': { name: 'Inspector MX', type: 'residential' },
-      'DE': { name: 'Inspector DE', type: 'commercial' },
-      'RR': { name: 'Inspector RR', type: 'commercial' },
-      'SD': { name: 'Inspector SD', type: 'residential' },
-      'AS': { name: 'Inspector AS', type: 'residential' },
-      'AM': { name: 'Arcadio Martinez', type: 'residential' }
-    };
-  });
+  const [inspectorDefinitions, setInspectorDefinitions] = useState({});
   const [showInspectorManager, setShowInspectorManager] = useState(false);
   const [newInspector, setNewInspector] = useState({ initials: '', name: '', type: 'residential' });
   const [settings, setSettings] = useState({
