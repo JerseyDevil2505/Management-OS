@@ -930,7 +930,7 @@ const PayrollProductionUpdater = () => {
                       className="w-full p-3 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     >
                       <option value="residential">🏠 Residential</option>
-                      <option value="commercial">🏢 Commercial</option>
+                      <option value="commercial">🏭 Commercial</option>
                     </select>
                     <p className="text-xs text-gray-500 mt-1">Determines color coding</p>
                   </div>
@@ -995,11 +995,11 @@ const PayrollProductionUpdater = () => {
                             <span className={`px-3 py-1 text-xs font-medium rounded-full ${
                               info.type === 'commercial' ? 'bg-blue-200 text-blue-800' : 'bg-green-200 text-green-800'
                             }`}>
-                              {info.type === 'commercial' ? '🏢 Commercial' : '🏠 Residential'}
+                              {info.type === 'commercial' ? '🏭 Commercial' : '🏠 Residential'}
                             </span>
                           </div>
                           <div className="text-sm text-gray-600 mt-1">
-                            Color coding: {info.type === 'commercial' ? 'Blue scheme for commercial properties' : 'Green scheme for residential properties'}
+                            Color coding: {info.type === 'commercial' ? 'Blue scheme for commercial/warehouse properties' : 'Green scheme for residential/home properties'}
                           </div>
                         </div>
                       </div>
@@ -1028,14 +1028,14 @@ const PayrollProductionUpdater = () => {
                 <div className="flex items-center p-3 rounded-lg border border-blue-200 bg-blue-50">
                   <div className="w-6 h-6 bg-blue-200 border border-blue-300 rounded mr-3"></div>
                   <div>
-                    <div className="font-medium text-blue-800">Commercial Inspectors</div>
+                    <div className="font-medium text-blue-800">🏭 Commercial Inspectors</div>
                     <div className="text-blue-600">Excel "Slipstream" blue scheme for inspected rows</div>
                   </div>
                 </div>
                 <div className="flex items-center p-3 rounded-lg border border-green-200 bg-green-50">
                   <div className="w-6 h-6 bg-green-200 border border-green-300 rounded mr-3"></div>
                   <div>
-                    <div className="font-medium text-green-800">Residential Inspectors</div>
+                    <div className="font-medium text-green-800">🏠 Residential Inspectors</div>
                     <div className="text-green-600">Excel "Slipstream" green scheme for inspected rows</div>
                   </div>
                 </div>
@@ -1542,11 +1542,11 @@ const PayrollProductionUpdater = () => {
               <div className="text-sm text-blue-700 space-y-1">
                 <div className="flex items-center">
                   <div className="w-4 h-4 bg-blue-200 border border-blue-300 rounded mr-2"></div>
-                  <span><strong>Commercial Inspectors:</strong> Excel "Slipstream" blue scheme</span>
+                  <span><strong>🏭 Commercial Inspectors:</strong> Excel "Slipstream" blue scheme</span>
                 </div>
                 <div className="flex items-center">
                   <div className="w-4 h-4 bg-green-200 border border-green-300 rounded mr-2"></div>
-                  <span><strong>Residential Inspectors:</strong> Excel "Slipstream" green scheme</span>
+                  <span><strong>🏠 Residential Inspectors:</strong> Excel "Slipstream" green scheme</span>
                 </div>
                 <div className="flex items-center">
                   <div className="w-4 h-4 bg-white border border-gray-300 rounded mr-2"></div>
@@ -1708,7 +1708,7 @@ const PayrollProductionUpdater = () => {
                               ? 'bg-blue-200 text-blue-800' 
                               : 'bg-green-200 text-green-800'
                           }`}>
-                            {inspector.type}
+                            {inspector.type === 'commercial' ? '🏭 commercial' : '🏠 residential'}
                           </span>
                         </div>
                         
