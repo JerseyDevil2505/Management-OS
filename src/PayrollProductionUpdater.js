@@ -1,5 +1,5 @@
-import React, { useState, useRef } from 'react';
-import { Upload, Download, AlertCircle, CheckCircle, Settings } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Upload, Download, AlertCircle, CheckCircle, Settings, Database } from 'lucide-react';
 import { employeeService, jobService, sourceFileService, propertyService, productionDataService, utilityService } from './supabaseClient';
 
 const PayrollProductionUpdater = () => {
@@ -9,11 +9,15 @@ const PayrollProductionUpdater = () => {
   const [results, setResults] = useState(null);
   const [activeTab, setActiveTab] = useState('inspectors');
   const [jobs, setJobs] = useState({});
+  const [selectedJob, setSelectedJob] = useState(null);
+  const [availableJobs, setAvailableJobs] = useState([]);
   const [currentJobName, setCurrentJobName] = useState('');
   const [jobMetrics, setJobMetrics] = useState(null);
   const [inspectorDefinitions, setInspectorDefinitions] = useState({});
   const [newInspector, setNewInspector] = useState({ initials: '', name: '', type: 'residential' });
   const [validationReport, setValidationReport] = useState(null);
+  const [dbConnected, setDbConnected] = useState(false);
+  const [dbStats, setDbStats] = useState({ employees: 0, jobs: 0, propertyRecords: 0, sourceFiles: 0 });
   const [settings, setSettings] = useState({
     startDate: '2025-04-24',
     lastUpdateDate: '2025-06-01',
@@ -33,6 +37,45 @@ const PayrollProductionUpdater = () => {
   const csvInputRef = useRef();
   const excelInputRef = useRef();
   const inspectorImportRef = useRef();
+
+  // Initialize database connection
+  useEffect(() => {
+    initializeDatabase();
+  }, []);
+
+  const initializeDatabase = async () => {
+    try {
+      // Test database connection
+      const connectionTest = await utilityService.testConnection();
+      setDbConnected(connectionTest.success);
+      
+      if (connectionTest.success) {
+        // Load jobs from database
+        const jobsData = await jobService.getAll();
+        setAvailableJobs(jobsData);
+        
+        // Load employees and create inspector definitions
+        const employeesData = await employeeService.getAll();
+        const definitions = {};
+        employeesData.forEach(emp => {
+          if (emp.role === 'inspector' && emp.initials) {
+            definitions[emp.initials] = {
+              name: `${emp.first_name} ${emp.last_name}`,
+              type: emp.inspector_type || 'residential'
+            };
+          }
+        });
+        setInspectorDefinitions(definitions);
+        
+        // Get database statistics
+        const stats = await utilityService.getStats();
+        setDbStats(stats);
+      }
+    } catch (error) {
+      console.error('Database initialization error:', error);
+      setDbConnected(false);
+    }
+  };
 
   const updateInspectorDefinitions = (newDefinitions) => {
     setInspectorDefinitions(newDefinitions);
@@ -64,6 +107,7 @@ const PayrollProductionUpdater = () => {
       const data = XLSX.utils.sheet_to_json(worksheet);
       
       const newInspectors = {};
+      const employeesToCreate = [];
       let importCount = 0;
       
       data.forEach(row => {
@@ -75,19 +119,38 @@ const PayrollProductionUpdater = () => {
           if (initialsMatch) {
             const initials = initialsMatch[1];
             const fullName = inspectorName.replace(/\s*\([A-Z]{2,3}\)/, '').trim();
+            const [firstName, ...lastNameParts] = fullName.split(' ');
             
             newInspectors[initials] = {
               name: fullName,
               type: role.toLowerCase()
             };
+
+            // Prepare for database import
+            employeesToCreate.push({
+              employee_number: `IMP_${Date.now()}_${initials}`,
+              first_name: firstName,
+              last_name: lastNameParts.join(' '),
+              initials: initials,
+              role: 'inspector',
+              inspector_type: role.toLowerCase(),
+              employment_status: 'active',
+              created_by: 'system-import'
+            });
+            
             importCount++;
           }
         }
       });
       
+      // Import to database if connected
+      if (dbConnected && employeesToCreate.length > 0) {
+        await employeeService.bulkImport(employeesToCreate);
+      }
+      
       setInspectorDefinitions(prev => ({...prev, ...newInspectors}));
       
-      alert(`Successfully imported ${importCount} inspectors from Excel file!\n\nImported inspectors:\n${Object.entries(newInspectors).map(([initials, info]) => `${initials} - ${info.name} (${info.type})`).join('\n')}`);
+      alert(`Successfully imported ${importCount} inspectors!\n\nImported inspectors:\n${Object.entries(newInspectors).map(([initials, info]) => `${initials} - ${info.name} (${info.type})`).join('\n')}\n\n${dbConnected ? '✅ Saved to database' : '⚠️ Local only (database not connected)'}`);
       
     } catch (error) {
       console.error('Import error:', error);
@@ -321,7 +384,7 @@ const PayrollProductionUpdater = () => {
     if (!validationReport) return;
 
     const XLSX = window.XLSX || require('xlsx');
-    const fileName = `Inspection_Validation_Report_${currentJobName}_${new Date().toISOString().split('T')[0].replace(/-/g, '')}.xlsx`;
+    const fileName = `Inspection_Validation_Report_${selectedJob?.job_name || currentJobName}_${new Date().toISOString().split('T')[0].replace(/-/g, '')}.xlsx`;
     
     XLSX.writeFile(validationReport.workbook, fileName);
   };
@@ -449,20 +512,21 @@ const PayrollProductionUpdater = () => {
     return { results, metrics };
   };
 
+  // UPDATED PROCESS FILES FUNCTION WITH SUPABASE INTEGRATION
   const processFiles = async () => {
     if (!csvFile) {
       alert('Please upload a CSV file');
       return;
     }
 
-    if (!currentJobName.trim()) {
-      alert('Please enter a job name');
+    if (!selectedJob && !currentJobName.trim()) {
+      alert('Please select a job or enter a new job name');
       return;
     }
 
     setProcessing(true);
     try {
-      console.log('Starting file scrubbing and validation...');
+      console.log('Starting file processing with Supabase integration...');
       
       const csvText = await readFileAsText(csvFile);
       const Papa = window.Papa || await import('papaparse');
@@ -475,9 +539,66 @@ const PayrollProductionUpdater = () => {
 
       console.log('Parsed CSV data:', parsedData.data.length, 'records');
 
+      let job = selectedJob;
+      let fileVersion = null;
+
+      // If connected to database, handle file versioning
+      if (dbConnected) {
+        // Use selected job or find/create job by name
+        if (!job && currentJobName.trim()) {
+          // Look for existing job by name
+          const existingJob = availableJobs.find(j => j.job_name === currentJobName.trim());
+          if (existingJob) {
+            job = existingJob;
+          } else {
+            // Note: In full implementation, you'd create a new job here
+            console.log('Would create new job:', currentJobName.trim());
+          }
+        }
+
+        if (job) {
+          // Create new source file version
+          fileVersion = await sourceFileService.createVersion(
+            job.id,
+            csvFile.name,
+            csvFile.size,
+            'system-user' // TODO: Get actual user ID from auth
+          );
+          console.log('Created file version:', fileVersion.version_number);
+        }
+      }
+
       // Apply scrubbing
       const startDate = new Date(settings.startDate);
       const scrubbedData = scrubData(parsedData.data, startDate);
+      
+      // Import to database if connected and have job/file version
+      if (dbConnected && job && fileVersion) {
+        try {
+          const importResult = await propertyService.importCSVData(
+            job.id,
+            fileVersion.id,
+            scrubbedData,
+            'system-user' // TODO: Get actual user ID from auth
+          );
+
+          // Update file version with results
+          await sourceFileService.updateVersion(fileVersion.id, {
+            total_records: parsedData.data.length,
+            records_processed: importResult.imported,
+            processing_status: 'completed',
+            processing_notes: `Successfully imported ${importResult.imported} of ${importResult.total} records`
+          });
+
+          // Update production summary
+          await productionDataService.updateSummary(job.id);
+          
+          console.log('Database import successful:', importResult);
+        } catch (dbError) {
+          console.error('Database import error:', dbError);
+          alert(`Warning: Data processed locally but database save failed: ${dbError.message}`);
+        }
+      }
       
       // Run validation
       const validationIssues = validateData(scrubbedData, settings.infoByCodeMappings);
@@ -489,16 +610,31 @@ const PayrollProductionUpdater = () => {
       // Calculate analytics
       const analytics = calculateAnalytics(scrubbedData, settings.infoByCodeMappings);
       
-      // Add validation summary to results
+      // Add validation summary and database info to results
       analytics.results.validationSummary = {
         totalIssues: validationIssues.length,
         inspectorsWithIssues: report ? report.inspectorCount : 0,
         hasReport: !!report
       };
+
+      if (dbConnected && job && fileVersion) {
+        analytics.results.databaseInfo = {
+          jobName: job.job_name,
+          fileVersion: fileVersion.version_number,
+          recordsImported: parsedData.data.length,
+          saved: true
+        };
+      } else {
+        analytics.results.databaseInfo = {
+          jobName: currentJobName || 'Local Processing',
+          saved: false,
+          reason: !dbConnected ? 'Database not connected' : 'No job selected'
+        };
+      }
       
-      // Store job data
+      // Store job data locally for backward compatibility
       const jobData = {
-        name: currentJobName.trim(),
+        name: (selectedJob?.job_name || currentJobName).trim(),
         date: new Date().toISOString(),
         csvData: scrubbedData,
         results: analytics.results,
@@ -508,13 +644,21 @@ const PayrollProductionUpdater = () => {
         validationReport: report
       };
       
-      setJobs(prev => ({...prev, [currentJobName.trim()]: jobData}));
+      setJobs(prev => ({...prev, [jobData.name]: jobData}));
       setResults(analytics.results);
       setJobMetrics(analytics.metrics);
       setActiveTab('payroll');
+
+      // Success message
+      const successMsg = dbConnected && job && fileVersion 
+        ? `✅ Success! File Version ${fileVersion.version_number} processed and saved to database.`
+        : `✅ Processing complete! ${!dbConnected ? '(Local only - database not connected)' : '(Local only - no job selected)'}`;
+      
+      alert(successMsg + `\n\nRecords: ${parsedData.data.length}\nValidation Issues: ${validationIssues.length}`);
+      
     } catch (error) {
       console.error('Processing error:', error);
-      alert(`Error processing file: ${error.message}`);
+      alert(`❌ Error processing file: ${error.message}`);
     } finally {
       setProcessing(false);
     }
@@ -542,11 +686,31 @@ const PayrollProductionUpdater = () => {
     <div className="max-w-6xl mx-auto p-6 bg-white">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">
-          Payroll Production Data Updater
+          PPA Management OS - Production Tracker
         </h1>
         <p className="text-gray-600">
-          Automate bimonthly payroll processing and production tracking with built-in data cleaning and analytics
+          Integrated payroll processing and production tracking with Supabase database
         </p>
+      </div>
+
+      {/* Database Status */}
+      <div className="mb-6 p-4 bg-gray-50 rounded-lg border">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Database className={`w-5 h-5 ${dbConnected ? 'text-green-600' : 'text-red-600'}`} />
+            <span className={`font-medium ${dbConnected ? 'text-green-800' : 'text-red-800'}`}>
+              Database: {dbConnected ? 'Connected' : 'Disconnected'}
+            </span>
+          </div>
+          {dbConnected && (
+            <div className="flex items-center gap-6 text-sm text-gray-600">
+              <span>{dbStats.employees} Employees</span>
+              <span>{dbStats.jobs} Jobs</span>
+              <span>{dbStats.propertyRecords?.toLocaleString() || 0} Property Records</span>
+              <span>{dbStats.sourceFiles} Source Files</span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Tab Navigation */}
@@ -607,7 +771,7 @@ const PayrollProductionUpdater = () => {
         </div>
       </div>
 
-      {/* Inspector Management Tab */}
+      {/* Inspector Management Tab - Keep your existing code */}
       {activeTab === 'inspectors' && (
         <div className="space-y-6">
           <div className="bg-gradient-to-r from-blue-50 to-green-50 rounded-lg border-2 border-blue-200 p-6">
@@ -615,7 +779,12 @@ const PayrollProductionUpdater = () => {
               <Settings className="w-8 h-8 mr-3 text-blue-600" />
               <div>
                 <h2 className="text-2xl font-bold text-gray-800">👥 Inspector Management</h2>
-                <p className="text-gray-600 mt-1">Manage inspector profiles for payroll tracking and color coding</p>
+                <p className="text-gray-600 mt-1">
+                  {dbConnected 
+                    ? `Connected to database with ${dbStats.employees} employees`
+                    : 'Manage inspector profiles for payroll tracking and color coding'
+                  }
+                </p>
               </div>
             </div>
             
@@ -629,7 +798,7 @@ const PayrollProductionUpdater = () => {
                   📊 Import from Excel File
                 </h4>
                 <p className="text-sm text-blue-700 mb-3">
-                  Import inspectors directly from your staff Excel file. The system will read Column B (names with initials) and Column F (roles), importing only Residential and Commercial inspectors.
+                  Import inspectors directly from your staff Excel file. {dbConnected && 'Data will be saved to the database automatically.'}
                 </p>
                 <div className="flex items-center gap-4">
                   <input
@@ -696,8 +865,9 @@ const PayrollProductionUpdater = () => {
                   </div>
                   <div className="flex items-end">
                     <button
-                      onClick={() => {
+                      onClick={async () => {
                         if (newInspector.initials && newInspector.name) {
+                          // Add to local state
                           setInspectorDefinitions({
                             ...inspectorDefinitions,
                             [newInspector.initials]: {
@@ -705,6 +875,26 @@ const PayrollProductionUpdater = () => {
                               type: newInspector.type
                             }
                           });
+
+                          // Add to database if connected
+                          if (dbConnected) {
+                            try {
+                              const [firstName, ...lastNameParts] = newInspector.name.split(' ');
+                              await employeeService.create({
+                                employee_number: `MAN_${Date.now()}`,
+                                first_name: firstName,
+                                last_name: lastNameParts.join(' '),
+                                initials: newInspector.initials,
+                                role: 'inspector',
+                                inspector_type: newInspector.type,
+                                employment_status: 'active',
+                                created_by: 'manual-entry'
+                              });
+                            } catch (error) {
+                              console.error('Database save error:', error);
+                            }
+                          }
+
                           setNewInspector({ initials: '', name: '', type: 'residential' });
                         }
                       }}
@@ -727,8 +917,10 @@ const PayrollProductionUpdater = () => {
                   <div className="text-sm text-gray-600 bg-gray-100 px-3 py-1 rounded-full">
                     {Object.keys(inspectorDefinitions).length} inspector{Object.keys(inspectorDefinitions).length !== 1 ? 's' : ''} configured
                   </div>
-                  <div className="text-xs text-green-600 bg-green-100 px-2 py-1 rounded-full flex items-center gap-1">
-                    💾 Saved in session
+                  <div className={`text-xs px-2 py-1 rounded-full flex items-center gap-1 ${
+                    dbConnected ? 'text-green-600 bg-green-100' : 'text-yellow-600 bg-yellow-100'
+                  }`}>
+                    {dbConnected ? '💾 Saved to database' : '⚠️ Local only'}
                   </div>
                 </div>
               </div>
@@ -789,6 +981,37 @@ const PayrollProductionUpdater = () => {
       {/* Upload Tab */}
       {activeTab === 'upload' && (
         <div>
+          {/* Job Selection Section */}
+          {dbConnected && availableJobs.length > 0 && (
+            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <h3 className="text-lg font-semibold text-blue-800 mb-3">📋 Job Selection</h3>
+              <div className="flex gap-4 items-end">
+                <div className="flex-1">
+                  <label className="block text-sm font-medium text-blue-700 mb-2">
+                    Select Existing Job
+                  </label>
+                  <select
+                    value={selectedJob?.id || ''}
+                    onChange={(e) => {
+                      const job = availableJobs.find(j => j.id === e.target.value);
+                      setSelectedJob(job);
+                      setCurrentJobName('');
+                    }}
+                    className="w-full p-3 border border-blue-300 rounded-lg text-sm"
+                  >
+                    <option value="">-- Select a job --</option>
+                    {availableJobs.map(job => (
+                      <option key={job.id} value={job.id}>
+                        {job.job_name} ({job.client_name})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="text-center text-gray-500 font-medium">OR</div>
+              </div>
+            </div>
+          )}
+
           <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
             <h3 className="text-lg font-semibold text-yellow-800 mb-3">🏷️ Job Information</h3>
             <div className="flex gap-4 items-end">
@@ -799,12 +1022,15 @@ const PayrollProductionUpdater = () => {
                 <input
                   type="text"
                   value={currentJobName}
-                  onChange={(e) => setCurrentJobName(e.target.value)}
+                  onChange={(e) => {
+                    setCurrentJobName(e.target.value);
+                    if (e.target.value) setSelectedJob(null);
+                  }}
                   placeholder="e.g., CCDD-Municipality Name"
                   className="w-full p-3 border border-yellow-300 rounded-lg text-sm focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
                 />
                 <p className="text-xs text-yellow-600 mt-1">
-                  This will be used to track and compare multiple jobs
+                  {selectedJob ? 'Selected job from database' : 'Enter name for local processing'}
                 </p>
               </div>
               {Object.keys(jobs).length > 0 && (
@@ -824,6 +1050,7 @@ const PayrollProductionUpdater = () => {
             </div>
           </div>
 
+          {/* Rest of your existing upload tab code... */}
           <div className="mb-6 p-4 bg-gray-50 rounded-lg">
             <div className="flex items-center mb-3">
               <Settings className="w-5 h-5 mr-2" />
@@ -960,20 +1187,25 @@ const PayrollProductionUpdater = () => {
           <div className="text-center mb-6">
             <button
               onClick={processFiles}
-              disabled={!csvFile || !currentJobName.trim() || processing}
+              disabled={!csvFile || (!selectedJob && !currentJobName.trim()) || processing}
               className="px-12 py-4 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-xl font-bold shadow-lg"
             >
               {processing ? (
                 <span className="flex items-center gap-3">
                   <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                  Scrubbing & Validating...
+                  {dbConnected ? 'Processing & Saving to Database...' : 'Processing Locally...'}
                 </span>
               ) : (
-                '🧹 Scrub and Consolidate'
+                <>
+                  {dbConnected ? '🚀 Process & Save to Database' : '🧹 Process Locally'}
+                </>
               )}
             </button>
             <p className="text-sm text-gray-600 mt-2">
-              Clean data, run validation, and generate comprehensive analytics
+              {dbConnected 
+                ? 'Clean data, validate, and save with file versioning to Supabase' 
+                : 'Clean data and run validation (local processing only)'
+              }
             </p>
           </div>
 
@@ -981,15 +1213,38 @@ const PayrollProductionUpdater = () => {
             <div className="bg-green-50 border border-green-200 rounded-lg p-6">
               <div className="flex items-center mb-4">
                 <CheckCircle className="w-6 h-6 text-green-600 mr-2" />
-                <h3 className="text-lg font-semibold text-green-800">Scrub and Validation Complete!</h3>
+                <h3 className="text-lg font-semibold text-green-800">Processing Complete!</h3>
               </div>
+
+              {/* Database Status */}
+              {results.databaseInfo && (
+                <div className="mb-4 p-3 bg-white border border-gray-200 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="font-medium">Job: {results.databaseInfo.jobName}</span>
+                      {results.databaseInfo.fileVersion && (
+                        <span className="ml-2 text-sm text-gray-600">
+                          (File Version {results.databaseInfo.fileVersion})
+                        </span>
+                      )}
+                    </div>
+                    <div className={`px-3 py-1 rounded-full text-sm ${
+                      results.databaseInfo.saved 
+                        ? 'bg-green-100 text-green-800' 
+                        : 'bg-yellow-100 text-yellow-800'
+                    }`}>
+                      {results.databaseInfo.saved ? '✅ Saved to Database' : `⚠️ ${results.databaseInfo.reason}`}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Job Summary Header */}
               <div className="mb-6 p-4 bg-white border border-gray-200 rounded-lg">
                 <h3 className="text-lg font-semibold text-gray-800 mb-2">
-                  For {currentJobName} as of {new Date().toLocaleDateString()}
+                  For {selectedJob?.job_name || currentJobName} as of {new Date().toLocaleDateString()}
                 </h3>
-                <p className="text-gray-600">So to recap:</p>
+                <p className="text-gray-600">Processing summary:</p>
               </div>
               
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
