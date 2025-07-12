@@ -268,6 +268,12 @@ const PayrollProductionUpdater = () => {
     ];
     
     const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+    // Auto-size summary sheet columns
+    summarySheet['!cols'] = [
+      { wch: 12 },  // Inspector
+      { wch: 15 },  // Total Issues
+      { wch: 25 }   // Inspector Name
+    ];
     XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary');
 
     // Create sheet for each inspector
@@ -286,6 +292,17 @@ const PayrollProductionUpdater = () => {
       
       const sheet = XLSX.utils.aoa_to_sheet(sheetData);
       
+      // Auto-size columns to fit content
+      const columnWidths = [
+        { wch: 8 },   // Block
+        { wch: 8 },   // Lot  
+        { wch: 12 },  // Qualifier
+        { wch: 8 },   // Card
+        { wch: 35 },  // Property Location
+        { wch: 45 }   // Warning Message
+      ];
+      sheet['!cols'] = columnWidths;
+      
       // Limit sheet name to 31 characters for Excel compatibility
       const sheetName = inspector.length > 31 ? inspector.substring(0, 31) : inspector;
       XLSX.utils.book_append_sheet(workbook, sheet, sheetName);
@@ -303,7 +320,7 @@ const PayrollProductionUpdater = () => {
     if (!validationReport) return;
 
     const XLSX = window.XLSX || require('xlsx');
-    const fileName = `Inspection_Validation_Report_${currentJobName}_${new Date().toISOString().split('T')[0]}.xlsx`;
+    const fileName = `Inspection_Validation_Report_${currentJobName}_${new Date().toISOString().split('T')[0].replace(/-/g, '')}.xlsx`;
     
     XLSX.writeFile(validationReport.workbook, fileName);
   };
@@ -965,6 +982,14 @@ const PayrollProductionUpdater = () => {
                 <CheckCircle className="w-6 h-6 text-green-600 mr-2" />
                 <h3 className="text-lg font-semibold text-green-800">Scrub and Validation Complete!</h3>
               </div>
+
+              {/* Job Summary Header */}
+              <div className="mb-6 p-4 bg-white border border-gray-200 rounded-lg">
+                <h3 className="text-lg font-semibold text-gray-800 mb-2">
+                  For {currentJobName} as of {new Date().toLocaleDateString()}
+                </h3>
+                <p className="text-gray-600">So to recap:</p>
+              </div>
               
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                 <div className="text-center">
@@ -1023,15 +1048,15 @@ const PayrollProductionUpdater = () => {
                         </div>
                       </div>
                       
-                      <div className="text-center">
+                      <div className="text-center bg-white p-4 rounded-lg">
                         <button
                           onClick={downloadValidationReport}
-                          className="inline-flex items-center px-6 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 font-medium"
+                          className="inline-flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium shadow-md transition-colors"
                         >
                           <Download className="w-5 h-5 mr-2" />
                           📊 Download Inspection Validation Report
                         </button>
-                        <p className="text-sm text-orange-700 mt-2">
+                        <p className="text-sm text-gray-700 mt-2">
                           Excel file with inspector-specific validation issues organized by tabs
                         </p>
                       </div>
