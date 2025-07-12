@@ -825,20 +825,20 @@ const PayrollProductionUpdater = () => {
               
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                 <div className="text-center">
-                  <div className="text-2xl font-bold text-green-600">{results.totalMatches}</div>
+                  <div className="text-2xl font-bold text-green-600">{results.totalMatches.toLocaleString()}</div>
                   <div className="text-sm text-gray-600">Total Properties</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-2xl font-bold text-blue-600">{results.updatedRecords}</div>
+                  <div className="text-2xl font-bold text-blue-600">{results.updatedRecords.toLocaleString()}</div>
                   <div className="text-sm text-gray-600">Properties Inspected</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-2xl font-bold text-purple-600">{results.entryRate.count}</div>
-                  <div className="text-sm text-gray-600">Interior Inspections</div>
+                  <div className="text-2xl font-bold text-purple-600">{Math.round((results.updatedRecords / results.totalMatches) * 100)}%</div>
+                  <div className="text-sm text-gray-600">Overall Complete</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-2xl font-bold text-orange-600">{results.refusalRate.count}</div>
-                  <div className="text-sm text-gray-600">Refusals</div>
+                  <div className="text-2xl font-bold text-orange-600">{results.entryRate.count.toLocaleString()}</div>
+                  <div className="text-sm text-gray-600">Interior Inspections</div>
                 </div>
               </div>
 
@@ -848,14 +848,14 @@ const PayrollProductionUpdater = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="p-3 bg-green-50 rounded">
                     <div className="text-xl font-bold text-green-600">
-                      {results.entryRate.count} Interior Inspections Completed, {results.entryRate.percentage.toFixed(1)}%
+                      {results.entryRate.count.toLocaleString()} Interior Inspections Completed, {Math.round(results.entryRate.percentage)}%
                     </div>
                     <div className="text-sm text-gray-600">Entry Rate for Class 2/3A Properties</div>
                   </div>
                   
                   <div className="p-3 bg-red-50 rounded">
                     <div className="text-xl font-bold text-red-600">
-                      {results.refusalRate.count} Refused Inspections, {results.refusalRate.percentage.toFixed(1)}%
+                      {results.refusalRate.count.toLocaleString()} Refused Inspections, {Math.round(results.refusalRate.percentage)}%
                     </div>
                     <div className="text-sm text-gray-600">Refusal Rate for Class 2/3A Properties</div>
                   </div>
