@@ -11,8 +11,8 @@ const PayrollProductionUpdater = () => {
   const [currentJobName, setCurrentJobName] = useState('');
   const [jobMetrics, setJobMetrics] = useState(null);
   const [inspectorDefinitions, setInspectorDefinitions] = useState({});
-  const [showInspectorManager, setShowInspectorManager] = useState(false);
   const [newInspector, setNewInspector] = useState({ initials: '', name: '', type: 'residential' });
+  const [validationReport, setValidationReport] = useState(null);
   const [settings, setSettings] = useState({
     startDate: '2025-04-24',
     lastUpdateDate: '2025-06-01',
@@ -106,13 +106,7 @@ const PayrollProductionUpdater = () => {
       }
     };
 
-    const isValidInitials = (initials) => {
-      if (!initials || typeof initials !== 'string') return false;
-      return /^[A-Z]{2,3}$/i.test(initials.trim());
-    };
-
     let scrubbedCount = 0;
-    const flaggedRecords = [];
     
     const scrubbedData = data.map(row => {
       let cleanRow = {...row};
@@ -157,27 +151,161 @@ const PayrollProductionUpdater = () => {
         }
       }
 
-      // LISTED BY/DATE FLAGGING (don't modify, just flag)
-      const validMeasured = cleanRow.MEASUREBY && cleanRow.MEASUREDT;
-      if (validMeasured) {
-        const listBy = cleanRow.LISTBY;
-        const listDate = cleanRow.LISTDT;
-        
-        if ((!listBy && listDate) || (listBy && !listDate)) {
-          flaggedRecords.push({
-            property: `Block ${cleanRow.BLOCK}, Lot ${cleanRow.LOT}`,
-            issue: `Incomplete Listed data: BY=${listBy || 'blank'}, DATE=${listDate || 'blank'}`,
-            inspector: cleanRow.MEASUREBY
-          });
-        }
-      }
-
       if (wasModified) scrubbedCount++;
       return cleanRow;
     });
 
-    console.log(`Scrubbed ${scrubbedCount} records, flagged ${flaggedRecords.length} for review`);
-    return { data: scrubbedData, flagged: flaggedRecords };
+    console.log(`Scrubbed ${scrubbedCount} records`);
+    return scrubbedData;
+  };
+
+  const validateData = (data, codeMapping) => {
+    console.log('Running validation checks...');
+    
+    const parseCodeString = (codeStr) => {
+      return codeStr.split(',').map(code => {
+        const num = parseInt(code.trim());
+        return isNaN(num) ? parseInt(code.trim().replace(/^0+/, '')) || 0 : num;
+      });
+    };
+    
+    const entryCodes = parseCodeString(codeMapping.entryCodes);
+    const refusalCodes = parseCodeString(codeMapping.refusalCodes);
+    const estimationCodes = parseCodeString(codeMapping.estimationCodes);
+    const invalidCodes = parseCodeString(codeMapping.invalidCodes);
+
+    const validationIssues = [];
+
+    data.forEach(row => {
+      // Only validate properties with valid Measured By/Date after scrub
+      if (!row.MEASUREBY || !row.MEASUREDT) return;
+
+      const inspector = row.MEASUREBY;
+      const infoBy = row.INFOBY;
+      const hasListedData = row.LISTBY && row.LISTDT;
+      const improvementValue = row.VALUES_IMPROVTAXABLEVALUE || 0;
+
+      const property = {
+        block: row.BLOCK,
+        lot: row.LOT,
+        qualifier: row.QUALIFIER || '',
+        card: row.CARD,
+        propertyLocation: row.PROPERTY_LOCATION || '',
+        inspector: inspector
+      };
+
+      // Rule 1: Entry codes but no Listed data
+      if (entryCodes.includes(infoBy) && !hasListedData) {
+        validationIssues.push({
+          ...property,
+          warning: 'Info By Mismatch-Inspected?'
+        });
+      }
+
+      // Rule 2: Refusal codes but no Listed data
+      if (refusalCodes.includes(infoBy) && !hasListedData) {
+        validationIssues.push({
+          ...property,
+          warning: 'Info By Mismatch-Refusal'
+        });
+      }
+
+      // Rule 3: Estimation codes but has Listed data
+      if (estimationCodes.includes(infoBy) && hasListedData) {
+        validationIssues.push({
+          ...property,
+          warning: 'Info By Mismatch-Inspected?'
+        });
+      }
+
+      // Rule 4: Invalid codes
+      if (invalidCodes.includes(infoBy)) {
+        validationIssues.push({
+          ...property,
+          warning: 'Info By Code Invalid'
+        });
+      }
+
+      // Rule 5: $0 improvement value validation
+      if (improvementValue === 0) {
+        if (infoBy !== 1 || !hasListedData) {
+          validationIssues.push({
+            ...property,
+            warning: 'InfoBy Code and Inspection Info Invalid for No Improvement'
+          });
+        }
+      }
+    });
+
+    console.log(`Found ${validationIssues.length} validation issues`);
+    return validationIssues;
+  };
+
+  const generateValidationReport = (validationIssues) => {
+    if (validationIssues.length === 0) return null;
+
+    // Group issues by inspector
+    const issuesByInspector = {};
+    validationIssues.forEach(issue => {
+      if (!issuesByInspector[issue.inspector]) {
+        issuesByInspector[issue.inspector] = [];
+      }
+      issuesByInspector[issue.inspector].push(issue);
+    });
+
+    // Create Excel workbook
+    const XLSX = window.XLSX || require('xlsx');
+    const workbook = XLSX.utils.book_new();
+
+    // Create summary sheet
+    const summaryData = [
+      ['Inspector', 'Total Issues', 'Inspector Name'],
+      ...Object.entries(issuesByInspector).map(([inspector, issues]) => [
+        inspector,
+        issues.length,
+        inspectorDefinitions[inspector]?.name || `Inspector ${inspector}`
+      ])
+    ];
+    
+    const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+    XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary');
+
+    // Create sheet for each inspector
+    Object.entries(issuesByInspector).forEach(([inspector, issues]) => {
+      const sheetData = [
+        ['Block', 'Lot', 'Qualifier', 'Card', 'Property Location', 'Warning Message'],
+        ...issues.map(issue => [
+          issue.block,
+          issue.lot,
+          issue.qualifier,
+          issue.card,
+          issue.propertyLocation,
+          issue.warning
+        ])
+      ];
+      
+      const sheet = XLSX.utils.aoa_to_sheet(sheetData);
+      
+      // Limit sheet name to 31 characters for Excel compatibility
+      const sheetName = inspector.length > 31 ? inspector.substring(0, 31) : inspector;
+      XLSX.utils.book_append_sheet(workbook, sheet, sheetName);
+    });
+
+    return {
+      workbook,
+      totalIssues: validationIssues.length,
+      inspectorCount: Object.keys(issuesByInspector).length,
+      issuesByInspector
+    };
+  };
+
+  const downloadValidationReport = () => {
+    if (!validationReport) return;
+
+    const XLSX = window.XLSX || require('xlsx');
+    const fileName = `Inspection_Validation_Report_${currentJobName}_${new Date().toISOString().split('T')[0]}.xlsx`;
+    
+    XLSX.writeFile(validationReport.workbook, fileName);
   };
 
   const calculateAnalytics = (data, codeMapping) => {
@@ -192,8 +320,6 @@ const PayrollProductionUpdater = () => {
     
     const entryCodes = parseCodeString(codeMapping.entryCodes);
     const refusalCodes = parseCodeString(codeMapping.refusalCodes);
-    const estimationCodes = parseCodeString(codeMapping.estimationCodes);
-    const invalidCodes = parseCodeString(codeMapping.invalidCodes);
 
     const hasCompleteInspectionData = (row) => {
       return row.MEASUREBY && row.MEASUREDT && row.LISTBY && row.LISTDT;
@@ -318,7 +444,7 @@ const PayrollProductionUpdater = () => {
 
     setProcessing(true);
     try {
-      console.log('Starting file scrubbing and consolidation...');
+      console.log('Starting file scrubbing and validation...');
       
       const csvText = await readFileAsText(csvFile);
       const Papa = window.Papa || await import('papaparse');
@@ -331,20 +457,37 @@ const PayrollProductionUpdater = () => {
 
       console.log('Parsed CSV data:', parsedData.data.length, 'records');
 
+      // Apply scrubbing
       const startDate = new Date(settings.startDate);
-      const scrubResult = scrubData(parsedData.data, startDate);
-      const analytics = calculateAnalytics(scrubResult.data, settings.infoByCodeMappings);
+      const scrubbedData = scrubData(parsedData.data, startDate);
       
-      analytics.results.flaggedRecords = scrubResult.flagged;
+      // Run validation
+      const validationIssues = validateData(scrubbedData, settings.infoByCodeMappings);
       
+      // Generate validation report
+      const report = generateValidationReport(validationIssues);
+      setValidationReport(report);
+      
+      // Calculate analytics
+      const analytics = calculateAnalytics(scrubbedData, settings.infoByCodeMappings);
+      
+      // Add validation summary to results
+      analytics.results.validationSummary = {
+        totalIssues: validationIssues.length,
+        inspectorsWithIssues: report ? report.inspectorCount : 0,
+        hasReport: !!report
+      };
+      
+      // Store job data
       const jobData = {
         name: currentJobName.trim(),
         date: new Date().toISOString(),
-        csvData: scrubResult.data,
+        csvData: scrubbedData,
         results: analytics.results,
         metrics: analytics.metrics,
         settings: {...settings},
-        inspectorDefinitions: {...inspectorDefinitions}
+        inspectorDefinitions: {...inspectorDefinitions},
+        validationReport: report
       };
       
       setJobs(prev => ({...prev, [currentJobName.trim()]: jobData}));
@@ -805,14 +948,14 @@ const PayrollProductionUpdater = () => {
               {processing ? (
                 <span className="flex items-center gap-3">
                   <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                  Scrubbing & Consolidating...
+                  Scrubbing & Validating...
                 </span>
               ) : (
                 '🧹 Scrub and Consolidate'
               )}
             </button>
             <p className="text-sm text-gray-600 mt-2">
-              Clean data and generate comprehensive analytics
+              Clean data, run validation, and generate comprehensive analytics
             </p>
           </div>
 
@@ -820,7 +963,7 @@ const PayrollProductionUpdater = () => {
             <div className="bg-green-50 border border-green-200 rounded-lg p-6">
               <div className="flex items-center mb-4">
                 <CheckCircle className="w-6 h-6 text-green-600 mr-2" />
-                <h3 className="text-lg font-semibold text-green-800">Scrubbing Complete!</h3>
+                <h3 className="text-lg font-semibold text-green-800">Scrub and Validation Complete!</h3>
               </div>
               
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
@@ -862,24 +1005,44 @@ const PayrollProductionUpdater = () => {
                 </div>
               </div>
 
-              {results.flaggedRecords && results.flaggedRecords.length > 0 && (
-                <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                  <h3 className="text-lg font-semibold text-yellow-800 mb-4">⚠️ Flagged Records for Review</h3>
-                  <p className="text-sm text-yellow-700 mb-3">
-                    These properties have incomplete Listed By/Date data and should be reviewed with inspectors:
-                  </p>
-                  <div className="space-y-2 max-h-48 overflow-y-auto">
-                    {results.flaggedRecords.slice(0, 10).map((record, i) => (
-                      <div key={i} className="text-sm bg-white p-2 rounded border">
-                        <strong>{record.property}</strong>: {record.issue} (Inspector: {record.inspector})
+              {/* Validation Report Section */}
+              {results.validationSummary && (
+                <div className="mb-6 p-4 bg-orange-50 border border-orange-200 rounded-lg">
+                  <h3 className="text-lg font-semibold text-orange-800 mb-4">🔍 Validation Summary</h3>
+                  
+                  {results.validationSummary.totalIssues > 0 ? (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="text-center p-3 bg-white rounded">
+                          <div className="text-2xl font-bold text-orange-600">{results.validationSummary.totalIssues.toLocaleString()}</div>
+                          <div className="text-sm text-gray-600">Validation Issues Found</div>
+                        </div>
+                        <div className="text-center p-3 bg-white rounded">
+                          <div className="text-2xl font-bold text-orange-600">{results.validationSummary.inspectorsWithIssues}</div>
+                          <div className="text-sm text-gray-600">Inspectors with Issues</div>
+                        </div>
                       </div>
-                    ))}
-                    {results.flaggedRecords.length > 10 && (
-                      <div className="text-sm text-yellow-600 font-medium">
-                        ... and {results.flaggedRecords.length - 10} more records
+                      
+                      <div className="text-center">
+                        <button
+                          onClick={downloadValidationReport}
+                          className="inline-flex items-center px-6 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 font-medium"
+                        >
+                          <Download className="w-5 h-5 mr-2" />
+                          📊 Download Inspection Validation Report
+                        </button>
+                        <p className="text-sm text-orange-700 mt-2">
+                          Excel file with inspector-specific validation issues organized by tabs
+                        </p>
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  ) : (
+                    <div className="text-center text-green-600 py-4">
+                      <CheckCircle className="w-12 h-12 mx-auto mb-2" />
+                      <h4 className="text-lg font-semibold">No Validation Issues Found!</h4>
+                      <p className="text-sm">All inspection data passed validation checks.</p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -887,22 +1050,24 @@ const PayrollProductionUpdater = () => {
         </div>
       )}
 
-      {/* Other tabs remain the same as original... */}
+      {/* Payroll Tab */}
       {activeTab === 'payroll' && (
         <div className="text-center text-gray-500 py-12">
-          <p>Payroll tab implementation continues...</p>
+          <p>Payroll processing features available after upload...</p>
         </div>
       )}
 
+      {/* Metrics Tab */}
       {activeTab === 'metrics' && (
         <div className="text-center text-gray-500 py-12">
-          <p>Metrics tab implementation continues...</p>
+          <p>Job metrics available after upload...</p>
         </div>
       )}
 
+      {/* Jobs Tab */}
       {activeTab === 'jobs' && (
         <div className="text-center text-gray-500 py-12">
-          <p>Jobs tab implementation continues...</p>
+          <p>Job history available after processing...</p>
         </div>
       )}
     </div>
