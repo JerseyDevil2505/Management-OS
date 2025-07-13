@@ -224,12 +224,13 @@ class MicrosystemsProcessor {
           // Parse property record (format depends on actual data structure)
           const property = this.parsePropertyRecord(line, index + 1);
           if (property) {
-            // Normalize codes to descriptions
-            const normalizedProperty = this.normalizePropertyCodes(property);
+            // UPDATED: Use new normalizeRecord function instead of normalizePropertyCodes
+            const normalizedProperty = this.normalizeRecord(property);
             
-            // Count lookup results
-            Object.values(normalizedProperty.lookupResults || {}).forEach(result => {
-              if (result.success) successfulLookups++;
+            // Count lookup results for legacy compatibility
+            const lookupResults = this.getLookupResultsForStats(normalizedProperty);
+            Object.values(lookupResults).forEach(result => {
+              if (result.description) successfulLookups++;
               else failedLookups++;
             });
 
@@ -256,6 +257,20 @@ class MicrosystemsProcessor {
         error: error.message
       };
     }
+  }
+
+  /**
+   * Helper to generate lookup stats from normalized property
+   */
+  getLookupResultsForStats(normalizedProperty) {
+    return {
+      typeUse: normalizedProperty.typeUse,
+      designStyle: normalizedProperty.designStyle,
+      foundation: normalizedProperty.foundation,
+      heatSource: normalizedProperty.heatSource,
+      infoBy: normalizedProperty.infoBy,
+      neighborhood: normalizedProperty.neighborhood
+    };
   }
 
   /**
@@ -322,6 +337,7 @@ class MicrosystemsProcessor {
         roofMaterial: this.cleanCode(parts[114]),       // Roof Material
         exteriorFinish1: this.cleanCode(parts[110]),    // Exterior Finish 1
         exteriorFinish2: this.cleanCode(parts[111]),    // Exterior Finish 2
+        interiorWall: this.cleanCode(parts[555]),       // Interior Wall (field 555)
         
         // Systems and heating
         heatSource: this.cleanCode(parts[126]),         // Heat Source
@@ -369,6 +385,97 @@ class MicrosystemsProcessor {
       console.warn(`Error parsing property record ${recordNumber}: ${error.message}`);
       return null;
     }
+  }
+
+  /**
+   * Normalize Microsystems record to standard format (matches BRT output)
+   * This ensures both vendors produce identical data structures for modules
+   */
+  normalizeRecord(rawRecord) {
+    const normalized = {
+      // Core identification
+      block: rawRecord.block,
+      lot: rawRecord.lot,
+      qualifier: rawRecord.qualifier,
+      
+      // Property details with code lookups
+      typeUse: this.lookupAndFormat('500', rawRecord.typeAndUse),
+      storyHeight: this.lookupAndFormat('510', rawRecord.storyHeight?.toString()),
+      designStyle: this.lookupAndFormat('520', rawRecord.style),
+      roofType: this.lookupAndFormat('540', rawRecord.roofType),
+      roofMaterial: this.lookupAndFormat('545', rawRecord.roofMaterial),
+      exteriorFinish: this.lookupAndFormat('530', rawRecord.exteriorFinish1),
+      foundation: this.lookupAndFormat('550', rawRecord.foundation),
+      interiorWall: this.lookupAndFormat('555', rawRecord.interiorWall),
+      basement: this.formatBasementData(rawRecord), // Custom formatter for basement data
+      heatSource: this.lookupAndFormat('565', rawRecord.heatSource),
+      heatSystem: this.lookupAndFormat('8XX', rawRecord.heatSystemType1), // HVAC lookup
+      airConditioning: this.lookupAndFormat('8XX', rawRecord.acType),
+      infoBy: this.lookupAndFormat('140', rawRecord.infoBy),
+      neighborhood: this.lookupAndFormat('210', rawRecord.vcsCode), // VCS lookup
+      
+      // Condition handling (separate fields like BRT)
+      exteriorCondition: this.lookupAndFormat('490', rawRecord.exteriorCondition || rawRecord.condition),
+      interiorCondition: this.lookupAndFormat('491', rawRecord.interiorCondition || rawRecord.condition),
+      
+      // Valuation data (convert to match BRT field names)
+      landValue: rawRecord.landValue,
+      improvementValue: rawRecord.improvementValue,
+      totalValue: rawRecord.totalValue,
+      
+      // Additional Microsystems-specific data
+      yearBuilt: rawRecord.yearBuilt,
+      livableArea: rawRecord.livableArea,
+      propertyClass: rawRecord.propertyClass,
+      saleDate: rawRecord.saleDate,
+      salePrice: rawRecord.salePrice,
+      
+      // Raw record for reference
+      _raw: rawRecord,
+      _vendor: 'Microsystems'
+    };
+    
+    return normalized;
+  }
+
+  /**
+   * Helper to lookup and format codes consistently (matches BRT format)
+   */
+  lookupAndFormat(category, value) {
+    const result = this.lookupCode(category, value);
+    return result ? {
+      code: result.code,
+      description: result.description
+    } : {
+      code: value || '',
+      description: null
+    };
+  }
+
+  /**
+   * Format basement data to match BRT structure
+   * Microsystems stores basement differently than BRT
+   */
+  formatBasementData(rawRecord) {
+    // Microsystems has basementSf and finishedBasementPercent
+    // Convert to BRT-style finished/unfinished classification
+    if (rawRecord.basementSf && rawRecord.basementSf > 0) {
+      if (rawRecord.finishedBasementPercent && rawRecord.finishedBasementPercent > 0) {
+        return {
+          code: 'FINISHED',
+          description: `Finished Basement (${rawRecord.finishedBasementPercent}%)`
+        };
+      } else {
+        return {
+          code: 'UNFINISHED',
+          description: 'Unfinished Basement'
+        };
+      }
+    }
+    return {
+      code: '',
+      description: null
+    };
   }
 
   /**
@@ -436,7 +543,7 @@ class MicrosystemsProcessor {
   }
 
   /**
-   * Normalize property codes using lookup tables
+   * Normalize property codes using lookup tables (LEGACY - kept for compatibility)
    */
   normalizePropertyCodes(property) {
     const lookupResults = {};
