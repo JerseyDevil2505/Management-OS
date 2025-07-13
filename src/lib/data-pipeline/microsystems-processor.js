@@ -260,81 +260,106 @@ class MicrosystemsProcessor {
 
   /**
    * Parse a single property record from Microsystems pipe-delimited format
-   * Based on the interface structure we observed, extracts both direct-read 
-   * fields and fields that need code lookup
+   * Based on the actual file structure with 600+ fields
    */
   parsePropertyRecord(line, recordNumber) {
     try {
       const parts = line.split('|');
       
       // Skip incomplete records or header lines
-      if (parts.length < 10) return null;
+      if (parts.length < 50) return null;
       if (line.toLowerCase().includes('block|lot|qual')) return null;
       
-      // Extract fields based on Microsystems data structure
-      // NOTE: Field positions may need adjustment based on actual file format
+      // Extract fields based on actual Microsystems data structure
       const property = {
         recordNumber,
         rawData: line,
         
         // ===== DIRECT READ FIELDS (use as-is) =====
-        // Primary identifiers
+        // Primary identifiers (positions 0-3)
         block: this.cleanValue(parts[0]),
         lot: this.cleanValue(parts[1]),
         qualifier: this.cleanValue(parts[2]),
+        building: this.cleanValue(parts[3]),
+        
+        // Location and ownership (positions 5-8)
+        location: this.cleanValue(parts[5]),
+        ownerName: this.cleanValue(parts[6]),
+        ownerStreet: this.cleanValue(parts[7]),
+        ownerCsz: this.cleanValue(parts[8]),
+        
+        // Property classification (position 9)
+        propertyClass: this.cleanValue(parts[9]),
+        
+        // Values (positions 10, 15, 16)
+        landValue: this.parseNumber(parts[10]),
+        totalValue: this.parseNumber(parts[15]),
+        improvementValue: this.parseNumber(parts[16]),
+        
+        // Sale information (positions 18-22)
+        saleDate: this.cleanValue(parts[18]),
+        salePrice: this.parseNumber(parts[21]),
         
         // Property details that don't need lookup
-        yearBuilt: this.parseNumber(parts[3]),
-        effectiveAge: this.parseNumber(parts[4]),
-        storyHeight: this.parseDecimal(parts[5]), // Can be 1.5, 2.0, etc.
-        livableArea: this.parseNumber(parts[6]),
-        finishedBasementPercent: this.parsePercent(parts[7]),
-        oldBaths: this.parseNumber(parts[8]),
-        modernBaths: this.parseNumber(parts[9]),
+        yearBuilt: this.parseNumber(parts[108]),        // Year Built
+        effectiveAge: this.parseNumber(parts[271]),     // Effective Age  
+        storyHeight: this.parseDecimal(parts[109]),     // Story Height
+        livableArea: this.parseNumber(parts[279]),      // Livable Area (near end)
         
-        // Additional direct fields (adjust indices as needed)
-        propertyClass: this.cleanValue(parts[10]),
-        netPercent: this.parsePercent(parts[11]),
+        // Additional measurements
+        basementSf: this.parseNumber(parts[122]),       // Bsmt Living Sf
+        finishedBasementPercent: this.parsePercent(parts[120]), // Bsmt Finish (Y/N becomes %)
+        
+        // Bath counts
+        modernBaths: this.parseNumber(parts[101]),      // Num Modern Baths
+        oldBaths: this.parseNumber(parts[103]),         // Num Old Baths
         
         // ===== CODE LOOKUP FIELDS (need translation) =====
-        // Core property characteristics (500 series)
-        style: this.cleanCode(parts[15]),           // 520 - Design/Style
-        foundation: this.cleanCode(parts[16]),      // 550 - Foundation
-        roofType: this.cleanCode(parts[17]),        // 540 - Roof Type
-        roofMaterial: this.cleanCode(parts[18]),    // 545 - Roof Material
-        exteriorFinish: this.cleanCode(parts[19]),  // 530 - Exterior Finish
-        interiorWall: this.cleanCode(parts[20]),    // 555 - Interior Wall
+        // Core property characteristics
+        style: this.cleanCode(parts[70]),               // Style Code
+        foundation: this.cleanCode(parts[113]),         // Foundation
+        roofType: this.cleanCode(parts[115]),           // Roof Type
+        roofMaterial: this.cleanCode(parts[114]),       // Roof Material
+        exteriorFinish1: this.cleanCode(parts[110]),    // Exterior Finish 1
+        exteriorFinish2: this.cleanCode(parts[111]),    // Exterior Finish 2
         
-        // Systems (560s and 8xx series)
-        heatSource: this.cleanCode(parts[21]),      // 565 - Heat Source / 8xx
-        acType: this.cleanCode(parts[22]),          // 8xx - Air Conditioning
-        plumbing: this.cleanCode(parts[23]),        // 580 - Miscellaneous Plumbing
+        // Systems and heating
+        heatSource: this.cleanCode(parts[126]),         // Heat Source
+        heatSystemType1: this.cleanCode(parts[123]),    // Heat System Type1
+        acType: this.cleanCode(parts[127]),             // Air Cond Type
         
-        // Built-ins and features
-        builtIns1: this.cleanCode(parts[24]),       // 590 - Built Ins 1
-        builtIns2: this.cleanCode(parts[25]),       // 591 - Built Ins 2
+        // Condition and information
+        condition: this.cleanCode(parts[96]),           // Condition
+        exteriorCondition: this.cleanCode(parts[490]),  // Exterior Condition (if exists)
+        infoBy: this.cleanCode(parts[94]),              // Information By
         
-        // Property information and condition
-        infoBy: this.cleanCode(parts[26]),          // 140 - Information By
-        exteriorCondition: this.cleanCode(parts[27]), // 490 - Exterior Condition
-        interiorCondition: this.cleanCode(parts[28]), // 491 - Interior Condition
+        // Property type and use
+        typeAndUse: this.cleanCode(parts[107]),         // Type Use Code
         
-        // VCS and classification
-        vcsCode: this.cleanCode(parts[29]),         // 210 - VCS (Valuation Code System)
-        landClass: this.cleanCode(parts[30]),       // 145 - Land Class
-        typeAndUse: this.cleanCode(parts[31]),      // 500 - Type and Use
+        // Site features (from your code file examples)
+        roadType: this.cleanCode(parts[427]),           // Road (near end of record)
+        curbing: this.cleanCode(parts[429]),            // Curbs Yn
+        sidewalk: this.cleanCode(parts[430]),           // Sidewalk Yn
+        utilities: this.cleanCode(parts[432]),          // Gas Yn, Water Y N, etc.
         
-        // Detached items (680 series)
-        detachedGarage: this.cleanCode(parts[32]),  // 680 - Detached Items
-        shed: this.cleanCode(parts[33]),            // 680 - Detached Items
-        pool: this.cleanCode(parts[34]),            // 680 - Detached Items
+        // VCS and zoning
+        vcsCode: this.cleanCode(parts[436]),            // VCS
+        neighborhood: this.cleanCode(parts[435]),       // Neighborhood
         
-        // Additional fields that might be present
-        topography: this.cleanCode(parts[35]),      // 115 - Topography
-        roadType: this.cleanCode(parts[36]),        // 120 - Road
-        curbing: this.cleanCode(parts[37]),         // 125 - Curbing (Y/N)
-        sidewalk: this.cleanCode(parts[38]),        // 130 - Sidewalk (Y/N)
-        utilities: this.cleanCode(parts[39])        // 135 - Utilities (Y/N)
+        // Quality codes
+        buildingQualClass: this.cleanCode(parts[106]),  // Bldg Qual Class Code
+        basementFinishQuality: this.cleanCode(parts[121]), // Bsmt Finish Quality
+        
+        // Additional features
+        fireplace1Story: this.cleanCode(parts[149]),    // Fireplace 1 Story Stack
+        porchQuality: this.cleanCode(parts[112]),       // Porch Quality
+        deckQuality: this.cleanCode(parts[168]),        // Deck Quality
+        
+        // Detached items
+        detachedItemCode1: this.cleanCode(parts[208]),  // Detached Item Code1
+        detachedItemCode2: this.cleanCode(parts[221]),  // Detached Item Code2
+        detachedItemCode3: this.cleanCode(parts[234]),  // Detached Item Code3
+        detachedItemCode4: this.cleanCode(parts[247])   // Detached Item Code4
       };
       
       // Remove undefined/null fields to keep data clean
