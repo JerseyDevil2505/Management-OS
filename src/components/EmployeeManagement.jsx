@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Upload, Search, Mail, Phone, MapPin, Clock, AlertTriangle, Settings, Database, CheckCircle, Loader, Edit, X } from 'lucide-react';
+import { Users, Upload, Search, Mail, Phone, MapPin, Clock, AlertTriangle, Settings, Database, CheckCircle, Loader, Edit, X, Copy, FileText, Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { employeeService, signInAsDev } from '../lib/supabaseClient';
 
@@ -16,6 +16,8 @@ const EmployeeManagement = () => {
   const [importComplete, setImportComplete] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
   const [editingEmployee, setEditingEmployee] = useState(null);
+  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [emailModalData, setEmailModalData] = useState({ emails: [], title: '' });
 
   // Load employees from database on component mount
   useEffect(() => {
@@ -43,6 +45,7 @@ const EmployeeManagement = () => {
         role: emp.role || 'Unassigned',
         location: emp.region || 'HEADQUARTERS',
         zipCode: emp.zip_code || '',
+        weeklyHours: emp.weekly_hours || null,
         hasIssues: !emp.employee_number || !emp.email || !emp.phone,
         initials: emp.initials,
         status: emp.employment_status === 'inactive' ? 'inactive' : 'active'
@@ -100,6 +103,7 @@ const EmployeeManagement = () => {
         const fullName = emp['Inspector'] || 'Unknown';
         const email = emp['Email'] || '';
         const phone = emp['Phone Number'] || emp['Phone'] || '';
+        const weeklyHours = emp['Weekly Hours'] || emp['Hours'] || null;
         
         // Extract initials from name if in parentheses
         let initials = emp['Initials'] || '';
@@ -176,6 +180,7 @@ const EmployeeManagement = () => {
           region: location,
           employment_status: employmentStatus,
           initials: initials,
+          weekly_hours: weeklyHours ? parseFloat(weeklyHours) : null,
           hire_date: new Date().toISOString().split('T')[0],
           created_by: '5df85ca3-7a54-4798-a665-c31da8d9caad'
         };
@@ -306,6 +311,22 @@ const EmployeeManagement = () => {
     }
   };
 
+  // Email modal functions
+  const showEmailModal = (emails, title) => {
+    setEmailModalData({ emails: emails.filter(Boolean), title });
+    setShowEmailModal(true);
+  };
+
+  const copyEmailsToClipboard = () => {
+    const emailString = emailModalData.emails.join(', ');
+    navigator.clipboard.writeText(emailString).then(() => {
+      alert('✅ Email addresses copied to clipboard!');
+      setShowEmailModal(false);
+    }).catch(() => {
+      alert('❌ Failed to copy emails. Please select and copy manually.');
+    });
+  };
+
   // Bulk email functions
   const handleBulkEmail = () => {
     const emails = selectedEmployees
@@ -313,8 +334,7 @@ const EmployeeManagement = () => {
       .filter(Boolean);
     
     if (emails.length > 0) {
-      const subject = encodeURIComponent('Professional Property Appraisers - Update');
-      window.open(`mailto:${emails.join(',')}?subject=${subject}`);
+      showEmailModal(emails, `Selected Employees (${emails.length})`);
     }
   };
 
@@ -324,8 +344,7 @@ const EmployeeManagement = () => {
       .map(emp => emp.email);
     
     if (emails.length > 0) {
-      const subject = encodeURIComponent('PPA - All Staff Communication');
-      window.open(`mailto:${emails.join(',')}?subject=${subject}`);
+      showEmailModal(emails, 'All Active Staff');
     }
   };
 
@@ -335,8 +354,7 @@ const EmployeeManagement = () => {
       .map(emp => emp.email);
     
     if (emails.length > 0) {
-      const subject = encodeURIComponent(`PPA - ${role} Team Communication`);
-      window.open(`mailto:${emails.join(',')}?subject=${subject}`);
+      showEmailModal(emails, `${role} Team`);
     } else {
       alert(`No active ${role} employees found with email addresses.`);
     }
@@ -348,8 +366,7 @@ const EmployeeManagement = () => {
       .map(emp => emp.email);
     
     if (emails.length > 0) {
-      const subject = encodeURIComponent(`PPA - ${region} Region Communication`);
-      window.open(`mailto:${emails.join(',')}?subject=${subject}`);
+      showEmailModal(emails, `${region} Region`);
     } else {
       alert(`No active employees found in ${region} region with email addresses.`);
     }
@@ -358,7 +375,7 @@ const EmployeeManagement = () => {
   const getEmployeeStats = () => {
     const totalWorkforce = employees.length;
     const contractors = employees.filter(emp => emp.isContractor).length;
-    const totalEmployees = employees.filter(emp => emp.status === 'active' && !emp.isContractor).length; // Fixed: only active employees
+    const totalEmployees = employees.filter(emp => emp.status === 'active' && !emp.isContractor).length;
     const active = employees.filter(emp => emp.status === 'active' && !emp.isContractor).length;
     const inactive = employees.filter(emp => emp.status === 'inactive').length;
     const fullTime = employees.filter(emp => emp.isFullTime && !emp.isContractor && emp.status === 'active').length;
@@ -370,10 +387,17 @@ const EmployeeManagement = () => {
     const clerical = employees.filter(emp => (emp.role === 'Clerical' || emp.role === 'Office') && emp.status === 'active').length;
     const owners = employees.filter(emp => emp.role === 'Owner' && emp.status === 'active').length;
     
+    // Calculate FTE
+    const fullTimeFTE = fullTime * 1.0;
+    const partTimeFTE = employees
+      .filter(emp => !emp.isFullTime && !emp.isContractor && emp.status === 'active')
+      .reduce((total, emp) => total + ((emp.weeklyHours || 0) / 40), 0);
+    const totalFTE = fullTimeFTE + partTimeFTE;
+    
     return { 
-      totalEmployees,    // Active W2 only
-      contractors,       // 1099 only
-      totalWorkforce,    // Everyone
+      totalEmployees,
+      contractors,
+      totalWorkforce,
       active, 
       inactive, 
       fullTime, 
@@ -383,7 +407,8 @@ const EmployeeManagement = () => {
       commercial, 
       management, 
       clerical, 
-      owners 
+      owners,
+      totalFTE: Math.round(totalFTE * 100) / 100 // Round to 2 decimal places
     };
   };
 
@@ -463,6 +488,16 @@ const EmployeeManagement = () => {
               👥 Employee Directory
             </button>
             <button
+              onClick={() => setActiveTab('forms')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'forms'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              📋 HR Forms & Documents
+            </button>
+            <button
               onClick={() => setActiveTab('management')}
               className={`py-2 px-1 border-b-2 font-medium text-sm ${
                 activeTab === 'management'
@@ -475,6 +510,50 @@ const EmployeeManagement = () => {
           </nav>
         </div>
       </div>
+
+      {/* Email Modal */}
+      {showEmailModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-96">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">📧 {emailModalData.title}</h3>
+              <button
+                onClick={() => setShowEmailModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="mb-4">
+              <p className="text-sm text-gray-600 mb-2">
+                {emailModalData.emails.length} email addresses ready to copy:
+              </p>
+              <div className="bg-gray-50 p-3 rounded border max-h-48 overflow-y-auto">
+                <div className="text-sm font-mono">
+                  {emailModalData.emails.join(', ')}
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex gap-3">
+              <button
+                onClick={copyEmailsToClipboard}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                <Copy className="w-4 h-4" />
+                Copy All Emails
+              </button>
+              <button
+                onClick={() => setShowEmailModal(false)}
+                className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Overview Tab */}
       {activeTab === 'overview' && (
@@ -549,6 +628,51 @@ const EmployeeManagement = () => {
               
               <div className="text-sm text-green-700">
                 💾 All data is permanently stored in your Supabase database - no more data loss!
+              </div>
+            </div>
+          )}
+
+          {/* FTE Calculation Display */}
+          {employees.length > 0 && (
+            <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg border-2 border-purple-200 p-6">
+              <div className="flex items-center mb-4">
+                <Users className="w-8 h-8 mr-3 text-purple-600" />
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-800">⚖️ Full-Time Equivalent (FTE) Analysis</h2>
+                  <p className="text-gray-600 mt-1">
+                    Total workforce capacity based on hours worked
+                  </p>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <div className="p-4 bg-white rounded-lg border shadow-sm text-center">
+                  <div className="text-3xl font-bold text-purple-600">{stats.totalFTE}</div>
+                  <div className="text-sm text-gray-600 font-medium">Total FTE</div>
+                  <div className="text-xs text-gray-500 mt-1">Equivalent full-time positions</div>
+                </div>
+                
+                <div className="p-4 bg-white rounded-lg border shadow-sm text-center">
+                  <div className="text-2xl font-bold text-green-600">{stats.fullTime}</div>
+                  <div className="text-sm text-gray-600 font-medium">Full-Time FTE</div>
+                  <div className="text-xs text-gray-500 mt-1">1.0 FTE each</div>
+                </div>
+                
+                <div className="p-4 bg-white rounded-lg border shadow-sm text-center">
+                  <div className="text-2xl font-bold text-orange-600">
+                    {Math.round((stats.totalFTE - stats.fullTime) * 100) / 100}
+                  </div>
+                  <div className="text-sm text-gray-600 font-medium">Part-Time FTE</div>
+                  <div className="text-xs text-gray-500 mt-1">Based on weekly hours</div>
+                </div>
+                
+                <div className="p-4 bg-white rounded-lg border shadow-sm text-center">
+                  <div className="text-2xl font-bold text-blue-600">
+                    {Math.round((stats.totalFTE / stats.totalEmployees) * 100)}%
+                  </div>
+                  <div className="text-sm text-gray-600 font-medium">FTE Efficiency</div>
+                  <div className="text-xs text-gray-500 mt-1">FTE vs headcount ratio</div>
+                </div>
               </div>
             </div>
           )}
@@ -655,8 +779,7 @@ const EmployeeManagement = () => {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {getUniqueValues('location').map(location => {
                   const count = employees.filter(emp => emp.location === location && emp.status === 'active').length;
-                  const totalAtLocation = employees.filter(emp => emp.location === location && emp.status === 'active').length;
-                  const percentage = totalAtLocation > 0 ? Math.round((count / stats.active) * 100) : 0;
+                  const percentage = count > 0 ? Math.round((count / stats.active) * 100) : 0;
                   return (
                     <div key={location} className="p-4 bg-gray-50 rounded-lg text-center">
                       <div className="text-2xl font-bold text-blue-600">{count}</div>
@@ -722,18 +845,24 @@ const EmployeeManagement = () => {
                 <div className="flex flex-wrap gap-3">
                   <button
                     onClick={handleEmailAll}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+                    className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-800 border border-gray-300 rounded-lg hover:bg-gray-200 text-sm font-medium"
                   >
                     <Mail className="w-4 h-4" />
                     Email All Active Staff
                   </button>
                   
-                  {/* Email by Role buttons */}
+                  {/* Email by Role buttons with matching colors */}
                   {getUniqueValues('role').filter(role => employees.some(emp => emp.role === role && emp.status === 'active')).map(role => (
                     <button
                       key={role}
                       onClick={() => handleEmailByRole(role)}
-                      className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm"
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium ${
+                        role === 'Residential' ? 'bg-green-100 text-green-800 border border-green-300 hover:bg-green-200' :
+                        role === 'Commercial' ? 'bg-blue-100 text-blue-800 border border-blue-300 hover:bg-blue-200' :
+                        role === 'Management' ? 'bg-orange-100 text-orange-800 border border-orange-300 hover:bg-orange-200' :
+                        role === 'Clerical' || role === 'Office' ? 'bg-purple-100 text-purple-800 border border-purple-300 hover:bg-purple-200' :
+                        'bg-gray-100 text-gray-800 border border-gray-300 hover:bg-gray-200'
+                      }`}
                     >
                       <Mail className="w-4 h-4" />
                       Email {role} Team
@@ -745,7 +874,7 @@ const EmployeeManagement = () => {
                     <button
                       key={location}
                       onClick={() => handleEmailByRegion(location)}
-                      className="flex items-center gap-2 px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm"
+                      className="flex items-center gap-2 px-3 py-2 bg-indigo-100 text-indigo-800 border border-indigo-300 rounded-lg hover:bg-indigo-200 text-sm font-medium"
                     >
                       <Mail className="w-4 h-4" />
                       Email {location}
@@ -860,6 +989,9 @@ const EmployeeManagement = () => {
                                 <div className="text-sm text-gray-500">
                                   #{employee.inspectorNumber}
                                   {employee.initials && <span className="ml-2 text-blue-600">({employee.initials})</span>}
+                                  {employee.weeklyHours && !employee.isFullTime && (
+                                    <span className="ml-2 text-orange-600">{employee.weeklyHours}h/wk</span>
+                                  )}
                                 </div>
                               </div>
                               {employee.hasIssues && (
@@ -931,13 +1063,13 @@ const EmployeeManagement = () => {
                               <Edit className="h-4 w-4" />
                             </button>
                             {employee.email && (
-                              <a
-                                href={`mailto:${employee.email}`}
+                              <button
+                                onClick={() => showEmailModal([employee.email], employee.name)}
                                 className="text-green-600 hover:text-green-800"
-                                title="Send email"
+                                title="Get email"
                               >
                                 <Mail className="h-4 w-4" />
-                              </a>
+                              </button>
                             )}
                             {employee.phone && (
                               <a
@@ -963,6 +1095,139 @@ const EmployeeManagement = () => {
               </div>
             </>
           )}
+        </div>
+      )}
+
+      {/* HR Forms & Documents Tab */}
+      {activeTab === 'forms' && (
+        <div className="space-y-6">
+          <div className="bg-gradient-to-r from-green-50 to-blue-50 rounded-lg border-2 border-green-200 p-6">
+            <div className="flex items-center mb-6">
+              <FileText className="w-8 h-8 mr-3 text-green-600" />
+              <div>
+                <h2 className="text-2xl font-bold text-gray-800">📋 HR Forms & Company Documents</h2>
+                <p className="text-gray-600 mt-1">
+                  Employee handbook, forms, and important company documents
+                </p>
+              </div>
+            </div>
+            
+            {/* Employee Handbook Section */}
+            <div className="mb-8 p-6 bg-white rounded-lg border shadow-sm">
+              <h3 className="text-lg font-semibold mb-4 text-gray-700 flex items-center">
+                📖 Employee Handbook & Policies
+              </h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <a
+                  href="/hr-documents/employee-handbook.pdf"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center p-4 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"
+                >
+                  <FileText className="w-8 h-8 text-blue-600 mr-3" />
+                  <div>
+                    <div className="font-semibold text-blue-800">Employee Handbook</div>
+                    <div className="text-sm text-blue-600">Company policies, procedures & benefits</div>
+                  </div>
+                  <Download className="w-5 h-5 text-blue-600 ml-auto" />
+                </a>
+                
+                <a
+                  href="/hr-documents/company-policies.pdf"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center p-4 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 transition-colors"
+                >
+                  <FileText className="w-8 h-8 text-green-600 mr-3" />
+                  <div>
+                    <div className="font-semibold text-green-800">Company Policies</div>
+                    <div className="text-sm text-green-600">HR policies & workplace guidelines</div>
+                  </div>
+                  <Download className="w-5 h-5 text-green-600 ml-auto" />
+                </a>
+              </div>
+            </div>
+
+            {/* HR Forms Section */}
+            <div className="mb-8 p-6 bg-white rounded-lg border shadow-sm">
+              <h3 className="text-lg font-semibold mb-4 text-gray-700 flex items-center">
+                📝 HR Forms & Documents
+              </h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <a
+                  href="/hr-documents/time-off-request-form.pdf"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center p-4 bg-orange-50 border border-orange-200 rounded-lg hover:bg-orange-100 transition-colors"
+                >
+                  <FileText className="w-8 h-8 text-orange-600 mr-3" />
+                  <div>
+                    <div className="font-semibold text-orange-800">Time Off Request</div>
+                    <div className="text-sm text-orange-600">Vacation & leave request form</div>
+                  </div>
+                  <Download className="w-5 h-5 text-orange-600 ml-auto" />
+                </a>
+                
+                <a
+                  href="/hr-documents/i9-form.pdf"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center p-4 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 transition-colors"
+                >
+                  <FileText className="w-8 h-8 text-purple-600 mr-3" />
+                  <div>
+                    <div className="font-semibold text-purple-800">Form I-9</div>
+                    <div className="text-sm text-purple-600">Employment eligibility verification</div>
+                  </div>
+                  <Download className="w-5 h-5 text-purple-600 ml-auto" />
+                </a>
+                
+                <a
+                  href="/hr-documents/expense-report-form.pdf"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center p-4 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors"
+                >
+                  <FileText className="w-8 h-8 text-red-600 mr-3" />
+                  <div>
+                    <div className="font-semibold text-red-800">Expense Report</div>
+                    <div className="text-sm text-red-600">Business expense reimbursement</div>
+                  </div>
+                  <Download className="w-5 h-5 text-red-600 ml-auto" />
+                </a>
+              </div>
+            </div>
+
+            {/* Additional Resources */}
+            <div className="p-6 bg-white rounded-lg border shadow-sm">
+              <h3 className="text-lg font-semibold mb-4 text-gray-700 flex items-center">
+                🔗 Additional Resources
+              </h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="p-4 bg-gray-50 rounded-lg">
+                  <h4 className="font-semibold text-gray-800 mb-2">📞 HR Contact Information</h4>
+                  <div className="text-sm text-gray-600">
+                    <p>HR Department: (856) 555-0123</p>
+                    <p>Email: hr@ppainc.com</p>
+                    <p>Office Hours: Monday-Friday, 8:00 AM - 5:00 PM</p>
+                  </div>
+                </div>
+                
+                <div className="p-4 bg-gray-50 rounded-lg">
+                  <h4 className="font-semibold text-gray-800 mb-2">💡 Quick Links</h4>
+                  <div className="text-sm text-gray-600">
+                    <p>• Payroll Portal</p>
+                    <p>• Benefits Information</p>
+                    <p>• Training Resources</p>
+                    <p>• Safety Guidelines</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -1082,7 +1347,7 @@ const EmployeeManagement = () => {
                 <button
                   onClick={() => {
                     const csvContent = [
-                      ['Inspector #', 'Name', 'Email', 'Phone', 'Role', 'Location', 'Employment Type', 'Status'].join(','),
+                      ['Inspector #', 'Name', 'Email', 'Phone', 'Role', 'Location', 'Employment Type', 'Weekly Hours', 'Status'].join(','),
                       ...employees.map(emp => [
                         emp.inspectorNumber,
                         `"${emp.name}"`,
@@ -1091,6 +1356,7 @@ const EmployeeManagement = () => {
                         emp.role,
                         emp.location,
                         emp.isContractor ? '1099 Contractor' : emp.isFullTime ? 'Full Time W2' : 'Part Time W2',
+                        emp.weeklyHours || '',
                         emp.status
                       ].join(','))
                     ].join('\n');
@@ -1107,7 +1373,7 @@ const EmployeeManagement = () => {
                   disabled={employees.length === 0}
                 >
                   <div className="text-green-700 font-semibold mb-2">📁 Export Database</div>
-                  <div className="text-sm text-green-600">Download complete employee database</div>
+                  <div className="text-sm text-green-600">Download complete employee database with FTE data</div>
                 </button>
                 
                 <button
@@ -1123,7 +1389,7 @@ const EmployeeManagement = () => {
                   className="p-4 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors text-left"
                 >
                   <div className="text-blue-700 font-semibold mb-2">📧 Email All Staff</div>
-                  <div className="text-sm text-blue-600">Send email to all active employees</div>
+                  <div className="text-sm text-blue-600">Get email list for all active employees</div>
                 </button>
               </div>
             </div>
