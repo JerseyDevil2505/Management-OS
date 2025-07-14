@@ -13,7 +13,7 @@ export const employeeService = {
         .from('employees')
         .select('*')
         .order('last_name');
-      
+       
       if (error) throw error;
       return data;
     } catch (error) {
