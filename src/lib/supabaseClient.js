@@ -47,11 +47,11 @@ export const employeeService = {
     return data
   },
 
-  // Bulk import employees - FIXED to use employee_number
+  // Bulk import employees - Using simple insert for now
   async bulkImport(employeeList) {
     const { data, error } = await supabase
       .from('employees')
-      .upsert(employeeList, { onConflict: 'employee_number' })
+      .insert(employeeList)
       .select()
     
     if (error) throw error
