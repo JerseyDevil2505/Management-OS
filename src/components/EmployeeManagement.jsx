@@ -177,7 +177,7 @@ const EmployeeManagement = () => {
           region: location,
           employment_status: employmentStatus,
           initials: initials,
-          hire_date: new Date().toISOString().split('T')[0]
+          hire_date: new Date().toISOString().split('T')[0],
           created_by: 'dudj23@gmail.com'
         };
       });
