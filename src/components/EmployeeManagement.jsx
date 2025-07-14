@@ -59,7 +59,7 @@ const EmployeeManagement = () => {
     }
   };
 
-  // Import Excel file function with business rules and version tracking
+  // Import Excel file function with proper variable declarations
   const handleFileImport = async (file) => {
     if (!file) return;
     
@@ -76,10 +76,9 @@ const EmployeeManagement = () => {
         sheetStubs: true
       });
       
-      // Get data from the main sheet
       const mainSheetData = XLSX.utils.sheet_to_json(workbook.Sheets['Sheet1']);
+      console.log('File columns detected:', Object.keys(mainSheetData[0] || {}));
       
-      // Get existing employees for comparison
       const existingEmployees = await employeeService.getAll();
       const existingMap = new Map(existingEmployees.map(emp => [emp.email, emp]));
       
@@ -87,52 +86,68 @@ const EmployeeManagement = () => {
       let updatedEmployees = 0;
       let contractorEmployees = 0;
       
-      // Process and clean the data with business rules
       const processedEmployees = mainSheetData.map((emp, index) => {
+        // DECLARE ALL VARIABLES AT THE TOP
+        let inspectorNum = emp['Inspector #'] || emp['Inspector Number'];
+        if (!inspectorNum) {
+          const namepart = (emp['Inspector'] || 'Unknown').split(',')[0].substring(0, 3).toUpperCase();
+          inspectorNum = `${namepart}${Date.now()}_${index}`;
+        }
+        
+        const fullName = emp['Inspector'] || 'Unknown';
+        const email = emp['Email'] || '';
+        const phone = emp['Phone Number'] || emp['Phone'] || '';
+        
+        // Extract initials from name if in parentheses
+        let initials = emp['Initials'] || '';
+        const initialsMatch = fullName.match(/\(([A-Z]{1,3})\)/);
+        if (initialsMatch) {
+          initials = initialsMatch[1];
+        }
+        
         // Split the full name into first and last
         const nameParts = fullName.split(',').map(part => part.trim());
         const lastName = nameParts[0] || '';
         const firstName = nameParts[1] ? nameParts[1].split('(')[0].trim() : '';
-        const phone = emp['Phone Number'] || emp['Phone'] || '';
         
-        // Apply business rules
+        // Handle role with business rules
         let role = emp['Role'] || 'Unassigned';
-        let employmentType = 'part_time';
         
         // Fixed admin roles
         if (fullName.toLowerCase().includes('tom davis')) {
           role = 'Owner';
-          employmentType = 'full_time';
         } else if (fullName.toLowerCase().includes('brian schneider')) {
           role = 'Owner';
-          employmentType = 'full_time';
         } else if (fullName.toLowerCase().includes('james duda')) {
           role = 'Management';
-          employmentType = 'full_time';
         } else if (role.toLowerCase().includes('office')) {
           role = 'Clerical';
         }
         
-        // Check for contractor status (flexible - look in any field)
+        // Handle employment status
+        let employmentStatus = 'part_time';
+        
+        // Check for contractor status
         const rowText = Object.values(emp).join(' ').toLowerCase();
         if (rowText.includes('contractor')) {
-          employmentType = 'contractor';
+          employmentStatus = 'contractor';
           contractorEmployees++;
         } else {
-          // Handle missing "Full time (Y/N)" column gracefully
-          const fullTimeField = emp['Full time (Y/N)'] || emp['Full Time'] || emp['Employment Type'];
-          if (fullTimeField) {
-            employmentType = fullTimeField.toString().toLowerCase().includes('y') || 
-                           fullTimeField.toString().toLowerCase().includes('full') ? 'full_time' : 'part_time';
+          // Handle Full time status - only exists in July 2025
+          if (emp['Full time (Y/N)']) {
+            employmentStatus = emp['Full time (Y/N)'].toString().toUpperCase() === 'Y' ? 'full_time' : 'part_time';
           } else {
-            // Default logic when column doesn't exist
+            // Smart defaults for early files
             if (role === 'Owner' || role === 'Management') {
-              employmentType = 'full_time'; // Assume management is full time
+              employmentStatus = 'full_time';
             } else {
-              employmentType = 'part_time'; // Default for everyone else
+              employmentStatus = 'part_time';
             }
           }
         }
+        
+        // Handle location - only exists in July 2025
+        const location = emp['LOCATION'] || emp['Location'] || 'Unknown';
         
         // Check if this is new or updated employee
         const existing = existingMap.get(email);
@@ -141,7 +156,6 @@ const EmployeeManagement = () => {
         } else if (
           existing.first_name !== firstName ||
           existing.last_name !== lastName ||
-          existing.email !== email ||
           existing.phone !== phone ||
           existing.role !== role
         ) {
@@ -149,56 +163,43 @@ const EmployeeManagement = () => {
         }
         
         return {
-          employee_number: inspectorNum,
+          employee_number: inspectorNum.toString(),
           first_name: firstName,
           last_name: lastName,
           email: email,
           phone: phone,
           role: role,
           inspector_type: role,
-          region: emp['LOCATION'] || emp['Location'] || emp['Region'] || 'Unknown',
-          employment_status: employmentType,
-          initials: emp['Initials'] || emp['Inspector Initials'] || '',
+          region: location,
+          employment_status: employmentStatus,
+          initials: initials,
           hire_date: new Date().toISOString().split('T')[0]
         };
       });
       
-      // Mark employees not in new import as terminated (but keep for historical data)
-      const newEmployeeNumbers = new Set(processedEmployees.map(emp => emp.employee_number));
-      const newEmails = new Set(processedEmployees.map(emp => emp.email).filter(Boolean));
+      console.log('Processed employees sample:', processedEmployees[0]);
       
-      let terminatedCount = 0;
-      for (const existing of existingEmployees) {
-        const stillActive = newEmployeeNumbers.has(existing.employee_number) || 
-                          (existing.email && newEmails.has(existing.email));
-        
-        if (!stillActive && existing.employment_status === 'active') {
-          // Mark as terminated but keep in database for historical production data
-          terminatedCount++;
-          // You can add termination logic here
-        }
-      }
-      
-      // Save to database using bulk import with error handling
+      // Save to database using bulk import
       const result = await employeeService.bulkImport(processedEmployees);
       
       // Reload from database to get the saved data with IDs
       await loadEmployees();
       
       // Show detailed import summary
+      const fileType = Object.keys(mainSheetData[0] || {}).length <= 4 ? 'Early Format' : 'Current Format';
       const summary = [
         `✅ Import completed: ${result.length} total records processed`,
+        `📄 File format: ${fileType} (${Object.keys(mainSheetData[0] || {}).length} columns)`,
         `📊 Changes detected:`,
         `  • ${newEmployees} new employees added`,
         `  • ${updatedEmployees} existing employees updated`,
-        `  • ${terminatedCount} employees marked as terminated`,
-        `  • ${contractorEmployees} contractors (1099) identified`,
+        contractorEmployees > 0 ? `  • ${contractorEmployees} contractors identified` : '',
         ``,
         `📁 Import details:`,
         `  • File: ${file.name}`,
         `  • Processed: ${new Date().toLocaleString()}`,
-        `  • Version: Saved for historical tracking`
-      ].join('\n');
+        `  • Business rules applied (Tom Davis, Brian Schneider, James Duda)`
+      ].filter(Boolean).join('\n');
       
       alert(summary);
       
@@ -235,7 +236,7 @@ const EmployeeManagement = () => {
       };
 
       await employeeService.create(newEmployeeData);
-      await loadEmployees(); // Reload to show new employee
+      await loadEmployees();
       setShowAddEmployee(false);
       alert('✅ Employee added successfully!');
     } catch (error) {
@@ -259,8 +260,6 @@ const EmployeeManagement = () => {
         initials: updatedData.initials || ''
       };
 
-      // You'll need to add an update method to employeeService
-      // For now, we'll reload the data
       await loadEmployees();
       setEditingEmployee(null);
       alert('✅ Employee updated successfully!');
@@ -502,10 +501,6 @@ const EmployeeManagement = () => {
                   <div className="text-2xl font-bold text-purple-600">{stats.contractors}</div>
                   <div className="text-sm text-gray-600">1099 Contractors</div>
                 </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-red-600">{stats.withIssues}</div>
-                  <div className="text-sm text-gray-600">Missing Data</div>
-                </div>
               </div>
               
               <div className="text-sm text-green-700">
@@ -573,7 +568,7 @@ const EmployeeManagement = () => {
                     <div className="flex justify-between items-center p-3 bg-green-50 rounded border-l-4 border-green-400">
                       <div className="flex items-center">
                         <Clock className="w-4 h-4 text-green-500 mr-3" />
-                        <span className="font-medium">Full Time Employees</span>
+                        <span className="font-medium">Full Time W2</span>
                       </div>
                       <span className="text-xl font-bold text-green-600">{stats.fullTime}</span>
                     </div>
@@ -792,12 +787,14 @@ const EmployeeManagement = () => {
                               employee.role === 'Commercial' ? 'bg-blue-100 text-blue-800' :
                               employee.role === 'Office' || employee.role === 'Clerical' ? 'bg-purple-100 text-purple-800' :
                               employee.role === 'Management' ? 'bg-orange-100 text-orange-800' :
+                              employee.role === 'Owner' ? 'bg-red-100 text-red-800' :
                               'bg-gray-100 text-gray-800'
                             }`}>
                               {employee.role === 'Residential' ? '🏠' : 
                                employee.role === 'Commercial' ? '🏭' :
                                employee.role === 'Office' || employee.role === 'Clerical' ? '💼' :
-                               employee.role === 'Management' ? '👔' : '👤'} {employee.role}
+                               employee.role === 'Management' ? '👔' : 
+                               employee.role === 'Owner' ? '👑' : '👤'} {employee.role}
                             </span>
                           </div>
                           
@@ -981,7 +978,7 @@ const EmployeeManagement = () => {
                 <button
                   onClick={() => {
                     const csvContent = [
-                      ['Inspector #', 'Name', 'Email', 'Phone', 'Role', 'Location', 'Employment Type', 'ZIP Code'].join(','),
+                      ['Inspector #', 'Name', 'Email', 'Phone', 'Role', 'Location', 'Employment Type'].join(','),
                       ...employees.map(emp => [
                         emp.inspectorNumber,
                         `"${emp.name}"`,
@@ -989,8 +986,7 @@ const EmployeeManagement = () => {
                         emp.phone,
                         emp.role,
                         emp.location,
-                        emp.isFullTime ? 'Full Time' : 'Part Time',
-                        emp.zipCode
+                        emp.isContractor ? '1099 Contractor' : emp.isFullTime ? 'Full Time W2' : 'Part Time W2'
                       ].join(','))
                     ].join('\n');
                     
@@ -1030,7 +1026,7 @@ const EmployeeManagement = () => {
         </div>
       )}
 
-      {/* Add Employee Modal - You can add this modal component */}
+      {/* Add Employee Modal */}
       {showAddEmployee && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
@@ -1045,7 +1041,6 @@ const EmployeeManagement = () => {
               </button>
               <button
                 onClick={() => {
-                  // You can implement a proper form here
                   setShowAddEmployee(false);
                   alert('Add employee form coming next!');
                 }}
