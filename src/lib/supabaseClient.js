@@ -13,7 +13,7 @@ export const employeeService = {
         .from('employees')
         .select('*')
         .order('last_name');
-       
+      
       if (error) throw error;
       return data;
     } catch (error) {
@@ -494,25 +494,4 @@ export const utilityService = {
       // Try to get real stats
       const [employees, jobs] = await Promise.all([
         supabase.from('employees').select('id', { count: 'exact', head: true }),
-        supabase.from('source_file_versions').select('id', { count: 'exact', head: true })
-      ]);
-
-      return {
-        employees: employees.count || 0,
-        jobs: jobs.count || 0,
-        propertyRecords: propertyRecords.count || 0,
-        sourceFiles: sourceFiles.count || 0
-      };
-    } catch (error) {
-      console.error('Stats fetch error:', error);
-      return {
-        employees: 0,
-        jobs: 0,
-        propertyRecords: 0,
-        sourceFiles: 0
-      };
-    }
-  }
-};
-
-export default supabase;
+        su
