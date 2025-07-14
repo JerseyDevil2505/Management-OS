@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Users, Upload, Search, Mail, Phone, MapPin, Clock, AlertTriangle, Settings, Database, CheckCircle, Loader, Plus, Edit, Save, X } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { employeeService } from '../lib/supabaseClient';
+import { employeeService, signInAsDev } from '../lib/supabaseClient';
 
 const EmployeeManagement = () => {
   const [employees, setEmployees] = useState([]);
@@ -20,7 +20,11 @@ const EmployeeManagement = () => {
 
   // Load employees from database on component mount
   useEffect(() => {
-    loadEmployees();
+    const initializeAuth = async () => {
+      await signInAsDev();
+      loadEmployees();
+    };
+    initializeAuth();
   }, []);
 
   const loadEmployees = async () => {
