@@ -60,6 +60,18 @@ export const employeeService = {
     return data;
   },
 
+  async update(id, employeeData) {
+    const { data, error } = await supabase
+      .from('employees')
+      .update(employeeData)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
   async bulkImport(employeeList) {
     const { data, error } = await supabase
       .from('employees')
@@ -68,6 +80,38 @@ export const employeeService = {
 
     if (error) throw error;
     return data;
+  },
+
+  async bulkUpsert(employeeList) {
+    const { data, error } = await supabase
+      .from('employees')
+      .upsert(employeeList, { 
+        onConflict: 'email',
+        ignoreDuplicates: false 
+      })
+      .select();
+
+    if (error) throw error;
+    return data;
+  },
+
+  async bulkUpdate(employeeList) {
+    const results = [];
+    
+    // Process updates in batches
+    for (const employee of employeeList) {
+      const { data, error } = await supabase
+        .from('employees')
+        .update(employee)
+        .eq('id', employee.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      results.push(data);
+    }
+
+    return results;
   }
 };
 
