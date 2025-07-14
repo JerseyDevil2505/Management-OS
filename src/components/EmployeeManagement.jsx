@@ -111,13 +111,25 @@ const EmployeeManagement = () => {
           role = 'Clerical';
         }
         
-        // Check for contractor status
+        // Check for contractor status (flexible - look in any field)
         const rowText = Object.values(emp).join(' ').toLowerCase();
         if (rowText.includes('contractor')) {
           employmentType = 'contractor_1099';
           contractorEmployees++;
         } else {
-          employmentType = emp['Full time (Y/N)'] === 'Y' ? 'full_time' : 'part_time';
+          // Handle missing "Full time (Y/N)" column gracefully
+          const fullTimeField = emp['Full time (Y/N)'] || emp['Full Time'] || emp['Employment Type'];
+          if (fullTimeField) {
+            employmentType = fullTimeField.toString().toLowerCase().includes('y') || 
+                           fullTimeField.toString().toLowerCase().includes('full') ? 'full_time' : 'part_time';
+          } else {
+            // Default logic when column doesn't exist
+            if (role === 'Owner' || role === 'Management') {
+              employmentType = 'full_time'; // Assume management is full time
+            } else {
+              employmentType = 'part_time'; // Default for everyone else
+            }
+          }
         }
         
         // Check if this is new or updated employee
@@ -137,12 +149,12 @@ const EmployeeManagement = () => {
           inspector_number: inspectorNum,
           full_name: fullName,
           email: email,
-          phone: emp['Phone Number'] || '',
+          phone: emp['Phone Number'] || emp['Phone'] || '',
           employment_type: employmentType,
           role: role,
-          region: emp['LOCATION'] || 'Unknown',
-          zip_code: emp['ZIP CODE'] || '',
-          initials: emp['Initials'] || '',
+          region: emp['LOCATION'] || emp['Location'] || emp['Region'] || 'Unknown',
+          zip_code: emp['ZIP CODE'] || emp['Zip Code'] || emp['Zip'] || '',
+          initials: emp['Initials'] || emp['Inspector Initials'] || '',
           status: 'active',
           created_by: 'admin'
         };
