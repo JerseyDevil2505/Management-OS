@@ -40,7 +40,7 @@ const EmployeeManagement = () => {
         role: emp.role || 'Unassigned',
         location: emp.region || 'Unknown',
         zipCode: emp.zip_code || '',
-        hasIssues: !emp.inspector_number || !emp.email || !emp.phone,
+        hasIssues: !emp.employee_number || !emp.email || !emp.phone,
         initials: emp.initials,
         status: emp.status || 'active'
       }));
