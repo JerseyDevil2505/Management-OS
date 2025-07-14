@@ -554,7 +554,7 @@ const EmployeeManagement = () => {
                           {/* Quick Actions */}
                           <div className="flex space-x-2">
                             {employee.email && (
-                              
+                              <a
                                 href={`mailto:${employee.email}`}
                                 className="text-blue-600 hover:text-blue-800"
                                 title="Send email"
@@ -563,7 +563,7 @@ const EmployeeManagement = () => {
                               </a>
                             )}
                             {employee.phone && (
-                              
+                              <a
                                 href={`tel:${employee.phone}`}
                                 className="text-green-600 hover:text-green-800"
                                 title="Call"
