@@ -153,7 +153,7 @@ const EmployeeManagement = () => {
           first_name: firstName,
           last_name: lastName,
           email: email,
-          phone: emp['Phone Number'] || emp['Phone'] || '',
+          phone: phone,
           role: role,
           inspector_type: role,
           region: emp['LOCATION'] || emp['Location'] || emp['Region'] || 'Unknown',
