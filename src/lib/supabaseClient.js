@@ -8,6 +8,13 @@ const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYm
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
+// Add anonymous authentication for development
+export const signInAnonymously = async () => {
+  const { data, error } = await supabase.auth.signInAnonymously();
+  if (error) console.error('Auth error:', error);
+  return data;
+};
+
 // =============================================
 // EMPLOYEE SERVICES
 // =============================================
