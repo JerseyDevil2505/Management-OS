@@ -311,28 +311,7 @@ const EmployeeManagement = () => {
     }
   };
 
-  // AI Handbook helper
-  const askHandbookQuestion = async () => {
-    if (!handbookQuestion.trim()) return;
-    
-    setIsAskingHandbook(true);
-    try {
-      const prompt = `You are an AI assistant helping employees understand their company handbook and policies for Professional Property Appraisers Inc (PPA). 
-
-Employee Question: "${handbookQuestion}"
-
-Please provide a helpful, accurate response about company policies, procedures, benefits, or workplace guidelines. If the question is outside the scope of typical employee handbook topics, politely redirect to HR or management.
-
-Keep your response concise but informative, and maintain a professional yet friendly tone.`;
-
-      const response = await window.claude.complete(prompt);
-      setHandbookResponse(response);
-    } catch (error) {
-      setHandbookResponse('Sorry, I had trouble processing your question. Please try again or contact HR directly.');
-    } finally {
-      setIsAskingHandbook(false);
-    }
-  };
+  // Email modal functions
   const openEmailModal = (emails, title) => {
     setEmailModalData({ emails: emails.filter(Boolean), title });
     setShowEmailModal(true);
