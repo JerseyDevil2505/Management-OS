@@ -147,7 +147,7 @@ const EmployeeManagement = () => {
         
         return {
           inspector_number: inspectorNum,
-          full_name: fullName,
+          name: fullName,
           email: email,
           phone: emp['Phone Number'] || emp['Phone'] || '',
           role: role,
