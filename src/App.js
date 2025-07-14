@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import PayrollProductionUpdater from './components/PayrollProductionUpdater';
 import EmployeeManagement from './components/EmployeeManagement';
+import AdminJobManagement from './components/AdminJobManagement';
 import './App.css';
 
 function App() {
-  const [activeModule, setActiveModule] = useState('production');
+  const [activeModule, setActiveModule] = useState('jobs'); // Changed default to jobs
 
   return (
     <div className="App">
@@ -13,6 +14,16 @@ function App() {
         <div className="max-w-6xl mx-auto">
           <h1 className="text-2xl font-bold mb-4">PPA Management OS</h1>
           <nav className="flex space-x-6">
+            <button
+              onClick={() => setActiveModule('jobs')}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                activeModule === 'jobs'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+              }`}
+            >
+              📋 Current Jobs
+            </button>
             <button
               onClick={() => setActiveModule('production')}
               className={`px-4 py-2 rounded-lg font-medium transition-colors ${
@@ -39,6 +50,7 @@ function App() {
 
       {/* Module Content */}
       <div className="min-h-screen bg-gray-50">
+        {activeModule === 'jobs' && <AdminJobManagement />}
         {activeModule === 'production' && <PayrollProductionUpdater />}
         {activeModule === 'employees' && <EmployeeManagement />}
       </div>
