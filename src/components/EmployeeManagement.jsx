@@ -38,14 +38,11 @@ const EmployeeManagement = () => {
         isFullTime: emp.employment_type === 'full_time',
         isContractor: emp.employment_type === 'contractor_1099',
         role: emp.role || 'Unassigned',
-        accessLevel: emp.access_level || 'inspector',
         location: emp.region || 'Unknown',
         zipCode: emp.zip_code || '',
         hasIssues: !emp.inspector_number || !emp.email || !emp.phone,
         initials: emp.initials,
-        status: emp.status || 'active',
-        importDate: emp.import_date,
-        importVersion: emp.import_version
+        status: emp.status || 'active'
       }));
       
       setEmployees(transformedEmployees);
@@ -99,26 +96,19 @@ const EmployeeManagement = () => {
         // Apply business rules
         let role = emp['Role'] || 'Unassigned';
         let employmentType = 'part_time';
-        let accessLevel = 'inspector';
         
         // Fixed admin roles
         if (fullName.toLowerCase().includes('tom davis')) {
           role = 'Owner';
-          accessLevel = 'owner';
           employmentType = 'full_time';
         } else if (fullName.toLowerCase().includes('brian schneider')) {
           role = 'Owner';
-          accessLevel = 'owner';
           employmentType = 'full_time';
         } else if (fullName.toLowerCase().includes('james duda')) {
           role = 'Management';
-          accessLevel = 'admin';
           employmentType = 'full_time';
         } else if (role.toLowerCase().includes('office')) {
           role = 'Clerical';
-          accessLevel = 'office';
-        } else if (role.toLowerCase().includes('management')) {
-          accessLevel = 'manager';
         }
         
         // Check for contractor status
@@ -150,14 +140,11 @@ const EmployeeManagement = () => {
           phone: emp['Phone Number'] || '',
           employment_type: employmentType,
           role: role,
-          access_level: accessLevel,
           region: emp['LOCATION'] || 'Unknown',
           zip_code: emp['ZIP CODE'] || '',
           initials: emp['Initials'] || '',
           status: 'active',
-          created_by: 'admin',
-          import_date: new Date().toISOString(),
-          import_version: file.name
+          created_by: 'admin'
         };
       });
       
@@ -177,7 +164,7 @@ const EmployeeManagement = () => {
         }
       }
       
-      // Save to database using bulk import
+      // Save to database using bulk import with error handling
       const result = await employeeService.bulkImport(processedEmployees);
       
       // Reload from database to get the saved data with IDs
