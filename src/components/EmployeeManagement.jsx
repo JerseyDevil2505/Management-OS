@@ -312,7 +312,7 @@ const EmployeeManagement = () => {
   };
 
   // Email modal functions
-  const showEmailModal = (emails, title) => {
+  const openEmailModal = (emails, title) => {
     setEmailModalData({ emails: emails.filter(Boolean), title });
     setShowEmailModal(true);
   };
@@ -334,7 +334,7 @@ const EmployeeManagement = () => {
       .filter(Boolean);
     
     if (emails.length > 0) {
-      showEmailModal(emails, `Selected Employees (${emails.length})`);
+      openEmailModal(emails, `Selected Employees (${emails.length})`);
     }
   };
 
@@ -344,7 +344,7 @@ const EmployeeManagement = () => {
       .map(emp => emp.email);
     
     if (emails.length > 0) {
-      showEmailModal(emails, 'All Active Staff');
+      openEmailModal(emails, 'All Active Staff');
     }
   };
 
@@ -354,7 +354,7 @@ const EmployeeManagement = () => {
       .map(emp => emp.email);
     
     if (emails.length > 0) {
-      showEmailModal(emails, `${role} Team`);
+      openEmailModal(emails, `${role} Team`);
     } else {
       alert(`No active ${role} employees found with email addresses.`);
     }
@@ -366,7 +366,7 @@ const EmployeeManagement = () => {
       .map(emp => emp.email);
     
     if (emails.length > 0) {
-      showEmailModal(emails, `${region} Region`);
+      openEmailModal(emails, `${region} Region`);
     } else {
       alert(`No active employees found in ${region} region with email addresses.`);
     }
@@ -1064,7 +1064,7 @@ const EmployeeManagement = () => {
                             </button>
                             {employee.email && (
                               <button
-                                onClick={() => showEmailModal([employee.email], employee.name)}
+                                onClick={() => openEmailModal([employee.email], employee.name)}
                                 className="text-green-600 hover:text-green-800"
                                 title="Get email"
                               >
