@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Upload, Download, AlertCircle, CheckCircle, Settings, Database } from 'lucide-react';
-import { employeeService, jobService, sourceFileService, propertyService, productionDataService, utilityService } from './supabaseClient';
-
+import { employeeService, jobService, sourceFileService, propertyService, productionDataService, utilityService } from '../lib/supabaseClient';
 const PayrollProductionUpdater = () => {
   const [csvFile, setCsvFile] = useState(null);
   const [excelFile, setExcelFile] = useState(null);
