@@ -17,7 +17,7 @@ const EmployeeManagement = () => {
   const [activeTab, setActiveTab] = useState('overview');
   const [editingEmployee, setEditingEmployee] = useState(null);
   const [showAddEmployee, setShowAddEmployee] = useState(false);
-
+ 
   // Load employees from database on component mount
   useEffect(() => {
     const initializeAuth = async () => {
