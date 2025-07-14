@@ -31,18 +31,18 @@ const EmployeeManagement = () => {
       // Transform database format to component format
       const transformedEmployees = data.map(emp => ({
         id: emp.id,
-        inspectorNumber: emp.inspector || `TEMP${emp.id}`,
-        name: emp.full_name || 'Unknown',
+        inspectorNumber: emp.employee_number || `TEMP${emp.id}`,
+        name: `${emp.last_name || ''}, ${emp.first_name || ''}`.replace(/, $/, ''),
         email: emp.email || '',
         phone: emp.phone || '',
-        isFullTime: emp.employment_type === 'full_time',
-        isContractor: emp.employment_type === 'contractor_1099',
+        isFullTime: emp.employment_status === 'full_time',
+        isContractor: emp.employment_status === 'contractor',
         role: emp.role || 'Unassigned',
         location: emp.region || 'Unknown',
         zipCode: emp.zip_code || '',
         hasIssues: !emp.employee_number || !emp.email || !emp.phone,
         initials: emp.initials,
-        status: emp.status || 'active'
+        status: emp.employment_status || 'active'
       }));
       
       setEmployees(transformedEmployees);
@@ -81,7 +81,7 @@ const EmployeeManagement = () => {
       
       // Get existing employees for comparison
       const existingEmployees = await employeeService.getAll();
-      const existingMap = new Map(existingEmployees.map(emp => [emp.inspector_number || emp.email, emp]));
+      const existingMap = new Map(existingEmployees.map(emp => [emp.email, emp]));
       
       let newEmployees = 0;
       let updatedEmployees = 0;
@@ -89,9 +89,11 @@ const EmployeeManagement = () => {
       
       // Process and clean the data with business rules
       const processedEmployees = mainSheetData.map((emp, index) => {
-        const inspectorNum = emp['Inspector #'] || `TEMP${Date.now()}_${index}`;
-        const fullName = emp['Inspector'] || 'Unknown';
-        const email = emp['Email'] || '';
+        // Split the full name into first and last
+        const nameParts = fullName.split(',').map(part => part.trim());
+        const lastName = nameParts[0] || '';
+        const firstName = nameParts[1] ? nameParts[1].split('(')[0].trim() : '';
+        const phone = emp['Phone Number'] || emp['Phone'] || '';
         
         // Apply business rules
         let role = emp['Role'] || 'Unassigned';
@@ -114,7 +116,7 @@ const EmployeeManagement = () => {
         // Check for contractor status (flexible - look in any field)
         const rowText = Object.values(emp).join(' ').toLowerCase();
         if (rowText.includes('contractor')) {
-          employmentType = 'contractor_1099';
+          employmentType = 'contractor';
           contractorEmployees++;
         } else {
           // Handle missing "Full time (Y/N)" column gracefully
@@ -133,42 +135,44 @@ const EmployeeManagement = () => {
         }
         
         // Check if this is new or updated employee
-        const existing = existingMap.get(inspectorNum) || existingMap.get(email);
+        const existing = existingMap.get(email);
         if (!existing) {
           newEmployees++;
         } else if (
-          existing.full_name !== fullName ||
+          existing.first_name !== firstName ||
+          existing.last_name !== lastName ||
           existing.email !== email ||
-          existing.phone !== (emp['Phone Number'] || '') ||
+          existing.phone !== phone ||
           existing.role !== role
         ) {
           updatedEmployees++;
         }
         
         return {
-          inspector_number: inspectorNum,
-          name: fullName,
+          employee_number: inspectorNum,
+          first_name: firstName,
+          last_name: lastName,
           email: email,
           phone: emp['Phone Number'] || emp['Phone'] || '',
           role: role,
+          inspector_type: role,
           region: emp['LOCATION'] || emp['Location'] || emp['Region'] || 'Unknown',
-          zip_code: emp['ZIP CODE'] || emp['Zip Code'] || emp['Zip'] || '',
+          employment_status: employmentType,
           initials: emp['Initials'] || emp['Inspector Initials'] || '',
-          status: 'active',
-          created_by: 'admin'
+          hire_date: new Date().toISOString().split('T')[0]
         };
       });
       
       // Mark employees not in new import as terminated (but keep for historical data)
-      const newInspectorNumbers = new Set(processedEmployees.map(emp => emp.inspector_number));
+      const newEmployeeNumbers = new Set(processedEmployees.map(emp => emp.employee_number));
       const newEmails = new Set(processedEmployees.map(emp => emp.email).filter(Boolean));
       
       let terminatedCount = 0;
       for (const existing of existingEmployees) {
-        const stillActive = newInspectorNumbers.has(existing.inspector_number) || 
+        const stillActive = newEmployeeNumbers.has(existing.employee_number) || 
                           (existing.email && newEmails.has(existing.email));
         
-        if (!stillActive && existing.status === 'active') {
+        if (!stillActive && existing.employment_status === 'active') {
           // Mark as terminated but keep in database for historical production data
           terminatedCount++;
           // You can add termination logic here
@@ -219,17 +223,15 @@ const EmployeeManagement = () => {
   const handleAddEmployee = async (employeeData) => {
     try {
       const newEmployeeData = {
-        inspector_number: employeeData.inspectorNumber,
-        full_name: employeeData.name,
+        employee_number: employeeData.inspectorNumber,
+        first_name: employeeData.firstName,
+        last_name: employeeData.lastName,
         email: employeeData.email,
         phone: employeeData.phone,
-        employment_type: employeeData.isFullTime ? 'full_time' : 'part_time',
+        employment_status: employeeData.isFullTime ? 'full_time' : 'part_time',
         role: employeeData.role,
         region: employeeData.location,
-        zip_code: employeeData.zipCode,
-        initials: employeeData.initials || '',
-        status: 'active',
-        created_by: 'admin'
+        initials: employeeData.initials || ''
       };
 
       await employeeService.create(newEmployeeData);
@@ -246,14 +248,14 @@ const EmployeeManagement = () => {
   const handleEditEmployee = async (employeeId, updatedData) => {
     try {
       const updateData = {
-        inspector_number: updatedData.inspectorNumber,
-        full_name: updatedData.name,
+        employee_number: updatedData.inspectorNumber,
+        first_name: updatedData.firstName,
+        last_name: updatedData.lastName,
         email: updatedData.email,
         phone: updatedData.phone,
-        employment_type: updatedData.isFullTime ? 'full_time' : 'part_time',
+        employment_status: updatedData.isFullTime ? 'full_time' : 'part_time',
         role: updatedData.role,
         region: updatedData.location,
-        zip_code: updatedData.zipCode,
         initials: updatedData.initials || ''
       };
 
