@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Upload, Search, Mail, Phone, MapPin, Clock, AlertTriangle, Settings, Database, CheckCircle, Loader, Plus, Edit, Save, X } from 'lucide-react';
+import { Users, Upload, Search, Mail, Phone, MapPin, Clock, AlertTriangle, Settings, Database, CheckCircle, Loader, Edit, X } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { employeeService, signInAsDev } from '../lib/supabaseClient';
 
@@ -16,7 +16,6 @@ const EmployeeManagement = () => {
   const [importComplete, setImportComplete] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
   const [editingEmployee, setEditingEmployee] = useState(null);
-  const [showAddEmployee, setShowAddEmployee] = useState(false);
 
   // Load employees from database on component mount
   useEffect(() => {
@@ -242,31 +241,6 @@ const EmployeeManagement = () => {
     });
   };
 
-  // Add new employee function
-  const handleAddEmployee = async (employeeData) => {
-    try {
-      const newEmployeeData = {
-        employee_number: employeeData.inspectorNumber,
-        first_name: employeeData.firstName,
-        last_name: employeeData.lastName,
-        email: employeeData.email,
-        phone: employeeData.phone,
-        employment_status: employeeData.isFullTime ? 'full_time' : 'part_time',
-        role: employeeData.role,
-        region: employeeData.location,
-        initials: employeeData.initials || ''
-      };
-
-      await employeeService.create(newEmployeeData);
-      await loadEmployees();
-      setShowAddEmployee(false);
-      alert('✅ Employee added successfully!');
-    } catch (error) {
-      console.error('Error adding employee:', error);
-      alert(`❌ Error adding employee: ${error.message}`);
-    }
-  };
-
   // Edit employee function
   const handleEditEmployee = async (employeeId, updatedData) => {
     try {
@@ -296,7 +270,8 @@ const EmployeeManagement = () => {
     let filtered = employees.filter(emp => {
       const matchesSearch = emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                            emp.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           String(emp.inspectorNumber).includes(searchTerm);
+                           String(emp.inspectorNumber).includes(searchTerm) ||
+                           (emp.initials && emp.initials.toLowerCase().includes(searchTerm.toLowerCase()));
       
       const matchesRole = filterRole === 'all' || emp.role === filterRole;
       const matchesLocation = filterLocation === 'all' || emp.location === filterLocation;
@@ -331,6 +306,7 @@ const EmployeeManagement = () => {
     }
   };
 
+  // Bulk email functions
   const handleBulkEmail = () => {
     const emails = selectedEmployees
       .map(id => employees.find(emp => emp.id === id)?.email)
@@ -342,14 +318,51 @@ const EmployeeManagement = () => {
     }
   };
 
+  const handleEmailAll = () => {
+    const emails = employees
+      .filter(emp => emp.status === 'active' && emp.email)
+      .map(emp => emp.email);
+    
+    if (emails.length > 0) {
+      const subject = encodeURIComponent('PPA - All Staff Communication');
+      window.open(`mailto:${emails.join(',')}?subject=${subject}`);
+    }
+  };
+
+  const handleEmailByRole = (role) => {
+    const emails = employees
+      .filter(emp => emp.status === 'active' && emp.role === role && emp.email)
+      .map(emp => emp.email);
+    
+    if (emails.length > 0) {
+      const subject = encodeURIComponent(`PPA - ${role} Team Communication`);
+      window.open(`mailto:${emails.join(',')}?subject=${subject}`);
+    } else {
+      alert(`No active ${role} employees found with email addresses.`);
+    }
+  };
+
+  const handleEmailByRegion = (region) => {
+    const emails = employees
+      .filter(emp => emp.status === 'active' && emp.location === region && emp.email)
+      .map(emp => emp.email);
+    
+    if (emails.length > 0) {
+      const subject = encodeURIComponent(`PPA - ${region} Region Communication`);
+      window.open(`mailto:${emails.join(',')}?subject=${subject}`);
+    } else {
+      alert(`No active employees found in ${region} region with email addresses.`);
+    }
+  };
+
   const getEmployeeStats = () => {
     const totalWorkforce = employees.length;
     const contractors = employees.filter(emp => emp.isContractor).length;
-    const totalEmployees = totalWorkforce - contractors; // W2 only
+    const totalEmployees = employees.filter(emp => emp.status === 'active' && !emp.isContractor).length; // Fixed: only active employees
     const active = employees.filter(emp => emp.status === 'active' && !emp.isContractor).length;
     const inactive = employees.filter(emp => emp.status === 'inactive').length;
-    const fullTime = employees.filter(emp => emp.isFullTime && !emp.isContractor).length;
-    const partTime = employees.filter(emp => !emp.isFullTime && !emp.isContractor).length;
+    const fullTime = employees.filter(emp => emp.isFullTime && !emp.isContractor && emp.status === 'active').length;
+    const partTime = employees.filter(emp => !emp.isFullTime && !emp.isContractor && emp.status === 'active').length;
     const withIssues = employees.filter(emp => emp.hasIssues && emp.status === 'active').length;
     const residential = employees.filter(emp => emp.role === 'Residential' && emp.status === 'active').length;
     const commercial = employees.filter(emp => emp.role === 'Commercial' && emp.status === 'active').length;
@@ -358,7 +371,7 @@ const EmployeeManagement = () => {
     const owners = employees.filter(emp => emp.role === 'Owner' && emp.status === 'active').length;
     
     return { 
-      totalEmployees,    // W2 only
+      totalEmployees,    // Active W2 only
       contractors,       // 1099 only
       totalWorkforce,    // Everyone
       active, 
@@ -422,13 +435,6 @@ const EmployeeManagement = () => {
               {stats.contractors > 0 && <span className="text-purple-600">{stats.contractors} 1099</span>}
             </div>
           )}
-          <button
-            onClick={() => setShowAddEmployee(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm"
-          >
-            <Plus className="w-4 h-4" />
-            Add Employee
-          </button>
         </div>
       </div>
 
@@ -710,6 +716,44 @@ const EmployeeManagement = () => {
 
           {employees.length > 0 && (
             <>
+              {/* Bulk Email Actions */}
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <h3 className="text-lg font-semibold mb-3 text-blue-800">📧 Bulk Email Actions</h3>
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    onClick={handleEmailAll}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+                  >
+                    <Mail className="w-4 h-4" />
+                    Email All Active Staff
+                  </button>
+                  
+                  {/* Email by Role buttons */}
+                  {getUniqueValues('role').filter(role => employees.some(emp => emp.role === role && emp.status === 'active')).map(role => (
+                    <button
+                      key={role}
+                      onClick={() => handleEmailByRole(role)}
+                      className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm"
+                    >
+                      <Mail className="w-4 h-4" />
+                      Email {role} Team
+                    </button>
+                  ))}
+                  
+                  {/* Email by Region buttons */}
+                  {getUniqueValues('location').filter(location => employees.some(emp => emp.location === location && emp.status === 'active')).map(location => (
+                    <button
+                      key={location}
+                      onClick={() => handleEmailByRegion(location)}
+                      className="flex items-center gap-2 px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm"
+                    >
+                      <Mail className="w-4 h-4" />
+                      Email {location}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {/* Search and Filters */}
               <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
                 <div className="flex flex-wrap gap-4 items-center">
@@ -718,7 +762,7 @@ const EmployeeManagement = () => {
                       <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                       <input
                         type="text"
-                        placeholder="Search employees..."
+                        placeholder="Search by name, email, inspector #, or initials..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                         className="w-full pl-10 pr-4 py-2 border border-yellow-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
@@ -813,7 +857,10 @@ const EmployeeManagement = () => {
                                   {employee.name}
                                   {employee.status === 'inactive' && <span className="text-xs ml-2 bg-red-100 text-red-600 px-1 rounded">INACTIVE</span>}
                                 </div>
-                                <div className="text-sm text-gray-500">#{employee.inspectorNumber}</div>
+                                <div className="text-sm text-gray-500">
+                                  #{employee.inspectorNumber}
+                                  {employee.initials && <span className="ml-2 text-blue-600">({employee.initials})</span>}
+                                </div>
                               </div>
                               {employee.hasIssues && (
                                 <AlertTriangle className="h-4 w-4 text-red-500" title="Missing information" />
@@ -1064,48 +1111,21 @@ const EmployeeManagement = () => {
                 </button>
                 
                 <button
-                  onClick={() => setShowAddEmployee(true)}
-                  className="p-4 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors text-left"
-                >
-                  <div className="text-blue-700 font-semibold mb-2">➕ Add Employee</div>
-                  <div className="text-sm text-blue-600">Manually add new employee to database</div>
-                </button>
-                
-                <button
                   onClick={() => loadEmployees()}
                   className="p-4 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 transition-colors text-left"
                 >
                   <div className="text-purple-700 font-semibold mb-2">🔄 Refresh Data</div>
                   <div className="text-sm text-purple-600">Reload employee data from database</div>
                 </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
-      {/* Add Employee Modal */}
-      {showAddEmployee && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h3 className="text-lg font-semibold mb-4">Add New Employee</h3>
-            <p className="text-gray-600 mb-4">This will be added directly to your database.</p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setShowAddEmployee(false)}
-                className="flex-1 px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  setShowAddEmployee(false);
-                  alert('Add employee form coming next!');
-                }}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-              >
-                Add Employee
-              </button>
+                <button
+                  onClick={handleEmailAll}
+                  className="p-4 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors text-left"
+                >
+                  <div className="text-blue-700 font-semibold mb-2">📧 Email All Staff</div>
+                  <div className="text-sm text-blue-600">Send email to all active employees</div>
+                </button>
+              </div>
             </div>
           </div>
         </div>
