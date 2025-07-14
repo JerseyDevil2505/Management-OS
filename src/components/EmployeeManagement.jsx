@@ -31,7 +31,7 @@ const EmployeeManagement = () => {
       // Transform database format to component format
       const transformedEmployees = data.map(emp => ({
         id: emp.id,
-        inspectorNumber: emp.inspector_number || `TEMP${emp.id}`,
+        inspectorNumber: emp.inspector || `TEMP${emp.id}`,
         name: emp.full_name || 'Unknown',
         email: emp.email || '',
         phone: emp.phone || '',
