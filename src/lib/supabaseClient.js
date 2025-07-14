@@ -47,11 +47,11 @@ export const employeeService = {
     return data
   },
 
-  // Bulk import employees
+  // Bulk import employees - FIXED to use employee_number
   async bulkImport(employeeList) {
     const { data, error } = await supabase
       .from('employees')
-      .upsert(employeeList, { onConflict: 'initials' })
+      .upsert(employeeList, { onConflict: 'employee_number' })
       .select()
     
     if (error) throw error
