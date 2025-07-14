@@ -42,11 +42,11 @@ const EmployeeManagement = () => {
         isFullTime: emp.employment_status === 'full_time',
         isContractor: emp.employment_status === 'contractor',
         role: emp.role || 'Unassigned',
-        location: emp.region || 'Unknown',
+        location: emp.region || 'HEADQUARTERS',
         zipCode: emp.zip_code || '',
         hasIssues: !emp.employee_number || !emp.email || !emp.phone,
         initials: emp.initials,
-        status: emp.employment_status || 'active'
+        status: emp.employment_status === 'inactive' ? 'inactive' : 'active'
       }));
       
       setEmployees(transformedEmployees);
@@ -63,7 +63,7 @@ const EmployeeManagement = () => {
     }
   };
 
-  // Import Excel file function with proper variable declarations
+  // Import Excel file function with proper variable declarations and UPSERT logic
   const handleFileImport = async (file) => {
     if (!file) return;
     
@@ -84,7 +84,7 @@ const EmployeeManagement = () => {
       console.log('File columns detected:', Object.keys(mainSheetData[0] || {}));
       
       const existingEmployees = await employeeService.getAll();
-      const existingMap = new Map(existingEmployees.map(emp => [emp.email, emp]));
+      const existingEmailMap = new Map(existingEmployees.map(emp => [emp.email, emp]));
       
       let newEmployees = 0;
       let updatedEmployees = 0;
@@ -133,7 +133,7 @@ const EmployeeManagement = () => {
         
         // Check for contractor status
         const rowText = Object.values(emp).join(' ').toLowerCase();
-        if (rowText.includes('contractor')) {
+        if (rowText.includes('contractor') || role.toLowerCase() === 'contractor') {
           employmentStatus = 'contractor';
           contractorEmployees++;
         } else {
@@ -151,10 +151,10 @@ const EmployeeManagement = () => {
         }
         
         // Handle location - only exists in July 2025
-        const location = emp['LOCATION'] || emp['Location'] || 'Unknown';
+        const location = emp['LOCATION'] || emp['Location'] || 'HEADQUARTERS';
         
         // Check if this is new or updated employee
-        const existing = existingMap.get(email);
+        const existing = existingEmailMap.get(email);
         if (!existing) {
           newEmployees++;
         } else if (
@@ -184,8 +184,24 @@ const EmployeeManagement = () => {
       
       console.log('Processed employees sample:', processedEmployees[0]);
       
-      // Save to database using bulk import
-      const result = await employeeService.bulkImport(processedEmployees);
+      // Mark employees not in new import as inactive
+      const newEmployeeEmails = new Set(processedEmployees.map(emp => emp.email));
+      const inactiveUpdates = existingEmployees
+        .filter(existing => existing.employment_status !== 'inactive' && !newEmployeeEmails.has(existing.email))
+        .map(emp => ({
+          ...emp,
+          employment_status: 'inactive',
+          termination_date: new Date().toISOString().split('T')[0]
+        }));
+      
+      let inactiveCount = 0;
+      if (inactiveUpdates.length > 0) {
+        await employeeService.bulkUpdate(inactiveUpdates);
+        inactiveCount = inactiveUpdates.length;
+      }
+      
+      // Save to database using bulk upsert (insert or update)
+      const result = await employeeService.bulkUpsert(processedEmployees);
       
       // Reload from database to get the saved data with IDs
       await loadEmployees();
@@ -198,6 +214,7 @@ const EmployeeManagement = () => {
         `📊 Changes detected:`,
         `  • ${newEmployees} new employees added`,
         `  • ${updatedEmployees} existing employees updated`,
+        inactiveCount > 0 ? `  • ${inactiveCount} employees marked as inactive` : '',
         contractorEmployees > 0 ? `  • ${contractorEmployees} contractors identified` : '',
         ``,
         `📁 Import details:`,
@@ -286,7 +303,8 @@ const EmployeeManagement = () => {
       const matchesFullTime = filterFullTime === 'all' || 
                              (filterFullTime === 'fulltime' && emp.isFullTime && !emp.isContractor) ||
                              (filterFullTime === 'parttime' && !emp.isFullTime && !emp.isContractor) ||
-                             (filterFullTime === 'contractor' && emp.isContractor);
+                             (filterFullTime === 'contractor' && emp.isContractor) ||
+                             (filterFullTime === 'inactive' && emp.status === 'inactive');
       
       return matchesSearch && matchesRole && matchesLocation && matchesFullTime;
     });
@@ -325,20 +343,35 @@ const EmployeeManagement = () => {
   };
 
   const getEmployeeStats = () => {
-    const total = employees.length;
-    const active = employees.filter(emp => emp.status === 'active').length;
-    const terminated = employees.filter(emp => emp.status === 'terminated').length;
+    const totalWorkforce = employees.length;
+    const contractors = employees.filter(emp => emp.isContractor).length;
+    const totalEmployees = totalWorkforce - contractors; // W2 only
+    const active = employees.filter(emp => emp.status === 'active' && !emp.isContractor).length;
+    const inactive = employees.filter(emp => emp.status === 'inactive').length;
     const fullTime = employees.filter(emp => emp.isFullTime && !emp.isContractor).length;
     const partTime = employees.filter(emp => !emp.isFullTime && !emp.isContractor).length;
-    const contractors = employees.filter(emp => emp.isContractor).length;
-    const withIssues = employees.filter(emp => emp.hasIssues).length;
-    const residential = employees.filter(emp => emp.role === 'Residential').length;
-    const commercial = employees.filter(emp => emp.role === 'Commercial').length;
-    const management = employees.filter(emp => emp.role === 'Management').length;
-    const clerical = employees.filter(emp => emp.role === 'Clerical' || emp.role === 'Office').length;
-    const owners = employees.filter(emp => emp.role === 'Owner').length;
+    const withIssues = employees.filter(emp => emp.hasIssues && emp.status === 'active').length;
+    const residential = employees.filter(emp => emp.role === 'Residential' && emp.status === 'active').length;
+    const commercial = employees.filter(emp => emp.role === 'Commercial' && emp.status === 'active').length;
+    const management = employees.filter(emp => emp.role === 'Management' && emp.status === 'active').length;
+    const clerical = employees.filter(emp => (emp.role === 'Clerical' || emp.role === 'Office') && emp.status === 'active').length;
+    const owners = employees.filter(emp => emp.role === 'Owner' && emp.status === 'active').length;
     
-    return { total, active, terminated, fullTime, partTime, contractors, withIssues, residential, commercial, management, clerical, owners };
+    return { 
+      totalEmployees,    // W2 only
+      contractors,       // 1099 only
+      totalWorkforce,    // Everyone
+      active, 
+      inactive, 
+      fullTime, 
+      partTime, 
+      withIssues, 
+      residential, 
+      commercial, 
+      management, 
+      clerical, 
+      owners 
+    };
   };
 
   const stats = getEmployeeStats();
@@ -375,14 +408,14 @@ const EmployeeManagement = () => {
           <div className="flex items-center gap-3">
             <Database className="w-5 h-5 text-green-600" />
             <span className="font-medium text-gray-800">
-              🟢 Database Connected: {employees.length > 0 ? `${employees.length} Records Loaded` : 'No Data Imported'}
+              🟢 Database Connected: {employees.length > 0 ? `${stats.totalWorkforce} Records Loaded` : 'No Data Imported'}
             </span>
           </div>
           {employees.length > 0 && (
             <div className="flex items-center gap-6 text-sm text-gray-600">
-              <span>{stats.total} Total</span>
+              <span>{stats.totalEmployees} Employees</span>
               <span className="text-green-600">{stats.active} Active</span>
-              {stats.terminated > 0 && <span className="text-red-600">{stats.terminated} Former</span>}
+              {stats.inactive > 0 && <span className="text-red-600">{stats.inactive} Inactive</span>}
               <span>{stats.residential} Residential</span>
               <span>{stats.commercial} Commercial</span>
               <span>{stats.management} Management</span>
@@ -491,7 +524,7 @@ const EmployeeManagement = () => {
               
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                 <div className="text-center">
-                  <div className="text-2xl font-bold text-green-600">{stats.total}</div>
+                  <div className="text-2xl font-bold text-green-600">{stats.totalEmployees}</div>
                   <div className="text-sm text-gray-600">Total Employees</div>
                 </div>
                 <div className="text-center">
@@ -522,7 +555,7 @@ const EmployeeManagement = () => {
                 <div>
                   <h2 className="text-2xl font-bold text-gray-800">👥 Employee Role Distribution</h2>
                   <p className="text-gray-600 mt-1">
-                    Breakdown of inspector roles and employment types
+                    Breakdown of inspector roles and employment types (Active employees only)
                   </p>
                 </div>
               </div>
@@ -593,6 +626,16 @@ const EmployeeManagement = () => {
                       </div>
                       <span className="text-xl font-bold text-purple-600">{stats.contractors}</span>
                     </div>
+
+                    {stats.inactive > 0 && (
+                      <div className="flex justify-between items-center p-3 bg-red-50 rounded border-l-4 border-red-400">
+                        <div className="flex items-center">
+                          <Clock className="w-4 h-4 text-red-500 mr-3" />
+                          <span className="font-medium">Inactive/Former</span>
+                        </div>
+                        <span className="text-xl font-bold text-red-600">{stats.inactive}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -605,8 +648,9 @@ const EmployeeManagement = () => {
               <h3 className="text-lg font-semibold text-gray-700 mb-4">📍 Regional Distribution</h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {getUniqueValues('location').map(location => {
-                  const count = employees.filter(emp => emp.location === location).length;
-                  const percentage = Math.round((count / employees.length) * 100);
+                  const count = employees.filter(emp => emp.location === location && emp.status === 'active').length;
+                  const totalAtLocation = employees.filter(emp => emp.location === location && emp.status === 'active').length;
+                  const percentage = totalAtLocation > 0 ? Math.round((count / stats.active) * 100) : 0;
                   return (
                     <div key={location} className="p-4 bg-gray-50 rounded-lg text-center">
                       <div className="text-2xl font-bold text-blue-600">{count}</div>
@@ -713,6 +757,7 @@ const EmployeeManagement = () => {
                     <option value="fulltime">Full Time W2</option>
                     <option value="parttime">Part Time W2</option>
                     <option value="contractor">1099 Contractor</option>
+                    <option value="inactive">Inactive/Former</option>
                   </select>
 
                   {selectedEmployees.length > 0 && (
@@ -750,7 +795,7 @@ const EmployeeManagement = () => {
                 
                 <div className="divide-y max-h-96 overflow-y-auto">
                   {filteredEmployees.map((employee) => (
-                    <div key={employee.id} className="p-4 hover:bg-gray-50">
+                    <div key={employee.id} className={`p-4 hover:bg-gray-50 ${employee.status === 'inactive' ? 'bg-red-50' : ''}`}>
                       <div className="flex items-center space-x-4">
                         <input
                           type="checkbox"
@@ -764,7 +809,10 @@ const EmployeeManagement = () => {
                           <div className="md:col-span-2">
                             <div className="flex items-center space-x-2">
                               <div>
-                                <div className="font-medium text-gray-900">{employee.name}</div>
+                                <div className={`font-medium ${employee.status === 'inactive' ? 'text-red-600' : 'text-gray-900'}`}>
+                                  {employee.name}
+                                  {employee.status === 'inactive' && <span className="text-xs ml-2 bg-red-100 text-red-600 px-1 rounded">INACTIVE</span>}
+                                </div>
                                 <div className="text-sm text-gray-500">#{employee.inspectorNumber}</div>
                               </div>
                               {employee.hasIssues && (
@@ -816,15 +864,14 @@ const EmployeeManagement = () => {
                           <div className="flex items-center space-x-1">
                             <Clock className="h-3 w-3 text-gray-400" />
                             <span className={`text-sm ${
+                              employee.status === 'inactive' ? 'text-red-600' :
                               employee.isContractor ? 'text-purple-600' :
                               employee.isFullTime ? 'text-green-600' : 'text-orange-600'
                             }`}>
-                              {employee.isContractor ? '1099 Contractor' :
+                              {employee.status === 'inactive' ? 'Inactive' :
+                               employee.isContractor ? '1099 Contractor' :
                                employee.isFullTime ? 'Full Time W2' : 'Part Time W2'}
                             </span>
-                            {employee.status === 'terminated' && (
-                              <span className="text-xs bg-red-100 text-red-600 px-1 rounded">Former</span>
-                            )}
                           </div>
                           
                           {/* Actions */}
@@ -899,7 +946,7 @@ const EmployeeManagement = () => {
                       🟢 Database Connected & Active
                     </h4>
                     <p className="text-sm text-green-700 mt-1">
-                      {stats.total} employee records stored in Supabase database
+                      {stats.totalWorkforce} total records ({stats.totalEmployees} employees + {stats.contractors} contractors)
                     </p>
                   </div>
                   <div className="text-right">
@@ -939,8 +986,7 @@ const EmployeeManagement = () => {
 
               <div className="text-sm text-gray-600 bg-blue-50 p-3 rounded">
                 <strong>💾 Data Persistence:</strong> All employee data is now permanently stored in your database. 
-                No more data loss between sessions! You can edit individual employees, add new ones, 
-                or import updates without losing existing data.
+                Import updates will automatically detect new hires, departures, and data changes without creating duplicates.
               </div>
             </div>
 
@@ -951,11 +997,17 @@ const EmployeeManagement = () => {
                   🔍 Data Quality Report
                 </h3>
                 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div className="p-4 bg-green-50 border border-green-200 rounded-lg text-center">
-                    <div className="text-2xl font-bold text-green-600">{stats.total - stats.withIssues}</div>
-                    <div className="text-sm text-green-700">Complete Records</div>
-                    <div className="text-xs text-green-600 mt-1">All required fields present</div>
+                    <div className="text-2xl font-bold text-green-600">{stats.active}</div>
+                    <div className="text-sm text-green-700">Active Records</div>
+                    <div className="text-xs text-green-600 mt-1">Currently employed</div>
+                  </div>
+                  
+                  <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-center">
+                    <div className="text-2xl font-bold text-red-600">{stats.inactive}</div>
+                    <div className="text-sm text-red-700">Inactive Records</div>
+                    <div className="text-xs text-red-600 mt-1">Former employees</div>
                   </div>
                   
                   <div className="p-4 bg-orange-50 border border-orange-200 rounded-lg text-center">
@@ -965,7 +1017,7 @@ const EmployeeManagement = () => {
                   </div>
                   
                   <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg text-center">
-                    <div className="text-2xl font-bold text-blue-600">{employees.length > 0 ? Math.round(((stats.total - stats.withIssues) / stats.total) * 100) : 0}%</div>
+                    <div className="text-2xl font-bold text-blue-600">{stats.active > 0 ? Math.round(((stats.active - stats.withIssues) / stats.active) * 100) : 0}%</div>
                     <div className="text-sm text-blue-700">Data Quality</div>
                     <div className="text-xs text-blue-600 mt-1">Overall completeness score</div>
                   </div>
@@ -983,7 +1035,7 @@ const EmployeeManagement = () => {
                 <button
                   onClick={() => {
                     const csvContent = [
-                      ['Inspector #', 'Name', 'Email', 'Phone', 'Role', 'Location', 'Employment Type'].join(','),
+                      ['Inspector #', 'Name', 'Email', 'Phone', 'Role', 'Location', 'Employment Type', 'Status'].join(','),
                       ...employees.map(emp => [
                         emp.inspectorNumber,
                         `"${emp.name}"`,
@@ -991,7 +1043,8 @@ const EmployeeManagement = () => {
                         emp.phone,
                         emp.role,
                         emp.location,
-                        emp.isContractor ? '1099 Contractor' : emp.isFullTime ? 'Full Time W2' : 'Part Time W2'
+                        emp.isContractor ? '1099 Contractor' : emp.isFullTime ? 'Full Time W2' : 'Part Time W2',
+                        emp.status
                       ].join(','))
                     ].join('\n');
                     
