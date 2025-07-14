@@ -178,7 +178,7 @@ const EmployeeManagement = () => {
           employment_status: employmentStatus,
           initials: initials,
           hire_date: new Date().toISOString().split('T')[0],
-          created_by: 'dudj23@gmail.com'
+          created_by: '5df85ca3-7a54-4798-a665-c31da8d9caad'
         };
       });
       
