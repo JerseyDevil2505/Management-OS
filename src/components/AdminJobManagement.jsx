@@ -192,6 +192,55 @@ const AdminJobManagement = () => {
           };
           
           console.log('Code file vendor result:', vendorResult);
+        } else if (text.includes('"KEY":"') && text.includes('"VALUE":"')) {
+          // BRT nested JSON in text file
+          console.log('Detected BRT nested JSON structure in .txt file');
+          
+          try {
+            let jsonContent = text;
+            if (text.includes('{"')) {
+              jsonContent = text.substring(text.indexOf('{"'));
+            }
+            
+            const parsed = JSON.parse(jsonContent);
+            
+            // Count total codes by traversing the nested structure
+            let totalCodes = 0;
+            const countCodes = (obj) => {
+              if (obj && typeof obj === 'object') {
+                if (obj.KEY && obj.DATA && obj.DATA.VALUE) {
+                  totalCodes++;
+                }
+                if (obj.MAP) {
+                  Object.values(obj.MAP).forEach(countCodes);
+                }
+              }
+            };
+            
+            Object.values(parsed).forEach(countCodes);
+            
+            vendorResult = {
+              vendor: 'BRT',
+              confidence: 100,
+              detectedFormat: 'BRT Nested JSON Code Structure',
+              fileStructure: `Nested JSON with ${totalCodes} code definitions`,
+              codeCount: totalCodes,
+              isValid: true
+            };
+            
+            console.log('BRT nested JSON code file detected:', vendorResult);
+          } catch (e) {
+            console.log('JSON parse failed for BRT file:', e);
+            // Fallback count
+            vendorResult = {
+              vendor: 'BRT',
+              confidence: 80,
+              detectedFormat: 'BRT Text Code Export',
+              fileStructure: 'Text format with nested codes',
+              codeCount: (text.match(/"VALUE":/g) || []).length,
+              isValid: true
+            };
+          }
         }
       }
       else if (file.name.endsWith('.json') || text.includes('"02":"COLONIAL"') || text.includes('"KEY":"') || text.includes('"VALUE":"')) {
