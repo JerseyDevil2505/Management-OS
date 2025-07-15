@@ -38,9 +38,16 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       if (error) throw error;
 
       if (data && data.length > 0) {
+        // Use timestamps from latest upload
         setFileTimestamps({
           source: data[0].source_file_uploaded_at,
           code: data[0].code_file_updated_at
+        });
+      } else {
+        // Fallback to job creation date (no uploads yet)
+        setFileTimestamps({
+          source: job.created_at,
+          code: job.created_at
         });
       }
     } catch (error) {
