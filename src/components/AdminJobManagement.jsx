@@ -584,6 +584,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
 
     try {
       const updateData = {
+        ccddCode: newPlanningJob.ccddCode,
         municipality: newPlanningJob.municipality,
         potentialYear: new Date(newPlanningJob.dueDate).getFullYear(),
         comments: newPlanningJob.comments || ''
@@ -617,6 +618,20 @@ const AdminJobManagement = ({ onJobSelect }) => {
     } catch (error) {
       console.error('Job deletion error:', error);
       window.alert('Error deleting job: ' + error.message);
+    }
+  };
+
+  const deletePlanningJob = async (planningJob) => {
+    if (window.confirm(`Delete planning job ${planningJob.municipality}?`)) {
+      try {
+        await planningJobService.delete(planningJob.id);
+        const updatedPlanningJobs = await planningJobService.getAll();
+        setPlanningJobs(updatedPlanningJobs);
+        window.alert('Planning job deleted successfully!');
+      } catch (error) {
+        console.error('Planning job deletion error:', error);
+        window.alert('Error deleting planning job: ' + error.message);
+      }
     }
   };
 
@@ -894,446 +909,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
                   <div className="text-2xl font-bold text-blue-600">{archivedJobs.length}</div>
                   <div className="text-sm text-gray-600">Complete</div>
                 </button>
-                <div className="text-center p-3 bg-purple-50 rounded-lg border border-purple-200">
-                  <div className="text-2xl font-bold text-purple-600">{jobs.reduce((sum, job) => sum + (job.totalProperties || 0), 0).toLocaleString()}</div>
-                  <div className="text-sm text-gray-600">Total Properties</div>
-                </div>
-              </div>
-            </div>
-
-            {/* County Grouped Job Cards */}
-            <div className="space-y-6">
-              {jobs.length === 0 ? (
-                <div className="text-center text-gray-500 py-12">
-                  <div className="text-4xl mb-4">📋</div>
-                  <h4 className="text-lg font-medium mb-2">No Jobs Found</h4>
-                  <p className="text-sm">Create your first job to get started!</p>
-                </div>
-              ) : (
-                Object.entries(groupJobsByCounty(jobs)).map(([county, countyJobs]) => (
-                  <div key={county} className="space-y-3">
-                    <h3 className="text-lg font-bold text-gray-800 border-b border-gray-300 pb-2">
-                      📍 {county} County ({countyJobs.length} jobs)
-                    </h3>
-                    <div className="space-y-3">
-                      {countyJobs.map(job => (
-                        <div key={job.id} className={`p-4 bg-white rounded-lg border-l-4 shadow-md hover:shadow-lg transition-all transform hover:scale-[1.01] ${
-                          job.vendor === 'Microsystems' ? 'border-blue-400 hover:bg-blue-50' : 'border-orange-300 hover:bg-orange-50'
-                        }`}>
-                          <div className="flex justify-between items-start mb-3">
-                            <div className="flex-1">
-                              <div className="flex justify-between items-center mb-2">
-                                <h4 className="text-lg font-bold text-gray-900">{job.name}</h4>
-                                <div className="flex items-center space-x-2">
-                                  <span className={`px-3 py-1 rounded-full text-xs font-medium shadow-sm ${
-                                    job.vendor === 'Microsystems' 
-                                      ? 'bg-blue-100 text-blue-800' 
-                                      : 'bg-orange-200 text-orange-900'
-                                  }`}>
-                                    {job.vendor}
-                                  </span>
-                                  <span className={`px-3 py-1 rounded-full text-xs font-medium shadow-sm ${getStatusColor(job.status)}`}>
-                                    {job.status || 'active'}
-                                  </span>
-                                </div>
-                              </div>
-                              <div className="flex items-center space-x-4 text-sm text-gray-600 mb-3">
-                                <span className="flex items-center space-x-1">
-                                  <span className="font-bold text-blue-600">{job.ccddCode}</span>
-                                  <span>•</span>
-                                  <MapPin className="w-4 h-4" />
-                                  <span>{job.municipality}</span>
-                                </span>
-                                <span className="flex items-center space-x-1">
-                                  <Calendar className="w-4 h-4" />
-                                  <span>Due: {job.dueDate ? job.dueDate.split('-')[0] : 'TBD'}</span>
-                                </span>
-                                {job.assignedManagers && job.assignedManagers.length > 0 && (
-                                  <span className="flex items-center space-x-1">
-                                    <Users className="w-4 h-4" />
-                                    <span>{job.assignedManagers.map(m => `${m.name} (${m.role})`).join(', ')}</span>
-                                  </span>
-                                )}
-                              </div>
-                              
-                              {/* Production Metrics - Updated with 5 columns */}
-                              <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-3 p-3 bg-gray-50 rounded-lg">
-                                <div className="text-center">
-                                  <div className="text-lg font-bold text-blue-600">
-                                    {(job.inspectedProperties || 0).toLocaleString()} of {(job.totalProperties || 0).toLocaleString()}
-                                  </div>
-                                  <div className="text-xs text-gray-600">Properties Inspected</div>
-                                  <div className="text-sm font-medium text-blue-600">
-                                    {job.totalProperties > 0 ? Math.round(((job.inspectedProperties || 0) / job.totalProperties) * 100) : 0}% Complete
-                                  </div>
-                                </div>
-                                
-                                <div className="text-center">
-                                  <div className="text-lg font-bold text-green-600">
-                                    {job.workflowStats?.rates?.entryRate || 0}%
-                                  </div>
-                                  <div className="text-xs text-gray-600">Residential Entry Rate</div>
-                                  <div className="text-sm text-gray-500">As of: TBD</div>
-                                </div>
-                                
-                                <div className="text-center">
-                                  <div className="text-lg font-bold text-red-600">
-                                    {job.workflowStats?.rates?.refusalRate || 0}%
-                                  </div>
-                                  <div className="text-xs text-gray-600">Residential Refusal Rate</div>
-                                  <div className="text-sm text-gray-500">As of: TBD</div>
-                                </div>
-
-                                <div className="text-center">
-                                  <div className="text-lg font-bold text-purple-600">
-                                    {job.workflowStats?.rates?.commercialInspectionRate || 0}%
-                                  </div>
-                                  <div className="text-xs text-gray-600">Commercial Inspections</div>
-                                  <div className="text-sm text-gray-500">From Payroll</div>
-                                </div>
-
-                                <div className="text-center">
-                                  <div className="text-lg font-bold text-indigo-600">
-                                    {job.workflowStats?.rates?.pricingRate || 0}%
-                                  </div>
-                                  <div className="text-xs text-gray-600">Commercials Priced</div>
-                                  <div className="text-sm text-gray-500">From Payroll</div>
-                                </div>
-                              </div>
-
-                              {/* Attempt Status */}
-                              <div className="flex space-x-2 mb-3">
-                                <div className={`px-3 py-1 rounded-full text-xs font-medium ${
-                                  job.workflowStats?.inspectionPhases?.firstAttempt === 'COMPLETE' 
-                                    ? 'bg-green-100 text-green-800' 
-                                    : 'bg-gray-100 text-gray-600'
-                                }`}>
-                                  1st: {job.workflowStats?.inspectionPhases?.firstAttempt || 'PENDING'}
-                                </div>
-                                <div className={`px-3 py-1 rounded-full text-xs font-medium ${
-                                  job.workflowStats?.inspectionPhases?.secondAttempt === 'COMPLETE' 
-                                    ? 'bg-green-100 text-green-800' 
-                                    : 'bg-gray-100 text-gray-600'
-                                }`}>
-                                  2nd: {job.workflowStats?.inspectionPhases?.secondAttempt || 'PENDING'}
-                                </div>
-                                <div className={`px-3 py-1 rounded-full text-xs font-medium ${
-                                  job.workflowStats?.inspectionPhases?.thirdAttempt === 'COMPLETE' 
-                                    ? 'bg-green-100 text-green-800' 
-                                    : 'bg-gray-100 text-gray-600'
-                                }`}>
-                                  3rd: {job.workflowStats?.inspectionPhases?.thirdAttempt || 'PENDING'}
-                                </div>
-                              </div>
-
-                              {/* Appeals Section */}
-                              <div className="p-2 bg-yellow-50 rounded-lg border border-yellow-200 mb-3">
-                                <div className="text-sm font-medium text-yellow-800 mb-1">Appeal Analytics</div>
-                                <div className="text-xs text-gray-600">
-                                  Total Appeals: {job.workflowStats?.appeals?.totalCount || 0} 
-                                  ({job.workflowStats?.appeals?.percentOfWhole || 0}% of total properties)
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Action Buttons */}
-                          <div className="flex justify-end space-x-2 pt-3 border-t border-gray-100">
-                            <button 
-                              onClick={() => goToJob(job)}
-                              className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
-                            >
-                              <Eye className="w-4 h-4" />
-                              <span>Go to Job</span>
-                            </button>
-                            {currentUser.canAccessBilling && (
-                              <button 
-                                onClick={() => goToBillingPayroll(job)}
-                                className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
-                              >
-                                <DollarSign className="w-4 h-4" />
-                                <span>Billing</span>
-                              </button>
-                            )}
-                            <button 
-                              onClick={() => {
-                                setEditingJob(job);
-                                setNewJob({
-                                  name: job.name,
-                                  ccddCode: job.ccddCode,
-                                  municipality: job.municipality,
-                                  county: job.county,
-                                  state: job.state,
-                                  dueDate: job.dueDate,
-                                  assignedManagers: job.assignedManagers || [],
-                                  sourceFile: null,
-                                  codeFile: null,
-                                  vendor: job.vendor,
-                                  vendorDetection: job.vendorDetection
-                                });
-                                setShowCreateJob(true);
-                              }}
-                              className="px-3 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
-                            >
-                              <Edit3 className="w-4 h-4" />
-                              <span>Edit</span>
-                            </button>
-                            <button 
-                              onClick={() => setShowDeleteConfirm(job)}
-                              className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                              <span>Delete</span>
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Planning Jobs Tab */}
-      {activeTab === 'planning' && (
-        <div className="space-y-6">
-          <div className="bg-gradient-to-r from-yellow-50 to-orange-50 rounded-lg border-2 border-yellow-200 p-6">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center">
-                <Settings className="w-8 h-8 mr-3 text-yellow-600" />
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-800">📝 Planning Stage Jobs</h2>
-                  <p className="text-gray-600 mt-1">
-                    Future jobs in planning - store basic info until ready to activate
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowCreatePlanning(true)}
-                className="px-6 py-3 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 flex items-center space-x-2 font-medium shadow-lg hover:shadow-xl transition-all transform hover:scale-105"
-              >
-                <Plus className="w-5 h-5" />
-                <span>📝 Add Planning Job</span>
-              </button>
-            </div>
-
-            <div className="grid gap-4">
-              {planningJobs.length === 0 ? (
-                <div className="text-center text-gray-500 py-12">
-                  <div className="text-4xl mb-4">📝</div>
-                  <h4 className="text-lg font-medium mb-2">No Planning Jobs Found</h4>
-                  <p className="text-sm">Add planning jobs to track prospective clients.</p>
-                </div>
-              ) : (
-                planningJobs.map(planningJob => (
-                  <div key={planningJob.id} className="p-4 bg-white rounded-lg border-l-4 border-yellow-400 shadow-md hover:shadow-lg transition-all transform hover:scale-[1.01]">
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center space-x-4">
-                        <span className="font-bold text-blue-600 text-lg">{planningJob.ccddCode}</span>
-                        <div>
-                          <h4 className="font-semibold text-gray-900">{planningJob.municipality}</h4>
-                          <p className="text-sm text-gray-600">Potential Year: {planningJob.potentialYear}</p>
-                          {planningJob.comments && (
-                            <p className="text-xs text-gray-500 mt-1">{planningJob.comments}</p>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex space-x-2">
-                        <button
-                          onClick={() => {
-                            setEditingPlanning(planningJob);
-                            setNewPlanningJob({
-                              ccddCode: planningJob.ccddCode,
-                              municipality: planningJob.municipality,
-                              dueDate: '', // This would need to be calculated from potentialYear
-                              comments: planningJob.comments || ''
-                            });
-                            setShowEditPlanning(true);
-                          }}
-                          className="px-3 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
-                        >
-                          <Edit3 className="w-4 h-4" />
-                          <span>Edit</span>
-                        </button>
-                        <button
-                          onClick={() => convertPlanningToJob(planningJob)}
-                          className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
-                        >
-                          <Plus className="w-4 h-4" />
-                          <span>Create Job</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Archive Tab */}
-      {activeTab === 'archive' && (
-        <div className="space-y-6">
-          <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg border-2 border-purple-200 p-6">
-            <div className="flex items-center mb-6">
-              <Archive className="w-8 h-8 mr-3 text-purple-600" />
-              <div>
-                <h2 className="text-2xl font-bold text-gray-800">📁 Archived Jobs</h2>
-                <p className="text-gray-600 mt-1">
-                  Completed jobs with final performance metrics and appeal data
-                </p>
-              </div>
-            </div>
-
-            <div className="grid gap-4">
-              {archivedJobs.length === 0 ? (
-                <div className="text-center text-gray-500 py-12">
-                  <div className="text-4xl mb-4">📁</div>
-                  <h4 className="text-lg font-medium mb-2">No Archived Jobs Found</h4>
-                  <p className="text-sm">Completed jobs will appear here automatically.</p>
-                </div>
-              ) : (
-                archivedJobs.map(job => (
-                  <div key={job.id} className="p-6 bg-white rounded-lg border-l-4 border-purple-400 shadow-md hover:shadow-lg transition-all">
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="flex-1">
-                        <div className="flex justify-between items-center mb-2">
-                          <h3 className="text-xl font-bold text-gray-900">{job.name}</h3>
-                          <span className={`px-3 py-1 rounded-full text-xs font-medium shadow-sm ${getStatusColor(job.status)}`}>
-                            {job.status}
-                          </span>
-                        </div>
-                        <div className="flex items-center space-x-4 text-sm text-gray-600 mb-4">
-                          <span className="font-bold text-blue-600">{job.ccddCode}</span>
-                          <span>{job.municipality}, {job.county} County</span>
-                          <span>Completed: {job.dueDate ? job.dueDate.split('-')[0] : 'TBD'}</span>
-                        </div>
-                        
-                        {/* Final Performance Metrics */}
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-purple-50 rounded-lg">
-                          <div className="text-center">
-                            <div className="text-lg font-bold text-purple-600">{(job.totalProperties || 0).toLocaleString()}</div>
-                            <div className="text-xs text-gray-600">Total Properties</div>
-                          </div>
-                          <div className="text-center">
-                            <div className="text-lg font-bold text-green-600">{job.workflowStats?.rates?.entryRate || 0}%</div>
-                            <div className="text-xs text-gray-600">Final Entry Rate</div>
-                          </div>
-                          <div className="text-center">
-                            <div className="text-lg font-bold text-blue-600">{job.workflowStats?.rates?.pricingRate || 0}%</div>
-                            <div className="text-xs text-gray-600">Pricing Rate</div>
-                          </div>
-                          <div className="text-center">
-                            <div className="text-lg font-bold text-yellow-600">{job.workflowStats?.appeals?.totalCount || 0}</div>
-                            <div className="text-xs text-gray-600">Total Appeals</div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Manager Assignments Tab */}
-      {activeTab === 'managers' && (
-        <div className="space-y-6">
-          <div className="bg-gradient-to-r from-green-50 to-blue-50 rounded-lg border-2 border-green-200 p-6">
-            <div className="flex items-center mb-6">
-              <Users className="w-8 h-8 mr-3 text-green-600" />
-              <div>
-                <h2 className="text-2xl font-bold text-gray-800">👥 Manager Workload Dashboard</h2>
-                <p className="text-gray-600 mt-1">
-                  Monitor manager assignments and workload distribution across active jobs
-                </p>
-              </div>
-            </div>
-
-            <div className="grid gap-6">
-              {managers.length === 0 ? (
-                <div className="text-center text-gray-500 py-12">
-                  <div className="text-4xl mb-4">👥</div>
-                  <h4 className="text-lg font-medium mb-2">No Managers Found</h4>
-                  <p className="text-sm">Manager data will appear here when loaded from the employee database.</p>
-                </div>
-              ) : (
-                managers.map(manager => {
-                  const workload = getManagerWorkload(manager);
-                  return (
-                    <div key={manager.id} className="p-6 bg-white rounded-lg border-l-4 border-green-400 shadow-md hover:shadow-lg transition-all">
-                      <div className="flex justify-between items-start mb-4">
-                        <div className="flex items-center space-x-4">
-                          <div className="w-12 h-12 rounded-full bg-green-100 text-green-800 flex items-center justify-center text-lg font-bold">
-                            {`${manager.first_name || ''} ${manager.last_name || ''}`.split(' ').map(n => n[0]).join('')}
-                          </div>
-                          <div>
-                            <h4 className="text-lg font-bold text-gray-900">{manager.first_name} {manager.last_name}</h4>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <div className="text-lg font-bold text-green-600">{workload.jobCount} Jobs</div>
-                          <div className="text-sm font-medium text-blue-600">{workload.totalProperties.toLocaleString()} Properties</div>
-                          <div className="text-sm text-gray-600">{workload.completionRate}% Complete</div>
-                        </div>
-                      </div>
-                      
-                      {/* Job Assignment Details */}
-                      {workload.jobs.length > 0 ? (
-                        <div className="space-y-2">
-                          <h5 className="font-medium text-gray-700">Assigned Jobs:</h5>
-                          {workload.jobs.map(job => {
-                            const jobCompletion = job.totalProperties > 0 ? Math.round(((job.inspectedProperties || 0) / job.totalProperties) * 100) : 0;
-                            const managerRole = job.assignedManagers?.find(am => am.id === manager.id)?.role || 'manager';
-                            
-                            return (
-                              <div key={job.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                                <div className="flex items-center space-x-3">
-                                  <span className="font-medium text-blue-600">{job.name}</span>
-                                  <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">{managerRole}</span>
-                                </div>
-                                <div className="flex items-center space-x-4 text-sm">
-                                  <span className="text-gray-600">{(job.totalProperties || 0).toLocaleString()} properties</span>
-                                  <div className="flex items-center space-x-2">
-                                    <div className="w-20 bg-gray-200 rounded-full h-2">
-                                      <div 
-                                        className="bg-green-600 h-2 rounded-full transition-all" 
-                                        style={{ width: `${jobCompletion}%` }}
-                                      ></div>
-                                    </div>
-                                    <span className="text-green-600 font-medium">{jobCompletion}%</span>
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <div className="text-center text-gray-500 py-4">
-                          <TrendingUp className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-                          <p className="text-sm">No current job assignments</p>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Delete Confirmation Modal */}
-      {showDeleteConfirm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-md w-full p-6 shadow-2xl">
-            <div className="text-center">
+                <div className="text-center">
               <Trash2 className="w-12 h-12 mx-auto mb-4 text-red-600" />
               <h3 className="text-lg font-bold text-gray-900 mb-2">Delete Job</h3>
               <p className="text-gray-600 mb-6">
@@ -1387,7 +963,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
                     placeholder="e.g., 1306"
                     maxLength="4"
-                    disabled={editingPlanning}
+                    disabled={false}
                   />
                 </div>
 
@@ -1720,4 +1296,452 @@ const AdminJobManagement = ({ onJobSelect }) => {
   );
 };
 
-export default AdminJobManagement;
+export default AdminJobManagement; p-3 bg-purple-50 rounded-lg border border-purple-200">
+                  <div className="text-2xl font-bold text-purple-600">{jobs.reduce((sum, job) => sum + (job.totalProperties || 0), 0).toLocaleString()}</div>
+                  <div className="text-sm text-gray-600">Total Properties</div>
+                </div>
+              </div>
+            </div>
+
+            {/* County Grouped Job Cards */}
+            <div className="space-y-6">
+              {jobs.length === 0 ? (
+                <div className="text-center text-gray-500 py-12">
+                  <div className="text-4xl mb-4">📋</div>
+                  <h4 className="text-lg font-medium mb-2">No Jobs Found</h4>
+                  <p className="text-sm">Create your first job to get started!</p>
+                </div>
+              ) : (
+                Object.entries(groupJobsByCounty(jobs)).map(([county, countyJobs]) => (
+                  <div key={county} className="space-y-3">
+                    <h3 className="text-lg font-bold text-gray-800 border-b border-gray-300 pb-2">
+                      📍 {county} County ({countyJobs.length} jobs)
+                    </h3>
+                    <div className="space-y-3">
+                      {countyJobs.map(job => (
+                        <div key={job.id} className={`p-4 bg-white rounded-lg border-l-4 shadow-md hover:shadow-lg transition-all transform hover:scale-[1.01] ${
+                          job.vendor === 'Microsystems' ? 'border-blue-400 hover:bg-blue-50' : 'border-orange-300 hover:bg-orange-50'
+                        }`}>
+                          <div className="flex justify-between items-start mb-3">
+                            <div className="flex-1">
+                              <div className="flex justify-between items-center mb-2">
+                                <h4 className="text-lg font-bold text-gray-900">
+                                  {job.name} ({job.year_created || 2025}-{job.job_number || 'TBD'})
+                                </h4>
+                                <div className="flex items-center space-x-2">
+                                  <span className={`px-3 py-1 rounded-full text-xs font-medium shadow-sm ${
+                                    job.vendor === 'Microsystems' 
+                                      ? 'bg-blue-100 text-blue-800' 
+                                      : 'bg-orange-200 text-orange-900'
+                                  }`}>
+                                    {job.vendor}
+                                  </span>
+                                  <span className={`px-3 py-1 rounded-full text-xs font-medium shadow-sm ${getStatusColor(job.status)}`}>
+                                    {job.status || 'active'}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="flex items-center space-x-4 text-sm text-gray-600 mb-3">
+                                <span className="flex items-center space-x-1">
+                                  <span className="font-bold text-blue-600">{job.ccddCode}</span>
+                                  <span>•</span>
+                                  <MapPin className="w-4 h-4" />
+                                  <span>{job.municipality}</span>
+                                </span>
+                                <span className="flex items-center space-x-1">
+                                  <Calendar className="w-4 h-4" />
+                                  <span>Due: {job.dueDate ? job.dueDate.split('-')[0] : 'TBD'}</span>
+                                </span>
+                                {job.assignedManagers && job.assignedManagers.length > 0 && (
+                                  <span className="flex items-center space-x-1">
+                                    <Users className="w-4 h-4" />
+                                    <span>{job.assignedManagers.map(m => `${m.name} (${m.role})`).join(', ')}</span>
+                                  </span>
+                                )}
+                              </div>
+                              
+                              {/* Production Metrics - Updated with 5 columns */}
+                              <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-3 p-3 bg-gray-50 rounded-lg">
+                                <div className="text-center">
+                                  <div className="text-lg font-bold text-blue-600">
+                                    {(job.inspectedProperties || 0).toLocaleString()} of {(job.totalProperties || 0).toLocaleString()}
+                                  </div>
+                                  <div className="text-xs text-gray-600">Properties Inspected</div>
+                                  <div className="text-sm font-medium text-blue-600">
+                                    {job.totalProperties > 0 ? Math.round(((job.inspectedProperties || 0) / job.totalProperties) * 100) : 0}% Complete
+                                  </div>
+                                </div>
+                                
+                                <div className="text-center">
+                                  <div className="text-lg font-bold text-green-600">
+                                    {job.workflowStats?.rates?.entryRate || 0}%
+                                  </div>
+                                  <div className="text-xs text-gray-600">Residential Entry Rate</div>
+                                  <div className="text-sm text-gray-500">As of: TBD</div>
+                                </div>
+                                
+                                <div className="text-center">
+                                  <div className="text-lg font-bold text-red-600">
+                                    {job.workflowStats?.rates?.refusalRate || 0}%
+                                  </div>
+                                  <div className="text-xs text-gray-600">Residential Refusal Rate</div>
+                                  <div className="text-sm text-gray-500">As of: TBD</div>
+                                </div>
+
+                                <div className="text-center">
+                                  <div className="text-lg font-bold text-purple-600">
+                                    {job.workflowStats?.rates?.commercialInspectionRate || 0}%
+                                  </div>
+                                  <div className="text-xs text-gray-600">Commercial Inspections</div>
+                                  <div className="text-sm text-gray-500">From Payroll</div>
+                                </div>
+
+                                <div className="text-center">
+                                  <div className="text-lg font-bold text-indigo-600">
+                                    {job.workflowStats?.rates?.pricingRate || 0}%
+                                  </div>
+                                  <div className="text-xs text-gray-600">Commercials Priced</div>
+                                  <div className="text-sm text-gray-500">From Payroll</div>
+                                </div>
+                              </div>
+
+                              {/* Attempt Status */}
+                              <div className="flex space-x-2 mb-3">
+                                <div className={`px-3 py-1 rounded-full text-xs font-medium ${
+                                  job.workflowStats?.inspectionPhases?.firstAttempt === 'COMPLETE' 
+                                    ? 'bg-green-100 text-green-800' 
+                                    : 'bg-gray-100 text-gray-600'
+                                }`}>
+                                  1st: {job.workflowStats?.inspectionPhases?.firstAttempt || 'PENDING'}
+                                </div>
+                                <div className={`px-3 py-1 rounded-full text-xs font-medium ${
+                                  job.workflowStats?.inspectionPhases?.secondAttempt === 'COMPLETE' 
+                                    ? 'bg-green-100 text-green-800' 
+                                    : 'bg-gray-100 text-gray-600'
+                                }`}>
+                                  2nd: {job.workflowStats?.inspectionPhases?.secondAttempt || 'PENDING'}
+                                </div>
+                                <div className={`px-3 py-1 rounded-full text-xs font-medium ${
+                                  job.workflowStats?.inspectionPhases?.thirdAttempt === 'COMPLETE' 
+                                    ? 'bg-green-100 text-green-800' 
+                                    : 'bg-gray-100 text-gray-600'
+                                }`}>
+                                  3rd: {job.workflowStats?.inspectionPhases?.thirdAttempt || 'PENDING'}
+                                </div>
+                              </div>
+
+                              {/* Appeals Section */}
+                              <div className="p-2 bg-yellow-50 rounded-lg border border-yellow-200 mb-3">
+                                <div className="text-sm font-medium text-yellow-800 mb-1">Appeal Analytics</div>
+                                <div className="text-xs text-gray-600">
+                                  Total Appeals: {job.workflowStats?.appeals?.totalCount || 0} 
+                                  ({job.workflowStats?.appeals?.percentOfWhole || 0}% of total properties)
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Action Buttons */}
+                          <div className="flex justify-end space-x-2 pt-3 border-t border-gray-100">
+                            <button 
+                              onClick={() => goToJob(job)}
+                              className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
+                            >
+                              <Eye className="w-4 h-4" />
+                              <span>Go to Job</span>
+                            </button>
+                            {currentUser.canAccessBilling && (
+                              <button 
+                                onClick={() => goToBillingPayroll(job)}
+                                className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
+                              >
+                                <DollarSign className="w-4 h-4" />
+                                <span>Billing</span>
+                              </button>
+                            )}
+                            <button 
+                              onClick={() => {
+                                setEditingJob(job);
+                                setNewJob({
+                                  name: job.name,
+                                  ccddCode: job.ccddCode,
+                                  municipality: job.municipality,
+                                  county: job.county,
+                                  state: job.state,
+                                  dueDate: job.dueDate,
+                                  assignedManagers: job.assignedManagers || [],
+                                  sourceFile: null,
+                                  codeFile: null,
+                                  vendor: job.vendor,
+                                  vendorDetection: job.vendorDetection
+                                });
+                                setShowCreateJob(true);
+                              }}
+                              className="px-3 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
+                            >
+                              <Edit3 className="w-4 h-4" />
+                              <span>Edit</span>
+                            </button>
+                            <button 
+                              onClick={() => setShowDeleteConfirm(job)}
+                              className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                              <span>Delete</span>
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Planning Jobs Tab */}
+      {activeTab === 'planning' && (
+        <div className="space-y-6">
+          <div className="bg-gradient-to-r from-yellow-50 to-orange-50 rounded-lg border-2 border-yellow-200 p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center">
+                <Settings className="w-8 h-8 mr-3 text-yellow-600" />
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-800">📝 Planning Stage Jobs</h2>
+                  <p className="text-gray-600 mt-1">
+                    Future jobs in planning - store basic info until ready to activate
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowCreatePlanning(true)}
+                className="px-6 py-3 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 flex items-center space-x-2 font-medium shadow-lg hover:shadow-xl transition-all transform hover:scale-105"
+              >
+                <Plus className="w-5 h-5" />
+                <span>📝 Add Planning Job</span>
+              </button>
+            </div>
+
+            <div className="grid gap-4">
+              {planningJobs.length === 0 ? (
+                <div className="text-center text-gray-500 py-12">
+                  <div className="text-4xl mb-4">📝</div>
+                  <h4 className="text-lg font-medium mb-2">No Planning Jobs Found</h4>
+                  <p className="text-sm">Add planning jobs to track prospective clients.</p>
+                </div>
+              ) : (
+                planningJobs.map(planningJob => (
+                  <div key={planningJob.id} className="p-4 bg-white rounded-lg border-l-4 border-yellow-400 shadow-md hover:shadow-lg transition-all transform hover:scale-[1.01]">
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center space-x-4">
+                        <span className="font-bold text-blue-600 text-lg">{planningJob.ccddCode}</span>
+                        <div>
+                          <h4 className="font-semibold text-gray-900">{planningJob.municipality}</h4>
+                          <p className="text-sm text-gray-600">Potential Year: {planningJob.potentialYear}</p>
+                          {planningJob.comments && (
+                            <p className="text-xs text-gray-500 mt-1">{planningJob.comments}</p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex space-x-2">
+                        <button
+                          onClick={() => {
+                            setEditingPlanning(planningJob);
+                            setNewPlanningJob({
+                              ccddCode: planningJob.ccddCode,
+                              municipality: planningJob.municipality,
+                              dueDate: '', // This would need to be calculated from potentialYear
+                              comments: planningJob.comments || ''
+                            });
+                            setShowEditPlanning(true);
+                          }}
+                          className="px-3 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
+                        >
+                          <Edit3 className="w-4 h-4" />
+                          <span>Edit</span>
+                        </button>
+                        <button
+                          onClick={() => deletePlanningJob(planningJob)}
+                          className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          <span>Delete</span>
+                        </button>
+                        <button
+                          onClick={() => convertPlanningToJob(planningJob)}
+                          className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
+                        >
+                          <Plus className="w-4 h-4" />
+                          <span>Create Job</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Archive Tab */}
+      {activeTab === 'archive' && (
+        <div className="space-y-6">
+          <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg border-2 border-purple-200 p-6">
+            <div className="flex items-center mb-6">
+              <Archive className="w-8 h-8 mr-3 text-purple-600" />
+              <div>
+                <h2 className="text-2xl font-bold text-gray-800">📁 Archived Jobs</h2>
+                <p className="text-gray-600 mt-1">
+                  Completed jobs with final performance metrics and appeal data
+                </p>
+              </div>
+            </div>
+
+            <div className="grid gap-4">
+              {archivedJobs.length === 0 ? (
+                <div className="text-center text-gray-500 py-12">
+                  <div className="text-4xl mb-4">📁</div>
+                  <h4 className="text-lg font-medium mb-2">No Archived Jobs Found</h4>
+                  <p className="text-sm">Completed jobs will appear here automatically.</p>
+                </div>
+              ) : (
+                archivedJobs.map(job => (
+                  <div key={job.id} className="p-6 bg-white rounded-lg border-l-4 border-purple-400 shadow-md hover:shadow-lg transition-all">
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="flex-1">
+                        <div className="flex justify-between items-center mb-2">
+                          <h3 className="text-xl font-bold text-gray-900">{job.name}</h3>
+                          <span className={`px-3 py-1 rounded-full text-xs font-medium shadow-sm ${getStatusColor(job.status)}`}>
+                            {job.status}
+                          </span>
+                        </div>
+                        <div className="flex items-center space-x-4 text-sm text-gray-600 mb-4">
+                          <span className="font-bold text-blue-600">{job.ccddCode}</span>
+                          <span>{job.municipality}, {job.county} County</span>
+                          <span>Completed: {job.dueDate ? job.dueDate.split('-')[0] : 'TBD'}</span>
+                        </div>
+                        
+                        {/* Final Performance Metrics */}
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-purple-50 rounded-lg">
+                          <div className="text-center">
+                            <div className="text-lg font-bold text-purple-600">{(job.totalProperties || 0).toLocaleString()}</div>
+                            <div className="text-xs text-gray-600">Total Properties</div>
+                          </div>
+                          <div className="text-center">
+                            <div className="text-lg font-bold text-green-600">{job.workflowStats?.rates?.entryRate || 0}%</div>
+                            <div className="text-xs text-gray-600">Final Entry Rate</div>
+                          </div>
+                          <div className="text-center">
+                            <div className="text-lg font-bold text-blue-600">{job.workflowStats?.rates?.pricingRate || 0}%</div>
+                            <div className="text-xs text-gray-600">Pricing Rate</div>
+                          </div>
+                          <div className="text-center">
+                            <div className="text-lg font-bold text-yellow-600">{job.workflowStats?.appeals?.totalCount || 0}</div>
+                            <div className="text-xs text-gray-600">Total Appeals</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Manager Assignments Tab */}
+      {activeTab === 'managers' && (
+        <div className="space-y-6">
+          <div className="bg-gradient-to-r from-green-50 to-blue-50 rounded-lg border-2 border-green-200 p-6">
+            <div className="flex items-center mb-6">
+              <Users className="w-8 h-8 mr-3 text-green-600" />
+              <div>
+                <h2 className="text-2xl font-bold text-gray-800">👥 Manager Workload Dashboard</h2>
+                <p className="text-gray-600 mt-1">
+                  Monitor manager assignments and workload distribution across active jobs
+                </p>
+              </div>
+            </div>
+
+            <div className="grid gap-6">
+              {managers.length === 0 ? (
+                <div className="text-center text-gray-500 py-12">
+                  <div className="text-4xl mb-4">👥</div>
+                  <h4 className="text-lg font-medium mb-2">No Managers Found</h4>
+                  <p className="text-sm">Manager data will appear here when loaded from the employee database.</p>
+                </div>
+              ) : (
+                managers.map(manager => {
+                  const workload = getManagerWorkload(manager);
+                  return (
+                    <div key={manager.id} className="p-6 bg-white rounded-lg border-l-4 border-green-400 shadow-md hover:shadow-lg transition-all">
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="flex items-center space-x-4">
+                          <div className="w-12 h-12 rounded-full bg-green-100 text-green-800 flex items-center justify-center text-lg font-bold">
+                            {`${manager.first_name || ''} ${manager.last_name || ''}`.split(' ').map(n => n[0]).join('')}
+                          </div>
+                          <div>
+                            <h4 className="text-lg font-bold text-gray-900">{manager.first_name} {manager.last_name}</h4>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-lg font-bold text-green-600">{workload.jobCount} Jobs</div>
+                          <div className="text-sm font-medium text-blue-600">{workload.totalProperties.toLocaleString()} Properties</div>
+                          <div className="text-sm text-gray-600">{workload.completionRate}% Complete</div>
+                        </div>
+                      </div>
+                      
+                      {/* Job Assignment Details */}
+                      {workload.jobs.length > 0 ? (
+                        <div className="space-y-2">
+                          <h5 className="font-medium text-gray-700">Assigned Jobs:</h5>
+                          {workload.jobs.map(job => {
+                            const jobCompletion = job.totalProperties > 0 ? Math.round(((job.inspectedProperties || 0) / job.totalProperties) * 100) : 0;
+                            const managerRole = job.assignedManagers?.find(am => am.id === manager.id)?.role || 'manager';
+                            
+                            return (
+                              <div key={job.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                                <div className="flex items-center space-x-3">
+                                  <span className="font-medium text-blue-600">{job.name}</span>
+                                  <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">{managerRole}</span>
+                                </div>
+                                <div className="flex items-center space-x-4 text-sm">
+                                  <span className="text-gray-600">{(job.totalProperties || 0).toLocaleString()} properties</span>
+                                  <div className="flex items-center space-x-2">
+                                    <div className="w-20 bg-gray-200 rounded-full h-2">
+                                      <div 
+                                        className="bg-green-600 h-2 rounded-full transition-all" 
+                                        style={{ width: `${jobCompletion}%` }}
+                                      ></div>
+                                    </div>
+                                    <span className="text-green-600 font-medium">{jobCompletion}%</span>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="text-center text-gray-500 py-4">
+                          <TrendingUp className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                          <p className="text-sm">No current job assignments</p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-md w-full p-6 shadow-2xl">
+            <div className="text-center
