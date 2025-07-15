@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import EmployeeManagement from './components/EmployeeManagement';
 import AdminJobManagement from './components/AdminJobManagement';
 import JobContainer from './components/job-modules/JobContainer';
+import FileUploadButton from './components/FileUploadButton';
 import './App.css';
 
 function App() {
@@ -18,6 +19,12 @@ function App() {
   const handleBackToJobs = () => {
     setSelectedJob(null);
     setActiveModule('jobs'); // Return to jobs list
+  };
+
+  // Handle file processing completion
+  const handleFileProcessed = (fileType, fileName) => {
+    console.log(`File processed: ${fileType} - ${fileName}`);
+    // Could trigger refresh of job data or notify active modules
   };
 
   return (
@@ -56,10 +63,21 @@ function App() {
           {/* Show job context when in job-specific modules */}
           {activeModule === 'job-modules' && selectedJob && (
             <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-300">Working on:</p>
-                <p className="text-lg font-semibold">{selectedJob.job_name}</p>
+              <div className="flex items-center gap-6">
+                <div>
+                  <p className="text-sm text-gray-300">Working on:</p>
+                  <p className="text-lg font-semibold">{selectedJob.job_name}</p>
+                </div>
+                
+                {/* File Upload Controls */}
+                <div className="border-l border-gray-700 pl-6">
+                  <FileUploadButton 
+                    job={selectedJob} 
+                    onFileProcessed={handleFileProcessed} 
+                  />
+                </div>
               </div>
+              
               <button
                 onClick={handleBackToJobs}
                 className="px-4 py-2 bg-gray-700 text-gray-300 hover:bg-gray-600 rounded-lg font-medium transition-colors"
