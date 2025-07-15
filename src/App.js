@@ -5,7 +5,7 @@ import AdminJobManagement from './components/AdminJobManagement';
 import './App.css';
 
 function App() {
-  const [activeModule, setActiveModule] = useState('jobs'); // Changed default to jobs
+  const [activeModule, setActiveModule] = useState('employees'); // Changed default to employees
 
   return (
     <div className="App">
@@ -14,6 +14,16 @@ function App() {
         <div className="max-w-6xl mx-auto">
           <h1 className="text-2xl font-bold mb-4">PPA Management OS</h1>
           <nav className="flex space-x-6">
+            <button
+              onClick={() => setActiveModule('employees')}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                activeModule === 'employees'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+              }`}
+            >
+              👥 Employee Management
+            </button>
             <button
               onClick={() => setActiveModule('jobs')}
               className={`px-4 py-2 rounded-lg font-medium transition-colors ${
@@ -34,25 +44,15 @@ function App() {
             >
               📊 Production Tracker
             </button>
-            <button
-              onClick={() => setActiveModule('employees')}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                activeModule === 'employees'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-              }`}
-            >
-              👥 Employee Management
-            </button>
           </nav>
         </div>
       </div>
 
       {/* Module Content */}
       <div className="min-h-screen bg-gray-50">
+        {activeModule === 'employees' && <EmployeeManagement />}
         {activeModule === 'jobs' && <AdminJobManagement />}
         {activeModule === 'production' && <PayrollProductionUpdater />}
-        {activeModule === 'employees' && <EmployeeManagement />}
       </div>
     </div>
   );
