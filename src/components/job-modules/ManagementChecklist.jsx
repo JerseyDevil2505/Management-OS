@@ -80,13 +80,12 @@ const ManagementChecklist = ({
     getCurrentUser();
   }, []);
 
+  // Mock checklist data will be replaced with database calls
+  const [checklistItems, setChecklistItems] = useState([]);
+
   useEffect(() => {
     if (jobData) {
-      // TODO: Replace with actual database call to load checklist items for this job
-      // const items = await checklistService.getItemsForJob(jobData.id);
-      // setChecklistItems(items);
-      
-      // For now, load empty checklist from template
+      // Load the 29 checklist items from your Excel template
       loadChecklistTemplate();
     }
   }, [jobData, checklistType]);
@@ -94,12 +93,47 @@ const ManagementChecklist = ({
   const loadChecklistTemplate = async () => {
     try {
       // TODO: Replace with actual Supabase call
-      // const template = await checklistService.getTemplate('revaluation');
-      // const jobChecklist = await checklistService.createJobChecklist(jobData.id, template.id);
-      // setChecklistItems(jobChecklist.items);
+      // For now, use the 29 items from your Excel template
+      const templateItems = [
+        // Setup Category (1-8)
+        { id: 1, item_order: 1, item_text: 'Contract Signed by Client', category: 'setup', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false, notes: null },
+        { id: 2, item_order: 2, item_text: 'Contract Signed/Approved by State', category: 'setup', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false, notes: null },
+        { id: 3, item_order: 3, item_text: 'Tax Maps Approved', category: 'setup', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false, notes: null },
+        { id: 4, item_order: 4, item_text: 'Tax Map Upload', category: 'setup', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: true, client_approved: false, notes: null },
+        { id: 5, item_order: 5, item_text: 'Zoning Map Upload', category: 'setup', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: true, client_approved: false, notes: null },
+        { id: 6, item_order: 6, item_text: 'Zoning Bulk and Use Regulations Upload', category: 'setup', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: true, client_approved: false, notes: null },
+        { id: 7, item_order: 7, item_text: 'PPA Website Updated', category: 'setup', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false, notes: null },
+        { id: 8, item_order: 8, item_text: 'Data Collection Parameters', category: 'setup', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: true, allows_file_upload: false, client_approved: false, notes: null },
+        
+        // Inspection Category (9-14)
+        { id: 9, item_order: 9, item_text: 'Initial Mailing List', category: 'inspection', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false, auto_update_source: 'source_file', special_action: 'generate_mailing_list' },
+        { id: 10, item_order: 10, item_text: 'Initial Letter and Brochure', category: 'inspection', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: true, client_approved: false, special_action: 'generate_letter' },
+        { id: 11, item_order: 11, item_text: 'Initial Mailing Sent', category: 'inspection', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false, notes: null },
+        { id: 12, item_order: 12, item_text: 'First Attempt Inspections', category: 'inspection', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false, auto_update_source: 'production_tracker', auto_update_condition: '100%' },
+        { id: 13, item_order: 13, item_text: 'Second Attempt Inspections', category: 'inspection', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false, special_action: 'generate_second_attempt_mailer' },
+        { id: 14, item_order: 14, item_text: 'Third Attempt Inspections', category: 'inspection', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false, special_action: 'generate_third_attempt_mailer' },
+        
+        // Analysis Category (15-26)
+        { id: 15, item_order: 15, item_text: 'Market Analysis', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: true, client_approved: false, notes: null },
+        { id: 16, item_order: 16, item_text: 'Page by Page Analysis', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false, notes: null },
+        { id: 17, item_order: 17, item_text: 'Lot Sizing Completed', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false, notes: null },
+        { id: 18, item_order: 18, item_text: 'Lot Sizing Questions Complete', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false, notes: null },
+        { id: 19, item_order: 19, item_text: 'VCS Reviewed/Reset', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false, notes: null },
+        { id: 20, item_order: 20, item_text: 'Land Value Tables Built', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false, notes: null },
+        { id: 21, item_order: 21, item_text: 'Land Values Entered', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: true, allows_file_upload: false, client_approved: false, notes: null },
+        { id: 22, item_order: 22, item_text: 'Economic Obsolescence Study', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: true, allows_file_upload: false, client_approved: false, notes: null },
+        { id: 23, item_order: 23, item_text: 'Cost Conversion Factor Set', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: true, allows_file_upload: false, client_approved: false, notes: null },
+        { id: 24, item_order: 24, item_text: 'Building Class Review/Updated', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false, notes: null },
+        { id: 25, item_order: 25, item_text: 'Effective Age Loaded/Set', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false, notes: null },
+        { id: 26, item_order: 26, item_text: 'Final Values Ready', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false, notes: null },
+        
+        // Completion Category (27-29)
+        { id: 27, item_order: 27, item_text: 'View Value Mailer', category: 'completion', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: true, client_approved: false, special_action: 'view_impact_letter' },
+        { id: 28, item_order: 28, item_text: 'Generate Turnover Document', category: 'completion', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false, special_action: 'generate_turnover_pdf' },
+        { id: 29, item_order: 29, item_text: 'Turnover Date', category: 'completion', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false, special_action: 'archive_trigger', input_type: 'date' }
+      ];
       
-      // Temporary: Empty checklist for development
-      setChecklistItems([]);
+      setChecklistItems(templateItems);
     } catch (error) {
       console.error('Error loading checklist template:', error);
       setChecklistItems([]);
@@ -166,13 +200,13 @@ const ManagementChecklist = ({
             ...item, 
             status: newStatus, 
             completed_at: newStatus === 'completed' ? new Date().toISOString() : null,
-            completed_by: newStatus === 'completed' ? 'System User' : null // TODO: Get actual user name from auth
+            completed_by: newStatus === 'completed' ? currentUser?.name || 'System User' : null
           }
         : item
     ));
     
     // TODO: Update database
-    // await checklistService.updateItemStatus(itemId, newStatus);
+    // await checklistService.updateItemStatus(itemId, newStatus, currentUser?.id);
   };
 
   const handleClientApproval = (itemId, approved) => {
@@ -182,13 +216,13 @@ const ManagementChecklist = ({
             ...item, 
             client_approved: approved,
             client_approved_date: approved ? new Date().toISOString() : null,
-            client_approved_by: approved ? 'System User' : null // TODO: Get actual user name from auth
+            client_approved_by: approved ? currentUser?.name || 'System User' : null
           }
         : item
     ));
     
     // TODO: Update database
-    // await checklistService.updateClientApproval(itemId, approved);
+    // await checklistService.updateClientApproval(itemId, approved, currentUser?.id);
   };
 
   const handleFileUpload = async (itemId, file) => {
@@ -613,8 +647,8 @@ const ManagementChecklist = ({
                     </div>
                   )}
 
-                  {/* Special actions */}
-                  {item.id === 9 && (
+                  {/* Special actions based on item */}
+                  {item.special_action === 'generate_mailing_list' && (
                     <button
                       onClick={generateMailingList}
                       className="px-3 py-1 bg-green-500 text-white rounded-md text-sm hover:bg-green-600 flex items-center gap-1"
@@ -624,7 +658,43 @@ const ManagementChecklist = ({
                     </button>
                   )}
 
-                  {item.id === 28 && (
+                  {item.special_action === 'generate_letter' && (
+                    <button
+                      className="px-3 py-1 bg-blue-500 text-white rounded-md text-sm hover:bg-blue-600 flex items-center gap-1"
+                    >
+                      <FileText className="w-4 h-4" />
+                      Generate Letter
+                    </button>
+                  )}
+
+                  {item.special_action === 'generate_second_attempt_mailer' && (
+                    <button
+                      className="px-3 py-1 bg-yellow-500 text-white rounded-md text-sm hover:bg-yellow-600 flex items-center gap-1"
+                    >
+                      <Mail className="w-4 h-4" />
+                      2nd Attempt Mailer
+                    </button>
+                  )}
+
+                  {item.special_action === 'generate_third_attempt_mailer' && (
+                    <button
+                      className="px-3 py-1 bg-orange-500 text-white rounded-md text-sm hover:bg-orange-600 flex items-center gap-1"
+                    >
+                      <Mail className="w-4 h-4" />
+                      3rd Attempt Mailer
+                    </button>
+                  )}
+
+                  {item.special_action === 'view_impact_letter' && (
+                    <button
+                      className="px-3 py-1 bg-purple-500 text-white rounded-md text-sm hover:bg-purple-600 flex items-center gap-1"
+                    >
+                      <Eye className="w-4 h-4" />
+                      View Mailer
+                    </button>
+                  )}
+
+                  {item.special_action === 'generate_turnover_pdf' && (
                     <button
                       className="px-3 py-1 bg-orange-500 text-white rounded-md text-sm hover:bg-orange-600 flex items-center gap-1"
                     >
@@ -633,11 +703,12 @@ const ManagementChecklist = ({
                     </button>
                   )}
 
-                  {item.id === 29 && (
+                  {item.input_type === 'date' && (
                     <input
                       type="date"
                       onChange={(e) => handleTurnoverDate(e.target.value)}
                       className="px-2 py-1 border border-gray-300 rounded-md text-sm"
+                      placeholder="Select turnover date"
                     />
                   )}
                 </div>
