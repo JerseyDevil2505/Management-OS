@@ -100,17 +100,75 @@ export const employeeService = {
     }
   },
 
+  // NEW: Add bulkUpsert method
+  async bulkUpsert(employees) {
+    try {
+      const { data, error } = await supabase
+        .from('employees')
+        .upsert(employees, { 
+          onConflict: 'email',
+          ignoreDuplicates: false 
+        })
+        .select();
+      
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Employee bulk upsert error:', error);
+      throw error;
+    }
+  },
+
+  // NEW: Add bulkUpdate method
+  async bulkUpdate(employees) {
+    try {
+      const updates = await Promise.all(
+        employees.map(emp => 
+          supabase
+            .from('employees')
+            .update(emp)
+            .eq('id', emp.id)
+            .select()
+        )
+      );
+      
+      return updates.map(result => result.data).flat();
+    } catch (error) {
+      console.error('Employee bulk update error:', error);
+      throw error;
+    }
+  },
+
+  // FIXED: Updated getManagers method with correct roles
   async getManagers() {
     try {
       const { data, error } = await supabase
         .from('employees')
         .select('*')
-        .in('role', ['Management', 'Owner'])
+        .in('role', ['Management', 'Owner'])  // Fixed to match actual database roles
         .eq('employment_status', 'active')
         .order('last_name');
       
       if (error) throw error;
-      return data;
+      
+      // Hard-code admin capabilities for the three admins
+      const managersWithAdminRoles = data.map(emp => {
+        const fullName = `${emp.first_name} ${emp.last_name}`.toLowerCase();
+        
+        const isAdmin = emp.role === 'Owner' || 
+                       fullName.includes('tom davis') || 
+                       fullName.includes('brian schneider') || 
+                       fullName.includes('james duda');
+        
+        return {
+          ...emp,
+          can_be_lead: true,
+          is_admin: isAdmin,
+          effective_role: 'admin'
+        };
+      });
+      
+      return managersWithAdminRoles;
     } catch (error) {
       console.error('Manager service error:', error);
       return this.getAll();
@@ -228,6 +286,20 @@ export const jobService = {
       return job;
     } catch (error) {
       console.error('Job creation error:', error);
+      throw error;
+    }
+  },
+
+  async delete(id) {
+    try {
+      const { error } = await supabase
+        .from('jobs')
+        .delete()
+        .eq('id', id);
+      
+      if (error) throw error;
+    } catch (error) {
+      console.error('Job deletion error:', error);
       throw error;
     }
   }
