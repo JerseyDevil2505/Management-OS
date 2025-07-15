@@ -32,6 +32,7 @@ import {
   Archive,
   Save
 } from 'lucide-react';
+import { supabase } from '../../lib/supabaseClient';
 
 const ManagementChecklist = ({ 
   jobData, 
@@ -53,63 +54,69 @@ const ManagementChecklist = ({
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
   const [mailingListPreview, setMailingListPreview] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null);
   const fileInputRef = useRef();
 
   // Extract year from end_date for display
   const dueYear = jobData?.end_date ? new Date(jobData.end_date).getFullYear() : 'TBD';
 
-  // Mock checklist data based on your template
-  const mockChecklistItems = [
-    // Setup Category
-    { id: 1, item_order: 1, item_text: 'Contract Signed by Client', category: 'setup', status: 'completed', completed_at: '2025-01-15', completed_by: 'Sean Murphy', requires_client_approval: false, allows_file_upload: false, client_approved: false, notes: 'Contract executed on schedule' },
-    { id: 2, item_order: 2, item_text: 'Contract Signed/Approved by State', category: 'setup', status: 'completed', completed_at: '2025-01-20', completed_by: 'Sean Murphy', requires_client_approval: false, allows_file_upload: false, client_approved: false },
-    { id: 3, item_order: 3, item_text: 'Tax Maps Approved', category: 'setup', status: 'completed', completed_at: '2025-01-25', completed_by: 'Sean Murphy', requires_client_approval: false, allows_file_upload: false, client_approved: false },
-    { id: 4, item_order: 4, item_text: 'Tax Map Upload', category: 'setup', status: 'completed', completed_at: '2025-01-25', completed_by: 'Sean Murphy', requires_client_approval: false, allows_file_upload: true, client_approved: false, file_attachment_path: '/uploads/tax-map-sample.pdf', file_size: '74MB' },
-    { id: 5, item_order: 5, item_text: 'Zoning Map Upload', category: 'setup', status: 'completed', completed_at: '2025-01-26', completed_by: 'Sean Murphy', requires_client_approval: false, allows_file_upload: true, client_approved: false, file_attachment_path: '/uploads/zoning-map-sample.pdf', file_size: '12MB' },
-    { id: 6, item_order: 6, item_text: 'Zoning Bulk and Use Regulations Upload', category: 'setup', status: 'completed', completed_at: '2025-01-27', completed_by: 'Sean Murphy', requires_client_approval: false, allows_file_upload: true, client_approved: false, file_attachment_path: '/uploads/zoning-regulations.pdf', file_size: '3MB' },
-    { id: 7, item_order: 7, item_text: 'PPA Website Updated', category: 'setup', status: 'completed', completed_at: '2025-02-01', completed_by: 'Sean Murphy', requires_client_approval: false, allows_file_upload: false, client_approved: false },
-    { id: 8, item_order: 8, item_text: 'Data Collection Parameters', category: 'setup', status: 'completed', completed_at: '2025-02-05', completed_by: 'Sean Murphy', requires_client_approval: true, allows_file_upload: false, client_approved: true, client_approved_date: '2025-02-08', notes: 'Client approved via email' },
+  // Get current user info from Supabase Auth
+  useEffect(() => {
+    const getCurrentUser = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          setCurrentUser({
+            id: user.id,
+            email: user.email,
+            name: user.user_metadata?.full_name || user.email.split('@')[0] || 'User'
+          });
+        }
+      } catch (error) {
+        console.error('Error getting current user:', error);
+      }
+    };
     
-    // Inspection Category
-    { id: 9, item_order: 9, item_text: 'Initial Mailing List', category: 'inspection', status: 'completed', completed_at: '2025-02-10', completed_by: 'Auto-System', requires_client_approval: false, allows_file_upload: false, client_approved: false, auto_completed: true, auto_update_source: 'source_file' },
-    { id: 10, item_order: 10, item_text: 'Initial Letter and Brochure', category: 'inspection', status: 'completed', completed_at: '2025-02-12', completed_by: 'Sean Murphy', requires_client_approval: false, allows_file_upload: true, client_approved: false, file_attachment_path: '/uploads/initial-letter-custom.pdf' },
-    { id: 11, item_order: 11, item_text: 'Initial Mailing Sent', category: 'inspection', status: 'completed', completed_at: '2025-02-15', completed_by: 'Sean Murphy', requires_client_approval: false, allows_file_upload: false, client_approved: false },
-    { id: 12, item_order: 12, item_text: 'First Attempt Inspections', category: 'inspection', status: 'completed', completed_at: '2025-06-01', completed_by: 'Auto-System', requires_client_approval: false, allows_file_upload: false, client_approved: false, auto_completed: true, auto_update_source: 'production_tracker', notes: 'Auto-completed at 100% inspection rate' },
-    { id: 13, item_order: 13, item_text: 'Second Attempt Inspections', category: 'inspection', status: 'in_progress', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false },
-    { id: 14, item_order: 14, item_text: 'Third Attempt Inspections', category: 'inspection', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false },
-    
-    // Analysis Category
-    { id: 15, item_order: 15, item_text: 'Market Analysis', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: true, client_approved: false },
-    { id: 16, item_order: 16, item_text: 'Page by Page Analysis', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false },
-    { id: 17, item_order: 17, item_text: 'Lot Sizing Completed', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false },
-    { id: 18, item_order: 18, item_text: 'Lot Sizing Questions Complete', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false },
-    { id: 19, item_order: 19, item_text: 'VCS Reviewed/Reset', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false },
-    { id: 20, item_order: 20, item_text: 'Land Value Tables Built', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false },
-    { id: 21, item_order: 21, item_text: 'Land Values Entered', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: true, allows_file_upload: false, client_approved: false },
-    { id: 22, item_order: 22, item_text: 'Economic Obsolescence Study', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: true, allows_file_upload: false, client_approved: false },
-    { id: 23, item_order: 23, item_text: 'Cost Conversion Factor Set', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: true, allows_file_upload: false, client_approved: false },
-    { id: 24, item_order: 24, item_text: 'Building Class Review/Updated', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false },
-    { id: 25, item_order: 25, item_text: 'Effective Age Loaded/Set', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false },
-    { id: 26, item_order: 26, item_text: 'Final Values Ready', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false },
-    
-    // Completion Category
-    { id: 27, item_order: 27, item_text: 'View Value Mailer', category: 'completion', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: true, client_approved: false },
-    { id: 28, item_order: 28, item_text: 'Generate Turnover Document', category: 'completion', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false },
-    { id: 29, item_order: 29, item_text: 'Turnover Date', category: 'completion', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false }
-  ];
+    getCurrentUser();
+  }, []);
+
+  // Mock checklist data will be replaced with database calls
+  const [checklistItems, setChecklistItems] = useState([]);
 
   useEffect(() => {
-    setChecklistItems(mockChecklistItems);
-  }, [checklistType]);
+    if (jobData) {
+      // TODO: Replace with actual database call to load checklist items for this job
+      // const items = await checklistService.getItemsForJob(jobData.id);
+      // setChecklistItems(items);
+      
+      // For now, load empty checklist from template
+      loadChecklistTemplate();
+    }
+  }, [jobData, checklistType]);
+
+  const loadChecklistTemplate = async () => {
+    try {
+      // TODO: Replace with actual Supabase call
+      // const template = await checklistService.getTemplate('revaluation');
+      // const jobChecklist = await checklistService.createJobChecklist(jobData.id, template.id);
+      // setChecklistItems(jobChecklist.items);
+      
+      // Temporary: Empty checklist for development
+      setChecklistItems([]);
+    } catch (error) {
+      console.error('Error loading checklist template:', error);
+      setChecklistItems([]);
+    }
+  };
 
   useEffect(() => {
     setHasClientNameChanges(editableClientName !== jobData?.client_name);
   }, [editableClientName, jobData?.client_name]);
 
   const saveClientName = () => {
-    // In real implementation, this would update the database
+    // TODO: Replace with actual database update
+    // await jobService.updateClientName(jobData.id, editableClientName);
     console.log('Saving client name:', editableClientName);
-    // jobData.client_name = editableClientName; // Update parent data
     setHasClientNameChanges(false);
     alert('Client/Assessor name updated successfully!');
   };
@@ -162,10 +169,13 @@ const ManagementChecklist = ({
             ...item, 
             status: newStatus, 
             completed_at: newStatus === 'completed' ? new Date().toISOString() : null,
-            completed_by: newStatus === 'completed' ? 'Current User' : null
+            completed_by: newStatus === 'completed' ? 'System User' : null // TODO: Get actual user name from auth
           }
         : item
     ));
+    
+    // TODO: Update database
+    // await checklistService.updateItemStatus(itemId, newStatus);
   };
 
   const handleClientApproval = (itemId, approved) => {
@@ -175,10 +185,13 @@ const ManagementChecklist = ({
             ...item, 
             client_approved: approved,
             client_approved_date: approved ? new Date().toISOString() : null,
-            client_approved_by: approved ? 'Current User' : null
+            client_approved_by: approved ? 'System User' : null // TODO: Get actual user name from auth
           }
         : item
     ));
+    
+    // TODO: Update database
+    // await checklistService.updateClientApproval(itemId, approved);
   };
 
   const handleFileUpload = async (itemId, file) => {
@@ -188,30 +201,50 @@ const ManagementChecklist = ({
     }
     
     setUploading(true);
-    // Simulate upload delay
-    setTimeout(() => {
-      setChecklistItems(items => items.map(item => 
-        item.id === itemId 
-          ? { 
-              ...item, 
-              file_attachment_path: `/uploads/${file.name}`,
-              file_size: `${(file.size / 1024 / 1024).toFixed(1)}MB`,
-              status: 'completed',
-              completed_at: new Date().toISOString(),
-              completed_by: 'Current User'
-            }
-          : item
-      ));
+    try {
+      // TODO: Replace with actual Supabase Storage upload
+      // const filePath = await storageService.uploadFile(file, 'checklist-attachments');
+      
+      // Simulate upload delay for now
+      setTimeout(() => {
+        setChecklistItems(items => items.map(item => 
+          item.id === itemId 
+            ? { 
+                ...item, 
+                file_attachment_path: `/uploads/${file.name}`, // TODO: Use actual uploaded file path
+                file_size: `${(file.size / 1024 / 1024).toFixed(1)}MB`,
+                status: 'completed',
+                completed_at: new Date().toISOString(),
+                completed_by: 'System User' // TODO: Get actual user name from auth
+              }
+            : item
+        ));
+        setUploading(false);
+      }, 1000);
+      
+      // TODO: Update database with file info
+      // await checklistService.updateItemFile(itemId, filePath, file.size);
+    } catch (error) {
+      console.error('File upload error:', error);
+      alert('Error uploading file: ' + error.message);
       setUploading(false);
-    }, 1000);
+    }
   };
 
   const generateMailingList = () => {
-    // Mock mailing list data
+    // TODO: Replace with actual data from source files/property records
+    // const properties = await propertyService.getPropertiesForJob(jobData.id);
+    // const mailingData = properties.map(prop => ({
+    //   block: prop.block,
+    //   lot: prop.lot, 
+    //   location: prop.property_location,
+    //   owner: prop.owner_name,
+    //   address: prop.mailing_address
+    // }));
+    
+    // Temporary mock data for development
     const mockMailingData = [
-      { block: '1', lot: '1', location: '123 Main St', owner: 'John Smith', address: '123 Main St, Sample Township, NJ 07001' },
-      { block: '1', lot: '2', location: '125 Main St', owner: 'Jane Doe', address: '456 Oak Ave, Sample Township, NJ 07001' },
-      { block: '2', lot: '1', location: '200 Oak Ave', owner: 'Bob Johnson', address: '789 Pine St, Sample Township, NJ 07001' }
+      { block: '1', lot: '1', location: 'Property data will come from source files', owner: 'Owner data from property records', address: 'Mailing addresses from normalized data' }
     ];
     setMailingListPreview(mockMailingData);
   };
