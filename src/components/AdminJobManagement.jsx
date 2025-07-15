@@ -442,13 +442,45 @@ const AdminJobManagement = () => {
 
     try {
       const updateData = {
-        name: newJob.name,
+        job_name: newJob.name,
         municipality: newJob.municipality,
-        dueDate: newJob.dueDate,
-        assignedManagers: newJob.assignedManagers
+        end_date: newJob.dueDate,
+        target_completion_date: newJob.dueDate
       };
 
-      await jobService.update(editingJob.id, updateData);
+      const { error } = await supabase
+        .from('jobs')
+        .update(updateData)
+        .eq('id', editingJob.id);
+      
+      if (error) throw error;
+
+      // Update manager assignments if changed
+      if (newJob.assignedManagers.length > 0) {
+        // Delete existing assignments
+        await supabase
+          .from('job_assignments')
+          .delete()
+          .eq('job_id', editingJob.id);
+        
+        // Insert new assignments
+        const assignments = newJob.assignedManagers.map(manager => ({
+          job_id: editingJob.id,
+          employee_id: manager.id,
+          role: manager.role,
+          assigned_by: currentUser?.id || 'cf3b2da7-d0f4-40cf-b7c9-58610782ad9a',
+          assigned_date: new Date().toISOString().split('T')[0],
+          is_active: true
+        }));
+        
+        const { error: assignError } = await supabase
+          .from('job_assignments')
+          .insert(assignments);
+        
+        if (assignError) {
+          console.error('Manager assignment update error:', assignError);
+        }
+      }
       
       // Refresh jobs list
       const updatedJobs = await jobService.getAll();
