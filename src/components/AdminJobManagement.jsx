@@ -12,6 +12,7 @@ const AdminJobManagement = () => {
   const [showCreateJob, setShowCreateJob] = useState(false);
   const [editingJob, setEditingJob] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
 
   const [newJob, setNewJob] = useState({
     name: '',
@@ -75,19 +76,35 @@ const AdminJobManagement = () => {
     initializeData();
   }, []);
 
-  // Enhanced file analysis with live validation
+  // Enhanced file analysis with live validation and debugging
   const analyzeFileWithProcessor = async (file, type) => {
-    if (!file) return;
+    console.log('=== ANALYZE FILE DEBUG ===');
+    console.log('Starting analysis for:', file.name, 'type:', type);
+    
+    if (!file) {
+      console.log('No file provided!');
+      return;
+    }
 
+    console.log('Reading file as text...');
     const text = await file.text();
+    console.log('File text length:', text.length);
+    console.log('First 200 characters:', text.substring(0, 200));
+    
     let vendorResult = null;
 
     if (type === 'source') {
+      console.log('Analyzing as source file...');
+      
       if (file.name.endsWith('.txt')) {
+        console.log('File is .txt, checking for Microsystems format...');
         const lines = text.split('\n');
+        console.log('Total lines:', lines.length);
         const headers = lines[0];
+        console.log('Headers:', headers);
         
         if (headers.includes('Block|Lot|Qual') || headers.includes('|')) {
+          console.log('Found pipe separators - this is Microsystems format!');
           const dataLines = lines.slice(1).filter(line => line.trim());
           const sampleLine = dataLines[0] || '';
           const pipeCount = (sampleLine.match(/\|/g) || []).length;
@@ -100,15 +117,21 @@ const AdminJobManagement = () => {
             propertyCount: dataLines.length,
             isValid: true
           };
+          
+          console.log('Vendor result:', vendorResult);
+        } else {
+          console.log('No pipe separators found, not Microsystems format');
         }
       }
       else if (file.name.endsWith('.csv') || file.name.endsWith('.xlsx')) {
+        console.log('File is CSV/Excel, checking for BRT format...');
         const lines = text.split('\n');
         const headers = lines[0];
         
         if (headers.includes('VALUES_LANDTAXABLEVALUE') || 
             headers.includes('PROPCLASS') || 
             headers.includes('LISTBY')) {
+          console.log('Found BRT headers');
           const dataLines = lines.slice(1).filter(line => line.trim());
           const fieldCount = (headers.match(/,/g) || []).length + 1;
           
@@ -120,9 +143,15 @@ const AdminJobManagement = () => {
             propertyCount: dataLines.length,
             isValid: true
           };
+          
+          console.log('Vendor result:', vendorResult);
+        } else {
+          console.log('No BRT headers found');
         }
       }
     } else if (type === 'code') {
+      console.log('Analyzing as code file...');
+      
       if (file.name.endsWith('.txt')) {
         const lines = text.split('\n').filter(line => line.trim());
         if (text.includes('120PV') || lines.some(line => /^\d{2,3}[A-Z]{1,3}/.test(line))) {
@@ -134,6 +163,8 @@ const AdminJobManagement = () => {
             codeCount: lines.length,
             isValid: true
           };
+          
+          console.log('Code file vendor result:', vendorResult);
         }
       }
       else if (file.name.endsWith('.json') || text.includes('"02":"COLONIAL"')) {
@@ -147,6 +178,8 @@ const AdminJobManagement = () => {
             codeCount: Object.keys(parsed).length,
             isValid: true
           };
+          
+          console.log('JSON code file vendor result:', vendorResult);
         } catch (e) {
           if (text.includes('COLONIAL')) {
             vendorResult = {
@@ -157,35 +190,72 @@ const AdminJobManagement = () => {
               codeCount: (text.match(/"/g) || []).length / 2,
               isValid: true
             };
+            
+            console.log('BRT text code file vendor result:', vendorResult);
           }
         }
       }
     }
 
-    setFileAnalysis(prev => ({
-      ...prev,
-      [type + 'File']: file,
-      detectedVendor: vendorResult?.vendor || null,
-      isValid: vendorResult?.isValid || false,
-      [type === 'source' ? 'propertyCount' : 'codeCount']: 
-        vendorResult?.[type === 'source' ? 'propertyCount' : 'codeCount'] || 0,
-      vendorDetails: vendorResult
-    }));
+    console.log('Final vendor result:', vendorResult);
+    console.log('Updating file analysis state...');
+
+    setFileAnalysis(prev => {
+      const newState = {
+        ...prev,
+        [type === 'source' ? 'sourceFile' : 'codeFile']: file,
+        detectedVendor: vendorResult?.vendor || null,
+        isValid: vendorResult?.isValid || false,
+        [type === 'source' ? 'propertyCount' : 'codeCount']: 
+          vendorResult?.[type === 'source' ? 'propertyCount' : 'codeCount'] || 0,
+        vendorDetails: vendorResult
+      };
+      
+      console.log('New file analysis state:', newState);
+      return newState;
+    });
 
     if (vendorResult) {
-      setNewJob(prev => ({ 
-        ...prev, 
-        vendor: vendorResult.vendor,
-        vendorDetection: vendorResult
-      }));
+      console.log('Updating newJob state with vendor info...');
+      setNewJob(prev => {
+        const newJobState = { 
+          ...prev, 
+          vendor: vendorResult.vendor,
+          vendorDetection: vendorResult
+        };
+        
+        console.log('New job state:', newJobState);
+        return newJobState;
+      });
+    } else {
+      console.log('No vendor result - not updating job state');
     }
+    
+    console.log('=== ANALYZE FILE COMPLETE ===');
   };
 
   const handleFileUpload = (e, type) => {
+    console.log('=== FILE UPLOAD DEBUG ===');
+    console.log('Event triggered for type:', type);
+    console.log('Files array:', e.target.files);
+    console.log('First file:', e.target.files[0]);
+    
     const file = e.target.files[0];
     if (file) {
-      setNewJob(prev => ({ ...prev, [type]: file }));
+      console.log('File details:', {
+        name: file.name,
+        size: file.size,
+        type: file.type
+      });
+      
+      // Convert short type names to full names for state
+      const fullTypeName = type === 'source' ? 'sourceFile' : 'codeFile';
+      console.log('Setting newJob with type:', fullTypeName);
+      
+      setNewJob(prev => ({ ...prev, [fullTypeName]: file }));
       analyzeFileWithProcessor(file, type);
+    } else {
+      console.log('No file found in event');
     }
   };
 
@@ -221,7 +291,7 @@ const AdminJobManagement = () => {
 
   const createJob = async () => {
     if (!newJob.ccddCode || !newJob.name || !newJob.municipality || !newJob.dueDate || newJob.assignedManagers.length === 0) {
-      alert('Please fill all required fields and assign at least one manager');
+      window.alert('Please fill all required fields and assign at least one manager');
       return;
     }
 
@@ -268,10 +338,10 @@ const AdminJobManagement = () => {
       setJobs(updatedJobs);
       
       closeJobModal();
-      alert('Job created successfully!');
+      window.alert('Job created successfully!');
     } catch (error) {
       console.error('Job creation error:', error);
-      alert('Error creating job: ' + error.message);
+      window.alert('Error creating job: ' + error.message);
     }
   };
 
@@ -294,18 +364,15 @@ const AdminJobManagement = () => {
   };
 
   const deleteJob = async (job) => {
-    if (!confirm(`Are you sure you want to delete "${job.name}"? This action cannot be undone.`)) {
-      return;
-    }
-
     try {
       await jobService.delete(job.id);
       const updatedJobs = await jobService.getAll();
       setJobs(updatedJobs);
-      alert('Job deleted successfully');
+      setShowDeleteConfirm(null);
+      window.alert('Job deleted successfully');
     } catch (error) {
       console.error('Job deletion error:', error);
-      alert('Error deleting job: ' + error.message);
+      window.alert('Error deleting job: ' + error.message);
     }
   };
 
@@ -363,11 +430,11 @@ const AdminJobManagement = () => {
   };
 
   const goToJob = (job) => {
-    alert(`Navigate to ${job.name} modules:\n- Production Tracker\n- Management Checklist\n- Market & Land Analytics\n- Final Valuation\n- Appeal Coverage`);
+    window.alert(`Navigate to ${job.name} modules:\n- Production Tracker\n- Management Checklist\n- Market & Land Analytics\n- Final Valuation\n- Appeal Coverage`);
   };
 
   const goToBillingPayroll = (job) => {
-    alert(`Navigate to ${job.name} Billing & Payroll in Production Tracker`);
+    window.alert(`Navigate to ${job.name} Billing & Payroll in Production Tracker`);
   };
 
   if (loading) {
@@ -575,7 +642,7 @@ const AdminJobManagement = () => {
                         <span>Edit Job</span>
                       </button>
                       <button 
-                        onClick={() => deleteJob(job)}
+                        onClick={() => setShowDeleteConfirm(job)}
                         className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center space-x-1 text-sm font-medium"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -680,6 +747,35 @@ const AdminJobManagement = () => {
                   </div>
                 ))
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-md w-full p-6">
+            <div className="text-center">
+              <Trash2 className="w-12 h-12 mx-auto mb-4 text-red-600" />
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Delete Job</h3>
+              <p className="text-gray-600 mb-6">
+                Are you sure you want to delete "{showDeleteConfirm.name}"? This action cannot be undone.
+              </p>
+              <div className="flex justify-center space-x-3">
+                <button
+                  onClick={() => setShowDeleteConfirm(null)}
+                  className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => deleteJob(showDeleteConfirm)}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium"
+                >
+                  Delete Job
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -798,7 +894,7 @@ const AdminJobManagement = () => {
                       <input
                         type="file"
                         accept=".txt,.csv,.xlsx"
-                        onChange={(e) => handleFileUpload(e, 'sourceFile')}
+                        onChange={(e) => handleFileUpload(e, 'source')}
                         className="hidden"
                         id="sourceFile"
                       />
@@ -841,7 +937,7 @@ const AdminJobManagement = () => {
                       <input
                         type="file"
                         accept=".txt,.json"
-                        onChange={(e) => handleFileUpload(e, 'codeFile')}
+                        onChange={(e) => handleFileUpload(e, 'code')}
                         className="hidden"
                         id="codeFile"
                       />
