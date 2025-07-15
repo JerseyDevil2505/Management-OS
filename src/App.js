@@ -6,7 +6,7 @@ import FileUploadButton from './components/FileUploadButton';
 import './App.css';
 
 function App() {
-  const [activeModule, setActiveModule] = useState('employees');
+  const [activeModule, setActiveModule] = useState('jobs');
   const [selectedJob, setSelectedJob] = useState(null); // For job-specific modules
 
   // Handle job selection from AdminJobManagement
