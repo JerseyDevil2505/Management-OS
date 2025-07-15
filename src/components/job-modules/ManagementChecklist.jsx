@@ -1,55 +1,18 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { 
-  CheckCircle, 
-  Clock, 
-  AlertCircle, 
-  Users, 
-  Calendar, 
-  FileText, 
-  Settings, 
-  Database,
-  Plus,
-  Edit3,
-  Trash2,
-  ArrowLeft,
-  Download,
-  Upload,
-  Filter,
-  Search,
-  Eye,
-  UserCheck,
-  Building,
-  MapPin,
-  Mail,
-  FileCheck,
-  Target,
-  ExternalLink,
-  FileUp,
-  CheckSquare,
-  Square,
-  FileDown,
-  Printer,
-  Archive,
-  Save
+  CheckCircle, Clock, AlertCircle, Users, Calendar, FileText, Settings, Database, Plus, Edit3, Trash2, ArrowLeft, Download, Upload, Filter, Search, Eye, UserCheck, Building, MapPin, Mail, FileCheck, Target, ExternalLink, FileUp, CheckSquare, Square, FileDown, Printer, Archive, Save
 } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 
-const ManagementChecklist = ({ 
-  jobData, 
-  onBackToJobs, 
-  activeSubModule = 'checklist',
-  onSubModuleChange 
-}) => {
-  // jobData should include: job_name, client_name, assigned_manager (UUID), end_date, manager_name (from join)
+const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checklist', onSubModuleChange }) => {
   const [editableClientName, setEditableClientName] = useState(jobData?.client_name || '');
   const [hasClientNameChanges, setHasClientNameChanges] = useState(false);
-  const [dbConnected, setDbConnected] = useState(true);
   const [checklistType, setChecklistType] = useState('revaluation');
   const [checklistItems, setChecklistItems] = useState([]);
   const [filterCategory, setFilterCategory] = useState('all');
   const [showCompleted, setShowCompleted] = useState(true);
-  const [asOfDate, setAsOfDate] = useState('2025-07-15'); // General checklist updates
-  const [sourceFileDate, setSourceFileDate] = useState('2025-06-01'); // From Production Tracker
+  const [asOfDate, setAsOfDate] = useState('2025-07-15');
+  const [sourceFileDate, setSourceFileDate] = useState('2025-06-01');
   const [searchTerm, setSearchTerm] = useState('');
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
   const [mailingListPreview, setMailingListPreview] = useState(null);
@@ -57,10 +20,8 @@ const ManagementChecklist = ({
   const [currentUser, setCurrentUser] = useState(null);
   const fileInputRef = useRef();
 
-  // Extract year from end_date for display
   const dueYear = jobData?.end_date ? new Date(jobData.end_date).getFullYear() : 'TBD';
 
-  // Get current user info from Supabase Auth
   useEffect(() => {
     const getCurrentUser = async () => {
       try {
@@ -76,81 +37,56 @@ const ManagementChecklist = ({
         console.error('Error getting current user:', error);
       }
     };
-    
     getCurrentUser();
   }, []);
 
-  // Mock checklist data will be replaced with database calls
-  const [checklistItems, setChecklistItems] = useState([]);
-
   useEffect(() => {
     if (jobData) {
-      // Load the 29 checklist items from your Excel template
-      loadChecklistTemplate();
-    }
-  }, [jobData, checklistType]);
-
-  const loadChecklistTemplate = async () => {
-    try {
-      // TODO: Replace with actual Supabase call
-      // For now, use the 29 items from your Excel template
       const templateItems = [
         // Setup Category (1-8)
-        { id: 1, item_order: 1, item_text: 'Contract Signed by Client', category: 'setup', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false, notes: null },
-        { id: 2, item_order: 2, item_text: 'Contract Signed/Approved by State', category: 'setup', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false, notes: null },
-        { id: 3, item_order: 3, item_text: 'Tax Maps Approved', category: 'setup', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false, notes: null },
-        { id: 4, item_order: 4, item_text: 'Tax Map Upload', category: 'setup', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: true, client_approved: false, notes: null },
-        { id: 5, item_order: 5, item_text: 'Zoning Map Upload', category: 'setup', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: true, client_approved: false, notes: null },
-        { id: 6, item_order: 6, item_text: 'Zoning Bulk and Use Regulations Upload', category: 'setup', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: true, client_approved: false, notes: null },
-        { id: 7, item_order: 7, item_text: 'PPA Website Updated', category: 'setup', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false, notes: null },
-        { id: 8, item_order: 8, item_text: 'Data Collection Parameters', category: 'setup', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: true, allows_file_upload: false, client_approved: false, notes: null },
+        { id: 1, item_order: 1, item_text: 'Contract Signed by Client', category: 'setup', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false },
+        { id: 2, item_order: 2, item_text: 'Contract Signed/Approved by State', category: 'setup', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false },
+        { id: 3, item_order: 3, item_text: 'Tax Maps Approved', category: 'setup', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false },
+        { id: 4, item_order: 4, item_text: 'Tax Map Upload', category: 'setup', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: true, client_approved: false },
+        { id: 5, item_order: 5, item_text: 'Zoning Map Upload', category: 'setup', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: true, client_approved: false },
+        { id: 6, item_order: 6, item_text: 'Zoning Bulk and Use Regulations Upload', category: 'setup', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: true, client_approved: false },
+        { id: 7, item_order: 7, item_text: 'PPA Website Updated', category: 'setup', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false },
+        { id: 8, item_order: 8, item_text: 'Data Collection Parameters', category: 'setup', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: true, allows_file_upload: false, client_approved: false },
         
         // Inspection Category (9-14)
-        { id: 9, item_order: 9, item_text: 'Initial Mailing List', category: 'inspection', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false, auto_update_source: 'source_file', special_action: 'generate_mailing_list' },
+        { id: 9, item_order: 9, item_text: 'Initial Mailing List', category: 'inspection', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false, special_action: 'generate_mailing_list' },
         { id: 10, item_order: 10, item_text: 'Initial Letter and Brochure', category: 'inspection', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: true, client_approved: false, special_action: 'generate_letter' },
-        { id: 11, item_order: 11, item_text: 'Initial Mailing Sent', category: 'inspection', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false, notes: null },
-        { id: 12, item_order: 12, item_text: 'First Attempt Inspections', category: 'inspection', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false, auto_update_source: 'production_tracker', auto_update_condition: '100%' },
+        { id: 11, item_order: 11, item_text: 'Initial Mailing Sent', category: 'inspection', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false },
+        { id: 12, item_order: 12, item_text: 'First Attempt Inspections', category: 'inspection', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false, auto_update_source: 'production_tracker' },
         { id: 13, item_order: 13, item_text: 'Second Attempt Inspections', category: 'inspection', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false, special_action: 'generate_second_attempt_mailer' },
         { id: 14, item_order: 14, item_text: 'Third Attempt Inspections', category: 'inspection', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false, special_action: 'generate_third_attempt_mailer' },
         
         // Analysis Category (15-26)
-        { id: 15, item_order: 15, item_text: 'Market Analysis', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: true, client_approved: false, notes: null },
-        { id: 16, item_order: 16, item_text: 'Page by Page Analysis', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false, notes: null },
-        { id: 17, item_order: 17, item_text: 'Lot Sizing Completed', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false, notes: null },
-        { id: 18, item_order: 18, item_text: 'Lot Sizing Questions Complete', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false, notes: null },
-        { id: 19, item_order: 19, item_text: 'VCS Reviewed/Reset', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false, notes: null },
-        { id: 20, item_order: 20, item_text: 'Land Value Tables Built', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false, notes: null },
-        { id: 21, item_order: 21, item_text: 'Land Values Entered', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: true, allows_file_upload: false, client_approved: false, notes: null },
-        { id: 22, item_order: 22, item_text: 'Economic Obsolescence Study', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: true, allows_file_upload: false, client_approved: false, notes: null },
-        { id: 23, item_order: 23, item_text: 'Cost Conversion Factor Set', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: true, allows_file_upload: false, client_approved: false, notes: null },
-        { id: 24, item_order: 24, item_text: 'Building Class Review/Updated', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false, notes: null },
-        { id: 25, item_order: 25, item_text: 'Effective Age Loaded/Set', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false, notes: null },
-        { id: 26, item_order: 26, item_text: 'Final Values Ready', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false, notes: null },
+        { id: 15, item_order: 15, item_text: 'Market Analysis', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: true, client_approved: false },
+        { id: 16, item_order: 16, item_text: 'Page by Page Analysis', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false },
+        { id: 17, item_order: 17, item_text: 'Lot Sizing Completed', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false },
+        { id: 18, item_order: 18, item_text: 'Lot Sizing Questions Complete', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false },
+        { id: 19, item_order: 19, item_text: 'VCS Reviewed/Reset', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false },
+        { id: 20, item_order: 20, item_text: 'Land Value Tables Built', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false },
+        { id: 21, item_order: 21, item_text: 'Land Values Entered', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: true, allows_file_upload: false, client_approved: false },
+        { id: 22, item_order: 22, item_text: 'Economic Obsolescence Study', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: true, allows_file_upload: false, client_approved: false },
+        { id: 23, item_order: 23, item_text: 'Cost Conversion Factor Set', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: true, allows_file_upload: false, client_approved: false },
+        { id: 24, item_order: 24, item_text: 'Building Class Review/Updated', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false },
+        { id: 25, item_order: 25, item_text: 'Effective Age Loaded/Set', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false },
+        { id: 26, item_order: 26, item_text: 'Final Values Ready', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false },
         
         // Completion Category (27-29)
         { id: 27, item_order: 27, item_text: 'View Value Mailer', category: 'completion', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: true, client_approved: false, special_action: 'view_impact_letter' },
         { id: 28, item_order: 28, item_text: 'Generate Turnover Document', category: 'completion', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false, special_action: 'generate_turnover_pdf' },
-        { id: 29, item_order: 29, item_text: 'Turnover Date', category: 'completion', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false, special_action: 'archive_trigger', input_type: 'date' }
+        { id: 29, item_order: 29, item_text: 'Turnover Date', category: 'completion', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false, input_type: 'date', special_action: 'archive_trigger' }
       ];
-      
       setChecklistItems(templateItems);
-    } catch (error) {
-      console.error('Error loading checklist template:', error);
-      setChecklistItems([]);
     }
-  };
+  }, [jobData, checklistType]);
 
   useEffect(() => {
     setHasClientNameChanges(editableClientName !== jobData?.client_name);
   }, [editableClientName, jobData?.client_name]);
-
-  const saveClientName = () => {
-    // TODO: Replace with actual database update
-    // await jobService.updateClientName(jobData.id, editableClientName);
-    console.log('Saving client name:', editableClientName);
-    setHasClientNameChanges(false);
-    alert('Client/Assessor name updated successfully!');
-  };
 
   const getCategoryIcon = (category) => {
     switch (category) {
@@ -204,9 +140,6 @@ const ManagementChecklist = ({
           }
         : item
     ));
-    
-    // TODO: Update database
-    // await checklistService.updateItemStatus(itemId, newStatus, currentUser?.id);
   };
 
   const handleClientApproval = (itemId, approved) => {
@@ -220,60 +153,39 @@ const ManagementChecklist = ({
           }
         : item
     ));
-    
-    // TODO: Update database
-    // await checklistService.updateClientApproval(itemId, approved, currentUser?.id);
   };
 
   const handleFileUpload = async (itemId, file) => {
-    if (file.size > 200 * 1024 * 1024) { // 200MB limit
+    if (file.size > 200 * 1024 * 1024) {
       alert('File size exceeds 200MB limit');
       return;
     }
     
     setUploading(true);
-    try {
-      // TODO: Replace with actual Supabase Storage upload
-      // const filePath = await storageService.uploadFile(file, 'checklist-attachments');
-      
-      // Simulate upload delay for now
-      setTimeout(() => {
-        setChecklistItems(items => items.map(item => 
-          item.id === itemId 
-            ? { 
-                ...item, 
-                file_attachment_path: `/uploads/${file.name}`, // TODO: Use actual uploaded file path
-                file_size: `${(file.size / 1024 / 1024).toFixed(1)}MB`,
-                status: 'completed',
-                completed_at: new Date().toISOString(),
-                completed_by: 'System User' // TODO: Get actual user name from auth
-              }
-            : item
-        ));
-        setUploading(false);
-      }, 1000);
-      
-      // TODO: Update database with file info
-      // await checklistService.updateItemFile(itemId, filePath, file.size);
-    } catch (error) {
-      console.error('File upload error:', error);
-      alert('Error uploading file: ' + error.message);
+    setTimeout(() => {
+      setChecklistItems(items => items.map(item => 
+        item.id === itemId 
+          ? { 
+              ...item, 
+              file_attachment_path: `/uploads/${file.name}`,
+              file_size: `${(file.size / 1024 / 1024).toFixed(1)}MB`,
+              status: 'completed',
+              completed_at: new Date().toISOString(),
+              completed_by: currentUser?.name || 'System User'
+            }
+          : item
+      ));
       setUploading(false);
-    }
+    }, 1000);
+  };
+
+  const saveClientName = () => {
+    console.log('Saving client name:', editableClientName);
+    setHasClientNameChanges(false);
+    alert('Client/Assessor name updated successfully!');
   };
 
   const generateMailingList = () => {
-    // TODO: Replace with actual data from source files/property records
-    // const properties = await propertyService.getPropertiesForJob(jobData.id);
-    // const mailingData = properties.map(prop => ({
-    //   block: prop.block,
-    //   lot: prop.lot, 
-    //   location: prop.property_location,
-    //   owner: prop.owner_name,
-    //   address: prop.mailing_address
-    // }));
-    
-    // Temporary mock data for development
     const mockMailingData = [
       { block: '1', lot: '1', location: 'Property data will come from source files', owner: 'Owner data from property records', address: 'Mailing addresses from normalized data' }
     ];
@@ -303,14 +215,13 @@ const ManagementChecklist = ({
   };
 
   const confirmArchive = () => {
-    // Update turnover date item
     setChecklistItems(items => items.map(item => 
       item.id === 29 
         ? { 
             ...item, 
             status: 'completed',
             completed_at: new Date().toISOString(),
-            completed_by: 'Current User',
+            completed_by: currentUser?.name || 'System User',
             notes: 'Job marked for archive'
           }
         : item
@@ -336,10 +247,8 @@ const ManagementChecklist = ({
       {/* Job Information Panel */}
       <div className="bg-gradient-to-r from-blue-50 to-green-50 rounded-lg border-2 border-blue-200 p-6 mb-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Left Column - Job Details */}
           <div>
             <h2 className="text-2xl font-bold text-gray-800 mb-4">{jobData.job_name}</h2>
-            
             <div className="space-y-3">
               <div className="flex items-center gap-3">
                 <label className="text-sm font-medium text-gray-700 w-32">Client/Assessor:</label>
@@ -362,25 +271,24 @@ const ManagementChecklist = ({
                   )}
                 </div>
               </div>
-
               <div className="flex items-center gap-3">
                 <label className="text-sm font-medium text-gray-700 w-32">Lead Manager:</label>
-                <span className="text-sm text-gray-600">{jobData.manager_name || 'Not assigned'}</span>
+                <span className="text-sm text-gray-600">
+                  {jobData.assignedManagers && jobData.assignedManagers.length > 0 
+                    ? jobData.assignedManagers.find(m => m.role === 'Lead Manager')?.name || jobData.assignedManagers[0]?.name
+                    : 'Not assigned'}
+                </span>
               </div>
-
               <div className="flex items-center gap-3">
                 <label className="text-sm font-medium text-gray-700 w-32">For Tax Year:</label>
                 <span className="text-sm text-gray-600">{dueYear}</span>
               </div>
-
               <div className="flex items-center gap-3">
                 <label className="text-sm font-medium text-gray-700 w-32">Municipality:</label>
                 <span className="text-sm text-gray-600">{jobData.municipality || 'Not specified'}</span>
               </div>
             </div>
           </div>
-
-          {/* Right Column - Project Type & Dates */}
           <div>
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-2">Project Type</label>
@@ -407,13 +315,11 @@ const ManagementChecklist = ({
                 </button>
               </div>
             </div>
-
             <div className="space-y-3">
               <div className="flex items-center gap-3">
                 <label className="text-sm font-medium text-gray-700 w-32">As of Date:</label>
                 <span className="text-sm text-gray-600">{asOfDate}</span>
               </div>
-
               <div className="flex items-center gap-3">
                 <label className="text-sm font-medium text-gray-700 w-32">Source File Date:</label>
                 <span className="text-sm text-gray-600">{sourceFileDate}</span>
@@ -440,7 +346,6 @@ const ManagementChecklist = ({
               />
             </div>
           </div>
-
           <div className="bg-white p-4 rounded-lg border">
             <div className="flex items-center justify-between">
               <div>
@@ -451,7 +356,6 @@ const ManagementChecklist = ({
             </div>
             <p className="text-xs text-gray-500 mt-1">of {totalCount} total items</p>
           </div>
-
           <div className="bg-white p-4 rounded-lg border">
             <div className="flex items-center justify-between">
               <div>
@@ -466,7 +370,6 @@ const ManagementChecklist = ({
               of {checklistItems.filter(item => item.requires_client_approval).length} required
             </p>
           </div>
-
           <div className="bg-white p-4 rounded-lg border">
             <div className="flex items-center justify-between">
               <div>
@@ -502,7 +405,6 @@ const ManagementChecklist = ({
               <option value="completion">✅ Completion</option>
             </select>
           </div>
-
           <div className="flex items-center gap-2">
             <Search className="w-4 h-4 text-gray-500" />
             <input
@@ -513,7 +415,6 @@ const ManagementChecklist = ({
               className="px-3 py-1 border border-gray-300 rounded-md text-sm w-64"
             />
           </div>
-
           <div className="flex items-center gap-2">
             <input
               type="checkbox"
@@ -541,22 +442,19 @@ const ManagementChecklist = ({
               item.status === 'completed' ? 'border-green-200 bg-green-50' : 'border-gray-200'
             }`}>
               <div className="flex items-start justify-between">
-                {/* Left side - Item info */}
                 <div className="flex items-start gap-3 flex-1">
                   <div className={`p-2 rounded-lg bg-${categoryColor}-100`}>
                     <CategoryIcon className={`w-5 h-5 text-${categoryColor}-600`} />
                   </div>
-                  
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
                       <h3 className="font-medium text-gray-800">{item.item_text}</h3>
-                      {item.auto_completed && (
+                      {item.auto_update_source && (
                         <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-full">
-                          Auto-completed
+                          Auto-update from {item.auto_update_source}
                         </span>
                       )}
                     </div>
-                    
                     <div className="flex items-center gap-4 text-sm text-gray-600 mb-2">
                       <span className={`px-2 py-1 bg-${categoryColor}-100 text-${categoryColor}-700 rounded-full text-xs`}>
                         {item.category}
@@ -565,15 +463,11 @@ const ManagementChecklist = ({
                         {item.status.replace('_', ' ')}
                       </span>
                     </div>
-
-                    {/* Completion info */}
                     {item.completed_at && (
                       <div className="text-sm text-gray-500 mb-2">
                         Completed on {new Date(item.completed_at).toLocaleDateString()} by {item.completed_by}
                       </div>
                     )}
-
-                    {/* File attachment */}
                     {item.file_attachment_path && (
                       <div className="flex items-center gap-2 text-sm text-blue-600 mb-2">
                         <FileText className="w-4 h-4" />
@@ -582,8 +476,6 @@ const ManagementChecklist = ({
                         <ExternalLink className="w-4 h-4 cursor-pointer hover:text-blue-800" />
                       </div>
                     )}
-
-                    {/* Notes */}
                     {item.notes && (
                       <div className="text-sm text-gray-600 bg-gray-50 p-2 rounded mt-2">
                         <strong>Notes:</strong> {item.notes}
@@ -591,10 +483,7 @@ const ManagementChecklist = ({
                     )}
                   </div>
                 </div>
-
-                {/* Right side - Actions */}
                 <div className="flex flex-col gap-2 ml-4">
-                  {/* Status toggle */}
                   <button
                     onClick={() => handleItemStatusChange(item.id, 
                       item.status === 'completed' ? 'pending' : 'completed'
@@ -607,8 +496,6 @@ const ManagementChecklist = ({
                   >
                     {item.status === 'completed' ? 'Completed' : 'Mark Complete'}
                   </button>
-
-                  {/* Client approval */}
                   {item.requires_client_approval && (
                     <button
                       onClick={() => handleClientApproval(item.id, !item.client_approved)}
@@ -621,8 +508,6 @@ const ManagementChecklist = ({
                       {item.client_approved ? '✓ Client Approved' : 'Client Approval'}
                     </button>
                   )}
-
-                  {/* File upload */}
                   {item.allows_file_upload && (
                     <div>
                       <input
@@ -646,8 +531,6 @@ const ManagementChecklist = ({
                       </button>
                     </div>
                   )}
-
-                  {/* Special actions based on item */}
                   {item.special_action === 'generate_mailing_list' && (
                     <button
                       onClick={generateMailingList}
@@ -657,52 +540,36 @@ const ManagementChecklist = ({
                       Generate List
                     </button>
                   )}
-
                   {item.special_action === 'generate_letter' && (
-                    <button
-                      className="px-3 py-1 bg-blue-500 text-white rounded-md text-sm hover:bg-blue-600 flex items-center gap-1"
-                    >
+                    <button className="px-3 py-1 bg-blue-500 text-white rounded-md text-sm hover:bg-blue-600 flex items-center gap-1">
                       <FileText className="w-4 h-4" />
                       Generate Letter
                     </button>
                   )}
-
                   {item.special_action === 'generate_second_attempt_mailer' && (
-                    <button
-                      className="px-3 py-1 bg-yellow-500 text-white rounded-md text-sm hover:bg-yellow-600 flex items-center gap-1"
-                    >
+                    <button className="px-3 py-1 bg-yellow-500 text-white rounded-md text-sm hover:bg-yellow-600 flex items-center gap-1">
                       <Mail className="w-4 h-4" />
                       2nd Attempt Mailer
                     </button>
                   )}
-
                   {item.special_action === 'generate_third_attempt_mailer' && (
-                    <button
-                      className="px-3 py-1 bg-orange-500 text-white rounded-md text-sm hover:bg-orange-600 flex items-center gap-1"
-                    >
+                    <button className="px-3 py-1 bg-orange-500 text-white rounded-md text-sm hover:bg-orange-600 flex items-center gap-1">
                       <Mail className="w-4 h-4" />
                       3rd Attempt Mailer
                     </button>
                   )}
-
                   {item.special_action === 'view_impact_letter' && (
-                    <button
-                      className="px-3 py-1 bg-purple-500 text-white rounded-md text-sm hover:bg-purple-600 flex items-center gap-1"
-                    >
+                    <button className="px-3 py-1 bg-purple-500 text-white rounded-md text-sm hover:bg-purple-600 flex items-center gap-1">
                       <Eye className="w-4 h-4" />
                       View Mailer
                     </button>
                   )}
-
                   {item.special_action === 'generate_turnover_pdf' && (
-                    <button
-                      className="px-3 py-1 bg-orange-500 text-white rounded-md text-sm hover:bg-orange-600 flex items-center gap-1"
-                    >
+                    <button className="px-3 py-1 bg-orange-500 text-white rounded-md text-sm hover:bg-orange-600 flex items-center gap-1">
                       <Printer className="w-4 h-4" />
                       Generate PDF
                     </button>
                   )}
-
                   {item.input_type === 'date' && (
                     <input
                       type="date"
