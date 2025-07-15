@@ -146,7 +146,6 @@ export const employeeService = {
         .from('employees')
         .select('*')
         .in('role', ['Management', 'Owner'])  // Fixed to match actual database roles
-        .eq('employment_status', 'active')
         .order('last_name');
       
       if (error) throw error;
