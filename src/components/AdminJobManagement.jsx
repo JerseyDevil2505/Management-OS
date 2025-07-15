@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Upload, Plus, Edit3, Users, FileText, Calendar, MapPin, Database, Settings, Eye, DollarSign, Trash2, CheckCircle, Archive, TrendingUp, Target, AlertTriangle } from 'lucide-react';
 import { employeeService, jobService, planningJobService, utilityService, authService, supabase } from '../lib/supabaseClient';
 
-const AdminJobManagement = ({ onJobSelect }) => {
+const AdminJobManagement = () => {
   const [activeTab, setActiveTab] = useState('jobs');
   const [currentUser, setCurrentUser] = useState({ role: 'admin', canAccessBilling: true });
   
@@ -599,23 +599,19 @@ const AdminJobManagement = ({ onJobSelect }) => {
   };
 
   const getStatusColor = (status) => {
-    switch (status) {
+    // Default to active if no status set
+    const actualStatus = status || 'active';
+    switch (actualStatus) {
       case 'active': return 'text-green-600 bg-green-100';
       case 'draft': return 'text-yellow-600 bg-yellow-100';
       case 'complete': return 'text-blue-600 bg-blue-100';
       case 'archived': return 'text-purple-600 bg-purple-100';
-      default: return 'text-gray-600 bg-gray-100';
+      default: return 'text-green-600 bg-green-100'; // Default to active
     }
   };
 
-   const goToJob = (job) => {
-     // Call the parent function to navigate to JobContainer
-     if (onJobSelect) {
-       onJobSelect(job);
-     } else {
-       // Fallback for testing - can be removed later
-      window.alert(`Navigate to ${job.job_name} modules:\n- Production Tracker\n- Management Checklist\n- Market & Land Analytics\n- Final Valuation\n- Appeal Coverage`);
-    }
+  const goToJob = (job) => {
+    window.alert(`Navigate to ${job.name} modules:\n- Production Tracker\n- Management Checklist\n- Market & Land Analytics\n- Final Valuation\n- Appeal Coverage`);
   };
 
   const goToBillingPayroll = (job) => {
@@ -840,7 +836,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
                     <div className="space-y-3">
                       {countyJobs.map(job => (
                         <div key={job.id} className={`p-4 bg-white rounded-lg border-l-4 shadow-md hover:shadow-lg transition-all transform hover:scale-[1.01] ${
-                          job.vendor === 'Microsystems' ? 'border-blue-400 hover:bg-blue-50' : 'border-orange-400 hover:bg-orange-50'
+                          job.vendor === 'Microsystems' ? 'border-blue-400 hover:bg-blue-50' : 'border-orange-300 hover:bg-orange-50'
                         }`}>
                           <div className="flex justify-between items-start mb-3">
                             <div className="flex-1">
@@ -850,12 +846,12 @@ const AdminJobManagement = ({ onJobSelect }) => {
                                   <span className={`px-3 py-1 rounded-full text-xs font-medium shadow-sm ${
                                     job.vendor === 'Microsystems' 
                                       ? 'bg-blue-100 text-blue-800' 
-                                      : 'bg-orange-100 text-orange-800'
+                                      : 'bg-orange-100 text-orange-700'
                                   }`}>
                                     {job.vendor}
                                   </span>
                                   <span className={`px-3 py-1 rounded-full text-xs font-medium shadow-sm ${getStatusColor(job.status)}`}>
-                                    {job.status}
+                                    {job.status || 'active'}
                                   </span>
                                 </div>
                               </div>
@@ -868,7 +864,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
                                 </span>
                                 <span className="flex items-center space-x-1">
                                   <Calendar className="w-4 h-4" />
-                                  <span>Due: {job.dueDate}</span>
+                                  <span>Due: {job.dueDate ? job.dueDate.split('-')[0] : 'TBD'}</span>
                                 </span>
                                 {job.assignedManagers && job.assignedManagers.length > 0 && (
                                   <span className="flex items-center space-x-1">
@@ -878,8 +874,8 @@ const AdminJobManagement = ({ onJobSelect }) => {
                                 )}
                               </div>
                               
-                              {/* Production Metrics */}
-                              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3 p-3 bg-gray-50 rounded-lg">
+                              {/* Production Metrics - Updated with 5 columns */}
+                              <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-3 p-3 bg-gray-50 rounded-lg">
                                 <div className="text-center">
                                   <div className="text-lg font-bold text-blue-600">
                                     {(job.inspectedProperties || 0).toLocaleString()} of {(job.totalProperties || 0).toLocaleString()}
@@ -904,6 +900,22 @@ const AdminJobManagement = ({ onJobSelect }) => {
                                   </div>
                                   <div className="text-xs text-gray-600">Refusal Rate</div>
                                   <div className="text-sm text-gray-500">As of: TBD</div>
+                                </div>
+
+                                <div className="text-center">
+                                  <div className="text-lg font-bold text-purple-600">
+                                    {job.workflowStats?.rates?.commercialInspectionRate || 0}%
+                                  </div>
+                                  <div className="text-xs text-gray-600">Commercial Complete</div>
+                                  <div className="text-sm text-gray-500">From Payroll</div>
+                                </div>
+
+                                <div className="text-center">
+                                  <div className="text-lg font-bold text-indigo-600">
+                                    {job.workflowStats?.rates?.pricingRate || 0}%
+                                  </div>
+                                  <div className="text-xs text-gray-600">Pricing Complete</div>
+                                  <div className="text-sm text-gray-500">From Payroll</div>
                                 </div>
                               </div>
 
@@ -1116,7 +1128,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
                         <div className="flex items-center space-x-4 text-sm text-gray-600 mb-4">
                           <span className="font-bold text-blue-600">{job.ccddCode}</span>
                           <span>{job.municipality}, {job.county} County</span>
-                          <span>Completed: {job.dueDate}</span>
+                          <span>Completed: {job.dueDate ? job.dueDate.split('-')[0] : 'TBD'}</span>
                         </div>
                         
                         {/* Final Performance Metrics */}
@@ -1181,7 +1193,6 @@ const AdminJobManagement = ({ onJobSelect }) => {
                           </div>
                           <div>
                             <h4 className="text-lg font-bold text-gray-900">{manager.first_name} {manager.last_name}</h4>
-                            <p className="text-sm text-gray-600">{manager.region || 'No region'} Region</p>
                           </div>
                         </div>
                         <div className="text-right">
@@ -1455,7 +1466,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
                 <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
                   <h3 className="font-medium text-blue-800 mb-4 flex items-center space-x-2">
                     <Upload className="w-5 h-5" />
-                    <span>📁 Source Data Files</span>
+                    <span>📁 Setup Files</span>
                     {fileAnalysis.detectedVendor && (
                       <span className="px-3 py-1 bg-green-100 text-green-800 text-xs rounded-full font-medium">
                         ✅ {fileAnalysis.detectedVendor} Detected
@@ -1547,7 +1558,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
                 </div>
               )}
 
-              {/* Manager Assignment */}
+              {/* Manager Assignment - Redesigned with 3-column grid */}
               <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
                 <h3 className="font-medium text-green-800 mb-4 flex items-center space-x-2">
                   <Users className="w-5 h-5" />
@@ -1557,7 +1568,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
                   </span>
                 </h3>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                   {managers.map(manager => {
                     const assignedManager = newJob.assignedManagers.find(m => m.id === manager.id);
                     const isSelected = !!assignedManager;
@@ -1573,30 +1584,29 @@ const AdminJobManagement = ({ onJobSelect }) => {
                         }`}
                       >
                         <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-3">
+                          <div className="flex items-center space-x-2">
                             <div className="w-8 h-8 rounded-full bg-green-100 text-green-800 flex items-center justify-center text-sm font-bold">
                               {`${manager.first_name || ''} ${manager.last_name || ''}`.split(' ').map(n => n[0]).join('')}
                             </div>
                             <div>
-                              <div className="font-medium text-gray-900 flex items-center space-x-2">
+                              <div className="font-medium text-gray-900 text-sm flex items-center space-x-1">
                                 <span>{manager.first_name} {manager.last_name}</span>
                                 {manager.can_be_lead && (
                                   <span className="px-1 py-0.5 bg-blue-100 text-blue-800 text-xs rounded">
-                                    Lead Eligible
+                                    Lead
                                   </span>
                                 )}
                               </div>
-                              <div className="text-sm text-gray-600">{manager.region || 'No region'} Region</div>
                             </div>
                           </div>
                         </div>
                         {isSelected && (
-                          <div className="mt-2 text-xs font-medium">
-                            <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full">
+                          <div className="mt-2 text-xs">
+                            <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full font-medium">
                               {assignedManager.role}
                             </span>
-                            <div className="text-green-600 mt-1">
-                              Click to cycle: Lead Manager → Assistant Manager → Remove
+                            <div className="text-green-600 mt-1 text-xs">
+                              Click: Lead → Assistant → Remove
                             </div>
                           </div>
                         )}
