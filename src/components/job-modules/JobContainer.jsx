@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Building, Factory, TrendingUp, DollarSign, Scale } from 'lucide-react';
+import FileUploadButton from '../FileUploadButton';
 import ManagementChecklist from './ManagementChecklist';
 import PayrollProductionUpdater from './PayrollProductionUpdater';
 import MarketAnalysis from './MarketAnalysis';
@@ -22,6 +23,13 @@ const JobContainer = ({ selectedJob, onBackToJobs }) => {
       setJobData(enrichedJobData);
     }
   }, [selectedJob]);
+
+  // Handle file upload completion
+  const handleFileProcessed = (fileType, fileName) => {
+    console.log(`File processed: ${fileType} - ${fileName}`);
+    // Optionally refresh job data or notify modules
+    // This could trigger data refresh in active modules
+  };
 
   if (!selectedJob) {
     return (
@@ -78,32 +86,43 @@ const JobContainer = ({ selectedJob, onBackToJobs }) => {
 
   return (
     <div className="max-w-6xl mx-auto p-6 bg-white">
-      {/* Header with Back Button and Job Info */}
-      <div className="mb-6 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={onBackToJobs}
-            className="flex items-center gap-2 px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Back to Jobs
-          </button>
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">
-              {selectedJob.job_name}
-            </h1>
-            <p className="text-gray-600">
-              {selectedJob.client_name} • {selectedJob.municipality || 'Municipality TBD'}
+      {/* Header with Back Button, Job Info, File Upload, and Status */}
+      <div className="mb-6">
+        {/* Top Row: Back Button and Job Title */}
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={onBackToJobs}
+              className="flex items-center gap-2 px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Back to Jobs
+            </button>
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">
+                {selectedJob.job_name}
+              </h1>
+              <p className="text-gray-600">
+                {selectedJob.client_name} • {selectedJob.municipality || 'Municipality TBD'}
+              </p>
+            </div>
+          </div>
+          <div className="text-right">
+            <p className="text-sm font-medium text-blue-600">
+              Due: {selectedJob.end_date ? new Date(selectedJob.end_date).toLocaleDateString() : 'TBD'}
+            </p>
+            <p className="text-xs text-gray-500">
+              Status: {selectedJob.status || 'Active'}
             </p>
           </div>
         </div>
-        <div className="text-right">
-          <p className="text-sm font-medium text-blue-600">
-            Due: {selectedJob.end_date ? new Date(selectedJob.end_date).toLocaleDateString() : 'TBD'}
-          </p>
-          <p className="text-xs text-gray-500">
-            Status: {selectedJob.status || 'Active'}
-          </p>
+
+        {/* File Upload Row */}
+        <div className="flex items-center justify-center py-3 bg-gray-50 rounded-lg border border-gray-200">
+          <FileUploadButton 
+            job={selectedJob} 
+            onFileProcessed={handleFileProcessed} 
+          />
         </div>
       </div>
 
