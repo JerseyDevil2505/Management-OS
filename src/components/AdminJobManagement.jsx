@@ -328,7 +328,7 @@ const AdminJobManagement = () => {
             byClass: {}
           }
         },
-        created_by: currentUser?.id || 'system'
+        created_by: currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad'
       };
 
       await jobService.create(jobData);
