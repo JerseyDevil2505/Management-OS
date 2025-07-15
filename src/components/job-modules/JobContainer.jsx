@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Building, Factory, TrendingUp, DollarSign, Scale } from 'lucide-react';
-import FileUploadButton from '../FileUploadButton';
+import { Building, Factory, TrendingUp, DollarSign, Scale } from 'lucide-react';
 import ManagementChecklist from './ManagementChecklist';
 import PayrollProductionUpdater from './PayrollProductionUpdater';
 import MarketAnalysis from './MarketAnalysis';
@@ -86,34 +85,6 @@ const JobContainer = ({ selectedJob, onBackToJobs }) => {
 
   return (
     <div className="max-w-6xl mx-auto p-6 bg-white">
-      {/* Header with Job Info and File Upload */}
-      <div className="mb-6">
-        {/* Job Title Row */}
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h1 className="text-4xl font-bold text-gray-900 mb-1">
-              {selectedJob.job_name}
-            </h1>
-            <p className="text-lg text-gray-600">
-              {selectedJob.client_name} • {selectedJob.municipality || 'Municipality TBD'}
-            </p>
-          </div>
-          <div className="text-right">
-            <p className="text-lg font-medium text-blue-600">
-              Due: {jobData?.due_year || 'TBD'}
-            </p>
-          </div>
-        </div>
-
-        {/* File Upload Row */}
-        <div className="flex items-center justify-center py-3 bg-gray-50 rounded-lg border border-gray-200">
-          <FileUploadButton 
-            job={selectedJob} 
-            onFileProcessed={handleFileProcessed} 
-          />
-        </div>
-      </div>
-
       {/* Module Navigation Tabs */}
       <div className="mb-6">
         <div className="border-b border-gray-200">
