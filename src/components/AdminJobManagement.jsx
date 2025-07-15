@@ -72,10 +72,16 @@ const AdminJobManagement = () => {
           ]);
           
           // Separate active and archived jobs
-          const activeJobs = jobsData.filter(job => job.status !== 'archived' && job.status !== 'complete');
-          const archived = jobsData.filter(job => job.status === 'archived' || job.status === 'complete');
+          const activeJobs = jobsData.filter(job => job.status !== 'archived');
+          const archived = jobsData.filter(job => job.status === 'archived');
           
-          setJobs(activeJobs);
+          // Set default status to 'active' for jobs without status
+          const processedActiveJobs = activeJobs.map(job => ({
+            ...job,
+            status: job.status || 'active'
+          }));
+          
+          setJobs(processedActiveJobs);
           setArchivedJobs(archived);
           setPlanningJobs(planningData);
           setManagers(managersData);
@@ -188,27 +194,50 @@ const AdminJobManagement = () => {
           console.log('Code file vendor result:', vendorResult);
         }
       }
-      else if (file.name.endsWith('.json') || text.includes('"02":"COLONIAL"')) {
+      else if (file.name.endsWith('.json') || text.includes('"02":"COLONIAL"') || text.includes('"KEY":"') || text.includes('"VALUE":"')) {
         try {
-          const parsed = JSON.parse(text);
+          // Try to find JSON content even if file has prefix text
+          let jsonContent = text;
+          if (text.includes('{"')) {
+            jsonContent = text.substring(text.indexOf('{"'));
+          }
+          
+          const parsed = JSON.parse(jsonContent);
+          
+          // Count total codes by traversing the nested structure
+          let totalCodes = 0;
+          const countCodes = (obj) => {
+            if (obj && typeof obj === 'object') {
+              if (obj.KEY && obj.DATA && obj.DATA.VALUE) {
+                totalCodes++;
+              }
+              if (obj.MAP) {
+                Object.values(obj.MAP).forEach(countCodes);
+              }
+            }
+          };
+          
+          Object.values(parsed).forEach(countCodes);
+          
           vendorResult = {
             vendor: 'BRT',
             confidence: 100,
-            detectedFormat: 'BRT JSON Code Hierarchy',
-            fileStructure: `JSON structure with ${Object.keys(parsed).length} categories`,
-            codeCount: Object.keys(parsed).length,
+            detectedFormat: 'BRT Nested JSON Code Structure',
+            fileStructure: `Nested JSON with ${totalCodes} code definitions`,
+            codeCount: totalCodes,
             isValid: true
           };
           
-          console.log('JSON code file vendor result:', vendorResult);
+          console.log('BRT nested JSON code file detected:', vendorResult);
         } catch (e) {
-          if (text.includes('COLONIAL')) {
+          console.log('JSON parse failed, checking for text format...');
+          if (text.includes('COLONIAL') || text.includes('GROUND FLR') || text.includes('VALUE')) {
             vendorResult = {
               vendor: 'BRT',
               confidence: 80,
               detectedFormat: 'BRT Text Code Export',
               fileStructure: 'Text format with code descriptions',
-              codeCount: (text.match(/"/g) || []).length / 2,
+              codeCount: (text.match(/"VALUE":/g) || []).length,
               isValid: true
             };
             
@@ -603,8 +632,7 @@ const AdminJobManagement = () => {
     const actualStatus = status || 'active';
     switch (actualStatus) {
       case 'active': return 'text-green-600 bg-green-100';
-      case 'draft': return 'text-yellow-600 bg-yellow-100';
-      case 'complete': return 'text-blue-600 bg-blue-100';
+      case 'planned': return 'text-yellow-600 bg-yellow-100';
       case 'archived': return 'text-purple-600 bg-purple-100';
       default: return 'text-green-600 bg-green-100'; // Default to active
     }
@@ -846,7 +874,7 @@ const AdminJobManagement = () => {
                                   <span className={`px-3 py-1 rounded-full text-xs font-medium shadow-sm ${
                                     job.vendor === 'Microsystems' 
                                       ? 'bg-blue-100 text-blue-800' 
-                                      : 'bg-orange-100 text-orange-700'
+                                      : 'bg-orange-200 text-orange-800'
                                   }`}>
                                     {job.vendor}
                                   </span>
