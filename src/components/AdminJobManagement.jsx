@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Upload, Plus, Edit3, Users, FileText, Calendar, MapPin, Database, Settings, Eye, DollarSign, Trash2, CheckCircle, Archive, TrendingUp, Target, AlertTriangle } from 'lucide-react';
 import { employeeService, jobService, planningJobService, utilityService, authService, supabase } from '../lib/supabaseClient';
 
-const AdminJobManagement = () => {
+const AdminJobManagement = ({ onJobSelect }) => {
   const [activeTab, setActiveTab] = useState('jobs');
   const [currentUser, setCurrentUser] = useState({ role: 'admin', canAccessBilling: true });
   
@@ -688,7 +688,11 @@ const AdminJobManagement = () => {
   };
 
   const goToJob = (job) => {
-    window.alert(`Navigate to ${job.name} modules:\n- Production Tracker\n- Management Checklist\n- Market & Land Analytics\n- Final Valuation\n- Appeal Coverage`);
+    if (onJobSelect) {
+      onJobSelect(job);
+    } else {
+      console.warn('onJobSelect prop not provided to AdminJobManagement');
+    }
   };
 
   const goToBillingPayroll = (job) => {
