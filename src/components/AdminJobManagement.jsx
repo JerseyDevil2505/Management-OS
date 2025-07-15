@@ -183,12 +183,24 @@ const AdminJobManagement = () => {
   };
 
   const handleFileUpload = (e, type) => {
-    const file = e.target.files[0];
-    if (file) {
-      setNewJob(prev => ({ ...prev, [type]: file }));
-      analyzeFileWithProcessor(file, type);
-    }
-  };
+  console.log('=== FILE UPLOAD DEBUG ===');
+  console.log('Event triggered for type:', type);
+  console.log('Files array:', e.target.files);
+  console.log('First file:', e.target.files[0]);
+  
+  const file = e.target.files[0];
+  if (file) {
+    console.log('File details:', {
+      name: file.name,
+      size: file.size,
+      type: file.type
+    });
+    setNewJob(prev => ({ ...prev, [type]: file }));
+    analyzeFileWithProcessor(file, type);
+  } else {
+    console.log('No file found in event');
+  }
+};
 
   const handleManagerToggle = (managerId, role = 'Assistant Manager') => {
     const manager = managers.find(m => m.id === managerId);
