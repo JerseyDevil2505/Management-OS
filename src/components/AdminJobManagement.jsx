@@ -738,7 +738,7 @@ const AdminJobManagement = () => {
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 p-4 bg-gray-50 rounded-lg">
                           <div className="text-center">
                             <div className="text-lg font-bold text-blue-600">
-                              {job.inspectedProperties || 0} of {job.totalProperties || 0}
+                              {(job.inspectedProperties || 0).toLocaleString()} of {(job.totalProperties || 0).toLocaleString()}
                             </div>
                             <div className="text-xs text-gray-600">Properties Inspected</div>
                             <div className="text-sm font-medium text-blue-600">
