@@ -437,6 +437,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
         assignedManagers: newJob.assignedManagers,
         totalProperties: fileAnalysis.propertyCount,
         inspectedProperties: 0,
+        status: 'active', // Explicitly set status to active
         sourceFileStatus: newJob.sourceFile ? 'imported' : 'pending',
         codeFileStatus: newJob.codeFile ? 'current' : 'pending',
         vendorDetection: newJob.vendorDetection,
@@ -927,7 +928,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
                                   <span className={`px-3 py-1 rounded-full text-xs font-medium shadow-sm ${
                                     job.vendor === 'Microsystems' 
                                       ? 'bg-blue-100 text-blue-800' 
-                                      : 'bg-orange-200 text-orange-800'
+                                      : 'bg-orange-200 text-orange-900'
                                   }`}>
                                     {job.vendor}
                                   </span>
@@ -971,7 +972,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
                                   <div className="text-lg font-bold text-green-600">
                                     {job.workflowStats?.rates?.entryRate || 0}%
                                   </div>
-                                  <div className="text-xs text-gray-600">Entry Rate</div>
+                                  <div className="text-xs text-gray-600">Residential Entry Rate</div>
                                   <div className="text-sm text-gray-500">As of: TBD</div>
                                 </div>
                                 
@@ -979,7 +980,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
                                   <div className="text-lg font-bold text-red-600">
                                     {job.workflowStats?.rates?.refusalRate || 0}%
                                   </div>
-                                  <div className="text-xs text-gray-600">Refusal Rate</div>
+                                  <div className="text-xs text-gray-600">Residential Refusal Rate</div>
                                   <div className="text-sm text-gray-500">As of: TBD</div>
                                 </div>
 
@@ -987,7 +988,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
                                   <div className="text-lg font-bold text-purple-600">
                                     {job.workflowStats?.rates?.commercialInspectionRate || 0}%
                                   </div>
-                                  <div className="text-xs text-gray-600">Commercial Complete</div>
+                                  <div className="text-xs text-gray-600">Commercial Inspections</div>
                                   <div className="text-sm text-gray-500">From Payroll</div>
                                 </div>
 
@@ -995,7 +996,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
                                   <div className="text-lg font-bold text-indigo-600">
                                     {job.workflowStats?.rates?.pricingRate || 0}%
                                   </div>
-                                  <div className="text-xs text-gray-600">Pricing Complete</div>
+                                  <div className="text-xs text-gray-600">Commercials Priced</div>
                                   <div className="text-sm text-gray-500">From Payroll</div>
                                 </div>
                               </div>
