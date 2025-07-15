@@ -86,33 +86,21 @@ const JobContainer = ({ selectedJob, onBackToJobs }) => {
 
   return (
     <div className="max-w-6xl mx-auto p-6 bg-white">
-      {/* Header with Back Button, Job Info, File Upload, and Status */}
+      {/* Header with Job Info and File Upload */}
       <div className="mb-6">
-        {/* Top Row: Back Button and Job Title */}
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={onBackToJobs}
-              className="flex items-center gap-2 px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              Back to Jobs
-            </button>
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">
-                {selectedJob.job_name}
-              </h1>
-              <p className="text-gray-600">
-                {selectedJob.client_name} • {selectedJob.municipality || 'Municipality TBD'}
-              </p>
-            </div>
+        {/* Job Title Row */}
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h1 className="text-4xl font-bold text-gray-900 mb-1">
+              {selectedJob.job_name}
+            </h1>
+            <p className="text-lg text-gray-600">
+              {selectedJob.client_name} • {selectedJob.municipality || 'Municipality TBD'}
+            </p>
           </div>
           <div className="text-right">
-            <p className="text-sm font-medium text-blue-600">
-              Due: {selectedJob.end_date ? new Date(selectedJob.end_date).toLocaleDateString() : 'TBD'}
-            </p>
-            <p className="text-xs text-gray-500">
-              Status: {selectedJob.status || 'Active'}
+            <p className="text-lg font-medium text-blue-600">
+              Due: {jobData?.due_year || 'TBD'}
             </p>
           </div>
         </div>
