@@ -80,9 +80,6 @@ const ManagementChecklist = ({
     getCurrentUser();
   }, []);
 
-  // Mock checklist data will be replaced with database calls
-  const [checklistItems, setChecklistItems] = useState([]);
-
   useEffect(() => {
     if (jobData) {
       // TODO: Replace with actual database call to load checklist items for this job
