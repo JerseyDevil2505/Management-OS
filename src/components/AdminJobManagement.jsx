@@ -458,7 +458,7 @@ const AdminJobManagement = () => {
             byClass: {}
           }
         },
-        created_by: currentUser?.id || 'cf3b2da7-d0f4-40cf-b7c9-58610782ad9a'
+        created_by: currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad'
       };
 
       await jobService.create(jobData);
@@ -494,7 +494,7 @@ const AdminJobManagement = () => {
         municipality: newPlanningJob.municipality,
         potentialYear: new Date(newPlanningJob.dueDate).getFullYear(),
         comments: newPlanningJob.comments || '',
-        created_by: currentUser?.id || 'cf3b2da7-d0f4-40cf-b7c9-58610782ad9a'
+        created_by: currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad'
       };
 
       await planningJobService.create(planningData);
@@ -545,7 +545,7 @@ const AdminJobManagement = () => {
           job_id: editingJob.id,
           employee_id: manager.id,
           role: manager.role,
-          assigned_by: currentUser?.id || 'cf3b2da7-d0f4-40cf-b7c9-58610782ad9a',
+          assigned_by: currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad',
           assigned_date: new Date().toISOString().split('T')[0],
           is_active: true
         }));
