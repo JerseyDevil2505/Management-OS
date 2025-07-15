@@ -105,7 +105,7 @@ export const employeeService = {
       const { data, error } = await supabase
         .from('employees')
         .select('*')
-        .in('role', ['admin', 'manager'])
+        .in('role', ['Management', 'Owner'])
         .eq('employment_status', 'active')
         .order('last_name');
       
