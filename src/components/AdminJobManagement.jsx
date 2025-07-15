@@ -12,6 +12,7 @@ const AdminJobManagement = () => {
   const [showCreateJob, setShowCreateJob] = useState(false);
   const [editingJob, setEditingJob] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(null); // Add state for delete confirmation
 
   const [newJob, setNewJob] = useState({
     name: '',
@@ -221,7 +222,7 @@ const AdminJobManagement = () => {
 
   const createJob = async () => {
     if (!newJob.ccddCode || !newJob.name || !newJob.municipality || !newJob.dueDate || newJob.assignedManagers.length === 0) {
-      alert('Please fill all required fields and assign at least one manager');
+      window.alert('Please fill all required fields and assign at least one manager');
       return;
     }
 
@@ -268,10 +269,10 @@ const AdminJobManagement = () => {
       setJobs(updatedJobs);
       
       closeJobModal();
-      alert('Job created successfully!');
+      window.alert('Job created successfully!');
     } catch (error) {
       console.error('Job creation error:', error);
-      alert('Error creating job: ' + error.message);
+      window.alert('Error creating job: ' + error.message);
     }
   };
 
@@ -294,18 +295,15 @@ const AdminJobManagement = () => {
   };
 
   const deleteJob = async (job) => {
-    if (!confirm(`Are you sure you want to delete "${job.name}"? This action cannot be undone.`)) {
-      return;
-    }
-
     try {
       await jobService.delete(job.id);
       const updatedJobs = await jobService.getAll();
       setJobs(updatedJobs);
-      alert('Job deleted successfully');
+      setShowDeleteConfirm(null);
+      window.alert('Job deleted successfully');
     } catch (error) {
       console.error('Job deletion error:', error);
-      alert('Error deleting job: ' + error.message);
+      window.alert('Error deleting job: ' + error.message);
     }
   };
 
@@ -363,11 +361,11 @@ const AdminJobManagement = () => {
   };
 
   const goToJob = (job) => {
-    alert(`Navigate to ${job.name} modules:\n- Production Tracker\n- Management Checklist\n- Market & Land Analytics\n- Final Valuation\n- Appeal Coverage`);
+    window.alert(`Navigate to ${job.name} modules:\n- Production Tracker\n- Management Checklist\n- Market & Land Analytics\n- Final Valuation\n- Appeal Coverage`);
   };
 
   const goToBillingPayroll = (job) => {
-    alert(`Navigate to ${job.name} Billing & Payroll in Production Tracker`);
+    window.alert(`Navigate to ${job.name} Billing & Payroll in Production Tracker`);
   };
 
   if (loading) {
@@ -575,7 +573,7 @@ const AdminJobManagement = () => {
                         <span>Edit Job</span>
                       </button>
                       <button 
-                        onClick={() => deleteJob(job)}
+                        onClick={() => setShowDeleteConfirm(job)}
                         className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center space-x-1 text-sm font-medium"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -680,6 +678,35 @@ const AdminJobManagement = () => {
                   </div>
                 ))
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-md w-full p-6">
+            <div className="text-center">
+              <Trash2 className="w-12 h-12 mx-auto mb-4 text-red-600" />
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Delete Job</h3>
+              <p className="text-gray-600 mb-6">
+                Are you sure you want to delete "{showDeleteConfirm.name}"? This action cannot be undone.
+              </p>
+              <div className="flex justify-center space-x-3">
+                <button
+                  onClick={() => setShowDeleteConfirm(null)}
+                  className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => deleteJob(showDeleteConfirm)}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium"
+                >
+                  Delete Job
+                </button>
+              </div>
             </div>
           </div>
         </div>
