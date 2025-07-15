@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Upload, Plus, Edit3, Users, FileText, Calendar, MapPin, Database, Settings, Eye, DollarSign, Trash2, CheckCircle, Archive, TrendingUp, Target, AlertTriangle } from 'lucide-react';
-import { employeeService, jobService, planningJobService, utilityService, authService } from '../lib/supabaseClient';
+import { employeeService, jobService, planningJobService, utilityService, authService, supabase } from '../lib/supabaseClient';
 
 const AdminJobManagement = () => {
   const [activeTab, setActiveTab] = useState('jobs');
@@ -292,12 +292,11 @@ const AdminJobManagement = () => {
 
   const handleManagerToggle = (managerId, role = 'manager') => {
     const manager = managers.find(m => m.id === managerId);
-    const currentManagerIds = newJob.assignedManagers.map(m => m.id);
+    const assignedManager = newJob.assignedManagers.find(m => m.id === managerId);
     
-    if (currentManagerIds.includes(managerId)) {
-      // Manager is already assigned - cycle through roles or remove
-      const currentManager = newJob.assignedManagers.find(m => m.id === managerId);
-      const currentRole = currentManager.role;
+    if (assignedManager) {
+      // Manager is already assigned - cycle through roles
+      const currentRole = assignedManager.role;
       
       let newRole;
       if (currentRole === 'Lead Manager') {
@@ -794,7 +793,7 @@ const AdminJobManagement = () => {
                   onClick={() => handleStatusTileClick('jobs')}
                   className="text-center p-3 bg-green-50 rounded-lg border border-green-200 hover:bg-green-100 transition-colors cursor-pointer"
                 >
-                  <div className="text-2xl font-bold text-green-600">{jobs.filter(j => j.status === 'active').length}</div>
+                  <div className="text-2xl font-bold text-green-600">{jobs.length}</div>
                   <div className="text-sm text-gray-600">Active Jobs</div>
                 </button>
                 <button
