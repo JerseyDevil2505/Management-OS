@@ -186,7 +186,7 @@ export const jobService = {
           job_assignments (
             id,
             role,
-            employee:employees (
+            employee:employees!job_assignments_employee_id_fkey (
               id,
               first_name,
               last_name,
