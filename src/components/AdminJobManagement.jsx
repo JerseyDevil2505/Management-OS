@@ -1294,6 +1294,110 @@ const AdminJobManagement = ({ onJobSelect }) => {
                   </label>
                   <input
                     type="text"
+                    value={newPlanningJob.municipality}
+                    onChange={(e) => setNewPlanningJob({...newPlanningJob, municipality: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
+                    placeholder="e.g., Middletown Township"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Target Date *
+                  </label>
+                  <input
+                    type="date"
+                    value={newPlanningJob.dueDate}
+                    onChange={(e) => setNewPlanningJob({...newPlanningJob, dueDate: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Comments
+                  </label>
+                  <textarea
+                    value={newPlanningJob.comments}
+                    onChange={(e) => setNewPlanningJob({...newPlanningJob, comments: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
+                    placeholder="e.g., Spoke to client, will extend to 2028..."
+                    rows={3}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-end space-x-3">
+              <button
+                onClick={closePlanningModal}
+                className="px-6 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium shadow-md hover:shadow-lg transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={editingPlanning ? editPlanningJob : createPlanningJob}
+                className="px-6 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 font-medium shadow-md hover:shadow-lg transition-all"
+              >
+                {editingPlanning ? '💾 Update Planning Job' : '📝 Add Planning Job'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create/Edit Job Modal */}
+      {showCreateJob && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-4xl w-full max-h-screen overflow-y-auto shadow-2xl">
+            <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-green-50">
+              <div className="flex items-center">
+                <Plus className="w-8 h-8 mr-3 text-blue-600" />
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">
+                    {editingJob ? '✏️ Edit Job' : '🚀 Create New Job'}
+                  </h2>
+                  <p className="text-gray-600 mt-1">Set up appraisal job with source data and team assignments</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Basic Job Information */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Job Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={newJob.name}
+                    onChange={(e) => setNewJob({...newJob, name: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="e.g., Middletown Township 2025"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    CCDD Code *
+                  </label>
+                  <input
+                    type="text"
+                    value={newJob.ccdd}
+                    onChange={(e) => setNewJob({...newJob, ccdd: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="e.g., 1306"
+                    maxLength="4"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Municipality *
+                  </label>
+                  <input
+                    type="text"
                     value={newJob.municipality}
                     onChange={(e) => setNewJob({...newJob, municipality: e.target.value})}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -1627,108 +1731,3 @@ const AdminJobManagement = ({ onJobSelect }) => {
 };
 
 export default AdminJobManagement;
-                    maxLength="4"
-                    disabled={false}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Municipality *
-                  </label>
-                  <input
-                    type="text"
-                    value={newPlanningJob.municipality}
-                    onChange={(e) => setNewPlanningJob({...newPlanningJob, municipality: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
-                    placeholder="e.g., Middletown Township"
-                  />
-                </div>
-
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Target Date *
-                  </label>
-                  <input
-                    type="date"
-                    value={newPlanningJob.dueDate}
-                    onChange={(e) => setNewPlanningJob({...newPlanningJob, dueDate: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
-                  />
-                </div>
-
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Comments
-                  </label>
-                  <textarea
-                    value={newPlanningJob.comments}
-                    onChange={(e) => setNewPlanningJob({...newPlanningJob, comments: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
-                    placeholder="e.g., Spoke to client, will extend to 2028..."
-                    rows={3}
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-end space-x-3">
-              <button
-                onClick={closePlanningModal}
-                className="px-6 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium shadow-md hover:shadow-lg transition-all"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={editingPlanning ? editPlanningJob : createPlanningJob}
-                className="px-6 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 font-medium shadow-md hover:shadow-lg transition-all"
-              >
-                {editingPlanning ? '💾 Update Planning Job' : '📝 Add Planning Job'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Create/Edit Job Modal */}
-      {showCreateJob && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-4xl w-full max-h-screen overflow-y-auto shadow-2xl">
-            <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-green-50">
-              <div className="flex items-center">
-                <Plus className="w-8 h-8 mr-3 text-blue-600" />
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-900">
-                    {editingJob ? '✏️ Edit Job' : '🚀 Create New Job'}
-                  </h2>
-                  <p className="text-gray-600 mt-1">Set up appraisal job with source data and team assignments</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="p-6 space-y-6">
-              {/* Basic Job Information */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Job Name *
-                  </label>
-                  <input
-                    type="text"
-                    value={newJob.name}
-                    onChange={(e) => setNewJob({...newJob, name: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="e.g., Middletown Township 2025"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    CCDD Code *
-                  </label>
-                  <input
-                    type="text"
-                    value={newJob.ccdd}
-                    onChange={(e) => setNewJob({...newJob, ccdd: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="e.g., 1306
