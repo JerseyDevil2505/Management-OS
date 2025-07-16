@@ -477,7 +477,7 @@ const processMicrosystemsData = async (fileText, jobData) => {
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       created_by: jobData.created_by || '5df85ca3-7a54-4798-a665-c31da8d9caad',
-      validation_status: 'processed'
+      validation_status: 'processed',
     };
     
     records.push(normalizedRecord);
