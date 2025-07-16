@@ -447,7 +447,7 @@ const processMicrosystemsData = async (fileText, jobData) => {
       asset_building_class: values[117] || '',              // Column ¶ - "Bldg Qual Class Code"
       asset_total_beds: parseInt(values[213] || 0),         // Column Ė - "Total Bedrms"
       asset_v_c_s: values[401] || '',                       // Column ǒ - "VCS"
-      asset_designStyle: parseFloat(rawRecord.Style Code || rawRecord.Style Code || 0)
+      asset_designStyle: parseFloat(rawRecord.Style Code || rawRecord.Style Code || 0),
       
       // Metadata
       raw_data: rawRecord,
