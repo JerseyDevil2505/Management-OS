@@ -204,6 +204,8 @@ export const jobService = {
         name: job.job_name,
         ccddCode: job.ccdd_code,
         municipality: job.municipality || job.client_name,
+        job_number: job.job_number,
+        year_created: job.year_created,
         county: job.county,
         state: job.state,
         vendor: job.vendor_type,
