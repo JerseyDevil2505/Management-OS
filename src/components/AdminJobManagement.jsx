@@ -440,23 +440,16 @@ const processMicrosystemsData = async (fileText, jobData) => {
       sales_page: rawRecord.SalesPage || rawRecord.salesPage || '',
       sales_nu: rawRecord.SalesNu || rawRecord.salesNu || '',
       
-       // Asset information
-      asset_year_built: parseInt(rawRecord.YearBuilt || rawRecord.yearBuilt || 0),
-      asset_livable_area: parseFloat(rawRecord.LivableArea || rawRecord.livableArea || 0),
-      asset_story_height: parseFloat(rawRecord.StoryHeight || rawRecord.storyHeight || 0),
-      asset_building_class: values[117] || '',              // Column ¶ - "Bldg Qual Class Code"
-      asset_total_beds: parseInt(values[213] || 0),         // Column Ė - "Total Bedrms"
-      asset_v_c_s: values[401] || '',                       // Column ǒ - "VCS"
-      asset_designStyle: parseFloat(rawRecord.Style Code || rawRecord.Style Code || 0),
+    // Asset information
+    asset_year_built: parseInt(rawRecord.YearBuilt || rawRecord.yearBuilt || 0),
+    asset_livable_area: parseFloat(rawRecord.LivableArea || rawRecord.livableArea || 0),
+    asset_story_height: parseFloat(rawRecord.StoryHeight || rawRecord.storyHeight || 0),
+    asset_building_class: rawRecord['Bldg Qual Class Code'] || '',     // Use bracket notation for spaces
+    asset_total_beds: parseInt(rawRecord['Total Bedrms'] || 0),        // Use bracket notation
+    asset_v_c_s: rawRecord.VCS || '',                                  // VCS field
+    asset_design_style: rawRecord['Style Code'] || '',                 // String, not parseFloat
       
-      // Metadata
-      raw_data: rawRecord,
-      processed_at: new Date().toISOString(),
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      created_by: jobData.created_by || '5df85ca3-7a54-4798-a665-c31da8d9caad',
-      validation_status: 'processed'
-      
+    
       // Metadata
       raw_data: rawRecord,
       processed_at: new Date().toISOString(),
