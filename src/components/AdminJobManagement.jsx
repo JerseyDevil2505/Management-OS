@@ -695,7 +695,7 @@ const createJob = async () => {
         ccdd: newJob.ccddCode,
         name: newJob.name,
         sourceFileName: newJob.sourceFile.name,  
-        codeFileName: newJob.codeFile.name
+        codeFileName: newJob.codeFile.name,
         created_by: currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad'
       };
       
