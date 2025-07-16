@@ -358,13 +358,13 @@ const AdminJobManagement = ({ onJobSelect }) => {
       console.log('Setting newJob with type:', fullTypeName);
       
       setNewJob(prev => ({ ...prev, [fullTypeName]: file }));
-analyzeFileWithProcessor(file, type);
+      analyzeFileWithProcessor(file, type);
     } else {
       console.log('No file found in event');
     }
   };
 
-  // 1. EXTEND analyzeFileWithProcessor to handle full data processing
+  // Data processing function for inserting property records
   const processFileData = async (file, type, vendor, jobId, ccdd, year = 2025) => {
     console.log('=== PROCESSING FILE DATA FOR DATABASE ===');
     console.log('File:', file.name, 'Type:', type, 'Vendor:', vendor);
@@ -471,62 +471,7 @@ analyzeFileWithProcessor(file, type);
       return { success: false, error: error.message };
     }
   };
-      
-      // Parse pipe-delimited data
-      const lines = text.split('\n');
-      const headers = lines[0].split('|').map(h => h.trim());
-      const dataLines = lines.slice(1).filter(line => line.trim());
-      
-      console.log('Processing', dataLines.length, 'Microsystems records');
-      
-      for (const line of dataLines) {
-        const values = line.split('|').map(v => v.trim());
-        const rawRecord = {};
-        
-        headers.forEach((header, index) => {
-          rawRecord[header] = values[index] || '';
-        });
-        
-        // Use the existing normalize method
-        const normalized = processor.normalizeRecord(rawRecord, year, ccdd);
-        
-        // Add job metadata
-        normalized.job_id = jobId;
-        normalized.file_version = 1;
-        normalized.source_file_uploaded_at = new Date().toISOString();
-        
-        normalizedRecords.push(normalized);
-      }
-    }
-    
-    // Insert into property_records table
-    if (normalizedRecords.length > 0) {
-      console.log('Inserting', normalizedRecords.length, 'records into property_records');
-      
-      const { data, error } = await supabase
-        .from('property_records')
-        .insert(normalizedRecords);
-      
-      if (error) {
-        console.error('Database insertion error:', error);
-        throw error;
-      }
-      
-      console.log('Successfully inserted property records');
-        return { 
-        success: true, 
-        recordsInserted: normalizedRecords.length,
-        data: data 
-      };
-    }
-    
-    return { success: false, reason: 'No records to insert' };
-    
-  } catch (error) {
-    console.error('File processing error:', error);
-    return { success: false, error: error.message };
-  }
-};
+
   const handleManagerToggle = (managerId, role = 'manager') => {
     const manager = managers.find(m => m.id === managerId);
     const assignedManager = newJob.assignedManagers.find(m => m.id === managerId);
@@ -569,104 +514,105 @@ analyzeFileWithProcessor(file, type);
     }
   };
 
-const createJob = async () => {
-  console.log('DEBUG: newJob=', newJob);
-  console.log('DEBUG: assignedManagers =', newJob.assignedManagers);
-  
-  if (!newJob.ccdd || !newJob.name || !newJob.municipality || !newJob.dueDate || 
-      newJob.assignedManagers.length === 0 || !newJob.sourceFile || !newJob.codeFile) {
-    window.alert('Please fill all required fields, upload both files, and assign at least one manager');
-    return;
-  }
-
-  try {
-    const jobData = {
-      name: newJob.name,
-      ccdd: newJob.ccdd,
-      municipality: newJob.municipality,
-      county: newJob.county,
-      state: newJob.state,
-      vendor: newJob.vendor,
-      dueDate: newJob.dueDate,
-      assignedManagers: newJob.assignedManagers,
-      totalProperties: fileAnalysis.propertyCount,
-      inspectedProperties: 0,
-      status: 'active',
-      sourceFileStatus: newJob.sourceFile ? 'imported' : 'pending',
-      codeFileStatus: newJob.codeFile ? 'current' : 'pending',
-      vendorDetection: newJob.vendorDetection,
-      workflowStats: {
-        inspectionPhases: {
-          firstAttempt: 'PENDING',
-          secondAttempt: 'PENDING', 
-          thirdAttempt: 'PENDING'
-        },
-        rates: {
-          entryRate: 0,
-          refusalRate: 0,
-          pricingRate: 0,
-          commercialInspectionRate: 0
-        },
-        appeals: {
-          totalCount: 0,
-          percentOfWhole: 0,
-          byClass: {}
-        }
-      },
-      created_by: currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad'
-    };
-
-    // Create the job first
-    const createdJob = await jobService.create(jobData);
-    console.log('Job created successfully:', createdJob);
+  const createJob = async () => {
+    console.log('DEBUG: newJob=', newJob);
+    console.log('DEBUG: assignedManagers =', newJob.assignedManagers);
     
-    // NOW PROCESS THE SOURCE FILE DATA
-    if (newJob.sourceFile && newJob.vendor) {
-      console.log('Processing source file data...');
-      
-      const processingResult = await processFileData(
-        newJob.sourceFile, 
-        'source', 
-        newJob.vendor, 
-        createdJob.id, 
-        newJob.ccdd,
-        2025
-      );
-      
-      if (processingResult.success) {
-        console.log(`Successfully inserted ${processingResult.recordsInserted} property records`);
-        
-        // Update job with actual property count
-        await jobService.update(createdJob.id, {
-          totalProperties: processingResult.recordsInserted,
-          sourceFileStatus: 'processed'
-        });
-        
-        window.alert(`Job created successfully with ${processingResult.recordsInserted} property records imported!`);
-      } else {
-        console.error('File processing failed:', processingResult);
-        window.alert('Job created but file processing failed: ' + (processingResult.error || processingResult.reason));
-      }
+    if (!newJob.ccdd || !newJob.name || !newJob.municipality || !newJob.dueDate || 
+        newJob.assignedManagers.length === 0 || !newJob.sourceFile || !newJob.codeFile) {
+      window.alert('Please fill all required fields, upload both files, and assign at least one manager');
+      return;
     }
-    
-    // Refresh jobs list
-    const updatedJobs = await jobService.getAll();
-    console.log('Updated jobs after creation:', updatedJobs);
-    
-    // Separate active and archived jobs
-    const activeJobs = updatedJobs.filter(job => job.status !== 'archived' && job.status !== 'complete');
-    const archived = updatedJobs.filter(job => job.status === 'archived' || job.status === 'complete');
-    
-    setJobs(activeJobs);
-    setArchivedJobs(archived);
-    
-    closeJobModal();
-    
-  } catch (error) {
-    console.error('Job creation error:', error);
-    window.alert('Error creating job: ' + error.message);
-  }
-};
+
+    try {
+      const jobData = {
+        name: newJob.name,
+        ccdd: newJob.ccdd,
+        municipality: newJob.municipality,
+        county: newJob.county,
+        state: newJob.state,
+        vendor: newJob.vendor,
+        dueDate: newJob.dueDate,
+        assignedManagers: newJob.assignedManagers,
+        totalProperties: fileAnalysis.propertyCount,
+        inspectedProperties: 0,
+        status: 'active',
+        sourceFileStatus: newJob.sourceFile ? 'imported' : 'pending',
+        codeFileStatus: newJob.codeFile ? 'current' : 'pending',
+        vendorDetection: newJob.vendorDetection,
+        workflowStats: {
+          inspectionPhases: {
+            firstAttempt: 'PENDING',
+            secondAttempt: 'PENDING', 
+            thirdAttempt: 'PENDING'
+          },
+          rates: {
+            entryRate: 0,
+            refusalRate: 0,
+            pricingRate: 0,
+            commercialInspectionRate: 0
+          },
+          appeals: {
+            totalCount: 0,
+            percentOfWhole: 0,
+            byClass: {}
+          }
+        },
+        created_by: currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad'
+      };
+
+      // Create the job first
+      const createdJob = await jobService.create(jobData);
+      console.log('Job created successfully:', createdJob);
+      
+      // NOW PROCESS THE SOURCE FILE DATA
+      if (newJob.sourceFile && newJob.vendor) {
+        console.log('Processing source file data...');
+        
+        const processingResult = await processFileData(
+          newJob.sourceFile, 
+          'source', 
+          newJob.vendor, 
+          createdJob.id, 
+          newJob.ccdd,
+          2025
+        );
+        
+        if (processingResult.success) {
+          console.log(`Successfully inserted ${processingResult.recordsInserted} property records`);
+          
+          // Update job with actual property count
+          await jobService.update(createdJob.id, {
+            totalProperties: processingResult.recordsInserted,
+            sourceFileStatus: 'processed'
+          });
+          
+          window.alert(`Job created successfully with ${processingResult.recordsInserted} property records imported!`);
+        } else {
+          console.error('File processing failed:', processingResult);
+          window.alert('Job created but file processing failed: ' + (processingResult.error || processingResult.reason));
+        }
+      }
+      
+      // Refresh jobs list
+      const updatedJobs = await jobService.getAll();
+      console.log('Updated jobs after creation:', updatedJobs);
+      
+      // Separate active and archived jobs
+      const activeJobs = updatedJobs.filter(job => job.status !== 'archived' && job.status !== 'complete');
+      const archived = updatedJobs.filter(job => job.status === 'archived' || job.status === 'complete');
+      
+      setJobs(activeJobs);
+      setArchivedJobs(archived);
+      
+      closeJobModal();
+      
+    } catch (error) {
+      console.error('Job creation error:', error);
+      window.alert('Error creating job: ' + error.message);
+    }
+  };
+
   const createPlanningJob = async () => {
     if (!newPlanningJob.ccdd || !newPlanningJob.municipality || !newPlanningJob.dueDate) {
       window.alert('Please fill all required fields');
@@ -1463,394 +1409,3 @@ const createJob = async () => {
                 className="px-6 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 font-medium shadow-md hover:shadow-lg transition-all"
               >
                 {editingPlanning ? '💾 Update Planning Job' : '📝 Add Planning Job'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Create/Edit Job Modal */}
-      {showCreateJob && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-4xl w-full max-h-screen overflow-y-auto shadow-2xl">
-            <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-green-50">
-              <div className="flex items-center">
-                <Plus className="w-8 h-8 mr-3 text-blue-600" />
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-900">
-                    {editingJob ? '✏️ Edit Job' : '🚀 Create New Job'}
-                  </h2>
-                  <p className="text-gray-600 mt-1">Set up appraisal job with source data and team assignments</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="p-6 space-y-6">
-              {/* Basic Job Information */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Job Name *
-                  </label>
-                  <input
-                    type="text"
-                    value={newJob.name}
-                    onChange={(e) => setNewJob({...newJob, name: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="e.g., Middletown Township 2025"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    CCDD Code *
-                  </label>
-                  <input
-                    type="text"
-                    value={newJob.ccdd}
-                    onChange={(e) => setNewJob({...newJob, ccdd: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="e.g., 1306"
-                    maxLength="4"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Municipality *
-                  </label>
-                  <input
-                    type="text"
-                    value={newJob.municipality}
-                    onChange={(e) => setNewJob({...newJob, municipality: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="e.g., Middletown Township"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    County
-                  </label>
-                  <input
-                    type="text"
-                    value={newJob.county}
-                    onChange={(e) => setNewJob({...newJob, county: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="e.g., Monmouth"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Due Date *
-                  </label>
-                  <input
-                    type="date"
-                    value={newJob.dueDate}
-                    onChange={(e) => setNewJob({...newJob, dueDate: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    State
-                  </label>
-                  <select
-                    value={newJob.state}
-                    onChange={(e) => setNewJob({...newJob, state: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="NJ">New Jersey</option>
-                    <option value="NY">New York</option>
-                    <option value="PA">Pennsylvania</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* File Upload Section */}
-              <div className="border-t pt-6">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4">📁 Source Files</h3>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Source File Upload */}
-                  <div className="p-4 border border-gray-200 rounded-lg">
-                    <h4 className="font-medium text-gray-700 mb-3">Source Data File</h4>
-                    <input
-                      type="file"
-                      accept=".csv,.txt,.xlsx"
-                      onChange={(e) => handleFileUpload(e, 'source')}
-                      className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                    />
-                    {fileAnalysis.sourceFile && (
-                      <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
-                        <div className="text-sm font-medium text-green-800">
-                          ✅ {fileAnalysis.sourceFile.name}
-                        </div>
-                        {fileAnalysis.sourceVendorDetails && (
-                          <div className="text-xs text-green-600 mt-1">
-                            {fileAnalysis.sourceVendorDetails.detectedFormat} - {fileAnalysis.propertyCount} properties
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Code File Upload */}
-                  <div className="p-4 border border-gray-200 rounded-lg">
-                    <h4 className="font-medium text-gray-700 mb-3">Code Definitions File</h4>
-                    <input
-                      type="file"
-                      accept=".txt,.json"
-                      onChange={(e) => handleFileUpload(e, 'code')}
-                      className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-green-50 file:text-green-700 hover:file:bg-green-100"
-                    />
-                    {fileAnalysis.codeFile && (
-                      <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
-                        <div className="text-sm font-medium text-green-800">
-                          ✅ {fileAnalysis.codeFile.name}
-                        </div>
-                        {fileAnalysis.codeVendorDetails && (
-                          <div className="text-xs text-green-600 mt-1">
-                            {fileAnalysis.codeVendorDetails.detectedFormat} - {fileAnalysis.codeCount} codes
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Vendor Detection Results */}
-                {fileAnalysis.detectedVendor && (
-                  <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                    <h4 className="font-medium text-blue-800 mb-2">🔍 Vendor Detection Results</h4>
-                    <div className="text-sm text-blue-700">
-                      Detected: <span className="font-bold">{fileAnalysis.detectedVendor}</span>
-                      {fileAnalysis.sourceVendorDetails && (
-                        <span className="ml-2">
-                          ({fileAnalysis.sourceVendorDetails.confidence}% confidence)
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Manager Assignments */}
-              <div className="border-t pt-6">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4">👥 Manager Assignments *</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {managers.map(manager => {
-                    const assignedManager = newJob.assignedManagers.find(m => m.id === manager.id);
-                    return (
-                      <div
-                        key={manager.id}
-                        onClick={() => handleManagerToggle(manager.id)}
-                        className={`p-3 border rounded-lg cursor-pointer transition-all ${
-                          assignedManager
-                            ? assignedManager.role === 'Lead Manager'
-                              ? 'border-blue-500 bg-blue-50'
-                              : 'border-green-500 bg-green-50'
-                            : 'border-gray-300 hover:border-gray-400'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <div className="font-medium text-gray-900">
-                              {manager.first_name} {manager.last_name}
-                            </div>
-                            <div className="text-sm text-gray-600">{manager.role}</div>
-                          </div>
-                          {assignedManager && (
-                            <div className="text-xs font-medium text-blue-600">
-                              {assignedManager.role}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-                
-                {newJob.assignedManagers.length > 0 && (
-                  <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
-                    <div className="text-sm font-medium text-green-800 mb-1">Assigned Managers:</div>
-                    <div className="text-sm text-green-700">
-                      {newJob.assignedManagers.map(m => `${m.name} (${m.role})`).join(', ')}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-end space-x-3">
-              <button
-                onClick={closeJobModal}
-                className="px-6 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium shadow-md hover:shadow-lg transition-all"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={editingJob ? editJob : createJob}
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium shadow-md hover:shadow-lg transition-all"
-              >
-                {editingJob ? '💾 Update Job' : '🚀 Create Job'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Delete Confirmation Modal */}
-      {showDeleteConfirm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-md w-full shadow-2xl">
-            <div className="p-6">
-              <div className="flex items-center mb-4">
-                <AlertTriangle className="w-8 h-8 mr-3 text-red-600" />
-                <h3 className="text-lg font-semibold text-gray-900">Confirm Deletion</h3>
-              </div>
-              <p className="text-gray-600 mb-6">
-                Are you sure you want to delete "{showDeleteConfirm.name}"? This action cannot be undone.
-              </p>
-              <div className="flex justify-end space-x-3">
-                <button
-                  onClick={() => setShowDeleteConfirm(null)}
-                  className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => deleteJob(showDeleteConfirm)}
-                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
-                >
-                  Delete Job
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Archive Tab */}
-      {activeTab === 'archive' && (
-        <div className="space-y-6">
-          <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg border-2 border-purple-200 p-6">
-            <div className="flex items-center mb-6">
-              <Archive className="w-8 h-8 mr-3 text-purple-600" />
-              <div>
-                <h2 className="text-2xl font-bold text-gray-800">📁 Archived Jobs</h2>
-                <p className="text-gray-600 mt-1">
-                  Completed and archived appraisal jobs
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              {archivedJobs.length === 0 ? (
-                <div className="text-center text-gray-500 py-12">
-                  <div className="text-4xl mb-4">📁</div>
-                  <h4 className="text-lg font-medium mb-2">No Archived Jobs</h4>
-                  <p className="text-sm">Completed jobs will appear here.</p>
-                </div>
-              ) : (
-                archivedJobs.map(job => (
-                  <div key={job.id} className="p-4 bg-white rounded-lg border-l-4 border-purple-400 shadow-md opacity-75">
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <h4 className="text-lg font-bold text-gray-700">{job.name}</h4>
-                        <div className="flex items-center space-x-4 text-sm text-gray-500">
-                          <span>CCDD: {job.ccdd}</span>
-                          <span>•</span>
-                          <span>{job.municipality}</span>
-                          <span>•</span>
-                          <span>Archived: {job.archived_date ? new Date(job.archived_date).toLocaleDateString() : 'Unknown'}</span>
-                        </div>
-                      </div>
-                      <span className="px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                        Archived
-                      </span>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Manager Assignments Tab */}
-      {activeTab === 'managers' && (
-        <div className="space-y-6">
-          <div className="bg-gradient-to-r from-green-50 to-blue-50 rounded-lg border-2 border-green-200 p-6">
-            <div className="flex items-center mb-6">
-              <Users className="w-8 h-8 mr-3 text-green-600" />
-              <div>
-                <h2 className="text-2xl font-bold text-gray-800">👥 Manager Workload Overview</h2>
-                <p className="text-gray-600 mt-1">
-                  View manager assignments and workload distribution
-                </p>
-              </div>
-            </div>
-
-            <div className="grid gap-6">
-              {managers.map(manager => {
-                const workload = getManagerWorkload(manager);
-                return (
-                  <div key={manager.id} className="p-6 bg-white rounded-lg border shadow-md">
-                    <div className="flex justify-between items-start mb-4">
-                      <div>
-                        <h3 className="text-lg font-bold text-gray-900">
-                          {manager.first_name} {manager.last_name}
-                        </h3>
-                        <p className="text-sm text-gray-600">{manager.role}</p>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-2xl font-bold text-blue-600">{workload.jobCount}</div>
-                        <div className="text-sm text-gray-600">Active Jobs</div>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                      <div className="text-center p-3 bg-blue-50 rounded-lg">
-                        <div className="text-lg font-bold text-blue-600">{workload.totalProperties.toLocaleString()}</div>
-                        <div className="text-xs text-gray-600">Total Properties</div>
-                      </div>
-                      <div className="text-center p-3 bg-green-50 rounded-lg">
-                        <div className="text-lg font-bold text-green-600">{workload.completedProperties.toLocaleString()}</div>
-                        <div className="text-xs text-gray-600">Completed</div>
-                      </div>
-                      <div className="text-center p-3 bg-purple-50 rounded-lg">
-                        <div className="text-lg font-bold text-purple-600">{workload.completionRate}%</div>
-                        <div className="text-xs text-gray-600">Completion Rate</div>
-                      </div>
-                    </div>
-
-                    {workload.jobs.length > 0 && (
-                      <div>
-                        <h4 className="font-medium text-gray-700 mb-2">Assigned Jobs:</h4>
-                        <div className="space-y-2">
-                          {workload.jobs.map(job => (
-                            <div key={job.id} className="flex justify-between items-center p-2 bg-gray-50 rounded">
-                              <span className="text-sm font-medium">{job.name}</span>
-                              <span className="text-xs text-gray-600">
-                                {job.inspectedProperties || 0} / {job.totalProperties || 0} properties
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
-export default AdminJobManagement;
