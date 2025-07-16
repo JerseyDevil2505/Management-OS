@@ -457,20 +457,6 @@ const processMicrosystemsData = async (fileText, jobData) => {
       view_code: null, // BRT only
       neighborhood: rawRecord.Neighborhood,
 
-      // Update fireplace calculation
-      calculateFireplaceCount(rawRecord) {
-        const fireplaceFields = [
-          'Fireplace 1 Story Stack Fp',
-          '1 And Half Sty Fp', 
-          '2 Sty Fp',
-          'Same Stack Fp',
-          'Freestanding Fp',
-          'Heatilator',
-        ];
-      return fireplaceFields.reduce((total, field) => {
-        return total + parseInt(rawRecord[field] || 0);
-        }, 0);
-      }
       // Metadata
       raw_data: rawRecord,
       processed_at: new Date().toISOString(),
