@@ -72,7 +72,9 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
 
       const decisionsMap = {};
       data.forEach(decision => {
-        const key = `${decision.block}-${decision.lot}_${decision.qualifier || 'NONE'}-${decision.card || 'NONE'}-${decision.property_location || 'NONE'}`;
+        // Use existing composite key if available, otherwise generate from individual fields
+        const key = decision.property_composite_key || 
+          `${new Date(job.created_at).getFullYear()}${job.ccdd || '0000'}-${decision.block}-${decision.lot}_${decision.qualifier || 'NONE'}-${decision.card || 'NONE'}-${decision.property_location || 'NONE'}`;
         decisionsMap[key] = decision;
       });
 
@@ -227,14 +229,20 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     const oldMap = new Map();
     const newMap = new Map();
 
+    // Get job year and CCDD for composite key generation
+    const jobYear = new Date(job.created_at).getFullYear();
+    const jobCCDD = job.ccdd || '0000'; // TODO: Get from job settings
+
     // Create maps with robust composite property keys
     oldData.forEach(row => {
-      const key = `${row.block}-${row.lot}_${row.qualifier || 'NONE'}-${row.card || 'NONE'}-${row.property_location || 'NONE'}`;
+      // Use existing composite key if available, otherwise generate it
+      const key = row.property_composite_key || 
+        `${jobYear}${jobCCDD}-${row.block}-${row.lot}_${row.qualifier || 'NONE'}-${row.card || 'NONE'}-${row.property_location || 'NONE'}`;
       oldMap.set(key, row);
     });
 
     newData.forEach(row => {
-      const key = `${row.BLOCK}-${row.LOT}_${row.QUALIFIER || 'NONE'}-${row.CARD || 'NONE'}-${row.PROPERTY_LOCATION || 'NONE'}`;
+      const key = `${jobYear}${jobCCDD}-${row.BLOCK}-${row.LOT}_${row.QUALIFIER || 'NONE'}-${row.CARD || 'NONE'}-${row.PROPERTY_LOCATION || 'NONE'}`;
       newMap.set(key, row);
     });
 
@@ -494,6 +502,9 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       const nextVersion = (existingVersions?.[0]?.file_version || 0) + 1;
 
       // Prepare data for import
+      const jobYear = new Date().getFullYear(); // Current year when job created
+      const jobCCDD = job.ccdd || '0000'; // TODO: Get from job settings
+
       const importData = data.map(row => ({
         job_id: jobId,
         file_version: nextVersion,
@@ -501,13 +512,13 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         source_file_name: fileName,
         source_file_uploaded_at: new Date().toISOString(),
         
-        // Property identification with composite key
+        // Property identification with YEARCCDD composite key
         block: row.BLOCK,
         lot: row.LOT,
         qualifier: row.QUALIFIER || null,
         card: row.CARD || null,
         property_location: row.PROPERTY_LOCATION || null,
-        property_composite_key: `${row.BLOCK}-${row.LOT}_${row.QUALIFIER || 'NONE'}-${row.CARD || 'NONE'}-${row.PROPERTY_LOCATION || 'NONE'}`,
+        property_composite_key: `${jobYear}${jobCCDD}-${row.BLOCK}-${row.LOT}_${row.QUALIFIER || 'NONE'}-${row.CARD || 'NONE'}-${row.PROPERTY_LOCATION || 'NONE'}`,
         
         // Inspector data
         measure_by: row.MEASUREBY || null,
