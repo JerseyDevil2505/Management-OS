@@ -439,6 +439,7 @@ const processMicrosystemsData = async (fileText, jobData) => {
       processed_at: new Date().toISOString(),
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
+      created_by: jobData.created_by || '5df85ca3-7a54-4798-a665-c31da8d9caad',
       validation_status: 'processed'
     };
     
@@ -522,6 +523,7 @@ const processBRTData = async (fileText, jobData) => {
       processed_at: new Date().toISOString(),
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
+      created_by: jobData.created_by || '5df85ca3-7a54-4798-a665-c31da8d9caad',
       validation_status: 'processed'
     };
     
@@ -692,8 +694,9 @@ const createJob = async () => {
         id: createdJob.id,
         ccdd: newJob.ccddCode,
         name: newJob.name,
-        sourceFileName: newJob.sourceFile.name,
+        sourceFileName: newJob.sourceFile.name,  
         codeFileName: newJob.codeFile.name
+        created_by: currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad'
       };
       
       try {
