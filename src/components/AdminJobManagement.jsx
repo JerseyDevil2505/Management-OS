@@ -646,7 +646,7 @@ const createJob = async () => {
     // Step 1: Create the job record first
     const jobData = {
       name: newJob.name,
-      ccdd: newJob.ccdd,
+      ccdd: newJob.ccddCode,
       municipality: newJob.municipality,
       county: newJob.county,
       state: newJob.state,
@@ -690,7 +690,7 @@ const createJob = async () => {
       
       const processingJobData = {
         id: createdJob.id,
-        ccdd: newJob.ccdd,
+        ccdd: newJob.ccddCode,
         name: newJob.name,
         sourceFileName: newJob.sourceFile.name,
         codeFileName: newJob.codeFile.name
