@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+    import React, { useState, useEffect } from 'react';
 import { Upload, Plus, Edit3, Users, FileText, Calendar, MapPin, Database, Settings, Eye, DollarSign, Trash2, CheckCircle, Archive, TrendingUp, Target, AlertTriangle } from 'lucide-react';
 import { employeeService, jobService, planningJobService, utilityService, authService, supabase } from '../lib/supabaseClient';
 
@@ -440,16 +440,37 @@ const processMicrosystemsData = async (fileText, jobData) => {
       sales_page: rawRecord.SalesPage || rawRecord.salesPage || '',
       sales_nu: rawRecord.SalesNu || rawRecord.salesNu || '',
       
-    // Asset information
-    asset_year_built: parseInt(rawRecord.YearBuilt || rawRecord.yearBuilt || 0),
-    asset_livable_area: parseFloat(rawRecord.LivableArea || rawRecord.livableArea || 0),
-    asset_story_height: parseFloat(rawRecord.StoryHeight || rawRecord.storyHeight || 0),
-    asset_building_class: rawRecord['Bldg Qual Class Code'] || '',     // Use bracket notation for spaces
-    asset_total_beds: parseInt(rawRecord['Total Bedrms'] || 0),        // Use bracket notation
-    asset_v_c_s: rawRecord.VCS || '',                                  // VCS field
-    asset_design_style: rawRecord['Style Code'] || '',                 // String, not parseFloat
+      // Asset information
+      asset_year_built: parseInt(rawRecord.YearBuilt || rawRecord.yearBuilt || 0),
+      asset_livable_area: parseFloat(rawRecord.LivableArea || rawRecord.livableArea || 0),
+      asset_story_height: parseFloat(rawRecord.StoryHeight || rawRecord.storyHeight || 0),
+      asset_building_class: rawRecord['Bldg Qual Class Code'] || '',     // Use bracket notation for spaces
+      asset_total_beds: parseInt(rawRecord['Total Bedrms'] || 0),        // Use bracket notation
+      asset_v_c_s: rawRecord.VCS || '',                                  // VCS field
+      asset_design_style: rawRecord['Style Code'] || '',                 // String, not parseFloat
+
+      // Add to normalizeRecord function
+      exempt_facility: rawRecord['Facility Name'],
+      property_class_mod4: rawRecord.Class,
+      property_class_cama: null, // Microsystems doesn't have this
+      info_by: rawRecord['Info By'],
+      view_code: null, // BRT only
+      neighborhood: rawRecord.Neighborhood,
+
+      // Update fireplace calculation
+      calculateFireplaceCount(rawRecord) {
+        const fireplaceFields = [
+          'Fireplace 1 Story Stack Fp',
+          '1 And Half Sty Fp', 
+          '2 Sty Fp',
+          'Same Stack Fp',
+          'Freestanding Fp',
+          'Heatilator'
+        ];
+      return fireplaceFields.reduce((total, field) => {
+        return total + parseInt(rawRecord[field] || 0);
+        }, 0);
       
-    
       // Metadata
       raw_data: rawRecord,
       processed_at: new Date().toISOString(),
@@ -542,7 +563,21 @@ const processBRTData = async (fileText, jobData) => {
       asset_building_class: rawRecord.BUILDING_CLASS || '',     // Actual building class field
       asset_design_style: rawRecord.DESIGN || '',              // Design/style code
       asset_v_c_s: rawRecord.VCS || '',                        // VCS/Neighborhood code
-      
+
+      // Add to normalizeRecord function
+      exempt_facility: rawRecord.EXEMPT_FACILITYNAME,
+      property_class_mod4: rawRecord.PROPERTY_CLASS,
+      property_class_cama: rawRecord.PROPCLASS,
+      info_by: rawRecord.INFOBY,
+      view_code: rawRecord.VIEW,
+      neighborhood: rawRecord.NBHD,
+
+      // Update fireplace calculation
+      calculateFireplaceCount(rawRecord) {
+        const count1 = parseInt(rawRecord.FIREPLACECNT_1 || 0);
+        const count2 = parseInt(rawRecord.FIREPLACECNT_2 || 0);
+        return count1 + count2;
+              
       // Metadata
       raw_data: rawRecord,
       processed_at: new Date().toISOString(),
