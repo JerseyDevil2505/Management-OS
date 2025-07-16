@@ -501,12 +501,13 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         source_file_name: fileName,
         source_file_uploaded_at: new Date().toISOString(),
         
-        // Property identification
+        // Property identification with composite key
         block: row.BLOCK,
         lot: row.LOT,
         qualifier: row.QUALIFIER || null,
         card: row.CARD || null,
         property_location: row.PROPERTY_LOCATION || null,
+        property_composite_key: `${row.BLOCK}-${row.LOT}_${row.QUALIFIER || 'NONE'}-${row.CARD || 'NONE'}-${row.PROPERTY_LOCATION || 'NONE'}`,
         
         // Inspector data
         measure_by: row.MEASUREBY || null,
