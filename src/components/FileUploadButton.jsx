@@ -72,7 +72,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
 
       const decisionsMap = {};
       data.forEach(decision => {
-        const key = `${decision.block}|${decision.lot}|${decision.qualifier || ''}`;
+        const key = `${decision.block}-${decision.lot}_${decision.qualifier || 'NONE'}-${decision.card || 'NONE'}-${decision.property_location || 'NONE'}`;
         decisionsMap[key] = decision;
       });
 
@@ -193,13 +193,13 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
   // Generate comparison report
   const generateComparisonReport = async (newData, jobId) => {
     try {
-      // Get previous data from database
+      // Get previous data from database - REMOVED LIMIT
       const { data: previousData, error } = await supabase
         .from('inspection_data')
         .select('*')
         .eq('job_id', jobId)
-        .order('upload_date', { ascending: false })
-        .limit(5000); // Get reasonable amount of recent data
+        .order('upload_date', { ascending: false });
+        // Removed limit to get ALL data for comparison
 
       if (error) throw error;
 
@@ -227,14 +227,14 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     const oldMap = new Map();
     const newMap = new Map();
 
-    // Create maps with unique property keys
+    // Create maps with robust composite property keys
     oldData.forEach(row => {
-      const key = `${row.block}|${row.lot}|${row.qualifier || ''}`;
+      const key = `${row.block}-${row.lot}_${row.qualifier || 'NONE'}-${row.card || 'NONE'}-${row.property_location || 'NONE'}`;
       oldMap.set(key, row);
     });
 
     newData.forEach(row => {
-      const key = `${row.BLOCK}|${row.LOT}|${row.QUALIFIER || ''}`;
+      const key = `${row.BLOCK}-${row.LOT}_${row.QUALIFIER || 'NONE'}-${row.CARD || 'NONE'}-${row.PROPERTY_LOCATION || 'NONE'}`;
       newMap.set(key, row);
     });
 
@@ -246,11 +246,15 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     // Find removed properties
     oldMap.forEach((oldRow, key) => {
       if (!newMap.has(key)) {
+        const keyParts = key.split('-');
+        const blockLot = keyParts[0].split('-');
+        const qualifierCard = keyParts[1] ? keyParts[1].split('_')[0] : 'NONE';
+        
         removedProperties.push({
           key,
-          block: oldRow.block,
-          lot: oldRow.lot,
-          qualifier: oldRow.qualifier,
+          block: blockLot[0],
+          lot: blockLot[1],
+          qualifier: qualifierCard === 'NONE' ? null : qualifierCard,
           property_location: oldRow.property_location
         });
       }
@@ -259,11 +263,15 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     // Find added properties and changes
     newMap.forEach((newRow, key) => {
       if (!oldMap.has(key)) {
+        const keyParts = key.split('-');
+        const blockLot = keyParts[0].split('-');
+        const qualifierCard = keyParts[1] ? keyParts[1].split('_')[0] : 'NONE';
+        
         addedProperties.push({
           key,
           block: newRow.BLOCK,
           lot: newRow.LOT,
-          qualifier: newRow.QUALIFIER,
+          qualifier: qualifierCard === 'NONE' ? null : newRow.QUALIFIER,
           property_location: newRow.PROPERTY_LOCATION
         });
       } else {
@@ -762,7 +770,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                                   : 'bg-red-100 text-red-600 hover:bg-red-200'
                               }`}
                             >
-                              Keep OLD Sale
+                              Prioritize Old Sale
                             </button>
                             <button
                               onClick={() => handleSalesDecision(change.key, 'use_new', change)}
@@ -772,7 +780,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                                   : 'bg-green-100 text-green-600 hover:bg-green-200'
                               }`}
                             >
-                              Use NEW Sale
+                              Keep New Sale
                             </button>
                             <button
                               onClick={() => handleSalesDecision(change.key, 'keep_both', change)}
