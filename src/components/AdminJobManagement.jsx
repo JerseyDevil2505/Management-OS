@@ -406,13 +406,53 @@ const AdminJobManagement = ({ onJobSelect }) => {
     }
   };
 
+  // NEW: File processing function that calls your data pipeline
+  const processJobFiles = async (jobId, sourceFile, codeFile, vendor, ccdd, jobYear) => {
+    try {
+      console.log('Processing files for job:', jobId);
+      console.log('Vendor:', vendor, 'CCDD:', ccdd, 'Year:', jobYear);
+      
+      // Create FormData for file upload
+      const formData = new FormData();
+      formData.append('jobId', jobId);
+      formData.append('sourceFile', sourceFile);
+      formData.append('codeFile', codeFile);
+      formData.append('vendor', vendor);
+      formData.append('ccdd', ccdd);
+      formData.append('jobYear', jobYear);
+      
+      // Call your backend data pipeline endpoint
+      const response = await fetch('/api/process-job-files', {
+        method: 'POST',
+        body: formData
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`File processing failed: ${response.status} - ${errorText}`);
+      }
+      
+      const result = await response.json();
+      console.log('File processing result:', result);
+      
+      return result;
+      
+    } catch (error) {
+      console.error('File processing error:', error);
+      throw new Error('file processing failed: ' + error.message);
+    }
+  };
+
   const createJob = async () => {
-    if (!newJob.ccdd || !newJob.name || !newJob.municipality || !newJob.dueDate || newJob.assignedManagers.length === 0) {
-      window.alert('Please fill all required fields and assign at least one manager');
+    if (!newJob.ccdd || !newJob.name || !newJob.municipality || 
+        !newJob.dueDate || newJob.assignedManagers.length === 0 ||
+        !newJob.sourceFile || !newJob.codeFile) {
+      window.alert('Please fill all required fields, upload both files, and assign at least one manager');
       return;
     }
 
     try {
+      // Step 1: Create the job record
       const jobData = {
         name: newJob.name,
         ccdd: newJob.ccdd,
@@ -425,8 +465,8 @@ const AdminJobManagement = ({ onJobSelect }) => {
         totalProperties: fileAnalysis.propertyCount,
         inspectedProperties: 0,
         status: 'active',
-        sourceFileStatus: newJob.sourceFile ? 'imported' : 'pending',
-        codeFileStatus: newJob.codeFile ? 'current' : 'pending',
+        sourceFileStatus: 'processing', // Will update after processing
+        codeFileStatus: 'processing',   // Will update after processing
         vendorDetection: newJob.vendorDetection,
         workflowStats: {
           inspectionPhases: {
@@ -449,9 +489,30 @@ const AdminJobManagement = ({ onJobSelect }) => {
         created_by: currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad'
       };
 
-      await jobService.create(jobData);
+      console.log('Creating job with data:', jobData);
+      const createdJob = await jobService.create(jobData);
+      console.log('Job created successfully:', createdJob);
       
-      // Refresh jobs list
+      // Step 2: Process the uploaded files and populate property_records
+      console.log('Starting file processing pipeline...');
+      await processJobFiles(
+        createdJob.id, 
+        newJob.sourceFile, 
+        newJob.codeFile, 
+        newJob.vendor,
+        newJob.ccdd,
+        new Date(newJob.dueDate).getFullYear()
+      );
+      
+      console.log('File processing completed successfully');
+      
+      // Step 3: Update job status to show files are processed
+      await jobService.update(createdJob.id, {
+        sourceFileStatus: 'imported',
+        codeFileStatus: 'current'
+      });
+      
+      // Step 4: Refresh jobs list
       const updatedJobs = await jobService.getAll();
       console.log('Updated jobs after creation:', updatedJobs);
       
@@ -463,9 +524,23 @@ const AdminJobManagement = ({ onJobSelect }) => {
       setArchivedJobs(archived);
       
       closeJobModal();
-      window.alert('Job created successfully!');
+      window.alert('Job created and files processed successfully!');
+      
     } catch (error) {
       console.error('Job creation error:', error);
+      
+      // If job was created but file processing failed, update status
+      if (error.message.includes('file processing')) {
+        try {
+          await jobService.update(createdJob?.id, {
+            sourceFileStatus: 'error',
+            codeFileStatus: 'error'
+          });
+        } catch (updateError) {
+          console.error('Failed to update job status after error:', updateError);
+        }
+      }
+      
       window.alert('Error creating job: ' + error.message);
     }
   };
@@ -1210,111 +1285,6 @@ const AdminJobManagement = ({ onJobSelect }) => {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
                     placeholder="e.g., 1306"
                     maxLength="4"
-                    disabled={false}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Municipality *
-                  </label>
-                  <input
-                    type="text"
-                    value={newPlanningJob.municipality}
-                    onChange={(e) => setNewPlanningJob({...newPlanningJob, municipality: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
-                    placeholder="e.g., Middletown Township"
-                  />
-                </div>
-
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Target Date *
-                  </label>
-                  <input
-                    type="date"
-                    value={newPlanningJob.dueDate}
-                    onChange={(e) => setNewPlanningJob({...newPlanningJob, dueDate: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
-                  />
-                </div>
-
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Comments
-                  </label>
-                  <textarea
-                    value={newPlanningJob.comments}
-                    onChange={(e) => setNewPlanningJob({...newPlanningJob, comments: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
-                    placeholder="e.g., Spoke to client, will extend to 2028..."
-                    rows={3}
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-end space-x-3">
-              <button
-                onClick={closePlanningModal}
-                className="px-6 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium shadow-md hover:shadow-lg transition-all"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={editingPlanning ? editPlanningJob : createPlanningJob}
-                className="px-6 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 font-medium shadow-md hover:shadow-lg transition-all"
-              >
-                {editingPlanning ? '💾 Update Planning Job' : '📝 Add Planning Job'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Create/Edit Job Modal */}
-      {showCreateJob && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-4xl w-full max-h-screen overflow-y-auto shadow-2xl">
-            <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-green-50">
-              <div className="flex items-center">
-                <Plus className="w-8 h-8 mr-3 text-blue-600" />
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-900">
-                    {editingJob ? '✏️ Edit Job' : '🚀 Create New Job'}
-                  </h2>
-                  <p className="text-gray-600 mt-1">Set up appraisal job with source data and team assignments</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="p-6 space-y-6">
-              {/* Basic Job Information */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Job Name *
-                  </label>
-                  <input
-                    type="text"
-                    value={newJob.name}
-                    onChange={(e) => setNewJob({...newJob, name: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="e.g., Middletown Township 2025"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    CCDD Code *
-                  </label>
-                  <input
-                    type="text"
-                    value={newJob.ccdd}
-                    onChange={(e) => setNewJob({...newJob, ccdd: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="e.g., 1306"
-                    maxLength="4"
                   />
                 </div>
 
@@ -1379,7 +1349,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {/* Source File Upload */}
                   <div className="p-4 border border-gray-200 rounded-lg">
-                    <h4 className="font-medium text-gray-700 mb-3">Source Data File</h4>
+                    <h4 className="font-medium text-gray-700 mb-3">Source Data File *</h4>
                     <input
                       type="file"
                       accept=".csv,.txt,.xlsx"
@@ -1402,7 +1372,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
 
                   {/* Code File Upload */}
                   <div className="p-4 border border-gray-200 rounded-lg">
-                    <h4 className="font-medium text-gray-700 mb-3">Code Definitions File</h4>
+                    <h4 className="font-medium text-gray-700 mb-3">Code Definitions File *</h4>
                     <input
                       type="file"
                       accept=".txt,.json"
@@ -1656,4 +1626,109 @@ const AdminJobManagement = ({ onJobSelect }) => {
   );
 };
 
-export default AdminJobManagement;
+export default AdminJobManagement;"
+                    maxLength="4"
+                    disabled={false}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Municipality *
+                  </label>
+                  <input
+                    type="text"
+                    value={newPlanningJob.municipality}
+                    onChange={(e) => setNewPlanningJob({...newPlanningJob, municipality: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
+                    placeholder="e.g., Middletown Township"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Target Date *
+                  </label>
+                  <input
+                    type="date"
+                    value={newPlanningJob.dueDate}
+                    onChange={(e) => setNewPlanningJob({...newPlanningJob, dueDate: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Comments
+                  </label>
+                  <textarea
+                    value={newPlanningJob.comments}
+                    onChange={(e) => setNewPlanningJob({...newPlanningJob, comments: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
+                    placeholder="e.g., Spoke to client, will extend to 2028..."
+                    rows={3}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-end space-x-3">
+              <button
+                onClick={closePlanningModal}
+                className="px-6 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium shadow-md hover:shadow-lg transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={editingPlanning ? editPlanningJob : createPlanningJob}
+                className="px-6 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 font-medium shadow-md hover:shadow-lg transition-all"
+              >
+                {editingPlanning ? '💾 Update Planning Job' : '📝 Add Planning Job'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create/Edit Job Modal */}
+      {showCreateJob && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-4xl w-full max-h-screen overflow-y-auto shadow-2xl">
+            <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-green-50">
+              <div className="flex items-center">
+                <Plus className="w-8 h-8 mr-3 text-blue-600" />
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">
+                    {editingJob ? '✏️ Edit Job' : '🚀 Create New Job'}
+                  </h2>
+                  <p className="text-gray-600 mt-1">Set up appraisal job with source data and team assignments</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Basic Job Information */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Job Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={newJob.name}
+                    onChange={(e) => setNewJob({...newJob, name: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="e.g., Middletown Township 2025"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    CCDD Code *
+                  </label>
+                  <input
+                    type="text"
+                    value={newJob.ccdd}
+                    onChange={(e) => setNewJob({...newJob, ccdd: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="e.g., 1306
