@@ -417,10 +417,21 @@ const processMicrosystemsData = async (fileText, jobData) => {
       property_additional_lots: rawRecord.PropertyAdditionalLots || rawRecord.propertyAdditionalLots || '',
       property_addl_card: rawRecord.Building || rawRecord.building || '',
       
-      // Values
-      values_land: parseFloat(rawRecord.ValuesLand || rawRecord.valuesLand || 0),
-      values_improvement: parseFloat(rawRecord.ValuesImprovement || rawRecord.valuesImprovement || 0),
-      values_total: parseFloat(rawRecord.ValuesTotal || rawRecord.valuesTotal || 0),
+      // ===== VALUES SECTION =====
+      // MOD4 values (first occurrence - columns K, P, Q)
+      values_mod4_land: parseFloat(values[10] || 0),        // Column K - "Land Value"
+      values_mod4_total: parseFloat(values[15] || 0),       // Column P - "Totl Value"  
+      values_mod4_improvement: parseFloat(values[16] || 0), // Column Q - "Impr Value"
+
+      // CAMA values (second occurrence - columns BZ, CA, CB)  
+      values_cama_land: parseFloat(values[77] || 0),        // Column BZ - "Land Value"
+      values_cama_improvement: parseFloat(values[78] || 0), // Column CA - "Impr Value"
+      values_cama_total: parseFloat(values[79] || 0),       // Column CB - "Totl Value"
+
+      // Cost values
+      values_base_cost: parseFloat(values[297] || 0),       // Column Ū - "Base Cost"
+      values_det_items: parseFloat(values[298] || 0),       // Column ū - "Det Items"
+      values_cost_new: parseFloat(values[331] || 0),       // Column ƌ - "Cost New"
       
       // Sales data
       sales_date: rawRecord.SalesDate || rawRecord.salesDate || null,
@@ -433,6 +444,10 @@ const processMicrosystemsData = async (fileText, jobData) => {
       asset_year_built: parseInt(rawRecord.YearBuilt || rawRecord.yearBuilt || 0),
       asset_livable_area: parseFloat(rawRecord.LivableArea || rawRecord.livableArea || 0),
       asset_story_height: parseFloat(rawRecord.StoryHeight || rawRecord.storyHeight || 0),
+      asset_building_class: values[117] || '',              // Column ¶ - "Bldg Qual Class Code"
+      asset_total_beds: parseInt(values[213] || 0),         // Column Ė - "Total Bedrms"
+      asset_v_c_s: values[401] || '',                       // Column ǒ - "VCS"
+      asset_designStyle: parseFloat(rawRecord.Style Code || rawRecord.Style Code || 0)
       
       // Metadata
       raw_data: rawRecord,
@@ -502,9 +517,15 @@ const processBRTData = async (fileText, jobData) => {
       property_addl_card: rawRecord.Card || '',
       
       // Values
-      values_land: parseFloat(rawRecord.VALUES_LANDTAXABLEVALUE || 0),
-      values_improvement: parseFloat(rawRecord.VALUES_IMPROVTAXABLEVALUE || 0),
-      values_total: parseFloat(rawRecord.VALUES_NETTAXABLEVALUE || 0),
+      values_mod4_land: parseFloat(rawRecord.VALUES_LANDTAXABLEVALUE || 0),
+      values_mod4_improvement: parseFloat(rawRecord.VALUES_IMPROVTAXABLEVALUE || 0),
+      values_mod4_total: parseFloat(rawRecord.VALUES_NETTAXABLEVALUE || 0),
+      values_cama_land: parseFloat(rawRecord.TOTALLANDVALUE || 0),
+      values_cama_improvement: parseFloat(rawRecord.TOTALIMPROVVALUE || 0),
+      values_cama_total: parseFloat(rawRecord.TOTNETVALUE || 0),  // ← Fixed extra comma
+      values_base_cost: parseFloat(rawRecord.BASEREPLCOST || 0),
+      values_det_items: parseFloat(rawRecord.DETACHEDITEMS || 0),  // ← Fixed field name
+      values_cost_new: parseFloat(rawRecord.REPLCOSTNEW || 0)
       
       // Sales data
       sales_date: rawRecord.CURRENTSALE_DATE || null,
@@ -517,6 +538,9 @@ const processBRTData = async (fileText, jobData) => {
       asset_year_built: parseInt(rawRecord.YEARBUILT || 0),
       asset_livable_area: parseFloat(rawRecord.SFLA_TOTAL || 0),
       asset_story_height: parseFloat(rawRecord.STORYHGT || 0),
+      asset_building_class: rawRecord.BUILDING_CLASS || '',     // Actual building class field
+      asset_design_style: rawRecord.DESIGN || '',              // Design/style code
+      asset_v_c_s: rawRecord.VCS || '',                        // VCS/Neighborhood code
       
       // Metadata
       raw_data: rawRecord,
