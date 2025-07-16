@@ -239,7 +239,7 @@ export const jobService = {
       const dbFields = {
         job_name: componentFields.name,
         client_name: componentFields.municipality,
-        ccdd_code: componentFields.ccddCode,
+        ccdd_code: componentFields.ccdd,
         municipality: componentFields.municipality,
         county: componentFields.county,
         state: componentFields.state || 'NJ',
@@ -291,6 +291,47 @@ export const jobService = {
     }
   },
 
+  async update(id, updates) {
+    try {
+      // Map component field names to database field names
+      const { assignedManagers, ...componentFields } = updates;
+      
+      const dbFields = {};
+      
+      // Only include fields that are being updated
+      if (componentFields.name) dbFields.job_name = componentFields.name;
+      if (componentFields.municipality) dbFields.municipality = componentFields.municipality;
+      if (componentFields.ccdd) dbFields.ccdd_code = componentFields.ccdd;
+      if (componentFields.county) dbFields.county = componentFields.county;
+      if (componentFields.state) dbFields.state = componentFields.state;
+      if (componentFields.vendor) dbFields.vendor_type = componentFields.vendor;
+      if (componentFields.status) dbFields.status = componentFields.status;
+      if (componentFields.dueDate) {
+        dbFields.end_date = componentFields.dueDate;
+        dbFields.target_completion_date = componentFields.dueDate;
+      }
+      if (componentFields.totalProperties !== undefined) dbFields.total_properties = componentFields.totalProperties;
+      if (componentFields.inspectedProperties !== undefined) dbFields.inspected_properties = componentFields.inspectedProperties;
+      if (componentFields.sourceFileStatus) dbFields.source_file_status = componentFields.sourceFileStatus;
+      if (componentFields.codeFileStatus) dbFields.code_file_status = componentFields.codeFileStatus;
+      if (componentFields.vendorDetection) dbFields.vendor_detection = componentFields.vendorDetection;
+      if (componentFields.workflowStats) dbFields.workflow_stats = componentFields.workflowStats;
+
+      const { data, error } = await supabase
+        .from('jobs')
+        .update(dbFields)
+        .eq('id', id)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Job update error:', error);
+      throw error;
+    }
+  },
+
   async delete(id) {
     try {
       const { error } = await supabase
@@ -318,9 +359,10 @@ export const planningJobService = {
       
       return data.map(pj => ({
         id: pj.id,
-        ccddCode: pj.ccdd_code,
+        ccdd: pj.ccdd_code,
         municipality: pj.municipality,
-        potentialYear: pj.potential_year
+        potentialYear: pj.potential_year,
+        comments: pj.comments
       }));
     } catch (error) {
       console.error('Planning jobs error:', error);
@@ -331,9 +373,10 @@ export const planningJobService = {
   async create(planningJobData) {
     try {
       const dbFields = {
-        ccdd_code: planningJobData.ccddCode,
+        ccdd_code: planningJobData.ccdd,
         municipality: planningJobData.municipality,
         potential_year: planningJobData.potentialYear,
+        comments: planningJobData.comments,
         created_by: planningJobData.created_by
       };
       
@@ -354,9 +397,10 @@ export const planningJobService = {
   async update(id, updates) {
     try {
       const dbFields = {
-        ccdd_code: updates.ccddCode,
+        ccdd_code: updates.ccdd,
         municipality: updates.municipality,
-        potential_year: updates.potentialYear
+        potential_year: updates.potentialYear,
+        comments: updates.comments
       };
 
       const { data, error } = await supabase
