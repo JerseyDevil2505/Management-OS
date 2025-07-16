@@ -60,6 +60,115 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     }
   };
 
+  const importPropertyRecords = async (jobId, data, fileName) => {
+    try {
+      // Get job details for CCDD and year
+      const { data: jobData, error: jobError } = await supabase
+        .from('jobs') // Assuming this is the jobs table name
+        .select('ccdd, created_at')
+        .eq('id', jobId)
+        .single();
+
+      if (jobError) throw jobError;
+
+      const jobYear = new Date(jobData.created_at).getFullYear();
+      const jobCCDD = jobData.ccdd || '0000';
+
+      // TODO: Determine vendor type and process through appropriate processor
+      // For now, assume BRT format - this should be dynamic based on file structure
+      const vendorType = 'BRT'; // TODO: Auto-detect or get from job settings
+
+      // Process each record through the appropriate processor
+      const processedRecords = [];
+      
+      for (const rawRow of data) {
+        let normalizedRecord;
+        
+        if (vendorType === 'BRT') {
+          // TODO: Import and use actual BRT processor
+          // const processor = new BRTProcessor();
+          // normalizedRecord = processor.normalizeRecord(rawRow, vcsData, propertyRegion, jobYear, jobCCDD);
+          
+          // Simplified processing for now
+          normalizedRecord = {
+            job_id: jobId,
+            vendor_source: 'BRT',
+            processed_at: new Date().toISOString(),
+            
+            // Core identifiers
+            block: rawRow.BLOCK,
+            lot: rawRow.LOT,
+            qualifier: rawRow.QUALIFIER || null,
+            card: rawRow.CARD || null,
+            property_location: rawRow.PROPERTY_LOCATION || null,
+            property_composite_key: `${jobYear}${jobCCDD}-${rawRow.BLOCK}-${rawRow.LOT}_${rawRow.QUALIFIER || 'NONE'}-${rawRow.CARD || 'NONE'}-${rawRow.PROPERTY_LOCATION || 'NONE'}`,
+            
+            // Property fields
+            property_class: rawRow.PROPERTY_CLASS || null,
+            
+            // Owner fields
+            owner_name: rawRow.OWNER_OWNER || null,
+            owner_street: rawRow.OWNER_ADDRESS || null,
+            owner_csz: rawRow.OWNER_CITYSTATE && rawRow.OWNER_ZIP ? `${rawRow.OWNER_CITYSTATE} ${rawRow.OWNER_ZIP}` : null,
+            
+            // Values fields
+            values_land: parseFloat(rawRow.VALUES_LANDTAXABLEVALUE) || null,
+            values_improvement: parseFloat(rawRow.VALUES_IMPROVTAXABLEVALUE) || null,
+            values_total: parseFloat(rawRow.VALUES_NETTAXABLEVALUE) || null,
+            
+            // Sales fields
+            sales_date: rawRow.CURRENTSALE_DATE ? new Date(rawRow.CURRENTSALE_DATE).toISOString().split('T')[0] : null,
+            sales_price: parseFloat(rawRow.CURRENTSALE_PRICE) || null,
+            sales_book: rawRow.CURRENTSALE_DEEDBOOK || null,
+            sales_page: rawRow.CURRENTSALE_DEEDPAGE || null,
+            sales_nu: rawRow.CURRENTSALE_NUC || null,
+            
+            // Basic asset fields (TODO: Add full normalization)
+            asset_year_built: parseInt(rawRow.YEARBUILT) || null,
+            asset_story_height: parseFloat(rawRow.STORYHGT) || null,
+            asset_livable_area: parseFloat(rawRow.SFLA_TOTAL) || null,
+            
+            // Store complete raw data for validation and future processing
+            raw_data: rawRow
+          };
+        } else if (vendorType === 'Microsystems') {
+          // TODO: Similar processing for Microsystems
+          // const processor = new MicrosystemsProcessor();
+          // normalizedRecord = processor.normalizeRecord(rawRow, jobYear, jobCCDD);
+        }
+        
+        if (normalizedRecord) {
+          processedRecords.push(normalizedRecord);
+        }
+      }
+
+      // Insert processed records in batches
+      const batchSize = 1000;
+      let imported = 0;
+
+      for (let i = 0; i < processedRecords.length; i += batchSize) {
+        const batch = processedRecords.slice(i, i + batchSize);
+        
+        const { error } = await supabase
+          .from('property_records')
+          .upsert(batch, { 
+            onConflict: 'property_composite_key',
+            ignoreDuplicates: false 
+          });
+
+        if (error) throw error;
+        imported += batch.length;
+      }
+
+      console.log(`Imported ${imported} property records to property_records table`);
+      return { imported, total: processedRecords.length };
+
+    } catch (error) {
+      console.error('Property records import error:', error);
+      throw error;
+    }
+  };
+
   // Load previous sales decisions
   const loadPreviousSalesDecisions = async () => {
     try {
@@ -157,6 +266,9 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
 
         // Import inspection data to database
         const result = await importInspectionData(job.id, data, file.name);
+        
+        // ALSO import to property_records with normalized data
+        await importPropertyRecords(job.id, data, file.name);
         
         // Update file timestamp
         await updateFileTimestamp(job.id, 'source_file_uploaded_at');
@@ -588,8 +700,114 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     }
   };
 
-  // FIXED: Actually process and store code file information
-  const updateCodeFile = async (jobId, fileName) => {
+  const importPropertyRecords = async (jobId, data, fileName) => {
+    try {
+      // Get job details for CCDD and year
+      const { data: jobData, error: jobError } = await supabase
+        .from('jobs') // Assuming this is the jobs table name
+        .select('ccdd, created_at')
+        .eq('id', jobId)
+        .single();
+
+      if (jobError) throw jobError;
+
+      const jobYear = new Date(jobData.created_at).getFullYear();
+      const jobCCDD = jobData.ccdd || '0000';
+
+      // TODO: Determine vendor type and process through appropriate processor
+      // For now, assume BRT format - this should be dynamic based on file structure
+      const vendorType = 'BRT'; // TODO: Auto-detect or get from job settings
+
+      // Process each record through the appropriate processor
+      const processedRecords = [];
+      
+      for (const rawRow of data) {
+        let normalizedRecord;
+        
+        if (vendorType === 'BRT') {
+          // TODO: Import and use actual BRT processor
+          // const processor = new BRTProcessor();
+          // normalizedRecord = processor.normalizeRecord(rawRow, vcsData, propertyRegion, jobYear, jobCCDD);
+          
+          // Simplified processing for now
+          normalizedRecord = {
+            job_id: jobId,
+            vendor_source: 'BRT',
+            processed_at: new Date().toISOString(),
+            
+            // Core identifiers
+            block: rawRow.BLOCK,
+            lot: rawRow.LOT,
+            qualifier: rawRow.QUALIFIER || null,
+            card: rawRow.CARD || null,
+            property_location: rawRow.PROPERTY_LOCATION || null,
+            property_composite_key: `${jobYear}${jobCCDD}-${rawRow.BLOCK}-${rawRow.LOT}_${rawRow.QUALIFIER || 'NONE'}-${rawRow.CARD || 'NONE'}-${rawRow.PROPERTY_LOCATION || 'NONE'}`,
+            
+            // Property fields
+            property_class: rawRow.PROPERTY_CLASS || null,
+            
+            // Owner fields
+            owner_name: rawRow.OWNER_OWNER || null,
+            owner_street: rawRow.OWNER_ADDRESS || null,
+            owner_csz: rawRow.OWNER_CITYSTATE && rawRow.OWNER_ZIP ? `${rawRow.OWNER_CITYSTATE} ${rawRow.OWNER_ZIP}` : null,
+            
+            // Values fields
+            values_land: parseFloat(rawRow.VALUES_LANDTAXABLEVALUE) || null,
+            values_improvement: parseFloat(rawRow.VALUES_IMPROVTAXABLEVALUE) || null,
+            values_total: parseFloat(rawRow.VALUES_NETTAXABLEVALUE) || null,
+            
+            // Sales fields
+            sales_date: rawRow.CURRENTSALE_DATE ? new Date(rawRow.CURRENTSALE_DATE).toISOString().split('T')[0] : null,
+            sales_price: parseFloat(rawRow.CURRENTSALE_PRICE) || null,
+            sales_book: rawRow.CURRENTSALE_DEEDBOOK || null,
+            sales_page: rawRow.CURRENTSALE_DEEDPAGE || null,
+            sales_nu: rawRow.CURRENTSALE_NUC || null,
+            
+            // Basic asset fields (TODO: Add full normalization)
+            asset_year_built: parseInt(rawRow.YEARBUILT) || null,
+            asset_story_height: parseFloat(rawRow.STORYHGT) || null,
+            asset_livable_area: parseFloat(rawRow.SFLA_TOTAL) || null,
+            
+            // Store complete raw data for validation and future processing
+            raw_data: rawRow
+          };
+        } else if (vendorType === 'Microsystems') {
+          // TODO: Similar processing for Microsystems
+          // const processor = new MicrosystemsProcessor();
+          // normalizedRecord = processor.normalizeRecord(rawRow, jobYear, jobCCDD);
+        }
+        
+        if (normalizedRecord) {
+          processedRecords.push(normalizedRecord);
+        }
+      }
+
+      // Insert processed records in batches
+      const batchSize = 1000;
+      let imported = 0;
+
+      for (let i = 0; i < processedRecords.length; i += batchSize) {
+        const batch = processedRecords.slice(i, i + batchSize);
+        
+        const { error } = await supabase
+          .from('property_records')
+          .upsert(batch, { 
+            onConflict: 'property_composite_key',
+            ignoreDuplicates: false 
+          });
+
+        if (error) throw error;
+        imported += batch.length;
+      }
+
+      console.log(`Imported ${imported} property records to property_records table`);
+      return { imported, total: processedRecords.length };
+
+    } catch (error) {
+      console.error('Property records import error:', error);
+      throw error;
+    }
+  };
     try {
       const timestamp = new Date().toISOString();
       
