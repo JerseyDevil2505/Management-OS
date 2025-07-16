@@ -358,12 +358,175 @@ const AdminJobManagement = ({ onJobSelect }) => {
       console.log('Setting newJob with type:', fullTypeName);
       
       setNewJob(prev => ({ ...prev, [fullTypeName]: file }));
-      analyzeFileWithProcessor(file, type);
+analyzeFileWithProcessor(file, type);
     } else {
       console.log('No file found in event');
     }
   };
 
+  // 1. EXTEND analyzeFileWithProcessor to handle full data processing
+  const processFileData = async (file, type, vendor, jobId, ccdd, year = 2025) => {
+    console.log('=== PROCESSING FILE DATA FOR DATABASE ===');
+    console.log('File:', file.name, 'Type:', type, 'Vendor:', vendor);
+    
+    if (!file || type !== 'source') {
+      console.log('Skipping - not a source file');
+      return { success: false, reason: 'Not a source file' };
+    }
+
+    try {
+      const text = await file.text();
+      
+      // Import the processors
+      const { BRTProcessor } = await import('../lib/data-pipeline/brt-processor.js');
+      const { MicrosystemsProcessor } = await import('../lib/data-pipeline/microsystems-processor.js');
+      
+      let processor;
+      let normalizedRecords = [];
+      
+      if (vendor === 'BRT') {
+        processor = new BRTProcessor();
+        
+        // Parse CSV data
+        const lines = text.split('\n');
+        const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
+        const dataLines = lines.slice(1).filter(line => line.trim());
+        
+        console.log('Processing', dataLines.length, 'BRT records');
+        
+        for (const line of dataLines) {
+          const values = line.split(',').map(v => v.replace(/"/g, '').trim());
+          const rawRecord = {};
+          
+          headers.forEach((header, index) => {
+            rawRecord[header] = values[index] || '';
+          });
+          
+          // Use the existing normalize method
+          const normalized = processor.normalizeRecord(rawRecord, null, null, year, ccdd);
+          
+          // Add job metadata
+          normalized.job_id = jobId;
+          normalized.file_version = 1;
+          normalized.source_file_uploaded_at = new Date().toISOString();
+          
+          normalizedRecords.push(normalized);
+        }
+        
+      } else if (vendor === 'Microsystems') {
+        processor = new MicrosystemsProcessor();
+        
+        // Parse pipe-delimited data
+        const lines = text.split('\n');
+        const headers = lines[0].split('|').map(h => h.trim());
+        const dataLines = lines.slice(1).filter(line => line.trim());
+        
+        console.log('Processing', dataLines.length, 'Microsystems records');
+        
+        for (const line of dataLines) {
+          const values = line.split('|').map(v => v.trim());
+          const rawRecord = {};
+          
+          headers.forEach((header, index) => {
+            rawRecord[header] = values[index] || '';
+          });
+          
+          // Use the existing normalize method
+          const normalized = processor.normalizeRecord(rawRecord, year, ccdd);
+          
+          // Add job metadata
+          normalized.job_id = jobId;
+          normalized.file_version = 1;
+          normalized.source_file_uploaded_at = new Date().toISOString();
+          
+          normalizedRecords.push(normalized);
+        }
+      }
+      
+      // Insert into property_records table
+      if (normalizedRecords.length > 0) {
+        console.log('Inserting', normalizedRecords.length, 'records into property_records');
+        
+        const { data, error } = await supabase
+          .from('property_records')
+          .insert(normalizedRecords);
+        
+        if (error) {
+          console.error('Database insertion error:', error);
+          throw error;
+        }
+        
+        console.log('Successfully inserted property records');
+        return { 
+          success: true, 
+          recordsInserted: normalizedRecords.length,
+          data: data 
+        };
+      }
+      
+      return { success: false, reason: 'No records to insert' };
+      
+    } catch (error) {
+      console.error('File processing error:', error);
+      return { success: false, error: error.message };
+    }
+  };
+      
+      // Parse pipe-delimited data
+      const lines = text.split('\n');
+      const headers = lines[0].split('|').map(h => h.trim());
+      const dataLines = lines.slice(1).filter(line => line.trim());
+      
+      console.log('Processing', dataLines.length, 'Microsystems records');
+      
+      for (const line of dataLines) {
+        const values = line.split('|').map(v => v.trim());
+        const rawRecord = {};
+        
+        headers.forEach((header, index) => {
+          rawRecord[header] = values[index] || '';
+        });
+        
+        // Use the existing normalize method
+        const normalized = processor.normalizeRecord(rawRecord, year, ccdd);
+        
+        // Add job metadata
+        normalized.job_id = jobId;
+        normalized.file_version = 1;
+        normalized.source_file_uploaded_at = new Date().toISOString();
+        
+        normalizedRecords.push(normalized);
+      }
+    }
+    
+    // Insert into property_records table
+    if (normalizedRecords.length > 0) {
+      console.log('Inserting', normalizedRecords.length, 'records into property_records');
+      
+      const { data, error } = await supabase
+        .from('property_records')
+        .insert(normalizedRecords);
+      
+      if (error) {
+        console.error('Database insertion error:', error);
+        throw error;
+      }
+      
+      console.log('Successfully inserted property records');
+      return { 
+        success: true, 
+        recordsInserted: normalizedRecords.length,
+        data: data 
+      };
+    }
+    
+    return { success: false, reason: 'No records to insert' };
+    
+  } catch (error) {
+    console.error('File processing error:', error);
+    return { success: false, error: error.message };
+  }
+};
   const handleManagerToggle = (managerId, role = 'manager') => {
     const manager = managers.find(m => m.id === managerId);
     const assignedManager = newJob.assignedManagers.find(m => m.id === managerId);
@@ -406,72 +569,104 @@ const AdminJobManagement = ({ onJobSelect }) => {
     }
   };
 
-  const createJob = async () => {
-    console.log('DEBUG: newJob=', newJob);
-    console.log('DEBUG: assignedManagers =', newJob.assignedManagers);
-    if (!newJob.ccdd || !newJob.name || !newJob.municipality || !newJob.dueDate || newJob.assignedManagers.length === 0 || !newJob.sourceFile || !newJob.codeFile) {
-      window.alert('Please fill all required fields, upload both files, and assign at least one manager');
-      return;
-    }
+const createJob = async () => {
+  console.log('DEBUG: newJob=', newJob);
+  console.log('DEBUG: assignedManagers =', newJob.assignedManagers);
+  
+  if (!newJob.ccdd || !newJob.name || !newJob.municipality || !newJob.dueDate || 
+      newJob.assignedManagers.length === 0 || !newJob.sourceFile || !newJob.codeFile) {
+    window.alert('Please fill all required fields, upload both files, and assign at least one manager');
+    return;
+  }
 
-    try {
-      const jobData = {
-        name: newJob.name,
-        ccdd: newJob.ccdd,
-        municipality: newJob.municipality,
-        county: newJob.county,
-        state: newJob.state,
-        vendor: newJob.vendor,
-        dueDate: newJob.dueDate,
-        assignedManagers: newJob.assignedManagers,
-        totalProperties: fileAnalysis.propertyCount,
-        inspectedProperties: 0,
-        status: 'active',
-        sourceFileStatus: newJob.sourceFile ? 'imported' : 'pending',
-        codeFileStatus: newJob.codeFile ? 'current' : 'pending',
-        vendorDetection: newJob.vendorDetection,
-        workflowStats: {
-          inspectionPhases: {
-            firstAttempt: 'PENDING',
-            secondAttempt: 'PENDING', 
-            thirdAttempt: 'PENDING'
-          },
-          rates: {
-            entryRate: 0,
-            refusalRate: 0,
-            pricingRate: 0,
-            commercialInspectionRate: 0
-          },
-          appeals: {
-            totalCount: 0,
-            percentOfWhole: 0,
-            byClass: {}
-          }
+  try {
+    const jobData = {
+      name: newJob.name,
+      ccdd: newJob.ccdd,
+      municipality: newJob.municipality,
+      county: newJob.county,
+      state: newJob.state,
+      vendor: newJob.vendor,
+      dueDate: newJob.dueDate,
+      assignedManagers: newJob.assignedManagers,
+      totalProperties: fileAnalysis.propertyCount,
+      inspectedProperties: 0,
+      status: 'active',
+      sourceFileStatus: newJob.sourceFile ? 'imported' : 'pending',
+      codeFileStatus: newJob.codeFile ? 'current' : 'pending',
+      vendorDetection: newJob.vendorDetection,
+      workflowStats: {
+        inspectionPhases: {
+          firstAttempt: 'PENDING',
+          secondAttempt: 'PENDING', 
+          thirdAttempt: 'PENDING'
         },
-        created_by: currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad'
-      };
+        rates: {
+          entryRate: 0,
+          refusalRate: 0,
+          pricingRate: 0,
+          commercialInspectionRate: 0
+        },
+        appeals: {
+          totalCount: 0,
+          percentOfWhole: 0,
+          byClass: {}
+        }
+      },
+      created_by: currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad'
+    };
 
-      await jobService.create(jobData);
+    // Create the job first
+    const createdJob = await jobService.create(jobData);
+    console.log('Job created successfully:', createdJob);
+    
+    // NOW PROCESS THE SOURCE FILE DATA
+    if (newJob.sourceFile && newJob.vendor) {
+      console.log('Processing source file data...');
       
-      // Refresh jobs list
-      const updatedJobs = await jobService.getAll();
-      console.log('Updated jobs after creation:', updatedJobs);
+      const processingResult = await processFileData(
+        newJob.sourceFile, 
+        'source', 
+        newJob.vendor, 
+        createdJob.id, 
+        newJob.ccdd,
+        2025
+      );
       
-      // Separate active and archived jobs
-      const activeJobs = updatedJobs.filter(job => job.status !== 'archived' && job.status !== 'complete');
-      const archived = updatedJobs.filter(job => job.status === 'archived' || job.status === 'complete');
-      
-      setJobs(activeJobs);
-      setArchivedJobs(archived);
-      
-      closeJobModal();
-      window.alert('Job created successfully!');
-    } catch (error) {
-      console.error('Job creation error:', error);
-      window.alert('Error creating job: ' + error.message);
+      if (processingResult.success) {
+        console.log(`Successfully inserted ${processingResult.recordsInserted} property records`);
+        
+        // Update job with actual property count
+        await jobService.update(createdJob.id, {
+          totalProperties: processingResult.recordsInserted,
+          sourceFileStatus: 'processed'
+        });
+        
+        window.alert(`Job created successfully with ${processingResult.recordsInserted} property records imported!`);
+      } else {
+        console.error('File processing failed:', processingResult);
+        window.alert('Job created but file processing failed: ' + (processingResult.error || processingResult.reason));
+      }
     }
-  };
-
+    
+    // Refresh jobs list
+    const updatedJobs = await jobService.getAll();
+    console.log('Updated jobs after creation:', updatedJobs);
+    
+    // Separate active and archived jobs
+    const activeJobs = updatedJobs.filter(job => job.status !== 'archived' && job.status !== 'complete');
+    const archived = updatedJobs.filter(job => job.status === 'archived' || job.status === 'complete');
+    
+    setJobs(activeJobs);
+    setArchivedJobs(archived);
+    
+    closeJobModal();
+    
+  } catch (error) {
+    console.error('Job creation error:', error);
+    window.alert('Error creating job: ' + error.message);
+  }
+};
   const createPlanningJob = async () => {
     if (!newPlanningJob.ccdd || !newPlanningJob.municipality || !newPlanningJob.dueDate) {
       window.alert('Please fill all required fields');
