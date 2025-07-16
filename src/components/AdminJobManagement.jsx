@@ -465,7 +465,7 @@ const processMicrosystemsData = async (fileText, jobData) => {
           '2 Sty Fp',
           'Same Stack Fp',
           'Freestanding Fp',
-          'Heatilator'
+          'Heatilator',
         ];
       return fireplaceFields.reduce((total, field) => {
         return total + parseInt(rawRecord[field] || 0);
