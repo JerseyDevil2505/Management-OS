@@ -1626,7 +1626,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
   );
 };
 
-export default AdminJobManagement;"
+export default AdminJobManagement;
                     maxLength="4"
                     disabled={false}
                   />
