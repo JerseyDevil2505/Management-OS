@@ -557,12 +557,6 @@ const processBRTData = async (fileText, jobData) => {
       info_by: rawRecord.INFOBY,
       view_code: rawRecord.VIEW,
       neighborhood: rawRecord.NBHD,
-
-      // Update fireplace calculation
-      calculateFireplaceCount(rawRecord) {
-        const count1 = parseInt(rawRecord.FIREPLACECNT_1 || 0);
-        const count2 = parseInt(rawRecord.FIREPLACECNT_2 || 0);
-        return count1 + count2;
               
       // Metadata
       raw_data: rawRecord,
