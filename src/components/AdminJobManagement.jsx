@@ -407,6 +407,8 @@ const AdminJobManagement = ({ onJobSelect }) => {
   };
 
   const createJob = async () => {
+    console.log('DEBUG: newJob=', newJob);
+    console.log('DEBUG: assignedManagers =', newJob.assignedManagers);
     if (!newJob.ccdd || !newJob.name || !newJob.municipality || !newJob.dueDate || newJob.assignedManagers.length === 0 || !newJob.sourceFile || !newJob.codeFile) {
       window.alert('Please fill all required fields, upload both files, and assign at least one manager');
       return;
