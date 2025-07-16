@@ -513,7 +513,7 @@ analyzeFileWithProcessor(file, type);
       }
       
       console.log('Successfully inserted property records');
-      return { 
+        return { 
         success: true, 
         recordsInserted: normalizedRecords.length,
         data: data 
