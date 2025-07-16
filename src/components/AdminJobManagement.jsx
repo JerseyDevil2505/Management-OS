@@ -361,190 +361,6 @@ const AdminJobManagement = ({ onJobSelect }) => {
       analyzeFileWithProcessor(file, type);
     } else {
       console.log('No file found in event');
-    }
-  };
-
-  const handleManagerToggle = (managerId, role = 'manager') => {
-    const manager = managers.find(m => m.id === managerId);
-    const assignedManager = newJob.assignedManagers.find(m => m.id === managerId);
-    
-    if (assignedManager) {
-      // Manager is already assigned - cycle through roles
-      const currentRole = assignedManager.role;
-      
-      let newRole;
-      if (currentRole === 'Lead Manager') {
-        newRole = 'Assistant Manager';
-      } else if (currentRole === 'Assistant Manager') {
-        // Remove manager
-        setNewJob(prev => ({
-          ...prev,
-          assignedManagers: prev.assignedManagers.filter(m => m.id !== managerId)
-        }));
-        return;
-      } else {
-        newRole = 'Lead Manager';
-      }
-      
-      // Update role
-      setNewJob(prev => ({
-        ...prev,
-        assignedManagers: prev.assignedManagers.map(m => 
-          m.id === managerId ? { ...m, role: newRole } : m
-        )
-      }));
-    } else {
-      // Add manager with Lead Manager role
-      setNewJob(prev => ({
-        ...prev,
-        assignedManagers: [...prev.assignedManagers, { 
-          id: manager.id, 
-          name: `${manager.first_name} ${manager.last_name}`, 
-          role: 'Lead Manager'
-        }]
-      }));
-    }
-  };
-
-  // NEW: File processing function that calls your data pipeline
-  const processJobFiles = async (jobId, sourceFile, codeFile, vendor, ccdd, jobYear) => {
-    try {
-      console.log('Processing files for job:', jobId);
-      console.log('Vendor:', vendor, 'CCDD:', ccdd, 'Year:', jobYear);
-      
-      // Create FormData for file upload
-      const formData = new FormData();
-      formData.append('jobId', jobId);
-      formData.append('sourceFile', sourceFile);
-      formData.append('codeFile', codeFile);
-      formData.append('vendor', vendor);
-      formData.append('ccdd', ccdd);
-      formData.append('jobYear', jobYear);
-      
-      // Call your backend data pipeline endpoint
-      const response = await fetch('/api/process-job-files', {
-        method: 'POST',
-        body: formData
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`File processing failed: ${response.status} - ${errorText}`);
-      }
-      
-      const result = await response.json();
-      console.log('File processing result:', result);
-      
-      return result;
-      
-    } catch (error) {
-      console.error('File processing error:', error);
-      throw new Error('file processing failed: ' + error.message);
-    }
-  };
-
-  const createJob = async () => {
-    if (!newJob.ccdd || !newJob.name || !newJob.municipality || 
-        !newJob.dueDate || newJob.assignedManagers.length === 0 ||
-        !newJob.sourceFile || !newJob.codeFile) {
-      window.alert('Please fill all required fields, upload both files, and assign at least one manager');
-      return;
-    }
-
-    try {
-      // Step 1: Create the job record
-      const jobData = {
-        name: newJob.name,
-        ccdd: newJob.ccdd,
-        municipality: newJob.municipality,
-        county: newJob.county,
-        state: newJob.state,
-        vendor: newJob.vendor,
-        dueDate: newJob.dueDate,
-        assignedManagers: newJob.assignedManagers,
-        totalProperties: fileAnalysis.propertyCount,
-        inspectedProperties: 0,
-        status: 'active',
-        sourceFileStatus: 'processing', // Will update after processing
-        codeFileStatus: 'processing',   // Will update after processing
-        vendorDetection: newJob.vendorDetection,
-        workflowStats: {
-          inspectionPhases: {
-            firstAttempt: 'PENDING',
-            secondAttempt: 'PENDING', 
-            thirdAttempt: 'PENDING'
-          },
-          rates: {
-            entryRate: 0,
-            refusalRate: 0,
-            pricingRate: 0,
-            commercialInspectionRate: 0
-          },
-          appeals: {
-            totalCount: 0,
-            percentOfWhole: 0,
-            byClass: {}
-          }
-        },
-        created_by: currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad'
-      };
-
-      console.log('Creating job with data:', jobData);
-      const createdJob = await jobService.create(jobData);
-      console.log('Job created successfully:', createdJob);
-      
-      // Step 2: Process the uploaded files and populate property_records
-      console.log('Starting file processing pipeline...');
-      await processJobFiles(
-        createdJob.id, 
-        newJob.sourceFile, 
-        newJob.codeFile, 
-        newJob.vendor,
-        newJob.ccdd,
-        new Date(newJob.dueDate).getFullYear()
-      );
-      
-      console.log('File processing completed successfully');
-      
-      // Step 3: Update job status to show files are processed
-      await jobService.update(createdJob.id, {
-        sourceFileStatus: 'imported',
-        codeFileStatus: 'current'
-      });
-      
-      // Step 4: Refresh jobs list
-      const updatedJobs = await jobService.getAll();
-      console.log('Updated jobs after creation:', updatedJobs);
-      
-      // Separate active and archived jobs
-      const activeJobs = updatedJobs.filter(job => job.status !== 'archived' && job.status !== 'complete');
-      const archived = updatedJobs.filter(job => job.status === 'archived' || job.status === 'complete');
-      
-      setJobs(activeJobs);
-      setArchivedJobs(archived);
-      
-      closeJobModal();
-      window.alert('Job created and files processed successfully!');
-      
-    } catch (error) {
-      console.error('Job creation error:', error);
-      
-      // If job was created but file processing failed, update status
-      if (error.message.includes('file processing')) {
-        try {
-          await jobService.update(createdJob?.id, {
-            sourceFileStatus: 'error',
-            codeFileStatus: 'error'
-          });
-        } catch (updateError) {
-          console.error('Failed to update job status after error:', updateError);
-        }
-      }
-      
-      window.alert('Error creating job: ' + error.message);
-    }
-  };
-
   const createPlanningJob = async () => {
     if (!newPlanningJob.ccdd || !newPlanningJob.municipality || !newPlanningJob.dueDate) {
       window.alert('Please fill all required fields');
@@ -827,93 +643,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
             <p className="text-gray-600">Loading job data...</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="max-w-6xl mx-auto p-6 bg-white">
-      {/* Header Section */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">
-          PPA Management OS - Current Jobs List
-        </h1>
-        <p className="text-gray-600">
-          Manage appraisal jobs with source file integration and team assignments
-        </p>
-      </div>
-
-      {/* Database Status */}
-      <div className="mb-6 p-4 bg-gray-50 rounded-lg border">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Database className={`w-5 h-5 ${dbConnected ? 'text-green-600' : 'text-red-600'}`} />
-            <span className={`font-medium ${dbConnected ? 'text-green-800' : 'text-red-800'}`}>
-              Database: {dbConnected ? 'Connected' : 'Disconnected'}
-            </span>
-          </div>
-          {dbConnected && (
-            <div className="flex items-center gap-6 text-sm text-gray-600">
-              <span>{dbStats.employees} Employees</span>
-              <span>{jobs.length + archivedJobs.length} Jobs</span>
-              <span>{dbStats.propertyRecords?.toLocaleString() || 0} Property Records</span>
-              <span>{dbStats.sourceFiles} Source Files</span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Tab Navigation */}
-      <div className="mb-6">
-        <div className="border-b border-gray-200">
-          <nav className="-mb-px flex space-x-8">
-            <button
-              onClick={() => setActiveTab('jobs')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'jobs' 
-                  ? 'border-blue-500 text-blue-600' 
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              📋 Active Jobs ({jobs.length})
-            </button>
-            <button
-              onClick={() => setActiveTab('planning')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'planning' 
-                  ? 'border-blue-500 text-blue-600' 
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              📝 Planning ({planningJobs.length})
-            </button>
-            <button
-              onClick={() => setActiveTab('archive')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'archive' 
-                  ? 'border-blue-500 text-blue-600' 
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              📁 Archive ({archivedJobs.length})
-            </button>
-            <button
-              onClick={() => setActiveTab('managers')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'managers' 
-                  ? 'border-blue-500 text-blue-600' 
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              👥 Manager Assignments
-            </button>
-          </nav>
-        </div>
-      </div>
-
-      {/* Active Jobs Tab */}
+          {/* Active Jobs Tab */}
       {activeTab === 'jobs' && (
         <div className="space-y-6">
           <div className="bg-gradient-to-r from-blue-50 to-green-50 rounded-lg border-2 border-blue-200 p-6">
@@ -1027,151 +757,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
                                     <Users className="w-4 h-4" />
                                     <span>{job.assignedManagers.map(m => `${m.name} (${m.role})`).join(', ')}</span>
                                   </span>
-                                )}
-                              </div>
-                              
-                              {/* Production Metrics */}
-                              <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-3 p-3 bg-gray-50 rounded-lg">
-                                <div className="text-center">
-                                  <div className="text-lg font-bold text-blue-600">
-                                    {(job.inspectedProperties || 0).toLocaleString()} of {(job.totalProperties || 0).toLocaleString()}
-                                  </div>
-                                  <div className="text-xs text-gray-600">Properties Inspected</div>
-                                  <div className="text-sm font-medium text-blue-600">
-                                    {job.totalProperties > 0 ? Math.round(((job.inspectedProperties || 0) / job.totalProperties) * 100) : 0}% Complete
-                                  </div>
-                                </div>
-                                
-                                <div className="text-center">
-                                  <div className="text-lg font-bold text-green-600">
-                                    {job.workflowStats?.rates?.entryRate || 0}%
-                                  </div>
-                                  <div className="text-xs text-gray-600">Residential Entry Rate</div>
-                                  <div className="text-sm text-gray-500">As of: TBD</div>
-                                </div>
-                                
-                                <div className="text-center">
-                                  <div className="text-lg font-bold text-red-600">
-                                    {job.workflowStats?.rates?.refusalRate || 0}%
-                                  </div>
-                                  <div className="text-xs text-gray-600">Residential Refusal Rate</div>
-                                  <div className="text-sm text-gray-500">As of: TBD</div>
-                                </div>
-
-                                <div className="text-center">
-                                  <div className="text-lg font-bold text-purple-600">
-                                    {job.workflowStats?.rates?.commercialInspectionRate || 0}%
-                                  </div>
-                                  <div className="text-xs text-gray-600">Commercial Inspections</div>
-                                  <div className="text-sm text-gray-500">From Payroll</div>
-                                </div>
-
-                                <div className="text-center">
-                                  <div className="text-lg font-bold text-indigo-600">
-                                    {job.workflowStats?.rates?.pricingRate || 0}%
-                                  </div>
-                                  <div className="text-xs text-gray-600">Commercials Priced</div>
-                                  <div className="text-sm text-gray-500">From Payroll</div>
-                                </div>
-                              </div>
-
-                              {/* Attempt Status */}
-                              <div className="flex space-x-2 mb-3">
-                                <div className={`px-3 py-1 rounded-full text-xs font-medium ${
-                                  job.workflowStats?.inspectionPhases?.firstAttempt === 'COMPLETE' 
-                                    ? 'bg-green-100 text-green-800' 
-                                    : 'bg-gray-100 text-gray-600'
-                                }`}>
-                                  1st: {job.workflowStats?.inspectionPhases?.firstAttempt || 'PENDING'}
-                                </div>
-                                <div className={`px-3 py-1 rounded-full text-xs font-medium ${
-                                  job.workflowStats?.inspectionPhases?.secondAttempt === 'COMPLETE' 
-                                    ? 'bg-green-100 text-green-800' 
-                                    : 'bg-gray-100 text-gray-600'
-                                }`}>
-                                  2nd: {job.workflowStats?.inspectionPhases?.secondAttempt || 'PENDING'}
-                                </div>
-                                <div className={`px-3 py-1 rounded-full text-xs font-medium ${
-                                  job.workflowStats?.inspectionPhases?.thirdAttempt === 'COMPLETE' 
-                                    ? 'bg-green-100 text-green-800' 
-                                    : 'bg-gray-100 text-gray-600'
-                                }`}>
-                                  3rd: {job.workflowStats?.inspectionPhases?.thirdAttempt || 'PENDING'}
-                                </div>
-                              </div>
-
-                              {/* Appeals Section */}
-                              <div className="p-2 bg-yellow-50 rounded-lg border border-yellow-200 mb-3">
-                                <div className="text-sm font-medium text-yellow-800 mb-1">Appeal Analytics</div>
-                                <div className="text-xs text-gray-600">
-                                  Total Appeals: {job.workflowStats?.appeals?.totalCount || 0} 
-                                  ({job.workflowStats?.appeals?.percentOfWhole || 0}% of total properties)
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Action Buttons */}
-                          <div className="flex justify-end space-x-2 pt-3 border-t border-gray-100">
-                            <button 
-                              onClick={() => goToJob(job)}
-                              className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
-                            >
-                              <Eye className="w-4 h-4" />
-                              <span>Go to Job</span>
-                            </button>
-                            {currentUser.canAccessBilling && (
-                              <button 
-                                onClick={() => goToBillingPayroll(job)}
-                                className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
-                              >
-                                <DollarSign className="w-4 h-4" />
-                                <span>Billing</span>
-                              </button>
-                            )}
-                            <button 
-                              onClick={() => {
-                                setEditingJob(job);
-                                setNewJob({
-                                  name: job.name,
-                                  ccdd: job.ccdd,
-                                  municipality: job.municipality,
-                                  county: job.county,
-                                  state: job.state,
-                                  dueDate: job.dueDate,
-                                  assignedManagers: job.assignedManagers || [],
-                                  sourceFile: null,
-                                  codeFile: null,
-                                  vendor: job.vendor,
-                                  vendorDetection: job.vendorDetection
-                                });
-                                setShowCreateJob(true);
-                              }}
-                              className="px-3 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
-                            >
-                              <Edit3 className="w-4 h-4" />
-                              <span>Edit</span>
-                            </button>
-                            <button 
-                              onClick={() => setShowDeleteConfirm(job)}
-                              className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                              <span>Delete</span>
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Planning Jobs Tab */}
+                                {/* Planning Jobs Tab */}
       {activeTab === 'planning' && (
         <div className="space-y-6">
           <div className="bg-gradient-to-r from-yellow-50 to-orange-50 rounded-lg border-2 border-yellow-200 p-6">
@@ -1212,51 +798,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
                           <p className="text-sm text-gray-600">Potential Year: {planningJob.potentialYear}</p>
                           {planningJob.comments && (
                             <p className="text-xs text-gray-500 mt-1">{planningJob.comments}</p>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex space-x-2">
-                        <button
-                          onClick={() => {
-                            setEditingPlanning(planningJob);
-                            setNewPlanningJob({
-                              ccdd: planningJob.ccdd,
-                              municipality: planningJob.municipality,
-                              dueDate: '',
-                              comments: planningJob.comments || ''
-                            });
-                            setShowEditPlanning(true);
-                          }}
-                          className="px-3 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
-                        >
-                          <Edit3 className="w-4 h-4" />
-                          <span>Edit</span>
-                        </button>
-                        <button
-                          onClick={() => deletePlanningJob(planningJob)}
-                          className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                          <span>Delete</span>
-                        </button>
-                        <button
-                          onClick={() => convertPlanningToJob(planningJob)}
-                          className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
-                        >
-                          <Plus className="w-4 h-4" />
-                          <span>Create Job</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Create/Edit Planning Job Modal */}
+                          {/* Create/Edit Planning Job Modal */}
       {(showCreatePlanning || showEditPlanning) && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg max-w-2xl w-full max-h-screen overflow-y-auto shadow-2xl">
@@ -1609,6 +1151,53 @@ const AdminJobManagement = ({ onJobSelect }) => {
           </div>
         </div>
       )}
+    </div>
+  );
+};
+
+export default AdminJobManagement;
+                        </div>
+                      </div>
+                      <div className="flex space-x-2">
+                        <button
+                          onClick={() => {
+                            setEditingPlanning(planningJob);
+                            setNewPlanningJob({
+                              ccdd: planningJob.ccdd,
+                              municipality: planningJob.municipality,
+                              dueDate: '',
+                              comments: planningJob.comments || ''
+                            });
+                            setShowEditPlanning(true);
+                          }}
+                          className="px-3 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
+                        >
+                          <Edit3 className="w-4 h-4" />
+                          <span>Edit</span>
+                        </button>
+                        <button
+                          onClick={() => deletePlanningJob(planningJob)}
+                          className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          <span>Delete</span>
+                        </button>
+                        <button
+                          onClick={() => convertPlanningToJob(planningJob)}
+                          className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
+                        >
+                          <Plus className="w-4 h-4" />
+                          <span>Create Job</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Archive Tab */}
       {activeTab === 'archive' && (
@@ -1726,8 +1315,410 @@ const AdminJobManagement = ({ onJobSelect }) => {
           </div>
         </div>
       )}
-    </div>
-  );
-};
+                              </div>
+                              
+                              {/* Production Metrics */}
+                              <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-3 p-3 bg-gray-50 rounded-lg">
+                                <div className="text-center">
+                                  <div className="text-lg font-bold text-blue-600">
+                                    {(job.inspectedProperties || 0).toLocaleString()} of {(job.totalProperties || 0).toLocaleString()}
+                                  </div>
+                                  <div className="text-xs text-gray-600">Properties Inspected</div>
+                                  <div className="text-sm font-medium text-blue-600">
+                                    {job.totalProperties > 0 ? Math.round(((job.inspectedProperties || 0) / job.totalProperties) * 100) : 0}% Complete
+                                  </div>
+                                </div>
+                                
+                                <div className="text-center">
+                                  <div className="text-lg font-bold text-green-600">
+                                    {job.workflowStats?.rates?.entryRate || 0}%
+                                  </div>
+                                  <div className="text-xs text-gray-600">Residential Entry Rate</div>
+                                  <div className="text-sm text-gray-500">As of: TBD</div>
+                                </div>
+                                
+                                <div className="text-center">
+                                  <div className="text-lg font-bold text-red-600">
+                                    {job.workflowStats?.rates?.refusalRate || 0}%
+                                  </div>
+                                  <div className="text-xs text-gray-600">Residential Refusal Rate</div>
+                                  <div className="text-sm text-gray-500">As of: TBD</div>
+                                </div>
 
-export default AdminJobManagement;
+                                <div className="text-center">
+                                  <div className="text-lg font-bold text-purple-600">
+                                    {job.workflowStats?.rates?.commercialInspectionRate || 0}%
+                                  </div>
+                                  <div className="text-xs text-gray-600">Commercial Inspections</div>
+                                  <div className="text-sm text-gray-500">From Payroll</div>
+                                </div>
+
+                                <div className="text-center">
+                                  <div className="text-lg font-bold text-indigo-600">
+                                    {job.workflowStats?.rates?.pricingRate || 0}%
+                                  </div>
+                                  <div className="text-xs text-gray-600">Commercials Priced</div>
+                                  <div className="text-sm text-gray-500">From Payroll</div>
+                                </div>
+                              </div>
+
+                              {/* Attempt Status */}
+                              <div className="flex space-x-2 mb-3">
+                                <div className={`px-3 py-1 rounded-full text-xs font-medium ${
+                                  job.workflowStats?.inspectionPhases?.firstAttempt === 'COMPLETE' 
+                                    ? 'bg-green-100 text-green-800' 
+                                    : 'bg-gray-100 text-gray-600'
+                                }`}>
+                                  1st: {job.workflowStats?.inspectionPhases?.firstAttempt || 'PENDING'}
+                                </div>
+                                <div className={`px-3 py-1 rounded-full text-xs font-medium ${
+                                  job.workflowStats?.inspectionPhases?.secondAttempt === 'COMPLETE' 
+                                    ? 'bg-green-100 text-green-800' 
+                                    : 'bg-gray-100 text-gray-600'
+                                }`}>
+                                  2nd: {job.workflowStats?.inspectionPhases?.secondAttempt || 'PENDING'}
+                                </div>
+                                <div className={`px-3 py-1 rounded-full text-xs font-medium ${
+                                  job.workflowStats?.inspectionPhases?.thirdAttempt === 'COMPLETE' 
+                                    ? 'bg-green-100 text-green-800' 
+                                    : 'bg-gray-100 text-gray-600'
+                                }`}>
+                                  3rd: {job.workflowStats?.inspectionPhases?.thirdAttempt || 'PENDING'}
+                                </div>
+                              </div>
+
+                              {/* Appeals Section */}
+                              <div className="p-2 bg-yellow-50 rounded-lg border border-yellow-200 mb-3">
+                                <div className="text-sm font-medium text-yellow-800 mb-1">Appeal Analytics</div>
+                                <div className="text-xs text-gray-600">
+                                  Total Appeals: {job.workflowStats?.appeals?.totalCount || 0} 
+                                  ({job.workflowStats?.appeals?.percentOfWhole || 0}% of total properties)
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Action Buttons */}
+                          <div className="flex justify-end space-x-2 pt-3 border-t border-gray-100">
+                            <button 
+                              onClick={() => goToJob(job)}
+                              className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
+                            >
+                              <Eye className="w-4 h-4" />
+                              <span>Go to Job</span>
+                            </button>
+                            {currentUser.canAccessBilling && (
+                              <button 
+                                onClick={() => goToBillingPayroll(job)}
+                                className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
+                              >
+                                <DollarSign className="w-4 h-4" />
+                                <span>Billing</span>
+                              </button>
+                            )}
+                            <button 
+                              onClick={() => {
+                                setEditingJob(job);
+                                setNewJob({
+                                  name: job.name,
+                                  ccdd: job.ccdd,
+                                  municipality: job.municipality,
+                                  county: job.county,
+                                  state: job.state,
+                                  dueDate: job.dueDate,
+                                  assignedManagers: job.assignedManagers || [],
+                                  sourceFile: null,
+                                  codeFile: null,
+                                  vendor: job.vendor,
+                                  vendorDetection: job.vendorDetection
+                                });
+                                setShowCreateJob(true);
+                              }}
+                              className="px-3 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
+                            >
+                              <Edit3 className="w-4 h-4" />
+                              <span>Edit</span>
+                            </button>
+                            <button 
+                              onClick={() => setShowDeleteConfirm(job)}
+                              className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                              <span>Delete</span>
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-6xl mx-auto p-6 bg-white">
+      {/* Header Section */}
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">
+          PPA Management OS - Current Jobs List
+        </h1>
+        <p className="text-gray-600">
+          Manage appraisal jobs with source file integration and team assignments
+        </p>
+      </div>
+
+      {/* Database Status */}
+      <div className="mb-6 p-4 bg-gray-50 rounded-lg border">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Database className={`w-5 h-5 ${dbConnected ? 'text-green-600' : 'text-red-600'}`} />
+            <span className={`font-medium ${dbConnected ? 'text-green-800' : 'text-red-800'}`}>
+              Database: {dbConnected ? 'Connected' : 'Disconnected'}
+            </span>
+          </div>
+          {dbConnected && (
+            <div className="flex items-center gap-6 text-sm text-gray-600">
+              <span>{dbStats.employees} Employees</span>
+              <span>{jobs.length + archivedJobs.length} Jobs</span>
+              <span>{dbStats.propertyRecords?.toLocaleString() || 0} Property Records</span>
+              <span>{dbStats.sourceFiles} Source Files</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Tab Navigation */}
+      <div className="mb-6">
+        <div className="border-b border-gray-200">
+          <nav className="-mb-px flex space-x-8">
+            <button
+              onClick={() => setActiveTab('jobs')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'jobs' 
+                  ? 'border-blue-500 text-blue-600' 
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              📋 Active Jobs ({jobs.length})
+            </button>
+            <button
+              onClick={() => setActiveTab('planning')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'planning' 
+                  ? 'border-blue-500 text-blue-600' 
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              📝 Planning ({planningJobs.length})
+            </button>
+            <button
+              onClick={() => setActiveTab('archive')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'archive' 
+                  ? 'border-blue-500 text-blue-600' 
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              📁 Archive ({archivedJobs.length})
+            </button>
+            <button
+              onClick={() => setActiveTab('managers')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'managers' 
+                  ? 'border-blue-500 text-blue-600' 
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              👥 Manager Assignments
+            </button>
+          </nav>
+        </div>
+      </div>
+
+  const handleManagerToggle = (managerId, role = 'manager') => {
+    const manager = managers.find(m => m.id === managerId);
+    const assignedManager = newJob.assignedManagers.find(m => m.id === managerId);
+    
+    if (assignedManager) {
+      // Manager is already assigned - cycle through roles
+      const currentRole = assignedManager.role;
+      
+      let newRole;
+      if (currentRole === 'Lead Manager') {
+        newRole = 'Assistant Manager';
+      } else if (currentRole === 'Assistant Manager') {
+        // Remove manager
+        setNewJob(prev => ({
+          ...prev,
+          assignedManagers: prev.assignedManagers.filter(m => m.id !== managerId)
+        }));
+        return;
+      } else {
+        newRole = 'Lead Manager';
+      }
+      
+      // Update role
+      setNewJob(prev => ({
+        ...prev,
+        assignedManagers: prev.assignedManagers.map(m => 
+          m.id === managerId ? { ...m, role: newRole } : m
+        )
+      }));
+    } else {
+      // Add manager with Lead Manager role
+      setNewJob(prev => ({
+        ...prev,
+        assignedManagers: [...prev.assignedManagers, { 
+          id: manager.id, 
+          name: `${manager.first_name} ${manager.last_name}`, 
+          role: 'Lead Manager'
+        }]
+      }));
+    }
+  };
+
+  // NEW: File processing function that calls your data pipeline
+  const processJobFiles = async (jobId, sourceFile, codeFile, vendor, ccdd, jobYear) => {
+    try {
+      console.log('Processing files for job:', jobId);
+      console.log('Vendor:', vendor, 'CCDD:', ccdd, 'Year:', jobYear);
+      
+      // Create FormData for file upload
+      const formData = new FormData();
+      formData.append('jobId', jobId);
+      formData.append('sourceFile', sourceFile);
+      formData.append('codeFile', codeFile);
+      formData.append('vendor', vendor);
+      formData.append('ccdd', ccdd);
+      formData.append('jobYear', jobYear);
+      
+      // Call your backend data pipeline endpoint
+      const response = await fetch('/api/process-job-files', {
+        method: 'POST',
+        body: formData
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`File processing failed: ${response.status} - ${errorText}`);
+      }
+      
+      const result = await response.json();
+      console.log('File processing result:', result);
+      
+      return result;
+      
+    } catch (error) {
+      console.error('File processing error:', error);
+      throw new Error('file processing failed: ' + error.message);
+    }
+  };
+
+  const createJob = async () => {
+    if (!newJob.ccdd || !newJob.name || !newJob.municipality || 
+        !newJob.dueDate || newJob.assignedManagers.length === 0 ||
+        !newJob.sourceFile || !newJob.codeFile) {
+      window.alert('Please fill all required fields, upload both files, and assign at least one manager');
+      return;
+    }
+
+    try {
+      // Step 1: Create the job record
+      const jobData = {
+        name: newJob.name,
+        ccdd: newJob.ccdd,
+        municipality: newJob.municipality,
+        county: newJob.county,
+        state: newJob.state,
+        vendor: newJob.vendor,
+        dueDate: newJob.dueDate,
+        assignedManagers: newJob.assignedManagers,
+        totalProperties: fileAnalysis.propertyCount,
+        inspectedProperties: 0,
+        status: 'active',
+        sourceFileStatus: 'processing', // Will update after processing
+        codeFileStatus: 'processing',   // Will update after processing
+        vendorDetection: newJob.vendorDetection,
+        workflowStats: {
+          inspectionPhases: {
+            firstAttempt: 'PENDING',
+            secondAttempt: 'PENDING', 
+            thirdAttempt: 'PENDING'
+          },
+          rates: {
+            entryRate: 0,
+            refusalRate: 0,
+            pricingRate: 0,
+            commercialInspectionRate: 0
+          },
+          appeals: {
+            totalCount: 0,
+            percentOfWhole: 0,
+            byClass: {}
+          }
+        },
+        created_by: currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad'
+      };
+
+      console.log('Creating job with data:', jobData);
+      const createdJob = await jobService.create(jobData);
+      console.log('Job created successfully:', createdJob);
+      
+      // Step 2: Process the uploaded files and populate property_records
+      console.log('Starting file processing pipeline...');
+      await processJobFiles(
+        createdJob.id, 
+        newJob.sourceFile, 
+        newJob.codeFile, 
+        newJob.vendor,
+        newJob.ccdd,
+        new Date(newJob.dueDate).getFullYear()
+      );
+      
+      console.log('File processing completed successfully');
+      
+      // Step 3: Update job status to show files are processed
+      await jobService.update(createdJob.id, {
+        sourceFileStatus: 'imported',
+        codeFileStatus: 'current'
+      });
+      
+      // Step 4: Refresh jobs list
+      const updatedJobs = await jobService.getAll();
+      console.log('Updated jobs after creation:', updatedJobs);
+      
+      // Separate active and archived jobs
+      const activeJobs = updatedJobs.filter(job => job.status !== 'archived' && job.status !== 'complete');
+      const archived = updatedJobs.filter(job => job.status === 'archived' || job.status === 'complete');
+      
+      setJobs(activeJobs);
+      setArchivedJobs(archived);
+      
+      closeJobModal();
+      window.alert('Job created and files processed successfully!');
+      
+    } catch (error) {
+      console.error('Job creation error:', error);
+      
+      // If job was created but file processing failed, update status
+      if (error.message.includes('file processing')) {
+        try {
+          await jobService.update(createdJob?.id, {
+            sourceFileStatus: 'error',
+            codeFileStatus: 'error'
+          });
+        } catch (updateError) {
+          console.error('Failed to update job status after error:', updateError);
+        }
+      }
+      
+      window.alert('Error creating job: ' + error.message);
+    }
+  };
