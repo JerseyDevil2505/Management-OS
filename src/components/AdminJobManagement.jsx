@@ -755,8 +755,10 @@ const AdminJobManagement = ({ onJobSelect }) => {
                                 {job.assignedManagers && job.assignedManagers.length > 0 && (
                                   <span className="flex items-center space-x-1">
                                     <Users className="w-4 h-4" />
-                                    <span>{job.assignedManagers.map(m => `${m.name} (${m.role})`).join(',')}</span>
+                                    <span>{job.assignedManagers.map(m => `${m.name} (${m.role})`).join(', ')}</span>
                                   </span>
+                                )}
+                              </div>
                                 {/* Planning Jobs Tab */}
       {activeTab === 'planning' && (
         <div className="space-y-6">
