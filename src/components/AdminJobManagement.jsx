@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Upload, Plus, Edit3, Users, FileText, Calendar, MapPin, Database, Settings, Eye, DollarSign, Trash2, CheckCircle, Archive, TrendingUp, Target, AlertTriangle } from 'lucide-react';
 import { employeeService, jobService, planningJobService, utilityService, authService, supabase } from '../lib/supabaseClient';
 
-  const AdminJobManagement = ({ onJobSelect }) => {
+const AdminJobManagement = ({ onJobSelect }) => {
   const [activeTab, setActiveTab] = useState('jobs');
   const [currentUser, setCurrentUser] = useState({ role: 'admin', canAccessBilling: true });
   
@@ -364,114 +364,6 @@ import { employeeService, jobService, planningJobService, utilityService, authSe
     }
   };
 
-  // Data processing function for inserting property records
-  const processFileData = async (file, type, vendor, jobId, ccdd, year = 2025) => {
-    console.log('=== PROCESSING FILE DATA FOR DATABASE ===');
-    console.log('File:', file.name, 'Type:', type, 'Vendor:', vendor);
-    
-    if (!file || type !== 'source') {
-      console.log('Skipping - not a source file');
-      return { success: false, reason: 'Not a source file' };
-    }
-
-    try {
-      const text = await file.text();
-      
-      // Import the processors
-      const { BRTProcessor } = await import('../lib/data-pipeline/brt-processor.js');
-      const { MicrosystemsProcessor } = await import('../lib/data-pipeline/microsystems-processor.js');
-      
-      let processor;
-      let normalizedRecords = [];
-      
-      if (vendor === 'BRT') {
-        processor = new BRTProcessor();
-        
-        // Parse CSV data
-        const lines = text.split('\n');
-        const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
-        const dataLines = lines.slice(1).filter(line => line.trim());
-        
-        console.log('Processing', dataLines.length, 'BRT records');
-        
-        for (const line of dataLines) {
-          const values = line.split(',').map(v => v.replace(/"/g, '').trim());
-          const rawRecord = {};
-          
-          headers.forEach((header, index) => {
-            rawRecord[header] = values[index] || '';
-          });
-          
-          // Use the existing normalize method
-          const normalized = processor.normalizeRecord(rawRecord, null, null, year, ccdd);
-          
-          // Add job metadata
-          normalized.job_id = jobId;
-          normalized.file_version = 1;
-          normalized.source_file_uploaded_at = new Date().toISOString();
-          
-          normalizedRecords.push(normalized);
-        }
-        
-      } else if (vendor === 'Microsystems') {
-        processor = new MicrosystemsProcessor();
-        
-        // Parse pipe-delimited data
-        const lines = text.split('\n');
-        const headers = lines[0].split('|').map(h => h.trim());
-        const dataLines = lines.slice(1).filter(line => line.trim());
-        
-        console.log('Processing', dataLines.length, 'Microsystems records');
-        
-        for (const line of dataLines) {
-          const values = line.split('|').map(v => v.trim());
-          const rawRecord = {};
-          
-          headers.forEach((header, index) => {
-            rawRecord[header] = values[index] || '';
-          });
-          
-          // Use the existing normalize method
-          const normalized = processor.normalizeRecord(rawRecord, year, ccdd);
-          
-          // Add job metadata
-          normalized.job_id = jobId;
-          normalized.file_version = 1;
-          normalized.source_file_uploaded_at = new Date().toISOString();
-          
-          normalizedRecords.push(normalized);
-        }
-      }
-      
-      // Insert into property_records table
-      if (normalizedRecords.length > 0) {
-        console.log('Inserting', normalizedRecords.length, 'records into property_records');
-        
-        const { data, error } = await supabase
-          .from('property_records')
-          .insert(normalizedRecords);
-        
-        if (error) {
-          console.error('Database insertion error:', error);
-          throw error;
-        }
-        
-        console.log('Successfully inserted property records');
-        return { 
-          success: true, 
-          recordsInserted: normalizedRecords.length,
-          data: data 
-        };
-      }
-      
-      return { success: false, reason: 'No records to insert' };
-      
-    } catch (error) {
-      console.error('File processing error:', error);
-      return { success: false, error: error.message };
-    }
-  };
-
   const handleManagerToggle = (managerId, role = 'manager') => {
     const manager = managers.find(m => m.id === managerId);
     const assignedManager = newJob.assignedManagers.find(m => m.id === managerId);
@@ -517,9 +409,7 @@ import { employeeService, jobService, planningJobService, utilityService, authSe
   const createJob = async () => {
     console.log('DEBUG: newJob=', newJob);
     console.log('DEBUG: assignedManagers =', newJob.assignedManagers);
-    
-    if (!newJob.ccdd || !newJob.name || !newJob.municipality || !newJob.dueDate || 
-        newJob.assignedManagers.length === 0 || !newJob.sourceFile || !newJob.codeFile) {
+    if (!newJob.ccdd || !newJob.name || !newJob.municipality || !newJob.dueDate || newJob.assignedManagers.length === 0 || !newJob.sourceFile || !newJob.codeFile) {
       window.alert('Please fill all required fields, upload both files, and assign at least one manager');
       return;
     }
@@ -561,38 +451,7 @@ import { employeeService, jobService, planningJobService, utilityService, authSe
         created_by: currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad'
       };
 
-      // Create the job first
-      const createdJob = await jobService.create(jobData);
-      console.log('Job created successfully:', createdJob);
-      
-      // NOW PROCESS THE SOURCE FILE DATA
-      if (newJob.sourceFile && newJob.vendor) {
-        console.log('Processing source file data...');
-        
-        const processingResult = await processFileData(
-          newJob.sourceFile, 
-          'source', 
-          newJob.vendor, 
-          createdJob.id, 
-          newJob.ccdd,
-          2025
-        );
-        
-        if (processingResult.success) {
-          console.log(`Successfully inserted ${processingResult.recordsInserted} property records`);
-          
-          // Update job with actual property count
-          await jobService.update(createdJob.id, {
-            totalProperties: processingResult.recordsInserted,
-            sourceFileStatus: 'processed'
-          });
-          
-          window.alert(`Job created successfully with ${processingResult.recordsInserted} property records imported!`);
-        } else {
-          console.error('File processing failed:', processingResult);
-          window.alert('Job created but file processing failed: ' + (processingResult.error || processingResult.reason));
-        }
-      }
+      await jobService.create(jobData);
       
       // Refresh jobs list
       const updatedJobs = await jobService.getAll();
@@ -606,7 +465,7 @@ import { employeeService, jobService, planningJobService, utilityService, authSe
       setArchivedJobs(archived);
       
       closeJobModal();
-      
+      window.alert('Job created successfully!');
     } catch (error) {
       console.error('Job creation error:', error);
       window.alert('Error creating job: ' + error.message);
@@ -1409,7 +1268,7 @@ import { employeeService, jobService, planningJobService, utilityService, authSe
                 className="px-6 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 font-medium shadow-md hover:shadow-lg transition-all"
               >
                 {editingPlanning ? '💾 Update Planning Job' : '📝 Add Planning Job'}
-</button>
+              </button>
             </div>
           </div>
         </div>
@@ -1800,4 +1659,3 @@ import { employeeService, jobService, planningJobService, utilityService, authSe
 };
 
 export default AdminJobManagement;
-                
