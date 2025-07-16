@@ -1,8 +1,8 @@
 /**
  * Complete normalizeRecord function for Microsystems Processor
- * Updated with card and propertyLocation as core identifiers
+ * Updated with YEARCCDD composite key support
  */
-normalizeRecord(rawRecord) {
+normalizeRecord(rawRecord, jobYear, jobCCDD) {
   const normalized = {
     // ===== CORE IDENTIFIERS =====
     block: rawRecord.block,
@@ -10,6 +10,7 @@ normalizeRecord(rawRecord) {
     qualifier: rawRecord.qualifier,
     card: rawRecord.building,
     propertyLocation: rawRecord.propertyLocation,
+    propertyCompositeKey: `${jobYear}${jobCCDD}-${rawRecord.block}-${rawRecord.lot}_${rawRecord.qualifier || 'NONE'}-${rawRecord.building || 'NONE'}-${rawRecord.propertyLocation || 'NONE'}`,
     
     // ===== OWNER NORMALIZED FIELDS =====
     ownerName: rawRecord.ownerName,
