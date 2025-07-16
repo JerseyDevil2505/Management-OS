@@ -470,7 +470,7 @@ const processMicrosystemsData = async (fileText, jobData) => {
       return fireplaceFields.reduce((total, field) => {
         return total + parseInt(rawRecord[field] || 0);
         }, 0);
-      
+      }
       // Metadata
       raw_data: rawRecord,
       processed_at: new Date().toISOString(),
