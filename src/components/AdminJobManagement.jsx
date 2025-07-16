@@ -526,7 +526,7 @@ const processBRTData = async (fileText, jobData) => {
       values_cama_total: parseFloat(rawRecord.TOTNETVALUE || 0),  // ← Fixed extra comma
       values_base_cost: parseFloat(rawRecord.BASEREPLCOST || 0),
       values_det_items: parseFloat(rawRecord.DETACHEDITEMS || 0),  // ← Fixed field name
-      values_cost_new: parseFloat(rawRecord.REPLCOSTNEW || 0)
+      values_cost_new: parseFloat(rawRecord.REPLCOSTNEW || 0),
       
       // Sales data
       sales_date: rawRecord.CURRENTSALE_DATE || null,
