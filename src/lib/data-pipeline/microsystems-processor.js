@@ -188,6 +188,9 @@ export class MicrosystemsProcessor {
    * Map to property_analysis_data for calculated fields and raw storage
    */
   async mapToAnalysisData(rawRecord, propertyRecordId, jobId, yearCreated, ccddCode) {
+    // Get values by position for duplicates
+    const rawValues = this.headers.map(header => rawRecord[header]);
+    
     return {
       // Link to property record
       property_record_id: propertyRecordId,
