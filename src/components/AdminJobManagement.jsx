@@ -18,6 +18,20 @@ const AdminJobManagement = () => {
   const [loading, setLoading] = useState(true);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
   const [processing, setProcessing] = useState(false);
+  const [processingStatus, setProcessingStatus] = useState({
+    isProcessing: false,
+    currentStep: '',
+    progress: 0,
+    startTime: null,
+    recordsProcessed: 0,
+    totalRecords: 0,
+    errors: [],
+    warnings: []
+  });
+  const [showProcessingModal, setShowProcessingModal] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [showErrorLog, setShowErrorLog] = useState(false);
+  const [processingResults, setProcessingResults] = useState(null);
 
   const [newJob, setNewJob] = useState({
     name: '',
@@ -53,6 +67,40 @@ const AdminJobManagement = () => {
 
   const [dbConnected, setDbConnected] = useState(false);
   const [dbStats, setDbStats] = useState({ employees: 0, jobs: 0, propertyRecords: 0, sourceFiles: 0 });
+
+  // Notification system
+  const addNotification = (message, type = 'info') => {
+    const id = Date.now();
+    const notification = { id, message, type, timestamp: new Date() };
+    setNotifications(prev => [...prev, notification]);
+    
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    }, 5000);
+  };
+
+  const updateProcessingStatus = (step, progress = 0, details = {}) => {
+    setProcessingStatus(prev => ({
+      ...prev,
+      currentStep: step,
+      progress,
+      ...details
+    }));
+  };
+
+  const resetProcessingStatus = () => {
+    setProcessingStatus({
+      isProcessing: false,
+      currentStep: '',
+      progress: 0,
+      startTime: null,
+      recordsProcessed: 0,
+      totalRecords: 0,
+      errors: [],
+      warnings: []
+    });
+  };
 
   // Load real data from database
   useEffect(() => {
@@ -300,12 +348,25 @@ const AdminJobManagement = () => {
   const createJob = async () => {
     if (!newJob.ccddCode || !newJob.name || !newJob.municipality || !newJob.dueDate || 
         newJob.assignedManagers.length === 0 || !newJob.sourceFile || !newJob.codeFile) {
-      alert('Please fill all required fields, upload both files, and assign at least one manager');
+      addNotification('Please fill all required fields, upload both files, and assign at least one manager', 'error');
       return;
     }
 
     try {
       setProcessing(true);
+      setShowProcessingModal(true);
+      resetProcessingStatus();
+      
+      setProcessingStatus({
+        isProcessing: true,
+        currentStep: 'Creating job record...',
+        progress: 10,
+        startTime: new Date(),
+        recordsProcessed: 0,
+        totalRecords: fileAnalysis.propertyCount,
+        errors: [],
+        warnings: []
+      });
       
       // Step 1: Create the job record
       const jobData = {
@@ -333,10 +394,17 @@ const AdminJobManagement = () => {
 
       const createdJob = await jobService.create(jobData);
       
+      updateProcessingStatus('Job created successfully. Reading files...', 25);
+      
       // Step 2: Process files using clean propertyService
       if (newJob.sourceFile && newJob.codeFile) {
+        updateProcessingStatus('Reading source file...', 35);
         const sourceFileContent = await newJob.sourceFile.text();
+        
+        updateProcessingStatus('Reading code file...', 40);
         const codeFileContent = await newJob.codeFile.text();
+        
+        updateProcessingStatus(`Processing ${newJob.vendor} data...`, 50);
         
         const result = await propertyService.importCSVData(
           sourceFileContent,
@@ -347,6 +415,12 @@ const AdminJobManagement = () => {
           newJob.vendor
         );
         
+        updateProcessingStatus('Updating job status...', 90, {
+          recordsProcessed: result.processed || 0,
+          errors: result.warnings || [],
+          warnings: result.warnings || []
+        });
+        
         // Update job status based on processing results
         const updateData = {
           sourceFileStatus: result.errors > 0 ? 'error' : 'imported',
@@ -355,34 +429,55 @@ const AdminJobManagement = () => {
         
         await jobService.update(createdJob.id, updateData);
         
+        updateProcessingStatus('Refreshing job list...', 95);
+        
+        // Step 3: Refresh jobs list
+        const updatedJobs = await jobService.getAll();
+        const activeJobs = updatedJobs.filter(job => job.status !== 'archived');
+        const archived = updatedJobs.filter(job => job.status === 'archived');
+        
+        setJobs(activeJobs);
+        setArchivedJobs(archived);
+        
+        updateProcessingStatus('Complete!', 100);
+        
+        // Store results for display
+        setProcessingResults({
+          success: result.errors === 0,
+          processed: result.processed || 0,
+          errors: result.errors || 0,
+          warnings: result.warnings || [],
+          processingTime: new Date() - processingStatus.startTime,
+          jobName: newJob.name,
+          vendor: newJob.vendor
+        });
+        
         if (result.errors > 0) {
-          alert(`Job created but ${result.errors} errors occurred during file processing. Check the logs.`);
+          addNotification(`Job created but ${result.errors} errors occurred during processing`, 'warning');
         } else {
-          alert(`Job created successfully! Processed ${result.processed} properties.`);
+          addNotification(`Job created successfully! Processed ${result.processed} properties.`, 'success');
         }
       }
-      
-      // Step 3: Refresh jobs list
-      const updatedJobs = await jobService.getAll();
-      const activeJobs = updatedJobs.filter(job => job.status !== 'archived');
-      const archived = updatedJobs.filter(job => job.status === 'archived');
-      
-      setJobs(activeJobs);
-      setArchivedJobs(archived);
       
       closeJobModal();
       
     } catch (error) {
       console.error('Job creation error:', error);
-      alert('Error creating job: ' + error.message);
+      updateProcessingStatus('Error occurred', 0, {
+        errors: [error.message]
+      });
+      addNotification('Error creating job: ' + error.message, 'error');
     } finally {
       setProcessing(false);
+      setTimeout(() => {
+        setShowProcessingModal(false);
+      }, 2000);
     }
   };
 
   const createPlanningJob = async () => {
     if (!newPlanningJob.ccddCode || !newPlanningJob.municipality || !newPlanningJob.dueDate) {
-      alert('Please fill all required fields');
+      addNotification('Please fill all required fields', 'error');
       return;
     }
 
@@ -401,16 +496,16 @@ const AdminJobManagement = () => {
       setPlanningJobs(updatedPlanningJobs);
       
       closePlanningModal();
-      alert('Planning job created successfully!');
+      addNotification('Planning job created successfully!', 'success');
     } catch (error) {
       console.error('Planning job creation error:', error);
-      alert('Error creating planning job: ' + error.message);
+      addNotification('Error creating planning job: ' + error.message, 'error');
     }
   };
 
   const editJob = async () => {
     if (!newJob.name || !newJob.municipality || !newJob.dueDate) {
-      alert('Please fill all required fields');
+      addNotification('Please fill all required fields', 'error');
       return;
     }
 
@@ -431,16 +526,16 @@ const AdminJobManagement = () => {
       setArchivedJobs(archived);
       
       closeJobModal();
-      alert('Job updated successfully!');
+      addNotification('Job updated successfully!', 'success');
     } catch (error) {
       console.error('Job update error:', error);
-      alert('Error updating job: ' + error.message);
+      addNotification('Error updating job: ' + error.message, 'error');
     }
   };
 
   const editPlanningJob = async () => {
     if (!newPlanningJob.municipality || !newPlanningJob.dueDate) {
-      alert('Please fill all required fields');
+      addNotification('Please fill all required fields', 'error');
       return;
     }
 
@@ -457,10 +552,10 @@ const AdminJobManagement = () => {
       setPlanningJobs(updatedPlanningJobs);
       
       closePlanningModal();
-      alert('Planning job updated successfully!');
+      addNotification('Planning job updated successfully!', 'success');
     } catch (error) {
       console.error('Planning job update error:', error);
-      alert('Error updating planning job: ' + error.message);
+      addNotification('Error updating planning job: ' + error.message, 'error');
     }
   };
 
@@ -474,10 +569,10 @@ const AdminJobManagement = () => {
       setJobs(activeJobs);
       setArchivedJobs(archived);
       setShowDeleteConfirm(null);
-      alert('Job deleted successfully');
+      addNotification('Job deleted successfully', 'success');
     } catch (error) {
       console.error('Job deletion error:', error);
-      alert('Error deleting job: ' + error.message);
+      addNotification('Error deleting job: ' + error.message, 'error');
     }
   };
 
@@ -613,6 +708,131 @@ const AdminJobManagement = () => {
 
   return (
     <div className="max-w-6xl mx-auto p-6 bg-white">
+      {/* Notification System */}
+      <div className="fixed top-4 right-4 z-50 space-y-2">
+        {notifications.map(notification => (
+          <div
+            key={notification.id}
+            className={`p-4 rounded-lg shadow-lg border-l-4 max-w-md transition-all duration-300 ${
+              notification.type === 'error' ? 'bg-red-50 border-red-400 text-red-800' :
+              notification.type === 'warning' ? 'bg-yellow-50 border-yellow-400 text-yellow-800' :
+              notification.type === 'success' ? 'bg-green-50 border-green-400 text-green-800' :
+              'bg-blue-50 border-blue-400 text-blue-800'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">{notification.message}</span>
+              <button
+                onClick={() => setNotifications(prev => prev.filter(n => n.id !== notification.id))}
+                className="ml-2 text-gray-400 hover:text-gray-600"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Processing Modal */}
+      {showProcessingModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-md w-full p-6 shadow-2xl">
+            <div className="text-center">
+              <div className="mb-4">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+              </div>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Processing Job</h3>
+              <p className="text-sm text-gray-600 mb-4">{processingStatus.currentStep}</p>
+              
+              {/* Progress Bar */}
+              <div className="w-full bg-gray-200 rounded-full h-2 mb-4">
+                <div 
+                  className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${processingStatus.progress}%` }}
+                />
+              </div>
+              
+              {/* Progress Details */}
+              <div className="text-xs text-gray-500 space-y-1">
+                {processingStatus.totalRecords > 0 && (
+                  <div>Records: {processingStatus.recordsProcessed} / {processingStatus.totalRecords}</div>
+                )}
+                {processingStatus.startTime && (
+                  <div>Elapsed: {Math.round((new Date() - new Date(processingStatus.startTime)) / 1000)}s</div>
+                )}
+                {processingStatus.progress}% complete
+              </div>
+              
+              {/* Errors */}
+              {processingStatus.errors.length > 0 && (
+                <div className="mt-4 p-3 bg-red-50 rounded-lg">
+                  <div className="text-sm font-medium text-red-800 mb-1">Errors:</div>
+                  <div className="text-xs text-red-600 space-y-1">
+                    {processingStatus.errors.slice(0, 3).map((error, idx) => (
+                      <div key={idx}>{error}</div>
+                    ))}
+                    {processingStatus.errors.length > 3 && (
+                      <div>...and {processingStatus.errors.length - 3} more</div>
+                    )}
+                  </div>
+                </div>
+              )}
+              
+              {/* Results */}
+              {processingResults && (
+                <div className="mt-4 p-3 bg-green-50 rounded-lg">
+                  <div className="text-sm font-medium text-green-800 mb-2">Processing Complete!</div>
+                  <div className="text-xs text-green-600 space-y-1">
+                    <div>✅ {processingResults.processed} properties processed</div>
+                    <div>⏱️ Processing time: {Math.round(processingResults.processingTime / 1000)}s</div>
+                    <div>🏢 Job: {processingResults.jobName}</div>
+                    <div>📊 Vendor: {processingResults.vendor}</div>
+                    {processingResults.errors > 0 && (
+                      <div className="text-red-600">⚠️ {processingResults.errors} errors occurred</div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Error Log Modal */}
+      {showErrorLog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-4xl w-full max-h-screen overflow-y-auto shadow-2xl">
+            <div className="p-6 border-b border-gray-200 bg-red-50">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-red-800">Processing Error Log</h2>
+                <button
+                  onClick={() => setShowErrorLog(false)}
+                  className="text-red-600 hover:text-red-800"
+                >
+                  <span className="text-xl">×</span>
+                </button>
+              </div>
+            </div>
+            <div className="p-6">
+              {processingStatus.errors.length === 0 ? (
+                <div className="text-center text-gray-500 py-8">
+                  <div className="text-4xl mb-4">✅</div>
+                  <p>No errors to display</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {processingStatus.errors.map((error, idx) => (
+                    <div key={idx} className="p-4 bg-red-50 rounded-lg border border-red-200">
+                      <div className="font-medium text-red-800">Error {idx + 1}:</div>
+                      <div className="text-sm text-red-600 mt-1">{error}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       {/* Header Section */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">
@@ -638,6 +858,14 @@ const AdminJobManagement = () => {
               <span>{jobs.length + archivedJobs.length} Jobs</span>
               <span>{dbStats.propertyRecords?.toLocaleString() || 0} Property Records</span>
               <span>{dbStats.sourceFiles} Source Files</span>
+              {processingStatus.errors.length > 0 && (
+                <button
+                  onClick={() => setShowErrorLog(true)}
+                  className="text-red-600 hover:text-red-800 text-sm underline"
+                >
+                  View Error Log ({processingStatus.errors.length})
+                </button>
+              )}
             </div>
           )}
         </div>
