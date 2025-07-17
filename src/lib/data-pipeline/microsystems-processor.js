@@ -182,7 +182,7 @@ export class MicrosystemsProcessor {
   /**
    * Map to property_analysis_data for calculated fields and raw storage
    */
-  mapToAnalysisData(rawRecord, propertyRecordId) {
+  async mapToAnalysisData(rawRecord, propertyRecordId, jobId) {
     return {
       // Link to property record
       property_record_id: propertyRecordId,
@@ -218,9 +218,9 @@ export class MicrosystemsProcessor {
       asset_ext_cond: rawRecord['Condition'],
       asset_int_cond: rawRecord['Interior Cond Or End Unit'],
       
-      // Normalized values - calculated later in development
-      values_norm_time: null,
-      values_norm_size: null,
+      // Normalized values - time adjustment using FRED HPI data
+      values_norm_time: await this.calculateTimeAdjustedValue(rawRecord, jobId),
+      values_norm_size: null, // Size normalization - calculated later in development
       
       // Store complete raw data as JSON for dynamic querying
       raw_data: rawRecord,
@@ -297,6 +297,54 @@ export class MicrosystemsProcessor {
   }
 
   /**
+   * Calculate time-adjusted sale value using FRED HPI data
+   */
+  async calculateTimeAdjustedValue(rawRecord, jobId) {
+    try {
+      const salePrice = this.parseNumeric(rawRecord['Sale Price']);
+      const saleDate = rawRecord['Sale Date'];
+      
+      if (!salePrice || !saleDate) return null;
+      
+      // Extract sale year from date
+      const saleYear = new Date(saleDate).getFullYear();
+      if (isNaN(saleYear)) return null;
+      
+      // Get county from job
+      const { data: job, error: jobError } = await supabase
+        .from('jobs')
+        .select('county_name, year_created')
+        .eq('id', jobId)
+        .single();
+      
+      if (jobError || !job) {
+        console.warn('Could not get job county for time adjustment');
+        return salePrice; // Return original price if no county data
+      }
+      
+      // Get time adjustment multiplier
+      const { data: multiplierResult, error: multiplierError } = await supabase
+        .rpc('calculate_time_multiplier', {
+          p_county_name: job.county_name,
+          p_sale_year: saleYear,
+          p_current_year: job.year_created
+        });
+      
+      if (multiplierError || !multiplierResult) {
+        console.warn(`No HPI data for ${job.county_name} ${saleYear}, using original price`);
+        return salePrice; // Return original price if no HPI data
+      }
+      
+      const adjustedValue = salePrice * multiplierResult;
+      return parseFloat(adjustedValue.toFixed(2));
+      
+    } catch (error) {
+      console.error('Error calculating time-adjusted value:', error);
+      return this.parseNumeric(rawRecord['Sale Price']); // Fallback to original price
+    }
+  }
+
+  /**
    * Process complete file and store in database
    */
   async processFile(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode) {
@@ -337,7 +385,7 @@ export class MicrosystemsProcessor {
           }
           
           // Map to analysis data
-          const analysisData = this.mapToAnalysisData(rawRecord, insertedRecord.id);
+          const analysisData = await this.mapToAnalysisData(rawRecord, insertedRecord.id, jobId);
           analysisData.property_composite_key = propertyRecord.property_composite_key;
           
           // Insert analysis data
