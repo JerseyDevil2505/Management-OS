@@ -80,7 +80,7 @@ export class MicrosystemsProcessor {
       const values = lines[i].split('|');
       
       if (values.length !== this.headers.length) {
-        console.warn(`Row ${i} has ${values.length} values but ${this.headers.length} headers - skipping`);
+        console.warn(`Row ${i} has ${values.length} values but ${this.headers.length} headers - possibly broken pipes. Row data:`, lines[i].substring(0, 200));
         continue;
       }
       
@@ -101,6 +101,11 @@ export class MicrosystemsProcessor {
    * Find positions of duplicate headers for positional mapping
    */
   findDuplicateHeaderPositions() {
+    // Debug logging for location field
+    console.log('Header at index 5 (6th column):', this.headers[5]);
+    console.log('All headers containing "Location":', this.headers.filter((h, i) => h.includes('Location')).map((h, i) => `${i}: ${h}`));
+    console.log('All headers containing "VCS":', this.headers.filter((h, i) => h.includes('VCS')).map((h, i) => `${i}: ${h}`));
+    
     this.headers.forEach((header, index) => {
       if (header === 'Land Value') {
         this.duplicateHeaderPositions.landValue.push(index);
@@ -115,6 +120,9 @@ export class MicrosystemsProcessor {
         this.duplicateHeaderPositions.location.push(index);
       }
     });
+    
+    // Force location to use 6th column (index 5) for debugging
+    this.duplicateHeaderPositions.location = [5];
     
     console.log('Duplicate header positions:', this.duplicateHeaderPositions);
   }
@@ -136,7 +144,7 @@ export class MicrosystemsProcessor {
       property_qualifier: rawRecord['Qual'],
       property_addl_card: rawRecord['Bldg'],
       property_location: rawValues[this.duplicateHeaderPositions.location[0]] || null,
-      property_composite_key: `${yearCreated}${ccddCode}-${rawRecord['Block']}-${rawRecord['Lot']}_${rawRecord['Qual'] || 'NONE'}-${rawRecord['Bldg'] || 'NONE'}-${rawValues[this.duplicateHeaderPositions.location[0]] || 'NONE'}`,
+      property_composite_key: `${yearCreated}${ccddCode}-${rawRecord['Block']}-${rawRecord['Lot']}_${(rawRecord['Qual'] || '').trim() || 'NONE'}-${(rawRecord['Bldg'] || '').trim() || 'NONE'}-${(rawValues[this.duplicateHeaderPositions.location[0]] || '').trim() || 'NONE'}`,
       
       // Owner fields
       owner_name: rawRecord['Owner Name'],
@@ -175,12 +183,16 @@ export class MicrosystemsProcessor {
       // Property classifications
       property_cama_class: rawRecord['Class'],
       property_facility: rawRecord['Facility Name'],
+      property_vcs: rawRecord['VCS'],
       
       // Metadata - FIXED: Added created_by field
       vendor_source: 'Microsystems',
       source_file_uploaded_at: new Date(),
       processed_at: new Date(),
-      created_by: '5df85ca3-7a54-4798-a665-c31da8d9caad'
+      created_by: '5df85ca3-7a54-4798-a665-c31da8d9caad',
+      
+      // Store complete raw data as JSON
+      raw_data: rawRecord
     };
   }
 
@@ -201,7 +213,7 @@ export class MicrosystemsProcessor {
       property_qualifier: rawRecord['Qual'],
       property_addl_card: rawRecord['Bldg'],
       property_location: rawValues[this.duplicateHeaderPositions.location[0]] || null,
-      property_composite_key: `${yearCreated}${ccddCode}-${rawRecord['Block']}-${rawRecord['Lot']}_${rawRecord['Qual'] || 'NONE'}-${rawRecord['Bldg'] || 'NONE'}-${rawValues[this.duplicateHeaderPositions.location[0]] || 'NONE'}`,
+      property_composite_key: `${yearCreated}${ccddCode}-${rawRecord['Block']}-${rawRecord['Lot']}_${(rawRecord['Qual'] || '').trim() || 'NONE'}-${(rawRecord['Bldg'] || '').trim() || 'NONE'}-${(rawValues[this.duplicateHeaderPositions.location[0]] || '').trim() || 'NONE'}`,
       
       // Calculated fields - minimal essential calculations only
       total_baths_calculated: this.calculateTotalBaths(rawRecord),
@@ -227,7 +239,7 @@ export class MicrosystemsProcessor {
       asset_int_cond: rawRecord['Interior Cond Or End Unit'],
       
       // Normalized values - time adjustment using FRED HPI data
-      values_norm_time: await this.calculateTimeAdjustedValue(rawRecord, jobId),
+      values_norm_time: null, // Calculate later in Market & Land Analytics module
       values_norm_size: null, // Size normalization - calculated later in development
       
       // Store complete raw data as JSON for dynamic querying
