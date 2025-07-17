@@ -170,6 +170,7 @@ export class MicrosystemsProcessor {
       
       // Property classifications
       property_cama_class: rawRecord['Class'],
+      property_facility: rawRecord['Facility Name'],
       
       // Metadata
       vendor_source: 'Microsystems',
@@ -196,7 +197,30 @@ export class MicrosystemsProcessor {
       
       // Calculated fields - minimal essential calculations only
       total_baths_calculated: this.calculateTotalBaths(rawRecord),
-      lot_size_calculated: this.calculateLotSize(rawRecord),
+      
+      // Asset fields - direct mappings from Microsystems
+      asset_sfla: this.parseNumeric(rawRecord['Livable Area']),
+      asset_new_vcs: null, // User defined, created in module
+      asset_key_page: null, // User defined, created in module
+      asset_map_page: null, // User defined, created in module
+      asset_zoning: null, // User defined, created in module
+      asset_view: null, // Not available in Microsystems
+      asset_neighborhood: rawRecord['Neighborhood'],
+      asset_type_use: rawRecord['Type Use Code'],
+      asset_building_class: rawRecord['Bldg Qual Class Code'],
+      asset_design_style: rawRecord['Style Code'],
+      asset_year_built: this.parseInteger(rawRecord['Year Built']),
+      asset_lot_frontage: this.calculateLotFrontage(rawRecord), // Calculate later
+      asset_lot_depth: this.calculateLotDepth(rawRecord), // Calculate later
+      asset_lot_acre: this.parseNumeric(rawRecord['Lot Size In Acres'], 2), // 2 decimals
+      asset_lot_sf: this.parseInteger(rawRecord['Lot Size In Sf']), // No decimals
+      asset_story_height: this.parseNumeric(rawRecord['Story Height']),
+      asset_ext_cond: rawRecord['Condition'],
+      asset_int_cond: rawRecord['Interior Cond Or End Unit'],
+      
+      // Normalized values - calculated later in development
+      values_norm_time: null,
+      values_norm_size: null,
       
       // Store complete raw data as JSON for dynamic querying
       raw_data: rawRecord,
@@ -226,21 +250,50 @@ export class MicrosystemsProcessor {
   }
 
   /**
-   * Calculate lot size in square feet
+   * Calculate lot frontage - sum of Front Ft1, Front Ft2, Front Ft3
    */
-  calculateLotSize(rawRecord) {
-    // Try different lot size fields
-    let lotSize = this.parseNumeric(rawRecord['Lot Size In Sf']);
+  calculateLotFrontage(rawRecord) {
+    let totalFrontage = 0;
+    let hasValues = false;
     
-    if (!lotSize) {
-      // Convert acres to square feet if available
-      const acres = this.parseNumeric(rawRecord['Lot Size In Acres']);
-      if (acres) {
-        lotSize = acres * 43560; // 1 acre = 43,560 sq ft
-      }
+    const frontFt1 = this.parseNumeric(rawRecord['Front Ft1']);
+    const frontFt2 = this.parseNumeric(rawRecord['Front Ft2']);
+    const frontFt3 = this.parseNumeric(rawRecord['Front Ft3']);
+    
+    if (frontFt1) {
+      totalFrontage += frontFt1;
+      hasValues = true;
+    }
+    if (frontFt2) {
+      totalFrontage += frontFt2;
+      hasValues = true;
+    }
+    if (frontFt3) {
+      totalFrontage += frontFt3;
+      hasValues = true;
     }
     
-    return lotSize;
+    return hasValues ? totalFrontage : null;
+  }
+
+  /**
+   * Calculate lot depth - average of Avg Depth1, Avg Depth2, Avg Depth3
+   */
+  calculateLotDepth(rawRecord) {
+    const depths = [];
+    
+    const avgDepth1 = this.parseNumeric(rawRecord['Avg Depth1']);
+    const avgDepth2 = this.parseNumeric(rawRecord['Avg Depth2']);
+    const avgDepth3 = this.parseNumeric(rawRecord['Avg Depth3']);
+    
+    if (avgDepth1) depths.push(avgDepth1);
+    if (avgDepth2) depths.push(avgDepth2);
+    if (avgDepth3) depths.push(avgDepth3);
+    
+    if (depths.length === 0) return null;
+    
+    const average = depths.reduce((sum, depth) => sum + depth, 0) / depths.length;
+    return parseFloat(average.toFixed(2)); // Round to 2 decimal places
   }
 
   /**
@@ -321,10 +374,11 @@ export class MicrosystemsProcessor {
     return isNaN(date.getTime()) ? null : date.toISOString().split('T')[0];
   }
 
-  parseNumeric(value) {
+  parseNumeric(value, decimals = null) {
     if (!value || value === '') return null;
     const num = parseFloat(String(value).replace(/[,$]/g, ''));
-    return isNaN(num) ? null : num;
+    if (isNaN(num)) return null;
+    return decimals !== null ? parseFloat(num.toFixed(decimals)) : num;
   }
 
   parseInteger(value) {
