@@ -172,10 +172,11 @@ export class MicrosystemsProcessor {
       property_cama_class: rawRecord['Class'],
       property_facility: rawRecord['Facility Name'],
       
-      // Metadata
+      // Metadata - FIXED: Added created_by field
       vendor_source: 'Microsystems',
       source_file_uploaded_at: new Date(),
-      processed_at: new Date()
+      processed_at: new Date(),
+      created_by: '5df85ca3-7a54-4798-a665-c31da8d9caad'
     };
   }
 
@@ -225,8 +226,9 @@ export class MicrosystemsProcessor {
       // Store complete raw data as JSON for dynamic querying
       raw_data: rawRecord,
       
-      // Metadata
-      calculated_at: new Date()
+      // Metadata - FIXED: Added created_by field
+      calculated_at: new Date(),
+      created_by: '5df85ca3-7a54-4798-a665-c31da8d9caad'
     };
   }
 
