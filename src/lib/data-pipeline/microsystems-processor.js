@@ -194,11 +194,9 @@ export class MicrosystemsProcessor {
       property_location: rawRecord['Location'],
       property_composite_key: rawRecord.property_composite_key,
       
-      // Calculated fields (examples - add more as needed)
+      // Calculated fields - minimal essential calculations only
       total_baths_calculated: this.calculateTotalBaths(rawRecord),
-      fireplace_count_calculated: this.calculateFireplaceCount(rawRecord),
       lot_size_calculated: this.calculateLotSize(rawRecord),
-      livable_area_normalized: this.parseNumeric(rawRecord['Livable Area']),
       
       // Store complete raw data as JSON for dynamic querying
       raw_data: rawRecord,
@@ -209,34 +207,22 @@ export class MicrosystemsProcessor {
   }
 
   /**
-   * Calculate total bathrooms from multiple fields
+   * Calculate total bathrooms - corrected weighting
+   * 4 & 3 fixture = full baths (1.0), 2 fixture = half bath (0.5), single fixture not counted
    */
   calculateTotalBaths(rawRecord) {
     let total = 0;
     
-    // Add weighted bathroom counts
+    // Full bathrooms (1.0 weight each)
     total += (this.parseNumeric(rawRecord['4 Fixture Bath']) || 0) * 1.0;
-    total += (this.parseNumeric(rawRecord['3 Fixture Bath']) || 0) * 0.75;
+    total += (this.parseNumeric(rawRecord['3 Fixture Bath']) || 0) * 1.0;
+    
+    // Half bathrooms (0.5 weight each)
     total += (this.parseNumeric(rawRecord['2 Fixture Bath']) || 0) * 0.5;
-    total += (this.parseNumeric(rawRecord['Single Fixture']) || 0) * 0.25;
+    
+    // Single fixture not counted
     
     return total > 0 ? total : null;
-  }
-
-  /**
-   * Calculate fireplace count
-   */
-  calculateFireplaceCount(rawRecord) {
-    let count = 0;
-    
-    count += this.parseInteger(rawRecord['Fireplace 1 Story Stack']) || 0;
-    count += this.parseInteger(rawRecord['Fp 1 And Half Sty']) || 0;
-    count += this.parseInteger(rawRecord['Fp 2 Sty']) || 0;
-    count += this.parseInteger(rawRecord['Fp Same Stack']) || 0;
-    count += this.parseInteger(rawRecord['Fp Freestanding']) || 0;
-    count += this.parseInteger(rawRecord['Fp Heatilator']) || 0;
-    
-    return count > 0 ? count : null;
   }
 
   /**
