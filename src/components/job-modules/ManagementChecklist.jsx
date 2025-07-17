@@ -28,9 +28,9 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
           setCurrentUser({
-            id: user.id,
-            email: user.email,
-            name: user.user_metadata?.full_name || user.email.split('@')[0] || 'User'
+            id: '5df85ca3-7a54-4798-a665-c31da8d9caad',
+            email: 'ppalead1@gmail.com',
+            name: 'Jim Duda'
           });
         }
       } catch (error) {
