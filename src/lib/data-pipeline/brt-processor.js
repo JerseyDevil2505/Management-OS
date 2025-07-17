@@ -174,17 +174,18 @@ export class BRTProcessor {
       property_mod_class: rawRecord.PROPERTY_CLASS, // BRT-specific field Microsystems doesn't have
       property_facility: rawRecord.EXEMPT_FACILITYNAME,
       
-      // Metadata
+      // Metadata - FIXED: Added created_by field
       vendor_source: 'BRT',
       source_file_uploaded_at: new Date(),
-      processed_at: new Date()
+      processed_at: new Date(),
+      created_by: '5df85ca3-7a54-4798-a665-c31da8d9caad'
     };
   }
 
   /**
    * Map to property_analysis_data for calculated fields and raw storage
    */
-  async mapToAnalysisData(rawRecord, propertyRecordId, jobId) {
+  async mapToAnalysisData(rawRecord, propertyRecordId, jobId, yearCreated, ccddCode) {
     return {
       // Link to property record
       property_record_id: propertyRecordId,
@@ -195,7 +196,7 @@ export class BRTProcessor {
       property_qualifier: rawRecord.QUALIFIER,
       property_addl_card: rawRecord.CARD,
       property_location: rawRecord.PROPERTY_LOCATION,
-      property_composite_key: rawRecord.property_composite_key,
+      property_composite_key: `${yearCreated}${ccddCode}-${rawRecord.BLOCK}-${rawRecord.LOT}_${rawRecord.QUALIFIER || 'NONE'}-${rawRecord.CARD || 'NONE'}-${rawRecord.PROPERTY_LOCATION || 'NONE'}`,
       
       // Essential calculated fields only
       total_baths_calculated: this.calculateTotalBaths(rawRecord), // Proper weighted calculation
@@ -227,8 +228,9 @@ export class BRTProcessor {
       // Store complete raw data as JSON for dynamic querying
       raw_data: rawRecord,
       
-      // Metadata
-      calculated_at: new Date()
+      // Metadata - FIXED: Added created_by field
+      calculated_at: new Date(),
+      created_by: '5df85ca3-7a54-4798-a665-c31da8d9caad'
     };
   }
 
@@ -417,9 +419,8 @@ export class BRTProcessor {
             continue;
           }
           
-          // Map to analysis data
-          const analysisData = await this.mapToAnalysisData(rawRecord, insertedRecord.id, jobId);
-          analysisData.property_composite_key = propertyRecord.property_composite_key;
+          // Map to analysis data - FIXED: Added missing parameters
+          const analysisData = await this.mapToAnalysisData(rawRecord, insertedRecord.id, jobId, yearCreated, ccddCode);
           
           // Insert analysis data
           const { error: analysisError } = await supabase
