@@ -13,7 +13,8 @@ export class MicrosystemsProcessor {
     this.duplicateHeaderPositions = {
       landValue: [],
       imprValue: [],
-      totlValue: []
+      totlValue: [],
+      location: []
     };
   }
 
@@ -110,6 +111,9 @@ export class MicrosystemsProcessor {
       if (header === 'Totl Value') {
         this.duplicateHeaderPositions.totlValue.push(index);
       }
+      if (header === 'Location') {
+        this.duplicateHeaderPositions.location.push(index);
+      }
     });
     
     console.log('Duplicate header positions:', this.duplicateHeaderPositions);
@@ -131,8 +135,8 @@ export class MicrosystemsProcessor {
       property_lot: rawRecord['Lot'],
       property_qualifier: rawRecord['Qual'],
       property_addl_card: rawRecord['Bldg'],
-      property_location: rawRecord['Location'],
-      property_composite_key: `${yearCreated}${ccddCode}-${rawRecord['Block']}-${rawRecord['Lot']}_${rawRecord['Qual'] || 'NONE'}-${rawRecord['Bldg'] || 'NONE'}-${rawRecord['Location'] || 'NONE'}`,
+      property_location: rawValues[this.duplicateHeaderPositions.location[0]] || null,
+      property_composite_key: `${yearCreated}${ccddCode}-${rawRecord['Block']}-${rawRecord['Lot']}_${rawRecord['Qual'] || 'NONE'}-${rawRecord['Bldg'] || 'NONE'}-${rawValues[this.duplicateHeaderPositions.location[0]] || 'NONE'}`,
       
       // Owner fields
       owner_name: rawRecord['Owner Name'],
@@ -193,8 +197,8 @@ export class MicrosystemsProcessor {
       property_lot: rawRecord['Lot'],
       property_qualifier: rawRecord['Qual'],
       property_addl_card: rawRecord['Bldg'],
-      property_location: rawRecord['Location'],
-      property_composite_key: `${yearCreated}${ccddCode}-${rawRecord['Block']}-${rawRecord['Lot']}_${rawRecord['Qual'] || 'NONE'}-${rawRecord['Bldg'] || 'NONE'}-${rawRecord['Location'] || 'NONE'}`,
+      property_location: rawValues[this.duplicateHeaderPositions.location[0]] || null,
+      property_composite_key: `${yearCreated}${ccddCode}-${rawRecord['Block']}-${rawRecord['Lot']}_${rawRecord['Qual'] || 'NONE'}-${rawRecord['Bldg'] || 'NONE'}-${rawValues[this.duplicateHeaderPositions.location[0]] || 'NONE'}`,
       
       // Calculated fields - minimal essential calculations only
       total_baths_calculated: this.calculateTotalBaths(rawRecord),
