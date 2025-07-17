@@ -1,6 +1,6 @@
-    import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Upload, Plus, Edit3, Users, FileText, Calendar, MapPin, Database, Settings, Eye, DollarSign, Trash2, CheckCircle, Archive, TrendingUp, Target, AlertTriangle } from 'lucide-react';
-import { employeeService, jobService, planningJobService, utilityService, authService, supabase } from '../lib/supabaseClient';
+import { employeeService, jobService, planningJobService, utilityService, authService, propertyService } from '../lib/supabaseClient';
 
 const AdminJobManagement = () => {
   const [activeTab, setActiveTab] = useState('jobs');
@@ -17,6 +17,7 @@ const AdminJobManagement = () => {
   const [editingPlanning, setEditingPlanning] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
+  const [processing, setProcessing] = useState(false);
 
   const [newJob, setNewJob] = useState({
     name: '',
@@ -87,10 +88,6 @@ const AdminJobManagement = () => {
           setManagers(managersData);
           setDbStats(statsData);
           setCurrentUser(userData || { role: 'admin', canAccessBilling: true });
-          
-          // Debug auth data
-          console.log('Auth user data:', userData);
-          console.log('Current user set to:', userData || { role: 'admin', canAccessBilling: true });
         }
       } catch (error) {
         console.error('Data initialization error:', error);
@@ -103,138 +100,82 @@ const AdminJobManagement = () => {
     initializeData();
   }, []);
 
- // Enhanced analyzeFileWithProcessor function with data processing
-// Add this to replace your existing analyzeFileWithProcessor function
+  // CLEAN: Simple file analysis using vendor detection patterns
+  const analyzeFile = async (file, type) => {
+    if (!file) return;
 
-const analyzeFileWithProcessor = async (file, type, jobData = null) => {
-  console.log('=== ANALYZE FILE DEBUG ===');
-  console.log('Starting analysis for:', file.name, 'type:', type);
-  
-  if (!file) {
-    console.log('No file provided!');
-    return;
-  }
+    const text = await file.text();
+    let vendorResult = null;
 
-  console.log('Reading file as text...');
-  const text = await file.text();
-  console.log('File text length:', text.length);
-  console.log('First 200 characters:', text.substring(0, 200));
-  
-  let vendorResult = null;
-  let processedData = null;
-
-  if (type === 'source') {
-    console.log('Analyzing as source file...');
-    
-    if (file.name.endsWith('.txt')) {
-      console.log('File is .txt, checking for Microsystems format...');
-      const lines = text.split('\n');
-      console.log('Total lines:', lines.length);
-      const headers = lines[0];
-      console.log('Headers:', headers);
-      
-      if (headers.includes('Block|Lot|Qual') || headers.includes('|')) {
-        console.log('Found pipe separators - this is Microsystems format!');
-        const dataLines = lines.slice(1).filter(line => line.trim());
-        const sampleLine = dataLines[0] || '';
-        const pipeCount = (sampleLine.match(/\|/g) || []).length;
+    if (type === 'source') {
+      // Detect vendor based on file patterns
+      if (file.name.endsWith('.txt')) {
+        const lines = text.split('\n');
+        const headers = lines[0];
         
-        vendorResult = {
-          vendor: 'Microsystems',
-          confidence: 100,
-          detectedFormat: 'Microsystems Text Delimited',
-          fileStructure: `${pipeCount + 1} fields with pipe separators`,
-          propertyCount: dataLines.length,
-          isValid: true
-        };
-        
-        // Process Microsystems data if jobData is provided
-        if (jobData) {
-          console.log('Processing Microsystems data for job:', jobData.name);
-          processedData = await processMicrosystemsData(text, jobData);
-          console.log('Processed', processedData.length, 'Microsystems records');
-        }
-        
-        console.log('Vendor result:', vendorResult);
-      } else {
-        console.log('No pipe separators found, not Microsystems format');
-      }
-    }
-    else if (file.name.endsWith('.csv') || file.name.endsWith('.xlsx')) {
-      console.log('File is CSV/Excel, checking for BRT format...');
-      const lines = text.split('\n');
-      const headers = lines[0];
-      
-      if (headers.includes('VALUES_LANDTAXABLEVALUE') || 
-          headers.includes('PROPCLASS') || 
-          headers.includes('LISTBY')) {
-        console.log('Found BRT headers');
-        const dataLines = lines.slice(1).filter(line => line.trim());
-        const fieldCount = (headers.match(/,/g) || []).length + 1;
-        
-        vendorResult = {
-          vendor: 'BRT',
-          confidence: headers.includes('VALUES_LANDTAXABLEVALUE') ? 100 : 85,
-          detectedFormat: 'BRT CSV Export',
-          fileStructure: `${fieldCount} columns with standard BRT headers`,
-          propertyCount: dataLines.length,
-          isValid: true
-        };
-        
-        // Process BRT data if jobData is provided
-        if (jobData) {
-          console.log('Processing BRT data for job:', jobData.name);
-          processedData = await processBRTData(text, jobData);
-          console.log('Processed', processedData.length, 'BRT records');
-        }
-        
-        console.log('Vendor result:', vendorResult);
-      } else {
-        console.log('No BRT headers found');
-      }
-    }
-  } else if (type === 'code') {
-    console.log('Analyzing as code file...');
-    
-    if (file.name.endsWith('.txt')) {
-      const lines = text.split('\n').filter(line => line.trim());
-      if (text.includes('120PV') || lines.some(line => /^\d{2,3}[A-Z]{1,3}/.test(line))) {
-        vendorResult = {
-          vendor: 'Microsystems',
-          confidence: 95,
-          detectedFormat: 'Microsystems Code Definitions',
-          fileStructure: `${lines.length} code definitions`,
-          codeCount: lines.length,
-          isValid: true
-        };
-        
-        console.log('Code file vendor result:', vendorResult);
-      } else if (text.includes('"KEY":"') && text.includes('"VALUE":"')) {
-        // BRT nested JSON in text file
-        console.log('Detected BRT nested JSON structure in .txt file');
-        
-        try {
-          let jsonContent = text;
-          if (text.includes('{"')) {
-            jsonContent = text.substring(text.indexOf('{"'));
-          }
+        if (headers.includes('Block|Lot|Qual') || headers.includes('|')) {
+          const dataLines = lines.slice(1).filter(line => line.trim());
+          const pipeCount = (dataLines[0]?.match(/\|/g) || []).length;
           
-          const parsed = JSON.parse(jsonContent);
-          
-          // Count total codes by traversing the nested structure
-          let totalCodes = 0;
-          const countCodes = (obj) => {
-            if (obj && typeof obj === 'object') {
-              if (obj.KEY && obj.DATA && obj.DATA.VALUE) {
-                totalCodes++;
-              }
-              if (obj.MAP) {
-                Object.values(obj.MAP).forEach(countCodes);
-              }
-            }
+          vendorResult = {
+            vendor: 'Microsystems',
+            confidence: 100,
+            detectedFormat: 'Microsystems Text Delimited',
+            fileStructure: `${pipeCount + 1} fields with pipe separators`,
+            propertyCount: dataLines.length,
+            isValid: true
           };
+        }
+      } else if (file.name.endsWith('.csv') || file.name.endsWith('.xlsx')) {
+        const lines = text.split('\n');
+        const headers = lines[0];
+        
+        if (headers.includes('VALUES_LANDTAXABLEVALUE') || 
+            headers.includes('PROPCLASS') || 
+            headers.includes('LISTBY')) {
+          const dataLines = lines.slice(1).filter(line => line.trim());
+          const fieldCount = (headers.match(/,/g) || []).length + 1;
           
-          Object.values(parsed).forEach(countCodes);
+          vendorResult = {
+            vendor: 'BRT',
+            confidence: headers.includes('VALUES_LANDTAXABLEVALUE') ? 100 : 85,
+            detectedFormat: 'BRT CSV Export',
+            fileStructure: `${fieldCount} columns with standard BRT headers`,
+            propertyCount: dataLines.length,
+            isValid: true
+          };
+        }
+      }
+    } else if (type === 'code') {
+      // Code file detection
+      if (file.name.endsWith('.txt')) {
+        const lines = text.split('\n').filter(line => line.trim());
+        if (text.includes('120PV') || lines.some(line => /^\d{2,3}[A-Z]{1,3}/.test(line))) {
+          vendorResult = {
+            vendor: 'Microsystems',
+            confidence: 95,
+            detectedFormat: 'Microsystems Code Definitions',
+            fileStructure: `${lines.length} code definitions`,
+            codeCount: lines.length,
+            isValid: true
+          };
+        } else if (text.includes('"KEY":"') && text.includes('"VALUE":"')) {
+          let totalCodes = 0;
+          try {
+            let jsonContent = text.includes('{"') ? text.substring(text.indexOf('{"')) : text;
+            const parsed = JSON.parse(jsonContent);
+            
+            const countCodes = (obj) => {
+              if (obj && typeof obj === 'object') {
+                if (obj.KEY && obj.DATA && obj.DATA.VALUE) totalCodes++;
+                if (obj.MAP) Object.values(obj.MAP).forEach(countCodes);
+              }
+            };
+            
+            Object.values(parsed).forEach(countCodes);
+          } catch (e) {
+            totalCodes = (text.match(/"VALUE":/g) || []).length;
+          }
           
           vendorResult = {
             vendor: 'BRT',
@@ -244,46 +185,22 @@ const analyzeFileWithProcessor = async (file, type, jobData = null) => {
             codeCount: totalCodes,
             isValid: true
           };
-          
-          console.log('BRT nested JSON code file detected:', vendorResult);
-        } catch (e) {
-          console.log('JSON parse failed for BRT file:', e);
-          // Fallback count
-          vendorResult = {
-            vendor: 'BRT',
-            confidence: 80,
-            detectedFormat: 'BRT Text Code Export',
-            fileStructure: 'Text format with nested codes',
-            codeCount: (text.match(/"VALUE":/g) || []).length,
-            isValid: true
-          };
         }
-      }
-    }
-    else if (file.name.endsWith('.json') || text.includes('"02":"COLONIAL"') || text.includes('"KEY":"') || text.includes('"VALUE":"')) {
-      try {
-        // Try to find JSON content even if file has prefix text
-        let jsonContent = text;
-        if (text.includes('{"')) {
-          jsonContent = text.substring(text.indexOf('{"'));
-        }
-        
-        const parsed = JSON.parse(jsonContent);
-        
-        // Count total codes by traversing the nested structure
+      } else if (file.name.endsWith('.json')) {
+        // Similar BRT JSON processing
         let totalCodes = 0;
-        const countCodes = (obj) => {
-          if (obj && typeof obj === 'object') {
-            if (obj.KEY && obj.DATA && obj.DATA.VALUE) {
-              totalCodes++;
+        try {
+          const parsed = JSON.parse(text);
+          const countCodes = (obj) => {
+            if (obj && typeof obj === 'object') {
+              if (obj.KEY && obj.DATA && obj.DATA.VALUE) totalCodes++;
+              if (obj.MAP) Object.values(obj.MAP).forEach(countCodes);
             }
-            if (obj.MAP) {
-              Object.values(obj.MAP).forEach(countCodes);
-            }
-          }
-        };
-        
-        Object.values(parsed).forEach(countCodes);
+          };
+          Object.values(parsed).forEach(countCodes);
+        } catch (e) {
+          totalCodes = (text.match(/"VALUE":/g) || []).length;
+        }
         
         vendorResult = {
           vendor: 'BRT',
@@ -293,335 +210,51 @@ const analyzeFileWithProcessor = async (file, type, jobData = null) => {
           codeCount: totalCodes,
           isValid: true
         };
-        
-        console.log('BRT nested JSON code file detected:', vendorResult);
-      } catch (e) {
-        console.log('JSON parse failed, checking for text format...');
-        if (text.includes('COLONIAL') || text.includes('GROUND FLR') || text.includes('VALUE')) {
-          vendorResult = {
-            vendor: 'BRT',
-            confidence: 80,
-            detectedFormat: 'BRT Text Code Export',
-            fileStructure: 'Text format with code descriptions',
-            codeCount: (text.match(/"VALUE":/g) || []).length,
-            isValid: true
-          };
-          
-          console.log('BRT text code file vendor result:', vendorResult);
-        }
       }
     }
-  }
 
-  console.log('Final vendor result:', vendorResult);
-  console.log('Updating file analysis state...');
+    // Update file analysis state
+    setFileAnalysis(prev => {
+      const newState = {
+        ...prev,
+        [type === 'source' ? 'sourceFile' : 'codeFile']: file,
+        [type === 'source' ? 'propertyCount' : 'codeCount']: 
+          vendorResult?.[type === 'source' ? 'propertyCount' : 'codeCount'] || 0,
+      };
+      
+      if (type === 'source' || !prev.detectedVendor) {
+        newState.detectedVendor = vendorResult?.vendor || null;
+        newState.isValid = vendorResult?.isValid || false;
+      }
+      
+      if (type === 'source') {
+        newState.sourceVendorDetails = vendorResult;
+      } else {
+        newState.codeVendorDetails = vendorResult;
+      }
+      
+      return newState;
+    });
 
-  setFileAnalysis(prev => {
-    const newState = {
-      ...prev,
-      [type === 'source' ? 'sourceFile' : 'codeFile']: file,
-      [type === 'source' ? 'propertyCount' : 'codeCount']: 
-        vendorResult?.[type === 'source' ? 'propertyCount' : 'codeCount'] || 0,
-    };
-    
-    // Only update vendor info if this is a source file or if no vendor was detected yet
-    if (type === 'source' || !prev.detectedVendor) {
-      newState.detectedVendor = vendorResult?.vendor || null;
-      newState.isValid = vendorResult?.isValid || false;
-    }
-    
-    // Store vendor details separately for each file type
-    if (type === 'source') {
-      newState.sourceVendorDetails = vendorResult;
-    } else {
-      newState.codeVendorDetails = vendorResult;
-    }
-    
-    console.log('New file analysis state:', newState);
-    return newState;
-  });
-
-  if (vendorResult && type === 'source') {
-    console.log('Updating newJob state with vendor info...');
-    setNewJob(prev => {
-      const newJobState = { 
+    if (vendorResult && type === 'source') {
+      setNewJob(prev => ({ 
         ...prev, 
         vendor: vendorResult.vendor,
         vendorDetection: vendorResult
-      };
-      
-      console.log('New job state:', newJobState);
-      return newJobState;
-    });
-  } else {
-    console.log('No vendor result or code file - not updating job state');
-  }
-  
-  console.log('=== ANALYZE FILE COMPLETE ===');
-  
-  // Return processed data if available
-  return {
-    vendorResult,
-    processedData
-  };
-};
-
-// NEW FUNCTION: Process Microsystems data
-const processMicrosystemsData = async (fileText, jobData) => {
-  console.log('=== PROCESSING MICROSYSTEMS DATA ===');
-  
-  const lines = fileText.split('\n');
-  const headers = lines[0].split('|');
-  const dataLines = lines.slice(1).filter(line => line.trim());
-  
-  console.log('Headers:', headers);
-  console.log('Processing', dataLines.length, 'data lines');
-  
-  const records = [];
-  const jobYear = new Date().getFullYear();
-  
-  for (let i = 0; i < dataLines.length; i++) {
-    const line = dataLines[i];
-    const values = line.split('|');
-    
-    // Create raw record object
-    const rawRecord = {};
-    headers.forEach((header, index) => {
-      rawRecord[header.trim()] = values[index] ? values[index].trim() : '';
-    });
-    
-    // Create normalized record using composite key format
-    const normalizedRecord = {
-      // Core identifiers
-      block: rawRecord.Block || rawRecord.block || '',
-      lot: rawRecord.Lot || rawRecord.lot || '',
-      qualifier: rawRecord.Qual || rawRecord.qualifier || '',
-      card: rawRecord.Building || rawRecord.building || '',
-      property_location: rawRecord.PropertyLocation || rawRecord.propertyLocation || '',
-      property_composite_key: `${jobYear}${jobData.ccdd}-${rawRecord.Block || rawRecord.block}-${rawRecord.Lot || rawRecord.lot}_${rawRecord.Qual || rawRecord.qualifier || 'NONE'}-${rawRecord.Building || rawRecord.building || 'NONE'}-${rawRecord.PropertyLocation || rawRecord.propertyLocation || 'NONE'}`,
-      
-      // Job metadata
-      job_id: jobData.id,
-      vendor_source: 'Microsystems',
-      source_file_name: jobData.sourceFileName || 'Unknown',
-      code_file_name: jobData.codeFileName || 'Unknown',
-      file_version: 1,
-      
-      // Owner information
-      owner_name: rawRecord.OwnerName || rawRecord.ownerName || '',
-      owner_street: rawRecord.OwnerStreet || rawRecord.ownerStreet || '',
-      owner_csz: rawRecord.OwnerCsz || rawRecord.ownerCsz || '',
-      
-      // Property information
-      property_class: rawRecord.PropertyClass || rawRecord.propertyClass || '',
-      property_additional_lots: rawRecord.PropertyAdditionalLots || rawRecord.propertyAdditionalLots || '',
-      property_addl_card: rawRecord.Building || rawRecord.building || '',
-      
-      // ===== VALUES SECTION =====
-      // MOD4 values (first occurrence - columns K, P, Q)
-      values_mod4_land: parseFloat(values[10] || 0),        // Column K - "Land Value"
-      values_mod4_total: parseFloat(values[15] || 0),       // Column P - "Totl Value"  
-      values_mod4_improvement: parseFloat(values[16] || 0), // Column Q - "Impr Value"
-
-      // CAMA values (second occurrence - columns BZ, CA, CB)  
-      values_cama_land: parseFloat(values[77] || 0),        // Column BZ - "Land Value"
-      values_cama_improvement: parseFloat(values[78] || 0), // Column CA - "Impr Value"
-      values_cama_total: parseFloat(values[79] || 0),       // Column CB - "Totl Value"
-
-      // Cost values
-      values_base_cost: parseFloat(values[297] || 0),       // Column Ū - "Base Cost"
-      values_det_items: parseFloat(values[298] || 0),       // Column ū - "Det Items"
-      values_cost_new: parseFloat(values[331] || 0),       // Column ƌ - "Cost New"
-      
-      // Sales data
-      sales_date: rawRecord.SalesDate || rawRecord.salesDate || null,
-      sales_price: parseFloat(rawRecord.SalesPrice || rawRecord.salesPrice || 0),
-      sales_book: rawRecord.SalesBook || rawRecord.salesBook || '',
-      sales_page: rawRecord.SalesPage || rawRecord.salesPage || '',
-      sales_nu: rawRecord.SalesNu || rawRecord.salesNu || '',
-      
-      // Asset information
-      asset_year_built: parseInt(rawRecord.YearBuilt || rawRecord.yearBuilt || 0),
-      asset_livable_area: parseFloat(rawRecord.LivableArea || rawRecord.livableArea || 0),
-      asset_story_height: parseFloat(rawRecord.StoryHeight || rawRecord.storyHeight || 0),
-      asset_building_class: rawRecord['Bldg Qual Class Code'] || '',     // Use bracket notation for spaces
-      asset_total_beds: parseInt(rawRecord['Total Bedrms'] || 0),        // Use bracket notation
-      asset_v_c_s: rawRecord.VCS || '',                                  // VCS field
-      asset_design_style: rawRecord['Style Code'] || '',                 // String, not parseFloat
-
-      // Add to normalizeRecord function
-      exempt_facility: rawRecord['Facility Name'],
-      property_class_mod4: rawRecord.Class,
-      property_class_cama: null, // Microsystems doesn't have this
-      info_by: rawRecord['Info By'],
-      view_code: null, // BRT only
-      neighborhood: rawRecord.Neighborhood,
-
-      // Metadata
-      raw_data: rawRecord,
-      processed_at: new Date().toISOString(),
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      created_by: jobData.created_by || '5df85ca3-7a54-4798-a665-c31da8d9caad',
-      validation_status: 'processed',
-    };
-    
-    records.push(normalizedRecord);
-  }
-  
-  console.log('Created', records.length, 'normalized Microsystems records');
-  return records;
-};
-
-// NEW FUNCTION: Process BRT data
-const processBRTData = async (fileText, jobData) => {
-  console.log('=== PROCESSING BRT DATA ===');
-  
-  const lines = fileText.split('\n');
-  const headers = lines[0].split(',');
-  const dataLines = lines.slice(1).filter(line => line.trim());
-  
-  console.log('Headers:', headers);
-  console.log('Processing', dataLines.length, 'data lines');
-  
-  const records = [];
-  const jobYear = new Date().getFullYear();
-  
-  for (let i = 0; i < dataLines.length; i++) {
-    const line = dataLines[i];
-    const values = line.split(',');
-    
-    // Create raw record object
-    const rawRecord = {};
-    headers.forEach((header, index) => {
-      rawRecord[header.trim()] = values[index] ? values[index].trim().replace(/"/g, '') : '';
-    });
-    
-    // Create normalized record using composite key format
-    const normalizedRecord = {
-      // Core identifiers
-      block: rawRecord.BLOCK || '',
-      lot: rawRecord.LOT || '',
-      qualifier: rawRecord.QUALIFIER || '',
-      card: rawRecord.Card || '',
-      property_location: rawRecord.PROPERTY_LOCATION || '',
-      property_composite_key: `${jobYear}${jobData.ccdd}-${rawRecord.BLOCK}-${rawRecord.LOT}_${rawRecord.QUALIFIER || 'NONE'}-${rawRecord.Card || 'NONE'}-${rawRecord.PROPERTY_LOCATION || 'NONE'}`,
-      
-      // Job metadata
-      job_id: jobData.id,
-      vendor_source: 'BRT',
-      source_file_name: jobData.sourceFileName || 'Unknown',
-      code_file_name: jobData.codeFileName || 'Unknown',
-      file_version: 1,
-      
-      // Owner information
-      owner_name: rawRecord.OWNER_OWNER || '',
-      owner_street: rawRecord.OWNER_ADDRESS || '',
-      owner_csz: `${rawRecord.OWNER_CITY || ''} ${rawRecord.OWNER_STATE || ''} ${rawRecord.OWNER_ZIP || ''}`.trim(),
-      
-      // Property information
-      property_class: rawRecord.PROPERTY_CLASS || '',
-      property_additional_lots: rawRecord.PROPERTY_ADDLOTS || '',
-      property_addl_card: rawRecord.Card || '',
-      
-      // Values
-      values_mod4_land: parseFloat(rawRecord.VALUES_LANDTAXABLEVALUE || 0),
-      values_mod4_improvement: parseFloat(rawRecord.VALUES_IMPROVTAXABLEVALUE || 0),
-      values_mod4_total: parseFloat(rawRecord.VALUES_NETTAXABLEVALUE || 0),
-      values_cama_land: parseFloat(rawRecord.TOTALLANDVALUE || 0),
-      values_cama_improvement: parseFloat(rawRecord.TOTALIMPROVVALUE || 0),
-      values_cama_total: parseFloat(rawRecord.TOTNETVALUE || 0),  // ← Fixed extra comma
-      values_base_cost: parseFloat(rawRecord.BASEREPLCOST || 0),
-      values_det_items: parseFloat(rawRecord.DETACHEDITEMS || 0),  // ← Fixed field name
-      values_cost_new: parseFloat(rawRecord.REPLCOSTNEW || 0),
-      
-      // Sales data
-      sales_date: rawRecord.CURRENTSALE_DATE || null,
-      sales_price: parseFloat(rawRecord.CURRENTSALE_PRICE || 0),
-      sales_book: rawRecord.CURRENTSALE_DEEDBOOK || '',
-      sales_page: rawRecord.CURRENTSALE_DEEDPAGE || '',
-      sales_nu: rawRecord.CURRENTSALE_NUC || '',
-      
-      // Asset information
-      asset_year_built: parseInt(rawRecord.YEARBUILT || 0),
-      asset_livable_area: parseFloat(rawRecord.SFLA_TOTAL || 0),
-      asset_story_height: parseFloat(rawRecord.STORYHGT || 0),
-      asset_building_class: rawRecord.BUILDING_CLASS || '',     // Actual building class field
-      asset_design_style: rawRecord.DESIGN || '',              // Design/style code
-      asset_v_c_s: rawRecord.VCS || '',                        // VCS/Neighborhood code
-
-      // Add to normalizeRecord function
-      exempt_facility: rawRecord.EXEMPT_FACILITYNAME,
-      property_class_mod4: rawRecord.PROPERTY_CLASS,
-      property_class_cama: rawRecord.PROPCLASS,
-      info_by: rawRecord.INFOBY,
-      view_code: rawRecord.VIEW,
-      neighborhood: rawRecord.NBHD,
-              
-      // Metadata
-      raw_data: rawRecord,
-      processed_at: new Date().toISOString(),
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      created_by: jobData.created_by || '5df85ca3-7a54-4798-a665-c31da8d9caad',
-      validation_status: 'processed'
-    };
-    
-    records.push(normalizedRecord);
-  }
-  
-  console.log('Created', records.length, 'normalized BRT records');
-  return records;
-};
-
-// NEW FUNCTION: Insert processed data into database
-const insertProcessedData = async (processedData, jobId) => {
-  console.log('=== INSERTING PROCESSED DATA ===');
-  console.log('Inserting', processedData.length, 'records for job', jobId);
-  
-  try {
-    const { data, error } = await supabase
-      .from('property_records')
-      .insert(processedData);
-    
-    if (error) {
-      console.error('Database insertion error:', error);
-      throw error;
+      }));
     }
-    
-    console.log('Successfully inserted', processedData.length, 'records');
-    return { success: true, insertedCount: processedData.length };
-  } catch (error) {
-    console.error('Failed to insert data:', error);
-    throw error;
-  }
-};
+  };
+
   const handleFileUpload = (e, type) => {
-    console.log('=== FILE UPLOAD DEBUG ===');
-    console.log('Event triggered for type:', type);
-    console.log('Files array:', e.target.files);
-    console.log('First file:', e.target.files[0]);
-    
     const file = e.target.files[0];
     if (file) {
-      console.log('File details:', {
-        name: file.name,
-        size: file.size,
-        type: file.type
-      });
-      
-      // Convert short type names to full names for state
       const fullTypeName = type === 'source' ? 'sourceFile' : 'codeFile';
-      console.log('Setting newJob with type:', fullTypeName);
-      
       setNewJob(prev => ({ ...prev, [fullTypeName]: file }));
-      analyzeFileWithProcessor(file, type);
-    } else {
-      console.log('No file found in event');
+      analyzeFile(file, type);
     }
   };
 
-  const handleManagerToggle = (managerId, role = 'manager') => {
+  const handleManagerToggle = (managerId) => {
     const manager = managers.find(m => m.id === managerId);
     const assignedManager = newJob.assignedManagers.find(m => m.id === managerId);
     
@@ -663,145 +296,93 @@ const insertProcessedData = async (processedData, jobId) => {
     }
   };
 
-  const updateManagerRole = (managerId, newRole) => {
-    setNewJob(prev => ({
-      ...prev,
-      assignedManagers: prev.assignedManagers.map(m => 
-        m.id === managerId ? { ...m, role: newRole } : m
-      )
-    }));
-  };
+  // CLEAN: Use propertyService.importCSVData() instead of inline processing
+  const createJob = async () => {
+    if (!newJob.ccddCode || !newJob.name || !newJob.municipality || !newJob.dueDate || 
+        newJob.assignedManagers.length === 0 || !newJob.sourceFile || !newJob.codeFile) {
+      alert('Please fill all required fields, upload both files, and assign at least one manager');
+      return;
+    }
 
-  // Enhanced createJob function that processes files after job creation
-// Replace your existing createJob function with this
-
-const createJob = async () => {
-  console.log('DEBUG: newJob=', newJob);
-  console.log('DEBUG: assignedManagers =', newJob.assignedManagers);
-  
-  if (!newJob.ccddCode || !newJob.name || !newJob.municipality || !newJob.dueDate || newJob.assignedManagers.length === 0 || !newJob.sourceFile || !newJob.codeFile) {
-    window.alert('Please fill all required fields, upload both files, and assign at least one manager');
-    return;
-  }
-
-  try {
-    // Step 1: Create the job record first
-    const jobData = {
-      name: newJob.name,
-      ccdd: newJob.ccddCode,
-      municipality: newJob.municipality,
-      county: newJob.county,
-      state: newJob.state,
-      vendor: newJob.vendor,
-      dueDate: newJob.dueDate,
-      assignedManagers: newJob.assignedManagers,
-      totalProperties: fileAnalysis.propertyCount,
-      inspectedProperties: 0,
-      status: 'active',
-      sourceFileStatus: 'processing', // Changed from 'imported' to 'processing'
-      codeFileStatus: 'current',
-      vendorDetection: newJob.vendorDetection,
-      workflowStats: {
-        inspectionPhases: {
-          firstAttempt: 'PENDING',
-          secondAttempt: 'PENDING', 
-          thirdAttempt: 'PENDING'
-        },
-        rates: {
-          entryRate: 0,
-          refusalRate: 0,
-          pricingRate: 0,
-          commercialInspectionRate: 0
-        },
-        appeals: {
-          totalCount: 0,
-          percentOfWhole: 0,
-          byClass: {}
-        }
-      },
-      created_by: currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad'
-    };
-
-    console.log('Creating job with data:', jobData);
-    const createdJob = await jobService.create(jobData);
-    console.log('Job created successfully:', createdJob);
-
-    // Step 2: Process the source file data now that we have a job ID
-    if (newJob.sourceFile && createdJob.id) {
-      console.log('Processing source file data for job ID:', createdJob.id);
+    try {
+      setProcessing(true);
       
-      const processingJobData = {
-        id: createdJob.id,
-        ccdd: newJob.ccddCode,
+      // Step 1: Create the job record
+      const jobData = {
         name: newJob.name,
-        sourceFileName: newJob.sourceFile.name,  
-        codeFileName: newJob.codeFile.name,
+        ccdd: newJob.ccddCode,
+        municipality: newJob.municipality,
+        county: newJob.county,
+        state: newJob.state,
+        vendor: newJob.vendor,
+        dueDate: newJob.dueDate,
+        assignedManagers: newJob.assignedManagers,
+        totalProperties: fileAnalysis.propertyCount,
+        inspectedProperties: 0,
+        status: 'active',
+        sourceFileStatus: 'processing',
+        codeFileStatus: 'current',
+        vendorDetection: newJob.vendorDetection,
+        workflowStats: {
+          inspectionPhases: { firstAttempt: 'PENDING', secondAttempt: 'PENDING', thirdAttempt: 'PENDING' },
+          rates: { entryRate: 0, refusalRate: 0, pricingRate: 0, commercialInspectionRate: 0 },
+          appeals: { totalCount: 0, percentOfWhole: 0, byClass: {} }
+        },
         created_by: currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad'
       };
+
+      const createdJob = await jobService.create(jobData);
       
-      try {
-        // Re-analyze the source file but this time with job data for processing
-        const result = await analyzeFileWithProcessor(newJob.sourceFile, 'source', processingJobData);
+      // Step 2: Process files using clean propertyService
+      if (newJob.sourceFile && newJob.codeFile) {
+        const sourceFileContent = await newJob.sourceFile.text();
+        const codeFileContent = await newJob.codeFile.text();
         
-        if (result.processedData && result.processedData.length > 0) {
-          console.log('Inserting processed data into database...');
-          await insertProcessedData(result.processedData, createdJob.id);
-          
-          // Update job status to show source file is now imported
-          await supabase
-            .from('jobs')
-            .update({ 
-              sourceFileStatus: 'imported',
-              totalProperties: result.processedData.length 
-            })
-            .eq('id', createdJob.id);
-          
-          console.log('Source file processing complete!');
+        const result = await propertyService.importCSVData(
+          sourceFileContent,
+          codeFileContent,
+          createdJob.id,
+          new Date().getFullYear(),
+          newJob.ccddCode,
+          newJob.vendor
+        );
+        
+        // Update job status based on processing results
+        const updateData = {
+          sourceFileStatus: result.errors > 0 ? 'error' : 'imported',
+          totalProperties: result.processed || 0
+        };
+        
+        await jobService.update(createdJob.id, updateData);
+        
+        if (result.errors > 0) {
+          alert(`Job created but ${result.errors} errors occurred during file processing. Check the logs.`);
         } else {
-          console.warn('No processed data returned from file analysis');
-          
-          // Update job status to show there was an issue
-          await supabase
-            .from('jobs')
-            .update({ sourceFileStatus: 'error' })
-            .eq('id', createdJob.id);
+          alert(`Job created successfully! Processed ${result.processed} properties.`);
         }
-      } catch (processingError) {
-        console.error('Error processing source file:', processingError);
-        
-        // Update job status to show there was an error
-        await supabase
-          .from('jobs')
-          .update({ sourceFileStatus: 'error' })
-          .eq('id', createdJob.id);
-        
-        window.alert('Job created but there was an error processing the source file: ' + processingError.message);
       }
+      
+      // Step 3: Refresh jobs list
+      const updatedJobs = await jobService.getAll();
+      const activeJobs = updatedJobs.filter(job => job.status !== 'archived');
+      const archived = updatedJobs.filter(job => job.status === 'archived');
+      
+      setJobs(activeJobs);
+      setArchivedJobs(archived);
+      
+      closeJobModal();
+      
+    } catch (error) {
+      console.error('Job creation error:', error);
+      alert('Error creating job: ' + error.message);
+    } finally {
+      setProcessing(false);
     }
-    
-    // Step 3: Refresh jobs list with the new data
-    const updatedJobs = await jobService.getAll();
-    console.log('Updated jobs after creation:', updatedJobs);
-    
-    // Separate active and archived jobs
-    const activeJobs = updatedJobs.filter(job => job.status !== 'archived' && job.status !== 'complete');
-    const archived = updatedJobs.filter(job => job.status === 'archived' || job.status === 'complete');
-    
-    setJobs(activeJobs);
-    setArchivedJobs(archived);
-    
-    closeJobModal();
-    window.alert('Job created and source file processed successfully!');
-    
-  } catch (error) {
-    console.error('Job creation error:', error);
-    window.alert('Error creating job: ' + error.message);
-  }
-};
+  };
 
   const createPlanningJob = async () => {
     if (!newPlanningJob.ccddCode || !newPlanningJob.municipality || !newPlanningJob.dueDate) {
-      window.alert('Please fill all required fields');
+      alert('Please fill all required fields');
       return;
     }
 
@@ -816,85 +397,50 @@ const createJob = async () => {
 
       await planningJobService.create(planningData);
       
-      // Refresh planning jobs list
       const updatedPlanningJobs = await planningJobService.getAll();
       setPlanningJobs(updatedPlanningJobs);
       
       closePlanningModal();
-      window.alert('Planning job created successfully!');
+      alert('Planning job created successfully!');
     } catch (error) {
       console.error('Planning job creation error:', error);
-      window.alert('Error creating planning job: ' + error.message);
+      alert('Error creating planning job: ' + error.message);
     }
   };
 
   const editJob = async () => {
     if (!newJob.name || !newJob.municipality || !newJob.dueDate) {
-      window.alert('Please fill all required fields');
+      alert('Please fill all required fields');
       return;
     }
 
     try {
       const updateData = {
-        job_name: newJob.name,
+        name: newJob.name,
         municipality: newJob.municipality,
-        end_date: newJob.dueDate,
-        target_completion_date: newJob.dueDate
+        dueDate: newJob.dueDate
       };
 
-      const { error } = await supabase
-        .from('jobs')
-        .update(updateData)
-        .eq('id', editingJob.id);
+      await jobService.update(editingJob.id, updateData);
       
-      if (error) throw error;
-
-      // Update manager assignments if changed
-      if (newJob.assignedManagers.length > 0) {
-        // Delete existing assignments
-        await supabase
-          .from('job_assignments')
-          .delete()
-          .eq('job_id', editingJob.id);
-        
-        // Insert new assignments
-        const assignments = newJob.assignedManagers.map(manager => ({
-          job_id: editingJob.id,
-          employee_id: manager.id,
-          role: manager.role,
-          assigned_by: currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad',
-          assigned_date: new Date().toISOString().split('T')[0],
-          is_active: true
-        }));
-        
-        const { error: assignError } = await supabase
-          .from('job_assignments')
-          .insert(assignments);
-        
-        if (assignError) {
-          console.error('Manager assignment update error:', assignError);
-        }
-      }
-      
-      // Refresh jobs list
       const updatedJobs = await jobService.getAll();
-      const activeJobs = updatedJobs.filter(job => job.status !== 'archived' && job.status !== 'complete');
-      const archived = updatedJobs.filter(job => job.status === 'archived' || job.status === 'complete');
+      const activeJobs = updatedJobs.filter(job => job.status !== 'archived');
+      const archived = updatedJobs.filter(job => job.status === 'archived');
       
       setJobs(activeJobs);
       setArchivedJobs(archived);
       
       closeJobModal();
-      window.alert('Job updated successfully!');
+      alert('Job updated successfully!');
     } catch (error) {
       console.error('Job update error:', error);
-      window.alert('Error updating job: ' + error.message);
+      alert('Error updating job: ' + error.message);
     }
   };
 
   const editPlanningJob = async () => {
     if (!newPlanningJob.municipality || !newPlanningJob.dueDate) {
-      window.alert('Please fill all required fields');
+      alert('Please fill all required fields');
       return;
     }
 
@@ -907,15 +453,14 @@ const createJob = async () => {
 
       await planningJobService.update(editingPlanning.id, updateData);
       
-      // Refresh planning jobs list
       const updatedPlanningJobs = await planningJobService.getAll();
       setPlanningJobs(updatedPlanningJobs);
       
       closePlanningModal();
-      window.alert('Planning job updated successfully!');
+      alert('Planning job updated successfully!');
     } catch (error) {
       console.error('Planning job update error:', error);
-      window.alert('Error updating planning job: ' + error.message);
+      alert('Error updating planning job: ' + error.message);
     }
   };
 
@@ -923,16 +468,16 @@ const createJob = async () => {
     try {
       await jobService.delete(job.id);
       const updatedJobs = await jobService.getAll();
-      const activeJobs = updatedJobs.filter(job => job.status !== 'archived' && job.status !== 'complete');
-      const archived = updatedJobs.filter(job => job.status === 'archived' || job.status === 'complete');
+      const activeJobs = updatedJobs.filter(job => job.status !== 'archived');
+      const archived = updatedJobs.filter(job => job.status === 'archived');
       
       setJobs(activeJobs);
       setArchivedJobs(archived);
       setShowDeleteConfirm(null);
-      window.alert('Job deleted successfully');
+      alert('Job deleted successfully');
     } catch (error) {
       console.error('Job deletion error:', error);
-      window.alert('Error deleting job: ' + error.message);
+      alert('Error deleting job: ' + error.message);
     }
   };
 
@@ -994,25 +539,23 @@ const createJob = async () => {
   };
 
   const getStatusColor = (status) => {
-    // Default to active if no status set
     const actualStatus = status || 'active';
     switch (actualStatus) {
       case 'active': return 'text-green-600 bg-green-100';
       case 'planned': return 'text-yellow-600 bg-yellow-100';
       case 'archived': return 'text-purple-600 bg-purple-100';
-      default: return 'text-green-600 bg-green-100'; // Default to active
+      default: return 'text-green-600 bg-green-100';
     }
   };
 
   const goToJob = (job) => {
-    window.alert(`Navigate to ${job.name} modules:\n- Production Tracker\n- Management Checklist\n- Market & Land Analytics\n- Final Valuation\n- Appeal Coverage`);
+    alert(`Navigate to ${job.name} modules:\n- Production Tracker\n- Management Checklist\n- Market & Land Analytics\n- Final Valuation\n- Appeal Coverage`);
   };
 
   const goToBillingPayroll = (job) => {
-    window.alert(`Navigate to ${job.name} Billing & Payroll in Production Tracker`);
+    alert(`Navigate to ${job.name} Billing & Payroll in Production Tracker`);
   };
 
-  // Calculate manager workloads
   const getManagerWorkload = (manager) => {
     const assignedJobs = jobs.filter(job => 
       job.assignedManagers?.some(am => am.id === manager.id)
@@ -1031,18 +574,14 @@ const createJob = async () => {
     };
   };
 
-  // Group jobs by county
   const groupJobsByCounty = (jobList) => {
     const grouped = jobList.reduce((acc, job) => {
       const county = job.county || 'Unknown County';
-      if (!acc[county]) {
-        acc[county] = [];
-      }
+      if (!acc[county]) acc[county] = [];
       acc[county].push(job);
       return acc;
     }, {});
 
-    // Sort counties alphabetically and municipalities within each county
     const sortedCounties = Object.keys(grouped).sort();
     const result = {};
     
@@ -1055,7 +594,6 @@ const createJob = async () => {
     return result;
   };
 
-  // Navigate to tab when clicking status tiles
   const handleStatusTileClick = (tab) => {
     setActiveTab(tab);
   };
@@ -1268,7 +806,7 @@ const createJob = async () => {
                                 )}
                               </div>
                               
-                              {/* Production Metrics - Updated with 5 columns */}
+                              {/* Production Metrics */}
                               <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-3 p-3 bg-gray-50 rounded-lg">
                                 <div className="text-center">
                                   <div className="text-lg font-bold text-blue-600">
@@ -1460,7 +998,7 @@ const createJob = async () => {
                             setNewPlanningJob({
                               ccddCode: planningJob.ccddCode,
                               municipality: planningJob.municipality,
-                              dueDate: '', // This would need to be calculated from potentialYear
+                              dueDate: '',
                               comments: planningJob.comments || ''
                             });
                             setShowEditPlanning(true);
@@ -1952,7 +1490,7 @@ const createJob = async () => {
                 </div>
               )}
 
-              {/* Manager Assignment - Redesigned with 3-column grid */}
+              {/* Manager Assignment */}
               <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
                 <h3 className="font-medium text-green-800 mb-4 flex items-center space-x-2">
                   <Users className="w-5 h-5" />
@@ -2020,9 +1558,10 @@ const createJob = async () => {
               </button>
               <button
                 onClick={editingJob ? editJob : createJob}
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium shadow-md hover:shadow-lg transition-all"
+                disabled={processing}
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {editingJob ? '💾 Update Job' : '🚀 Create Job'}
+                {processing ? 'Processing...' : editingJob ? '💾 Update Job' : '🚀 Create Job'}
               </button>
             </div>
           </div>
