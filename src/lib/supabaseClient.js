@@ -536,10 +536,10 @@ export const propertyService = {
       
       // Use the clean processors for dual-table insertion
       if (vendorType === 'BRT') {
-        const { brtProcessor } = await import('../data-pipeline/brt-processor.js');
+        const { brtProcessor } = await import('./data-pipeline/brt-processor.js');
         return await brtProcessor.processFile(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode);
       } else if (vendorType === 'Microsystems') {
-        const { microsystemsProcessor } = await import('../data-pipeline/microsystems-processor.js');
+        const { microsystemsProcessor } = await import('./data-pipeline/microsystems-processor.js');
         return await microsystemsProcessor.processFile(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode);
       } else {
         throw new Error(`Unsupported vendor type: ${vendorType}`);
