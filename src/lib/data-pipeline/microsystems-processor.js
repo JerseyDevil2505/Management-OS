@@ -183,7 +183,7 @@ export class MicrosystemsProcessor {
   /**
    * Map to property_analysis_data for calculated fields and raw storage
    */
-  async mapToAnalysisData(rawRecord, propertyRecordId, jobId) {
+  async mapToAnalysisData(rawRecord, propertyRecordId, jobId, yearCreated, ccddCode) {
     return {
       // Link to property record
       property_record_id: propertyRecordId,
@@ -194,7 +194,7 @@ export class MicrosystemsProcessor {
       property_qualifier: rawRecord['Qual'],
       property_addl_card: rawRecord['Bldg'],
       property_location: rawRecord['Location'],
-      property_composite_key: rawRecord.property_composite_key,
+      property_composite_key: `${yearCreated}${ccddCode}-${rawRecord['Block']}-${rawRecord['Lot']}_${rawRecord['Qual'] || 'NONE'}-${rawRecord['Bldg'] || 'NONE'}-${rawRecord['Location'] || 'NONE'}`,
       
       // Calculated fields - minimal essential calculations only
       total_baths_calculated: this.calculateTotalBaths(rawRecord),
@@ -387,8 +387,7 @@ export class MicrosystemsProcessor {
           }
           
           // Map to analysis data
-          const analysisData = await this.mapToAnalysisData(rawRecord, insertedRecord.id, jobId);
-          analysisData.property_composite_key = propertyRecord.property_composite_key;
+          const analysisData = await this.mapToAnalysisData(rawRecord, insertedRecord.id, jobId, yearCreated, ccddCode);
           
           // Insert analysis data
           const { error: analysisError } = await supabase
