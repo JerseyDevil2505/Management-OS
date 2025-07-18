@@ -686,7 +686,116 @@ const AdminJobManagement = ({ onJobSelect }) => {
               <div className="text-xs text-gray-500 space-y-1 mb-4">
                 {processingStatus.totalRecords > 0 && (
                   <div>Records: {processingStatus.recordsProcessed} / {processingStatus.totalRecords}</div>
-                {/* Create/Edit Job Modal */}
+                )}
+                {processingStatus.startTime && (
+                  <div>Elapsed: {formatElapsedTime(processingStatus.startTime)}</div>
+                )}
+                <div>{processingStatus.progress}% complete</div>
+              </div>
+
+              {/* Real-time batch processing logs */}
+              {processingStatus.logs && processingStatus.logs.length > 0 && (
+                <div className="mb-4 p-3 bg-blue-50 rounded-lg max-h-32 overflow-y-auto">
+                  <div className="text-sm font-medium text-blue-800 mb-2">Batch Processing:</div>
+                  <div className="text-xs text-blue-700 space-y-1 text-left">
+                    {processingStatus.logs.slice(-5).map((log, idx) => (
+                      <div key={idx} className="flex justify-between">
+                        <span>{log.message}</span>
+                        <span className="text-blue-500">{log.timestamp}</span>
+                      </div>
+                    ))}
+                    {processingStatus.logs.length > 5 && (
+                      <div className="text-center text-blue-600 font-medium">
+                        ...and {processingStatus.logs.length - 5} more steps
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+              
+              {/* Error Display */}
+              {processingStatus.errors && processingStatus.errors.length > 0 && (
+                <div className="mb-4 p-3 bg-red-50 rounded-lg">
+                  <div className="text-sm font-medium text-red-800 mb-1">Errors:</div>
+                  <div className="text-xs text-red-600 space-y-1">
+                    {processingStatus.errors.slice(0, 3).map((error, idx) => (
+                      <div key={idx}>{error}</div>
+                    ))}
+                    {processingStatus.errors.length > 3 && (
+                      <div>...and {processingStatus.errors.length - 3} more</div>
+                    )}
+                  </div>
+                </div>
+              )}
+              
+              {/* COMPLETION RESULTS - Only shows when done */}
+              {processingResults && (
+                <div className="mb-4 p-4 bg-green-50 rounded-lg border-2 border-green-200">
+                  <div className="text-lg font-bold text-green-800 mb-3">🎉 Processing Complete!</div>
+                  <div className="text-sm text-green-700 space-y-2">
+                    <div className="flex justify-between">
+                      <span>✅ Properties Processed:</span>
+                      <span className="font-bold">{processingResults.processed.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>⏱️ Total Time:</span>
+                      <span className="font-bold">{formatElapsedTime(processingStatus.startTime)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>🏢 Job Created:</span>
+                      <span className="font-bold">{processingResults.jobName}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>📊 Vendor:</span>
+                      <span className="font-bold">{processingResults.vendor}</span>
+                    </div>
+                    {processingResults.errors > 0 && (
+                      <div className="flex justify-between text-red-600">
+                        <span>⚠️ Errors:</span>
+                        <span className="font-bold">{processingResults.errors}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* ACTION BUTTONS */}
+              <div className="flex justify-center space-x-3">
+                {/* FORCE QUIT - Only during processing */}
+                {!processingResults && processingStatus.isProcessing && (
+                  <button
+                    onClick={() => {
+                      setShowProcessingModal(false);
+                      setProcessing(false);
+                      resetProcessingStatus();
+                      addNotification('Job creation cancelled - import stopped', 'warning');
+                    }}
+                    className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 text-sm font-medium"
+                  >
+                    🛑 Force Quit Import
+                  </button>
+                )}
+
+                {/* CLOSE - Only when complete */}
+                {processingResults && (
+                  <button
+                    onClick={() => {
+                      setShowProcessingModal(false);
+                      setProcessingResults(null);
+                      resetProcessingStatus();
+                    }}
+                    className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium"
+                  >
+                    ✅ Close
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create/Edit Job Modal */}
       {showCreateJob && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg max-w-5xl w-full max-h-screen overflow-y-auto shadow-2xl">
@@ -1069,118 +1178,6 @@ const AdminJobManagement = ({ onJobSelect }) => {
           </div>
         </div>
       )}
-    </div>
-  );
-};
-
-export default AdminJobManagement;
-                {processingStatus.startTime && (
-                  <div>Elapsed: {formatElapsedTime(processingStatus.startTime)}</div>
-                )}
-                <div>{processingStatus.progress}% complete</div>
-              </div>
-
-              {/* Real-time batch processing logs */}
-              {processingStatus.logs && processingStatus.logs.length > 0 && (
-                <div className="mb-4 p-3 bg-blue-50 rounded-lg max-h-32 overflow-y-auto">
-                  <div className="text-sm font-medium text-blue-800 mb-2">Batch Processing:</div>
-                  <div className="text-xs text-blue-700 space-y-1 text-left">
-                    {processingStatus.logs.slice(-5).map((log, idx) => (
-                      <div key={idx} className="flex justify-between">
-                        <span>{log.message}</span>
-                        <span className="text-blue-500">{log.timestamp}</span>
-                      </div>
-                    ))}
-                    {processingStatus.logs.length > 5 && (
-                      <div className="text-center text-blue-600 font-medium">
-                        ...and {processingStatus.logs.length - 5} more steps
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-              
-              {/* Error Display */}
-              {processingStatus.errors && processingStatus.errors.length > 0 && (
-                <div className="mb-4 p-3 bg-red-50 rounded-lg">
-                  <div className="text-sm font-medium text-red-800 mb-1">Errors:</div>
-                  <div className="text-xs text-red-600 space-y-1">
-                    {processingStatus.errors.slice(0, 3).map((error, idx) => (
-                      <div key={idx}>{error}</div>
-                    ))}
-                    {processingStatus.errors.length > 3 && (
-                      <div>...and {processingStatus.errors.length - 3} more</div>
-                    )}
-                  </div>
-                </div>
-              )}
-              
-              {/* COMPLETION RESULTS - Only shows when done */}
-              {processingResults && (
-                <div className="mb-4 p-4 bg-green-50 rounded-lg border-2 border-green-200">
-                  <div className="text-lg font-bold text-green-800 mb-3">🎉 Processing Complete!</div>
-                  <div className="text-sm text-green-700 space-y-2">
-                    <div className="flex justify-between">
-                      <span>✅ Properties Processed:</span>
-                      <span className="font-bold">{processingResults.processed.toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>⏱️ Total Time:</span>
-                      <span className="font-bold">{formatElapsedTime(processingStatus.startTime)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>🏢 Job Created:</span>
-                      <span className="font-bold">{processingResults.jobName}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>📊 Vendor:</span>
-                      <span className="font-bold">{processingResults.vendor}</span>
-                    </div>
-                    {processingResults.errors > 0 && (
-                      <div className="flex justify-between text-red-600">
-                        <span>⚠️ Errors:</span>
-                        <span className="font-bold">{processingResults.errors}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* ACTION BUTTONS */}
-              <div className="flex justify-center space-x-3">
-                {/* FORCE QUIT - Only during processing */}
-                {!processingResults && processingStatus.isProcessing && (
-                  <button
-                    onClick={() => {
-                      setShowProcessingModal(false);
-                      setProcessing(false);
-                      resetProcessingStatus();
-                      addNotification('Job creation cancelled - import stopped', 'warning');
-                    }}
-                    className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 text-sm font-medium"
-                  >
-                    🛑 Force Quit Import
-                  </button>
-                )}
-
-                {/* CLOSE - Only when complete */}
-                {processingResults && (
-                  <button
-                    onClick={() => {
-                      setShowProcessingModal(false);
-                      setProcessingResults(null);
-                      resetProcessingStatus();
-                    }}
-                    className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium"
-                  >
-                    ✅ Close
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Header */}
       <div className="mb-8">
@@ -1212,7 +1209,7 @@ export default AdminJobManagement;
         </div>
       </div>
 
-      {/* RESTORED Tab Navigation with Planning Jobs */}
+      {/* Tab Navigation with Planning Jobs */}
       <div className="mb-6">
         <div className="border-b border-gray-200">
           <nav className="-mb-px flex space-x-8">
@@ -1348,30 +1345,6 @@ export default AdminJobManagement;
                                     {job.workflowStats?.rates?.entryRate || 0}%
                                   </div>
                                   <div className="text-xs text-gray-600">Entry Rate</div>
-                                  <div className="text-sm text-gray-500">As of: TBD</div>
-                                </div>
-                                
-                                <div className="text-center">
-                                  <div className="text-lg font-bold text-red-600">
-                                    {job.workflowStats?.rates?.refusalRate || 0}%
-                                  </div>
-                                  <div className="text-xs text-gray-600">Refusal Rate</div>
-                                  <div className="text-sm text-gray-500">As of: TBD</div>
-                                </div>
-
-                                <div className="text-center">
-                                  <div className="text-lg font-bold text-purple-600">
-                                    {job.workflowStats?.rates?.commercialInspectionRate || 0}%
-                                  </div>
-                                  <div className="text-xs text-gray-600">Commercial Complete</div>
-                                  <div className="text-sm text-gray-500">From Payroll</div>
-                                </div>
-
-                                <div className="text-center">
-                                  <div className="text-lg font-bold text-indigo-600">
-                                    {job.workflowStats?.rates?.pricingRate || 0}%
-                                  </div>
-                                  <div className="text-xs text-gray-600">Pricing Complete</div>
                                   <div className="text-sm text-gray-500">From Payroll</div>
                                 </div>
                               </div>
@@ -1429,7 +1402,7 @@ export default AdminJobManagement;
         </div>
       )}
 
-      {/* RESTORED Planning Jobs Tab */}
+      {/* Planning Jobs Tab */}
       {activeTab === 'planning' && (
         <div className="space-y-6">
           <div className="bg-gradient-to-r from-yellow-50 to-orange-50 rounded-lg border-2 border-yellow-200 p-6">
@@ -1566,3 +1539,32 @@ export default AdminJobManagement;
           </div>
         </div>
       )}
+    </div>
+  );
+};
+
+export default AdminJobManagement;-500">As of: TBD</div>
+                                </div>
+                                
+                                <div className="text-center">
+                                  <div className="text-lg font-bold text-red-600">
+                                    {job.workflowStats?.rates?.refusalRate || 0}%
+                                  </div>
+                                  <div className="text-xs text-gray-600">Refusal Rate</div>
+                                  <div className="text-sm text-gray-500">As of: TBD</div>
+                                </div>
+
+                                <div className="text-center">
+                                  <div className="text-lg font-bold text-purple-600">
+                                    {job.workflowStats?.rates?.commercialInspectionRate || 0}%
+                                  </div>
+                                  <div className="text-xs text-gray-600">Commercial Complete</div>
+                                  <div className="text-sm text-gray-500">From Payroll</div>
+                                </div>
+
+                                <div className="text-center">
+                                  <div className="text-lg font-bold text-indigo-600">
+                                    {job.workflowStats?.rates?.pricingRate || 0}%
+                                  </div>
+                                  <div className="text-xs text-gray-600">Pricing Complete</div>
+                                  <div className="text-sm text-gray
