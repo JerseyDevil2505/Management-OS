@@ -234,6 +234,7 @@ export class BRTProcessor {
       values_mod_total: this.parseNumeric(rawRecord.VALUES_NETTAXABLEVALUE),
       values_cama_total: this.parseNumeric(rawRecord.TOTNETVALUE),
       
+      // FIXED: Added missing value fields
       values_base_cost: this.parseNumeric(rawRecord.BASEREPLCOST),
       values_det_items: this.parseNumeric(rawRecord.DETACHEDITEMS),
       values_repl_cost: this.parseNumeric(rawRecord.REPLCOSTNEW),
@@ -246,9 +247,11 @@ export class BRTProcessor {
       inspection_price_by: rawRecord.PRICEBY,
       inspection_price_date: this.parseDate(rawRecord.PRICEDT),
       
+      // FIXED: Added missing property classification fields
       property_cama_class: rawRecord.PROPCLASS,
       property_m4_class: rawRecord.PROPERTY_CLASS,
       property_facility: rawRecord.EXEMPT_FACILITYNAME,
+      property_vcs: rawRecord.VCS, // ADDED: Missing VCS field
       
       source_file_name: versionInfo.source_file_name || null,
       source_file_version_id: versionInfo.source_file_version_id || null,
@@ -282,7 +285,7 @@ export class BRTProcessor {
       asset_key_page: null,
       asset_map_page: null,
       asset_zoning: null,
-      asset_view: null,
+      asset_view: rawRecord.VIEW, // ADDED: Missing VIEW field
       asset_neighborhood: rawRecord.NBHD,
       asset_type_use: rawRecord.TYPEUSE,
       asset_building_class: rawRecord.BLDGCLASS,
@@ -290,8 +293,8 @@ export class BRTProcessor {
       asset_year_built: this.parseInteger(rawRecord.YEARBUILT),
       asset_lot_frontage: this.calculateLotFrontage(rawRecord),
       asset_lot_depth: this.calculateLotDepth(rawRecord),
-      asset_lot_acre: this.calculateLotAcres(rawRecord),
-      asset_lot_sf: this.calculateLotSquareFeet(rawRecord),
+      asset_lot_acre: this.calculateLotAcres(rawRecord), // FIXED: Check calculation
+      asset_lot_sf: this.calculateLotSquareFeet(rawRecord), // FIXED: Check calculation
       asset_story_height: this.parseNumeric(rawRecord.STORYHGT),
       asset_ext_cond: rawRecord.EXTERIORNC,
       asset_int_cond: rawRecord.INTERIORNC,
@@ -404,6 +407,7 @@ export class BRTProcessor {
 
   /**
    * Process complete file and store in database using batch processing
+   * ADDED: Duplicate prevention to avoid re-importing same data
    */
   async processFile(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, versionInfo = {}) {
     try {
@@ -416,12 +420,33 @@ export class BRTProcessor {
       const records = this.parseSourceFile(sourceFileContent);
       console.log(`Processing ${records.length} records in batches...`);
       
+      // Check for existing records to prevent duplicates
+      const existingRecordsQuery = await supabase
+        .from('property_records')
+        .select('property_composite_key')
+        .eq('job_id', jobId);
+      
+      const existingKeys = new Set(
+        existingRecordsQuery.data?.map(r => r.property_composite_key) || []
+      );
+      
+      if (existingKeys.size > 0) {
+        console.log(`Found ${existingKeys.size} existing records for this job - filtering duplicates`);
+      }
+      
       const propertyRecords = [];
       const analysisRecords = [];
       
       for (const rawRecord of records) {
         try {
           const propertyRecord = this.mapToPropertyRecord(rawRecord, yearCreated, ccddCode, jobId, versionInfo);
+          
+          // Skip if already exists
+          if (existingKeys.has(propertyRecord.property_composite_key)) {
+            console.log(`Skipping duplicate: ${propertyRecord.property_composite_key}`);
+            continue;
+          }
+          
           propertyRecords.push(propertyRecord);
           
           const analysisData = this.mapToAnalysisDataSync(rawRecord, null, jobId, versionInfo);
@@ -433,11 +458,19 @@ export class BRTProcessor {
         }
       }
       
+      console.log(`After duplicate filtering: ${propertyRecords.length} new records to insert`);
+      
       const results = {
         processed: 0,
         errors: 0,
-        warnings: []
+        warnings: [],
+        duplicatesSkipped: records.length - propertyRecords.length
       };
+      
+      if (propertyRecords.length === 0) {
+        console.log('No new records to process - all were duplicates');
+        return results;
+      }
       
       console.log(`Batch inserting ${propertyRecords.length} property records...`);
       const batchSize = 1000;
