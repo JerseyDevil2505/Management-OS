@@ -258,7 +258,8 @@ const AdminJobManagement = ({ onJobSelect }) => {
     }
 
     try {
-      // IMMEDIATELY show modal and set initial state
+      // IMMEDIATELY hide create job modal and show processing modal
+      setShowCreateJob(false);
       setShowProcessingModal(true);
       setProcessing(true);
       
@@ -392,7 +393,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
         // REMOVED: No more auto-timeout - stays open until user closes it
       }
       
-      closeJobModal();
+      // Don't call closeJobModal here since we already closed it above
       
     } catch (error) {
       console.error('Job creation error:', error);
