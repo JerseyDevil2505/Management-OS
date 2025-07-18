@@ -121,8 +121,9 @@ export class BRTProcessor {
 
   /**
    * Map BRT record to property_records table fields
+   * UPDATED: Added versionInfo parameter for proper version tracking
    */
-  mapToPropertyRecord(rawRecord, yearCreated, ccddCode, jobId) {
+  mapToPropertyRecord(rawRecord, yearCreated, ccddCode, jobId, versionInfo = {}) {
     return {
       // Job context
       job_id: jobId,
@@ -174,18 +175,26 @@ export class BRTProcessor {
       property_mod_class: rawRecord.PROPERTY_CLASS, // BRT-specific field Microsystems doesn't have
       property_facility: rawRecord.EXEMPT_FACILITYNAME,
       
-      // Metadata - FIXED: Added created_by field
+      // ADD VERSION TRACKING FIELDS:
+      source_file_name: versionInfo.source_file_name || null,
+      source_file_version_id: versionInfo.source_file_version_id || null,
+      source_file_uploaded_at: versionInfo.source_file_uploaded_at || new Date().toISOString(),
+      
+      // Metadata
       vendor_source: 'BRT',
-      source_file_uploaded_at: new Date(),
-      processed_at: new Date(),
-      created_by: '5df85ca3-7a54-4798-a665-c31da8d9caad'
+      processed_at: new Date().toISOString(),
+      created_by: '5df85ca3-7a54-4798-a665-c31da8d9caad',
+      
+      // Store complete raw data as JSON
+      raw_data: rawRecord
     };
   }
 
   /**
    * Map to property_analysis_data for calculated fields and raw storage
+   * UPDATED: Added versionInfo parameter for consistency
    */
-  async mapToAnalysisData(rawRecord, propertyRecordId, jobId, yearCreated, ccddCode) {
+  async mapToAnalysisData(rawRecord, propertyRecordId, jobId, yearCreated, ccddCode, versionInfo = {}) {
     return {
       // Link to property record
       property_record_id: propertyRecordId,
@@ -225,11 +234,16 @@ export class BRTProcessor {
       values_norm_time: await this.calculateTimeAdjustedValue(rawRecord, jobId),
       values_norm_size: null, // Size normalization - calculated later in development
       
+      // ADD VERSION TRACKING FIELDS:
+      source_file_name: versionInfo.source_file_name || null,
+      source_file_version_id: versionInfo.source_file_version_id || null,
+      source_file_uploaded_at: versionInfo.source_file_uploaded_at || new Date().toISOString(),
+      
       // Store complete raw data as JSON for dynamic querying
       raw_data: rawRecord,
       
-      // Metadata - FIXED: Added created_by field
-      calculated_at: new Date(),
+      // Metadata
+      calculated_at: new Date().toISOString(),
       created_by: '5df85ca3-7a54-4798-a665-c31da8d9caad'
     };
   }
@@ -381,8 +395,9 @@ export class BRTProcessor {
 
   /**
    * Process complete file and store in database
+   * UPDATED: Added versionInfo parameter and pass it to mapping methods
    */
-  async processFile(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode) {
+  async processFile(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, versionInfo = {}) {
     try {
       console.log('Starting BRT file processing...');
       
@@ -403,8 +418,8 @@ export class BRTProcessor {
       
       for (const rawRecord of records) {
         try {
-          // Map to property_records
-          const propertyRecord = this.mapToPropertyRecord(rawRecord, yearCreated, ccddCode, jobId);
+          // Map to property_records with version info
+          const propertyRecord = this.mapToPropertyRecord(rawRecord, yearCreated, ccddCode, jobId, versionInfo);
           
           // Insert property record
           const { data: insertedRecord, error: propertyError } = await supabase
@@ -419,8 +434,8 @@ export class BRTProcessor {
             continue;
           }
           
-          // Map to analysis data - FIXED: Added missing parameters
-          const analysisData = await this.mapToAnalysisData(rawRecord, insertedRecord.id, jobId, yearCreated, ccddCode);
+          // Map to analysis data with version info
+          const analysisData = await this.mapToAnalysisData(rawRecord, insertedRecord.id, jobId, yearCreated, ccddCode, versionInfo);
           
           // Insert analysis data
           const { error: analysisError } = await supabase
