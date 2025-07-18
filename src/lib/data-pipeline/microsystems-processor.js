@@ -183,11 +183,11 @@ export class MicrosystemsProcessor {
   }
 
   /**
-   * Map to property_analysis_data for calculated fields and raw storage
+   * Map to property_analysis_data for calculated fields and raw storage (SYNC VERSION)
    */
-  async mapToAnalysisData(rawRecord, propertyRecordId, jobId) {
+  mapToAnalysisDataSync(rawRecord, propertyRecordId, jobId) {
     return {
-      // Link to property record
+      // Link to property record (will be linked via composite key)
       property_record_id: propertyRecordId,
       
       // Property identifiers (duplicated for easy querying)
@@ -196,7 +196,7 @@ export class MicrosystemsProcessor {
       property_qualifier: rawRecord['Qual'],
       property_addl_card: rawRecord['Bldg'],
       property_location: rawRecord['Location'],
-      property_composite_key: `${new Date().getFullYear()}${jobId}-${rawRecord['Block']}-${rawRecord['Lot']}_${(rawRecord['Qual'] || '').trim() || 'NONE'}-${(rawRecord['Bldg'] || '').trim() || 'NONE'}-${(rawRecord['Location'] || '').trim() || 'NONE'}`,
+      // composite key set in processFile method
       
       // Essential calculated fields only
       total_baths_calculated: this.calculateTotalBaths(rawRecord),
@@ -221,8 +221,8 @@ export class MicrosystemsProcessor {
       asset_ext_cond: rawRecord['Condition'],
       asset_int_cond: rawRecord['Interior Cond Or End Unit'],
       
-      // Normalized values - time adjustment using FRED HPI data
-      values_norm_time: await this.calculateTimeAdjustedValue(rawRecord, jobId),
+      // Normalized values - calculated later in FileUploadButton.jsx
+      values_norm_time: null, // TODO: Use calculateTimeAdjustedValue() method below when building normalization
       values_norm_size: null, // Size normalization - calculated later in development
       
       // Store complete raw data as JSON for dynamic querying
@@ -268,6 +268,95 @@ export class MicrosystemsProcessor {
       .from('property_analysis_data')
       .update(analysisUpdates)
       .eq('property_record_id', propertyRecordId);
+  }
+
+  /**
+   * Process complete file and store in database using FAST batch processing
+   */
+  async processFile(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode) {
+    try {
+      console.log('Starting Microsystems file processing...');
+      
+      // Process code file if provided
+      if (codeFileContent) {
+        this.processCodeFile(codeFileContent);
+      }
+      
+      // Parse source file
+      const records = this.parseSourceFile(sourceFileContent);
+      console.log(`Processing ${records.length} records in batches...`);
+      
+      // Prepare all property records for batch insert
+      const propertyRecords = [];
+      const analysisRecords = [];
+      
+      for (const rawRecord of records) {
+        try {
+          // Map to property_records
+          const propertyRecord = this.mapToPropertyRecord(rawRecord, yearCreated, ccddCode, jobId);
+          propertyRecords.push(propertyRecord);
+          
+          // Map to analysis data (will link via composite key after insert)
+          const analysisData = this.mapToAnalysisDataSync(rawRecord, null, jobId);
+          analysisData.property_composite_key = propertyRecord.property_composite_key;
+          analysisRecords.push(analysisData);
+          
+        } catch (error) {
+          console.error('Error mapping record:', error);
+        }
+      }
+      
+      const results = {
+        processed: 0,
+        errors: 0,
+        warnings: []
+      };
+      
+      // BATCH 1: Insert property records (1000 at a time)
+      console.log(`Batch inserting ${propertyRecords.length} property records...`);
+      const batchSize = 1000;
+      
+      for (let i = 0; i < propertyRecords.length; i += batchSize) {
+        const batch = propertyRecords.slice(i, i + batchSize);
+        
+        const { error: propertyError } = await supabase
+          .from('property_records')
+          .insert(batch);
+        
+        if (propertyError) {
+          console.error('Batch property insert error:', propertyError);
+          results.errors += batch.length;
+        } else {
+          results.processed += batch.length;
+          console.log(`✅ Inserted property records ${i + 1}-${Math.min(i + batchSize, propertyRecords.length)}`);
+        }
+      }
+      
+      // BATCH 2: Insert analysis records (1000 at a time)
+      console.log(`Batch inserting ${analysisRecords.length} analysis records...`);
+      
+      for (let i = 0; i < analysisRecords.length; i += batchSize) {
+        const batch = analysisRecords.slice(i, i + batchSize);
+        
+        const { error: analysisError } = await supabase
+          .from('property_analysis_data')
+          .insert(batch);
+        
+        if (analysisError) {
+          console.error('Batch analysis insert error:', analysisError);
+          results.warnings.push(`Analysis batch ${i}-${i + batchSize} failed`);
+        } else {
+          console.log(`✅ Inserted analysis records ${i + 1}-${Math.min(i + batchSize, analysisRecords.length)}`);
+        }
+      }
+      
+      console.log('🚀 BATCH PROCESSING COMPLETE:', results);
+      return results;
+      
+    } catch (error) {
+      console.error('File processing failed:', error);
+      throw error;
+    }
   }
 
   /**
@@ -338,6 +427,8 @@ export class MicrosystemsProcessor {
 
   /**
    * Calculate time-adjusted sale value using FRED HPI data
+   * NOTE: This method is preserved for future use in FileUploadButton.jsx normalization
+   * Currently not called during import to avoid async/database errors
    */
   async calculateTimeAdjustedValue(rawRecord, jobId) {
     try {
@@ -381,77 +472,6 @@ export class MicrosystemsProcessor {
     } catch (error) {
       console.error('Error calculating time-adjusted value:', error);
       return this.parseNumeric(rawRecord['Sale Price']); // Fallback to original price
-    }
-  }
-
-  /**
-   * Process complete file and store in database
-   */
-  async processFile(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode) {
-    try {
-      console.log('Starting Microsystems file processing...');
-      
-      // Process code file if provided
-      if (codeFileContent) {
-        this.processCodeFile(codeFileContent);
-      }
-      
-      // Parse source file
-      const records = this.parseSourceFile(sourceFileContent);
-      
-      // Process each record
-      const results = {
-        processed: 0,
-        errors: 0,
-        warnings: []
-      };
-      
-      for (const rawRecord of records) {
-        try {
-          // Map to property_records
-          const propertyRecord = this.mapToPropertyRecord(rawRecord, yearCreated, ccddCode, jobId);
-          
-          // Insert property record
-          const { data: insertedRecord, error: propertyError } = await supabase
-            .from('property_records')
-            .insert([propertyRecord])
-            .select('id')
-            .single();
-          
-          if (propertyError) {
-            console.error('Error inserting property record:', propertyError);
-            results.errors++;
-            continue;
-          }
-
-          // Map to analysis data
-          const analysisData = await this.mapToAnalysisData(rawRecord, insertedRecord.id, jobId);
-          analysisData.property_composite_key = propertyRecord.property_composite_key;
-          
-          // Insert analysis data
-          const { error: analysisError } = await supabase
-            .from('property_analysis_data')
-            .insert([analysisData]);
-          
-          if (analysisError) {
-            console.error('Error inserting analysis data:', analysisError);
-            results.warnings.push(`Analysis data failed for ${propertyRecord.property_composite_key}`);
-          }
-                             
-          results.processed++;
-          
-        } catch (error) {
-          console.error('Error processing record:', error);
-          results.errors++;
-        }
-      }
-      
-      console.log('Processing complete:', results);
-      return results;
-      
-    } catch (error) {
-      console.error('File processing failed:', error);
-      throw error;
     }
   }
 
