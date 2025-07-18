@@ -387,20 +387,7 @@ export class MicrosystemsProcessor {
             results.errors++;
             continue;
           }
-          
-          // Map to analysis data
-          const analysisData = await this.mapToAnalysisData(rawRecord, insertedRecord.id, jobId, yearCreated, ccddCode);
-          
-          // Insert analysis data
-          const { error: analysisError } = await supabase
-            .from('property_analysis_data')
-            .insert([analysisData]);
-          
-          if (analysisError) {
-            console.error('Error inserting analysis data:', analysisError);
-            results.warnings.push(`Analysis data failed for ${propertyRecord.property_composite_key}`);
-          }
-          
+                             
           results.processed++;
           
         } catch (error) {
