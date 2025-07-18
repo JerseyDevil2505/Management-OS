@@ -1138,6 +1138,11 @@ const AdminJobManagement = ({ onJobSelect }) => {
           </div>
         </div>
       )}
+    </div>
+  );
+};
+
+export default AdminJobManagement;
 
       {/* NEW: County HPI Import Modal */}
       {showHpiImport && (
@@ -2174,7 +2179,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
                         ))}
                       </div>
 
-                      {/* Summary Stats */}
+{/* Summary Stats */}
                       <div className="mt-4 pt-4 border-t border-gray-200">
                         <div className="grid grid-cols-3 gap-4 text-center">
                           <div>
@@ -2213,4 +2218,8 @@ const AdminJobManagement = ({ onJobSelect }) => {
           </div>
         </div>
       )}
-      
+    </div>
+  );
+};
+
+export default AdminJobManagement;
