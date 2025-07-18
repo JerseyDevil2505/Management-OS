@@ -680,7 +680,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
                 <div 
                   className="bg-blue-600 h-2 rounded-full transition-all duration-300"
                   style={{ width: `${processingStatus.progress}%` }}
-                />
+                ></div>
               </div>
               
               <div className="text-xs text-gray-500 space-y-1 mb-4">
