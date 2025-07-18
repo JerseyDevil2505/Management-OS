@@ -170,9 +170,9 @@ export class BRTProcessor {
       inspection_price_by: rawRecord.PRICEBY,
       inspection_price_date: this.parseDate(rawRecord.PRICEDT),
       
-      // Property classifications
+      // Property classifications - FIXED: Use property_m4_class instead of property_mod_class
       property_cama_class: rawRecord.PROPCLASS,
-      property_mod_class: rawRecord.PROPERTY_CLASS, // BRT-specific field Microsystems doesn't have
+      property_m4_class: rawRecord.PROPERTY_CLASS, // FIXED: Now matches schema
       property_facility: rawRecord.EXEMPT_FACILITYNAME,
       
       // ADD VERSION TRACKING FIELDS:
@@ -191,10 +191,10 @@ export class BRTProcessor {
   }
 
   /**
-   * Map to property_analysis_data for calculated fields and raw storage
-   * UPDATED: Added versionInfo parameter for consistency
+   * Map to property_analysis_data for calculated fields and raw storage (SYNC VERSION)
+   * UPDATED: Made sync and added versionInfo parameter for consistency
    */
-  async mapToAnalysisData(rawRecord, propertyRecordId, jobId, yearCreated, ccddCode, versionInfo = {}) {
+  mapToAnalysisDataSync(rawRecord, propertyRecordId, jobId, versionInfo = {}) {
     return {
       // Link to property record
       property_record_id: propertyRecordId,
@@ -205,7 +205,7 @@ export class BRTProcessor {
       property_qualifier: rawRecord.QUALIFIER,
       property_addl_card: rawRecord.CARD,
       property_location: rawRecord.PROPERTY_LOCATION,
-      property_composite_key: `${yearCreated}${ccddCode}-${rawRecord.BLOCK}-${rawRecord.LOT}_${rawRecord.QUALIFIER || 'NONE'}-${rawRecord.CARD || 'NONE'}-${rawRecord.PROPERTY_LOCATION || 'NONE'}`,
+      // composite key set in processFile method
       
       // Essential calculated fields only
       total_baths_calculated: this.calculateTotalBaths(rawRecord), // Proper weighted calculation
@@ -230,8 +230,8 @@ export class BRTProcessor {
       asset_ext_cond: rawRecord.EXTERIORNC,
       asset_int_cond: rawRecord.INTERIORNC,
       
-      // Normalized values - time adjustment using FRED HPI data
-      values_norm_time: await this.calculateTimeAdjustedValue(rawRecord, jobId),
+      // Normalized values - calculated later to avoid async issues
+      values_norm_time: null, // TODO: Calculate later to avoid async in batch processing
       values_norm_size: null, // Size normalization - calculated later in development
       
       // ADD VERSION TRACKING FIELDS:
@@ -394,8 +394,8 @@ export class BRTProcessor {
   }
 
   /**
-   * Process complete file and store in database
-   * UPDATED: Added versionInfo parameter and pass it to mapping methods
+   * Process complete file and store in database using FAST batch processing
+   * UPDATED: Converted to batch processing like Microsystems for speed
    */
   async processFile(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, versionInfo = {}) {
     try {
@@ -408,54 +408,73 @@ export class BRTProcessor {
       
       // Parse source file
       const records = this.parseSourceFile(sourceFileContent);
+      console.log(`Processing ${records.length} records in batches...`);
       
-      // Process each record
+      // Prepare all property records for batch insert
+      const propertyRecords = [];
+      const analysisRecords = [];
+      
+      for (const rawRecord of records) {
+        try {
+          // Map to property_records with version info
+          const propertyRecord = this.mapToPropertyRecord(rawRecord, yearCreated, ccddCode, jobId, versionInfo);
+          propertyRecords.push(propertyRecord);
+          
+          // Map to analysis data (will link via composite key after insert) with version info
+          const analysisData = this.mapToAnalysisDataSync(rawRecord, null, jobId, versionInfo);
+          analysisData.property_composite_key = propertyRecord.property_composite_key;
+          analysisRecords.push(analysisData);
+          
+        } catch (error) {
+          console.error('Error mapping record:', error);
+        }
+      }
+      
       const results = {
         processed: 0,
         errors: 0,
         warnings: []
       };
       
-      for (const rawRecord of records) {
-        try {
-          // Map to property_records with version info
-          const propertyRecord = this.mapToPropertyRecord(rawRecord, yearCreated, ccddCode, jobId, versionInfo);
-          
-          // Insert property record
-          const { data: insertedRecord, error: propertyError } = await supabase
-            .from('property_records')
-            .insert([propertyRecord])
-            .select('id')
-            .single();
-          
-          if (propertyError) {
-            console.error('Error inserting property record:', propertyError);
-            results.errors++;
-            continue;
-          }
-          
-          // Map to analysis data with version info
-          const analysisData = await this.mapToAnalysisData(rawRecord, insertedRecord.id, jobId, yearCreated, ccddCode, versionInfo);
-          
-          // Insert analysis data
-          const { error: analysisError } = await supabase
-            .from('property_analysis_data')
-            .insert([analysisData]);
-          
-          if (analysisError) {
-            console.error('Error inserting analysis data:', analysisError);
-            results.warnings.push(`Analysis data failed for ${propertyRecord.property_composite_key}`);
-          }
-          
-          results.processed++;
-          
-        } catch (error) {
-          console.error('Error processing record:', error);
-          results.errors++;
+      // BATCH 1: Insert property records (1000 at a time)
+      console.log(`Batch inserting ${propertyRecords.length} property records...`);
+      const batchSize = 1000;
+      
+      for (let i = 0; i < propertyRecords.length; i += batchSize) {
+        const batch = propertyRecords.slice(i, i + batchSize);
+        
+        const { error: propertyError } = await supabase
+          .from('property_records')
+          .insert(batch);
+        
+        if (propertyError) {
+          console.error('Batch property insert error:', propertyError);
+          results.errors += batch.length;
+        } else {
+          results.processed += batch.length;
+          console.log(`✅ Inserted property records ${i + 1}-${Math.min(i + batchSize, propertyRecords.length)}`);
         }
       }
       
-      console.log('Processing complete:', results);
+      // BATCH 2: Insert analysis records (1000 at a time)
+      console.log(`Batch inserting ${analysisRecords.length} analysis records...`);
+      
+      for (let i = 0; i < analysisRecords.length; i += batchSize) {
+        const batch = analysisRecords.slice(i, i + batchSize);
+        
+        const { error: analysisError } = await supabase
+          .from('property_analysis_data')
+          .insert(batch);
+        
+        if (analysisError) {
+          console.error('Batch analysis insert error:', analysisError);
+          results.warnings.push(`Analysis batch ${i}-${i + batchSize} failed`);
+        } else {
+          console.log(`✅ Inserted analysis records ${i + 1}-${Math.min(i + batchSize, analysisRecords.length)}`);
+        }
+      }
+      
+      console.log('🚀 BATCH PROCESSING COMPLETE:', results);
       return results;
       
     } catch (error) {
