@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Upload, Plus, Edit3, Users, FileText, Calendar, MapPin, Database, Settings, Eye, DollarSign, Trash2, CheckCircle, Archive, TrendingUp, Target, AlertTriangle } from 'lucide-react';
 import { employeeService, jobService, planningJobService, utilityService, authService, propertyService } from '../lib/supabaseClient';
 
-const AdminJobManagement = () => {
+const AdminJobManagement = ({ onJobSelect }) => {
   const [activeTab, setActiveTab] = useState('jobs');
   const [currentUser, setCurrentUser] = useState({ role: 'admin', canAccessBilling: true });
   
@@ -18,6 +18,8 @@ const AdminJobManagement = () => {
   const [loading, setLoading] = useState(true);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
   const [processing, setProcessing] = useState(false);
+
+  // Processing and notification state
   const [processingStatus, setProcessingStatus] = useState({
     isProcessing: false,
     currentStep: '',
@@ -30,7 +32,6 @@ const AdminJobManagement = () => {
   });
   const [showProcessingModal, setShowProcessingModal] = useState(false);
   const [notifications, setNotifications] = useState([]);
-  const [showErrorLog, setShowErrorLog] = useState(false);
   const [processingResults, setProcessingResults] = useState(null);
 
   const [newJob, setNewJob] = useState({
@@ -241,6 +242,29 @@ const AdminJobManagement = () => {
             isValid: true
           };
         }
+      } else if (file.name.endsWith('.json')) {
+        let totalCodes = 0;
+        try {
+          const parsed = JSON.parse(text);
+          const countCodes = (obj) => {
+            if (obj && typeof obj === 'object') {
+              if (obj.KEY && obj.DATA && obj.DATA.VALUE) totalCodes++;
+              if (obj.MAP) Object.values(obj.MAP).forEach(countCodes);
+            }
+          };
+          Object.values(parsed).forEach(countCodes);
+        } catch (e) {
+          totalCodes = (text.match(/"VALUE":/g) || []).length;
+        }
+        
+        vendorResult = {
+          vendor: 'BRT',
+          confidence: 100,
+          detectedFormat: 'BRT Nested JSON Code Structure',
+          fileStructure: `Nested JSON with ${totalCodes} code definitions`,
+          codeCount: totalCodes,
+          isValid: true
+        };
       }
     }
 
@@ -625,7 +649,11 @@ const AdminJobManagement = () => {
   };
 
   const goToJob = (job) => {
-    alert(`Navigate to ${job.name} modules:\n- Production Tracker\n- Management Checklist\n- Market & Land Analytics\n- Final Valuation\n- Appeal Coverage`);
+    if (onJobSelect) {
+      onJobSelect(job);
+    } else {
+      alert(`Navigate to ${job.name} modules:\n- Production Tracker\n- Management Checklist\n- Market & Land Analytics\n- Final Valuation\n- Appeal Coverage`);
+    }
   };
 
   const groupJobsByCounty = (jobList) => {
@@ -650,6 +678,28 @@ const AdminJobManagement = () => {
 
   const handleStatusTileClick = (tab) => {
     setActiveTab(tab);
+  };
+
+  const getManagerWorkload = (manager) => {
+    const assignedJobs = jobs.filter(job => 
+      job.assignedManagers?.some(am => am.id === manager.id)
+    );
+    
+    const totalProperties = assignedJobs.reduce((sum, job) => sum + (job.totalProperties || 0), 0);
+    const completedProperties = assignedJobs.reduce((sum, job) => sum + (job.inspectedProperties || 0), 0);
+    const completionRate = totalProperties > 0 ? Math.round((completedProperties / totalProperties) * 100) : 0;
+    
+    return {
+      jobCount: assignedJobs.length,
+      jobs: assignedJobs,
+      totalProperties,
+      completedProperties,
+      completionRate
+    };
+  };
+
+  const goToBillingPayroll = (job) => {
+    alert(`Navigate to ${job.name} Billing & Payroll in Production Tracker`);
   };
 
   if (loading) {
