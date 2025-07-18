@@ -296,6 +296,12 @@ const AdminJobManagement = ({ onJobSelect }) => {
         sourceFileStatus: 'processing',
         codeFileStatus: 'current',
         vendorDetection: { vendor: newJob.vendor },
+        
+        // ADD THESE MISSING FIELDS:
+        source_file_name: newJob.sourceFile.name,
+        source_file_version_id: crypto.randomUUID(), // Generate unique version ID
+        source_file_uploaded_at: new Date().toISOString(),
+        
         workflowStats: {
           inspectionPhases: { firstAttempt: 'PENDING', secondAttempt: 'PENDING', thirdAttempt: 'PENDING' },
           rates: { entryRate: 0, refusalRate: 0, pricingRate: 0, commercialInspectionRate: 0 },
@@ -344,7 +350,12 @@ const AdminJobManagement = ({ onJobSelect }) => {
           createdJob.id,
           new Date().getFullYear(),
           newJob.ccddCode,
-          newJob.vendor
+          newJob.vendor,
+          {
+            source_file_name: newJob.sourceFile.name,
+            source_file_version_id: createdJob.source_file_version_id, // Use the same ID from job
+            source_file_uploaded_at: new Date().toISOString()
+          }
         );
         
         // Restore original console.log
