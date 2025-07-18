@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, Plus, Edit3, Users, FileText, Calendar, MapPin, Database, Settings, Eye, DollarSign, Trash2, CheckCircle, Archive, TrendingUp, Target, AlertTriangle } from 'lucide-react';
+import { Upload, Plus, Edit3, Users, FileText, Calendar, MapPin, Database, Settings, Eye, DollarSign, Trash2, CheckCircle, Archive, TrendingUp, Target, AlertTriangle, X } from 'lucide-react';
 import { employeeService, jobService, planningJobService, utilityService, authService, propertyService } from '../lib/supabaseClient';
 
 const AdminJobManagement = ({ onJobSelect }) => {
@@ -35,6 +35,15 @@ const AdminJobManagement = ({ onJobSelect }) => {
   const [notifications, setNotifications] = useState([]);
   const [processingResults, setProcessingResults] = useState(null);
 
+  // County HPI state
+  const [countyHpiData, setCountyHpiData] = useState({});
+  const [showHpiImport, setShowHpiImport] = useState(null);
+  const [hpiFile, setHpiFile] = useState(null);
+  const [importingHpi, setImportingHpi] = useState(false);
+
+  // Billing state
+  const [billingData, setBillingData] = useState({});
+
   const [newJob, setNewJob] = useState({
     name: '',
     ccddCode: '',
@@ -46,7 +55,8 @@ const AdminJobManagement = ({ onJobSelect }) => {
     sourceFile: null,
     codeFile: null,
     vendor: null,
-    vendorDetection: null
+    vendorDetection: null,
+    percentBilled: 0.00 // NEW: % Billed field
   });
 
   const [newPlanningJob, setNewPlanningJob] = useState({
@@ -112,6 +122,125 @@ const AdminJobManagement = ({ onJobSelect }) => {
     });
   };
 
+  // NEW: File removal handler
+  const removeFile = (fileType) => {
+    if (fileType === 'source') {
+      setNewJob(prev => ({ ...prev, sourceFile: null }));
+      setFileAnalysis(prev => ({ 
+        ...prev, 
+        sourceFile: null, 
+        propertyCount: 0,
+        detectedVendor: fileAnalysis.codeFile ? prev.detectedVendor : null,
+        isValid: !!fileAnalysis.codeFile 
+      }));
+    } else if (fileType === 'code') {
+      setNewJob(prev => ({ ...prev, codeFile: null }));
+      setFileAnalysis(prev => ({ 
+        ...prev, 
+        codeFile: null, 
+        codeCount: 0 
+      }));
+    }
+    // Reset file input
+    const inputId = fileType === 'source' ? 'sourceFile' : 'codeFile';
+    const fileInput = document.getElementById(inputId);
+    if (fileInput) fileInput.value = '';
+  };
+
+  // NEW: Get unique counties from jobs
+  const getUniqueCounties = () => {
+    const counties = [...jobs, ...archivedJobs]
+      .map(job => job.county)
+      .filter(county => county && county.trim() !== '')
+      .filter((county, index, arr) => arr.indexOf(county) === index)
+      .sort();
+    return counties;
+  };
+
+  // NEW: County HPI import handler
+  const importCountyHpi = async (county) => {
+    if (!hpiFile) {
+      addNotification('Please select an HPI data file', 'error');
+      return;
+    }
+
+    try {
+      setImportingHpi(true);
+      const fileContent = await hpiFile.text();
+      const lines = fileContent.split('\n').filter(line => line.trim());
+      
+      if (lines.length < 2) {
+        addNotification('Invalid CSV file format', 'error');
+        return;
+      }
+
+      const header = lines[0].split(',');
+      const dateColumnIndex = header.findIndex(col => col.toLowerCase().includes('observation_date') || col.toLowerCase().includes('date'));
+      const hpiColumnIndex = header.findIndex(col => col.includes('ATNHPIUS') || col.toLowerCase().includes('hpi'));
+
+      if (dateColumnIndex === -1 || hpiColumnIndex === -1) {
+        addNotification('Could not find required columns in CSV', 'error');
+        return;
+      }
+
+      const hpiRecords = [];
+      for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].split(',');
+        if (values.length >= 2) {
+          const dateStr = values[dateColumnIndex].trim();
+          const hpiValue = parseFloat(values[hpiColumnIndex]);
+          
+          if (dateStr && !isNaN(hpiValue)) {
+            const year = parseInt(dateStr.split('-')[0]);
+            hpiRecords.push({
+              county_name: county,
+              observation_year: year,
+              hpi_index: hpiValue,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            });
+          }
+        }
+      }
+
+      // Here you would call your HPI service to save the data
+      // await hpiService.importCountyData(county, hpiRecords);
+      
+      // For now, update local state
+      setCountyHpiData(prev => ({
+        ...prev,
+        [county]: hpiRecords
+      }));
+
+      addNotification(`Successfully imported ${hpiRecords.length} HPI records for ${county} County`, 'success');
+      setShowHpiImport(null);
+      setHpiFile(null);
+      
+    } catch (error) {
+      console.error('HPI import error:', error);
+      addNotification('Error importing HPI data: ' + error.message, 'error');
+    } finally {
+      setImportingHpi(false);
+    }
+  };
+
+  // NEW: Get billing data by property class
+  const getBillingData = (jobId) => {
+    // This would query the property records for the job and group by class
+    // For now, return mock data structure
+    return {
+      'Class 1 - Vacant Land': { inspected: 150, total: 200 },
+      'Class 2 - Residential': { inspected: 2800, total: 3200 },
+      'Class 3A - Farmhouse': { inspected: 45, total: 50 },
+      'Class 3B - Farmland': { inspected: 120, total: 130 },
+      'Class 4 - Commercial': { inspected: 85, total: 95 },
+      'Class 15 - Exempt': { inspected: 30, total: 35 },
+      'Class 5 - Railroad': { inspected: 5, total: 5 },
+      'Class 6 - Personal Property': { inspected: 12, total: 15 },
+      'Commercials Priced': { priced: 78, total: 95 }
+    };
+  };
+
   // Load real data from database
   useEffect(() => {
     const initializeData = async () => {
@@ -137,7 +266,8 @@ const AdminJobManagement = ({ onJobSelect }) => {
           // Set default status to 'active' for jobs without status
           const processedActiveJobs = activeJobs.map(job => ({
             ...job,
-            status: job.status || 'active'
+            status: job.status || 'active',
+            percentBilled: job.percentBilled || 0.00 // NEW: Default % billed
           }));
           
           setJobs(processedActiveJobs);
@@ -296,6 +426,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
         sourceFileStatus: 'processing',
         codeFileStatus: 'current',
         vendorDetection: { vendor: newJob.vendor },
+        percentBilled: newJob.percentBilled, // NEW: Include % billed
         
         // ADD THESE MISSING FIELDS:
         source_file_name: newJob.sourceFile.name,
@@ -401,10 +532,9 @@ const AdminJobManagement = ({ onJobSelect }) => {
           addNotification(`Job created successfully! Processed ${result.processed} properties.`, 'success');
         }
 
-        // REMOVED: No more auto-timeout - stays open until user closes it
+        // FIXED: Call closeJobModal to reset form data
+        closeJobModal();
       }
-      
-      // Don't call closeJobModal here since we already closed it above
       
     } catch (error) {
       console.error('Job creation error:', error);
@@ -455,7 +585,8 @@ const AdminJobManagement = ({ onJobSelect }) => {
       const updateData = {
         name: newJob.name,
         municipality: newJob.municipality,
-        dueDate: newJob.dueDate
+        dueDate: newJob.dueDate,
+        percentBilled: newJob.percentBilled // NEW: Include % billed in updates
       };
 
       await jobService.update(editingJob.id, updateData);
@@ -518,6 +649,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
     }
   };
 
+  // FIXED: Reset form data after successful creation
   const closeJobModal = () => {
     setShowCreateJob(false);
     setEditingJob(null);
@@ -532,7 +664,8 @@ const AdminJobManagement = ({ onJobSelect }) => {
       sourceFile: null,
       codeFile: null,
       vendor: null,
-      vendorDetection: null
+      vendorDetection: null,
+      percentBilled: 0.00 // NEW: Reset % billed
     });
     setFileAnalysis({
       sourceFile: null,
@@ -568,7 +701,8 @@ const AdminJobManagement = ({ onJobSelect }) => {
       sourceFile: null,
       codeFile: null,
       vendor: null,
-      vendorDetection: null
+      vendorDetection: null,
+      percentBilled: 0.00 // NEW: Default % billed
     });
     setShowCreateJob(true);
   };
@@ -807,18 +941,283 @@ const AdminJobManagement = ({ onJobSelect }) => {
         </div>
       )}
 
+      {/* NEW: County HPI Tab */}
+      {activeTab === 'county-hpi' && (
+        <div className="space-y-6">
+          <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg border-2 border-indigo-200 p-6">
+            <div className="flex items-center mb-6">
+              <TrendingUp className="w-8 h-8 mr-3 text-indigo-600" />
+              <div>
+                <h2 className="text-2xl font-bold text-gray-800">📈 County HPI Data Management</h2>
+                <p className="text-gray-600 mt-1">
+                  Import and manage Housing Price Index data for time normalization calculations
+                </p>
+              </div>
+            </div>
+
+            {/* Counties Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {getUniqueCounties().length === 0 ? (
+                <div className="col-span-full text-center text-gray-500 py-12">
+                  <div className="text-4xl mb-4">📈</div>
+                  <h4 className="text-lg font-medium mb-2">No Counties Found</h4>
+                  <p className="text-sm">Create jobs with county information to manage HPI data</p>
+                </div>
+              ) : (
+                getUniqueCounties().map(county => (
+                  <div key={county} className="p-4 bg-white rounded-lg border shadow-md hover:shadow-lg transition-all">
+                    <div className="flex justify-between items-start mb-3">
+                      <div>
+                        <h4 className="text-lg font-bold text-gray-900">{county} County</h4>
+                        <p className="text-sm text-gray-600">
+                          {countyHpiData[county] ? 
+                            `${countyHpiData[county].length} HPI records` : 
+                            'No HPI data imported'
+                          }
+                        </p>
+                      </div>
+                      <div className="flex items-center space-x-1">
+                        <TrendingUp className="w-5 h-5 text-indigo-600" />
+                        {countyHpiData[county] && (
+                          <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs">
+                            ✓ Data
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {countyHpiData[county] && (
+                      <div className="mb-3 p-2 bg-indigo-50 rounded text-sm">
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div>
+                            <span className="font-medium">Years:</span> {
+                              Math.min(...countyHpiData[county].map(r => r.observation_year))
+                            } - {
+                              Math.max(...countyHpiData[county].map(r => r.observation_year))
+                            }
+                          </div>
+                          <div>
+                            <span className="font-medium">Latest HPI:</span> {
+                              countyHpiData[county]
+                                .sort((a, b) => b.observation_year - a.observation_year)[0]
+                                ?.hpi_index.toFixed(2) || 'N/A'
+                            }
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    
+                    <div className="flex justify-end">
+                      <button
+                        onClick={() => setShowHpiImport(county)}
+                        className="px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center space-x-1 text-sm font-medium"
+                      >
+                        <Upload className="w-4 h-4" />
+                        <span>{countyHpiData[county] ? 'Update' : 'Import'} HPI Data</span>
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* HPI Usage Information */}
+            <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <h3 className="font-medium text-blue-800 mb-2">💡 HPI Data Usage</h3>
+              <p className="text-sm text-blue-700">
+                Housing Price Index data enables time normalization of property values. Import CSV files with 
+                observation_date and HPI index columns. This data will be used in job modules to calculate 
+                time-adjusted values using the formula: <code className="bg-blue-100 px-1 rounded">
+                Historical Sale × (Current HPI / Historical HPI) = Time-Normalized Value</code>
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* NEW: Billing Tab */}
+      {activeTab === 'billing' && (
+        <div className="space-y-6">
+          <div className="bg-gradient-to-r from-green-50 to-teal-50 rounded-lg border-2 border-green-200 p-6">
+            <div className="flex items-center mb-6">
+              <DollarSign className="w-8 h-8 mr-3 text-green-600" />
+              <div>
+                <h2 className="text-2xl font-bold text-gray-800">💰 Billing Overview</h2>
+                <p className="text-gray-600 mt-1">
+                  Property class breakdown and inspection counts for all active jobs
+                </p>
+              </div>
+            </div>
+
+            {/* Job Billing Cards */}
+            <div className="space-y-4">
+              {jobs.length === 0 ? (
+                <div className="text-center text-gray-500 py-12">
+                  <div className="text-4xl mb-4">💰</div>
+                  <h4 className="text-lg font-medium mb-2">No Active Jobs</h4>
+                  <p className="text-sm">Create jobs to view billing breakdowns</p>
+                </div>
+              ) : (
+                jobs.map(job => {
+                  const billingData = getBillingData(job.id);
+                  
+                  return (
+                    <div key={job.id} className="p-6 bg-white rounded-lg border shadow-md">
+                      <div className="flex justify-between items-center mb-4">
+                        <div>
+                          <h4 className="text-xl font-bold text-gray-900">{job.name}</h4>
+                          <p className="text-sm text-gray-600">{job.municipality} • {job.ccddCode}</p>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-lg font-bold text-green-600">
+                            {(job.percentBilled || 0).toFixed(2)}% Billed
+                          </div>
+                          <div className="text-sm text-gray-500">Overall Progress</div>
+                        </div>
+                      </div>
+
+                      {/* Property Class Breakdown */}
+                      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                        {Object.entries(billingData).map(([className, data]) => (
+                          <div key={className} className="p-3 bg-gray-50 rounded-lg border">
+                            <div className="text-xs font-medium text-gray-600 mb-1">
+                              {className}
+                            </div>
+                            <div className="text-lg font-bold text-gray-900">
+                              {className === 'Commercials Priced' ? 
+                                data.priced?.toLocaleString() || '0' :
+                                data.inspected?.toLocaleString() || '0'
+                              }
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {className === 'Commercials Priced' ? 
+                                `of ${data.total?.toLocaleString() || '0'} total` :
+                                'inspected'
+                              }
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Summary Stats */}
+                      <div className="mt-4 pt-4 border-t border-gray-200">
+                        <div className="grid grid-cols-3 gap-4 text-center">
+                          <div>
+                            <div className="text-lg font-bold text-blue-600">
+                              {Object.values(billingData)
+                                .filter(data => data.inspected !== undefined)
+                                .reduce((sum, data) => sum + (data.inspected || 0), 0)
+                                .toLocaleString()
+                              }
+                            </div>
+                            <div className="text-xs text-gray-600">Total Inspected</div>
+                          </div>
+                          <div>
+                            <div className="text-lg font-bold text-green-600">
+                              {billingData['Commercials Priced']?.priced?.toLocaleString() || '0'}
+                            </div>
+                            <div className="text-xs text-gray-600">Commercials Priced</div>
+                          </div>
+                          <div>
+                            <div className="text-lg font-bold text-purple-600">
+                              {Object.values(billingData)
+                                .filter(data => data.total !== undefined)
+                                .reduce((sum, data) => sum + (data.total || 0), 0)
+                                .toLocaleString()
+                              }
+                            </div>
+                            <div className="text-xs text-gray-600">Total Properties</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* NEW: County HPI Import Modal */}
+      {showHpiImport && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-md w-full p-6 shadow-2xl">
+            <div className="text-center">
+              <TrendingUp className="w-12 h-12 mx-auto mb-4 text-blue-600" />
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Import HPI Data</h3>
+              <p className="text-gray-600 mb-4">
+                Upload HPI data for <strong>{showHpiImport}</strong> County
+              </p>
+              
+              <div className="mb-4">
+                <input
+                  type="file"
+                  accept=".csv"
+                  onChange={(e) => setHpiFile(e.target.files[0])}
+                  className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                />
+                <p className="text-xs text-gray-500 mt-2">
+                  CSV file with observation_date and HPI index columns
+                </p>
+              </div>
+
+              <div className="flex justify-center space-x-3">
+                <button
+                  onClick={() => {
+                    setShowHpiImport(null);
+                    setHpiFile(null);
+                  }}
+                  className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => importCountyHpi(showHpiImport)}
+                  disabled={!hpiFile || importingHpi}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {importingHpi ? 'Importing...' : 'Import HPI Data'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Create/Edit Job Modal */}
       {showCreateJob && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg max-w-5xl w-full max-h-screen overflow-y-auto shadow-2xl">
             <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-green-50">
-              <div className="flex items-center">
-                <Plus className="w-8 h-8 mr-3 text-blue-600" />
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-900">
-                    {editingJob ? '✏️ Edit Job' : '🚀 Create New Appraisal Job'}
-                  </h2>
-                  <p className="text-gray-600 mt-1">Set up a job with source data and manager assignments</p>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <Plus className="w-8 h-8 mr-3 text-blue-600" />
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-900">
+                      {editingJob ? '✏️ Edit Job' : '🚀 Create New Appraisal Job'}
+                    </h2>
+                    <p className="text-gray-600 mt-1">Set up a job with source data and manager assignments</p>
+                  </div>
+                </div>
+                {/* NEW: % Billed field in top right */}
+                <div className="bg-white p-3 rounded-lg border shadow-sm">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    % Billed
+                  </label>
+                  <div className="flex items-center space-x-1">
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="100"
+                      value={newJob.percentBilled}
+                      onChange={(e) => setNewJob({...newJob, percentBilled: parseFloat(e.target.value) || 0})}
+                      className="w-20 px-2 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="0.00"
+                    />
+                    <span className="text-sm text-gray-600">%</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -901,7 +1300,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
                 </div>
               </div>
 
-              {/* SIMPLIFIED File Upload Section */}
+              {/* ENHANCED File Upload Section with Remove Buttons */}
               {!editingJob && (
                 <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
                   <h3 className="font-medium text-blue-800 mb-4 flex items-center space-x-2">
@@ -936,7 +1335,14 @@ const AdminJobManagement = ({ onJobSelect }) => {
                         </label>
                       </div>
                       {fileAnalysis.sourceFile && (
-                        <div className="mt-3 p-3 bg-white rounded border">
+                        <div className="mt-3 p-3 bg-white rounded border relative">
+                          {/* NEW: Remove button */}
+                          <button
+                            onClick={() => removeFile('source')}
+                            className="absolute top-2 right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 text-xs"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
                           <div className="flex items-center space-x-2 mb-2">
                             <CheckCircle className="w-5 h-5 text-green-600" />
                             <span className="font-medium text-green-800">
@@ -944,6 +1350,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
                             </span>
                           </div>
                           <div className="text-sm text-gray-600">
+                            <div className="font-medium text-gray-800">{fileAnalysis.sourceFile.name}</div>
                             {fileAnalysis.propertyCount > 0 && (
                               <div className="font-medium text-green-600">
                                 ✅ {fileAnalysis.propertyCount.toLocaleString()} properties
@@ -975,12 +1382,20 @@ const AdminJobManagement = ({ onJobSelect }) => {
                         </label>
                       </div>
                       {fileAnalysis.codeFile && (
-                        <div className="mt-3 p-3 bg-white rounded border">
+                        <div className="mt-3 p-3 bg-white rounded border relative">
+                          {/* NEW: Remove button */}
+                          <button
+                            onClick={() => removeFile('code')}
+                            className="absolute top-2 right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 text-xs"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
                           <div className="flex items-center space-x-2 mb-2">
                             <CheckCircle className="w-5 h-5 text-green-600" />
                             <span className="font-medium text-green-800">Code file validated</span>
                           </div>
                           <div className="text-sm text-gray-600">
+                            <div className="font-medium text-gray-800">{fileAnalysis.codeFile.name}</div>
                             {fileAnalysis.codeCount > 0 && (
                               <div className="font-medium text-green-600">
                                 ✅ {fileAnalysis.codeCount.toLocaleString()} code definitions
@@ -1221,7 +1636,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
         </div>
       </div>
 
-      {/* Tab Navigation with Planning Jobs */}
+      {/* Tab Navigation with Planning Jobs and NEW TABS */}
       <div className="mb-6">
         <div className="border-b border-gray-200">
           <nav className="-mb-px flex space-x-8">
@@ -1254,6 +1669,26 @@ const AdminJobManagement = ({ onJobSelect }) => {
               }`}
             >
               🗄️ Archived Jobs ({archivedJobs.length})
+            </button>
+            <button
+              onClick={() => setActiveTab('county-hpi')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'county-hpi' 
+                  ? 'border-blue-500 text-blue-600' 
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              📈 County HPI ({getUniqueCounties().length})
+            </button>
+            <button
+              onClick={() => setActiveTab('billing')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'billing' 
+                  ? 'border-blue-500 text-blue-600' 
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              💰 Billing
             </button>
           </nav>
         </div>
@@ -1318,6 +1753,10 @@ const AdminJobManagement = ({ onJobSelect }) => {
                                   </span>
                                   <span className={`px-3 py-1 rounded-full text-xs font-medium shadow-sm ${getStatusColor(job.status)}`}>
                                     {job.status || 'active'}
+                                  </span>
+                                  {/* NEW: % Billed display */}
+                                  <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium shadow-sm">
+                                    {(job.percentBilled || 0).toFixed(2)}% Billed
                                   </span>
                                 </div>
                               </div>
@@ -1410,7 +1849,8 @@ const AdminJobManagement = ({ onJobSelect }) => {
                                   sourceFile: null,
                                   codeFile: null,
                                   vendor: job.vendor,
-                                  vendorDetection: job.vendorDetection
+                                  vendorDetection: job.vendorDetection,
+                                  percentBilled: job.percentBilled || 0.00 // NEW: Include % billed
                                 });
                                 setShowCreateJob(true);
                               }}
@@ -1575,8 +2015,202 @@ const AdminJobManagement = ({ onJobSelect }) => {
           </div>
         </div>
       )}
-    </div>
-  );
-};
 
-export default AdminJobManagement;
+      {/* NEW: County HPI Tab */}
+      {activeTab === 'county-hpi' && (
+        <div className="space-y-6">
+          <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg border-2 border-indigo-200 p-6">
+            <div className="flex items-center mb-6">
+              <TrendingUp className="w-8 h-8 mr-3 text-indigo-600" />
+              <div>
+                <h2 className="text-2xl font-bold text-gray-800">📈 County HPI Data Management</h2>
+                <p className="text-gray-600 mt-1">
+                  Import and manage Housing Price Index data for time normalization calculations
+                </p>
+              </div>
+            </div>
+
+            {/* Counties Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {getUniqueCounties().length === 0 ? (
+                <div className="col-span-full text-center text-gray-500 py-12">
+                  <div className="text-4xl mb-4">📈</div>
+                  <h4 className="text-lg font-medium mb-2">No Counties Found</h4>
+                  <p className="text-sm">Create jobs with county information to manage HPI data</p>
+                </div>
+              ) : (
+                getUniqueCounties().map(county => (
+                  <div key={county} className="p-4 bg-white rounded-lg border shadow-md hover:shadow-lg transition-all">
+                    <div className="flex justify-between items-start mb-3">
+                      <div>
+                        <h4 className="text-lg font-bold text-gray-900">{county} County</h4>
+                        <p className="text-sm text-gray-600">
+                          {countyHpiData[county] ? 
+                            `${countyHpiData[county].length} HPI records` : 
+                            'No HPI data imported'
+                          }
+                        </p>
+                      </div>
+                      <div className="flex items-center space-x-1">
+                        <TrendingUp className="w-5 h-5 text-indigo-600" />
+                        {countyHpiData[county] && (
+                          <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs">
+                            ✓ Data
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {countyHpiData[county] && (
+                      <div className="mb-3 p-2 bg-indigo-50 rounded text-sm">
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div>
+                            <span className="font-medium">Years:</span> {
+                              Math.min(...countyHpiData[county].map(r => r.observation_year))
+                            } - {
+                              Math.max(...countyHpiData[county].map(r => r.observation_year))
+                            }
+                          </div>
+                          <div>
+                            <span className="font-medium">Latest HPI:</span> {
+                              countyHpiData[county]
+                                .sort((a, b) => b.observation_year - a.observation_year)[0]
+                                ?.hpi_index.toFixed(2) || 'N/A'
+                            }
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    
+                    <div className="flex justify-end">
+                      <button
+                        onClick={() => setShowHpiImport(county)}
+                        className="px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center space-x-1 text-sm font-medium"
+                      >
+                        <Upload className="w-4 h-4" />
+                        <span>{countyHpiData[county] ? 'Update' : 'Import'} HPI Data</span>
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* HPI Usage Information */}
+            <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <h3 className="font-medium text-blue-800 mb-2">💡 HPI Data Usage</h3>
+              <p className="text-sm text-blue-700">
+                Housing Price Index data enables time normalization of property values. Import CSV files with 
+                observation_date and HPI index columns. This data will be used in job modules to calculate 
+                time-adjusted values using the formula: <code className="bg-blue-100 px-1 rounded">
+                Historical Sale × (Current HPI / Historical HPI) = Time-Normalized Value</code>
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* NEW: Billing Tab */}
+      {activeTab === 'billing' && (
+        <div className="space-y-6">
+          <div className="bg-gradient-to-r from-green-50 to-teal-50 rounded-lg border-2 border-green-200 p-6">
+            <div className="flex items-center mb-6">
+              <DollarSign className="w-8 h-8 mr-3 text-green-600" />
+              <div>
+                <h2 className="text-2xl font-bold text-gray-800">💰 Billing Overview</h2>
+                <p className="text-gray-600 mt-1">
+                  Property class breakdown and inspection counts for all active jobs
+                </p>
+              </div>
+            </div>
+
+            {/* Job Billing Cards */}
+            <div className="space-y-4">
+              {jobs.length === 0 ? (
+                <div className="text-center text-gray-500 py-12">
+                  <div className="text-4xl mb-4">💰</div>
+                  <h4 className="text-lg font-medium mb-2">No Active Jobs</h4>
+                  <p className="text-sm">Create jobs to view billing breakdowns</p>
+                </div>
+              ) : (
+                jobs.map(job => {
+                  const billingData = getBillingData(job.id);
+                  
+                  return (
+                    <div key={job.id} className="p-6 bg-white rounded-lg border shadow-md">
+                      <div className="flex justify-between items-center mb-4">
+                        <div>
+                          <h4 className="text-xl font-bold text-gray-900">{job.name}</h4>
+                          <p className="text-sm text-gray-600">{job.municipality} • {job.ccddCode}</p>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-lg font-bold text-green-600">
+                            {(job.percentBilled || 0).toFixed(2)}% Billed
+                          </div>
+                          <div className="text-sm text-gray-500">Overall Progress</div>
+                        </div>
+                      </div>
+
+                      {/* Property Class Breakdown */}
+                      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                        {Object.entries(billingData).map(([className, data]) => (
+                          <div key={className} className="p-3 bg-gray-50 rounded-lg border">
+                            <div className="text-xs font-medium text-gray-600 mb-1">
+                              {className}
+                            </div>
+                            <div className="text-lg font-bold text-gray-900">
+                              {className === 'Commercials Priced' ? 
+                                data.priced?.toLocaleString() || '0' :
+                                data.inspected?.toLocaleString() || '0'
+                              }
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {className === 'Commercials Priced' ? 
+                                `of ${data.total?.toLocaleString() || '0'} total` :
+                                'inspected'
+                              }
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Summary Stats */}
+                      <div className="mt-4 pt-4 border-t border-gray-200">
+                        <div className="grid grid-cols-3 gap-4 text-center">
+                          <div>
+                            <div className="text-lg font-bold text-blue-600">
+                              {Object.values(billingData)
+                                .filter(data => data.inspected !== undefined)
+                                .reduce((sum, data) => sum + (data.inspected || 0), 0)
+                                .toLocaleString()
+                              }
+                            </div>
+                            <div className="text-xs text-gray-600">Total Inspected</div>
+                          </div>
+                          <div>
+                            <div className="text-lg font-bold text-green-600">
+                              {billingData['Commercials Priced']?.priced?.toLocaleString() || '0'}
+                            </div>
+                            <div className="text-xs text-gray-600">Commercials Priced</div>
+                          </div>
+                          <div>
+                            <div className="text-lg font-bold text-purple-600">
+                              {Object.values(billingData)
+                                .filter(data => data.total !== undefined)
+                                .reduce((sum, data) => sum + (data.total || 0), 0)
+                                .toLocaleString()
+                              }
+                            </div>
+                            <div className="text-xs text-gray-600">Total Properties</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      
