@@ -43,40 +43,108 @@ export class BRTProcessor {
   }
 
   /**
-   * Process BRT code file (nested JSON format)
-   * Example structure: {"1":{"KEY":"01","DATA":{"VALUE":"GROUND FLR"}}}
+   * Process BRT code file (mixed format with headers and JSON sections)
+   * Example structure: 
+   * Residential
+   * {"1":{"KEY":"01","DATA":{"VALUE":"GROUND FLR"}}}
+   * VCS
+   * {"AC":{"KEY":"AC","DATA":{"VALUE":"ACRES"}}}
    */
   processCodeFile(codeFileContent) {
     console.log('Processing BRT code file...');
     
     try {
-      const codeData = JSON.parse(codeFileContent);
+      const lines = codeFileContent.split('\n');
+      let currentSection = null;
+      let jsonBuffer = '';
+      let inJsonBlock = false;
       
-      // Process each category in the JSON structure
-      Object.keys(codeData).forEach(categoryKey => {
-        const category = codeData[categoryKey];
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
         
-        if (category.MAP) {
-          // Process subcategories with MAP structure
-          Object.keys(category.MAP).forEach(subKey => {
-            const subCategory = category.MAP[subKey];
-            if (subCategory.DATA && subCategory.DATA.VALUE) {
-              // Store as "categoryKey_subKey" = "VALUE"
-              const lookupKey = `${categoryKey}_${subCategory.KEY || subKey}`;
-              this.codeLookups.set(lookupKey, subCategory.DATA.VALUE);
-            }
-          });
-        } else if (category.DATA && category.DATA.VALUE) {
-          // Direct category mapping
-          this.codeLookups.set(category.KEY || categoryKey, category.DATA.VALUE);
+        // Skip empty lines
+        if (!line) continue;
+        
+        // Check if this is a section header (not JSON)
+        if (!line.startsWith('{') && !line.startsWith('"') && !inJsonBlock) {
+          // Process any accumulated JSON from previous section
+          if (jsonBuffer && currentSection) {
+            this.parseJsonSection(jsonBuffer, currentSection);
+          }
+          
+          // Start new section
+          currentSection = line;
+          jsonBuffer = '';
+          inJsonBlock = false;
+          console.log(`Found section: ${currentSection}`);
+          continue;
         }
-      });
+        
+        // Accumulate JSON lines
+        if (line.startsWith('{') || inJsonBlock) {
+          inJsonBlock = true;
+          jsonBuffer += line;
+          
+          // Check if JSON block is complete (simple bracket counting)
+          const openBrackets = (jsonBuffer.match(/\{/g) || []).length;
+          const closeBrackets = (jsonBuffer.match(/\}/g) || []).length;
+          
+          if (openBrackets === closeBrackets && openBrackets > 0) {
+            // JSON block complete, process it
+            if (currentSection) {
+              this.parseJsonSection(jsonBuffer, currentSection);
+            }
+            jsonBuffer = '';
+            inJsonBlock = false;
+          }
+        }
+      }
       
-      console.log(`Loaded ${this.codeLookups.size} code definitions`);
+      // Process any remaining JSON
+      if (jsonBuffer && currentSection) {
+        this.parseJsonSection(jsonBuffer, currentSection);
+      }
+      
+      console.log(`Loaded ${this.codeLookups.size} code definitions from BRT file`);
       
     } catch (error) {
       console.error('Error parsing BRT code file:', error);
       // Continue processing without codes if file is malformed
+    }
+  }
+  
+  /**
+   * Parse a JSON section and store lookups
+   */
+  parseJsonSection(jsonString, sectionName) {
+    try {
+      const codeData = JSON.parse(jsonString);
+      
+      // Store section-specific lookups
+      if (sectionName === 'VCS') {
+        // Store VCS data separately for lot calculations
+        Object.keys(codeData).forEach(key => {
+          const item = codeData[key];
+          if (item.DATA && item.DATA.VALUE) {
+            this.vcsLookups.set(key, item.DATA.VALUE);
+          }
+        });
+        console.log(`Loaded ${Object.keys(codeData).length} VCS codes`);
+      } else {
+        // Store other sections in main codeLookups
+        Object.keys(codeData).forEach(key => {
+          const item = codeData[key];
+          if (item.DATA && item.DATA.VALUE) {
+            // Prefix with section name for uniqueness
+            const lookupKey = `${sectionName}_${key}`;
+            this.codeLookups.set(lookupKey, item.DATA.VALUE);
+          }
+        });
+        console.log(`Loaded ${Object.keys(codeData).length} codes from ${sectionName} section`);
+      }
+      
+    } catch (error) {
+      console.error(`Error parsing JSON section ${sectionName}:`, error);
     }
   }
 
