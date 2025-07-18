@@ -1,4 +1,4 @@
-/**
+  /**
  * Complete Microsystems Processor 
  * Handles pipe-delimited source files and field_id+code lookup files
  * Stores direct mappings in property_records and raw data in property_analysis_data
@@ -182,44 +182,41 @@ export class MicrosystemsProcessor {
     };
   }
 
-  /**
-   * Map to property_analysis_data for calculated fields and raw storage
-   */
-  async mapToAnalysisData(rawRecord, propertyRecordId, jobId, yearCreated, ccddCode) {
-    return {
-      // Link to property record
-      property_record_id: propertyRecordId,
-      
-      // Property identifiers (duplicated for easy querying)
-      property_block: rawRecord['Block'],
-      property_lot: rawRecord['Lot'],
-      property_qualifier: rawRecord['Qual'],
-      property_addl_card: rawRecord['Bldg'],
-      property_location: rawRecord['Location'], // FIXED: Direct mapping
-      property_composite_key: `${yearCreated}${ccddCode}-${rawRecord['Block']}-${rawRecord['Lot']}_${(rawRecord['Qual'] || '').trim() || 'NONE'}-${(rawRecord['Bldg'] || '').trim() || 'NONE'}-${(rawRecord['Location'] || '').trim() || 'NONE'}`,
-      
-      // Calculated fields - minimal essential calculations only
-      total_baths_calculated: this.calculateTotalBaths(rawRecord),
-      
-      // Asset fields - direct mappings from Microsystems
-      asset_sfla: this.parseNumeric(rawRecord['Livable Area']),
-      asset_new_vcs: null, // User defined, created in module
-      asset_key_page: null, // User defined, created in module
-      asset_map_page: null, // User defined, created in module
-      asset_zoning: null, // User defined, created in module
-      asset_view: null, // Not available in Microsystems
-      asset_neighborhood: rawRecord['Neighborhood'],
-      asset_type_use: rawRecord['Type Use Code'],
-      asset_building_class: rawRecord['Bldg Qual Class Code'],
-      asset_design_style: rawRecord['Style Code'],
-      asset_year_built: this.parseInteger(rawRecord['Year Built']),
-      asset_lot_frontage: this.calculateLotFrontage(rawRecord),
-      asset_lot_depth: this.calculateLotDepth(rawRecord),
-      asset_lot_acre: this.parseNumeric(rawRecord['Lot Size In Acres'], 2), // 2 decimals
-      asset_lot_sf: this.parseInteger(rawRecord['Lot Size In Sf']), // No decimals
-      asset_story_height: this.parseNumeric(rawRecord['Story Height']),
-      asset_ext_cond: rawRecord['Condition'],
-      asset_int_cond: rawRecord['Interior Cond Or End Unit'],
+ /**
+ * Update analysis data with calculated and import-specific fields
+ */
+async updateAnalysisData(rawRecord, propertyRecordId) {
+  const analysisUpdates = {
+    // Calculated fields
+    total_baths_calculated: this.calculateTotalBaths(rawRecord),
+    asset_lot_frontage: this.calculateLotFrontage(rawRecord),
+    asset_lot_depth: this.calculateLotDepth(rawRecord),
+    
+    // Asset fields - direct mappings from Microsystems
+    asset_sfla: this.parseNumeric(rawRecord['Livable Area']),
+    asset_neighborhood: rawRecord['Neighborhood'],
+    asset_type_use: rawRecord['Type Use Code'],
+    asset_building_class: rawRecord['Bldg Qual Class Code'],
+    asset_design_style: rawRecord['Style Code'],
+    asset_year_built: this.parseInteger(rawRecord['Year Built']),
+    asset_lot_acre: this.parseNumeric(rawRecord['Lot Size In Acres'], 2),
+    asset_lot_sf: this.parseInteger(rawRecord['Lot Size In Sf']),
+    asset_story_height: this.parseNumeric(rawRecord['Story Height']),
+    asset_ext_cond: rawRecord['Condition'],
+    asset_int_cond: rawRecord['Interior Cond Or End Unit'],
+    
+    // Store complete raw data
+    raw_data: rawRecord,
+    
+    // Metadata
+    calculated_at: new Date().toISOString()
+  };
+
+  return await supabase
+    .from('property_analysis_data')
+    .update(analysisUpdates)
+    .eq('property_record_id', propertyRecordId);
+}
       
       // Normalized values - time adjustment using FRED HPI data
       values_norm_time: null, // Calculate later in Market & Land Analytics module
@@ -383,10 +380,17 @@ export class MicrosystemsProcessor {
             .single();
           
           if (propertyError) {
-            console.error('Error inserting property record:', propertyError);
-            results.errors++;
-            continue;
-          }
+          console.error('Error inserting property record:', propertyError);
+          results.errors++;
+          continue;
+    }
+
+        // Update analysis data with calculated and import-specific fields
+        const { error: updateError } = await this.updateAnalysisData(rawRecord, insertedRecord.id);
+          if (updateError) {
+          console.warn(`Failed to update analysis data:`, updateError);
+          results.warnings.push(`Analysis data update failed for ${propertyRecord.property_composite_key}`);
+    }
                              
           results.processed++;
           
