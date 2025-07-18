@@ -127,7 +127,7 @@ export class BRTProcessor {
   }
 
   /**
-   * Parse CSV BRT file (comma-delimited)
+   * Parse CSV BRT file (comma-delimited with proper CSV parsing)
    */
   parseSourceFile(fileContent) {
     console.log('Parsing BRT source file...');
@@ -137,13 +137,14 @@ export class BRTProcessor {
       throw new Error('File must have at least header and one data row');
     }
     
-    this.headers = lines[0].split(',');
+    // Use proper CSV parsing to handle quoted fields and commas within fields
+    this.headers = this.parseCSVLine(lines[0]);
     console.log(`Found ${this.headers.length} headers`);
     console.log('Headers:', this.headers.slice(0, 10));
     
     const records = [];
     for (let i = 1; i < lines.length; i++) {
-      const values = lines[i].split(',');
+      const values = this.parseCSVLine(lines[i]);
       
       if (values.length !== this.headers.length) {
         console.warn(`Row ${i} has ${values.length} values but ${this.headers.length} headers - skipping`);
