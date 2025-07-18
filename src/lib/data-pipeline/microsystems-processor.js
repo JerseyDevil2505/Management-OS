@@ -10,12 +10,6 @@ export class MicrosystemsProcessor {
   constructor() {
     this.codeLookups = new Map();
     this.headers = [];
-    this.duplicateHeaderPositions = {
-      landValue: [],
-      imprValue: [],
-      totlValue: [],
-      location: []
-    };
   }
 
   /**
@@ -68,11 +62,20 @@ export class MicrosystemsProcessor {
       throw new Error('File must have at least header and one data row');
     }
     
-    // Parse headers and find duplicate positions
-    this.headers = lines[0].split('|');
-    this.findDuplicateHeaderPositions();
+    // Parse headers and rename duplicates
+    const originalHeaders = lines[0].split('|');
+    this.headers = this.renameDuplicateHeaders(originalHeaders);
     
-    console.log(`Found ${this.headers.length} headers`);
+    console.log(`Found ${this.headers.length} headers with duplicates renamed`);
+    console.log('Duplicate mapping created:', {
+      'Location': this.headers.indexOf('Location'),
+      'Land Value': this.headers.indexOf('Land Value'),
+      'Land Value2': this.headers.indexOf('Land Value2'),
+      'Impr Value': this.headers.indexOf('Impr Value'),
+      'Impr Value2': this.headers.indexOf('Impr Value2'),
+      'Totl Value': this.headers.indexOf('Totl Value'),
+      'Totl Value2': this.headers.indexOf('Totl Value2')
+    });
     
     // Parse data rows
     const records = [];
@@ -84,7 +87,7 @@ export class MicrosystemsProcessor {
         continue;
       }
       
-      // Create record object
+      // Create record object with renamed headers
       const record = {};
       this.headers.forEach((header, index) => {
         record[header] = values[index] || null;
@@ -98,42 +101,25 @@ export class MicrosystemsProcessor {
   }
 
   /**
-   * Find positions of duplicate headers for positional mapping
+   * Rename duplicate headers by adding numbers
    */
-  findDuplicateHeaderPositions() {
-    // Debug logging for location field
-    console.log('Header at index 5 (6th column):', this.headers[5]);
-    console.log('All headers containing "Location":', this.headers.filter((h, i) => h.includes('Location')).map((h, i) => `${i}: ${h}`));
-    console.log('All headers containing "VCS":', this.headers.filter((h, i) => h.includes('VCS')).map((h, i) => `${i}: ${h}`));
-    
-    this.headers.forEach((header, index) => {
-      if (header === 'Land Value') {
-        this.duplicateHeaderPositions.landValue.push(index);
-      }
-      if (header === 'Impr Value') {
-        this.duplicateHeaderPositions.imprValue.push(index);
-      }
-      if (header === 'Totl Value') {
-        this.duplicateHeaderPositions.totlValue.push(index);
-      }
-      if (header === 'Location') {
-        this.duplicateHeaderPositions.location.push(index);
+  renameDuplicateHeaders(originalHeaders) {
+    const headerCounts = {};
+    return originalHeaders.map(header => {
+      if (headerCounts[header]) {
+        headerCounts[header]++;
+        return `${header}${headerCounts[header]}`;
+      } else {
+        headerCounts[header] = 1;
+        return header;
       }
     });
-    
-    // Force location to use 6th column (index 5) for debugging
-    this.duplicateHeaderPositions.location = [5];
-    
-    console.log('Duplicate header positions:', this.duplicateHeaderPositions);
   }
 
   /**
    * Map Microsystems record to property_records table fields
    */
   mapToPropertyRecord(rawRecord, yearCreated, ccddCode, jobId) {
-    // Get values by position for duplicates
-    const rawValues = this.headers.map(header => rawRecord[header]);
-    
     return {
       // Job context
       job_id: jobId,
@@ -143,8 +129,8 @@ export class MicrosystemsProcessor {
       property_lot: rawRecord['Lot'],
       property_qualifier: rawRecord['Qual'],
       property_addl_card: rawRecord['Bldg'],
-      property_location: rawValues[this.duplicateHeaderPositions.location[0]] || null,
-      property_composite_key: `${yearCreated}${ccddCode}-${rawRecord['Block']}-${rawRecord['Lot']}_${(rawRecord['Qual'] || '').trim() || 'NONE'}-${(rawRecord['Bldg'] || '').trim() || 'NONE'}-${(rawValues[this.duplicateHeaderPositions.location[0]] || '').trim() || 'NONE'}`,
+      property_location: rawRecord['Location'], // FIXED: Direct mapping to first Location
+      property_composite_key: `${yearCreated}${ccddCode}-${rawRecord['Block']}-${rawRecord['Lot']}_${(rawRecord['Qual'] || '').trim() || 'NONE'}-${(rawRecord['Bldg'] || '').trim() || 'NONE'}-${(rawRecord['Location'] || '').trim() || 'NONE'}`,
       
       // Owner fields
       owner_name: rawRecord['Owner Name'],
@@ -158,21 +144,21 @@ export class MicrosystemsProcessor {
       sales_page: rawRecord['Sale Page'],
       sales_nu: rawRecord['Sale Nu'],
       
-      // Values - positional mapping for duplicates
-      values_mod_land: this.parseNumeric(rawValues[this.duplicateHeaderPositions.landValue[0]]),
-      values_cama_land: this.parseNumeric(rawValues[this.duplicateHeaderPositions.landValue[1]]),
-      values_mod_improvement: this.parseNumeric(rawValues[this.duplicateHeaderPositions.imprValue[0]]),
-      values_cama_improvement: this.parseNumeric(rawValues[this.duplicateHeaderPositions.imprValue[1]]),
-      values_mod_total: this.parseNumeric(rawValues[this.duplicateHeaderPositions.totlValue[0]]),
-      values_cama_total: this.parseNumeric(rawValues[this.duplicateHeaderPositions.totlValue[1]]),
+      // Values - FIXED: Direct mapping to renamed headers
+      values_mod_land: this.parseNumeric(rawRecord['Land Value']), // First instance
+      values_cama_land: this.parseNumeric(rawRecord['Land Value2']), // Second instance
+      values_mod_improvement: this.parseNumeric(rawRecord['Impr Value']), // First instance
+      values_cama_improvement: this.parseNumeric(rawRecord['Impr Value2']), // Second instance
+      values_mod_total: this.parseNumeric(rawRecord['Totl Value']), // First instance
+      values_cama_total: this.parseNumeric(rawRecord['Totl Value2']), // Second instance
       
       // Values - single occurrence
       values_base_cost: this.parseNumeric(rawRecord['Base Cost']),
       values_det_items: this.parseNumeric(rawRecord['Det Items']),
       values_repl_cost: this.parseNumeric(rawRecord['Cost New']),
       
-      // Inspection fields
-      inspection_info_by: this.parseInteger(rawRecord['Interior Finish3']),
+      // Inspection fields - FIXED: Remove parseInteger for letter codes
+      inspection_info_by: rawRecord['Interior Finish3'], // Store letter codes directly (E, F, O, R, V)
       inspection_list_by: rawRecord['Insp By'],
       inspection_list_date: this.parseDate(rawRecord['Insp Date']),
       inspection_measure_by: rawRecord['Measured By'],
@@ -185,10 +171,10 @@ export class MicrosystemsProcessor {
       property_facility: rawRecord['Facility Name'],
       property_vcs: rawRecord['VCS'],
       
-      // Metadata - FIXED: Added created_by field
+      // Metadata
       vendor_source: 'Microsystems',
-      source_file_uploaded_at: new Date(),
-      processed_at: new Date(),
+      source_file_uploaded_at: new Date().toISOString(),
+      processed_at: new Date().toISOString(),
       created_by: '5df85ca3-7a54-4798-a665-c31da8d9caad',
       
       // Store complete raw data as JSON
@@ -200,9 +186,6 @@ export class MicrosystemsProcessor {
    * Map to property_analysis_data for calculated fields and raw storage
    */
   async mapToAnalysisData(rawRecord, propertyRecordId, jobId, yearCreated, ccddCode) {
-    // Get values by position for duplicates
-    const rawValues = this.headers.map(header => rawRecord[header]);
-    
     return {
       // Link to property record
       property_record_id: propertyRecordId,
@@ -212,8 +195,8 @@ export class MicrosystemsProcessor {
       property_lot: rawRecord['Lot'],
       property_qualifier: rawRecord['Qual'],
       property_addl_card: rawRecord['Bldg'],
-      property_location: rawValues[this.duplicateHeaderPositions.location[0]] || null,
-      property_composite_key: `${yearCreated}${ccddCode}-${rawRecord['Block']}-${rawRecord['Lot']}_${(rawRecord['Qual'] || '').trim() || 'NONE'}-${(rawRecord['Bldg'] || '').trim() || 'NONE'}-${(rawValues[this.duplicateHeaderPositions.location[0]] || '').trim() || 'NONE'}`,
+      property_location: rawRecord['Location'], // FIXED: Direct mapping
+      property_composite_key: `${yearCreated}${ccddCode}-${rawRecord['Block']}-${rawRecord['Lot']}_${(rawRecord['Qual'] || '').trim() || 'NONE'}-${(rawRecord['Bldg'] || '').trim() || 'NONE'}-${(rawRecord['Location'] || '').trim() || 'NONE'}`,
       
       // Calculated fields - minimal essential calculations only
       total_baths_calculated: this.calculateTotalBaths(rawRecord),
@@ -230,8 +213,8 @@ export class MicrosystemsProcessor {
       asset_building_class: rawRecord['Bldg Qual Class Code'],
       asset_design_style: rawRecord['Style Code'],
       asset_year_built: this.parseInteger(rawRecord['Year Built']),
-      asset_lot_frontage: this.calculateLotFrontage(rawRecord), // Calculate later
-      asset_lot_depth: this.calculateLotDepth(rawRecord), // Calculate later
+      asset_lot_frontage: this.calculateLotFrontage(rawRecord),
+      asset_lot_depth: this.calculateLotDepth(rawRecord),
       asset_lot_acre: this.parseNumeric(rawRecord['Lot Size In Acres'], 2), // 2 decimals
       asset_lot_sf: this.parseInteger(rawRecord['Lot Size In Sf']), // No decimals
       asset_story_height: this.parseNumeric(rawRecord['Story Height']),
@@ -245,8 +228,8 @@ export class MicrosystemsProcessor {
       // Store complete raw data as JSON for dynamic querying
       raw_data: rawRecord,
       
-      // Metadata - FIXED: Added created_by field
-      calculated_at: new Date(),
+      // Metadata
+      calculated_at: new Date().toISOString(),
       created_by: '5df85ca3-7a54-4798-a665-c31da8d9caad'
     };
   }
