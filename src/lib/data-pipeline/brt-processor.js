@@ -127,6 +127,46 @@ export class BRTProcessor {
   }
 
   /**
+   * Parse a single CSV line with proper handling of quoted fields and commas
+   * This is the MISSING method that was causing the error!
+   */
+  parseCSVLine(line) {
+    const result = [];
+    let current = '';
+    let inQuotes = false;
+    let i = 0;
+    
+    while (i < line.length) {
+      const char = line[i];
+      
+      if (char === '"') {
+        if (inQuotes && line[i + 1] === '"') {
+          // Handle escaped quotes ("")
+          current += '"';
+          i += 2;
+          continue;
+        }
+        inQuotes = !inQuotes;
+      } else if (char === ',' && !inQuotes) {
+        // Found field separator outside quotes
+        result.push(current.trim());
+        current = '';
+        i++;
+        continue;
+      } else {
+        current += char;
+      }
+      
+      i++;
+    }
+    
+    // Add the last field
+    result.push(current.trim());
+    
+    return result;
+  }
+
+  /**
    * Parse CSV BRT file (comma-delimited with proper CSV parsing)
    */
   parseSourceFile(fileContent) {
@@ -414,7 +454,7 @@ export class BRTProcessor {
           results.errors += batch.length;
         } else {
           results.processed += batch.length;
-          console.log(`Inserted property records ${i + 1} to ${Math.min(i + batchSize, propertyRecords.length)}`);
+          console.log(`✅ Inserted property records ${i + 1} to ${Math.min(i + batchSize, propertyRecords.length)}`);
         }
       }
       
@@ -431,11 +471,11 @@ export class BRTProcessor {
           console.error('Batch analysis insert error:', analysisError);
           results.warnings.push(`Analysis batch ${i} to ${i + batchSize} failed`);
         } else {
-          console.log(`Inserted analysis records ${i + 1} to ${Math.min(i + batchSize, analysisRecords.length)}`);
+          console.log(`✅ Inserted analysis records ${i + 1} to ${Math.min(i + batchSize, analysisRecords.length)}`);
         }
       }
       
-      console.log('BRT batch processing complete:', results);
+      console.log('🚀 BRT BATCH PROCESSING COMPLETE:', results);
       return results;
       
     } catch (error) {
