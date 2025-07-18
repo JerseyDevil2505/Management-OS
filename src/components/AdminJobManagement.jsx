@@ -53,7 +53,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
     codeFile: null,
     vendor: null,
     vendorDetection: null,
-    percentBilled: 0.00 // NEW: % Billed field
+    percentBilled: 0.00
   });
 
   const [newPlanningJob, setNewPlanningJob] = useState({
@@ -82,6 +82,14 @@ const AdminJobManagement = ({ onJobSelect }) => {
     const minutes = Math.floor(elapsed / 60);
     const seconds = elapsed % 60;
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  // Helper function to capitalize county names
+  const capitalizeCounty = (county) => {
+    if (!county) return county;
+    return county.split(' ').map(word => 
+      word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+    ).join(' ');
   };
 
   // Notification system
@@ -119,7 +127,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
     });
   };
 
-  // NEW: File removal handler
+  // File removal handler
   const removeFile = (fileType) => {
     if (fileType === 'source') {
       setNewJob(prev => ({ ...prev, sourceFile: null }));
@@ -144,17 +152,17 @@ const AdminJobManagement = ({ onJobSelect }) => {
     if (fileInput) fileInput.value = '';
   };
 
-  // NEW: Get unique counties from jobs
+  // Get unique counties from jobs
   const getUniqueCounties = () => {
     const counties = [...jobs, ...archivedJobs]
-      .map(job => job.county)
+      .map(job => capitalizeCounty(job.county))
       .filter(county => county && county.trim() !== '')
       .filter((county, index, arr) => arr.indexOf(county) === index)
       .sort();
     return counties;
   };
 
-  // NEW: County HPI import handler
+  // County HPI import handler
   const importCountyHpi = async (county) => {
     if (!hpiFile) {
       addNotification('Please select an HPI data file', 'error');
@@ -200,7 +208,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
         }
       }
 
-      // Here you would call your HPI service to save the data
+      // TODO: Implement actual HPI service call
       // await hpiService.importCountyData(county, hpiRecords);
       
       // For now, update local state
@@ -219,23 +227,6 @@ const AdminJobManagement = ({ onJobSelect }) => {
     } finally {
       setImportingHpi(false);
     }
-  };
-
-  // NEW: Get billing data by property class
-  const getBillingData = (jobId) => {
-    // This would query the property records for the job and group by class
-    // For now, return mock data structure
-    return {
-      'Class 1 - Vacant Land': { inspected: 150, total: 200 },
-      'Class 2 - Residential': { inspected: 2800, total: 3200 },
-      'Class 3A - Farmhouse': { inspected: 45, total: 50 },
-      'Class 3B - Farmland': { inspected: 120, total: 130 },
-      'Class 4 - Commercial': { inspected: 85, total: 95 },
-      'Class 15 - Exempt': { inspected: 30, total: 35 },
-      'Class 5 - Railroad': { inspected: 5, total: 5 },
-      'Class 6 - Personal Property': { inspected: 12, total: 15 },
-      'Commercials Priced': { priced: 78, total: 95 }
-    };
   };
 
   // Load real data from database
@@ -260,15 +251,21 @@ const AdminJobManagement = ({ onJobSelect }) => {
           const activeJobs = jobsData.filter(job => job.status !== 'archived');
           const archived = jobsData.filter(job => job.status === 'archived');
           
-          // Set default status to 'active' for jobs without status
+          // Set default status to 'active' for jobs without status and capitalize counties
           const processedActiveJobs = activeJobs.map(job => ({
             ...job,
-            status: job.status || 'active',
-            percentBilled: job.percentBilled || 0.00 // NEW: Default % billed
+            status: job.status || 'Active',
+            county: capitalizeCounty(job.county),
+            percentBilled: job.percent_billed || 0.00
+          }));
+          
+          const processedArchivedJobs = archived.map(job => ({
+            ...job,
+            county: capitalizeCounty(job.county)
           }));
           
           setJobs(processedActiveJobs);
-          setArchivedJobs(archived);
+          setArchivedJobs(processedArchivedJobs);
           setPlanningJobs(planningData);
           setManagers(managersData);
           setDbStats(statsData);
@@ -285,7 +282,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
     initializeData();
   }, []);
 
-  // SIMPLIFIED FILE ANALYSIS (was 100+ lines, now ~20 lines)
+  // SIMPLIFIED FILE ANALYSIS
   const analyzeFile = async (file, type) => {
     if (!file) return;
 
@@ -412,22 +409,21 @@ const AdminJobManagement = ({ onJobSelect }) => {
         name: newJob.name,
         ccdd: newJob.ccddCode,
         municipality: newJob.municipality,
-        county: newJob.county,
+        county: capitalizeCounty(newJob.county),
         state: newJob.state,
         vendor: newJob.vendor,
         dueDate: newJob.dueDate,
         assignedManagers: newJob.assignedManagers,
         totalProperties: fileAnalysis.propertyCount,
         inspectedProperties: 0,
-        status: 'active',
+        status: 'Active',
         sourceFileStatus: 'processing',
         codeFileStatus: 'current',
         vendorDetection: { vendor: newJob.vendor },
-        percentBilled: newJob.percentBilled, // NEW: Include % billed
+        percent_billed: newJob.percentBilled,
         
-        // ADD THESE MISSING FIELDS:
         source_file_name: newJob.sourceFile.name,
-        source_file_version_id: crypto.randomUUID(), // Generate unique version ID
+        source_file_version_id: crypto.randomUUID(),
         source_file_uploaded_at: new Date().toISOString(),
         
         workflowStats: {
@@ -481,7 +477,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
           newJob.vendor,
           {
             source_file_name: newJob.sourceFile.name,
-            source_file_version_id: createdJob.source_file_version_id, // Use the same ID from job
+            source_file_version_id: createdJob.source_file_version_id,
             source_file_uploaded_at: new Date().toISOString()
           }
         );
@@ -508,8 +504,16 @@ const AdminJobManagement = ({ onJobSelect }) => {
         const activeJobs = updatedJobs.filter(job => job.status !== 'archived');
         const archived = updatedJobs.filter(job => job.status === 'archived');
         
-        setJobs(activeJobs);
-        setArchivedJobs(archived);
+        setJobs(activeJobs.map(job => ({
+          ...job,
+          status: job.status || 'Active',
+          county: capitalizeCounty(job.county),
+          percentBilled: job.percent_billed || 0.00
+        })));
+        setArchivedJobs(archived.map(job => ({
+          ...job,
+          county: capitalizeCounty(job.county)
+        })));
         
         updateProcessingStatus('Complete!', 100);
         
@@ -529,7 +533,6 @@ const AdminJobManagement = ({ onJobSelect }) => {
           addNotification(`Job created successfully! Processed ${result.processed} properties.`, 'success');
         }
 
-        // FIXED: Call closeJobModal to reset form data
         closeJobModal();
       }
       
@@ -583,7 +586,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
         name: newJob.name,
         municipality: newJob.municipality,
         dueDate: newJob.dueDate,
-        percentBilled: newJob.percentBilled // NEW: Include % billed in updates
+        percent_billed: newJob.percentBilled
       };
 
       await jobService.update(editingJob.id, updateData);
@@ -592,8 +595,16 @@ const AdminJobManagement = ({ onJobSelect }) => {
       const activeJobs = updatedJobs.filter(job => job.status !== 'archived');
       const archived = updatedJobs.filter(job => job.status === 'archived');
       
-      setJobs(activeJobs);
-      setArchivedJobs(archived);
+      setJobs(activeJobs.map(job => ({
+        ...job,
+        status: job.status || 'Active',
+        county: capitalizeCounty(job.county),
+        percentBilled: job.percent_billed || 0.00
+      })));
+      setArchivedJobs(archived.map(job => ({
+        ...job,
+        county: capitalizeCounty(job.county)
+      })));
       
       closeJobModal();
       addNotification('Job updated successfully!', 'success');
@@ -636,8 +647,16 @@ const AdminJobManagement = ({ onJobSelect }) => {
       const activeJobs = updatedJobs.filter(job => job.status !== 'archived');
       const archived = updatedJobs.filter(job => job.status === 'archived');
       
-      setJobs(activeJobs);
-      setArchivedJobs(archived);
+      setJobs(activeJobs.map(job => ({
+        ...job,
+        status: job.status || 'Active',
+        county: capitalizeCounty(job.county),
+        percentBilled: job.percent_billed || 0.00
+      })));
+      setArchivedJobs(archived.map(job => ({
+        ...job,
+        county: capitalizeCounty(job.county)
+      })));
       setShowDeleteConfirm(null);
       addNotification('Job deleted successfully', 'success');
     } catch (error) {
@@ -646,7 +665,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
     }
   };
 
-  // FIXED: Reset form data after successful creation
+  // Reset form data after successful creation
   const closeJobModal = () => {
     setShowCreateJob(false);
     setEditingJob(null);
@@ -662,7 +681,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
       codeFile: null,
       vendor: null,
       vendorDetection: null,
-      percentBilled: 0.00 // NEW: Reset % billed
+      percentBilled: 0.00
     });
     setFileAnalysis({
       sourceFile: null,
@@ -699,15 +718,15 @@ const AdminJobManagement = ({ onJobSelect }) => {
       codeFile: null,
       vendor: null,
       vendorDetection: null,
-      percentBilled: 0.00 // NEW: Default % billed
+      percentBilled: 0.00
     });
     setShowCreateJob(true);
   };
 
   const getStatusColor = (status) => {
-    const actualStatus = status || 'active';
+    const actualStatus = status || 'Active';
     switch (actualStatus) {
-      case 'active': return 'text-green-600 bg-green-100';
+      case 'Active': return 'text-green-600 bg-green-100';
       case 'planned': return 'text-yellow-600 bg-yellow-100';
       case 'archived': return 'text-purple-600 bg-purple-100';
       default: return 'text-green-600 bg-green-100';
@@ -871,7 +890,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
                 </div>
               )}
               
-              {/* COMPLETION RESULTS - Only shows when done */}
+              {/* COMPLETION RESULTS */}
               {processingResults && (
                 <div className="mb-4 p-4 bg-green-50 rounded-lg border-2 border-green-200">
                   <div className="text-lg font-bold text-green-800 mb-3">🎉 Processing Complete!</div>
@@ -999,7 +1018,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
                     <p className="text-gray-600 mt-1">Set up a job with source data and manager assignments</p>
                   </div>
                 </div>
-                {/* NEW: % Billed field in top right */}
+                {/* % Billed field in top right */}
                 <div className="bg-white p-3 rounded-lg border shadow-sm">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     % Billed
@@ -1013,6 +1032,11 @@ const AdminJobManagement = ({ onJobSelect }) => {
                       value={newJob.percentBilled}
                       onChange={(e) => setNewJob({...newJob, percentBilled: parseFloat(e.target.value) || 0})}
                       className="w-20 px-2 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      style={{ 
+                        appearance: 'textfield',
+                        MozAppearance: 'textfield',
+                        WebkitAppearance: 'none'
+                      }}
                       placeholder="0.00"
                     />
                     <span className="text-sm text-gray-600">%</span>
@@ -1478,14 +1502,14 @@ const AdminJobManagement = ({ onJobSelect }) => {
               📈 County HPI ({getUniqueCounties().length})
             </button>
             <button
-              onClick={() => setActiveTab('billing')}
+              onClick={() => setActiveTab('manager-assignments')}
               className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'billing' 
+                activeTab === 'manager-assignments' 
                   ? 'border-blue-500 text-blue-600' 
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
-              💰 Billing
+              👥 Manager Assignments ({managers.length})
             </button>
           </nav>
         </div>
@@ -1549,7 +1573,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
                                     {job.vendor}
                                   </span>
                                   <span className={`px-3 py-1 rounded-full text-xs font-medium shadow-sm ${getStatusColor(job.status)}`}>
-                                    {job.status || 'active'}
+                                    {job.status || 'Active'}
                                   </span>
                                   <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium shadow-sm">
                                     {(job.percentBilled || 0).toFixed(2)}% Billed
@@ -1592,7 +1616,6 @@ const AdminJobManagement = ({ onJobSelect }) => {
                                     {job.workflowStats?.rates?.entryRate || 0}%
                                   </div>
                                   <div className="text-xs text-gray-600">Entry Rate</div>
-                                  <div className="text-sm text-gray-500">As of: TBD</div>
                                 </div>
                                 
                                 <div className="text-center">
@@ -1600,7 +1623,6 @@ const AdminJobManagement = ({ onJobSelect }) => {
                                     {job.workflowStats?.rates?.refusalRate || 0}%
                                   </div>
                                   <div className="text-xs text-gray-600">Refusal Rate</div>
-                                  <div className="text-sm text-gray-500">As of: TBD</div>
                                 </div>
 
                                 <div className="text-center">
@@ -1608,7 +1630,6 @@ const AdminJobManagement = ({ onJobSelect }) => {
                                     {job.workflowStats?.rates?.commercialInspectionRate || 0}%
                                   </div>
                                   <div className="text-xs text-gray-600">Commercial Complete</div>
-                                  <div className="text-sm text-gray-500">From Payroll</div>
                                 </div>
 
                                 <div className="text-center">
@@ -1616,7 +1637,6 @@ const AdminJobManagement = ({ onJobSelect }) => {
                                     {job.workflowStats?.rates?.pricingRate || 0}%
                                   </div>
                                   <div className="text-xs text-gray-600">Pricing Complete</div>
-                                  <div className="text-sm text-gray-500">From Payroll</div>
                                 </div>
                               </div>
                             </div>
@@ -1906,106 +1926,154 @@ const AdminJobManagement = ({ onJobSelect }) => {
         </div>
       )}
 
-      {/* Billing Tab */}
-      {activeTab === 'billing' && (
+      {/* Manager Assignments Tab */}
+      {activeTab === 'manager-assignments' && (
         <div className="space-y-6">
-          <div className="bg-gradient-to-r from-green-50 to-teal-50 rounded-lg border-2 border-green-200 p-6">
+          <div className="bg-gradient-to-r from-teal-50 to-cyan-50 rounded-lg border-2 border-teal-200 p-6">
             <div className="flex items-center mb-6">
-              <DollarSign className="w-8 h-8 mr-3 text-green-600" />
+              <Users className="w-8 h-8 mr-3 text-teal-600" />
               <div>
-                <h2 className="text-2xl font-bold text-gray-800">💰 Billing Overview</h2>
+                <h2 className="text-2xl font-bold text-gray-800">👥 Manager Assignments & Workload</h2>
                 <p className="text-gray-600 mt-1">
-                  Property class breakdown and inspection counts for all active jobs
+                  Track manager assignments, job counts, and completion rates across all active projects
                 </p>
               </div>
             </div>
 
-            {/* Job Billing Cards */}
-            <div className="space-y-4">
-              {jobs.length === 0 ? (
-                <div className="text-center text-gray-500 py-12">
-                  <div className="text-4xl mb-4">💰</div>
-                  <h4 className="text-lg font-medium mb-2">No Active Jobs</h4>
-                  <p className="text-sm">Create jobs to view billing breakdowns</p>
+            {/* Manager Cards Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {managers.length === 0 ? (
+                <div className="col-span-full text-center text-gray-500 py-12">
+                  <div className="text-4xl mb-4">👥</div>
+                  <h4 className="text-lg font-medium mb-2">No Managers Found</h4>
+                  <p className="text-sm">Add managers to track workload assignments</p>
                 </div>
               ) : (
-                jobs.map(job => {
-                  const billingData = getBillingData(job.id);
+                managers.map(manager => {
+                  const workload = getManagerWorkload(manager);
                   
                   return (
-                    <div key={job.id} className="p-6 bg-white rounded-lg border shadow-md">
-                      <div className="flex justify-between items-center mb-4">
-                        <div>
-                          <h4 className="text-xl font-bold text-gray-900">{job.name}</h4>
-                          <p className="text-sm text-gray-600">{job.municipality} • {job.ccddCode}</p>
-                        </div>
-                        <div className="text-right">
-                          <div className="text-lg font-bold text-green-600">
-                            {(job.percentBilled || 0).toFixed(2)}% Billed
+                    <div key={manager.id} className="p-6 bg-white rounded-lg border shadow-md hover:shadow-lg transition-all">
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-12 h-12 rounded-full bg-teal-100 text-teal-800 flex items-center justify-center text-lg font-bold">
+                            {`${manager.first_name || ''} ${manager.last_name || ''}`.split(' ').map(n => n[0]).join('')}
                           </div>
-                          <div className="text-sm text-gray-500">Overall Progress</div>
+                          <div>
+                            <h4 className="text-lg font-bold text-gray-900">
+                              {manager.first_name} {manager.last_name}
+                            </h4>
+                            <p className="text-sm text-gray-600">
+                              As of: {new Date().toLocaleDateString()}
+                            </p>
+                            {manager.can_be_lead && (
+                              <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full font-medium">
+                                Lead Manager
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
 
-                      {/* Property Class Breakdown */}
-                      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                        {Object.entries(billingData).map(([className, data]) => (
-                          <div key={className} className="p-3 bg-gray-50 rounded-lg border">
-                            <div className="text-xs font-medium text-gray-600 mb-1">
-                              {className}
-                            </div>
-                            <div className="text-lg font-bold text-gray-900">
-                              {className === 'Commercials Priced' ? 
-                                data.priced?.toLocaleString() || '0' :
-                                data.inspected?.toLocaleString() || '0'
-                              }
-                            </div>
-                            <div className="text-xs text-gray-500">
-                              {className === 'Commercials Priced' ? 
-                                `of ${data.total?.toLocaleString() || '0'} total` :
-                                'inspected'
-                              }
-                            </div>
+                      {/* Workload Stats */}
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4 text-center">
+                          <div className="p-3 bg-teal-50 rounded-lg">
+                            <div className="text-2xl font-bold text-teal-600">{workload.jobCount}</div>
+                            <div className="text-xs text-teal-700">Active Jobs</div>
                           </div>
-                        ))}
-                      </div>
-
-                      {/* Summary Stats */}
-                      <div className="mt-4 pt-4 border-t border-gray-200">
-                        <div className="grid grid-cols-3 gap-4 text-center">
-                          <div>
-                            <div className="text-lg font-bold text-blue-600">
-                              {Object.values(billingData)
-                                .filter(data => data.inspected !== undefined)
-                                .reduce((sum, data) => sum + (data.inspected || 0), 0)
-                                .toLocaleString()
-                              }
+                          <div className="p-3 bg-blue-50 rounded-lg">
+                            <div className="text-2xl font-bold text-blue-600">
+                              {workload.totalProperties.toLocaleString()}
                             </div>
-                            <div className="text-xs text-gray-600">Total Inspected</div>
-                          </div>
-                          <div>
-                            <div className="text-lg font-bold text-green-600">
-                              {billingData['Commercials Priced']?.priced?.toLocaleString() || '0'}
-                            </div>
-                            <div className="text-xs text-gray-600">Commercials Priced</div>
-                          </div>
-                          <div>
-                            <div className="text-lg font-bold text-purple-600">
-                              {Object.values(billingData)
-                                .filter(data => data.total !== undefined)
-                                .reduce((sum, data) => sum + (data.total || 0), 0)
-                                .toLocaleString()
-                              }
-                            </div>
-                            <div className="text-xs text-gray-600">Total Properties</div>
+                            <div className="text-xs text-blue-700">Total Properties</div>
                           </div>
                         </div>
+
+                        {/* Completion Progress */}
+                        <div className="space-y-2">
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-600">Completion Rate</span>
+                            <span className="font-medium text-gray-900">{workload.completionRate}%</span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-2">
+                            <div 
+                              className="bg-teal-600 h-2 rounded-full transition-all duration-300"
+                              style={{ width: `${workload.completionRate}%` }}
+                            ></div>
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {workload.completedProperties.toLocaleString()} of {workload.totalProperties.toLocaleString()} properties completed
+                          </div>
+                        </div>
+
+                        {/* Assigned Jobs List */}
+                        {workload.jobs.length > 0 && (
+                          <div className="space-y-2">
+                            <h5 className="text-sm font-medium text-gray-700">Assigned Jobs:</h5>
+                            <div className="space-y-1">
+                              {workload.jobs.slice(0, 3).map(job => (
+                                <div key={job.id} className="flex justify-between items-center p-2 bg-gray-50 rounded text-xs">
+                                  <span className="font-medium text-gray-900">{job.name}</span>
+                                  <span className="text-gray-600">
+                                    {job.assignedManagers?.find(am => am.id === manager.id)?.role || 'Manager'}
+                                  </span>
+                                </div>
+                              ))}
+                              {workload.jobs.length > 3 && (
+                                <div className="text-xs text-gray-500 text-center py-1">
+                                  +{workload.jobs.length - 3} more jobs
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {workload.jobCount === 0 && (
+                          <div className="text-center text-gray-500 py-4">
+                            <div className="text-2xl mb-2">📝</div>
+                            <p className="text-sm">No active job assignments</p>
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
                 })
               )}
             </div>
+
+            {/* Summary Stats */}
+            {managers.length > 0 && (
+              <div className="mt-8 p-4 bg-teal-50 border border-teal-200 rounded-lg">
+                <h3 className="font-medium text-teal-800 mb-3">📊 Team Overview</h3>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-center">
+                  <div>
+                    <div className="text-lg font-bold text-teal-600">{managers.length}</div>
+                    <div className="text-xs text-teal-700">Total Managers</div>
+                  </div>
+                  <div>
+                    <div className="text-lg font-bold text-blue-600">
+                      {managers.reduce((sum, m) => sum + getManagerWorkload(m).jobCount, 0)}
+                    </div>
+                    <div className="text-xs text-blue-700">Job Assignments</div>
+                  </div>
+                  <div>
+                    <div className="text-lg font-bold text-green-600">
+                      {managers.reduce((sum, m) => sum + getManagerWorkload(m).totalProperties, 0).toLocaleString()}
+                    </div>
+                    <div className="text-xs text-green-700">Properties Managed</div>
+                  </div>
+                  <div>
+                    <div className="text-lg font-bold text-purple-600">
+                      {managers.length > 0 ? Math.round(
+                        managers.reduce((sum, m) => sum + getManagerWorkload(m).completionRate, 0) / managers.length
+                      ) : 0}%
+                    </div>
+                    <div className="text-xs text-purple-700">Avg Completion</div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
