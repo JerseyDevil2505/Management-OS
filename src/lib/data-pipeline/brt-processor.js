@@ -248,7 +248,7 @@ export class BRTProcessor {
       property_cama_class: rawRecord.PROPCLASS,
       property_m4_class: rawRecord.PROPERTY_CLASS,
       property_facility: rawRecord.EXEMPT_FACILITYNAME,
-      property_vcs: rawRecord.VCS,
+      property_vcs: rawRecord.VCS, // ADDED: Missing VCS field
       
       source_file_name: versionInfo.source_file_name || null,
       source_file_version_id: versionInfo.source_file_version_id || null,
@@ -282,7 +282,7 @@ export class BRTProcessor {
       asset_key_page: null,
       asset_map_page: null,
       asset_zoning: null,
-      asset_view: rawRecord.VIEW,
+      asset_view: rawRecord.VIEW, // ADDED: Missing VIEW field
       asset_neighborhood: rawRecord.NBHD,
       asset_type_use: rawRecord.TYPEUSE,
       asset_building_class: rawRecord.BLDGCLASS,
@@ -416,33 +416,12 @@ export class BRTProcessor {
       const records = this.parseSourceFile(sourceFileContent);
       console.log(`Processing ${records.length} records in batches...`);
       
-      // Check for existing records to prevent duplicates
-      const existingRecordsQuery = await supabase
-        .from('property_records')
-        .select('property_composite_key')
-        .eq('job_id', jobId);
-      
-      const existingKeys = new Set(
-        existingRecordsQuery.data?.map(r => r.property_composite_key) || []
-      );
-      
-      if (existingKeys.size > 0) {
-        console.log(`Found ${existingKeys.size} existing records for this job - filtering duplicates`);
-      }
-      
       const propertyRecords = [];
       const analysisRecords = [];
       
       for (const rawRecord of records) {
         try {
           const propertyRecord = this.mapToPropertyRecord(rawRecord, yearCreated, ccddCode, jobId, versionInfo);
-          
-          // Skip if already exists
-          if (existingKeys.has(propertyRecord.property_composite_key)) {
-            console.log(`Skipping duplicate: ${propertyRecord.property_composite_key}`);
-            continue;
-          }
-          
           propertyRecords.push(propertyRecord);
           
           const analysisData = this.mapToAnalysisDataSync(rawRecord, null, jobId, versionInfo);
@@ -454,27 +433,17 @@ export class BRTProcessor {
         }
       }
       
-      console.log(`After duplicate filtering: ${propertyRecords.length} new records to insert`);
-      
       const results = {
         processed: 0,
         errors: 0,
-        warnings: [],
-        duplicatesSkipped: records.length - propertyRecords.length
+        warnings: []
       };
       
-      if (propertyRecords.length === 0) {
-        console.log('No new records to process - all were duplicates');
-        return results;
-      }
-      
       console.log(`Batch inserting ${propertyRecords.length} property records...`);
-      const batchSize = 2000;
+      const batchSize = 1000;
       
       for (let i = 0; i < propertyRecords.length; i += batchSize) {
         const batch = propertyRecords.slice(i, i + batchSize);
-        
-        console.log(`Processing batch ${Math.floor(i/batchSize) + 1}: records ${i + 1} to ${Math.min(i + batchSize, propertyRecords.length)}`);
         
         const { error: propertyError } = await supabase
           .from('property_records')
@@ -494,15 +463,13 @@ export class BRTProcessor {
       for (let i = 0; i < analysisRecords.length; i += batchSize) {
         const batch = analysisRecords.slice(i, i + batchSize);
         
-        console.log(`Processing analysis batch ${Math.floor(i/batchSize) + 1}: records ${i + 1} to ${Math.min(i + batchSize, analysisRecords.length)}`);
-        
         const { error: analysisError } = await supabase
           .from('property_analysis_data')
           .insert(batch);
         
         if (analysisError) {
           console.error('Batch analysis insert error:', analysisError);
-          results.warnings.push(`Analysis batch ${i} to ${i + batchSize} failed: ${analysisError.message}`);
+          results.warnings.push(`Analysis batch ${i} to ${i + batchSize} failed`);
         } else {
           console.log(`✅ Inserted analysis records ${i + 1} to ${Math.min(i + batchSize, analysisRecords.length)}`);
         }
