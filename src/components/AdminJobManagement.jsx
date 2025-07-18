@@ -686,6 +686,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
               <div className="text-xs text-gray-500 space-y-1 mb-4">
                 {processingStatus.totalRecords > 0 && (
                   <div>Records: {processingStatus.recordsProcessed} / {processingStatus.totalRecords}</div>
+                )}
                 {/* Create/Edit Job Modal */}
       {showCreateJob && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
