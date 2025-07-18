@@ -1345,6 +1345,30 @@ const AdminJobManagement = ({ onJobSelect }) => {
                                     {job.workflowStats?.rates?.entryRate || 0}%
                                   </div>
                                   <div className="text-xs text-gray-600">Entry Rate</div>
+                                  <div className="text-sm text-gray-500">As of: TBD</div>
+                                </div>
+                                
+                                <div className="text-center">
+                                  <div className="text-lg font-bold text-red-600">
+                                    {job.workflowStats?.rates?.refusalRate || 0}%
+                                  </div>
+                                  <div className="text-xs text-gray-600">Refusal Rate</div>
+                                  <div className="text-sm text-gray-500">As of: TBD</div>
+                                </div>
+
+                                <div className="text-center">
+                                  <div className="text-lg font-bold text-purple-600">
+                                    {job.workflowStats?.rates?.commercialInspectionRate || 0}%
+                                  </div>
+                                  <div className="text-xs text-gray-600">Commercial Complete</div>
+                                  <div className="text-sm text-gray-500">From Payroll</div>
+                                </div>
+
+                                <div className="text-center">
+                                  <div className="text-lg font-bold text-indigo-600">
+                                    {job.workflowStats?.rates?.pricingRate || 0}%
+                                  </div>
+                                  <div className="text-xs text-gray-600">Pricing Complete</div>
                                   <div className="text-sm text-gray-500">From Payroll</div>
                                 </div>
                               </div>
@@ -1543,28 +1567,4 @@ const AdminJobManagement = ({ onJobSelect }) => {
   );
 };
 
-export default AdminJobManagement;-500">As of: TBD</div>
-                                </div>
-                                
-                                <div className="text-center">
-                                  <div className="text-lg font-bold text-red-600">
-                                    {job.workflowStats?.rates?.refusalRate || 0}%
-                                  </div>
-                                  <div className="text-xs text-gray-600">Refusal Rate</div>
-                                  <div className="text-sm text-gray-500">As of: TBD</div>
-                                </div>
-
-                                <div className="text-center">
-                                  <div className="text-lg font-bold text-purple-600">
-                                    {job.workflowStats?.rates?.commercialInspectionRate || 0}%
-                                  </div>
-                                  <div className="text-xs text-gray-600">Commercial Complete</div>
-                                  <div className="text-sm text-gray-500">From Payroll</div>
-                                </div>
-
-                                <div className="text-center">
-                                  <div className="text-lg font-bold text-indigo-600">
-                                    {job.workflowStats?.rates?.pricingRate || 0}%
-                                  </div>
-                                  <div className="text-xs text-gray-600">Pricing Complete</div>
-                                  <div className="text-sm text-gray
+export default AdminJobManagement;
