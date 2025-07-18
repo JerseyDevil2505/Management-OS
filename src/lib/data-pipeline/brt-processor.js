@@ -149,7 +149,8 @@ export class BRTProcessor {
   }
 
   /**
-   * Parse CSV BRT file (tab-delimited)
+   * Parse CSV BRT file (COMMA-delimited, not tab-delimited!)
+   * FIXED: BRT uses standard CSV format, not tab-delimited
    */
   parseSourceFile(fileContent) {
     console.log('Parsing BRT source file...');
@@ -159,15 +160,16 @@ export class BRTProcessor {
       throw new Error('File must have at least header and one data row');
     }
     
-    // Parse headers - BRT uses tab-delimited
-    this.headers = lines[0].split('\t');
+    // Parse headers - BRT uses COMMA-delimited (standard CSV)
+    this.headers = lines[0].split(',');
     
     console.log(`Found ${this.headers.length} headers`);
+    console.log('Headers:', this.headers.slice(0, 10)); // Show first 10 headers for debugging
     
     // Parse data rows
     const records = [];
     for (let i = 1; i < lines.length; i++) {
-      const values = lines[i].split('\t');
+      const values = lines[i].split(',');
       
       if (values.length !== this.headers.length) {
         console.warn(`Row ${i} has ${values.length} values but ${this.headers.length} headers - skipping`);
@@ -505,6 +507,51 @@ export class BRTProcessor {
       };
       
       // BATCH 1: Insert property records (1000 at a time)
+      console.log(`Batch inserting ${propertyRecords.length} property records...`);
+      const batchSize = 1000;
+      
+      for (let i = 0; i < propertyRecords.length; i += batchSize) {
+        const batch = propertyRecords.slice(i, i + batchSize);
+        
+        const { error: propertyError } = await supabase
+          .from('property_records')
+          .insert(batch);
+        
+        if (propertyError) {
+          console.error('Batch property insert error:', propertyError);
+          results.errors += batch.length;
+        } else {
+          results.processed += batch.length;
+          console.log(`✅ Inserted property records ${i + 1}-${Math.min(i + batchSize, propertyRecords.length)}`);
+        }
+      }
+      
+      // BATCH 2: Insert analysis records (1000 at a time)
+      console.log(`Batch inserting ${analysisRecords.length} analysis records...`);
+      
+      for (let i = 0; i < analysisRecords.length; i += batchSize) {
+        const batch = analysisRecords.slice(i, i + batchSize);
+        
+        const { error: analysisError } = await supabase
+          .from('property_analysis_data')
+          .insert(batch);
+        
+        if (analysisError) {
+          console.error('Batch analysis insert error:', analysisError);
+          results.warnings.push(`Analysis batch ${i}-${i + batchSize} failed`);
+        } else {
+          console.log(`✅ Inserted analysis records ${i + 1}-${Math.min(i + batchSize, analysisRecords.length)}`);
+        }
+      }
+      
+      console.log('🚀 BATCH PROCESSING COMPLETE:', results);
+      return results;
+      
+    } catch (error) {
+      console.error('File processing failed:', error);
+      throw error;
+    }
+  }000 at a time)
       console.log(`Batch inserting ${propertyRecords.length} property records...`);
       const batchSize = 1000;
       
