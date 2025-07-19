@@ -431,7 +431,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
         assignedManagers: newJob.assignedManagers,
         totalProperties: fileAnalysis.propertyCount,
         inspectedProperties: 0,
-        status: 'Active',
+        status: 'active',
         sourceFileStatus: 'processing',
         codeFileStatus: 'current',
         vendorDetection: { vendor: newJob.vendor },
@@ -603,6 +603,10 @@ const AdminJobManagement = ({ onJobSelect }) => {
         dueDate: newJob.dueDate,
         percent_billed: newJob.percentBilled
       };
+
+      console.log('DEBUG - Sending to database:', updateData);
+      console.log('DEBUG - newJob.percentBilled value:', newJob.percentBilled);
+      console.log('DEBUG - editingJob.id:', editingJob.id);
 
       await jobService.update(editingJob.id, updateData);
       
