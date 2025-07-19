@@ -271,7 +271,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
             ...job,
             status: job.status === 'active' ? 'Active' : (job.status || 'Active'),
             county: capitalizeCounty(job.county),
-            percentBilled: job.percent_billed || 0.00
+            percentBilled: job.percent_billed || 
           }));
           
           const processedArchivedJobs = archived.map(job => ({
