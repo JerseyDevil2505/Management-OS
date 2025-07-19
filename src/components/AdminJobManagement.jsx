@@ -1686,7 +1686,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
                                   codeFile: null,
                                   vendor: job.vendor,
                                   vendorDetection: job.vendorDetection,
-                                  percentBilled: job.percentBilled || 0.00
+                                  percentBilled: job.percent_billed || 0.00
                                 });
                                 setShowCreateJob(true);
                               }}
