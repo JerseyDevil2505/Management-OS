@@ -433,7 +433,7 @@ export const planningJobService = {
   }
 };
 
-// ===== PROPERTY MANAGEMENT SERVICES =====
+// ===== UNIFIED PROPERTY MANAGEMENT SERVICES =====
 export const propertyService = {
   async getAll(jobId) {
     try {
@@ -502,7 +502,10 @@ export const propertyService = {
     try {
       const { data, error } = await supabase
         .from('property_records')
-        .update(updates)
+        .update({
+          ...updates,
+          updated_at: new Date().toISOString()
+        })
         .eq('id', id)
         .select()
         .single();
@@ -529,12 +532,12 @@ export const propertyService = {
     }
   },
 
-  // FIXED: Real implementation using processors instead of placeholder
+  // Simplified import method using single-table processors
   async importCSVData(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, vendorType) {
     try {
       console.log(`Processing ${vendorType} files for job ${jobId}`);
       
-      // Use the clean processors for dual-table insertion
+      // Use updated processors for single-table insertion
       if (vendorType === 'BRT') {
         const { brtProcessor } = await import('./data-pipeline/brt-processor.js');
         return await brtProcessor.processFile(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode);
@@ -552,129 +555,13 @@ export const propertyService = {
         warnings: [error.message]
       };
     }
-  }
-};
-
-// ===== NEW: PROPERTY ANALYSIS SERVICES =====
-export const propertyAnalysisService = {
-  async getAll(jobId) {
-    try {
-      const { data, error } = await supabase
-        .from('property_analysis_data')
-        .select('*')
-        .eq('job_id', jobId)
-        .order('created_at', { ascending: false });
-      
-      if (error) throw error;
-      return data;
-    } catch (error) {
-      console.error('Property analysis service error:', error);
-      return [];
-    }
-  },
-
-  async getById(id) {
-    try {
-      const { data, error } = await supabase
-        .from('property_analysis_data')
-        .select('*')
-        .eq('id', id)
-        .single();
-      
-      if (error) throw error;
-      return data;
-    } catch (error) {
-      console.error('Property analysis service error:', error);
-      return null;
-    }
-  },
-
-  async getByPropertyRecordId(propertyRecordId) {
-    try {
-      const { data, error } = await supabase
-        .from('property_analysis_data')
-        .select('*')
-        .eq('property_record_id', propertyRecordId)
-        .single();
-      
-      if (error) throw error;
-      return data;
-    } catch (error) {
-      console.error('Property analysis service error:', error);
-      return null;
-    }
-  },
-
-  async create(analysisData) {
-    try {
-      const { data, error } = await supabase
-        .from('property_analysis_data')
-        .insert([analysisData])
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
-    } catch (error) {
-      console.error('Property analysis creation error:', error);
-      throw error;
-    }
-  },
-
-  async bulkCreate(analysisDataArray) {
-    try {
-      const { data, error } = await supabase
-        .from('property_analysis_data')
-        .insert(analysisDataArray)
-        .select();
-      
-      if (error) throw error;
-      return data;
-    } catch (error) {
-      console.error('Property analysis bulk creation error:', error);
-      throw error;
-    }
-  },
-
-  async update(id, updates) {
-    try {
-      const { data, error } = await supabase
-        .from('property_analysis_data')
-        .update({
-          ...updates,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', id)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
-    } catch (error) {
-      console.error('Property analysis update error:', error);
-      throw error;
-    }
-  },
-
-  async delete(id) {
-    try {
-      const { error } = await supabase
-        .from('property_analysis_data')
-        .delete()
-        .eq('id', id);
-      
-      if (error) throw error;
-    } catch (error) {
-      console.error('Property analysis deletion error:', error);
-      throw error;
-    }
   },
 
   // Query raw_data JSON field for dynamic reporting
   async queryRawData(jobId, fieldName, value) {
     try {
       const { data, error } = await supabase
-        .from('property_analysis_data')
+        .from('property_records')
         .select('*')
         .eq('job_id', jobId)
         .eq(`raw_data->>${fieldName}`, value);
@@ -682,8 +569,67 @@ export const propertyAnalysisService = {
       if (error) throw error;
       return data;
     } catch (error) {
-      console.error('Property analysis raw data query error:', error);
+      console.error('Property raw data query error:', error);
       return [];
+    }
+  },
+
+  // Advanced filtering for analysis
+  async getByCondition(jobId, condition) {
+    try {
+      const { data, error } = await supabase
+        .from('property_records')
+        .select('*')
+        .eq('job_id', jobId)
+        .eq('condition_rating', condition)
+        .order('property_location');
+      
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Property condition query error:', error);
+      return [];
+    }
+  },
+
+  // Get properties needing inspection
+  async getPendingInspections(jobId) {
+    try {
+      const { data, error } = await supabase
+        .from('property_records')
+        .select('*')
+        .eq('job_id', jobId)
+        .is('inspection_info_by', null)
+        .order('property_location');
+      
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Property pending inspections query error:', error);
+      return [];
+    }
+  },
+
+  // Bulk update inspection data
+  async bulkUpdateInspections(inspectionUpdates) {
+    try {
+      const updates = await Promise.all(
+        inspectionUpdates.map(update => 
+          supabase
+            .from('property_records')
+            .update({
+              ...update.data,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', update.id)
+            .select()
+        )
+      );
+      
+      return updates.map(result => result.data).flat();
+    } catch (error) {
+      console.error('Property bulk inspection update error:', error);
+      throw error;
     }
   }
 };
@@ -757,20 +703,32 @@ export const productionDataService = {
     try {
       console.log(`Updating production summary for job ${jobId}`);
       
-      // Get property counts from both tables
-      const [propertyRecords, propertyAnalysis] = await Promise.all([
-        supabase.from('property_records').select('id', { count: 'exact', head: true }).eq('job_id', jobId),
-        supabase.from('property_analysis_data').select('id', { count: 'exact', head: true }).eq('job_id', jobId)
-      ]);
+      // Get property counts from single table
+      const { count, error: countError } = await supabase
+        .from('property_records')
+        .select('id', { count: 'exact', head: true })
+        .eq('job_id', jobId);
+
+      if (countError) throw countError;
+
+      // Count properties with inspection data
+      const { count: inspectedCount, error: inspectedError } = await supabase
+        .from('property_records')
+        .select('id', { count: 'exact', head: true })
+        .eq('job_id', jobId)
+        .not('inspection_info_by', 'is', null);
+
+      if (inspectedError) throw inspectedError;
 
       // Update job with current totals
       const { data, error } = await supabase
         .from('jobs')
         .update({
-          total_properties: propertyRecords.count || 0,
+          total_properties: count || 0,
+          inspected_properties: inspectedCount || 0,
           workflow_stats: {
-            properties_processed: propertyRecords.count || 0,
-            analysis_completed: propertyAnalysis.count || 0,
+            properties_processed: count || 0,
+            properties_inspected: inspectedCount || 0,
             last_updated: new Date().toISOString()
           }
         })
@@ -802,34 +760,29 @@ export const utilityService = {
     }
   },
 
-  // FIXED: Include property_analysis_data in stats
+  // Simplified stats using single table
   async getStats() {
     try {
-      const [employees, jobs, propertyRecords, propertyAnalysis, sourceFiles] = await Promise.all([
+      const [employees, jobs, properties, sourceFiles] = await Promise.all([
         supabase.from('employees').select('id', { count: 'exact', head: true }),
         supabase.from('jobs').select('id', { count: 'exact', head: true }),
         supabase.from('property_records').select('id', { count: 'exact', head: true }),
-        supabase.from('property_analysis_data').select('id', { count: 'exact', head: true }),
         supabase.from('source_file_versions').select('id', { count: 'exact', head: true })
       ]);
 
       return {
         employees: employees.count || 0,
         jobs: jobs.count || 0,
-        propertyRecords: propertyRecords.count || 0,
-        propertyAnalysis: propertyAnalysis.count || 0,
-        sourceFiles: sourceFiles.count || 0,
-        totalProperties: (propertyRecords.count || 0) + (propertyAnalysis.count || 0)
+        properties: properties.count || 0,
+        sourceFiles: sourceFiles.count || 0
       };
     } catch (error) {
       console.error('Stats fetch error:', error);
       return {
         employees: 0,
         jobs: 0,
-        propertyRecords: 0,
-        propertyAnalysis: 0,
-        sourceFiles: 0,
-        totalProperties: 0
+        properties: 0,
+        sourceFiles: 0
       };
     }
   }
