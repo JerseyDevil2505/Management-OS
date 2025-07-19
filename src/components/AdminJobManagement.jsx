@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Upload, Plus, Edit3, Users, FileText, Calendar, MapPin, Database, Settings, Eye, DollarSign, Trash2, CheckCircle, Archive, TrendingUp, Target, AlertTriangle, X } from 'lucide-react';
-import { employeeService, jobService, planningJobService, utilityService, authService, propertyService } from '../lib/supabaseClient';
+import { employeeService, jobService, planningJobService, utilityService, authService, propertyService, supabase } from '../lib/supabaseClient';
 
 const AdminJobManagement = ({ onJobSelect }) => {
   const [activeTab, setActiveTab] = useState('jobs');
@@ -162,7 +162,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
     return counties;
   };
 
-  // County HPI import handler
+  // County HPI import handler - FIXED WITH REAL DATABASE INTEGRATION
   const importCountyHpi = async (county) => {
     if (!hpiFile) {
       addNotification('Please select an HPI data file', 'error');
@@ -208,10 +208,25 @@ const AdminJobManagement = ({ onJobSelect }) => {
         }
       }
 
-      // TODO: Implement actual HPI service call
-      // await hpiService.importCountyData(county, hpiRecords);
+      // REAL Supabase database integration
+      const { data, error } = await supabase
+        .from('county_hpi_data')
+        .delete()
+        .eq('county_name', county);
+
+      if (error) {
+        console.error('Error clearing existing HPI data:', error);
+      }
+
+      const { data: insertData, error: insertError } = await supabase
+        .from('county_hpi_data')
+        .insert(hpiRecords);
+
+      if (insertError) {
+        throw new Error('Database insert failed: ' + insertError.message);
+      }
       
-      // For now, update local state
+      // Update local state
       setCountyHpiData(prev => ({
         ...prev,
         [county]: hpiRecords
@@ -251,10 +266,10 @@ const AdminJobManagement = ({ onJobSelect }) => {
           const activeJobs = jobsData.filter(job => job.status !== 'archived');
           const archived = jobsData.filter(job => job.status === 'archived');
           
-          // Set default status to 'active' for jobs without status and capitalize counties
+          // Set default status to 'Active' for jobs without status and capitalize counties
           const processedActiveJobs = activeJobs.map(job => ({
             ...job,
-            status: job.status || 'Active',
+            status: job.status === 'active' ? 'Active' : (job.status || 'Active'),
             county: capitalizeCounty(job.county),
             percentBilled: job.percent_billed || 0.00
           }));
@@ -506,7 +521,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
         
         setJobs(activeJobs.map(job => ({
           ...job,
-          status: job.status || 'Active',
+          status: job.status === 'active' ? 'Active' : (job.status || 'Active'),
           county: capitalizeCounty(job.county),
           percentBilled: job.percent_billed || 0.00
         })));
@@ -597,7 +612,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
       
       setJobs(activeJobs.map(job => ({
         ...job,
-        status: job.status || 'Active',
+        status: job.status === 'active' ? 'Active' : (job.status || 'Active'),
         county: capitalizeCounty(job.county),
         percentBilled: job.percent_billed || 0.00
       })));
@@ -649,7 +664,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
       
       setJobs(activeJobs.map(job => ({
         ...job,
-        status: job.status || 'Active',
+        status: job.status === 'active' ? 'Active' : (job.status || 'Active'),
         county: capitalizeCounty(job.county),
         percentBilled: job.percent_billed || 0.00
       })));
@@ -1018,7 +1033,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
                     <p className="text-gray-600 mt-1">Set up a job with source data and manager assignments</p>
                   </div>
                 </div>
-                {/* % Billed field in top right */}
+                {/* % Billed field in top right - FIXED CSS */}
                 <div className="bg-white p-3 rounded-lg border shadow-sm">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     % Billed
@@ -1032,15 +1047,20 @@ const AdminJobManagement = ({ onJobSelect }) => {
                       value={newJob.percentBilled}
                       onChange={(e) => setNewJob({...newJob, percentBilled: parseFloat(e.target.value) || 0})}
                       className="w-20 px-2 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      style={{ 
-                        appearance: 'textfield',
-                        MozAppearance: 'textfield',
-                        WebkitAppearance: 'none'
-                      }}
                       placeholder="0.00"
                     />
                     <span className="text-sm text-gray-600">%</span>
                   </div>
+                  <style jsx>{`
+                    input[type="number"]::-webkit-outer-spin-button,
+                    input[type="number"]::-webkit-inner-spin-button {
+                      -webkit-appearance: none;
+                      margin: 0;
+                    }
+                    input[type="number"] {
+                      -moz-appearance: textfield;
+                    }
+                  `}</style>
                 </div>
               </div>
             </div>
