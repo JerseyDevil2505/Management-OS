@@ -1,7 +1,7 @@
 /**
  * Complete BRT Processor 
  * Handles CSV source files and mixed-format code files
- * Stores direct mappings in property_records and raw data in property_analysis_data
+ * UPDATED: Single table insertion to property_records with all 82 fields
  */
 
 import { supabase } from '../supabaseClient.js';
@@ -203,40 +203,53 @@ export class BRTProcessor {
   }
 
   /**
-   * Map BRT record to property_records table fields
+   * Map BRT record to property_records table (ALL 82 FIELDS)
+   * UPDATED: Combines original property_records + analysis fields into single record
    */
   mapToPropertyRecord(rawRecord, yearCreated, ccddCode, jobId, versionInfo = {}) {
     return {
+      // Job context
       job_id: jobId,
       
+      // Property identifiers
       property_block: rawRecord.BLOCK,
       property_lot: rawRecord.LOT,
       property_qualifier: rawRecord.QUALIFIER,
       property_addl_card: rawRecord.CARD,
+      property_addl_lot: null, // Not available in BRT
       property_location: rawRecord.PROPERTY_LOCATION,
       property_composite_key: `${yearCreated}${ccddCode}-${rawRecord.BLOCK}-${rawRecord.LOT}_${rawRecord.QUALIFIER || 'NONE'}-${rawRecord.CARD || 'NONE'}-${rawRecord.PROPERTY_LOCATION || 'NONE'}`,
+      property_cama_class: rawRecord.PROPCLASS,
+      property_m4_class: rawRecord.PROPERTY_CLASS,
+      property_facility: rawRecord.EXEMPT_FACILITYNAME,
+      property_vcs: rawRecord.VCS,
       
+      // Owner fields
       owner_name: rawRecord.OWNER_OWNER,
       owner_street: rawRecord.OWNER_ADDRESS,
       owner_csz: this.calculateOwnerCsZ(rawRecord),
       
+      // Sales fields
       sales_date: this.parseDate(rawRecord.CURRENTSALE_DATE),
       sales_price: this.parseNumeric(rawRecord.CURRENTSALE_PRICE),
       sales_book: rawRecord.CURRENTSALE_DEEDBOOK,
       sales_page: rawRecord.CURRENTSALE_DEEDPAGE,
       sales_nu: rawRecord.CURRENTSALE_NUC,
       
+      // Values fields
       values_mod_land: this.parseNumeric(rawRecord.VALUES_LANDTAXABLEVALUE),
       values_cama_land: this.parseNumeric(rawRecord.TOTALLANDVALUE),
       values_mod_improvement: this.parseNumeric(rawRecord.VALUES_IMPROVTAXABLEVALUE),
       values_cama_improvement: this.parseNumeric(rawRecord.TOTALIMPROVVALUE),
       values_mod_total: this.parseNumeric(rawRecord.VALUES_NETTAXABLEVALUE),
       values_cama_total: this.parseNumeric(rawRecord.TOTNETVALUE),
-      
       values_base_cost: this.parseNumeric(rawRecord.BASEREPLCOST),
       values_det_items: this.parseNumeric(rawRecord.DETACHEDITEMS),
       values_repl_cost: this.parseNumeric(rawRecord.REPLCOSTNEW),
+      values_norm_time: null, // Calculated later in FileUploadButton.jsx
+      values_norm_size: null, // Calculated later in FileUploadButton.jsx
       
+      // Inspection fields
       inspection_info_by: this.parseInteger(rawRecord.INFOBY),
       inspection_list_by: rawRecord.LISTBY,
       inspection_list_date: this.parseDate(rawRecord.LISTDT),
@@ -245,68 +258,62 @@ export class BRTProcessor {
       inspection_price_by: rawRecord.PRICEBY,
       inspection_price_date: this.parseDate(rawRecord.PRICEDT),
       
-      property_cama_class: rawRecord.PROPCLASS,
-      property_m4_class: rawRecord.PROPERTY_CLASS,
-      property_facility: rawRecord.EXEMPT_FACILITYNAME,
-      property_vcs: rawRecord.VCS, // ADDED: Missing VCS field
-      
-      source_file_name: versionInfo.source_file_name || null,
-      source_file_version_id: versionInfo.source_file_version_id || null,
-      source_file_uploaded_at: versionInfo.source_file_uploaded_at || new Date().toISOString(),
-      
-      vendor_source: 'BRT',
-      processed_at: new Date().toISOString(),
-      created_by: '5df85ca3-7a54-4798-a665-c31da8d9caad',
-      
-      raw_data: rawRecord
-    };
-  }
-
-  /**
-   * Map to property_analysis_data for calculated fields and raw storage
-   */
-  mapToAnalysisDataSync(rawRecord, propertyRecordId, jobId, versionInfo = {}) {
-    return {
-      property_record_id: propertyRecordId,
-      
-      property_block: rawRecord.BLOCK,
-      property_lot: rawRecord.LOT,
-      property_qualifier: rawRecord.QUALIFIER,
-      property_addl_card: rawRecord.CARD,
-      property_location: rawRecord.PROPERTY_LOCATION,
-      
-      total_baths_calculated: this.calculateTotalBaths(rawRecord),
-      
-      asset_sfla: this.parseNumeric(rawRecord.SFLA_TOTAL),
-      asset_new_vcs: null,
-      asset_key_page: null,
-      asset_map_page: null,
-      asset_zoning: null,
-      asset_view: rawRecord.VIEW, // ADDED: Missing VIEW field
-      asset_neighborhood: rawRecord.NBHD,
-      asset_type_use: rawRecord.TYPEUSE,
+      // Asset fields - All analysis fields now in single table
       asset_building_class: rawRecord.BLDGCLASS,
       asset_design_style: rawRecord.DESIGN,
-      asset_year_built: this.parseInteger(rawRecord.YEARBUILT),
-      asset_lot_frontage: this.calculateLotFrontage(rawRecord),
-      asset_lot_depth: this.calculateLotDepth(rawRecord),
-      asset_lot_acre: this.calculateLotAcres(rawRecord),
-      asset_lot_sf: this.calculateLotSquareFeet(rawRecord),
-      asset_story_height: this.parseNumeric(rawRecord.STORYHGT),
       asset_ext_cond: rawRecord.EXTERIORNC,
       asset_int_cond: rawRecord.INTERIORNC,
+      asset_key_page: null, // User defined, created in module
+      asset_lot_acre: this.calculateLotAcres(rawRecord),
+      asset_lot_depth: this.calculateLotDepth(rawRecord),
+      asset_lot_frontage: this.calculateLotFrontage(rawRecord),
+      asset_lot_sf: this.calculateLotSquareFeet(rawRecord),
+      asset_map_page: null, // User defined, created in module
+      asset_neighborhood: rawRecord.NBHD,
+      asset_sfla: this.parseNumeric(rawRecord.SFLA_TOTAL),
+      asset_story_height: this.parseNumeric(rawRecord.STORYHGT),
+      asset_type_use: rawRecord.TYPEUSE,
+      asset_view: rawRecord.VIEW,
+      asset_year_built: this.parseInteger(rawRecord.YEARBUILT),
+      asset_zoning: null, // User defined, created in module
       
-      values_norm_time: null,
-      values_norm_size: null,
+      // Analysis and calculation fields
+      analysis_code: null, // User defined, created in module
+      analysis_version: 1,
+      condition_rating: null, // User defined, created in module
+      location_analysis: null, // User defined, created in module
+      new_vcs: null, // User defined, created in module
+      total_baths_calculated: this.calculateTotalBaths(rawRecord),
       
+      // Processing metadata
+      processed_at: new Date().toISOString(),
+      processing_notes: null,
+      validation_status: 'imported',
+      is_new_since_last_upload: true,
+      is_retroactive_credit: false,
+      
+      // File tracking with version info
       source_file_name: versionInfo.source_file_name || null,
       source_file_version_id: versionInfo.source_file_version_id || null,
       source_file_uploaded_at: versionInfo.source_file_uploaded_at || new Date().toISOString(),
+      code_file_name: versionInfo.code_file_name || null,
+      code_file_updated_at: versionInfo.code_file_updated_at || new Date().toISOString(),
+      file_version: versionInfo.file_version || 1,
+      upload_date: new Date().toISOString(),
       
-      raw_data: rawRecord,
+      // Payroll and project tracking
+      payroll_period_start: null,
+      project_start_date: null,
       
-      calculated_at: new Date().toISOString(),
-      created_by: '5df85ca3-7a54-4798-a665-c31da8d9caad'
+      // System metadata
+      vendor_source: 'BRT',
+      import_session_id: versionInfo.import_session_id || null,
+      created_by: '5df85ca3-7a54-4798-a665-c31da8d9caad',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      
+      // Store complete raw data as JSON
+      raw_data: rawRecord
     };
   }
 
@@ -403,11 +410,12 @@ export class BRTProcessor {
   }
 
   /**
-   * Process complete file and store in database using batch processing
+   * Process complete file and store in database using FAST single-table batch processing
+   * UPDATED: Single table insertion only - no more dual-table complexity
    */
   async processFile(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, versionInfo = {}) {
     try {
-      console.log('Starting BRT file processing...');
+      console.log('Starting BRT file processing (SINGLE TABLE)...');
       
       if (codeFileContent) {
         this.processCodeFile(codeFileContent);
@@ -416,17 +424,14 @@ export class BRTProcessor {
       const records = this.parseSourceFile(sourceFileContent);
       console.log(`Processing ${records.length} records in batches...`);
       
+      // Prepare all property records for batch insert (SINGLE TABLE)
       const propertyRecords = [];
-      const analysisRecords = [];
       
       for (const rawRecord of records) {
         try {
+          // Map to unified property_records table with all 82 fields
           const propertyRecord = this.mapToPropertyRecord(rawRecord, yearCreated, ccddCode, jobId, versionInfo);
           propertyRecords.push(propertyRecord);
-          
-          const analysisData = this.mapToAnalysisDataSync(rawRecord, null, jobId, versionInfo);
-          analysisData.property_composite_key = propertyRecord.property_composite_key;
-          analysisRecords.push(analysisData);
           
         } catch (error) {
           console.error('Error mapping record:', error);
@@ -439,7 +444,8 @@ export class BRTProcessor {
         warnings: []
       };
       
-      console.log(`Batch inserting ${propertyRecords.length} property records...`);
+      // SINGLE BATCH INSERT: Insert all property records to unified table (1000 at a time)
+      console.log(`Batch inserting ${propertyRecords.length} property records to unified table...`);
       const batchSize = 1000;
       
       for (let i = 0; i < propertyRecords.length; i += batchSize) {
@@ -458,24 +464,7 @@ export class BRTProcessor {
         }
       }
       
-      console.log(`Batch inserting ${analysisRecords.length} analysis records...`);
-      
-      for (let i = 0; i < analysisRecords.length; i += batchSize) {
-        const batch = analysisRecords.slice(i, i + batchSize);
-        
-        const { error: analysisError } = await supabase
-          .from('property_analysis_data')
-          .insert(batch);
-        
-        if (analysisError) {
-          console.error('Batch analysis insert error:', analysisError);
-          results.warnings.push(`Analysis batch ${i} to ${i + batchSize} failed`);
-        } else {
-          console.log(`✅ Inserted analysis records ${i + 1} to ${Math.min(i + batchSize, analysisRecords.length)}`);
-        }
-      }
-      
-      console.log('🚀 BRT BATCH PROCESSING COMPLETE:', results);
+      console.log('🚀 SINGLE TABLE PROCESSING COMPLETE:', results);
       return results;
       
     } catch (error) {
