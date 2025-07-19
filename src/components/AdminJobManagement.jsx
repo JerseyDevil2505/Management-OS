@@ -1474,7 +1474,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
             <div className="flex items-center gap-6 text-sm text-gray-600">
               <span>{dbStats.employees} Employees</span>
               <span>{jobs.length + archivedJobs.length} Jobs</span>
-              <span>{dbStats.propertyRecords?.toLocaleString() || 0} Property Records</span>
+              <span>{dbStats.propertyRecords?.toLocaleString() || 0} Properties</span>
               <span>{dbStats.sourceFiles} Source Files</span>
             </div>
           )}
