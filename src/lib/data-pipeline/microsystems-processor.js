@@ -1,7 +1,7 @@
 /**
  * Complete Microsystems Processor 
  * Handles pipe-delimited source files and field_id+code lookup files
- * Stores direct mappings in property_records and raw data in property_analysis_data
+ * UPDATED: Single table insertion to property_records with all 82 fields
  */
 
 import { supabase } from '../supabaseClient.js';
@@ -117,8 +117,8 @@ export class MicrosystemsProcessor {
   }
 
   /**
-   * Map Microsystems record to property_records table fields
-   * UPDATED: Added versionInfo parameter for proper version tracking
+   * Map Microsystems record to property_records table (ALL 82 FIELDS)
+   * UPDATED: Combines original property_records + analysis fields into single record
    */
   mapToPropertyRecord(rawRecord, yearCreated, ccddCode, jobId, versionInfo = {}) {
     return {
@@ -130,8 +130,13 @@ export class MicrosystemsProcessor {
       property_lot: rawRecord['Lot'],
       property_qualifier: rawRecord['Qual'],
       property_addl_card: rawRecord['Bldg'],
-      property_location: rawRecord['Location'], // FIXED: Direct mapping to first Location
+      property_addl_lot: null, // Not available in Microsystems
+      property_location: rawRecord['Location'], // Direct mapping to first Location
       property_composite_key: `${yearCreated}${ccddCode}-${rawRecord['Block']}-${rawRecord['Lot']}_${(rawRecord['Qual'] || '').trim() || 'NONE'}-${(rawRecord['Bldg'] || '').trim() || 'NONE'}-${(rawRecord['Location'] || '').trim() || 'NONE'}`,
+      property_cama_class: rawRecord['Class'],
+      property_m4_class: null, // Not available in Microsystems
+      property_facility: rawRecord['Facility Name'],
+      property_vcs: rawRecord['VCS'],
       
       // Owner fields
       owner_name: rawRecord['Owner Name'],
@@ -145,20 +150,20 @@ export class MicrosystemsProcessor {
       sales_page: rawRecord['Sale Page'],
       sales_nu: rawRecord['Sale Nu'],
       
-      // Values - FIXED: Direct mapping to renamed headers
+      // Values - Direct mapping to renamed headers
       values_mod_land: this.parseNumeric(rawRecord['Land Value']), // First instance
       values_cama_land: this.parseNumeric(rawRecord['Land Value2']), // Second instance
       values_mod_improvement: this.parseNumeric(rawRecord['Impr Value']), // First instance
       values_cama_improvement: this.parseNumeric(rawRecord['Impr Value2']), // Second instance
       values_mod_total: this.parseNumeric(rawRecord['Totl Value']), // First instance
       values_cama_total: this.parseNumeric(rawRecord['Totl Value2']), // Second instance
-      
-      // Values - single occurrence
       values_base_cost: this.parseNumeric(rawRecord['Base Cost']),
       values_det_items: this.parseNumeric(rawRecord['Det Items']),
       values_repl_cost: this.parseNumeric(rawRecord['Cost New']),
+      values_norm_time: null, // Calculated later in FileUploadButton.jsx
+      values_norm_size: null, // Calculated later in FileUploadButton.jsx
       
-      // Inspection fields - FIXED: Remove parseInteger for letter codes
+      // Inspection fields
       inspection_info_by: rawRecord['Interior Finish3'], // Store letter codes directly (E, F, O, R, V)
       inspection_list_by: rawRecord['Insp By'],
       inspection_list_date: this.parseDate(rawRecord['Insp Date']),
@@ -167,20 +172,59 @@ export class MicrosystemsProcessor {
       inspection_price_by: null, // Not available in Microsystems
       inspection_price_date: null, // Not available in Microsystems
       
-      // Property classifications
-      property_cama_class: rawRecord['Class'],
-      property_facility: rawRecord['Facility Name'],
-      property_vcs: rawRecord['VCS'],
+      // Asset fields - All analysis fields now in single table
+      asset_building_class: rawRecord['Bldg Qual Class Code'],
+      asset_design_style: rawRecord['Style Code'],
+      asset_ext_cond: rawRecord['Condition'],
+      asset_int_cond: rawRecord['Interior Cond Or End Unit'],
+      asset_key_page: null, // User defined, created in module
+      asset_lot_acre: this.parseNumeric(rawRecord['Lot Size In Acres'], 2),
+      asset_lot_depth: this.calculateLotDepth(rawRecord),
+      asset_lot_frontage: this.calculateLotFrontage(rawRecord),
+      asset_lot_sf: this.parseInteger(rawRecord['Lot Size In Sf']),
+      asset_map_page: null, // User defined, created in module
+      asset_neighborhood: rawRecord['Neighborhood'],
+      asset_sfla: this.parseNumeric(rawRecord['Livable Area']),
+      asset_story_height: this.parseNumeric(rawRecord['Story Height']),
+      asset_type_use: rawRecord['Type Use Code'],
+      asset_view: null, // Not available in Microsystems
+      asset_year_built: this.parseInteger(rawRecord['Year Built']),
+      asset_zoning: null, // User defined, created in module
       
-      // ADD VERSION TRACKING FIELDS:
+      // Analysis and calculation fields
+      analysis_code: null, // User defined, created in module
+      analysis_version: 1,
+      condition_rating: null, // User defined, created in module
+      location_analysis: null, // User defined, created in module
+      new_vcs: null, // User defined, created in module
+      total_baths_calculated: this.calculateTotalBaths(rawRecord),
+      
+      // Processing metadata
+      processed_at: new Date().toISOString(),
+      processing_notes: null,
+      validation_status: 'imported',
+      is_new_since_last_upload: true,
+      is_retroactive_credit: false,
+      
+      // File tracking with version info
       source_file_name: versionInfo.source_file_name || null,
       source_file_version_id: versionInfo.source_file_version_id || null,
       source_file_uploaded_at: versionInfo.source_file_uploaded_at || new Date().toISOString(),
+      code_file_name: versionInfo.code_file_name || null,
+      code_file_updated_at: versionInfo.code_file_updated_at || new Date().toISOString(),
+      file_version: versionInfo.file_version || 1,
+      upload_date: new Date().toISOString(),
       
-      // Metadata
+      // Payroll and project tracking
+      payroll_period_start: null,
+      project_start_date: null,
+      
+      // System metadata
       vendor_source: 'Microsystems',
-      processed_at: new Date().toISOString(),
+      import_session_id: versionInfo.import_session_id || null,
       created_by: '5df85ca3-7a54-4798-a665-c31da8d9caad',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
       
       // Store complete raw data as JSON
       raw_data: rawRecord
@@ -188,106 +232,12 @@ export class MicrosystemsProcessor {
   }
 
   /**
-   * Map to property_analysis_data for calculated fields and raw storage (SYNC VERSION)
-   * UPDATED: Added versionInfo parameter for consistency
-   */
-  mapToAnalysisDataSync(rawRecord, propertyRecordId, jobId, versionInfo = {}) {
-    return {
-      // Link to property record (will be linked via composite key)
-      property_record_id: propertyRecordId,
-      
-      // Property identifiers (duplicated for easy querying)
-      property_block: rawRecord['Block'],
-      property_lot: rawRecord['Lot'],
-      property_qualifier: rawRecord['Qual'],
-      property_addl_card: rawRecord['Bldg'],
-      property_location: rawRecord['Location'],
-      // composite key set in processFile method
-      
-      // Essential calculated fields only
-      total_baths_calculated: this.calculateTotalBaths(rawRecord),
-      
-      // Asset fields - direct mappings from Microsystems
-      asset_sfla: this.parseNumeric(rawRecord['Livable Area']),
-      asset_new_vcs: null, // User defined, created in module
-      asset_key_page: null, // User defined, created in module
-      asset_map_page: null, // User defined, created in module
-      asset_zoning: null, // User defined, created in module
-      asset_view: null, // Not available in Microsystems
-      asset_neighborhood: rawRecord['Neighborhood'],
-      asset_type_use: rawRecord['Type Use Code'],
-      asset_building_class: rawRecord['Bldg Qual Class Code'],
-      asset_design_style: rawRecord['Style Code'],
-      asset_year_built: this.parseInteger(rawRecord['Year Built']),
-      asset_lot_frontage: this.calculateLotFrontage(rawRecord),
-      asset_lot_depth: this.calculateLotDepth(rawRecord),
-      asset_lot_acre: this.parseNumeric(rawRecord['Lot Size In Acres'], 2),
-      asset_lot_sf: this.parseInteger(rawRecord['Lot Size In Sf']),
-      asset_story_height: this.parseNumeric(rawRecord['Story Height']),
-      asset_ext_cond: rawRecord['Condition'],
-      asset_int_cond: rawRecord['Interior Cond Or End Unit'],
-      
-      // Normalized values - calculated later in FileUploadButton.jsx
-      values_norm_time: null, // TODO: Use calculateTimeAdjustedValue() method below when building normalization
-      values_norm_size: null, // Size normalization - calculated later in development
-      
-      // ADD VERSION TRACKING FIELDS:
-      source_file_name: versionInfo.source_file_name || null,
-      source_file_version_id: versionInfo.source_file_version_id || null,
-      source_file_uploaded_at: versionInfo.source_file_uploaded_at || new Date().toISOString(),
-      
-      // Store complete raw data as JSON for dynamic querying
-      raw_data: rawRecord,
-      
-      // Metadata
-      calculated_at: new Date().toISOString(),
-      created_by: '5df85ca3-7a54-4798-a665-c31da8d9caad'
-    };
-  }
-
-  /**
-   * Update analysis data with calculated and import-specific fields
-   */
-  async updateAnalysisData(rawRecord, propertyRecordId) {
-    const analysisUpdates = {
-      // Calculated fields
-      total_baths_calculated: this.calculateTotalBaths(rawRecord),
-      asset_lot_frontage: this.calculateLotFrontage(rawRecord),
-      asset_lot_depth: this.calculateLotDepth(rawRecord),
-      
-      // Asset fields - direct mappings from Microsystems
-      asset_sfla: this.parseNumeric(rawRecord['Livable Area']),
-      asset_neighborhood: rawRecord['Neighborhood'],
-      asset_type_use: rawRecord['Type Use Code'],
-      asset_building_class: rawRecord['Bldg Qual Class Code'],
-      asset_design_style: rawRecord['Style Code'],
-      asset_year_built: this.parseInteger(rawRecord['Year Built']),
-      asset_lot_acre: this.parseNumeric(rawRecord['Lot Size In Acres'], 2),
-      asset_lot_sf: this.parseInteger(rawRecord['Lot Size In Sf']),
-      asset_story_height: this.parseNumeric(rawRecord['Story Height']),
-      asset_ext_cond: rawRecord['Condition'],
-      asset_int_cond: rawRecord['Interior Cond Or End Unit'],
-      
-      // Store complete raw data
-      raw_data: rawRecord,
-      
-      // Metadata
-      calculated_at: new Date().toISOString()
-    };
-
-    return await supabase
-      .from('property_analysis_data')
-      .update(analysisUpdates)
-      .eq('property_record_id', propertyRecordId);
-  }
-
-  /**
-   * Process complete file and store in database using FAST batch processing
-   * UPDATED: Added versionInfo parameter and pass it to mapping methods
+   * Process complete file and store in database using FAST single-table batch processing
+   * UPDATED: Single table insertion only - no more dual-table complexity
    */
   async processFile(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, versionInfo = {}) {
     try {
-      console.log('Starting Microsystems file processing...');
+      console.log('Starting Microsystems file processing (SINGLE TABLE)...');
       
       // Process code file if provided
       if (codeFileContent) {
@@ -298,20 +248,14 @@ export class MicrosystemsProcessor {
       const records = this.parseSourceFile(sourceFileContent);
       console.log(`Processing ${records.length} records in batches...`);
       
-      // Prepare all property records for batch insert
+      // Prepare all property records for batch insert (SINGLE TABLE)
       const propertyRecords = [];
-      const analysisRecords = [];
       
       for (const rawRecord of records) {
         try {
-          // Map to property_records with version info
+          // Map to unified property_records table with all 82 fields
           const propertyRecord = this.mapToPropertyRecord(rawRecord, yearCreated, ccddCode, jobId, versionInfo);
           propertyRecords.push(propertyRecord);
-          
-          // Map to analysis data (will link via composite key after insert) with version info
-          const analysisData = this.mapToAnalysisDataSync(rawRecord, null, jobId, versionInfo);
-          analysisData.property_composite_key = propertyRecord.property_composite_key;
-          analysisRecords.push(analysisData);
           
         } catch (error) {
           console.error('Error mapping record:', error);
@@ -324,8 +268,8 @@ export class MicrosystemsProcessor {
         warnings: []
       };
       
-      // BATCH 1: Insert property records (1000 at a time)
-      console.log(`Batch inserting ${propertyRecords.length} property records...`);
+      // SINGLE BATCH INSERT: Insert all property records to unified table (1000 at a time)
+      console.log(`Batch inserting ${propertyRecords.length} property records to unified table...`);
       const batchSize = 1000;
       
       for (let i = 0; i < propertyRecords.length; i += batchSize) {
@@ -344,25 +288,7 @@ export class MicrosystemsProcessor {
         }
       }
       
-      // BATCH 2: Insert analysis records (1000 at a time)
-      console.log(`Batch inserting ${analysisRecords.length} analysis records...`);
-      
-      for (let i = 0; i < analysisRecords.length; i += batchSize) {
-        const batch = analysisRecords.slice(i, i + batchSize);
-        
-        const { error: analysisError } = await supabase
-          .from('property_analysis_data')
-          .insert(batch);
-        
-        if (analysisError) {
-          console.error('Batch analysis insert error:', analysisError);
-          results.warnings.push(`Analysis batch ${i}-${i + batchSize} failed`);
-        } else {
-          console.log(`✅ Inserted analysis records ${i + 1}-${Math.min(i + batchSize, analysisRecords.length)}`);
-        }
-      }
-      
-      console.log('🚀 BATCH PROCESSING COMPLETE:', results);
+      console.log('🚀 SINGLE TABLE PROCESSING COMPLETE:', results);
       return results;
       
     } catch (error) {
