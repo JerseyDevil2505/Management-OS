@@ -215,7 +215,7 @@ export const jobService = {
         codeFileStatus: job.code_file_status || 'pending',
         vendorDetection: job.vendor_detection,
         workflowStats: job.workflow_stats,
-        percentBilling: job.percent_billing,
+        percentBilling: job.percent_billed,
         assignedManagers: job.job_assignments?.map(ja => ({
           id: ja.employee.id,
           name: `${ja.employee.first_name} ${ja.employee.last_name}`,
@@ -252,7 +252,7 @@ export const jobService = {
         code_file_status: componentFields.codeFileStatus || 'pending',
         vendor_detection: componentFields.vendorDetection,
         workflow_stats: componentFields.workflowStats,
-        percent_billing: componentFields.percentBilling,
+        percent_billed: componentFields.percentBilling,
         created_by: componentFields.created_by || componentFields.createdBy
       };
       
@@ -314,7 +314,7 @@ export const jobService = {
       if (componentFields.codeFileStatus) dbFields.code_file_status = componentFields.codeFileStatus;
       if (componentFields.vendorDetection) dbFields.vendor_detection = componentFields.vendorDetection;
       if (componentFields.workflowStats) dbFields.workflow_stats = componentFields.workflowStats;
-      if (componentFields.percentBilling !== undefined) dbFields.percent_billing = componentFields.percentBilling;
+      if (componentFields.percentBilling !== undefined) dbFields.percent_billed = componentFields.percentBilling;
 
       const { data, error } = await supabase
         .from('jobs')
