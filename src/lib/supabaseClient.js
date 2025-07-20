@@ -215,7 +215,7 @@ export const jobService = {
         codeFileStatus: job.code_file_status || 'pending',
         vendorDetection: job.vendor_detection,
         workflowStats: job.workflow_stats,
-        percentBilling: job.percent_billed,
+        percent_billed: job.percent_billed,  // FIXED: was percentBilling, now percent_billed
         assignedManagers: job.job_assignments?.map(ja => ({
           id: ja.employee.id,
           name: `${ja.employee.first_name} ${ja.employee.last_name}`,
