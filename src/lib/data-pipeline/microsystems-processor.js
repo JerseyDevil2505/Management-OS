@@ -133,7 +133,7 @@ export class MicrosystemsProcessor {
       property_addl_lot: null, // Not available in Microsystems
       property_location: rawRecord['Location'], // Direct mapping to first Location
       property_composite_key: `${yearCreated}${ccddCode}-${rawRecord['Block']}-${rawRecord['Lot']}_${(rawRecord['Qual'] || '').trim() || 'NONE'}-${(rawRecord['Bldg'] || '').trim() || 'NONE'}-${(rawRecord['Location'] || '').trim() || 'NONE'}`,
-      property_cama_class: null //Not available in Microsystems
+      property_cama_class: null, //Not available in Microsystems
       property_m4_class: rawRecord['Class'],
       property_facility: rawRecord['Facility Name'],
       property_vcs: rawRecord['VCS'],
