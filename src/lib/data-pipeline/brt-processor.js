@@ -1,8 +1,9 @@
 /**
- * Complete BRT Processor 
+ * Enhanced BRT Processor 
  * Handles CSV source files and mixed-format code files
  * UPDATED: Single table insertion to property_records with all 82 fields
  * ENHANCED: Added retry logic for connection issues and query cancellations
+ * NEW: Proper code file storage in jobs table and enhanced lot calculations
  */
 
 import { supabase } from '../supabaseClient.js';
@@ -12,6 +13,9 @@ export class BRTProcessor {
     this.codeLookups = new Map();
     this.vcsLookups = new Map();
     this.headers = [];
+    
+    // NEW: Store all parsed code sections for database storage
+    this.allCodeSections = {};
   }
 
   /**
@@ -66,18 +70,6 @@ export class BRTProcessor {
   }
 
   /**
-   * Calculate total bathrooms with proper half-bath weighting
-   * BRT's BATHTOT counts half baths as full, so we adjust
-   */
-  calculateTotalBaths(rawRecord) {
-    const bathTot = this.parseNumeric(rawRecord.BATHTOT) || 0;
-    const twoFix = this.parseNumeric(rawRecord.PLUMBING2FIX) || 0;
-    
-    const adjustedTotal = bathTot - twoFix + (twoFix * 0.5);
-    return adjustedTotal > 0 ? adjustedTotal : null;
-  }
-
-  /**
    * Auto-detect if file is BRT format
    */
   detectFileType(fileContent) {
@@ -91,10 +83,11 @@ export class BRTProcessor {
   }
 
   /**
-   * Process BRT code file (mixed format with headers and JSON sections)
+   * ENHANCED: Process BRT code file and store in jobs table
+   * Handles mixed format with headers and JSON sections
    */
-  processCodeFile(codeFileContent) {
-    console.log('Processing BRT code file...');
+  async processCodeFile(codeFileContent, jobId) {
+    console.log('Processing BRT code file with database storage...');
     
     try {
       const lines = codeFileContent.split('\n');
@@ -102,12 +95,18 @@ export class BRTProcessor {
       let jsonBuffer = '';
       let inJsonBlock = false;
       
+      // Reset collections
+      this.allCodeSections = {};
+      this.codeLookups.clear();
+      this.vcsLookups.clear();
+      
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
         
         if (!line) continue;
         
         if (!line.startsWith('{') && !line.startsWith('"') && !inJsonBlock) {
+          // Process previous section if exists
           if (jsonBuffer && currentSection) {
             this.parseJsonSection(jsonBuffer, currentSection);
           }
@@ -136,38 +135,111 @@ export class BRTProcessor {
         }
       }
       
+      // Process final section
       if (jsonBuffer && currentSection) {
         this.parseJsonSection(jsonBuffer, currentSection);
       }
       
       console.log(`Loaded ${this.codeLookups.size} code definitions from BRT file`);
+      console.log(`Found sections: ${Object.keys(this.allCodeSections).join(', ')}`);
+      
+      // NEW: Store code file in jobs table
+      await this.storeCodeFileInDatabase(codeFileContent, jobId);
       
     } catch (error) {
       console.error('Error parsing BRT code file:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * NEW: Store code file content and parsed definitions in jobs table
+   */
+  async storeCodeFileInDatabase(codeFileContent, jobId) {
+    try {
+      console.log('💾 Storing code file in jobs table...');
+      
+      const { error } = await supabase
+        .from('jobs')
+        .update({
+          code_file_content: codeFileContent,
+          code_file_name: 'BRT_Code_File.txt',
+          code_file_uploaded_at: new Date().toISOString(),
+          parsed_code_definitions: {
+            vendor_type: 'BRT',
+            sections: this.allCodeSections,
+            summary: {
+              total_sections: Object.keys(this.allCodeSections).length,
+              vcs_codes: Object.keys(this.allCodeSections.VCS || {}).length,
+              residential_codes: Object.keys(this.allCodeSections.Residential || {}).length,
+              parsed_at: new Date().toISOString()
+            }
+          }
+        })
+        .eq('id', jobId);
+
+      if (error) {
+        console.error('Error storing code file in database:', error);
+        throw error;
+      }
+      
+      console.log('✅ Code file stored successfully in jobs table');
+    } catch (error) {
+      console.error('Failed to store code file:', error);
+      // Don't throw - continue with processing even if code storage fails
     }
   }
   
   /**
-   * Parse a JSON section and store lookups
+   * ENHANCED: Parse a JSON section and store lookups + complete section data
    */
   parseJsonSection(jsonString, sectionName) {
     try {
       const codeData = JSON.parse(jsonString);
       
+      // Store complete section data for database storage
+      this.allCodeSections[sectionName] = codeData;
+      
       if (sectionName === 'VCS') {
+        // Process VCS section for land value calculations
         Object.keys(codeData).forEach(key => {
-          const item = codeData[key];
-          if (item.DATA && item.DATA.VALUE) {
-            this.vcsLookups.set(key, item.DATA.VALUE);
+          const vcsItem = codeData[key];
+          if (vcsItem.DATA && vcsItem.DATA.VALUE) {
+            const vcsCode = vcsItem.DATA.VALUE;
+            
+            // Store VCS lookup for land calculations
+            this.vcsLookups.set(vcsCode, vcsItem);
+            
+            // Also store unit rate codes within this VCS
+            if (vcsItem.MAP && vcsItem.MAP['8'] && vcsItem.MAP['8'].DATA && vcsItem.MAP['8'].DATA.VALUE === 'URC') {
+              const urcSection = vcsItem.MAP['8'].MAP;
+              if (urcSection) {
+                Object.keys(urcSection).forEach(urcKey => {
+                  const urcItem = urcSection[urcKey];
+                  if (urcItem.MAP && urcItem.MAP['1'] && urcItem.MAP['1'].DATA) {
+                    const description = urcItem.MAP['1'].DATA.VALUE;
+                    const lookupKey = `${sectionName}_URC_${vcsCode}_${urcKey}`;
+                    this.codeLookups.set(lookupKey, description);
+                    
+                    // Store simplified lookup for lot calculations
+                    this.codeLookups.set(urcKey, description);
+                  }
+                });
+              }
+            }
           }
         });
         console.log(`Loaded ${Object.keys(codeData).length} VCS codes`);
       } else {
+        // Process other sections (Residential, Quality Factors, etc.)
         Object.keys(codeData).forEach(key => {
           const item = codeData[key];
           if (item.DATA && item.DATA.VALUE) {
             const lookupKey = `${sectionName}_${key}`;
             this.codeLookups.set(lookupKey, item.DATA.VALUE);
+            
+            // Also store without section prefix for easier lookup
+            this.codeLookups.set(key, item.DATA.VALUE);
           }
         });
         console.log(`Loaded ${Object.keys(codeData).length} codes from ${sectionName} section`);
@@ -370,6 +442,18 @@ export class BRTProcessor {
   }
 
   /**
+   * Calculate total bathrooms with proper half-bath weighting
+   * BRT's BATHTOT counts half baths as full, so we adjust
+   */
+  calculateTotalBaths(rawRecord) {
+    const bathTot = this.parseNumeric(rawRecord.BATHTOT) || 0;
+    const twoFix = this.parseNumeric(rawRecord.PLUMBING2FIX) || 0;
+    
+    const adjustedTotal = bathTot - twoFix + (twoFix * 0.5);
+    return adjustedTotal > 0 ? adjustedTotal : null;
+  }
+
+  /**
    * Calculate owner city, state, zip combination
    */
   calculateOwnerCsZ(rawRecord) {
@@ -419,35 +503,56 @@ export class BRTProcessor {
   }
 
   /**
-   * Calculate lot size in acres using LANDUR_1 through LANDUR_6 codes
+   * ENHANCED: Calculate lot size in acres using LANDUR_1 through LANDUR_6 codes with VCS lookup
+   * NOW: Uses code file definitions to properly interpret land unit codes
    */
   calculateLotAcres(rawRecord) {
     let totalAcres = 0;
+    let totalSqFt = 0;
+    let foundAcres = false;
+    let foundSqFt = false;
     
+    // Check each LANDUR field (1-6)
     for (let i = 1; i <= 6; i++) {
       const urCode = rawRecord[`LANDUR_${i}`];
-      const urValue = this.parseNumeric(rawRecord[`LANDUR_${i}`]);
+      const urValue = this.parseNumeric(rawRecord[`LANDURVALUE_${i}`]);
       
-      if (urCode && urCode.includes('AC') && urValue) {
-        totalAcres += urValue;
+      if (!urCode || !urValue) continue;
+      
+      // NEW: Look up code description from VCS data
+      const codeDescription = this.getCodeDescription(urCode);
+      
+      if (codeDescription) {
+        // Check if this code represents acres
+        if (codeDescription.toUpperCase().includes('ACRE') || 
+            codeDescription.toUpperCase().includes('AC')) {
+          totalAcres += urValue;
+          foundAcres = true;
+          console.log(`Found acres: ${urCode} (${codeDescription}) = ${urValue} acres`);
+        }
+        // Check if this code represents square feet
+        else if (codeDescription.toUpperCase().includes('SITE') && 
+                 !codeDescription.toUpperCase().includes('ACRE')) {
+          // Most site values are per square foot, convert to acres
+          totalSqFt += urValue;
+          foundSqFt = true;
+          console.log(`Found sq ft: ${urCode} (${codeDescription}) = ${urValue} sq ft`);
+        }
+      } else {
+        // FALLBACK: Use original logic if no code description found
+        if (urCode.includes('AC')) {
+          totalAcres += urValue;
+          foundAcres = true;
+        } else if (urCode.includes('SF')) {
+          totalSqFt += urValue;
+          foundSqFt = true;
+        }
       }
     }
     
-    if (totalAcres === 0) {
-      let totalSqFt = 0;
-      
-      for (let i = 1; i <= 6; i++) {
-        const urCode = rawRecord[`LANDUR_${i}`];
-        const urValue = this.parseNumeric(rawRecord[`LANDUR_${i}`]);
-        
-        if (urCode && urCode.includes('SF') && urValue) {
-          totalSqFt += urValue;
-        }
-      }
-      
-      if (totalSqFt > 0) {
-        totalAcres = totalSqFt / 43560;
-      }
+    // Convert square feet to acres if no acres found
+    if (!foundAcres && foundSqFt && totalSqFt > 0) {
+      totalAcres = totalSqFt / 43560;
     }
     
     return totalAcres > 0 ? parseFloat(totalAcres.toFixed(3)) : null;
@@ -462,16 +567,18 @@ export class BRTProcessor {
   }
 
   /**
-   * Process complete file and store in database using FAST single-table batch processing
+   * ENHANCED: Process complete file and store in database with code file integration
    * UPDATED: Single table insertion only - no more dual-table complexity
    * ENHANCED: Added retry logic for connection issues and query cancellations
+   * NEW: Integrates code file storage in jobs table
    */
   async processFile(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, versionInfo = {}) {
     try {
-      console.log('Starting BRT file processing (SINGLE TABLE WITH RETRY LOGIC)...');
+      console.log('Starting Enhanced BRT file processing (SINGLE TABLE WITH CODE STORAGE)...');
       
+      // NEW: Process and store code file if provided
       if (codeFileContent) {
-        this.processCodeFile(codeFileContent);
+        await this.processCodeFile(codeFileContent, jobId);
       }
       
       const records = this.parseSourceFile(sourceFileContent);
@@ -519,15 +626,16 @@ export class BRTProcessor {
         }
       }
       
-      console.log('🚀 SINGLE TABLE PROCESSING COMPLETE WITH RETRY LOGIC:', results);
+      console.log('🚀 ENHANCED SINGLE TABLE PROCESSING COMPLETE WITH CODE STORAGE:', results);
       return results;
       
     } catch (error) {
-      console.error('BRT file processing failed:', error);
+      console.error('Enhanced BRT file processing failed:', error);
       throw error;
     }
   }
 
+  // Utility functions (preserved from original)
   parseDate(dateString) {
     if (!dateString || dateString.trim() === '') return null;
     const date = new Date(dateString);
@@ -547,8 +655,47 @@ export class BRTProcessor {
     return isNaN(num) ? null : num;
   }
 
+  /**
+   * ENHANCED: Get code description with fallback to original code
+   * Now uses stored code definitions from all sections
+   */
   getCodeDescription(code) {
-    return this.codeLookups.get(code) || code;
+    // Try exact match first
+    if (this.codeLookups.has(code)) {
+      return this.codeLookups.get(code);
+    }
+    
+    // Try VCS lookup
+    if (this.vcsLookups.has(code)) {
+      const vcsItem = this.vcsLookups.get(code);
+      return vcsItem.DATA ? vcsItem.DATA.VALUE : code;
+    }
+    
+    // Try with different section prefixes
+    const sectionPrefixes = ['VCS_URC', 'Residential', 'Quality_Factors', 'Depth_Factors'];
+    for (const prefix of sectionPrefixes) {
+      const prefixedKey = `${prefix}_${code}`;
+      if (this.codeLookups.has(prefixedKey)) {
+        return this.codeLookups.get(prefixedKey);
+      }
+    }
+    
+    // Return original code if no description found
+    return code;
+  }
+
+  /**
+   * NEW: Get all parsed code sections (for module access)
+   */
+  getAllCodeSections() {
+    return this.allCodeSections;
+  }
+
+  /**
+   * NEW: Get specific section codes
+   */
+  getSectionCodes(sectionName) {
+    return this.allCodeSections[sectionName] || {};
   }
 }
 
