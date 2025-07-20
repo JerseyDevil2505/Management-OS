@@ -1533,7 +1533,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
-              👥 Manager Assignments ({managers.length})
+              👥 Manager Assignments ({managers.filter(m => !`${m.first_name} ${m.last_name}`.toLowerCase().includes('tom davis')).length})
             </button>
           </nav>
         </div>
@@ -1950,7 +1950,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
         </div>
       )}
 
-      {/* Manager Assignments Tab */}
+      {/* Manager Assignments Tab - IMPROVED HORIZONTAL LAYOUT */}
       {activeTab === 'manager-assignments' && (
         <div className="space-y-6">
           <div className="bg-gradient-to-r from-teal-50 to-cyan-50 rounded-lg border-2 border-teal-200 p-6">
@@ -1964,133 +1964,159 @@ const AdminJobManagement = ({ onJobSelect }) => {
               </div>
             </div>
 
-            {/* Manager Cards Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {/* Manager Rows */}
+            <div className="space-y-3">
               {managers.length === 0 ? (
-                <div className="col-span-full text-center text-gray-500 py-12">
+                <div className="text-center text-gray-500 py-12">
                   <div className="text-4xl mb-4">👥</div>
                   <h4 className="text-lg font-medium mb-2">No Managers Found</h4>
                   <p className="text-sm">Add managers to track workload assignments</p>
                 </div>
               ) : (
-                managers.map(manager => {
-                  const workload = getManagerWorkload(manager);
-                  
-                  return (
-                    <div key={manager.id} className="p-6 bg-white rounded-lg border shadow-md hover:shadow-lg transition-all">
-                      <div className="flex items-start justify-between mb-4">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-12 h-12 rounded-full bg-teal-100 text-teal-800 flex items-center justify-center text-lg font-bold">
-                            {`${manager.first_name || ''} ${manager.last_name || ''}`.split(' ').map(n => n[0]).join('')}
+                managers
+                  .filter(manager => {
+                    // Filter out Tom Davis
+                    const fullName = `${manager.first_name} ${manager.last_name}`.toLowerCase();
+                    return !fullName.includes('tom davis');
+                  })
+                  .map(manager => {
+                    const workload = getManagerWorkload(manager);
+                    
+                    return (
+                      <div key={manager.id} className="bg-white rounded-lg border shadow-sm hover:shadow-md transition-all p-4">
+                        <div className="flex items-center justify-between">
+                          {/* Left: Manager Info */}
+                          <div className="flex items-center space-x-4">
+                            <div className="w-10 h-10 rounded-full bg-teal-100 text-teal-800 flex items-center justify-center text-sm font-bold">
+                              {`${manager.first_name || ''} ${manager.last_name || ''}`.split(' ').map(n => n[0]).join('')}
+                            </div>
+                            <div>
+                              <h4 className="text-lg font-bold text-gray-900 flex items-center space-x-2">
+                                <span>{manager.first_name} {manager.last_name}</span>
+                                {manager.can_be_lead && (
+                                  <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full font-medium">
+                                    Lead Manager
+                                  </span>
+                                )}
+                              </h4>
+                              <p className="text-sm text-gray-600">
+                                {workload.jobCount} active jobs • {workload.totalProperties.toLocaleString()} total properties
+                              </p>
+                            </div>
                           </div>
-                          <div>
-                            <h4 className="text-lg font-bold text-gray-900">
-                              {manager.first_name} {manager.last_name}
-                            </h4>
-                            <p className="text-sm text-gray-600">
-                              As of: {new Date().toLocaleDateString()}
-                            </p>
-                            {manager.can_be_lead && (
-                              <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full font-medium">
-                                Lead Manager
-                              </span>
+
+                          {/* Center: Stats (Full for Lead, Minimal for Assistant) */}
+                          <div className="flex items-center space-x-6">
+                            {manager.can_be_lead ? (
+                              // FULL STATS FOR LEAD MANAGERS
+                              <>
+                                <div className="text-center">
+                                  <div className="text-xl font-bold text-teal-600">{workload.jobCount}</div>
+                                  <div className="text-xs text-teal-700">Active Jobs</div>
+                                </div>
+                                <div className="text-center">
+                                  <div className="text-xl font-bold text-blue-600">
+                                    {workload.totalProperties.toLocaleString()}
+                                  </div>
+                                  <div className="text-xs text-blue-700">Properties</div>
+                                </div>
+                                <div className="text-center">
+                                  <div className="text-xl font-bold text-green-600">{workload.completionRate}%</div>
+                                  <div className="text-xs text-green-700">Complete</div>
+                                </div>
+                                {/* Progress Bar */}
+                                <div className="w-24">
+                                  <div className="w-full bg-gray-200 rounded-full h-2">
+                                    <div 
+                                      className="bg-teal-600 h-2 rounded-full transition-all duration-300"
+                                      style={{ width: `${workload.completionRate}%` }}
+                                    ></div>
+                                  </div>
+                                  <div className="text-xs text-gray-500 mt-1 text-center">
+                                    {workload.completedProperties.toLocaleString()} done
+                                  </div>
+                                </div>
+                              </>
+                            ) : (
+                              // MINIMAL STATS FOR ASSISTANT MANAGERS
+                              <div className="flex items-center space-x-4">
+                                <div className="text-center">
+                                  <div className="text-lg font-bold text-teal-600">{workload.jobCount}</div>
+                                  <div className="text-xs text-teal-700">Jobs</div>
+                                </div>
+                                <div className="text-center">
+                                  <div className="text-lg font-bold text-green-600">{workload.completionRate}%</div>
+                                  <div className="text-xs text-green-700">Complete</div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Right: Assigned Jobs List */}
+                          <div className="max-w-md">
+                            {workload.jobs.length > 0 ? (
+                              <div className="space-y-1">
+                                {workload.jobs.slice(0, 2).map(job => (
+                                  <div key={job.id} className="flex justify-between items-center p-2 bg-gray-50 rounded text-xs">
+                                    <span className="font-medium text-gray-900 truncate max-w-32">{job.name}</span>
+                                    <span className="text-gray-600 ml-2">
+                                      {job.assignedManagers?.find(am => am.id === manager.id)?.role || 'Manager'}
+                                    </span>
+                                  </div>
+                                ))}
+                                {workload.jobs.length > 2 && (
+                                  <div className="text-xs text-gray-500 text-center py-1">
+                                    +{workload.jobs.length - 2} more jobs
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="text-center text-gray-400 py-2">
+                                <div className="text-sm">No active assignments</div>
+                              </div>
                             )}
                           </div>
                         </div>
                       </div>
-
-                      {/* Workload Stats */}
-                      <div className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4 text-center">
-                          <div className="p-3 bg-teal-50 rounded-lg">
-                            <div className="text-2xl font-bold text-teal-600">{workload.jobCount}</div>
-                            <div className="text-xs text-teal-700">Active Jobs</div>
-                          </div>
-                          <div className="p-3 bg-blue-50 rounded-lg">
-                            <div className="text-2xl font-bold text-blue-600">
-                              {workload.totalProperties.toLocaleString()}
-                            </div>
-                            <div className="text-xs text-blue-700">Total Properties</div>
-                          </div>
-                        </div>
-
-                        {/* Completion Progress */}
-                        <div className="space-y-2">
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-600">Completion Rate</span>
-                            <span className="font-medium text-gray-900">{workload.completionRate}%</span>
-                          </div>
-                          <div className="w-full bg-gray-200 rounded-full h-2">
-                            <div 
-                              className="bg-teal-600 h-2 rounded-full transition-all duration-300"
-                              style={{ width: `${workload.completionRate}%` }}
-                            ></div>
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            {workload.completedProperties.toLocaleString()} of {workload.totalProperties.toLocaleString()} properties completed
-                          </div>
-                        </div>
-
-                        {/* Assigned Jobs List */}
-                        {workload.jobs.length > 0 && (
-                          <div className="space-y-2">
-                            <h5 className="text-sm font-medium text-gray-700">Assigned Jobs:</h5>
-                            <div className="space-y-1">
-                              {workload.jobs.slice(0, 3).map(job => (
-                                <div key={job.id} className="flex justify-between items-center p-2 bg-gray-50 rounded text-xs">
-                                  <span className="font-medium text-gray-900">{job.name}</span>
-                                  <span className="text-gray-600">
-                                    {job.assignedManagers?.find(am => am.id === manager.id)?.role || 'Manager'}
-                                  </span>
-                                </div>
-                              ))}
-                              {workload.jobs.length > 3 && (
-                                <div className="text-xs text-gray-500 text-center py-1">
-                                  +{workload.jobs.length - 3} more jobs
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )}
-
-                        {workload.jobCount === 0 && (
-                          <div className="text-center text-gray-500 py-4">
-                            <div className="text-2xl mb-2">📝</div>
-                            <p className="text-sm">No active job assignments</p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })
+                    );
+                  })
               )}
             </div>
 
             {/* Summary Stats */}
-            {managers.length > 0 && (
+            {managers.filter(m => !`${m.first_name} ${m.last_name}`.toLowerCase().includes('tom davis')).length > 0 && (
               <div className="mt-8 p-4 bg-teal-50 border border-teal-200 rounded-lg">
                 <h3 className="font-medium text-teal-800 mb-3">📊 Team Overview</h3>
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-center">
                   <div>
-                    <div className="text-lg font-bold text-teal-600">{managers.length}</div>
-                    <div className="text-xs text-teal-700">Total Managers</div>
+                    <div className="text-lg font-bold text-teal-600">
+                      {managers.filter(m => !`${m.first_name} ${m.last_name}`.toLowerCase().includes('tom davis')).length}
+                    </div>
+                    <div className="text-xs text-teal-700">Active Managers</div>
                   </div>
                   <div>
                     <div className="text-lg font-bold text-blue-600">
-                      {managers.reduce((sum, m) => sum + getManagerWorkload(m).jobCount, 0)}
+                      {managers
+                        .filter(m => !`${m.first_name} ${m.last_name}`.toLowerCase().includes('tom davis'))
+                        .reduce((sum, m) => sum + getManagerWorkload(m).jobCount, 0)}
                     </div>
                     <div className="text-xs text-blue-700">Job Assignments</div>
                   </div>
                   <div>
                     <div className="text-lg font-bold text-green-600">
-                      {managers.reduce((sum, m) => sum + getManagerWorkload(m).totalProperties, 0).toLocaleString()}
+                      {managers
+                        .filter(m => !`${m.first_name} ${m.last_name}`.toLowerCase().includes('tom davis'))
+                        .reduce((sum, m) => sum + getManagerWorkload(m).totalProperties, 0).toLocaleString()}
                     </div>
                     <div className="text-xs text-green-700">Properties Managed</div>
                   </div>
                   <div>
                     <div className="text-lg font-bold text-purple-600">
-                      {managers.length > 0 ? Math.round(
-                        managers.reduce((sum, m) => sum + getManagerWorkload(m).completionRate, 0) / managers.length
+                      {managers.filter(m => !`${m.first_name} ${m.last_name}`.toLowerCase().includes('tom davis')).length > 0 ? Math.round(
+                        managers
+                          .filter(m => !`${m.first_name} ${m.last_name}`.toLowerCase().includes('tom davis'))
+                          .reduce((sum, m) => sum + getManagerWorkload(m).completionRate, 0) / 
+                        managers.filter(m => !`${m.first_name} ${m.last_name}`.toLowerCase().includes('tom davis')).length
                       ) : 0}%
                     </div>
                     <div className="text-xs text-purple-700">Avg Completion</div>
