@@ -3,6 +3,7 @@
  * Handles pipe-delimited source files and field_id+code lookup files
  * UPDATED: Single table insertion to property_records with all 82 fields
  * NEW: Proper code file storage in jobs table with pipe-delimited format support
+ * FIXED: Added debugging for API key authentication issues
  */
 
 import { supabase } from '../supabaseClient.js';
@@ -121,7 +122,7 @@ export class MicrosystemsProcessor {
       console.log(`Organized into ${Object.keys(this.allCodes).length} field groups`);
       console.log(`Categories found: ${Object.keys(this.categories).join(', ')}`);
       
-      // NEW: Store code file in jobs table
+      // NEW: Store code file in jobs table with debugging
       await this.storeCodeFileInDatabase(codeFileContent, jobId);
       
     } catch (error) {
@@ -132,41 +133,92 @@ export class MicrosystemsProcessor {
 
   /**
    * NEW: Store code file content and parsed definitions in jobs table
+   * FIXED: Added comprehensive debugging for API authentication issues
    */
   async storeCodeFileInDatabase(codeFileContent, jobId) {
     try {
       console.log('💾 Storing Microsystems code file in jobs table...');
+      console.log('🔍 DEBUG - jobId:', jobId);
+      console.log('🔍 DEBUG - supabase client exists:', !!supabase);
+      console.log('🔍 DEBUG - code content length:', codeFileContent?.length);
+      console.log('🔍 DEBUG - allCodes keys:', Object.keys(this.allCodes));
+      console.log('🔍 DEBUG - categories keys:', Object.keys(this.categories));
+      console.log('🔍 DEBUG - codeLookups size:', this.codeLookups.size);
       
-      const { error } = await supabase
+      // Test basic Supabase connectivity first
+      console.log('🔍 DEBUG - Testing Supabase connection...');
+      const { data: testData, error: testError } = await supabase
         .from('jobs')
-        .update({
-          code_file_content: codeFileContent,
-          code_file_name: 'Microsystems_Code_File.txt',
-          code_file_uploaded_at: new Date().toISOString(),
-          parsed_code_definitions: {
-            vendor_type: 'Microsystems',
-            field_codes: this.allCodes,
-            categories: this.categories,
-            flat_lookup: Object.fromEntries(this.codeLookups),
-            summary: {
-              total_codes: this.codeLookups.size,
-              field_groups: Object.keys(this.allCodes).length,
-              categories: Object.keys(this.categories).length,
-              parsed_at: new Date().toISOString()
-            }
-          }
-        })
-        .eq('id', jobId);
-
-      if (error) {
-        console.error('Error storing Microsystems code file in database:', error);
-        throw error;
+        .select('id, job_name')
+        .eq('id', jobId)
+        .single();
+      
+      if (testError) {
+        console.error('❌ DEBUG - Supabase connection test failed:', testError);
+        throw new Error(`Supabase connection failed: ${testError.message}`);
       }
       
+      console.log('✅ DEBUG - Supabase connection successful, job found:', testData?.job_name);
+      
+      // Now attempt the actual update
+      console.log('🔍 DEBUG - Attempting code file storage update...');
+      const updatePayload = {
+        code_file_content: codeFileContent,
+        code_file_name: 'Microsystems_Code_File.txt',
+        code_file_uploaded_at: new Date().toISOString(),
+        parsed_code_definitions: {
+          vendor_type: 'Microsystems',
+          field_codes: this.allCodes,
+          categories: this.categories,
+          flat_lookup: Object.fromEntries(this.codeLookups),
+          summary: {
+            total_codes: this.codeLookups.size,
+            field_groups: Object.keys(this.allCodes).length,
+            categories: Object.keys(this.categories).length,
+            parsed_at: new Date().toISOString()
+          }
+        }
+      };
+      
+      console.log('🔍 DEBUG - Update payload keys:', Object.keys(updatePayload));
+      console.log('🔍 DEBUG - Parsed definitions summary:', updatePayload.parsed_code_definitions.summary);
+      
+      const { data: updateData, error: updateError } = await supabase
+        .from('jobs')
+        .update(updatePayload)
+        .eq('id', jobId)
+        .select('id, code_file_name, code_file_uploaded_at');
+
+      if (updateError) {
+        console.error('❌ DEBUG - Code file storage update failed:', updateError);
+        console.error('❌ DEBUG - Error details:', {
+          message: updateError.message,
+          details: updateError.details,
+          hint: updateError.hint,
+          code: updateError.code
+        });
+        throw updateError;
+      }
+      
+      console.log('✅ DEBUG - Code file storage update successful!');
+      console.log('✅ DEBUG - Updated job data:', updateData);
       console.log('✅ Microsystems code file stored successfully in jobs table');
+      
     } catch (error) {
-      console.error('Failed to store Microsystems code file:', error);
+      console.error('❌ Failed to store Microsystems code file:', error);
+      console.error('❌ Error stack:', error.stack);
+      
+      // Log additional debugging info
+      console.log('🔍 DEBUG - Error context:', {
+        jobId,
+        contentLength: codeFileContent?.length,
+        allCodesCount: Object.keys(this.allCodes || {}).length,
+        categoriesCount: Object.keys(this.categories || {}).length,
+        lookupSize: this.codeLookups?.size || 0
+      });
+      
       // Don't throw - continue with processing even if code storage fails
+      console.log('⚠️ Continuing with job creation despite code storage failure...');
     }
   }
 
@@ -361,7 +413,10 @@ export class MicrosystemsProcessor {
       
       // NEW: Process and store code file if provided
       if (codeFileContent) {
-        // await this.storeCodeFileInDatabase(codeFileContent, jobId);
+        console.log('🔍 DEBUG - Processing code file, length:', codeFileContent.length);
+        await this.processCodeFile(codeFileContent, jobId);
+      } else {
+        console.log('⚠️ DEBUG - No code file content provided');
       }
       
       // Parse source file
