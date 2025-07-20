@@ -53,7 +53,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
     codeFile: null,
     vendor: null,
     vendorDetection: null,
-    percentBilled: 0.00
+    percentBilled: ''
   });
 
   const [newPlanningJob, setNewPlanningJob] = useState({
@@ -1690,7 +1690,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
                                   codeFile: null,
                                   vendor: job.vendor,
                                   vendorDetection: job.vendorDetection,
-                                  percentBilled: job.percent_billed || 0.00
+                                  percentBilled: job.percent_billed || ''
                                 });
                                 setShowCreateJob(true);
                               }}
