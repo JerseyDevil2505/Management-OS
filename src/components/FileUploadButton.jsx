@@ -360,7 +360,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     }
   };
 
-  // Process file using the proven processors (like AdminJobManagement)
+  // Enhanced upsert process with permanent tracking
   const processFile = async (file, type, fileContent) => {
     try {
       setIsUploading(true);
@@ -371,23 +371,8 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
           await saveSalesDecisions();
         }
 
-        // Use the same proven method as AdminJobManagement
-        const result = await propertyService.importCSVData(
-          fileContent,
-          null, // Code file content - not updated during source file uploads
-          job.id,
-          new Date().getFullYear(),
-          job.ccdd || job.ccddCode,
-          job.vendor,
-          {
-            source_file_name: file.name,
-            source_file_version_id: crypto.randomUUID(),
-            source_file_uploaded_at: new Date().toISOString(),
-            source_file_as_of_date: asOfDates.source
-          }
-        );
-        
-        console.log(`Imported ${result.processed} property records`);
+        // ENHANCED: Smart upsert approach instead of add-only
+        await performSmartUpsert(fileContent, file.name);
         
       } else if (type === 'code') {
         // For code file updates, we need to reprocess with the new code file
@@ -406,22 +391,8 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         // Reconstruct source file content from raw_data
         const sourceFileContent = reconstructSourceFile(latestRecord);
         
-        // Reprocess with new code file
-        const result = await propertyService.importCSVData(
-          sourceFileContent,
-          fileContent,
-          job.id,
-          new Date().getFullYear(),
-          job.ccdd || job.ccddCode,
-          job.vendor,
-          {
-            code_file_name: file.name,
-            code_file_updated_at: new Date().toISOString(),
-            code_file_as_of_date: asOfDates.code
-          }
-        );
-
-        console.log(`Reprocessed ${result.processed} property records with new code file`);
+        // Enhanced: Smart upsert for code file updates too
+        await performSmartUpsert(sourceFileContent, latestRecord[0].source_file_name, fileContent, file.name);
       }
 
       // Refresh timestamps
@@ -442,6 +413,248 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       setUploadType(null);
       setShowReport(false);
       setPendingSalesDecisions({});
+    }
+  };
+
+  // Smart upsert with permanent change tracking
+  const performSmartUpsert = async (sourceFileContent, sourceFileName, codeFileContent = null, codeFileName = null) => {
+    try {
+      console.log('🔄 Starting smart upsert with permanent tracking...');
+      
+      // 1. Get current yearCCDD prefix for this job
+      const jobYear = new Date(job.created_at).getFullYear();
+      const jobCCDD = job.ccdd || job.ccddCode || '0000';
+      const yearCCDDPrefix = `${jobYear}${jobCCDD}`;
+      
+      // 2. Get ALL current property records for this yearCCDD
+      const { data: currentRecords, error: currentError } = await supabase
+        .from('property_records')
+        .select('*')
+        .like('property_composite_key', `${yearCCDDPrefix}-%`);
+      
+      if (currentError) throw currentError;
+      
+      console.log(`📊 Found ${currentRecords?.length || 0} existing records for ${yearCCDDPrefix}`);
+      
+      // 3. Process new data using proven processors
+      console.log('⚙️ Processing new data through processors...');
+      const result = await propertyService.importCSVData(
+        sourceFileContent,
+        codeFileContent,
+        job.id,
+        jobYear,
+        job.ccdd || job.ccddCode,
+        job.vendor,
+        {
+          source_file_name: sourceFileName,
+          source_file_version_id: crypto.randomUUID(),
+          source_file_uploaded_at: new Date().toISOString(),
+          source_file_as_of_date: asOfDates.source,
+          code_file_name: codeFileName,
+          code_file_updated_at: codeFileContent ? new Date().toISOString() : null,
+          code_file_as_of_date: codeFileContent ? asOfDates.code : null,
+          is_fileupload_update: true // Flag to indicate this is an update
+        }
+      );
+      
+      console.log(`✅ Processors completed: ${result.processed} records processed`);
+      
+      // 4. Get the newly inserted records
+      const { data: newRecords, error: newError } = await supabase
+        .from('property_records')
+        .select('*')
+        .like('property_composite_key', `${yearCCDDPrefix}-%`)
+        .gte('created_at', new Date(Date.now() - 60000).toISOString()); // Records created in last minute
+      
+      if (newError) throw newError;
+      
+      // 5. Perform UPSERT logic and track changes
+      const changeTracking = await performUpsertAndTrackChanges(
+        currentRecords || [], 
+        newRecords || [], 
+        yearCCDDPrefix
+      );
+      
+      // 6. Save permanent change tracking to comparison_reports
+      if (changeTracking.totalChanges > 0) {
+        await saveChangeTracking(changeTracking, sourceFileName, codeFileName);
+      }
+      
+      console.log(`🎯 Upsert complete: ${changeTracking.totalChanges} changes tracked`);
+      console.log(`📝 Final state: ${changeTracking.finalRecordCount} property records for ${yearCCDDPrefix}`);
+      
+      return {
+        processed: result.processed,
+        changes: changeTracking
+      };
+      
+    } catch (error) {
+      console.error('Smart upsert error:', error);
+      throw error;
+    }
+  };
+
+  // Perform upsert logic and track all changes
+  const performUpsertAndTrackChanges = async (currentRecords, newRecords, yearCCDDPrefix) => {
+    try {
+      // Create maps for efficient lookup
+      const currentMap = new Map();
+      const newMap = new Map();
+      
+      currentRecords.forEach(record => {
+        currentMap.set(record.property_composite_key, record);
+      });
+      
+      newRecords.forEach(record => {
+        newMap.set(record.property_composite_key, record);
+      });
+      
+      const addedProperties = [];
+      const removedProperties = [];
+      const updatedProperties = [];
+      const unchangedCount = 0;
+      
+      // Find properties to DELETE (in current but not in new)
+      for (const [compositeKey, currentRecord] of currentMap) {
+        if (!newMap.has(compositeKey)) {
+          removedProperties.push({
+            composite_key: compositeKey,
+            block: currentRecord.property_block,
+            lot: currentRecord.property_lot,
+            qualifier: currentRecord.property_qualifier,
+            property_location: currentRecord.property_location,
+            removed_data: {
+              sales_price: currentRecord.sales_price,
+              property_class: currentRecord.property_cama_class || currentRecord.property_m4_class
+            }
+          });
+          
+          // DELETE from database
+          await supabase
+            .from('property_records')
+            .delete()
+            .eq('property_composite_key', compositeKey);
+        }
+      }
+      
+      // Find properties to ADD or UPDATE
+      for (const [compositeKey, newRecord] of newMap) {
+        if (!currentMap.has(compositeKey)) {
+          // NEW property - already inserted by processor
+          addedProperties.push({
+            composite_key: compositeKey,
+            block: newRecord.property_block,
+            lot: newRecord.property_lot,
+            qualifier: newRecord.property_qualifier,
+            property_location: newRecord.property_location,
+            added_data: {
+              sales_price: newRecord.sales_price,
+              property_class: newRecord.property_cama_class || newRecord.property_m4_class
+            }
+          });
+        } else {
+          // EXISTING property - UPDATE if different
+          const currentRecord = currentMap.get(compositeKey);
+          
+          // Check if significant fields changed
+          const hasChanges = (
+            currentRecord.sales_price !== newRecord.sales_price ||
+            currentRecord.sales_date !== newRecord.sales_date ||
+            currentRecord.property_cama_class !== newRecord.property_cama_class ||
+            currentRecord.property_m4_class !== newRecord.property_m4_class ||
+            JSON.stringify(currentRecord.raw_data) !== JSON.stringify(newRecord.raw_data)
+          );
+          
+          if (hasChanges) {
+            updatedProperties.push({
+              composite_key: compositeKey,
+              block: newRecord.property_block,
+              lot: newRecord.property_lot,
+              qualifier: newRecord.property_qualifier,
+              property_location: newRecord.property_location,
+              old_data: {
+                sales_price: currentRecord.sales_price,
+                sales_date: currentRecord.sales_date,
+                property_class: currentRecord.property_cama_class || currentRecord.property_m4_class
+              },
+              new_data: {
+                sales_price: newRecord.sales_price,
+                sales_date: newRecord.sales_date,
+                property_class: newRecord.property_cama_class || newRecord.property_m4_class
+              }
+            });
+            
+            // UPDATE database - replace old record with new data
+            await supabase
+              .from('property_records')
+              .delete()
+              .eq('property_composite_key', compositeKey);
+            // New record already inserted by processor
+          } else {
+            // No changes - remove the duplicate new record
+            await supabase
+              .from('property_records')
+              .delete()
+              .eq('id', newRecord.id);
+          }
+        }
+      }
+      
+      // Get final record count
+      const { count: finalCount } = await supabase
+        .from('property_records')
+        .select('id', { count: 'exact', head: true })
+        .like('property_composite_key', `${yearCCDDPrefix}-%`);
+      
+      return {
+        addedProperties,
+        removedProperties,
+        updatedProperties,
+        totalChanges: addedProperties.length + removedProperties.length + updatedProperties.length,
+        finalRecordCount: finalCount || 0
+      };
+      
+    } catch (error) {
+      console.error('Upsert and tracking error:', error);
+      throw error;
+    }
+  };
+
+  // Save permanent change tracking for end-of-job reporting
+  const saveChangeTracking = async (changeTracking, sourceFileName, codeFileName) => {
+    try {
+      const changeRecord = {
+        job_id: job.id,
+        change_date: new Date().toISOString(),
+        change_type: 'fileupload_update',
+        source_file_name: sourceFileName,
+        code_file_name: codeFileName,
+        change_data: {
+          added_properties: changeTracking.addedProperties,
+          removed_properties: changeTracking.removedProperties,
+          updated_properties: changeTracking.updatedProperties,
+          summary: {
+            properties_added: changeTracking.addedProperties.length,
+            properties_removed: changeTracking.removedProperties.length,
+            properties_updated: changeTracking.updatedProperties.length,
+            total_changes: changeTracking.totalChanges,
+            final_property_count: changeTracking.finalRecordCount
+          }
+        },
+        processed_by: 'fileupload',
+        created_by: 'current-user' // TODO: Get actual user ID
+      };
+
+      const { error } = await supabase
+        .from('property_change_log') // New table for permanent tracking
+        .insert([changeRecord]);
+
+      if (error) throw error;
+      
+      console.log('💾 Change tracking saved for end-of-job reporting');
+    } catch (error) {
+      console.error('Error saving change tracking:', error);
+      // Don't fail the upload if tracking fails
     }
   };
 
