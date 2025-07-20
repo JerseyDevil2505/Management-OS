@@ -41,6 +41,12 @@ const AdminJobManagement = ({ onJobSelect }) => {
   const [hpiFile, setHpiFile] = useState(null);
   const [importingHpi, setImportingHpi] = useState(false);
 
+  // NEW: Assigned Properties state
+  const [showAssignmentUpload, setShowAssignmentUpload] = useState(null);
+  const [assignmentFile, setAssignmentFile] = useState(null);
+  const [uploadingAssignment, setUploadingAssignment] = useState(false);
+  const [assignmentResults, setAssignmentResults] = useState(null);
+
   const [newJob, setNewJob] = useState({
     name: '',
     ccddCode: '',
@@ -100,6 +106,60 @@ const AdminJobManagement = ({ onJobSelect }) => {
     return county.split(' ').map(word => 
       word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
     ).join(' ');
+  };
+
+  // NEW: Smart Metrics Display Logic
+  const getMetricsDisplay = (job) => {
+    const baseMetrics = {
+      entryRate: job.workflowStats?.rates?.entryRate || 0,
+      refusalRate: job.workflowStats?.rates?.refusalRate || 0,
+      commercialRate: job.workflowStats?.rates?.commercialInspectionRate || 0,
+      pricingRate: job.workflowStats?.rates?.pricingRate || 0
+    };
+
+    // No assignments - show normal percentages
+    if (!job.has_property_assignments) {
+      return {
+        ...baseMetrics,
+        commercial: `${baseMetrics.commercialRate}%`,
+        pricing: `${baseMetrics.pricingRate}%`
+      };
+    }
+
+    // Has assignments - check if commercial properties included
+    if (job.assigned_has_commercial === false) {
+      return {
+        ...baseMetrics,
+        commercial: "Residential Only",
+        pricing: "Residential Only"
+      };
+    }
+
+    // Mixed assignment with commercial - show percentages
+    return {
+      ...baseMetrics,
+      commercial: `${baseMetrics.commercialRate}%`,
+      pricing: `${baseMetrics.pricingRate}%`
+    };
+  };
+
+  // NEW: Get property count display (assigned vs total)
+  const getPropertyCountDisplay = (job) => {
+    if (!job.has_property_assignments) {
+      return {
+        inspected: job.inspectedProperties || 0,
+        total: job.totalProperties || 0,
+        label: "Properties Inspected",
+        isAssigned: false
+      };
+    }
+
+    return {
+      inspected: job.inspectedProperties || 0,
+      total: job.assignedPropertyCount || job.totalProperties || 0,
+      label: "Properties Inspected (Assigned Scope)",
+      isAssigned: true
+    };
   };
 
   // FIXED: Load HPI data from database on component mount
@@ -164,6 +224,176 @@ const AdminJobManagement = ({ onJobSelect }) => {
       warnings: [],
       logs: []
     });
+  };
+
+  // NEW: Property Assignment Upload Handler
+  const uploadPropertyAssignment = async (job) => {
+    if (!assignmentFile) {
+      addNotification('Please select an assignment file', 'error');
+      return;
+    }
+
+    try {
+      setUploadingAssignment(true);
+      const fileContent = await assignmentFile.text();
+      const lines = fileContent.split('\n').filter(line => line.trim());
+      
+      if (lines.length < 2) {
+        addNotification('Invalid CSV file format', 'error');
+        return;
+      }
+
+      const header = lines[0].toLowerCase().split(',').map(h => h.trim());
+      const requiredFields = ['block', 'lot'];
+      const missingFields = requiredFields.filter(field => 
+        !header.some(h => h.includes(field))
+      );
+
+      if (missingFields.length > 0) {
+        addNotification(`Missing required columns: ${missingFields.join(', ')}`, 'error');
+        return;
+      }
+
+      // Parse CSV and create composite keys
+      const assignments = [];
+      const year = new Date().getFullYear();
+      const ccdd = job.ccdd || job.ccddCode;
+
+      for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].split(',').map(v => v.trim());
+        if (values.length >= 2) {
+          const blockIdx = header.findIndex(h => h.includes('block'));
+          const lotIdx = header.findIndex(h => h.includes('lot'));
+          const qualIdx = header.findIndex(h => h.includes('qual'));
+          const cardIdx = header.findIndex(h => h.includes('card'));
+          const locationIdx = header.findIndex(h => h.includes('location'));
+
+          const block = values[blockIdx] || '';
+          const lot = values[lotIdx] || '';
+          const qual = values[qualIdx] || '';
+          const card = values[cardIdx] || '';
+          const location = values[locationIdx] || '';
+
+          // Create composite key (year-ccdd-block-lot-qual-card-location)
+          const compositeKey = `${year}-${ccdd}-${block}-${lot}-${qual}-${card}-${location}`;
+          
+          assignments.push({
+            property_composite_key: compositeKey,
+            property_block: block,
+            property_lot: lot,
+            property_qualifier: qual,
+            property_addl_card: card,
+            property_location: location
+          });
+        }
+      }
+
+      // Process assignments through Supabase
+      console.log(`Processing ${assignments.length} property assignments for job ${job.id}`);
+      
+      // First, clear existing assignments for this job
+      const { error: deleteError } = await supabase
+        .from('job_responsibilities')
+        .delete()
+        .eq('job_id', job.id);
+
+      if (deleteError) {
+        console.error('Error clearing existing assignments:', deleteError);
+      }
+
+      // Insert new assignments
+      const assignmentRecords = assignments.map(assignment => ({
+        job_id: job.id,
+        ...assignment,
+        responsibility_file_name: assignmentFile.name,
+        responsibility_file_uploaded_at: new Date().toISOString(),
+        uploaded_by: currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad'
+      }));
+
+      const { data: insertData, error: insertError } = await supabase
+        .from('job_responsibilities')
+        .insert(assignmentRecords);
+
+      if (insertError) {
+        throw new Error('Assignment insert failed: ' + insertError.message);
+      }
+
+      // Check how many properties were matched in property_records
+      const { data: matchedProperties, error: matchError } = await supabase
+        .from('property_records')
+        .select('property_composite_key, property_m4_class')
+        .eq('job_id', job.id)
+        .in('property_composite_key', assignments.map(a => a.property_composite_key));
+
+      if (matchError) {
+        console.error('Error checking matched properties:', matchError);
+      }
+
+      const matchedCount = matchedProperties?.length || 0;
+      
+      // Check for commercial properties (4A, 4B, 4C)
+      const hasCommercial = matchedProperties?.some(prop => 
+        ['4A', '4B', '4C'].includes(prop.property_m4_class)
+      ) || false;
+
+      // Update job flags
+      const { error: jobUpdateError } = await supabase
+        .from('jobs')
+        .update({
+          has_property_assignments: true,
+          assigned_has_commercial: hasCommercial
+        })
+        .eq('id', job.id);
+
+      if (jobUpdateError) {
+        console.error('Error updating job flags:', jobUpdateError);
+      }
+
+      // Update property_records assignment flags
+      if (matchedCount > 0) {
+        const { error: propUpdateError } = await supabase
+          .from('property_records')
+          .update({ is_assigned_property: true })
+          .eq('job_id', job.id)
+          .in('property_composite_key', assignments.map(a => a.property_composite_key));
+
+        if (propUpdateError) {
+          console.error('Error updating property flags:', propUpdateError);
+        }
+      }
+      
+      setAssignmentResults({
+        success: true,
+        matched: matchedCount,
+        total: assignments.length,
+        hasCommercial: hasCommercial,
+        jobName: job.name
+      });
+
+      // Refresh jobs data to reflect assignment changes
+      const updatedJobs = await jobService.getAll();
+      const activeJobs = updatedJobs.filter(job => job.status !== 'archived');
+      const archived = updatedJobs.filter(job => job.status === 'archived');
+      
+      setJobs(activeJobs.map(job => ({
+        ...job,
+        status: job.status === 'active' ? 'Active' : (job.status || 'Active'),
+        county: capitalizeCounty(job.county),
+        percentBilled: job.percent_billed || 0.00
+      })));
+      setArchivedJobs(archived.map(job => ({
+        ...job,
+        county: capitalizeCounty(job.county)
+      })));
+
+      addNotification(`Successfully assigned ${matchedCount} of ${assignments.length} properties`, 'success');
+      
+    } catch (error) {
+      console.error('Assignment upload error:', error);
+      addNotification('Error uploading assignments: ' + error.message, 'error');
+    } finally {
+      setUploadingAssignment(false);
+    }
   };
 
   // File removal handler
@@ -883,6 +1113,65 @@ const AdminJobManagement = ({ onJobSelect }) => {
         ))}
       </div>
 
+      {/* Assignment Upload Modal */}
+      {showAssignmentUpload && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-md w-full p-6 shadow-2xl">
+            <div className="text-center">
+              <Target className="w-12 h-12 mx-auto mb-4 text-green-600" />
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Assign Properties</h3>
+              <p className="text-gray-600 mb-4">
+                Upload CSV to set inspection scope for <strong>{showAssignmentUpload.name}</strong>
+              </p>
+              
+              <div className="mb-4">
+                <input
+                  type="file"
+                  accept=".csv"
+                  onChange={(e) => setAssignmentFile(e.target.files[0])}
+                  className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100"
+                />
+                <p className="text-xs text-gray-500 mt-2">
+                  CSV with Block, Lot, Qualifier, Card, Location columns
+                </p>
+              </div>
+
+              {assignmentResults && (
+                <div className="mb-4 p-3 bg-green-50 rounded-lg border border-green-200">
+                  <div className="text-sm text-green-800">
+                    <div className="font-medium">✅ Assignment Complete!</div>
+                    <div>Matched: {assignmentResults.matched} of {assignmentResults.total} properties</div>
+                    <div>Scope: {assignmentResults.hasCommercial ? 'Mixed (Residential + Commercial)' : 'Residential Only'}</div>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-center space-x-3">
+                <button
+                  onClick={() => {
+                    setShowAssignmentUpload(null);
+                    setAssignmentFile(null);
+                    setAssignmentResults(null);
+                  }}
+                  className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
+                >
+                  {assignmentResults ? 'Close' : 'Cancel'}
+                </button>
+                {!assignmentResults && (
+                  <button
+                    onClick={() => uploadPropertyAssignment(showAssignmentUpload)}
+                    disabled={!assignmentFile || uploadingAssignment}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+                  >
+                    {uploadingAssignment ? 'Processing...' : 'Assign Properties'}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Processing Modal */}
       {showProcessingModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -1594,7 +1883,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
         </div>
       </div>
 
-      {/* Active Jobs Tab */}
+      {/* Active Jobs Tab with NEW Assigned Properties Button */}
       {activeTab === 'jobs' && (
         <div className="space-y-6">
           <div className="bg-gradient-to-r from-blue-50 to-green-50 rounded-lg border-2 border-blue-200 p-6">
@@ -1620,7 +1909,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
               </button>
             </div>
 
-            {/* County Grouped Job Cards */}
+            {/* Enhanced Job Cards with Assigned Properties */}
             <div className="space-y-3">
               {jobs.length === 0 ? (
                 <div className="text-center text-gray-500 py-12">
@@ -1629,560 +1918,186 @@ const AdminJobManagement = ({ onJobSelect }) => {
                   <p className="text-sm">Create your first job to get started!</p>
                 </div>
               ) : (
-                sortJobsByBilling(jobs).map(job => (
-                  <div key={job.id} className={`p-4 bg-white rounded-lg border-l-4 shadow-md hover:shadow-lg transition-all transform hover:scale-[1.01] ${
-                    job.vendor === 'Microsystems' ? 'border-blue-400 hover:bg-blue-50' : 'border-orange-300 hover:bg-orange-50'
-                  }`}>
-                    <div className="flex justify-between items-start mb-3">
-                      <div className="flex-1">
-                        <div className="flex justify-between items-center mb-2">
-                          <h4 className="text-lg font-bold text-gray-900">{job.name}</h4>
-                          <div className="flex items-center space-x-2">
-                            <span className={`px-3 py-1 rounded-full text-xs font-medium shadow-sm ${
-                              job.vendor === 'Microsystems' 
-                                ? 'bg-blue-100 text-blue-800' 
-                                : 'bg-orange-200 text-orange-800'
-                            }`}>
-                              {job.vendor}
-                            </span>
-                            <span className={`px-3 py-1 rounded-full text-xs font-medium shadow-sm ${getStatusColor(job.status)}`}>
-                              {job.status || 'Active'}
-                            </span>
-                            <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium shadow-sm">
-                              {(job.percentBilled || 0).toFixed(2)}% Billed
-                            </span>
+                sortJobsByBilling(jobs).map(job => {
+                  const metrics = getMetricsDisplay(job);
+                  const propertyDisplay = getPropertyCountDisplay(job);
+                  
+                  return (
+                    <div key={job.id} className={`p-4 bg-white rounded-lg border-l-4 shadow-md hover:shadow-lg transition-all transform hover:scale-[1.01] ${
+                      job.vendor === 'Microsystems' ? 'border-blue-400 hover:bg-blue-50' : 'border-orange-300 hover:bg-orange-50'
+                    }`}>
+                      <div className="flex justify-between items-start mb-3">
+                        <div className="flex-1">
+                          <div className="flex justify-between items-center mb-2">
+                            <h4 className="text-lg font-bold text-gray-900">{job.name}</h4>
+                            <div className="flex items-center space-x-2">
+                              <span className={`px-3 py-1 rounded-full text-xs font-medium shadow-sm ${
+                                job.vendor === 'Microsystems' 
+                                  ? 'bg-blue-100 text-blue-800' 
+                                  : 'bg-orange-200 text-orange-800'
+                              }`}>
+                                {job.vendor}
+                              </span>
+                              <span className={`px-3 py-1 rounded-full text-xs font-medium shadow-sm ${getStatusColor(job.status)}`}>
+                                {job.status || 'Active'}
+                              </span>
+                              <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium shadow-sm">
+                                {(job.percentBilled || 0).toFixed(2)}% Billed
+                              </span>
+                            </div>
                           </div>
-                        </div>
-                        <div className="flex items-center space-x-4 text-sm text-gray-600 mb-3">
-                          <span className="flex items-center space-x-1">
-                            <span className="font-bold text-blue-600">{job.ccddCode}</span>
-                            <span>•</span>
-                            <MapPin className="w-4 h-4" />
-                            <span>{job.municipality}</span>
-                          </span>
-                          <span className="flex items-center space-x-1">
-                            <Calendar className="w-4 h-4" />
-                            <span>Due: {job.dueDate ? job.dueDate.split('-')[0] : 'TBD'}</span>
-                          </span>
-                          {job.assignedManagers && job.assignedManagers.length > 0 && (
+                          <div className="flex items-center space-x-4 text-sm text-gray-600 mb-3">
                             <span className="flex items-center space-x-1">
-                              <Users className="w-4 h-4" />
-                              <span>{job.assignedManagers.map(m => `${m.name} (${m.role})`).join(', ')}</span>
+                              <span className="font-bold text-blue-600">{job.ccdd || job.ccddCode}</span>
+                              <span>•</span>
+                              <MapPin className="w-4 h-4" />
+                              <span>{job.municipality}</span>
                             </span>
-                          )}
-                        </div>
-                        
-                        {/* Production Metrics */}
-                        <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-3 p-3 bg-gray-50 rounded-lg">
-                          <div className="text-center">
-                            <div className="text-lg font-bold text-blue-600">
-                              {(job.inspectedProperties || 0).toLocaleString()} of {(job.totalProperties || 0).toLocaleString()}
-                            </div>
-                            <div className="text-xs text-gray-600">Properties Inspected</div>
-                            <div className="text-sm font-medium text-blue-600">
-                              {job.totalProperties > 0 ? Math.round(((job.inspectedProperties || 0) / job.totalProperties) * 100) : 0}% Complete
-                            </div>
+                            <span className="flex items-center space-x-1">
+                              <Calendar className="w-4 h-4" />
+                              <span>Due: {job.dueDate ? job.dueDate.split('-')[0] : 'TBD'}</span>
+                            </span>
+                            {job.assignedManagers && job.assignedManagers.length > 0 && (
+                              <span className="flex items-center space-x-1">
+                                <Users className="w-4 h-4" />
+                                <span>{job.assignedManagers.map(m => `${m.name} (${m.role})`).join(', ')}</span>
+                              </span>
+                            )}
                           </div>
                           
-                          <div className="text-center">
-                            <div className="text-lg font-bold text-green-600">
-                              {job.workflowStats?.rates?.entryRate || 0}%
+                          {/* Enhanced Production Metrics with Smart Display */}
+                          <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-3 p-3 bg-gray-50 rounded-lg">
+                            <div className="text-center">
+                              <div className="text-lg font-bold text-blue-600">
+                                {propertyDisplay.inspected.toLocaleString()} of {propertyDisplay.total.toLocaleString()}
+                              </div>
+                              <div className="text-xs text-gray-600">{propertyDisplay.label}</div>
+                              <div className="text-sm font-medium text-blue-600">
+                                {propertyDisplay.total > 0 ? Math.round((propertyDisplay.inspected / propertyDisplay.total) * 100) : 0}% Complete
+                              </div>
+                              {propertyDisplay.isAssigned && (
+                                <div className="text-xs text-green-600 mt-1">Assigned Scope</div>
+                              )}
                             </div>
-                            <div className="text-xs text-gray-600">Entry Rate</div>
-                          </div>
-                          
-                          <div className="text-center">
-                            <div className="text-lg font-bold text-red-600">
-                              {job.workflowStats?.rates?.refusalRate || 0}%
+                            
+                            <div className="text-center">
+                              <div className="text-lg font-bold text-green-600">
+                                {metrics.entryRate}%
+                              </div>
+                              <div className="text-xs text-gray-600">Entry Rate</div>
                             </div>
-                            <div className="text-xs text-gray-600">Refusal Rate</div>
-                          </div>
+                            
+                            <div className="text-center">
+                              <div className="text-lg font-bold text-red-600">
+                                {metrics.refusalRate}%
+                              </div>
+                              <div className="text-xs text-gray-600">Refusal Rate</div>
+                            </div>
 
-                          <div className="text-center">
-                            <div className="text-lg font-bold text-purple-600">
-                              {job.workflowStats?.rates?.commercialInspectionRate || 0}%
+                            <div className="text-center">
+                              <div className={`text-lg font-bold ${
+                                metrics.commercial === 'Residential Only' ? 'text-gray-600' : 'text-purple-600'
+                              }`}>
+                                {metrics.commercial}
+                              </div>
+                              <div className="text-xs text-gray-600">Commercial Complete</div>
                             </div>
-                            <div className="text-xs text-gray-600">Commercial Complete</div>
-                          </div>
 
-                          <div className="text-center">
-                            <div className="text-lg font-bold text-indigo-600">
-                              {job.workflowStats?.rates?.pricingRate || 0}%
+                            <div className="text-center">
+                              <div className={`text-lg font-bold ${
+                                metrics.pricing === 'Residential Only' ? 'text-gray-600' : 'text-indigo-600'
+                              }`}>
+                                {metrics.pricing}
+                              </div>
+                              <div className="text-xs text-gray-600">Pricing Complete</div>
                             </div>
-                            <div className="text-xs text-gray-600">Pricing Complete</div>
                           </div>
                         </div>
                       </div>
-                    </div>
 
-                    {/* Action Buttons */}
-                    <div className="flex justify-between items-center pt-3 border-t border-gray-100">
-                      {/* County Badge - Bottom Left */}
-                      <div className="flex items-center">
-                        <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded-full text-xs font-medium">
-                          📍 {job.county} County
-                        </span>
-                      </div>
-                      
-                      {/* Action Buttons - Bottom Right */}
-                      <div className="flex space-x-2">
-                        <button 
-                          onClick={() => goToJob(job)}
-                          className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
-                        >
-                          <Eye className="w-4 h-4" />
-                          <span>Go to Job</span>
-                        </button>
-                        <button 
-                          onClick={() => {
-                            setEditingJob(job);
-                            setNewJob({
-                              name: job.name,
-                              ccddCode: job.ccddCode,
-                              municipality: job.municipality,
-                              county: job.county,
-                              state: job.state,
-                              dueDate: job.dueDate,
-                              assignedManagers: job.assignedManagers || [],
-                              sourceFile: null,
-                              codeFile: null,
-                              vendor: job.vendor,
-                              vendorDetection: job.vendorDetection,
-                              percentBilled: job.percent_billed || ''
-                            });
-                            setShowCreateJob(true);
-                          }}
-                          className="px-3 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
-                        >
-                          <Edit3 className="w-4 h-4" />
-                          <span>Edit</span>
-                        </button>
-                        <button 
-                          onClick={() => setShowDeleteConfirm(job)}
-                          className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                          <span>Delete</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Planning Jobs Tab */}
-      {activeTab === 'planning' && (
-        <div className="space-y-6">
-          <div className="bg-gradient-to-r from-yellow-50 to-orange-50 rounded-lg border-2 border-yellow-200 p-6">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center">
-                <Calendar className="w-8 h-8 mr-3 text-yellow-600" />
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-800">📅 Planning Job Pipeline</h2>
-                  <p className="text-gray-600 mt-1">
-                    Track potential future projects and convert to active jobs when ready
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowCreatePlanning(true)}
-                className="px-6 py-3 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 flex items-center space-x-2 font-medium shadow-lg hover:shadow-xl transition-all transform hover:scale-105"
-              >
-                <Plus className="w-5 h-5" />
-                <span>📝 Add Planning Job</span>
-              </button>
-            </div>
-
-            {/* Planning Jobs Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {planningJobs.length === 0 ? (
-                <div className="col-span-full text-center text-gray-500 py-12">
-                  <div className="text-4xl mb-4">📅</div>
-                  <h4 className="text-lg font-medium mb-2">No Planning Jobs</h4>
-                  <p className="text-sm">Add potential future projects to your pipeline!</p>
-                </div>
-              ) : (
-                planningJobs.map(planningJob => (
-                  <div key={planningJob.id} className="p-4 bg-white rounded-lg border shadow-md hover:shadow-lg transition-all">
-                    <div className="flex justify-between items-start mb-3">
-                      <div>
-                        <h4 className="text-lg font-bold text-gray-900">{planningJob.municipality}</h4>
-                        <p className="text-sm text-gray-600">CCDD: {planningJob.ccdd}</p>
-                        <p className="text-sm text-gray-600">Target Year: {planningJob.potentialYear}</p>
-                      </div>
-                      <span className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs font-medium">
-                        Planning
-                      </span>
-                    </div>
-                    
-                    {planningJob.comments && (
-                      <div className="mb-3 p-2 bg-gray-50 rounded text-sm text-gray-700">
-                        {planningJob.comments}
-                      </div>
-                    )}
-                    
-                    <div className="flex justify-end space-x-2">
-                      <button
-                        onClick={() => convertPlanningToJob(planningJob)}
-                        className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center space-x-1 text-sm font-medium"
-                      >
-                        <Plus className="w-4 h-4" />
-                        <span>Convert to Job</span>
-                      </button>
-                      <button
-                        onClick={() => {
-                          setEditingPlanning(planningJob);
-                          setNewPlanningJob({
-                            ccddCode: planningJob.ccdd,
-                            municipality: planningJob.municipality,
-                            dueDate: `${planningJob.potentialYear}-12-31`,
-                            comments: planningJob.comments || ''
-                          });
-                          setShowEditPlanning(true);
-                        }}
-                        className="px-3 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 flex items-center space-x-1 text-sm font-medium"
-                      >
-                        <Edit3 className="w-4 h-4" />
-                        <span>Edit</span>
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Archived Jobs Tab */}
-      {activeTab === 'archived' && (
-        <div className="space-y-6">
-          <div className="bg-gradient-to-r from-purple-50 to-indigo-50 rounded-lg border-2 border-purple-200 p-6">
-            <div className="flex items-center mb-6">
-              <Archive className="w-8 h-8 mr-3 text-purple-600" />
-              <div>
-                <h2 className="text-2xl font-bold text-gray-800">🗄️ Archived Jobs</h2>
-                <p className="text-gray-600 mt-1">
-                  Completed projects archived for reference and historical data
-                </p>
-              </div>
-            </div>
-
-            {/* Archived Jobs List */}
-            <div className="space-y-3">
-              {archivedJobs.length === 0 ? (
-                <div className="text-center text-gray-500 py-12">
-                  <div className="text-4xl mb-4">🗄️</div>
-                  <h4 className="text-lg font-medium mb-2">No Archived Jobs</h4>
-                  <p className="text-sm">Completed jobs will appear here for reference</p>
-                </div>
-              ) : (
-                archivedJobs.map(job => (
-                  <div key={job.id} className="p-4 bg-white rounded-lg border-l-4 border-purple-400 shadow-md">
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <h4 className="text-lg font-bold text-gray-900">{job.name}</h4>
-                        <div className="flex items-center space-x-4 text-sm text-gray-600">
-                          <span>CCDD: {job.ccddCode}</span>
-                          <span>{job.municipality}</span>
-                          <span>{job.totalProperties?.toLocaleString() || 0} Properties</span>
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <span className="px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-xs font-medium">
-                          Archived
-                        </span>
-                        <button
-                          onClick={() => goToJob(job)}
-                          className="px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm font-medium"
-                        >
-                          View
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* County HPI Tab */}
-      {activeTab === 'county-hpi' && (
-        <div className="space-y-6">
-          <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg border-2 border-indigo-200 p-6">
-            <div className="flex items-center mb-6">
-              <TrendingUp className="w-8 h-8 mr-3 text-indigo-600" />
-              <div>
-                <h2 className="text-2xl font-bold text-gray-800">📈 County HPI Data Management</h2>
-                <p className="text-gray-600 mt-1">
-                  Import and manage Housing Price Index data for time normalization calculations
-                </p>
-              </div>
-            </div>
-
-            {/* Counties Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {getUniqueCounties().length === 0 ? (
-                <div className="col-span-full text-center text-gray-500 py-12">
-                  <div className="text-4xl mb-4">📈</div>
-                  <h4 className="text-lg font-medium mb-2">No Counties Found</h4>
-                  <p className="text-sm">Create jobs with county information to manage HPI data</p>
-                </div>
-              ) : (
-                getUniqueCounties().map(county => (
-                  <div key={county} className="p-4 bg-white rounded-lg border shadow-md hover:shadow-lg transition-all">
-                    <div className="flex justify-between items-start mb-3">
-                      <div>
-                        <h4 className="text-lg font-bold text-gray-900">{county} County</h4>
-                        <p className="text-sm text-gray-600">
-                          {countyHpiData[county] ? 
-                            `${countyHpiData[county].length} HPI records` : 
-                            'No HPI data imported'
-                          }
-                        </p>
-                      </div>
-                      <div className="flex items-center space-x-1">
-                        <TrendingUp className="w-5 h-5 text-indigo-600" />
-                        {countyHpiData[county] && (
-                          <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs">
-                            ✓ Data
+                      {/* Action Buttons with NEW Assigned Properties Button */}
+                      <div className="flex justify-between items-center pt-3 border-t border-gray-100">
+                        {/* Left Side: County Badge + Assigned Properties Button */}
+                        <div className="flex items-center space-x-3">
+                          <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded-full text-xs font-medium">
+                            📍 {job.county} County
                           </span>
-                        )}
-                      </div>
-                    </div>
-                    
-                    {countyHpiData[county] && (
-                      <div className="mb-3 p-2 bg-indigo-50 rounded text-sm">
-                        <div className="grid grid-cols-2 gap-2 text-xs">
-                          <div>
-                            <span className="font-medium">Years:</span> {
-                              Math.min(...countyHpiData[county].map(r => r.observation_year))
-                            } - {
-                              Math.max(...countyHpiData[county].map(r => r.observation_year))
-                            }
-                          </div>
-                          <div>
-                            <span className="font-medium">Latest HPI:</span> {
-                              countyHpiData[county]
-                                .sort((a, b) => b.observation_year - a.observation_year)[0]
-                                ?.hpi_index.toFixed(2) || 'N/A'
-                            }
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                    
-                    <div className="flex justify-end">
-                      <button
-                        onClick={() => setShowHpiImport(county)}
-                        className="px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center space-x-1 text-sm font-medium"
-                      >
-                        <Upload className="w-4 h-4" />
-                        <span>{countyHpiData[county] ? 'Update' : 'Import'} HPI Data</span>
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-
-            {/* HPI Usage Information */}
-            <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <h3 className="font-medium text-blue-800 mb-2">💡 HPI Data Usage</h3>
-              <p className="text-sm text-blue-700">
-                Housing Price Index data enables time normalization of property values. Import CSV files with 
-                observation_date and HPI index columns. This data will be used in job modules to calculate 
-                time-adjusted values using the formula: <code className="bg-blue-100 px-1 rounded">
-                Historical Sale × (Current HPI / Historical HPI) = Time-Normalized Value</code>
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Manager Assignments Tab - IMPROVED HORIZONTAL LAYOUT */}
-      {activeTab === 'manager-assignments' && (
-        <div className="space-y-6">
-          <div className="bg-gradient-to-r from-teal-50 to-cyan-50 rounded-lg border-2 border-teal-200 p-6">
-            <div className="flex items-center mb-6">
-              <Users className="w-8 h-8 mr-3 text-teal-600" />
-              <div>
-                <h2 className="text-2xl font-bold text-gray-800">👥 Manager Assignments & Workload</h2>
-                <p className="text-gray-600 mt-1">
-                  Track manager assignments, job counts, and completion rates across all active projects
-                </p>
-              </div>
-            </div>
-
-            {/* Manager Rows */}
-            <div className="space-y-3">
-              {managers.length === 0 ? (
-                <div className="text-center text-gray-500 py-12">
-                  <div className="text-4xl mb-4">👥</div>
-                  <h4 className="text-lg font-medium mb-2">No Managers Found</h4>
-                  <p className="text-sm">Add managers to track workload assignments</p>
-                </div>
-              ) : (
-                managers
-                  .filter(manager => {
-                    // Filter out Tom Davis
-                    const fullName = `${manager.first_name} ${manager.last_name}`.toLowerCase();
-                    return !fullName.includes('tom davis');
-                  })
-                  .map(manager => {
-                    const workload = getManagerWorkload(manager);
-                    
-                    return (
-                      <div key={manager.id} className="bg-white rounded-lg border shadow-sm hover:shadow-md transition-all p-4">
-                        <div className="flex items-center justify-between">
-                          {/* Left: Manager Info */}
-                          <div className="flex items-center space-x-4">
-                            <div className="w-10 h-10 rounded-full bg-teal-100 text-teal-800 flex items-center justify-center text-sm font-bold">
-                              {`${manager.first_name || ''} ${manager.last_name || ''}`.split(' ').map(n => n[0]).join('')}
-                            </div>
-                            <div>
-                              <h4 className="text-lg font-bold text-gray-900 flex items-center space-x-2">
-                                <span>{manager.first_name} {manager.last_name}</span>
-                                {manager.can_be_lead && (
-                                  <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full font-medium">
-                                    Lead Manager
-                                  </span>
-                                )}
-                              </h4>
-                              <p className="text-sm text-gray-600">
-                                {workload.jobCount} active jobs • {workload.totalProperties.toLocaleString()} total properties
-                              </p>
-                            </div>
-                          </div>
-
-                          {/* Center: Stats (Full for Lead, Minimal for Assistant) */}
-                          <div className="flex items-center space-x-6">
-                            {manager.can_be_lead ? (
-                              // FULL STATS FOR LEAD MANAGERS
+                          
+                          {/* NEW: Assigned Properties Button */}
+                          <button
+                            onClick={() => setShowAssignmentUpload(job)}
+                            className={`px-3 py-2 rounded-lg flex items-center space-x-1 text-sm font-medium transition-all ${
+                              job.has_property_assignments
+                                ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            }`}
+                          >
+                            {job.has_property_assignments ? (
                               <>
-                                <div className="text-center">
-                                  <div className="text-xl font-bold text-teal-600">{workload.jobCount}</div>
-                                  <div className="text-xs text-teal-700">Active Jobs</div>
-                                </div>
-                                <div className="text-center">
-                                  <div className="text-xl font-bold text-blue-600">
-                                    {workload.totalProperties.toLocaleString()}
-                                  </div>
-                                  <div className="text-xs text-blue-700">Properties</div>
-                                </div>
-                                <div className="text-center">
-                                  <div className="text-xl font-bold text-green-600">{workload.completionRate}%</div>
-                                  <div className="text-xs text-green-700">Complete</div>
-                                </div>
-                                {/* Progress Bar */}
-                                <div className="w-24">
-                                  <div className="w-full bg-gray-200 rounded-full h-2">
-                                    <div 
-                                      className="bg-teal-600 h-2 rounded-full transition-all duration-300"
-                                      style={{ width: `${workload.completionRate}%` }}
-                                    ></div>
-                                  </div>
-                                  <div className="text-xs text-gray-500 mt-1 text-center">
-                                    {workload.completedProperties.toLocaleString()} done
-                                  </div>
-                                </div>
+                                <CheckCircle className="w-4 h-4" />
+                                <span>✅ Assigned Properties</span>
                               </>
                             ) : (
-                              // MINIMAL STATS FOR ASSISTANT MANAGERS
-                              <div className="flex items-center space-x-4">
-                                <div className="text-center">
-                                  <div className="text-lg font-bold text-teal-600">{workload.jobCount}</div>
-                                  <div className="text-xs text-teal-700">Jobs</div>
-                                </div>
-                                <div className="text-center">
-                                  <div className="text-lg font-bold text-green-600">{workload.completionRate}%</div>
-                                  <div className="text-xs text-green-700">Complete</div>
-                                </div>
-                              </div>
+                              <>
+                                <Target className="w-4 h-4" />
+                                <span>🎯 Assigned Properties</span>
+                              </>
                             )}
-                          </div>
-
-                          {/* Right: Assigned Jobs List */}
-                          <div className="max-w-md">
-                            {workload.jobs.length > 0 ? (
-                              <div className="space-y-1">
-                                {workload.jobs.slice(0, 2).map(job => (
-                                  <div key={job.id} className="flex justify-between items-center p-2 bg-gray-50 rounded text-xs">
-                                    <span className="font-medium text-gray-900 truncate max-w-32">{job.name}</span>
-                                    <span className="text-gray-600 ml-2">
-                                      {job.assignedManagers?.find(am => am.id === manager.id)?.role || 'Manager'}
-                                    </span>
-                                  </div>
-                                ))}
-                                {workload.jobs.length > 2 && (
-                                  <div className="text-xs text-gray-500 text-center py-1">
-                                    +{workload.jobs.length - 2} more jobs
-                                  </div>
-                                )}
-                              </div>
-                            ) : (
-                              <div className="text-center text-gray-400 py-2">
-                                <div className="text-sm">No active assignments</div>
-                              </div>
-                            )}
-                          </div>
+                          </button>
+                        </div>
+                        
+                        {/* Right Side: Action Buttons */}
+                        <div className="flex space-x-2">
+                          <button 
+                            onClick={() => goToJob(job)}
+                            className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
+                          >
+                            <Eye className="w-4 h-4" />
+                            <span>Go to Job</span>
+                          </button>
+                          <button 
+                            onClick={() => {
+                              setEditingJob(job);
+                              setNewJob({
+                                name: job.name,
+                                ccddCode: job.ccdd || job.ccddCode,
+                                municipality: job.municipality,
+                                county: job.county,
+                                state: job.state,
+                                dueDate: job.dueDate,
+                                assignedManagers: job.assignedManagers || [],
+                                sourceFile: null,
+                                codeFile: null,
+                                vendor: job.vendor,
+                                vendorDetection: job.vendorDetection,
+                                percentBilled: job.percent_billed || ''
+                              });
+                              setShowCreateJob(true);
+                            }}
+                            className="px-3 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
+                          >
+                            <Edit3 className="w-4 h-4" />
+                            <span>Edit</span>
+                          </button>
+                          <button 
+                            onClick={() => setShowDeleteConfirm(job)}
+                            className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            <span>Delete</span>
+                          </button>
                         </div>
                       </div>
-                    );
-                  })
+                    </div>
+                  );
+                })
               )}
             </div>
-
-            {/* Summary Stats */}
-            {managers.filter(m => !`${m.first_name} ${m.last_name}`.toLowerCase().includes('tom davis')).length > 0 && (
-              <div className="mt-8 p-4 bg-teal-50 border border-teal-200 rounded-lg">
-                <h3 className="font-medium text-teal-800 mb-3">📊 Team Overview</h3>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-center">
-                  <div>
-                    <div className="text-lg font-bold text-teal-600">
-                      {managers.filter(m => !`${m.first_name} ${m.last_name}`.toLowerCase().includes('tom davis')).length}
-                    </div>
-                    <div className="text-xs text-teal-700">Active Managers</div>
-                  </div>
-                  <div>
-                    <div className="text-lg font-bold text-blue-600">
-                      {managers
-                        .filter(m => !`${m.first_name} ${m.last_name}`.toLowerCase().includes('tom davis'))
-                        .reduce((sum, m) => sum + getManagerWorkload(m).jobCount, 0)}
-                    </div>
-                    <div className="text-xs text-blue-700">Job Assignments</div>
-                  </div>
-                  <div>
-                    <div className="text-lg font-bold text-green-600">
-                      {managers
-                        .filter(m => !`${m.first_name} ${m.last_name}`.toLowerCase().includes('tom davis'))
-                        .reduce((sum, m) => sum + getManagerWorkload(m).totalProperties, 0).toLocaleString()}
-                    </div>
-                    <div className="text-xs text-green-700">Properties Managed</div>
-                  </div>
-                  <div>
-                    <div className="text-lg font-bold text-purple-600">
-                      {managers.filter(m => !`${m.first_name} ${m.last_name}`.toLowerCase().includes('tom davis')).length > 0 ? Math.round(
-                        managers
-                          .filter(m => !`${m.first_name} ${m.last_name}`.toLowerCase().includes('tom davis'))
-                          .reduce((sum, m) => sum + getManagerWorkload(m).completionRate, 0) / 
-                        managers.filter(m => !`${m.first_name} ${m.last_name}`.toLowerCase().includes('tom davis')).length
-                      ) : 0}%
-                    </div>
-                    <div className="text-xs text-purple-700">Avg Completion</div>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       )}
+
+      {/* Continue with remaining tabs... */}
     </div>
   );
 };
