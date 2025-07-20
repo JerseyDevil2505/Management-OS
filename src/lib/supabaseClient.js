@@ -778,21 +778,37 @@ export const utilityService = {
     }
   },
 
-  // Simplified stats using single table
+  // Fixed stats function - should now show correct property count
   async getStats() {
     try {
-      const [employees, jobs, properties, sourceFiles] = await Promise.all([
-        supabase.from('employees').select('id', { count: 'exact', head: true }),
-        supabase.from('jobs').select('id', { count: 'exact', head: true }),
-        supabase.from('property_records').select('id', { count: 'exact', head: true }),
-        supabase.from('source_file_versions').select('id', { count: 'exact', head: true })
-      ]);
+      // Get basic counts separately to avoid Promise.all masking errors
+      const { count: employeeCount, error: empError } = await supabase
+        .from('employees')
+        .select('id', { count: 'exact', head: true });
+
+      const { count: jobCount, error: jobError } = await supabase
+        .from('jobs')
+        .select('id', { count: 'exact', head: true });
+
+      const { count: propertyCount, error: propError } = await supabase
+        .from('property_records')
+        .select('id', { count: 'exact', head: true });
+
+      const { count: sourceFileCount, error: fileError } = await supabase
+        .from('source_file_versions')
+        .select('id', { count: 'exact', head: true });
+
+      // Log any errors but don't fail completely
+      if (empError) console.error('Employee count error:', empError);
+      if (jobError) console.error('Job count error:', jobError);
+      if (propError) console.error('Property count error:', propError);
+      if (fileError) console.error('Source file count error:', fileError);
 
       return {
-        employees: employees.count || 0,
-        jobs: jobs.count || 0,
-        properties: properties.count || 0,
-        sourceFiles: sourceFiles.count || 0
+        employees: employeeCount || 0,
+        jobs: jobCount || 0,
+        properties: propertyCount || 0,
+        sourceFiles: sourceFileCount || 0
       };
     } catch (error) {
       console.error('Stats fetch error:', error);
