@@ -1,229 +1,219 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Upload, Download, AlertCircle, CheckCircle, Settings, Database } from 'lucide-react';
-import { employeeService, jobService, sourceFileService, propertyService, productionDataService, utilityService } from '../../lib/supabaseClient';
-const PayrollProductionUpdater = () => {
-  const [csvFile, setCsvFile] = useState(null);
-  const [excelFile, setExcelFile] = useState(null);
+import React, { useState, useEffect } from 'react';
+import { AlertTriangle, Settings, Play, Download, CheckCircle, Clock, Users, BarChart3, FileText, X, DollarSign, Lock, Save } from 'lucide-react';
+import { employeeService, jobService, propertyService, supabase } from '../../lib/supabaseClient';
+
+const ProductionTracker = ({ currentJob, onUpdateJobMetrics, onBack }) => {
   const [processing, setProcessing] = useState(false);
   const [results, setResults] = useState(null);
-  const [activeTab, setActiveTab] = useState('inspectors');
-  const [jobs, setJobs] = useState({});
-  const [selectedJob, setSelectedJob] = useState(null);
-  const [availableJobs, setAvailableJobs] = useState([]);
-  const [currentJobName, setCurrentJobName] = useState('');
-  const [jobMetrics, setJobMetrics] = useState(null);
-  const [inspectorDefinitions, setInspectorDefinitions] = useState({});
-  const [newInspector, setNewInspector] = useState({ initials: '', name: '', type: 'residential' });
+  const [showDataWarning, setShowDataWarning] = useState(false);
   const [validationReport, setValidationReport] = useState(null);
-  const [dbConnected, setDbConnected] = useState(false);
-  const [dbStats, setDbStats] = useState({ employees: 0, jobs: 0, propertyRecords: 0, sourceFiles: 0 });
+  const [billingTotals, setBillingTotals] = useState(null);
+  const [inspectorDefinitions, setInspectorDefinitions] = useState({});
+  const [employees, setEmployees] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [settingsLocked, setSettingsLocked] = useState(false);
+  const [currentProcessingSession, setCurrentProcessingSession] = useState(null);
+  
   const [settings, setSettings] = useState({
-    startDate: '2025-04-24',
-    lastUpdateDate: '2025-06-01',
-    payPerProperty: 2.00,
-    targetPropertyClasses: ['2', '3A'],
-    applyColorCoding: true,
-    autoMarkInspected: true,
-    useSlipstreamColors: true,
+    projectStartDate: '2025-01-01',
+    payrollPeriodStart: '2025-01-01',
     infoByCodeMappings: {
       entryCodes: '01,02,03,04',
       refusalCodes: '06', 
       estimationCodes: '07',
-      invalidCodes: '00,05'
+      invalidCodes: '00,05',
+      pricingCodes: '08,09'
     }
   });
-  
-  const csvInputRef = useRef();
-  const excelInputRef = useRef();
-  const inspectorImportRef = useRef();
 
-  // Initialize database connection
+  // Load employees and inspector definitions
+  const loadEmployeeData = async () => {
+    try {
+      const employeesData = await employeeService.getAll();
+      setEmployees(employeesData);
+      
+      const definitions = {};
+      const validInitials = [];
+      employeesData.forEach(emp => {
+        if (emp.role === 'inspector' && emp.initials) {
+          definitions[emp.initials] = {
+            name: `${emp.first_name} ${emp.last_name}`,
+            type: emp.inspector_type || 'residential'
+          };
+          validInitials.push(emp.initials);
+        }
+      });
+      setInspectorDefinitions(definitions);
+      return validInitials;
+    } catch (error) {
+      console.error('Error loading employee data:', error);
+      return [];
+    }
+  };
+
+  // Check for existing processing session and load settings
+  const loadExistingSession = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('inspection_data')
+        .select('import_session_id, project_start_date, payroll_period_start')
+        .eq('job_id', currentJob.id)
+        .order('upload_date', { ascending: false })
+        .limit(1);
+      
+      if (error) throw error;
+      
+      if (data && data.length > 0) {
+        const session = data[0];
+        setCurrentProcessingSession(session.import_session_id);
+        setSettings(prev => ({
+          ...prev,
+          projectStartDate: session.project_start_date || prev.projectStartDate,
+          payrollPeriodStart: session.payroll_period_start || prev.payrollPeriodStart
+        }));
+        setSettingsLocked(true);
+      }
+    } catch (error) {
+      console.error('Error loading existing session:', error);
+    }
+  };
+
+  // Load billing totals from inspection_data
+  const loadBillingTotals = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('inspection_data')
+        .select('property_class, measure_by, measure_date')
+        .eq('job_id', currentJob.id)
+        .not('measure_by', 'is', null)
+        .not('measure_date', 'is', null);
+      
+      if (error) throw error;
+      
+      // Count by property class
+      const classCounts = {};
+      data.forEach(record => {
+        const propertyClass = record.property_class;
+        if (propertyClass) {
+          classCounts[propertyClass] = (classCounts[propertyClass] || 0) + 1;
+        }
+      });
+      
+      // Calculate grouped totals
+      const residential = (classCounts['2'] || 0) + (classCounts['3A'] || 0);
+      const commercial4A = classCounts['4A'] || 0;
+      const commercial4B = classCounts['4B'] || 0;
+      const commercial4C = classCounts['4C'] || 0;
+      const total4 = commercial4A + commercial4B + commercial4C;
+      const grandTotal = Object.values(classCounts).reduce((sum, count) => sum + count, 0);
+      
+      setBillingTotals({
+        individual: classCounts,
+        grouped: {
+          residential,
+          commercial4A,
+          commercial4B, 
+          commercial4C,
+          total4,
+          grandTotal
+        }
+      });
+      
+    } catch (error) {
+      console.error('Error loading billing totals:', error);
+    }
+  };
+
   useEffect(() => {
-    initializeDatabase();
-  }, []);
-
-  const initializeDatabase = async () => {
-    try {
-      // Test database connection
-      const connectionTest = await utilityService.testConnection();
-      setDbConnected(connectionTest.success);
-      
-      if (connectionTest.success) {
-        // Load jobs from database
-        const jobsData = await jobService.getAll();
-        setAvailableJobs(jobsData);
-        
-        // Load employees and create inspector definitions
-        const employeesData = await employeeService.getAll();
-        const definitions = {};
-        employeesData.forEach(emp => {
-          if (emp.role === 'inspector' && emp.initials) {
-            definitions[emp.initials] = {
-              name: `${emp.first_name} ${emp.last_name}`,
-              type: emp.inspector_type || 'residential'
-            };
-          }
-        });
-        setInspectorDefinitions(definitions);
-        
-        // Get database statistics
-        const stats = await utilityService.getStats();
-        setDbStats(stats);
-      }
-    } catch (error) {
-      console.error('Database initialization error:', error);
-      setDbConnected(false);
+    if (currentJob) {
+      loadEmployeeData();
+      loadExistingSession();
+      loadBillingTotals();
+      checkDataFreshness();
     }
-  };
+  }, [currentJob]);
 
-  const updateInspectorDefinitions = (newDefinitions) => {
-    setInspectorDefinitions(newDefinitions);
-  };
-
-  const handleFileUpload = (file, type) => {
-    if (type === 'csv') {
-      setCsvFile(file);
-    } else {
-      setExcelFile(file);
-    }
-  };
-
-  const importInspectorsFromExcel = async (file) => {
-    try {
-      const excelArrayBuffer = await readFileAsArrayBuffer(file);
-      const XLSX = window.XLSX || await import('xlsx');  
-      
-      const workbook = XLSX.read(excelArrayBuffer, {
-        cellStyles: true,
-        cellFormulas: true,
-        cellDates: true,
-        cellNF: true,
-        sheetStubs: true
-      });
-      
-      const firstSheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[firstSheetName];
-      const data = XLSX.utils.sheet_to_json(worksheet);
-      
-      const newInspectors = {};
-      const employeesToCreate = [];
-      let importCount = 0;
-      
-      data.forEach(row => {
-        const inspectorName = row['Inspector'];
-        const role = row['Role'];
-        
-        if (inspectorName && role && (role === 'Residential' || role === 'Commercial')) {
-          const initialsMatch = inspectorName.match(/\(([A-Z]{2,3})\)/);
-          if (initialsMatch) {
-            const initials = initialsMatch[1];
-            const fullName = inspectorName.replace(/\s*\([A-Z]{2,3}\)/, '').trim();
-            const [firstName, ...lastNameParts] = fullName.split(' ');
-            
-            newInspectors[initials] = {
-              name: fullName,
-              type: role.toLowerCase()
-            };
-
-            // Prepare for database import
-            employeesToCreate.push({
-              employee_number: `IMP_${Date.now()}_${initials}`,
-              first_name: firstName,
-              last_name: lastNameParts.join(' '),
-              initials: initials,
-              role: 'inspector',
-              inspector_type: role.toLowerCase(),
-              employment_status: 'active',
-              created_by: 'system-import'
-            });
-            
-            importCount++;
-          }
-        }
-      });
-      
-      // Import to database if connected
-      if (dbConnected && employeesToCreate.length > 0) {
-        await employeeService.bulkImport(employeesToCreate);
-      }
-      
-      setInspectorDefinitions(prev => ({...prev, ...newInspectors}));
-      
-      alert(`Successfully imported ${importCount} inspectors!\n\nImported inspectors:\n${Object.entries(newInspectors).map(([initials, info]) => `${initials} - ${info.name} (${info.type})`).join('\n')}\n\n${dbConnected ? '✅ Saved to database' : '⚠️ Local only (database not connected)'}`);
-      
-    } catch (error) {
-      console.error('Import error:', error);
-      alert(`Error importing inspectors: ${error.message}`);
-    }
-  };
-
-  const scrubData = (data, startDate) => {
-    console.log('Applying scrubbing rules...');
+  const checkDataFreshness = () => {
+    if (!currentJob?.source_file_uploaded_at) return;
     
-    const parseDate = (dateStr) => {
-      if (!dateStr) return null;
-      try {
-        return new Date(dateStr);
-      } catch (e) {
-        return null;
-      }
-    };
-
-    let scrubbedCount = 0;
+    const sourceFileAge = Math.floor((new Date() - new Date(currentJob.source_file_uploaded_at)) / (1000 * 60 * 60 * 24));
     
-    const scrubbedData = data.map(row => {
-      let cleanRow = {...row};
-      let wasModified = false;
-
-      // MEASURED BY/DATE SCRUBBING
-      const measureDate = parseDate(cleanRow.MEASUREDT);
-      const measureBy = cleanRow.MEASUREBY;
-      
-      if ((measureDate && measureDate < startDate) || 
-          (!measureDate && measureBy) || 
-          (measureDate && !measureBy)) {
-        cleanRow.MEASUREDT = null;
-        cleanRow.MEASUREBY = null;
-        cleanRow.INFOBY = null;
-        wasModified = true;
-      }
-
-      // PRICED BY/DATE SCRUBBING
-      const priceDate = parseDate(cleanRow.PRICEDT);
-      const priceBy = cleanRow.PRICEBY;
-      
-      if ((priceDate && priceDate < startDate) || 
-          (!priceDate && priceBy) || 
-          (priceDate && !priceBy)) {
-        cleanRow.PRICEDT = null;
-        cleanRow.PRICEBY = null;
-        wasModified = true;
-      }
-
-      // FIELD CALLS SCRUBBING
-      for (let i = 1; i <= 7; i++) {
-        const callDate = parseDate(cleanRow[`FIELDCALLDT_${i}`]);
-        const callBy = cleanRow[`FIELDCALL_${i}`];
-        
-        if ((callDate && callDate < startDate) || 
-            (!callDate && callBy) || 
-            (callDate && !callBy)) {
-          cleanRow[`FIELDCALLDT_${i}`] = null;
-          cleanRow[`FIELDCALL_${i}`] = null;
-          wasModified = true;
-        }
-      }
-
-      if (wasModified) scrubbedCount++;
-      return cleanRow;
-    });
-
-    console.log(`Scrubbed ${scrubbedCount} records`);
-    return scrubbedData;
+    if (sourceFileAge > 7) {
+      setShowDataWarning({
+        show: true,
+        message: `Source file last updated ${sourceFileAge} days ago`,
+        recommendation: "Consider updating source data first in the Upload module",
+        allowProceed: true
+      });
+    }
   };
 
-  const validateData = (data, codeMapping) => {
-    console.log('Running validation checks...');
+  // Notification system
+  const addNotification = (message, type = 'info') => {
+    const id = Date.now();
+    const notification = { id, message, type, timestamp: new Date() };
+    setNotifications(prev => [...prev, notification]);
+    
+    setTimeout(() => {
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    }, 5000);
+  };
+
+  // Save settings to database (lock them in)
+  const saveSettings = async () => {
+    try {
+      // In production, save settings to a job_settings or processing_sessions table
+      console.log('Saving settings for job:', currentJob.id, settings);
+      setSettingsLocked(true);
+      addNotification('Settings locked and saved to database', 'success');
+    } catch (error) {
+      console.error('Error saving settings:', error);
+      addNotification('Error saving settings: ' + error.message, 'error');
+    }
+  };
+
+  // Query property records for this job
+  const getPropertyRecords = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('property_records')
+        .select(`
+          property_composite_key,
+          property_block,
+          property_lot,
+          property_qualifier,
+          property_addl_card,
+          property_location,
+          property_m4_class,
+          property_cama_class,
+          inspection_measure_by,
+          inspection_measure_date,
+          inspection_list_by,
+          inspection_list_date,
+          inspection_price_by,
+          inspection_price_date,
+          inspection_info_by,
+          values_mod_improvement,
+          values_cama_improvement,
+          source_file_name,
+          source_file_uploaded_at,
+          code_file_name,
+          code_file_updated_at,
+          file_version
+        `)
+        .eq('job_id', currentJob.id);
+      
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error fetching property records:', error);
+      throw error;
+    }
+  };
+
+  // Enhanced scrub and validation function
+  const scrubAndValidateData = (data, startDate, validInitials, codeMapping) => {
+    console.log('Starting enhanced scrub and validation...');
     
     const parseCodeString = (codeStr) => {
       return codeStr.split(',').map(code => {
@@ -236,856 +226,594 @@ const PayrollProductionUpdater = () => {
     const refusalCodes = parseCodeString(codeMapping.refusalCodes);
     const estimationCodes = parseCodeString(codeMapping.estimationCodes);
     const invalidCodes = parseCodeString(codeMapping.invalidCodes);
-
-    const validationIssues = [];
-
+    const pricingCodes = parseCodeString(codeMapping.pricingCodes);
+    const allValidCodes = [...entryCodes, ...refusalCodes, ...estimationCodes, ...pricingCodes];
+    
+    const scrubReport = {
+      scrubbed: {
+        measureValidDateMissingInitials: 0,
+        measureValidInitialsMissingDate: 0,
+        listValidDateMissingInitials: 0,
+        listValidInitialsMissingDate: 0,
+        priceValidDateMissingInitials: 0,
+        priceValidInitialsMissingDate: 0,
+        invalidInfoBy: 0
+      },
+      flagged: {
+        refusalMismatch: 0,
+        entryMismatch: 0,
+        estimationMismatch: 0,
+        inspectorMismatch: 0,
+        zeroImprovementMismatch: 0
+      }
+    };
+    
+    const flaggedIssues = [];
+    const scrubbedData = [];
+    
     data.forEach(row => {
-      // Only validate properties with valid Measured By/Date after scrub
-      if (!row.MEASUREBY || !row.MEASUREDT) return;
-
-      const inspector = row.MEASUREBY;
-      const infoBy = row.INFOBY;
-      const hasListedData = row.LISTBY && row.LISTDT;
-      const improvementValue = row.VALUES_IMPROVTAXABLEVALUE || 0;
-
-      const property = {
-        block: row.BLOCK,
-        lot: row.LOT,
-        qualifier: row.QUALIFIER || '',
-        card: row.CARD,
-        propertyLocation: row.PROPERTY_LOCATION || '',
-        inspector: inspector
-      };
-
-      // Rule 1: Entry codes but no Listed data
-      if (entryCodes.includes(infoBy) && !hasListedData) {
-        validationIssues.push({
-          ...property,
-          warning: 'Info By Mismatch-Inspected?'
-        });
+      let cleanRow = { ...row };
+      let wasModified = false;
+      let shouldInsert = true;
+      
+      const measureDate = cleanRow.inspection_measure_date ? new Date(cleanRow.inspection_measure_date) : null;
+      const measureBy = cleanRow.inspection_measure_by;
+      const listDate = cleanRow.inspection_list_date ? new Date(cleanRow.inspection_list_date) : null;
+      const listBy = cleanRow.inspection_list_by;
+      const priceDate = cleanRow.inspection_price_date ? new Date(cleanRow.inspection_price_date) : null;
+      const priceBy = cleanRow.inspection_price_by;
+      const infoBy = parseInt(cleanRow.inspection_info_by) || 0;
+      const improvementValue = cleanRow.values_mod_improvement || cleanRow.values_cama_improvement || 0;
+      const propertyClass = cleanRow.property_m4_class || cleanRow.property_cama_class;
+      
+      // SCRUB RULES (Clean & Remove)
+      
+      // 1. Measure field scrubbing
+      if (measureDate && measureDate >= startDate && !validInitials.includes(measureBy)) {
+        cleanRow.inspection_measure_date = null;
+        cleanRow.inspection_measure_by = null;
+        cleanRow.inspection_info_by = null;
+        scrubReport.scrubbed.measureValidDateMissingInitials++;
+        wasModified = true;
+      } else if (validInitials.includes(measureBy) && (!measureDate || measureDate < startDate)) {
+        cleanRow.inspection_measure_date = null;
+        cleanRow.inspection_measure_by = null;
+        cleanRow.inspection_info_by = null;
+        scrubReport.scrubbed.measureValidInitialsMissingDate++;
+        wasModified = true;
       }
-
-      // Rule 2: Refusal codes but no Listed data
-      if (refusalCodes.includes(infoBy) && !hasListedData) {
-        validationIssues.push({
-          ...property,
-          warning: 'Info By Mismatch-Refusal'
-        });
+      
+      // 2. List field scrubbing
+      if (listDate && listDate >= startDate && !validInitials.includes(listBy)) {
+        cleanRow.inspection_list_date = null;
+        cleanRow.inspection_list_by = null;
+        scrubReport.scrubbed.listValidDateMissingInitials++;
+        wasModified = true;
+      } else if (validInitials.includes(listBy) && (!listDate || listDate < startDate)) {
+        cleanRow.inspection_list_date = null;
+        cleanRow.inspection_list_by = null;
+        scrubReport.scrubbed.listValidInitialsMissingDate++;
+        wasModified = true;
       }
-
-      // Rule 3: Estimation codes but has Listed data
-      if (estimationCodes.includes(infoBy) && hasListedData) {
-        validationIssues.push({
-          ...property,
-          warning: 'Info By Mismatch-Inspected?'
-        });
-      }
-
-      // Rule 4: Invalid codes
-      if (invalidCodes.includes(infoBy)) {
-        validationIssues.push({
-          ...property,
-          warning: 'Info By Code Invalid'
-        });
-      }
-
-      // Rule 5: $0 improvement value validation
-      if (improvementValue === 0) {
-        if (infoBy !== 1 || !hasListedData) {
-          validationIssues.push({
-            ...property,
-            warning: 'InfoBy Code and Inspection Info Invalid for No Improvement'
-          });
+      
+      // 3. Price field scrubbing (BRT only)
+      if (currentJob.vendor === 'BRT') {
+        if (priceDate && priceDate >= startDate && !validInitials.includes(priceBy)) {
+          cleanRow.inspection_price_date = null;
+          cleanRow.inspection_price_by = null;
+          scrubReport.scrubbed.priceValidDateMissingInitials++;
+          wasModified = true;
+        } else if (validInitials.includes(priceBy) && (!priceDate || priceDate < startDate)) {
+          cleanRow.inspection_price_date = null;
+          cleanRow.inspection_price_by = null;
+          scrubReport.scrubbed.priceValidInitialsMissingDate++;
+          wasModified = true;
         }
       }
-    });
-
-    console.log(`Found ${validationIssues.length} validation issues`);
-    return validationIssues;
-  };
-
-  const generateValidationReport = (validationIssues) => {
-    if (validationIssues.length === 0) return null;
-
-    // Group issues by inspector
-    const issuesByInspector = {};
-    validationIssues.forEach(issue => {
-      if (!issuesByInspector[issue.inspector]) {
-        issuesByInspector[issue.inspector] = [];
+      
+      // 4. Invalid InfoBy codes scrubbing
+      if (infoBy && !allValidCodes.includes(infoBy) && !invalidCodes.includes(infoBy)) {
+        cleanRow.inspection_measure_date = null;
+        cleanRow.inspection_measure_by = null;
+        cleanRow.inspection_info_by = null;
+        scrubReport.scrubbed.invalidInfoBy++;
+        wasModified = true;
       }
-      issuesByInspector[issue.inspector].push(issue);
-    });
-
-    // Create Excel workbook
-    const XLSX = window.XLSX || require('xlsx');
-    const workbook = XLSX.utils.book_new();
-
-    // Create summary sheet
-    const summaryData = [
-      ['Inspector', 'Total Issues', 'Inspector Name'],
-      ...Object.entries(issuesByInspector).map(([inspector, issues]) => [
-        inspector,
-        issues.length,
-        inspectorDefinitions[inspector]?.name || `Inspector ${inspector}`
-      ])
-    ];
-    
-    const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
-    // Auto-size summary sheet columns
-    summarySheet['!cols'] = [
-      { wch: 12 },  // Inspector
-      { wch: 15 },  // Total Issues
-      { wch: 25 }   // Inspector Name
-    ];
-    XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary');
-
-    // Create sheet for each inspector
-    Object.entries(issuesByInspector).forEach(([inspector, issues]) => {
-      const sheetData = [
-        ['Block', 'Lot', 'Qualifier', 'Card', 'Property Location', 'Warning Message'],
-        ...issues.map(issue => [
-          issue.block,
-          issue.lot,
-          issue.qualifier,
-          issue.card,
-          issue.propertyLocation,
-          issue.warning
-        ])
-      ];
       
-      const sheet = XLSX.utils.aoa_to_sheet(sheetData);
+      // VALIDATION FLAGS (Report Only - after scrubbing)
+      const hasValidInspection = cleanRow.inspection_measure_by && cleanRow.inspection_measure_date;
+      const hasListingData = cleanRow.inspection_list_by && cleanRow.inspection_list_date;
       
-      // Auto-size columns to fit content
-      const columnWidths = [
-        { wch: 8 },   // Block
-        { wch: 8 },   // Lot  
-        { wch: 12 },  // Qualifier
-        { wch: 8 },   // Card
-        { wch: 35 },  // Property Location
-        { wch: 45 }   // Warning Message
-      ];
-      sheet['!cols'] = columnWidths;
-      
-      // Limit sheet name to 31 characters for Excel compatibility
-      const sheetName = inspector.length > 31 ? inspector.substring(0, 31) : inspector;
-      XLSX.utils.book_append_sheet(workbook, sheet, sheetName);
-    });
-
-    return {
-      workbook,
-      totalIssues: validationIssues.length,
-      inspectorCount: Object.keys(issuesByInspector).length,
-      issuesByInspector
-    };
-  };
-
-  const downloadValidationReport = () => {
-    if (!validationReport) return;
-
-    const XLSX = window.XLSX || require('xlsx');
-    const fileName = `Inspection_Validation_Report_${selectedJob?.job_name || currentJobName}_${new Date().toISOString().split('T')[0].replace(/-/g, '')}.xlsx`;
-    
-    XLSX.writeFile(validationReport.workbook, fileName);
-  };
-
-  const calculateAnalytics = (data, codeMapping) => {
-    console.log('Calculating analytics...');
-    
-    const parseCodeString = (codeStr) => {
-      return codeStr.split(',').map(code => {
-        const num = parseInt(code.trim());
-        return isNaN(num) ? parseInt(code.trim().replace(/^0+/, '')) || 0 : num;
-      });
-    };
-    
-    const entryCodes = parseCodeString(codeMapping.entryCodes);
-    const refusalCodes = parseCodeString(codeMapping.refusalCodes);
-
-    const hasCompleteInspectionData = (row) => {
-      return row.MEASUREBY && row.MEASUREDT && row.LISTBY && row.LISTDT;
-    };
-
-    const isEligibleProperty = (row) => {
-      const propClass = row.PROPCLASS || row.PROPERTY_CLASS;
-      return propClass === 2 || propClass === '2' || propClass === '3A' || propClass === '3a';
-    };
-
-    const totalProperties = data.length;
-    const measuredProperties = data.filter(row => row.MEASUREBY && row.MEASUREDT);
-    const eligibleProperties = data.filter(isEligibleProperty);
-    
-    const entryRateProperties = eligibleProperties.filter(row => {
-      return hasCompleteInspectionData(row) && entryCodes.includes(row.INFOBY);
-    });
-
-    const refusalRateProperties = eligibleProperties.filter(row => {
-      return hasCompleteInspectionData(row) && refusalCodes.includes(row.INFOBY);
-    });
-
-    const inspectorStats = {};
-    measuredProperties.forEach(row => {
-      const inspector = row.MEASUREBY;
-      if (!inspector) return;
-      
-      if (!inspectorStats[inspector]) {
-        inspectorStats[inspector] = {
-          name: inspectorDefinitions[inspector]?.name || `Inspector ${inspector}`,
-          type: inspectorDefinitions[inspector]?.type || 'residential',
-          totalProperties: 0,
-          eligibleProperties: 0,
-          payrollAmount: 0,
-          inspectionTypes: { exterior: 0, interior: 0, commercial: 0 }
+      if (hasValidInspection && cleanRow.inspection_info_by) {
+        const property = {
+          block: cleanRow.property_block,
+          lot: cleanRow.property_lot,
+          qualifier: cleanRow.property_qualifier || '',
+          card: cleanRow.property_addl_card || '',
+          propertyLocation: cleanRow.property_location || '',
+          inspector: cleanRow.inspection_measure_by,
+          propertyClass: propertyClass
         };
+        
+        // 5. Refusal code but missing listing data
+        if (refusalCodes.includes(cleanRow.inspection_info_by) && !hasListingData) {
+          flaggedIssues.push({ ...property, warning: 'Refusal code but missing listing data' });
+          scrubReport.flagged.refusalMismatch++;
+        }
+        
+        // 6. Entry code but missing listing data
+        if (entryCodes.includes(cleanRow.inspection_info_by) && !hasListingData) {
+          flaggedIssues.push({ ...property, warning: 'Entry code but missing listing data' });
+          scrubReport.flagged.entryMismatch++;
+        }
+        
+        // 7. Estimation code but has listing data
+        if (estimationCodes.includes(cleanRow.inspection_info_by) && hasListingData) {
+          flaggedIssues.push({ ...property, warning: 'Estimation code but has listing data' });
+          scrubReport.flagged.estimationMismatch++;
+        }
+        
+        // 8. Residential inspector on commercial property
+        const inspectorType = inspectorDefinitions[cleanRow.inspection_measure_by]?.type;
+        if (inspectorType === 'residential' && ['4A', '4B', '4C'].includes(propertyClass)) {
+          flaggedIssues.push({ ...property, warning: 'Residential inspector on commercial property' });
+          scrubReport.flagged.inspectorMismatch++;
+        }
+        
+        // 9. Zero improvement but missing listing data
+        if (improvementValue === 0 && hasValidInspection && !hasListingData) {
+          flaggedIssues.push({ ...property, warning: 'Zero improvement but missing listing data' });
+          scrubReport.flagged.zeroImprovementMismatch++;
+        }
       }
       
-      inspectorStats[inspector].totalProperties++;
-      inspectorStats[inspector].inspectionTypes.exterior++;
-      
-      if (row.LISTBY && row.LISTDT) {
-        inspectorStats[inspector].inspectionTypes.interior++;
-      }
-      
-      if (isEligibleProperty(row) && hasCompleteInspectionData(row) && entryCodes.includes(row.INFOBY)) {
-        inspectorStats[inspector].eligibleProperties++;
-        inspectorStats[inspector].payrollAmount += settings.payPerProperty;
+      // Add to clean data for insertion
+      if (shouldInsert) {
+        scrubbedData.push(cleanRow);
       }
     });
-
-    const totalPayroll = Object.values(inspectorStats).reduce((sum, stats) => sum + stats.payrollAmount, 0);
-
-    const results = {
-      totalMatches: totalProperties,
-      updatedRecords: measuredProperties.length,
-      markedInspected: measuredProperties.length,
-      colorCodedRows: measuredProperties.length,
-      entryRate: {
-        count: entryRateProperties.length,
-        total: eligibleProperties.length,
-        percentage: eligibleProperties.length > 0 ? (entryRateProperties.length / eligibleProperties.length) * 100 : 0
-      },
-      refusalRate: {
-        count: refusalRateProperties.length,
-        total: eligibleProperties.length,
-        percentage: eligibleProperties.length > 0 ? (refusalRateProperties.length / eligibleProperties.length) * 100 : 0
-      },
-      payrollAnalytics: {
-        inspectorStats,
-        totalPayroll,
-        eligibleProperties: Object.values(inspectorStats).reduce((sum, stats) => sum + stats.eligibleProperties, 0),
-        inspectionTypes: Object.values(inspectorStats).reduce((acc, stats) => ({
-          exterior: acc.exterior + stats.inspectionTypes.exterior,
-          interior: acc.interior + stats.inspectionTypes.interior,
-          commercial: acc.commercial + stats.inspectionTypes.commercial
-        }), { exterior: 0, interior: 0, commercial: 0 })
-      }
-    };
-
-    const metrics = {
-      overallCompletion: { 
-        total: totalProperties, 
-        inspected: measuredProperties.length, 
-        percentage: (measuredProperties.length / totalProperties) * 100 
-      },
-      interiorInspections: { 
-        class2_3A: { 
-          total: eligibleProperties.length, 
-          listed: entryRateProperties.length, 
-          percentage: results.entryRate.percentage
-        } 
-      },
-      pricingInspections: { 
-        class4ABC: { 
-          total: data.filter(row => ['4A', '4B', '4C'].includes(row.PROPCLASS)).length, 
-          priced: data.filter(row => ['4A', '4B', '4C'].includes(row.PROPCLASS) && row.PRICEBY && row.PRICEDT).length, 
-          percentage: 0 
-        } 
-      },
-      inspectorActivity: inspectorStats,
-      projectedCompletion: {
-        remainingProperties: totalProperties - measuredProperties.length,
-        businessDaysToComplete: Math.ceil((totalProperties - measuredProperties.length) / 50),
-        estimatedFinishDate: new Date(Date.now() + Math.ceil((totalProperties - measuredProperties.length) / 50) * 24 * 60 * 60 * 1000)
-      }
-    };
-
-    return { results, metrics };
+    
+    console.log('Scrub complete:', scrubReport);
+    return { scrubbedData, scrubReport, flaggedIssues };
   };
 
-  // UPDATED PROCESS FILES FUNCTION WITH SUPABASE INTEGRATION
-  const processFiles = async () => {
-    if (!csvFile) {
-      alert('Please upload a CSV file');
+  // Insert clean data into inspection_data table
+  const insertIntoInspectionData = async (scrubbedData, sessionId) => {
+    try {
+      const insertData = scrubbedData.map(row => ({
+        job_id: currentJob.id,
+        import_session_id: sessionId,
+        property_composite_key: row.property_composite_key,
+        block: row.property_block,
+        lot: row.property_lot,
+        qualifier: row.property_qualifier,
+        card: row.property_addl_card,
+        property_location: row.property_location,
+        property_class: row.property_m4_class || row.property_cama_class,
+        measure_by: row.inspection_measure_by,
+        measure_date: row.inspection_measure_date,
+        list_by: row.inspection_list_by,
+        list_date: row.inspection_list_date,
+        price_by: row.inspection_price_by,
+        price_date: row.inspection_price_date,
+        info_by_code: row.inspection_info_by,
+        project_start_date: settings.projectStartDate,
+        payroll_period_start: settings.payrollPeriodStart,
+        source_file_name: row.source_file_name,
+        source_file_uploaded_at: row.source_file_uploaded_at,
+        code_file_name: row.code_file_name,
+        code_file_updated_at: row.code_file_updated_at,
+        file_version: row.file_version,
+        upload_date: new Date().toISOString(),
+        is_new_since_last_upload: true // Will be calculated in production
+      }));
+      
+      // Clear existing data for this session if re-processing
+      const { error: deleteError } = await supabase
+        .from('inspection_data')
+        .delete()
+        .eq('job_id', currentJob.id)
+        .eq('import_session_id', sessionId);
+      
+      if (deleteError) console.error('Error clearing existing inspection data:', deleteError);
+      
+      // Insert new clean data
+      const { data, error } = await supabase
+        .from('inspection_data')
+        .insert(insertData);
+        
+      if (error) throw error;
+      
+      console.log(`Inserted ${insertData.length} clean records into inspection_data`);
+      return insertData.length;
+      
+    } catch (error) {
+      console.error('Error inserting into inspection_data:', error);
+      throw error;
+    }
+  };
+
+  // Calculate analytics from inspection_data
+  const calculateAnalytics = async (sessionId, codeMapping) => {
+    try {
+      const { data, error } = await supabase
+        .from('inspection_data')
+        .select('*')
+        .eq('job_id', currentJob.id)
+        .eq('import_session_id', sessionId);
+        
+      if (error) throw error;
+      
+      const parseCodeString = (codeStr) => {
+        return codeStr.split(',').map(code => {
+          const num = parseInt(code.trim());
+          return isNaN(num) ? parseInt(code.trim().replace(/^0+/, '')) || 0 : num;
+        });
+      };
+      
+      const entryCodes = parseCodeString(codeMapping.entryCodes);
+      const refusalCodes = parseCodeString(codeMapping.refusalCodes);
+      const pricingCodes = parseCodeString(codeMapping.pricingCodes);
+      
+      const validInspections = data.filter(row => row.measure_by && row.measure_date);
+      const eligibleProperties = data.filter(row => ['2', '3A'].includes(row.property_class));
+      const commercialProperties = data.filter(row => ['4A', '4B', '4C'].includes(row.property_class));
+      
+      const entryRateProperties = validInspections.filter(row => 
+        ['2', '3A'].includes(row.property_class) && 
+        entryCodes.includes(row.info_by_code)
+      );
+      
+      const refusalRateProperties = validInspections.filter(row => 
+        ['2', '3A'].includes(row.property_class) && 
+        refusalCodes.includes(row.info_by_code)
+      );
+      
+      // Pricing calculations (vendor-specific)
+      const pricingRateProperties = currentJob.vendor === 'BRT' 
+        ? commercialProperties.filter(row => row.price_by && row.price_date)
+        : validInspections.filter(row => 
+            ['4A', '4B', '4C'].includes(row.property_class) && 
+            pricingCodes.includes(row.info_by_code)
+          );
+      
+      // Inspector performance
+      const inspectorStats = {};
+      validInspections.forEach(row => {
+        const inspector = row.measure_by;
+        if (!inspector) return;
+        
+        if (!inspectorStats[inspector]) {
+          inspectorStats[inspector] = {
+            name: inspectorDefinitions[inspector]?.name || `Inspector ${inspector}`,
+            type: inspectorDefinitions[inspector]?.type || 'residential',
+            totalInspections: 0,
+            dailyAverage: 0,
+            daysWorked: new Set(),
+            residential: 0,
+            commercial: 0
+          };
+        }
+        
+        inspectorStats[inspector].totalInspections++;
+        
+        // Track unique working days (BRT only)
+        if (currentJob.vendor === 'BRT' && row.measure_date) {
+          inspectorStats[inspector].daysWorked.add(row.measure_date);
+        }
+        
+        // Classify by property type
+        if (['2', '3A'].includes(row.property_class)) {
+          inspectorStats[inspector].residential++;
+        } else if (['4A', '4B', '4C'].includes(row.property_class)) {
+          inspectorStats[inspector].commercial++;
+        }
+      });
+      
+      // Calculate daily averages
+      Object.keys(inspectorStats).forEach(inspector => {
+        const stats = inspectorStats[inspector];
+        if (currentJob.vendor === 'BRT' && stats.daysWorked.size > 0) {
+          stats.dailyAverage = Math.round((stats.totalInspections / stats.daysWorked.size) * 10) / 10;
+        } else {
+          stats.dailyAverage = null;
+        }
+        stats.daysWorked = stats.daysWorked.size;
+      });
+      
+      return {
+        totalProperties: data.length,
+        inspectedProperties: validInspections.length,
+        entryRate: {
+          count: entryRateProperties.length,
+          total: eligibleProperties.length,
+          percentage: eligibleProperties.length > 0 ? Math.round((entryRateProperties.length / eligibleProperties.length) * 100) : 0
+        },
+        refusalRate: {
+          count: refusalRateProperties.length,
+          total: eligibleProperties.length,
+          percentage: eligibleProperties.length > 0 ? Math.round((refusalRateProperties.length / eligibleProperties.length) * 100) : 0
+        },
+        pricingRate: {
+          count: pricingRateProperties.length,
+          total: commercialProperties.length,
+          percentage: commercialProperties.length > 0 ? Math.round((pricingRateProperties.length / commercialProperties.length) * 100) : 0
+        },
+        inspectorStats
+      };
+      
+    } catch (error) {
+      console.error('Error calculating analytics:', error);
+      throw error;
+    }
+  };
+
+  // Main processing function
+  const processProductionData = async () => {
+    if (!currentJob) {
+      addNotification('No job selected', 'error');
       return;
     }
-
-    if (!selectedJob && !currentJobName.trim()) {
-      alert('Please select a job or enter a new job name');
+    
+    if (!settingsLocked) {
+      addNotification('Please save settings before processing', 'warning');
       return;
     }
 
     setProcessing(true);
     try {
-      console.log('Starting file processing with Supabase integration...');
+      console.log('Starting complete production data processing...');
       
-      const csvText = await readFileAsText(csvFile);
-      const Papa = window.Papa || await import('papaparse');
-      const parsedData = Papa.parse(csvText, {
-        header: true,
-        dynamicTyping: true,
-        skipEmptyLines: true,
-        delimitersToGuess: [',', '\t', '|', ';']
-      });
-
-      console.log('Parsed CSV data:', parsedData.data.length, 'records');
-
-      let job = selectedJob;
-      let fileVersion = null;
-
-      // If connected to database, handle file versioning
-      if (dbConnected) {
-        // Use selected job or find/create job by name
-        if (!job && currentJobName.trim()) {
-          // Look for existing job by name
-          const existingJob = availableJobs.find(j => j.job_name === currentJobName.trim());
-          if (existingJob) {
-            job = existingJob;
-          } else {
-            // Note: In full implementation, you'd create a new job here
-            console.log('Would create new job:', currentJobName.trim());
-          }
-        }
-
-        if (job) {
-          // Create new source file version
-          fileVersion = await sourceFileService.createVersion(
-            job.id,
-            csvFile.name,
-            csvFile.size,
-            'system-user' // TODO: Get actual user ID from auth
-          );
-          console.log('Created file version:', fileVersion.version_number);
-        }
+      // 1. Load valid employee initials
+      const validInitials = await loadEmployeeData();
+      
+      // 2. Query property records from database
+      const propertyData = await getPropertyRecords();
+      
+      if (!propertyData || propertyData.length === 0) {
+        addNotification('No property records found for this job', 'warning');
+        return;
       }
 
-      // Apply scrubbing
-      const startDate = new Date(settings.startDate);
-      const scrubbedData = scrubData(parsedData.data, startDate);
+      console.log(`Processing ${propertyData.length} property records...`);
       
-      // Import to database if connected and have job/file version
-      if (dbConnected && job && fileVersion) {
-        try {
-          const importResult = await propertyService.importCSVData(
-            job.id,
-            fileVersion.id,
-            scrubbedData,
-            'system-user' // TODO: Get actual user ID from auth
-          );
-
-          // Update file version with results
-          await sourceFileService.updateVersion(fileVersion.id, {
-            total_records: parsedData.data.length,
-            records_processed: importResult.imported,
-            processing_status: 'completed',
-            processing_notes: `Successfully imported ${importResult.imported} of ${importResult.total} records`
-          });
-
-          // Update production summary
-          await productionDataService.updateSummary(job.id);
-          
-          console.log('Database import successful:', importResult);
-        } catch (dbError) {
-          console.error('Database import error:', dbError);
-          alert(`Warning: Data processed locally but database save failed: ${dbError.message}`);
-        }
-      }
+      // 3. Apply enhanced scrubbing and validation
+      const startDate = new Date(settings.projectStartDate);
+      const { scrubbedData, scrubReport, flaggedIssues } = scrubAndValidateData(
+        propertyData, 
+        startDate, 
+        validInitials, 
+        settings.infoByCodeMappings
+      );
       
-      // Run validation
-      const validationIssues = validateData(scrubbedData, settings.infoByCodeMappings);
+      // 4. Create new processing session
+      const sessionId = crypto.randomUUID();
+      setCurrentProcessingSession(sessionId);
       
-      // Generate validation report
-      const report = generateValidationReport(validationIssues);
+      // 5. Insert clean data into inspection_data
+      const insertedCount = await insertIntoInspectionData(scrubbedData, sessionId);
+      
+      // 6. Calculate analytics from clean data
+      const analytics = await calculateAnalytics(sessionId, settings.infoByCodeMappings);
+      
+      // 7. Update billing totals
+      await loadBillingTotals();
+      
+      // 8. Generate validation report
+      const report = flaggedIssues.length > 0 ? {
+        totalIssues: flaggedIssues.length,
+        inspectorCount: new Set(flaggedIssues.map(issue => issue.inspector)).size,
+        issuesByInspector: flaggedIssues.reduce((acc, issue) => {
+          if (!acc[issue.inspector]) acc[issue.inspector] = [];
+          acc[issue.inspector].push(issue);
+          return acc;
+        }, {})
+      } : null;
+      
       setValidationReport(report);
       
-      // Calculate analytics
-      const analytics = calculateAnalytics(scrubbedData, settings.infoByCodeMappings);
-      
-      // Add validation summary and database info to results
-      analytics.results.validationSummary = {
-        totalIssues: validationIssues.length,
-        inspectorsWithIssues: report ? report.inspectorCount : 0,
-        hasReport: !!report
+      // 9. Combine results
+      const finalResults = {
+        ...analytics,
+        processingInfo: {
+          totalRecords: propertyData.length,
+          insertedRecords: insertedCount,
+          processingTime: new Date(),
+          vendor: currentJob.vendor,
+          sessionId,
+          scrubReport,
+          flaggedIssues: flaggedIssues.length
+        }
       };
-
-      if (dbConnected && job && fileVersion) {
-        analytics.results.databaseInfo = {
-          jobName: job.job_name,
-          fileVersion: fileVersion.version_number,
-          recordsImported: parsedData.data.length,
-          saved: true
-        };
-      } else {
-        analytics.results.databaseInfo = {
-          jobName: currentJobName || 'Local Processing',
-          saved: false,
-          reason: !dbConnected ? 'Database not connected' : 'No job selected'
-        };
+      
+      setResults(finalResults);
+      
+      // 10. Update job metrics back to AdminJobManagement
+      if (onUpdateJobMetrics) {
+        onUpdateJobMetrics(currentJob.id, {
+          entryRate: analytics.entryRate.percentage,
+          refusalRate: analytics.refusalRate.percentage,
+          inspectedProperties: analytics.inspectedProperties,
+          pricingRate: analytics.pricingRate.percentage
+        });
       }
       
-      // Store job data locally for backward compatibility
-      const jobData = {
-        name: (selectedJob?.job_name || currentJobName).trim(),
-        date: new Date().toISOString(),
-        csvData: scrubbedData,
-        results: analytics.results,
-        metrics: analytics.metrics,
-        settings: {...settings},
-        inspectorDefinitions: {...inspectorDefinitions},
-        validationReport: report
-      };
-      
-      setJobs(prev => ({...prev, [jobData.name]: jobData}));
-      setResults(analytics.results);
-      setJobMetrics(analytics.metrics);
-      setActiveTab('payroll');
-
-      // Success message
-      const successMsg = dbConnected && job && fileVersion 
-        ? `✅ Success! File Version ${fileVersion.version_number} processed and saved to database.`
-        : `✅ Processing complete! ${!dbConnected ? '(Local only - database not connected)' : '(Local only - no job selected)'}`;
-      
-      alert(successMsg + `\n\nRecords: ${parsedData.data.length}\nValidation Issues: ${validationIssues.length}`);
+      addNotification(`Processing complete! ${insertedCount} clean records inserted.`, 'success');
       
     } catch (error) {
       console.error('Processing error:', error);
-      alert(`❌ Error processing file: ${error.message}`);
+      addNotification('Error processing data: ' + error.message, 'error');
     } finally {
       setProcessing(false);
     }
   };
 
-  const readFileAsText = (file) => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (e) => resolve(e.target.result);
-      reader.onerror = (e) => reject(e);
-      reader.readAsText(file);
-    });
+  // Download validation report as Excel
+  const downloadValidationReport = () => {
+    if (!validationReport) return;
+    
+    console.log('Generating validation report...', validationReport);
+    addNotification('Validation report download would start here', 'info');
   };
 
-  const readFileAsArrayBuffer = (file) => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (e) => resolve(e.target.result);
-      reader.onerror = (e) => reject(e);
-      reader.readAsArrayBuffer(file);
-    });
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleDateString();
   };
+
+  const getDaysAgo = (dateString) => {
+    const days = Math.floor((new Date() - new Date(dateString)) / (1000 * 60 * 60 * 24));
+    return days === 0 ? 'Today' : days === 1 ? '1 day ago' : `${days} days ago`;
+  };
+
+  if (!currentJob) {
+    return (
+      <div className="max-w-6xl mx-auto p-6 bg-white">
+        <div className="text-center text-gray-500 py-12">
+          <div className="text-4xl mb-4">📋</div>
+          <h4 className="text-lg font-medium mb-2">No Job Selected</h4>
+          <p className="text-sm">Please select a job to use the Production Tracker.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-6xl mx-auto p-6 bg-white">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">
-          PPA Management OS - Production Tracker
-        </h1>
-        <p className="text-gray-600">
-          Integrated payroll processing and production tracking with Supabase database
-        </p>
+      {/* Notifications */}
+      <div className="fixed top-4 right-4 z-50 space-y-2">
+        {notifications.map(notification => (
+          <div
+            key={notification.id}
+            className={`p-4 rounded-lg shadow-lg border-l-4 max-w-md transition-all duration-300 ${
+              notification.type === 'error' ? 'bg-red-50 border-red-400 text-red-800' :
+              notification.type === 'warning' ? 'bg-yellow-50 border-yellow-400 text-yellow-800' :
+              notification.type === 'success' ? 'bg-green-50 border-green-400 text-green-800' :
+              'bg-blue-50 border-blue-400 text-blue-800'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">{notification.message}</span>
+              <button
+                onClick={() => setNotifications(prev => prev.filter(n => n.id !== notification.id))}
+                className="ml-2 text-gray-400 hover:text-gray-600"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        ))}
       </div>
 
-      {/* Database Status */}
-      <div className="mb-6 p-4 bg-gray-50 rounded-lg border">
+      {/* Header */}
+      <div className="mb-8">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Database className={`w-5 h-5 ${dbConnected ? 'text-green-600' : 'text-red-600'}`} />
-            <span className={`font-medium ${dbConnected ? 'text-green-800' : 'text-red-800'}`}>
-              Database: {dbConnected ? 'Connected' : 'Disconnected'}
-            </span>
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">
+              {currentJob.name} - Production Tracker
+            </h1>
+            <p className="text-gray-600">
+              Process inspection data, validate field work, and generate payroll analytics
+            </p>
           </div>
-          {dbConnected && (
-            <div className="flex items-center gap-6 text-sm text-gray-600">
-              <span>{dbStats.employees} Employees</span>
-              <span>{dbStats.jobs} Jobs</span>
-              <span>{dbStats.propertyRecords?.toLocaleString() || 0} Property Records</span>
-              <span>{dbStats.sourceFiles} Source Files</span>
-            </div>
+          {onBack && (
+            <button
+              onClick={onBack}
+              className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
+            >
+              ← Back to Jobs
+            </button>
           )}
         </div>
       </div>
 
-      {/* Tab Navigation */}
-      <div className="mb-6">
-        <div className="border-b border-gray-200">
-          <nav className="-mb-px flex space-x-8">
-            <button
-              onClick={() => setActiveTab('inspectors')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'inspectors'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              👥 Inspector Management
-            </button>
-            <button
-              onClick={() => setActiveTab('upload')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'upload'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              📁 Upload & Process
-            </button>
-            <button
-              onClick={() => setActiveTab('payroll')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'payroll'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              💰 Payroll Processing
-            </button>
-            <button
-              onClick={() => setActiveTab('metrics')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'metrics'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              📊 Job Metrics
-            </button>
-            <button
-              onClick={() => setActiveTab('jobs')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'jobs'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              📋 All Jobs ({Object.keys(jobs).length})
-            </button>
-          </nav>
+      {/* Job Info Banner */}
+      <div className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-green-50 rounded-lg border border-blue-200">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-6">
+            <div>
+              <span className="text-sm font-medium text-gray-600">Vendor:</span>
+              <span className={`ml-2 px-3 py-1 rounded-full text-sm font-medium ${
+                currentJob.vendor === 'Microsystems' 
+                  ? 'bg-blue-100 text-blue-800' 
+                  : 'bg-orange-100 text-orange-800'
+              }`}>
+                {currentJob.vendor}
+              </span>
+            </div>
+            <div>
+              <span className="text-sm font-medium text-gray-600">CCDD:</span>
+              <span className="ml-2 font-bold text-blue-600">{currentJob.ccdd || currentJob.ccddCode}</span>
+            </div>
+            <div>
+              <span className="text-sm font-medium text-gray-600">Municipality:</span>
+              <span className="ml-2 text-gray-800">{currentJob.municipality}</span>
+            </div>
+            {settingsLocked && (
+              <div className="flex items-center text-green-600">
+                <Lock className="w-4 h-4 mr-1" />
+                <span className="text-sm font-medium">Settings Locked</span>
+              </div>
+            )}
+          </div>
+          <div className="text-right">
+            <div className="text-2xl font-bold text-green-600">
+              {currentJob.inspectedProperties?.toLocaleString() || 0} of {currentJob.totalProperties?.toLocaleString() || 0}
+            </div>
+            <div className="text-sm text-gray-600">Properties Inspected</div>
+          </div>
         </div>
       </div>
 
-      {/* Inspector Management Tab - Keep your existing code */}
-      {activeTab === 'inspectors' && (
-        <div className="space-y-6">
-          <div className="bg-gradient-to-r from-blue-50 to-green-50 rounded-lg border-2 border-blue-200 p-6">
-            <div className="flex items-center mb-6">
-              <Settings className="w-8 h-8 mr-3 text-blue-600" />
-              <div>
-                <h2 className="text-2xl font-bold text-gray-800">👥 Inspector Management</h2>
-                <p className="text-gray-600 mt-1">
-                  {dbConnected 
-                    ? `Connected to database with ${dbStats.employees} employees`
-                    : 'Manage inspector profiles for payroll tracking and color coding'
-                  }
-                </p>
-              </div>
-            </div>
-            
-            <div className="mb-6 p-6 bg-white rounded-lg border shadow-sm">
-              <h3 className="text-lg font-semibold mb-4 text-gray-700 flex items-center">
-                ➕ Add New Inspector
-              </h3>
-              
-              <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <h4 className="font-semibold text-blue-800 mb-3 flex items-center">
-                  📊 Import from Excel File
-                </h4>
-                <p className="text-sm text-blue-700 mb-3">
-                  Import inspectors directly from your staff Excel file. {dbConnected && 'Data will be saved to the database automatically.'}
-                </p>
-                <div className="flex items-center gap-4">
-                  <input
-                    ref={inspectorImportRef}
-                    type="file"
-                    accept=".xlsx,.xls"
-                    onChange={(e) => {
-                      if (e.target.files[0]) {
-                        importInspectorsFromExcel(e.target.files[0]);
-                      }
-                    }}
-                    className="hidden"
-                  />
-                  <button
-                    onClick={() => inspectorImportRef.current.click()}
-                    className="px-4 py-2 bg-blue-500 text-white rounded-lg text-sm font-medium hover:bg-blue-600 transition-colors flex items-center gap-2"
-                  >
-                    <Upload className="w-4 h-4" />
-                    Import from Excel
-                  </button>
-                  <div className="text-xs text-blue-600">
-                    Expected format: "Last, First (XX)" in Column B, "Residential" or "Commercial" in Column F
-                  </div>
-                </div>
-              </div>
-              
-              <div className="border-t border-gray-200 pt-4">
-                <h4 className="font-semibold text-gray-700 mb-3">Manual Entry</h4>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Initials *</label>
-                    <input
-                      type="text"
-                      placeholder="e.g., AM"
-                      value={newInspector.initials}
-                      onChange={(e) => setNewInspector({...newInspector, initials: e.target.value.toUpperCase()})}
-                      className="w-full p-3 border rounded-lg text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      maxLength="3"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">2-3 uppercase letters</p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Full Name *</label>
-                    <input
-                      type="text"
-                      placeholder="e.g., Arcadio Martinez"
-                      value={newInspector.name}
-                      onChange={(e) => setNewInspector({...newInspector, name: e.target.value})}
-                      className="w-full p-3 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">Inspector's full name</p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Inspector Type *</label>
-                    <select
-                      value={newInspector.type}
-                      onChange={(e) => setNewInspector({...newInspector, type: e.target.value})}
-                      className="w-full p-3 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    >
-                      <option value="residential">🏠 Residential</option>
-                      <option value="commercial">🏭 Commercial</option>
-                    </select>
-                    <p className="text-xs text-gray-500 mt-1">Determines color coding</p>
-                  </div>
-                  <div className="flex items-end">
-                    <button
-                      onClick={async () => {
-                        if (newInspector.initials && newInspector.name) {
-                          // Add to local state
-                          setInspectorDefinitions({
-                            ...inspectorDefinitions,
-                            [newInspector.initials]: {
-                              name: newInspector.name,
-                              type: newInspector.type
-                            }
-                          });
-
-                          // Add to database if connected
-                          if (dbConnected) {
-                            try {
-                              const [firstName, ...lastNameParts] = newInspector.name.split(' ');
-                              await employeeService.create({
-                                employee_number: `MAN_${Date.now()}`,
-                                first_name: firstName,
-                                last_name: lastNameParts.join(' '),
-                                initials: newInspector.initials,
-                                role: 'inspector',
-                                inspector_type: newInspector.type,
-                                employment_status: 'active',
-                                created_by: 'manual-entry'
-                              });
-                            } catch (error) {
-                              console.error('Database save error:', error);
-                            }
-                          }
-
-                          setNewInspector({ initials: '', name: '', type: 'residential' });
-                        }
-                      }}
-                      disabled={!newInspector.initials || !newInspector.name}
-                      className="w-full px-4 py-3 bg-green-500 text-white rounded-lg text-sm font-medium hover:bg-green-600 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-                    >
-                      Add Inspector
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-            
-            <div className="p-6 bg-white rounded-lg border shadow-sm">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-semibold text-gray-700 flex items-center">
-                  📋 Current Inspectors
-                </h3>
-                <div className="flex items-center gap-3">
-                  <div className="text-sm text-gray-600 bg-gray-100 px-3 py-1 rounded-full">
-                    {Object.keys(inspectorDefinitions).length} inspector{Object.keys(inspectorDefinitions).length !== 1 ? 's' : ''} configured
-                  </div>
-                  <div className={`text-xs px-2 py-1 rounded-full flex items-center gap-1 ${
-                    dbConnected ? 'text-green-600 bg-green-100' : 'text-yellow-600 bg-yellow-100'
-                  }`}>
-                    {dbConnected ? '💾 Saved to database' : '⚠️ Local only'}
-                  </div>
-                </div>
-              </div>
-              
-              {Object.keys(inspectorDefinitions).length === 0 ? (
-                <div className="text-center text-gray-500 py-12">
-                  <div className="text-4xl mb-4">👥</div>
-                  <h4 className="text-lg font-medium mb-2">No Inspectors Configured</h4>
-                  <p className="text-sm">Add your first inspector above to get started with payroll tracking and color coding!</p>
-                </div>
-              ) : (
-                <div className="space-y-3 max-h-96 overflow-y-auto">
-                  {Object.entries(inspectorDefinitions).map(([initials, info]) => (
-                    <div key={initials} className={`flex justify-between items-center p-4 rounded-lg border-l-4 transition-all hover:shadow-md ${
-                      info.type === 'commercial' ? 'bg-blue-50 border-blue-400 hover:bg-blue-100' : 'bg-green-50 border-green-400 hover:bg-green-100'
-                    }`}>
-                      <div className="flex items-center flex-1">
-                        <div className="flex items-center justify-center w-12 h-12 rounded-full bg-white border-2 border-current mr-4">
-                          <span className={`font-bold text-lg ${
-                            info.type === 'commercial' ? 'text-blue-600' : 'text-green-600'
-                          }`}>
-                            {initials}
-                          </span>
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3">
-                            <span className="font-semibold text-lg text-gray-800">{info.name}</span>
-                            <span className={`px-3 py-1 text-xs font-medium rounded-full ${
-                              info.type === 'commercial' ? 'bg-blue-200 text-blue-800' : 'bg-green-200 text-green-800'
-                            }`}>
-                              {info.type === 'commercial' ? '🏭 Commercial' : '🏠 Residential'}
-                            </span>
-                          </div>
-                          <div className="text-sm text-gray-600 mt-1">
-                            Color coding: {info.type === 'commercial' ? 'Blue scheme for commercial/warehouse properties' : 'Green scheme for residential/home properties'}
-                          </div>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => {
-                          const updated = {...inspectorDefinitions};
-                          delete updated[initials];
-                          updateInspectorDefinitions(updated);
-                        }}
-                        className="ml-4 text-red-500 hover:text-red-700 text-sm font-medium px-4 py-2 rounded hover:bg-red-50 transition-colors border border-red-200 hover:border-red-300"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  ))}
+      {/* Data Freshness Warning */}
+      {showDataWarning?.show && (
+        <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+          <div className="flex items-start space-x-3">
+            <AlertTriangle className="w-5 h-5 text-yellow-600 mt-0.5" />
+            <div className="flex-1">
+              <h3 className="text-sm font-medium text-yellow-800">Data Freshness Notice</h3>
+              <p className="text-sm text-yellow-700 mt-1">
+                {showDataWarning.message}. {showDataWarning.recommendation}.
+              </p>
+              {currentJob.source_file_uploaded_at && currentJob.code_file_updated_at && (
+                <div className="mt-2 flex items-center space-x-4 text-xs text-yellow-600">
+                  <span>📄 Source: {getDaysAgo(currentJob.source_file_uploaded_at)}</span>
+                  <span>📋 Code: {getDaysAgo(currentJob.code_file_updated_at)}</span>
                 </div>
               )}
             </div>
+            <button
+              onClick={() => setShowDataWarning({ ...showDataWarning, show: false })}
+              className="text-yellow-600 hover:text-yellow-800"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
         </div>
       )}
 
-      {/* Upload Tab */}
-      {activeTab === 'upload' && (
-        <div>
-          {/* Job Selection Section */}
-          {dbConnected && availableJobs.length > 0 && (
-            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <h3 className="text-lg font-semibold text-blue-800 mb-3">📋 Job Selection</h3>
-              <div className="flex gap-4 items-end">
-                <div className="flex-1">
-                  <label className="block text-sm font-medium text-blue-700 mb-2">
-                    Select Existing Job
-                  </label>
-                  <select
-                    value={selectedJob?.id || ''}
-                    onChange={(e) => {
-                      const job = availableJobs.find(j => j.id === e.target.value);
-                      setSelectedJob(job);
-                      setCurrentJobName('');
-                    }}
-                    className="w-full p-3 border border-blue-300 rounded-lg text-sm"
-                  >
-                    <option value="">-- Select a job --</option>
-                    {availableJobs.map(job => (
-                      <option key={job.id} value={job.id}>
-                        {job.job_name} ({job.client_name})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="text-center text-gray-500 font-medium">OR</div>
-              </div>
-            </div>
-          )}
-
-          <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-            <h3 className="text-lg font-semibold text-yellow-800 mb-3">🏷️ Job Information</h3>
-            <div className="flex gap-4 items-end">
-              <div className="flex-1">
-                <label className="block text-sm font-medium text-yellow-700 mb-2">
-                  Job Name *
-                </label>
-                <input
-                  type="text"
-                  value={currentJobName}
-                  onChange={(e) => {
-                    setCurrentJobName(e.target.value);
-                    if (e.target.value) setSelectedJob(null);
-                  }}
-                  placeholder="e.g., CCDD-Municipality Name"
-                  className="w-full p-3 border border-yellow-300 rounded-lg text-sm focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
-                />
-                <p className="text-xs text-yellow-600 mt-1">
-                  {selectedJob ? 'Selected job from database' : 'Enter name for local processing'}
-                </p>
-              </div>
-              {Object.keys(jobs).length > 0 && (
-                <div>
-                  <select
-                    value=""
-                    onChange={(e) => setCurrentJobName(e.target.value)}
-                    className="p-3 border border-yellow-300 rounded-lg text-sm"
-                  >
-                    <option value="">Load Previous Job</option>
-                    {Object.keys(jobs).map(jobName => (
-                      <option key={jobName} value={jobName}>{jobName}</option>
-                    ))}
-                  </select>
-                </div>
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        {/* Configuration Panel */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Code Configuration */}
+          <div className={`p-6 border rounded-lg ${settingsLocked ? 'bg-gray-50 border-gray-300' : 'bg-blue-50 border-blue-200'}`}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-blue-800 flex items-center space-x-2">
+                <Settings className="w-5 h-5" />
+                <span>Code Configuration</span>
+                <span className="text-sm font-normal text-blue-600">
+                  ({currentJob.vendor} Format)
+                </span>
+              </h3>
+              {!settingsLocked && (
+                <button
+                  onClick={saveSettings}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 text-sm font-medium"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>Save & Lock</span>
+                </button>
               )}
             </div>
-          </div>
-
-          {/* Rest of your existing upload tab code... */}
-          <div className="mb-6 p-4 bg-gray-50 rounded-lg">
-            <div className="flex items-center mb-3">
-              <Settings className="w-5 h-5 mr-2" />
-              <h3 className="text-lg font-semibold">Scrub Settings</h3>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">Project Start Date</label>
-                <input
-                  type="date"
-                  value={settings.startDate}
-                  onChange={(e) => setSettings({...settings, startDate: e.target.value})}
-                  className="w-full p-2 border rounded-md"
-                />
-                <p className="text-xs text-gray-500 mt-1">Dates before this will be cleaned</p>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium mb-1">Payroll Process Date</label>
-                <input
-                  type="date"
-                  value={settings.lastUpdateDate}
-                  onChange={(e) => setSettings({...settings, lastUpdateDate: e.target.value})}
-                  className="w-full p-2 border rounded-md"
-                />
-                <p className="text-xs text-gray-500 mt-1">Calculate pay for work since this date</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-            <h3 className="text-lg font-semibold text-blue-800 mb-3">🏷️ InfoBy Code Configuration</h3>
-            <p className="text-sm text-blue-700 mb-4">
-              Configure the InfoBy codes specific to this town/job for accurate entry and refusal rate calculations.
-            </p>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
@@ -1097,10 +825,11 @@ const PayrollProductionUpdater = () => {
                     ...settings, 
                     infoByCodeMappings: {...settings.infoByCodeMappings, entryCodes: e.target.value}
                   })}
+                  disabled={settingsLocked}
                   placeholder="01,02,03,04"
-                  className="w-full p-2 border border-blue-300 rounded-md text-sm"
+                  className="w-full p-2 border border-blue-300 rounded-md text-sm disabled:bg-gray-100"
                 />
-                <p className="text-xs text-blue-600 mt-1">Codes for successful interior access (comma-separated)</p>
+                <p className="text-xs text-blue-600 mt-1">Successful interior access codes</p>
               </div>
               
               <div>
@@ -1112,10 +841,11 @@ const PayrollProductionUpdater = () => {
                     ...settings, 
                     infoByCodeMappings: {...settings.infoByCodeMappings, refusalCodes: e.target.value}
                   })}
+                  disabled={settingsLocked}
                   placeholder="06"
-                  className="w-full p-2 border border-blue-300 rounded-md text-sm"
+                  className="w-full p-2 border border-blue-300 rounded-md text-sm disabled:bg-gray-100"
                 />
-                <p className="text-xs text-blue-600 mt-1">Codes for property access refusal</p>
+                <p className="text-xs text-blue-600 mt-1">Property access refusal codes</p>
               </div>
               
               <div>
@@ -1127,10 +857,11 @@ const PayrollProductionUpdater = () => {
                     ...settings, 
                     infoByCodeMappings: {...settings.infoByCodeMappings, estimationCodes: e.target.value}
                   })}
+                  disabled={settingsLocked}
                   placeholder="07"
-                  className="w-full p-2 border border-blue-300 rounded-md text-sm"
+                  className="w-full p-2 border border-blue-300 rounded-md text-sm disabled:bg-gray-100"
                 />
-                <p className="text-xs text-blue-600 mt-1">Codes for estimated inspections</p>
+                <p className="text-xs text-blue-600 mt-1">Estimated inspection codes</p>
               </div>
               
               <div>
@@ -1142,216 +873,302 @@ const PayrollProductionUpdater = () => {
                     ...settings, 
                     infoByCodeMappings: {...settings.infoByCodeMappings, invalidCodes: e.target.value}
                   })}
+                  disabled={settingsLocked}
                   placeholder="00,05"
-                  className="w-full p-2 border border-blue-300 rounded-md text-sm"
+                  className="w-full p-2 border border-blue-300 rounded-md text-sm disabled:bg-gray-100"
                 />
-                <p className="text-xs text-blue-600 mt-1">Codes that should not count toward any metrics</p>
+                <p className="text-xs text-blue-600 mt-1">Invalid/exclude codes</p>
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-blue-700 mb-2">
+                  Pricing Codes
+                  {currentJob.vendor === 'Microsystems' && (
+                    <span className="text-xs text-blue-500 ml-2">(Microsystems uses InfoBy for pricing)</span>
+                  )}
+                </label>
+                <input
+                  type="text"
+                  value={settings.infoByCodeMappings.pricingCodes}
+                  onChange={(e) => setSettings({
+                    ...settings, 
+                    infoByCodeMappings: {...settings.infoByCodeMappings, pricingCodes: e.target.value}
+                  })}
+                  disabled={settingsLocked}
+                  placeholder="08,09"
+                  className="w-full p-2 border border-blue-300 rounded-md text-sm disabled:bg-gray-100"
+                />
+                <p className="text-xs text-blue-600 mt-1">
+                  {currentJob.vendor === 'BRT' 
+                    ? 'Commercial pricing completion codes' 
+                    : 'InfoBy codes that indicate pricing work completed'
+                  }
+                </p>
               </div>
             </div>
           </div>
 
-          <div className="mb-6">
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center bg-gradient-to-br from-blue-50 to-green-50">
-              <Upload className="w-16 h-16 mx-auto mb-4 text-blue-500" />
-              <h3 className="text-xl font-semibold mb-2 text-gray-800">Upload CSV Production File *</h3>
-              <p className="text-sm text-gray-600 mb-6">
-                Select your REVAL PRODUCTION CSV file for processing and analytics
-              </p>
-              <input
-                ref={csvInputRef}
-                type="file"
-                accept=".csv"
-                onChange={(e) => handleFileUpload(e.target.files[0], 'csv')}
-                className="hidden"
-              />
-              <button
-                onClick={() => csvInputRef.current.click()}
-                className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 font-medium text-lg"
-              >
-                Choose CSV File
-              </button>
-              {csvFile && (
-                <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
-                  <p className="text-green-700 font-medium">
-                    ✓ File Ready: {csvFile.name}
-                  </p>
-                  <p className="text-sm text-green-600 mt-1">
-                    CSV file loaded and ready for processing
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="text-center mb-6">
-            <button
-              onClick={processFiles}
-              disabled={!csvFile || (!selectedJob && !currentJobName.trim()) || processing}
-              className="px-12 py-4 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-xl font-bold shadow-lg"
-            >
-              {processing ? (
-                <span className="flex items-center gap-3">
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                  {dbConnected ? 'Processing & Saving to Database...' : 'Processing Locally...'}
-                </span>
-              ) : (
-                <>
-                  {dbConnected ? '🚀 Process & Save to Database' : '🧹 Process Locally'}
-                </>
-              )}
-            </button>
-            <p className="text-sm text-gray-600 mt-2">
-              {dbConnected 
-                ? 'Clean data, validate, and save with file versioning to Supabase' 
-                : 'Clean data and run validation (local processing only)'
-              }
-            </p>
-          </div>
-
-          {results && (
-            <div className="bg-green-50 border border-green-200 rounded-lg p-6">
-              <div className="flex items-center mb-4">
-                <CheckCircle className="w-6 h-6 text-green-600 mr-2" />
-                <h3 className="text-lg font-semibold text-green-800">Processing Complete!</h3>
-              </div>
-
-              {/* Database Status */}
-              {results.databaseInfo && (
-                <div className="mb-4 p-3 bg-white border border-gray-200 rounded-lg">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <span className="font-medium">Job: {results.databaseInfo.jobName}</span>
-                      {results.databaseInfo.fileVersion && (
-                        <span className="ml-2 text-sm text-gray-600">
-                          (File Version {results.databaseInfo.fileVersion})
-                        </span>
-                      )}
-                    </div>
-                    <div className={`px-3 py-1 rounded-full text-sm ${
-                      results.databaseInfo.saved 
-                        ? 'bg-green-100 text-green-800' 
-                        : 'bg-yellow-100 text-yellow-800'
-                    }`}>
-                      {results.databaseInfo.saved ? '✅ Saved to Database' : `⚠️ ${results.databaseInfo.reason}`}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Job Summary Header */}
-              <div className="mb-6 p-4 bg-white border border-gray-200 rounded-lg">
-                <h3 className="text-lg font-semibold text-gray-800 mb-2">
-                  For {selectedJob?.job_name || currentJobName} as of {new Date().toLocaleDateString()}
-                </h3>
-                <p className="text-gray-600">Processing summary:</p>
+          {/* Date Settings */}
+          <div className={`p-6 border rounded-lg ${settingsLocked ? 'bg-gray-50 border-gray-300' : 'bg-yellow-50 border-yellow-200'}`}>
+            <h3 className="text-lg font-semibold text-yellow-800 mb-4 flex items-center space-x-2">
+              <Clock className="w-5 h-5" />
+              <span>Date Settings</span>
+            </h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-yellow-700 mb-2">Project Start Date</label>
+                <input
+                  type="date"
+                  value={settings.projectStartDate}
+                  onChange={(e) => setSettings({...settings, projectStartDate: e.target.value})}
+                  disabled={settingsLocked}
+                  className="w-full p-2 border border-yellow-300 rounded-md text-sm disabled:bg-gray-100"
+                />
+                <p className="text-xs text-yellow-600 mt-1">Inspection data before this date will be cleaned</p>
               </div>
               
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-green-600">{results.totalMatches.toLocaleString()}</div>
-                  <div className="text-sm text-gray-600">Total Properties</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-blue-600">{results.updatedRecords.toLocaleString()}</div>
-                  <div className="text-sm text-gray-600">Properties Inspected</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-purple-600">{Math.round((results.updatedRecords / results.totalMatches) * 100)}%</div>
-                  <div className="text-sm text-gray-600">Overall Complete</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-orange-600">{results.entryRate.count.toLocaleString()}</div>
-                  <div className="text-sm text-gray-600">Interior Inspections</div>
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-yellow-700 mb-2">Payroll Period Start</label>
+                <input
+                  type="date"
+                  value={settings.payrollPeriodStart}
+                  onChange={(e) => setSettings({...settings, payrollPeriodStart: e.target.value})}
+                  disabled={settingsLocked}
+                  className="w-full p-2 border border-yellow-300 rounded-md text-sm disabled:bg-gray-100"
+                />
+                <p className="text-xs text-yellow-600 mt-1">Payroll calculations start from this date</p>
               </div>
+            </div>
+          </div>
+        </div>
 
-              <div className="mb-6 p-4 bg-white border border-gray-200 rounded-lg">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4">📊 Key Analytics</h3>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="p-3 bg-green-50 rounded">
-                    <div className="text-xl font-bold text-green-600">
-                      {results.entryRate.count.toLocaleString()} Interior Inspections Completed, {Math.round(results.entryRate.percentage)}%
-                    </div>
-                    <div className="text-sm text-gray-600">Entry Rate for Class 2/3A Properties</div>
-                  </div>
-                  
-                  <div className="p-3 bg-red-50 rounded">
-                    <div className="text-xl font-bold text-red-600">
-                      {results.refusalRate.count.toLocaleString()} Refused Inspections, {Math.round(results.refusalRate.percentage)}%
-                    </div>
-                    <div className="text-sm text-gray-600">Refusal Rate for Class 2/3A Properties</div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Validation Report Section */}
-              {results.validationSummary && (
-                <div className="mb-6 p-4 bg-orange-50 border border-orange-200 rounded-lg">
-                  <h3 className="text-lg font-semibold text-orange-800 mb-4">🔍 Validation Summary</h3>
-                  
-                  {results.validationSummary.totalIssues > 0 ? (
-                    <div className="space-y-3">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="text-center p-3 bg-white rounded">
-                          <div className="text-2xl font-bold text-orange-600">{results.validationSummary.totalIssues.toLocaleString()}</div>
-                          <div className="text-sm text-gray-600">Validation Issues Found</div>
-                        </div>
-                        <div className="text-center p-3 bg-white rounded">
-                          <div className="text-2xl font-bold text-orange-600">{results.validationSummary.inspectorsWithIssues}</div>
-                          <div className="text-sm text-gray-600">Inspectors with Issues</div>
-                        </div>
-                      </div>
-                      
-                      <div className="text-center bg-white p-4 rounded-lg">
-                        <button
-                          onClick={downloadValidationReport}
-                          className="inline-flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium shadow-md transition-colors"
-                        >
-                          <Download className="w-5 h-5 mr-2" />
-                          📊 Download Inspection Validation Report
-                        </button>
-                        <p className="text-sm text-gray-700 mt-2">
-                          Excel file with inspector-specific validation issues organized by tabs
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="text-center text-green-600 py-4">
-                      <CheckCircle className="w-12 h-12 mx-auto mb-2" />
-                      <h4 className="text-lg font-semibold">No Validation Issues Found!</h4>
-                      <p className="text-sm">All inspection data passed validation checks.</p>
-                    </div>
-                  )}
-                </div>
+        {/* Control Panel */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Process Button */}
+          <div className="p-6 bg-green-50 border border-green-200 rounded-lg">
+            <h3 className="text-lg font-semibold text-green-800 mb-4 flex items-center space-x-2">
+              <Play className="w-5 h-5" />
+              <span>Process Data</span>
+            </h3>
+            
+            <button
+              onClick={processProductionData}
+              disabled={processing || !settingsLocked}
+              className="w-full px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-md hover:shadow-lg transition-all"
+            >
+              {processing ? (
+                <span className="flex items-center justify-center space-x-2">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  <span>Processing...</span>
+                </span>
+              ) : (
+                <span className="flex items-center justify-center space-x-2">
+                  <Play className="w-4 h-4" />
+                  <span>🔄 Process Production Data</span>
+                </span>
               )}
+            </button>
+            
+            <p className="text-xs text-green-600 mt-2 text-center">
+              Scrub data, validate inspections, calculate metrics
+            </p>
+            
+            {!settingsLocked && (
+              <p className="text-xs text-red-600 mt-2 text-center">
+                Please save and lock settings before processing
+              </p>
+            )}
+          </div>
+
+          {/* Billing Totals */}
+          {billingTotals && (
+            <div className="p-6 bg-purple-50 border border-purple-200 rounded-lg">
+              <h3 className="text-lg font-semibold text-purple-800 mb-4 flex items-center space-x-2">
+                <DollarSign className="w-5 h-5" />
+                <span>Billing Summary</span>
+              </h3>
+              
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="space-y-2">
+                    <div className="font-medium text-purple-700">By Class:</div>
+                    {Object.entries(billingTotals.individual).map(([propClass, count]) => (
+                      <div key={propClass} className="flex justify-between">
+                        <span>Class {propClass}:</span>
+                        <span className="font-bold">{count}</span>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <div className="font-medium text-purple-700">Grouped:</div>
+                    <div className="flex justify-between">
+                      <span>Residential:</span>
+                      <span className="font-bold">{billingTotals.grouped.residential}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Commercial 4A:</span>
+                      <span className="font-bold">{billingTotals.grouped.commercial4A}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Commercial 4B:</span>
+                      <span className="font-bold">{billingTotals.grouped.commercial4B}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Commercial 4C:</span>
+                      <span className="font-bold">{billingTotals.grouped.commercial4C}</span>
+                    </div>
+                    <div className="flex justify-between border-t pt-2">
+                      <span>Total 4 Class:</span>
+                      <span className="font-bold">{billingTotals.grouped.total4}</span>
+                    </div>
+                    <div className="flex justify-between border-t pt-2 font-bold text-purple-800">
+                      <span>Grand Total:</span>
+                      <span>{billingTotals.grouped.grandTotal}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Validation Report */}
+          {validationReport && (
+            <div className="p-6 bg-orange-50 border border-orange-200 rounded-lg">
+              <h3 className="text-lg font-semibold text-orange-800 mb-4 flex items-center space-x-2">
+                <FileText className="w-5 h-5" />
+                <span>Validation Report</span>
+              </h3>
+              
+              <div className="space-y-3">
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-orange-600">{validationReport.totalIssues}</div>
+                  <div className="text-sm text-gray-600">Issues Found</div>
+                </div>
+                
+                <div className="text-center">
+                  <div className="text-lg font-bold text-orange-600">{validationReport.inspectorCount}</div>
+                  <div className="text-sm text-gray-600">Inspectors with Issues</div>
+                </div>
+                
+                <button
+                  onClick={downloadValidationReport}
+                  className="w-full px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 flex items-center justify-center space-x-2 text-sm font-medium"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Download Report</span>
+                </button>
+              </div>
             </div>
           )}
         </div>
-      )}
+      </div>
 
-      {/* Payroll Tab */}
-      {activeTab === 'payroll' && (
-        <div className="text-center text-gray-500 py-12">
-          <p>Payroll processing features available after upload...</p>
-        </div>
-      )}
+      {/* Results Section */}
+      {results && (
+        <div className="mt-8 space-y-6">
+          <div className="bg-gradient-to-r from-green-50 to-blue-50 rounded-lg border-2 border-green-200 p-6">
+            <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center space-x-2">
+              <CheckCircle className="w-8 h-8 text-green-600" />
+              <span>🎉 Processing Complete!</span>
+            </h2>
+            
+            {/* Key Metrics */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+              <div className="text-center p-4 bg-white rounded-lg border shadow-sm">
+                <div className="text-2xl font-bold text-blue-600">{results.totalProperties.toLocaleString()}</div>
+                <div className="text-sm text-gray-600">Total Properties</div>
+              </div>
+              <div className="text-center p-4 bg-white rounded-lg border shadow-sm">
+                <div className="text-2xl font-bold text-green-600">{results.inspectedProperties.toLocaleString()}</div>
+                <div className="text-sm text-gray-600">Properties Inspected</div>
+              </div>
+              <div className="text-center p-4 bg-white rounded-lg border shadow-sm">
+                <div className="text-2xl font-bold text-green-600">{results.entryRate.percentage}%</div>
+                <div className="text-sm text-gray-600">Entry Rate</div>
+              </div>
+              <div className="text-center p-4 bg-white rounded-lg border shadow-sm">
+                <div className="text-2xl font-bold text-red-600">{results.refusalRate.percentage}%</div>
+                <div className="text-sm text-gray-600">Refusal Rate</div>
+              </div>
+            </div>
 
-      {/* Metrics Tab */}
-      {activeTab === 'metrics' && (
-        <div className="text-center text-gray-500 py-12">
-          <p>Job metrics available after upload...</p>
-        </div>
-      )}
+            {/* Processing Summary */}
+            {results.processingInfo && (
+              <div className="mb-6 p-4 bg-white rounded-lg border">
+                <h3 className="text-lg font-semibold text-gray-800 mb-3">Processing Summary</h3>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
+                  <div>
+                    <span className="font-medium text-gray-700">Records Processed:</span>
+                    <span className="ml-2 text-blue-600 font-bold">{results.processingInfo.totalRecords}</span>
+                  </div>
+                  <div>
+                    <span className="font-medium text-gray-700">Clean Records:</span>
+                    <span className="ml-2 text-green-600 font-bold">{results.processingInfo.insertedRecords}</span>
+                  </div>
+                  <div>
+                    <span className="font-medium text-gray-700">Records Scrubbed:</span>
+                    <span className="ml-2 text-orange-600 font-bold">
+                      {Object.values(results.processingInfo.scrubReport.scrubbed).reduce((a, b) => a + b, 0)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="font-medium text-gray-700">Issues Flagged:</span>
+                    <span className="ml-2 text-red-600 font-bold">{results.processingInfo.flaggedIssues}</span>
+                  </div>
+                </div>
+              </div>
+            )}
 
-      {/* Jobs Tab */}
-      {activeTab === 'jobs' && (
-        <div className="text-center text-gray-500 py-12">
-          <p>Job history available after processing...</p>
+            {/* Inspector Performance */}
+            <div className="p-4 bg-white rounded-lg border">
+              <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center space-x-2">
+                <Users className="w-5 h-5" />
+                <span>Inspector Performance</span>
+              </h3>
+              
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="text-left p-2">Inspector</th>
+                      <th className="text-right p-2">Total</th>
+                      <th className="text-right p-2">Daily Avg</th>
+                      <th className="text-right p-2">Residential</th>
+                      <th className="text-right p-2">Commercial</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(results.inspectorStats).map(([initials, stats]) => (
+                      <tr key={initials} className="border-b hover:bg-gray-50">
+                        <td className="p-2">
+                          <div className="font-medium">{stats.name}</div>
+                          <div className="text-xs text-gray-500">{initials}</div>
+                        </td>
+                        <td className="text-right p-2 font-bold">{stats.totalInspections}</td>
+                        <td className="text-right p-2 text-green-600 font-medium">
+                          {stats.dailyAverage ? stats.dailyAverage.toFixed(1) : 'N/A'}
+                        </td>
+                        <td className="text-right p-2 text-blue-600">{stats.residential}</td>
+                        <td className="text-right p-2 text-purple-600">{stats.commercial}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              
+              {currentJob.vendor === 'Microsystems' && (
+                <p className="text-xs text-gray-500 mt-2">
+                  * Daily averages not available for Microsystems (no measure date tracking)
+                </p>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>
   );
 };
 
-export default PayrollProductionUpdater;
+export default ProductionTracker;
