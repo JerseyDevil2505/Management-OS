@@ -2,7 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { AlertTriangle, Settings, Play, Download, CheckCircle, Clock, Users, BarChart3, FileText, X, DollarSign, Lock, Save } from 'lucide-react';
 import { employeeService, jobService, propertyService, supabase } from '../../lib/supabaseClient';
 
-const ProductionTracker = ({ currentJob, onUpdateJobMetrics, onBack }) => {
+const ProductionTracker = ({ jobData, onBackToJobs, onUpdateJobMetrics }) => {
+  // Map JobContainer props to internal naming
+  const currentJob = jobData;
   const [processing, setProcessing] = useState(false);
   const [results, setResults] = useState(null);
   const [showDataWarning, setShowDataWarning] = useState(false);
@@ -715,9 +717,9 @@ const ProductionTracker = ({ currentJob, onUpdateJobMetrics, onBack }) => {
               Process inspection data, validate field work, and generate payroll analytics
             </p>
           </div>
-          {onBack && (
+          {onBackToJobs && (
             <button
-              onClick={onBack}
+              onClick={onBackToJobs}
               className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
             >
               ← Back to Jobs
