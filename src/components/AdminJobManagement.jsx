@@ -73,7 +73,17 @@ const AdminJobManagement = ({ onJobSelect }) => {
   });
 
   const [dbConnected, setDbConnected] = useState(false);
-  const [dbStats, setDbStats] = useState({ employees: 0, jobs: 0, propertyRecords: 0, sourceFiles: 0 });
+  const [dbStats, setDbStats] = useState({ 
+    employees: 0, 
+    jobs: 0, 
+    properties: 0,
+    propertiesBreakdown: {
+      total: 0,
+      residential: 0,
+      commercial: 0,
+      other: 0
+    }
+  });
 
   // Helper function for elapsed time formatting
   const formatElapsedTime = (startTime) => {
@@ -90,6 +100,35 @@ const AdminJobManagement = ({ onJobSelect }) => {
     return county.split(' ').map(word => 
       word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
     ).join(' ');
+  };
+
+  // FIXED: Load HPI data from database on component mount
+  const loadCountyHpiData = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('county_hpi_data')
+        .select('*')
+        .order('county_name, observation_year');
+      
+      if (error) {
+        console.error('Error loading HPI data:', error);
+        return;
+      }
+      
+      // Group HPI data by county
+      const hpiByCounty = {};
+      data.forEach(record => {
+        if (!hpiByCounty[record.county_name]) {
+          hpiByCounty[record.county_name] = [];
+        }
+        hpiByCounty[record.county_name].push(record);
+      });
+      
+      setCountyHpiData(hpiByCounty);
+      console.log('✅ Loaded HPI data for counties:', Object.keys(hpiByCounty));
+    } catch (error) {
+      console.error('Failed to load HPI data:', error);
+    }
   };
 
   // Notification system
@@ -226,7 +265,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
         throw new Error('Database insert failed: ' + insertError.message);
       }
       
-      // Update local state
+      // Update local state - FIXED: Now persists data
       setCountyHpiData(prev => ({
         ...prev,
         [county]: hpiRecords
@@ -285,6 +324,9 @@ const AdminJobManagement = ({ onJobSelect }) => {
           setManagers(managersData);
           setDbStats(statsData);
           setCurrentUser(userData || { role: 'admin', canAccessBilling: true });
+
+          // FIXED: Load HPI data from database
+          await loadCountyHpiData();
         }
       } catch (error) {
         console.error('Data initialization error:', error);
@@ -1456,7 +1498,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
         </p>
       </div>
 
-      {/* Database Status */}
+      {/* Database Status with Enhanced Property Breakdown */}
       <div className="mb-6 p-4 bg-gray-50 rounded-lg border">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -1469,8 +1511,26 @@ const AdminJobManagement = ({ onJobSelect }) => {
             <div className="flex items-center gap-6 text-sm text-gray-600">
               <span>{dbStats.employees} Employees</span>
               <span>{jobs.length + archivedJobs.length} Jobs</span>
-              <span>{dbStats.properties?.toLocaleString() || 0} Properties</span>
-              <span>{dbStats.sourceFiles} Source Files</span>
+              <div className="flex items-center gap-4">
+                <span className="font-medium text-blue-700">
+                  📊 {dbStats.properties?.toLocaleString() || 0} Properties:
+                </span>
+                {dbStats.propertiesBreakdown ? (
+                  <>
+                    <span className="text-green-600">
+                      🏠 {dbStats.propertiesBreakdown.residential?.toLocaleString() || 0} Residential
+                    </span>
+                    <span className="text-purple-600">
+                      🏢 {dbStats.propertiesBreakdown.commercial?.toLocaleString() || 0} Commercial
+                    </span>
+                    <span className="text-gray-500">
+                      📋 {dbStats.propertiesBreakdown.other?.toLocaleString() || 0} Other
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-gray-500">Loading breakdown...</span>
+                )}
+              </div>
             </div>
           )}
         </div>
