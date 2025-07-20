@@ -798,13 +798,13 @@ export const utilityService = {
       const { count: residentialCount, error: residentialError } = await supabase
         .from('property_records')
         .select('id', { count: 'exact', head: true })
-        .in('property_cama_class', ['2', '3A']);
+        .in('property_m4_class', ['2', '3A']);
 
       // Get commercial properties (CAMA class 4A, 4B, 4C)
       const { count: commercialCount, error: commercialError } = await supabase
         .from('property_records')
         .select('id', { count: 'exact', head: true })
-        .in('property_cama_class', ['4A', '4B', '4C']);
+        .in('property_m4_class', ['4A', '4B', '4C']);
 
       // Log any errors but don't fail completely
       if (empError) console.error('Employee count error:', empError);
