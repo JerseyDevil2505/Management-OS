@@ -2,6 +2,7 @@
  * Complete BRT Processor 
  * Handles CSV source files and mixed-format code files
  * UPDATED: Single table insertion to property_records with all 82 fields
+ * ENHANCED: Added retry logic for connection issues and query cancellations
  */
 
 import { supabase } from '../supabaseClient.js';
@@ -11,6 +12,57 @@ export class BRTProcessor {
     this.codeLookups = new Map();
     this.vcsLookups = new Map();
     this.headers = [];
+  }
+
+  /**
+   * Insert batch with retry logic for connection issues
+   */
+  async insertBatchWithRetry(batch, batchNumber, retries = 3) {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        console.log(`🔄 Batch ${batchNumber}, attempt ${attempt}...`);
+        
+        const { data, error } = await supabase
+          .from('property_records')
+          .insert(batch);
+        
+        if (!error) {
+          console.log(`✅ Batch ${batchNumber} successful on attempt ${attempt}`);
+          return { success: true, data };
+        }
+        
+        // Handle specific error codes
+        if (error.code === '57014') {
+          console.log(`🔄 Query canceled (57014) for batch ${batchNumber}, attempt ${attempt}. Retrying...`);
+          if (attempt < retries) {
+            await new Promise(resolve => setTimeout(resolve, 3000)); // Wait 3 seconds
+            continue;
+          }
+        } else if (error.code === '08003' || error.code === '08006') {
+          console.log(`🔄 Connection error for batch ${batchNumber}, attempt ${attempt}. Retrying...`);
+          if (attempt < retries) {
+            await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
+            continue;
+          }
+        } else {
+          // For other errors, don't retry
+          console.error(`❌ Batch ${batchNumber} failed with non-retryable error:`, error);
+          return { error };
+        }
+        
+        // If we get here, it's the final attempt for a retryable error
+        console.error(`❌ Batch ${batchNumber} failed after ${retries} attempts:`, error);
+        return { error };
+        
+      } catch (networkError) {
+        console.log(`🌐 Network error for batch ${batchNumber}, attempt ${attempt}:`, networkError.message);
+        if (attempt < retries) {
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          continue;
+        }
+        return { error: networkError };
+      }
+    }
   }
 
   /**
@@ -412,10 +464,11 @@ export class BRTProcessor {
   /**
    * Process complete file and store in database using FAST single-table batch processing
    * UPDATED: Single table insertion only - no more dual-table complexity
+   * ENHANCED: Added retry logic for connection issues and query cancellations
    */
   async processFile(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, versionInfo = {}) {
     try {
-      console.log('Starting BRT file processing (SINGLE TABLE)...');
+      console.log('Starting BRT file processing (SINGLE TABLE WITH RETRY LOGIC)...');
       
       if (codeFileContent) {
         this.processCodeFile(codeFileContent);
@@ -445,26 +498,28 @@ export class BRTProcessor {
       };
       
       // SINGLE BATCH INSERT: Insert all property records to unified table (1000 at a time)
-      console.log(`Batch inserting ${propertyRecords.length} property records to unified table...`);
+      console.log(`Batch inserting ${propertyRecords.length} property records to unified table with retry logic...`);
       const batchSize = 1000;
       
       for (let i = 0; i < propertyRecords.length; i += batchSize) {
         const batch = propertyRecords.slice(i, i + batchSize);
+        const batchNumber = Math.floor(i / batchSize) + 1;
         
-        const { error: propertyError } = await supabase
-          .from('property_records')
-          .insert(batch);
+        console.log(`🚀 Processing batch ${batchNumber}: records ${i + 1} to ${Math.min(i + batchSize, propertyRecords.length)}`);
         
-        if (propertyError) {
-          console.error('Batch property insert error:', propertyError);
+        const result = await this.insertBatchWithRetry(batch, batchNumber);
+        
+        if (result.error) {
+          console.error(`❌ Batch ${batchNumber} failed after retries:`, result.error);
           results.errors += batch.length;
+          results.warnings.push(`Batch ${batchNumber} failed: ${result.error.message}`);
         } else {
           results.processed += batch.length;
-          console.log(`✅ Inserted property records ${i + 1} to ${Math.min(i + batchSize, propertyRecords.length)}`);
+          console.log(`✅ Batch ${batchNumber} completed successfully`);
         }
       }
       
-      console.log('🚀 SINGLE TABLE PROCESSING COMPLETE:', results);
+      console.log('🚀 SINGLE TABLE PROCESSING COMPLETE WITH RETRY LOGIC:', results);
       return results;
       
     } catch (error) {
