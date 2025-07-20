@@ -578,7 +578,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
             jobService.getAll(),
             planningJobService.getAll(),
             employeeService.getManagers(),
-            loadEnhancedStats(), // Use enhanced stats instead
+            utilityService.getStats(), // Use existing stats instead
             authService.getCurrentUser()
           ]);
           
