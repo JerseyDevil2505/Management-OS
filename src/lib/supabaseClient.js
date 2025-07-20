@@ -200,6 +200,7 @@ export const jobService = {
         id: job.id,
         name: job.job_name,
         ccddCode: job.ccdd_code,
+        ccdd: job.ccdd_code, // ADDED: Alternative accessor for backward compatibility
         municipality: job.municipality || job.client_name,
         job_number: job.job_number,
         year_created: job.year_created,
@@ -216,6 +217,17 @@ export const jobService = {
         vendorDetection: job.vendor_detection,
         workflowStats: job.workflow_stats,
         percent_billed: job.percent_billed,  // FIXED: was percentBilling, now percent_billed
+        
+        // ADDED: Property assignment tracking for enhanced metrics
+        has_property_assignments: job.has_property_assignments || false,
+        assigned_has_commercial: job.assigned_has_commercial || false,
+        assignedPropertyCount: job.assigned_property_count || 0,
+        
+        // ADDED: File timestamp tracking for FileUploadButton
+        created_at: job.created_at,
+        source_file_uploaded_at: job.source_file_uploaded_at,
+        code_file_uploaded_at: job.code_file_uploaded_at,
+        
         assignedManagers: job.job_assignments?.map(ja => ({
           id: ja.employee.id,
           name: `${ja.employee.first_name} ${ja.employee.last_name}`,
@@ -252,7 +264,13 @@ export const jobService = {
         code_file_status: componentFields.codeFileStatus || 'pending',
         vendor_detection: componentFields.vendorDetection,
         workflow_stats: componentFields.workflowStats,
-        percent_billed: componentFields.percentBilled,
+        percent_billed: componentFields.percentBilled || 0,
+        
+        // ADDED: File tracking fields for FileUploadButton
+        source_file_name: componentFields.source_file_name,
+        source_file_version_id: componentFields.source_file_version_id,
+        source_file_uploaded_at: componentFields.source_file_uploaded_at,
+        
         created_by: componentFields.created_by || componentFields.createdBy
       };
       
@@ -349,7 +367,7 @@ export const jobService = {
     }
   },
 
-  // FIXED: Delete method with proper cascade deletion
+  // ENHANCED: Delete method with proper cascade deletion
   async delete(id) {
     try {
       console.log(`🗑️ Starting deletion process for job ${id}...`);
@@ -367,18 +385,18 @@ export const jobService = {
         console.log('✅ Deleted comparison_reports for job', id);
       }
 
-      // Step 2: Delete related property_change_log records (if this table exists)
-      const { error: changeLogError } = await supabase
-        .from('property_change_log')
-        .delete()
-        .eq('job_id', id);
-      
-      if (changeLogError) {
-        console.error('Error deleting change log:', changeLogError);
-        // Don't throw here - table might not exist or no records
-      } else {
-        console.log('✅ Deleted property_change_log for job', id);
-      }
+      // Step 2: Delete related property_change_log records (commented out - table doesn't exist)
+      // const { error: changeLogError } = await supabase
+      //   .from('property_change_log')
+      //   .delete()
+      //   .eq('job_id', id);
+      // 
+      // if (changeLogError) {
+      //   console.error('Error deleting change log:', changeLogError);
+      //   // Don't throw here - table might not exist or no records
+      // } else {
+      //   console.log('✅ Deleted property_change_log for job', id);
+      // }
 
       // Step 3: Delete related job_assignments
       const { error: assignmentsError } = await supabase
@@ -461,7 +479,8 @@ export const planningJobService = {
       
       return data.map(pj => ({
         id: pj.id,
-        ccdd: pj.ccdd_code,
+        ccddCode: pj.ccdd_code,
+        ccdd: pj.ccdd_code, // Alternative accessor
         municipality: pj.municipality,
         potentialYear: pj.potential_year,
         comments: pj.comments
@@ -475,7 +494,7 @@ export const planningJobService = {
   async create(planningJobData) {
     try {
       const dbFields = {
-        ccdd_code: planningJobData.ccdd,
+        ccdd_code: planningJobData.ccddCode || planningJobData.ccdd,
         municipality: planningJobData.municipality,
         potential_year: planningJobData.potentialYear,
         comments: planningJobData.comments,
@@ -499,7 +518,7 @@ export const planningJobService = {
   async update(id, updates) {
     try {
       const dbFields = {
-        ccdd_code: updates.ccdd,
+        ccdd_code: updates.ccddCode || updates.ccdd,
         municipality: updates.municipality,
         potential_year: updates.potentialYear,
         comments: updates.comments
@@ -634,18 +653,19 @@ export const propertyService = {
     }
   },
 
-  // Simplified import method using single-table processors
-  async importCSVData(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, vendorType) {
+  // FIXED: Import method with versionInfo parameter for FileUploadButton support
+  async importCSVData(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, vendorType, versionInfo = {}) {
     try {
       console.log(`Processing ${vendorType} files for job ${jobId}`);
+      console.log('🔍 DEBUG - versionInfo received:', versionInfo);
       
       // Use updated processors for single-table insertion
       if (vendorType === 'BRT') {
         const { brtProcessor } = await import('./data-pipeline/brt-processor.js');
-        return await brtProcessor.processFile(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode);
+        return await brtProcessor.processFile(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, versionInfo);
       } else if (vendorType === 'Microsystems') {
         const { microsystemsProcessor } = await import('./data-pipeline/microsystems-processor.js');
-        return await microsystemsProcessor.processFile(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode);
+        return await microsystemsProcessor.processFile(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, versionInfo);
       } else {
         throw new Error(`Unsupported vendor type: ${vendorType}`);
       }
@@ -862,7 +882,7 @@ export const utilityService = {
     }
   },
 
-  // Enhanced stats function with property class breakdown
+  // FIXED: Enhanced stats function with correct property class field names
   async getStats() {
     try {
       // Get basic counts separately to avoid Promise.all masking errors
@@ -878,13 +898,14 @@ export const utilityService = {
         .from('property_records')
         .select('id', { count: 'exact', head: true });
 
-      // Get residential properties (CAMA class 2, 3A)
+      // FIXED: Use property_m4_class (not property_cama_class) for Microsystems compatibility
+      // Get residential properties (M4 class 1, 2, 3A, 3B)
       const { count: residentialCount, error: residentialError } = await supabase
         .from('property_records')
         .select('id', { count: 'exact', head: true })
-        .in('property_m4_class', ['2', '3A']);
+        .in('property_m4_class', ['1', '2', '3A', '3B']);
 
-      // Get commercial properties (CAMA class 4A, 4B, 4C)
+      // Get commercial properties (M4 class 4A, 4B, 4C)
       const { count: commercialCount, error: commercialError } = await supabase
         .from('property_records')
         .select('id', { count: 'exact', head: true })
