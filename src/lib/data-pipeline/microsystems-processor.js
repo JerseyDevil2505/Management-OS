@@ -168,7 +168,7 @@ export class MicrosystemsProcessor {
       inspection_list_by: rawRecord['Insp By'],
       inspection_list_date: this.parseDate(rawRecord['Insp Date']),
       inspection_measure_by: rawRecord['Measured By'],
-      inspection_measure_date: null, // Not available in Microsystems
+      inspection_measure_date: this.parseDate(rawRecord['Insp Date 1']),
       inspection_price_by: null, // Not available in Microsystems
       inspection_price_date: null, // Not available in Microsystems
       
