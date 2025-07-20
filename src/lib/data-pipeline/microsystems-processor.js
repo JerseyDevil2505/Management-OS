@@ -361,7 +361,7 @@ export class MicrosystemsProcessor {
       
       // NEW: Process and store code file if provided
       if (codeFileContent) {
-        await this.processCodeFile(codeFileContent, jobId);
+        // await this.storeCodeFileInDatabase(codeFileContent, jobId);
       }
       
       // Parse source file
