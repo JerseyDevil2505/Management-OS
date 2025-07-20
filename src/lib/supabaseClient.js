@@ -314,7 +314,7 @@ export const jobService = {
       if (componentFields.codeFileStatus) dbFields.code_file_status = componentFields.codeFileStatus;
       if (componentFields.vendorDetection) dbFields.vendor_detection = componentFields.vendorDetection;
       if (componentFields.workflowStats) dbFields.workflow_stats = componentFields.workflowStats;
-      if (componentFields.percentBilling !== undefined) dbFields.percent_billed = componentFields.percentBilling;
+      if (componentFields.percentBilling !== undefined) dbFields.percent_billed = componentFields.percent_billed;
 
       const { data, error } = await supabase
         .from('jobs')
