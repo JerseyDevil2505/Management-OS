@@ -676,6 +676,40 @@ const ProductionTracker = ({ jobData, onBackToJobs, onUpdateJobMetrics }) => {
           <p className="text-sm">Please select a job to use the Production Tracker.</p>
         </div>
       </div>
+
+      {/* Project Settings - Lock In */}
+      <div className="mb-6 p-4 bg-indigo-50 border border-indigo-200 rounded-lg">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-semibold text-indigo-800 flex items-center space-x-2">
+              <Lock className="w-5 h-5" />
+              <span>Project Settings</span>
+            </h3>
+            <p className="text-sm text-indigo-600 mt-1">Lock in project start date for consistent scrubbing</p>
+          </div>
+          <div className="flex items-center space-x-4">
+            <div>
+              <label className="block text-sm font-medium text-indigo-700 mb-1">Project Start Date</label>
+              <input
+                type="date"
+                value={settings.projectStartDate}
+                onChange={(e) => setSettings({...settings, projectStartDate: e.target.value})}
+                disabled={settingsLocked}
+                className="px-3 py-2 border border-indigo-300 rounded-md text-sm disabled:bg-gray-100"
+              />
+            </div>
+            {!settingsLocked && (
+              <button
+                onClick={saveSettings}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center space-x-2 text-sm font-medium"
+              >
+                <Save className="w-4 h-4" />
+                <span>Lock Settings</span>
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
     );
   }
 
@@ -796,25 +830,16 @@ const ProductionTracker = ({ jobData, onBackToJobs, onUpdateJobMetrics }) => {
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Configuration Panel */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Code Configuration */}
+          {/* InfoBy Code Configuration */}
           <div className={`p-6 border rounded-lg ${settingsLocked ? 'bg-gray-50 border-gray-300' : 'bg-blue-50 border-blue-200'}`}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-blue-800 flex items-center space-x-2">
                 <Settings className="w-5 h-5" />
-                <span>Code Configuration</span>
+                <span>InfoBy Code Configuration</span>
                 <span className="text-sm font-normal text-blue-600">
                   ({currentJob.vendor} Format)
                 </span>
               </h3>
-              {!settingsLocked && (
-                <button
-                  onClick={saveSettings}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 text-sm font-medium"
-                >
-                  <Save className="w-4 h-4" />
-                  <span>Save & Lock</span>
-                </button>
-              )}
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -987,7 +1012,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, onUpdateJobMetrics }) => {
           {billingTotals && (
             <div className="p-6 bg-purple-50 border border-purple-200 rounded-lg">
               <h3 className="text-lg font-semibold text-purple-800 mb-4 flex items-center space-x-2">
-                <DollarSign className="w-5 h-5" />
+                <BarChart3 className="w-5 h-5" />
                 <span>Billing Summary</span>
               </h3>
               
