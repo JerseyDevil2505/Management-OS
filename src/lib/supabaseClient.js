@@ -778,7 +778,7 @@ export const utilityService = {
     }
   },
 
-  // Fixed stats function - should now show correct property count
+  // Enhanced stats function with property class breakdown
   async getStats() {
     try {
       // Get basic counts separately to avoid Promise.all masking errors
@@ -794,21 +794,40 @@ export const utilityService = {
         .from('property_records')
         .select('id', { count: 'exact', head: true });
 
-      const { count: sourceFileCount, error: fileError } = await supabase
-        .from('source_file_versions')
-        .select('id', { count: 'exact', head: true });
+      // Get residential properties (CAMA class 2, 3A)
+      const { count: residentialCount, error: residentialError } = await supabase
+        .from('property_records')
+        .select('id', { count: 'exact', head: true })
+        .in('property_cama_class', ['2', '3A']);
+
+      // Get commercial properties (CAMA class 4A, 4B, 4C)
+      const { count: commercialCount, error: commercialError } = await supabase
+        .from('property_records')
+        .select('id', { count: 'exact', head: true })
+        .in('property_cama_class', ['4A', '4B', '4C']);
 
       // Log any errors but don't fail completely
       if (empError) console.error('Employee count error:', empError);
       if (jobError) console.error('Job count error:', jobError);
       if (propError) console.error('Property count error:', propError);
-      if (fileError) console.error('Source file count error:', fileError);
+      if (residentialError) console.error('Residential count error:', residentialError);
+      if (commercialError) console.error('Commercial count error:', commercialError);
+
+      const totalProperties = propertyCount || 0;
+      const residential = residentialCount || 0;
+      const commercial = commercialCount || 0;
+      const other = Math.max(0, totalProperties - residential - commercial);
 
       return {
         employees: employeeCount || 0,
         jobs: jobCount || 0,
-        properties: propertyCount || 0,
-        sourceFiles: sourceFileCount || 0
+        properties: totalProperties,
+        propertiesBreakdown: {
+          total: totalProperties,
+          residential: residential,
+          commercial: commercial,
+          other: other
+        }
       };
     } catch (error) {
       console.error('Stats fetch error:', error);
@@ -816,7 +835,12 @@ export const utilityService = {
         employees: 0,
         jobs: 0,
         properties: 0,
-        sourceFiles: 0
+        propertiesBreakdown: {
+          total: 0,
+          residential: 0,
+          commercial: 0,
+          other: 0
+        }
       };
     }
   }
