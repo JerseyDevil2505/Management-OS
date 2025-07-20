@@ -133,7 +133,7 @@ export class MicrosystemsProcessor {
 
   /**
    * NEW: Store code file content and parsed definitions in jobs table
-   * FIXED: Added comprehensive debugging for API authentication issues
+   * FIXED: Added comprehensive debugging and Unicode null character cleaning
    */
   async storeCodeFileInDatabase(codeFileContent, jobId) {
     try {
@@ -144,6 +144,17 @@ export class MicrosystemsProcessor {
       console.log('🔍 DEBUG - allCodes keys:', Object.keys(this.allCodes));
       console.log('🔍 DEBUG - categories keys:', Object.keys(this.categories));
       console.log('🔍 DEBUG - codeLookups size:', this.codeLookups.size);
+      
+      // FIXED: Clean Unicode null characters that PostgreSQL can't handle
+      console.log('🧹 DEBUG - Cleaning Unicode null characters from code file...');
+      const cleanedCodeContent = codeFileContent
+        .replace(/\u0000/g, '') // Remove null characters
+        .replace(/\x00/g, '')   // Remove hex null characters
+        .trim();
+      
+      console.log('🔍 DEBUG - Original length:', codeFileContent.length);
+      console.log('🔍 DEBUG - Cleaned length:', cleanedCodeContent.length);
+      console.log('🔍 DEBUG - Null chars removed:', codeFileContent.length - cleanedCodeContent.length);
       
       // Test basic Supabase connectivity first
       console.log('🔍 DEBUG - Testing Supabase connection...');
@@ -160,10 +171,10 @@ export class MicrosystemsProcessor {
       
       console.log('✅ DEBUG - Supabase connection successful, job found:', testData?.job_name);
       
-      // Now attempt the actual update
-      console.log('🔍 DEBUG - Attempting code file storage update...');
+      // Now attempt the actual update with cleaned content
+      console.log('🔍 DEBUG - Attempting code file storage update with cleaned content...');
       const updatePayload = {
-        code_file_content: codeFileContent,
+        code_file_content: cleanedCodeContent, // Use cleaned content
         code_file_name: 'Microsystems_Code_File.txt',
         code_file_uploaded_at: new Date().toISOString(),
         parsed_code_definitions: {
