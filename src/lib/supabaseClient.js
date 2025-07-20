@@ -349,14 +349,98 @@ export const jobService = {
     }
   },
 
+  // FIXED: Delete method with proper cascade deletion
   async delete(id) {
     try {
-      const { error } = await supabase
+      console.log(`🗑️ Starting deletion process for job ${id}...`);
+
+      // Step 1: Delete related comparison_reports first
+      const { error: reportsError } = await supabase
+        .from('comparison_reports')
+        .delete()
+        .eq('job_id', id);
+      
+      if (reportsError) {
+        console.error('Error deleting comparison reports:', reportsError);
+        // Don't throw here - continue with job deletion even if no reports exist
+      } else {
+        console.log('✅ Deleted comparison_reports for job', id);
+      }
+
+      // Step 2: Delete related property_change_log records (if this table exists)
+      const { error: changeLogError } = await supabase
+        .from('property_change_log')
+        .delete()
+        .eq('job_id', id);
+      
+      if (changeLogError) {
+        console.error('Error deleting change log:', changeLogError);
+        // Don't throw here - table might not exist or no records
+      } else {
+        console.log('✅ Deleted property_change_log for job', id);
+      }
+
+      // Step 3: Delete related job_assignments
+      const { error: assignmentsError } = await supabase
+        .from('job_assignments')
+        .delete()
+        .eq('job_id', id);
+      
+      if (assignmentsError) {
+        console.error('Error deleting job assignments:', assignmentsError);
+      } else {
+        console.log('✅ Deleted job_assignments for job', id);
+      }
+
+      // Step 4: Delete related job_responsibilities (property assignments)
+      const { error: responsibilitiesError } = await supabase
+        .from('job_responsibilities')
+        .delete()
+        .eq('job_id', id);
+      
+      if (responsibilitiesError) {
+        console.error('Error deleting job responsibilities:', responsibilitiesError);
+      } else {
+        console.log('✅ Deleted job_responsibilities for job', id);
+      }
+
+      // Step 5: Delete related property_records
+      const { error: propertyError } = await supabase
+        .from('property_records')
+        .delete()
+        .eq('job_id', id);
+      
+      if (propertyError) {
+        console.error('Error deleting property records:', propertyError);
+      } else {
+        console.log('✅ Deleted property_records for job', id);
+      }
+
+      // Step 6: Delete related source_file_versions
+      const { error: sourceFileError } = await supabase
+        .from('source_file_versions')
+        .delete()
+        .eq('job_id', id);
+      
+      if (sourceFileError) {
+        console.error('Error deleting source file versions:', sourceFileError);
+      } else {
+        console.log('✅ Deleted source_file_versions for job', id);
+      }
+
+      // Step 7: Finally delete the job itself
+      const { error: jobError } = await supabase
         .from('jobs')
         .delete()
         .eq('id', id);
       
-      if (error) throw error;
+      if (jobError) {
+        console.error('❌ FINAL ERROR - Failed to delete job:', jobError);
+        throw jobError;
+      }
+
+      console.log('🎉 Job deletion completed successfully!');
+      
     } catch (error) {
       console.error('Job deletion error:', error);
       throw error;
