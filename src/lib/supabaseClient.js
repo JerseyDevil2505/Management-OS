@@ -252,7 +252,7 @@ export const jobService = {
         code_file_status: componentFields.codeFileStatus || 'pending',
         vendor_detection: componentFields.vendorDetection,
         workflow_stats: componentFields.workflowStats,
-        percent_billed: componentFields.percentBilling,
+        percent_billed: componentFields.percentBilled,
         created_by: componentFields.created_by || componentFields.createdBy
       };
       
@@ -294,6 +294,9 @@ export const jobService = {
     try {
       const { assignedManagers, ...componentFields } = updates;
       
+      console.log('🔧 DEBUG - jobService.update() called with:', { id, updates });
+      console.log('🔧 DEBUG - componentFields after destructuring:', componentFields);
+      
       const dbFields = {};
       
       // Map component fields to database fields
@@ -314,7 +317,17 @@ export const jobService = {
       if (componentFields.codeFileStatus) dbFields.code_file_status = componentFields.codeFileStatus;
       if (componentFields.vendorDetection) dbFields.vendor_detection = componentFields.vendorDetection;
       if (componentFields.workflowStats) dbFields.workflow_stats = componentFields.workflowStats;
-      if (componentFields.percentBilling !== undefined) dbFields.percent_billed = componentFields.percent_billed;
+      
+      // FIXED PERCENT BILLED MAPPING WITH DEBUG
+      if (componentFields.percent_billed !== undefined) {
+        console.log('🎯 DEBUG - Found percent_billed field, value:', componentFields.percent_billed);
+        dbFields.percent_billed = componentFields.percent_billed;
+      } else {
+        console.log('⚠️ DEBUG - percent_billed field NOT found in componentFields');
+        console.log('📋 DEBUG - Available fields:', Object.keys(componentFields));
+      }
+
+      console.log('💾 DEBUG - Final dbFields being sent to Supabase:', dbFields);
 
       const { data, error } = await supabase
         .from('jobs')
@@ -323,7 +336,12 @@ export const jobService = {
         .select()
         .single();
       
-      if (error) throw error;
+      if (error) {
+        console.error('❌ DEBUG - Supabase update error:', error);
+        throw error;
+      }
+      
+      console.log('✅ DEBUG - Supabase update successful, returned data:', data);
       return data;
     } catch (error) {
       console.error('Job update error:', error);
