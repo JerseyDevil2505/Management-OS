@@ -162,6 +162,53 @@ const AdminJobManagement = ({ onJobSelect }) => {
     };
   };
 
+  // Enhanced stats loading with real property counts
+  const loadEnhancedStats = async () => {
+    try {
+      // Get basic stats
+      const basicStats = await utilityService.getStats();
+      
+      // Get real property breakdown from property_records
+      const { data: propertyBreakdown, error } = await supabase
+        .from('property_records')
+        .select('property_m4_class')
+        .not('property_m4_class', 'is', null);
+      
+      if (error) {
+        console.error('Error loading property breakdown:', error);
+        return basicStats;
+      }
+      
+      // Count properties by M4 class
+      const counts = { residential: 0, commercial: 0, other: 0 };
+      
+      propertyBreakdown.forEach(record => {
+        const m4Class = record.property_m4_class;
+        if (['1', '2', '3A', '3B'].includes(m4Class)) {
+          counts.residential++;
+        } else if (['4A', '4B', '4C'].includes(m4Class)) {
+          counts.commercial++;
+        } else {
+          counts.other++;
+        }
+      });
+      
+      return {
+        ...basicStats,
+        properties: propertyBreakdown.length,
+        propertiesBreakdown: {
+          total: propertyBreakdown.length,
+          residential: counts.residential,
+          commercial: counts.commercial,
+          other: counts.other
+        }
+      };
+    } catch (error) {
+      console.error('Error loading enhanced stats:', error);
+      return await utilityService.getStats();
+    }
+  };
+
   // FIXED: Load HPI data from database on component mount
   const loadCountyHpiData = async () => {
     try {
@@ -370,7 +417,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
         jobName: job.name
       });
 
-      // Refresh jobs data to reflect assignment changes
+      // Refresh jobs data and property stats to reflect assignment changes
       const updatedJobs = await jobService.getAll();
       const activeJobs = updatedJobs.filter(job => job.status !== 'archived');
       const archived = updatedJobs.filter(job => job.status === 'archived');
@@ -385,6 +432,10 @@ const AdminJobManagement = ({ onJobSelect }) => {
         ...job,
         county: capitalizeCounty(job.county)
       })));
+
+      // Refresh property stats to show updated counts
+      const refreshedStats = await loadEnhancedStats();
+      setDbStats(refreshedStats);
 
       addNotification(`Successfully assigned ${matchedCount} of ${assignments.length} properties`, 'success');
       
@@ -527,7 +578,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
             jobService.getAll(),
             planningJobService.getAll(),
             employeeService.getManagers(),
-            utilityService.getStats(),
+            loadEnhancedStats(), // Use enhanced stats instead
             authService.getCurrentUser()
           ]);
           
@@ -801,6 +852,10 @@ const AdminJobManagement = ({ onJobSelect }) => {
           ...job,
           county: capitalizeCounty(job.county)
         })));
+        
+        // Refresh property stats after job creation
+        const refreshedStats = await loadEnhancedStats();
+        setDbStats(refreshedStats);
         
         updateProcessingStatus('Complete!', 100);
         
@@ -2097,7 +2152,296 @@ const AdminJobManagement = ({ onJobSelect }) => {
         </div>
       )}
 
-      {/* Continue with remaining tabs... */}
+      {/* Planning Jobs Tab */}
+      {activeTab === 'planning' && (
+        <div className="space-y-6">
+          <div className="bg-gradient-to-r from-yellow-50 to-orange-50 rounded-lg border-2 border-yellow-200 p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center">
+                <Calendar className="w-8 h-8 mr-3 text-yellow-600" />
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-800">📅 Planning Job Management</h2>
+                  <p className="text-gray-600 mt-1">Track potential future projects and pipeline planning</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowCreatePlanning(true)}
+                className="px-6 py-3 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 flex items-center space-x-2 font-medium shadow-lg hover:shadow-xl transition-all transform hover:scale-105"
+              >
+                <Plus className="w-5 h-5" />
+                <span>📝 Add Planning Job</span>
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              {planningJobs.length === 0 ? (
+                <div className="text-center text-gray-500 py-12">
+                  <div className="text-4xl mb-4">📅</div>
+                  <h4 className="text-lg font-medium mb-2">No Planning Jobs</h4>
+                  <p className="text-sm">Add planning jobs to track your future project pipeline!</p>
+                </div>
+              ) : (
+                planningJobs.map(planningJob => (
+                  <div key={planningJob.id} className="p-4 bg-white rounded-lg border-l-4 border-yellow-400 shadow-md hover:shadow-lg transition-all transform hover:scale-[1.01] hover:bg-yellow-50">
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1">
+                        <div className="flex justify-between items-center mb-2">
+                          <h4 className="text-lg font-bold text-gray-900">{planningJob.municipality} {planningJob.potentialYear}</h4>
+                          <span className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs font-medium shadow-sm">
+                            Planning Phase
+                          </span>
+                        </div>
+                        <div className="flex items-center space-x-4 text-sm text-gray-600 mb-2">
+                          <span className="flex items-center space-x-1">
+                            <span className="font-bold text-yellow-600">{planningJob.ccddCode}</span>
+                            <span>•</span>
+                            <span>Target: {planningJob.potentialYear}</span>
+                          </span>
+                        </div>
+                        {planningJob.comments && (
+                          <div className="text-sm text-gray-600 bg-gray-50 p-2 rounded">
+                            {planningJob.comments}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex justify-end space-x-2 mt-3 pt-3 border-t border-gray-100">
+                      <button
+                        onClick={() => convertPlanningToJob(planningJob)}
+                        className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span>Convert to Job</span>
+                      </button>
+                      <button 
+                        onClick={() => {
+                          setEditingPlanning(planningJob);
+                          setNewPlanningJob({
+                            ccddCode: planningJob.ccddCode,
+                            municipality: planningJob.municipality,
+                            dueDate: `${planningJob.potentialYear}-01-01`,
+                            comments: planningJob.comments || ''
+                          });
+                          setShowEditPlanning(true);
+                        }}
+                        className="px-3 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                        <span>Edit</span>
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Archived Jobs Tab */}
+      {activeTab === 'archived' && (
+        <div className="space-y-6">
+          <div className="bg-gradient-to-r from-purple-50 to-gray-50 rounded-lg border-2 border-purple-200 p-6">
+            <div className="flex items-center mb-6">
+              <Archive className="w-8 h-8 mr-3 text-purple-600" />
+              <div>
+                <h2 className="text-2xl font-bold text-gray-800">🗄️ Archived Jobs</h2>
+                <p className="text-gray-600 mt-1">Completed and archived project history</p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {archivedJobs.length === 0 ? (
+                <div className="text-center text-gray-500 py-12">
+                  <div className="text-4xl mb-4">🗄️</div>
+                  <h4 className="text-lg font-medium mb-2">No Archived Jobs</h4>
+                  <p className="text-sm">Completed jobs will appear here for historical reference</p>
+                </div>
+              ) : (
+                archivedJobs.map(job => (
+                  <div key={job.id} className="p-4 bg-white rounded-lg border-l-4 border-purple-400 shadow-md hover:shadow-lg transition-all transform hover:scale-[1.01] hover:bg-purple-50">
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1">
+                        <div className="flex justify-between items-center mb-2">
+                          <h4 className="text-lg font-bold text-gray-900">{job.name}</h4>
+                          <div className="flex items-center space-x-2">
+                            <span className={`px-3 py-1 rounded-full text-xs font-medium shadow-sm ${
+                              job.vendor === 'Microsystems' 
+                                ? 'bg-blue-100 text-blue-800' 
+                                : 'bg-orange-200 text-orange-800'
+                            }`}>
+                              {job.vendor}
+                            </span>
+                            <span className="px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-xs font-medium shadow-sm">
+                              Archived
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-4 text-sm text-gray-600">
+                          <span className="flex items-center space-x-1">
+                            <span className="font-bold text-purple-600">{job.ccdd || job.ccddCode}</span>
+                            <span>•</span>
+                            <MapPin className="w-4 h-4" />
+                            <span>{job.municipality}</span>
+                          </span>
+                          <span className="flex items-center space-x-1">
+                            <span>📍 {job.county} County</span>
+                          </span>
+                          <span className="flex items-center space-x-1">
+                            <span>🏠 {(job.totalProperties || 0).toLocaleString()} Properties</span>
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* County HPI Tab */}
+      {activeTab === 'county-hpi' && (
+        <div className="space-y-6">
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border-2 border-blue-200 p-6">
+            <div className="flex items-center mb-6">
+              <TrendingUp className="w-8 h-8 mr-3 text-blue-600" />
+              <div>
+                <h2 className="text-2xl font-bold text-gray-800">📈 County HPI Data Management</h2>
+                <p className="text-gray-600 mt-1">Import and manage Housing Price Index data by county</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {getUniqueCounties().length === 0 ? (
+                <div className="col-span-full text-center text-gray-500 py-12">
+                  <div className="text-4xl mb-4">📈</div>
+                  <h4 className="text-lg font-medium mb-2">No County Data</h4>
+                  <p className="text-sm">Create jobs to see available counties for HPI data import</p>
+                </div>
+              ) : (
+                getUniqueCounties().map(county => {
+                  const hpiData = countyHpiData[county] || [];
+                  const hasData = hpiData.length > 0;
+                  const latestYear = hasData ? Math.max(...hpiData.map(d => d.observation_year)) : null;
+                  const dataCount = hpiData.length;
+
+                  return (
+                    <div key={county} className="p-4 bg-white rounded-lg border shadow-md hover:shadow-lg transition-all">
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-lg font-bold text-gray-900">{county} County</h3>
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                          hasData ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'
+                        }`}>
+                          {hasData ? `${dataCount} Records` : 'No Data'}
+                        </span>
+                      </div>
+                      
+                      {hasData && (
+                        <div className="text-sm text-gray-600 mb-3">
+                          <div>Latest: {latestYear}</div>
+                          <div>Years: {Math.min(...hpiData.map(d => d.observation_year))} - {latestYear}</div>
+                        </div>
+                      )}
+
+                      <button
+                        onClick={() => setShowHpiImport(county)}
+                        className={`w-full px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                          hasData 
+                            ? 'bg-blue-100 text-blue-800 hover:bg-blue-200' 
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                      >
+                        {hasData ? '🔄 Update HPI Data' : '📊 Import HPI Data'}
+                      </button>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Manager Assignments Tab */}
+      {activeTab === 'manager-assignments' && (
+        <div className="space-y-6">
+          <div className="bg-gradient-to-r from-green-50 to-blue-50 rounded-lg border-2 border-green-200 p-6">
+            <div className="flex items-center mb-6">
+              <Users className="w-8 h-8 mr-3 text-green-600" />
+              <div>
+                <h2 className="text-2xl font-bold text-gray-800">👥 Manager Assignment Overview</h2>
+                <p className="text-gray-600 mt-1">Current workload distribution across all managers</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {managers.filter(manager => !`${manager.first_name} ${manager.last_name}`.toLowerCase().includes('tom davis')).map(manager => {
+                const workload = getManagerWorkload(manager);
+                
+                return (
+                  <div key={manager.id} className="p-4 bg-white rounded-lg border shadow-md hover:shadow-lg transition-all">
+                    <div className="flex items-center mb-3">
+                      <div className="w-10 h-10 rounded-full bg-green-100 text-green-800 flex items-center justify-center text-sm font-bold mr-3">
+                        {`${manager.first_name || ''} ${manager.last_name || ''}`.split(' ').map(n => n[0]).join('')}
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-bold text-gray-900">
+                          {manager.first_name} {manager.last_name}
+                        </h3>
+                        {manager.can_be_lead && (
+                          <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded font-medium">
+                            Lead Qualified
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 mb-4">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Active Jobs:</span>
+                        <span className="font-medium text-blue-600">{workload.jobCount}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Total Properties:</span>
+                        <span className="font-medium text-gray-800">{workload.totalProperties.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Completed:</span>
+                        <span className="font-medium text-green-600">{workload.completedProperties.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Completion Rate:</span>
+                        <span className="font-medium text-purple-600">{workload.completionRate}%</span>
+                      </div>
+                    </div>
+
+                    {workload.jobs.length > 0 && (
+                      <div className="border-t pt-3">
+                        <div className="text-xs text-gray-600 mb-2">Assigned Jobs:</div>
+                        <div className="space-y-1">
+                          {workload.jobs.slice(0, 3).map(job => (
+                            <div key={job.id} className="text-xs text-gray-700 flex justify-between">
+                              <span className="truncate">{job.municipality}</span>
+                              <span className="text-gray-500">{(job.totalProperties || 0).toLocaleString()}</span>
+                            </div>
+                          ))}
+                          {workload.jobs.length > 3 && (
+                            <div className="text-xs text-gray-500">
+                              ...and {workload.jobs.length - 3} more
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
