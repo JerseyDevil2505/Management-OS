@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { AlertTriangle, Settings, Play, Download, CheckCircle, Clock, Users, BarChart3, FileText, X, DollarSign, Lock, Save } from 'lucide-react';
+import { AlertTriangle, Settings, Play, Download, CheckCircle, Clock, Users, BarChart3, FileText, X, Lock, Save } from 'lucide-react';
 import { employeeService, jobService, propertyService, supabase } from '../../lib/supabaseClient';
 
 const ProductionTracker = ({ jobData, onBackToJobs, onUpdateJobMetrics }) => {
   // Map JobContainer props to internal naming
   const currentJob = jobData;
+  
   const [processing, setProcessing] = useState(false);
   const [results, setResults] = useState(null);
   const [showDataWarning, setShowDataWarning] = useState(false);
@@ -18,7 +19,6 @@ const ProductionTracker = ({ jobData, onBackToJobs, onUpdateJobMetrics }) => {
   
   const [settings, setSettings] = useState({
     projectStartDate: '2025-01-01',
-    payrollPeriodStart: '2025-01-01',
     infoByCodeMappings: {
       entryCodes: '01,02,03,04',
       refusalCodes: '06', 
@@ -58,7 +58,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, onUpdateJobMetrics }) => {
     try {
       const { data, error } = await supabase
         .from('inspection_data')
-        .select('import_session_id, project_start_date, payroll_period_start')
+        .select('import_session_id, project_start_date')
         .eq('job_id', currentJob.id)
         .order('upload_date', { ascending: false })
         .limit(1);
@@ -70,8 +70,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, onUpdateJobMetrics }) => {
         setCurrentProcessingSession(session.import_session_id);
         setSettings(prev => ({
           ...prev,
-          projectStartDate: session.project_start_date || prev.projectStartDate,
-          payrollPeriodStart: session.payroll_period_start || prev.payrollPeriodStart
+          projectStartDate: session.project_start_date || prev.projectStartDate
         }));
         setSettingsLocked(true);
       }
@@ -400,7 +399,6 @@ const ProductionTracker = ({ jobData, onBackToJobs, onUpdateJobMetrics }) => {
         price_date: row.inspection_price_date,
         info_by_code: row.inspection_info_by,
         project_start_date: settings.projectStartDate,
-        payroll_period_start: settings.payrollPeriodStart,
         source_file_name: row.source_file_name,
         source_file_uploaded_at: row.source_file_uploaded_at,
         code_file_name: row.code_file_name,
@@ -676,40 +674,6 @@ const ProductionTracker = ({ jobData, onBackToJobs, onUpdateJobMetrics }) => {
           <p className="text-sm">Please select a job to use the Production Tracker.</p>
         </div>
       </div>
-
-      {/* Project Settings - Lock In */}
-      <div className="mb-6 p-4 bg-indigo-50 border border-indigo-200 rounded-lg">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-lg font-semibold text-indigo-800 flex items-center space-x-2">
-              <Lock className="w-5 h-5" />
-              <span>Project Settings</span>
-            </h3>
-            <p className="text-sm text-indigo-600 mt-1">Lock in project start date for consistent scrubbing</p>
-          </div>
-          <div className="flex items-center space-x-4">
-            <div>
-              <label className="block text-sm font-medium text-indigo-700 mb-1">Project Start Date</label>
-              <input
-                type="date"
-                value={settings.projectStartDate}
-                onChange={(e) => setSettings({...settings, projectStartDate: e.target.value})}
-                disabled={settingsLocked}
-                className="px-3 py-2 border border-indigo-300 rounded-md text-sm disabled:bg-gray-100"
-              />
-            </div>
-            {!settingsLocked && (
-              <button
-                onClick={saveSettings}
-                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center space-x-2 text-sm font-medium"
-              >
-                <Save className="w-4 h-4" />
-                <span>Lock Settings</span>
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
     );
   }
 
@@ -796,6 +760,40 @@ const ProductionTracker = ({ jobData, onBackToJobs, onUpdateJobMetrics }) => {
               {currentJob.inspectedProperties?.toLocaleString() || 0} of {currentJob.totalProperties?.toLocaleString() || 0}
             </div>
             <div className="text-sm text-gray-600">Properties Inspected</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Project Settings - Lock In */}
+      <div className="mb-6 p-4 bg-indigo-50 border border-indigo-200 rounded-lg">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-semibold text-indigo-800 flex items-center space-x-2">
+              <Lock className="w-5 h-5" />
+              <span>Project Settings</span>
+            </h3>
+            <p className="text-sm text-indigo-600 mt-1">Lock in project start date for consistent scrubbing</p>
+          </div>
+          <div className="flex items-center space-x-4">
+            <div>
+              <label className="block text-sm font-medium text-indigo-700 mb-1">Project Start Date</label>
+              <input
+                type="date"
+                value={settings.projectStartDate}
+                onChange={(e) => setSettings({...settings, projectStartDate: e.target.value})}
+                disabled={settingsLocked}
+                className="px-3 py-2 border border-indigo-300 rounded-md text-sm disabled:bg-gray-100"
+              />
+            </div>
+            {!settingsLocked && (
+              <button
+                onClick={saveSettings}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center space-x-2 text-sm font-medium"
+              >
+                <Save className="w-4 h-4" />
+                <span>Lock Settings</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -935,37 +933,16 @@ const ProductionTracker = ({ jobData, onBackToJobs, onUpdateJobMetrics }) => {
             </div>
           </div>
 
-          {/* Date Settings */}
+          {/* Additional Settings */}
           <div className={`p-6 border rounded-lg ${settingsLocked ? 'bg-gray-50 border-gray-300' : 'bg-yellow-50 border-yellow-200'}`}>
             <h3 className="text-lg font-semibold text-yellow-800 mb-4 flex items-center space-x-2">
               <Clock className="w-5 h-5" />
-              <span>Date Settings</span>
+              <span>Additional Settings</span>
             </h3>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-yellow-700 mb-2">Project Start Date</label>
-                <input
-                  type="date"
-                  value={settings.projectStartDate}
-                  onChange={(e) => setSettings({...settings, projectStartDate: e.target.value})}
-                  disabled={settingsLocked}
-                  className="w-full p-2 border border-yellow-300 rounded-md text-sm disabled:bg-gray-100"
-                />
-                <p className="text-xs text-yellow-600 mt-1">Inspection data before this date will be cleaned</p>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-yellow-700 mb-2">Payroll Period Start</label>
-                <input
-                  type="date"
-                  value={settings.payrollPeriodStart}
-                  onChange={(e) => setSettings({...settings, payrollPeriodStart: e.target.value})}
-                  disabled={settingsLocked}
-                  className="w-full p-2 border border-yellow-300 rounded-md text-sm disabled:bg-gray-100"
-                />
-                <p className="text-xs text-yellow-600 mt-1">Payroll calculations start from this date</p>
-              </div>
+            <div className="text-center text-gray-500 py-8">
+              <Clock className="w-12 h-12 mx-auto mb-2 text-gray-400" />
+              <p className="text-sm">Additional date settings will be available in future updates</p>
             </div>
           </div>
         </div>
