@@ -1,7 +1,8 @@
 /**
- * Complete Microsystems Processor 
+ * Enhanced Microsystems Processor 
  * Handles pipe-delimited source files and field_id+code lookup files
  * UPDATED: Single table insertion to property_records with all 82 fields
+ * NEW: Proper code file storage in jobs table with pipe-delimited format support
  */
 
 import { supabase } from '../supabaseClient.js';
@@ -10,6 +11,10 @@ export class MicrosystemsProcessor {
   constructor() {
     this.codeLookups = new Map();
     this.headers = [];
+    
+    // NEW: Store all parsed codes for database storage
+    this.allCodes = {};
+    this.categories = {};
   }
 
   /**
@@ -26,29 +31,143 @@ export class MicrosystemsProcessor {
   }
 
   /**
-   * Process Microsystems code file (field_id+code format)
-   * Example: "120PV" = Field 120 + Code "PV" = "PAVED"
-   * Special: "8FA" = Heating/cooling codes use "8" prefix
+   * ENHANCED: Process Microsystems code file and store in jobs table
+   * Handles pipe-delimited format: CODE|DESCRIPTION|RATE|CONSTANT|CATEGORY|TABLE|UPDATED
+   * Examples: "120PV  9999|PAVED|0|0|ROAD|0|05/14/92|"
+   *           "8FA16  0399|FORCED HOT AIR|4700|0|FORCED HOT AIR|E|06/24/02|"
    */
-  processCodeFile(codeFileContent) {
-    console.log('Processing Microsystems code file...');
+  async processCodeFile(codeFileContent, jobId) {
+    console.log('Processing Microsystems code file with database storage...');
     
-    const lines = codeFileContent.split('\n').filter(line => line.trim());
-    
-    lines.forEach(line => {
-      const trimmedLine = line.trim();
-      if (!trimmedLine) return;
+    try {
+      const lines = codeFileContent.split('\n').filter(line => line.trim());
       
-      // Parse field_id+code format
-      // Most: "120PV=PAVED"
-      // Heating/cooling: "8FA=FORCED AIR"
-      const [code, description] = trimmedLine.split('=');
-      if (code && description) {
-        this.codeLookups.set(code.trim(), description.trim());
+      // Reset collections
+      this.allCodes = {};
+      this.categories = {};
+      this.codeLookups.clear();
+      
+      lines.forEach(line => {
+        const trimmedLine = line.trim();
+        if (!trimmedLine) return;
+        
+        // Parse pipe-delimited format: CODE|DESC|RATE|CONSTANT|CATEGORY|TABLE|UPDATED
+        const parts = trimmedLine.split('|');
+        if (parts.length < 5) return; // Need at least CODE|DESC|RATE|CONSTANT|CATEGORY
+        
+        const fullCode = parts[0].trim();
+        const description = parts[1].trim();
+        const rate = parts[2].trim();
+        const constant = parts[3].trim();
+        const category = parts[4].trim();
+        const table = parts[5] ? parts[5].trim() : '';
+        const updated = parts[6] ? parts[6].trim() : '';
+        
+        if (!fullCode || !description) return;
+        
+        // Extract prefix and suffix from full code
+        // Examples: "120PV  9999" -> prefix="120", suffix="PV"
+        //           "8FA16  0399" -> prefix="8", suffix="FA"
+        const codeMatch = fullCode.match(/^(\d+)([A-Z]+)/);
+        if (codeMatch) {
+          const prefix = codeMatch[1];
+          const suffix = codeMatch[2];
+          
+          // Store full code with description
+          this.codeLookups.set(fullCode, description);
+          
+          // Store suffix for CSV lookup (this is what appears in source data)
+          this.codeLookups.set(suffix, description);
+          
+          // Organize by prefix for database storage
+          if (!this.allCodes[prefix]) {
+            this.allCodes[prefix] = {};
+          }
+          
+          this.allCodes[prefix][suffix] = {
+            description: description,
+            rate: rate,
+            constant: constant,
+            category: category,
+            table: table,
+            updated: updated,
+            full_code: fullCode
+          };
+          
+          // Store category mapping
+          this.categories[prefix] = category;
+          
+        } else {
+          // Handle codes that don't match the pattern (direct codes)
+          this.codeLookups.set(fullCode, description);
+          
+          if (!this.allCodes['direct']) {
+            this.allCodes['direct'] = {};
+          }
+          
+          this.allCodes['direct'][fullCode] = {
+            description: description,
+            rate: rate,
+            constant: constant,
+            category: category,
+            table: table,
+            updated: updated,
+            full_code: fullCode
+          };
+        }
+      });
+      
+      console.log(`Loaded ${this.codeLookups.size} code definitions`);
+      console.log(`Organized into ${Object.keys(this.allCodes).length} field groups`);
+      console.log(`Categories found: ${Object.keys(this.categories).join(', ')}`);
+      
+      // NEW: Store code file in jobs table
+      await this.storeCodeFileInDatabase(codeFileContent, jobId);
+      
+    } catch (error) {
+      console.error('Error parsing Microsystems code file:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * NEW: Store code file content and parsed definitions in jobs table
+   */
+  async storeCodeFileInDatabase(codeFileContent, jobId) {
+    try {
+      console.log('💾 Storing Microsystems code file in jobs table...');
+      
+      const { error } = await supabase
+        .from('jobs')
+        .update({
+          code_file_content: codeFileContent,
+          code_file_name: 'Microsystems_Code_File.txt',
+          code_file_uploaded_at: new Date().toISOString(),
+          parsed_code_definitions: {
+            vendor_type: 'Microsystems',
+            field_codes: this.allCodes,
+            categories: this.categories,
+            flat_lookup: Object.fromEntries(this.codeLookups),
+            summary: {
+              total_codes: this.codeLookups.size,
+              field_groups: Object.keys(this.allCodes).length,
+              categories: Object.keys(this.categories).length,
+              parsed_at: new Date().toISOString()
+            }
+          }
+        })
+        .eq('id', jobId);
+
+      if (error) {
+        console.error('Error storing Microsystems code file in database:', error);
+        throw error;
       }
-    });
-    
-    console.log(`Loaded ${this.codeLookups.size} code definitions`);
+      
+      console.log('✅ Microsystems code file stored successfully in jobs table');
+    } catch (error) {
+      console.error('Failed to store Microsystems code file:', error);
+      // Don't throw - continue with processing even if code storage fails
+    }
   }
 
   /**
@@ -232,16 +351,17 @@ export class MicrosystemsProcessor {
   }
 
   /**
-   * Process complete file and store in database using FAST single-table batch processing
+   * ENHANCED: Process complete file and store in database with code file integration
    * UPDATED: Single table insertion only - no more dual-table complexity
+   * NEW: Integrates code file storage in jobs table
    */
   async processFile(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, versionInfo = {}) {
     try {
-      console.log('Starting Microsystems file processing (SINGLE TABLE)...');
+      console.log('Starting Enhanced Microsystems file processing (SINGLE TABLE WITH CODE STORAGE)...');
       
-      // Process code file if provided
+      // NEW: Process and store code file if provided
       if (codeFileContent) {
-        this.processCodeFile(codeFileContent);
+        await this.processCodeFile(codeFileContent, jobId);
       }
       
       // Parse source file
@@ -288,11 +408,11 @@ export class MicrosystemsProcessor {
         }
       }
       
-      console.log('🚀 SINGLE TABLE PROCESSING COMPLETE:', results);
+      console.log('🚀 ENHANCED SINGLE TABLE PROCESSING COMPLETE WITH CODE STORAGE:', results);
       return results;
       
     } catch (error) {
-      console.error('File processing failed:', error);
+      console.error('Enhanced Microsystems file processing failed:', error);
       throw error;
     }
   }
@@ -382,7 +502,7 @@ export class MicrosystemsProcessor {
       // Get county from job
       const { data: job, error: jobError } = await supabase
         .from('jobs')
-        .select('county_name, year_created')
+        .select('county, year_created')
         .eq('id', jobId)
         .single();
       
@@ -391,20 +511,31 @@ export class MicrosystemsProcessor {
         return salePrice; // Return original price if no county data
       }
       
-      // Get time adjustment multiplier
-      const { data: multiplierResult, error: multiplierError } = await supabase
-        .rpc('calculate_time_multiplier', {
-          p_county_name: job.county_name,
-          p_sale_year: saleYear,
-          p_current_year: job.year_created
-        });
+      // Get time adjustment multiplier from county_hpi_data
+      const { data: hpiData, error: hpiError } = await supabase
+        .from('county_hpi_data')
+        .select('hpi_index, observation_year')
+        .eq('county_name', job.county)
+        .in('observation_year', [saleYear, job.year_created])
+        .order('observation_year');
       
-      if (multiplierError || !multiplierResult) {
-        console.warn(`No HPI data for ${job.county_name} ${saleYear}, using original price`);
+      if (hpiError || !hpiData || hpiData.length < 2) {
+        console.warn(`No HPI data for ${job.county} ${saleYear}, using original price`);
         return salePrice; // Return original price if no HPI data
       }
       
-      const adjustedValue = salePrice * multiplierResult;
+      // Find HPI values for sale year and current year
+      const saleYearHPI = hpiData.find(d => d.observation_year === saleYear);
+      const currentYearHPI = hpiData.find(d => d.observation_year === job.year_created);
+      
+      if (!saleYearHPI || !currentYearHPI) {
+        return salePrice;
+      }
+      
+      // Calculate time adjustment multiplier
+      const multiplier = currentYearHPI.hpi_index / saleYearHPI.hpi_index;
+      const adjustedValue = salePrice * multiplier;
+      
       return parseFloat(adjustedValue.toFixed(2));
       
     } catch (error) {
@@ -434,10 +565,74 @@ export class MicrosystemsProcessor {
   }
 
   /**
-   * Get code description for display
+   * ENHANCED: Get code description with support for suffix lookup
+   * Now handles both full codes (120PV) and suffix codes (PV) from CSV
    */
   getCodeDescription(code) {
-    return this.codeLookups.get(code) || code;
+    // Try exact match first (for full codes or suffix codes)
+    if (this.codeLookups.has(code)) {
+      return this.codeLookups.get(code);
+    }
+    
+    // Return original code if no description found
+    return code;
+  }
+
+  /**
+   * NEW: Get code details including rate and category
+   */
+  getCodeDetails(code) {
+    // Search through field codes for detailed information
+    for (const fieldPrefix of Object.keys(this.allCodes)) {
+      const fieldCodes = this.allCodes[fieldPrefix];
+      if (fieldCodes[code]) {
+        return {
+          description: fieldCodes[code].description,
+          rate: fieldCodes[code].rate,
+          constant: fieldCodes[code].constant,
+          category: fieldCodes[code].category,
+          field_prefix: fieldPrefix
+        };
+      }
+    }
+    
+    return {
+      description: this.getCodeDescription(code),
+      rate: null,
+      constant: null,
+      category: null,
+      field_prefix: null
+    };
+  }
+
+  /**
+   * NEW: Get all parsed code sections (for module access)
+   */
+  getAllCodeSections() {
+    return {
+      field_codes: this.allCodes,
+      categories: this.categories,
+      flat_lookup: Object.fromEntries(this.codeLookups)
+    };
+  }
+
+  /**
+   * NEW: Get codes by category
+   */
+  getCodesByCategory(category) {
+    const result = {};
+    
+    for (const fieldPrefix of Object.keys(this.allCodes)) {
+      const fieldCodes = this.allCodes[fieldPrefix];
+      
+      for (const code of Object.keys(fieldCodes)) {
+        if (fieldCodes[code].category === category) {
+          result[code] = fieldCodes[code];
+        }
+      }
+    }
+    
+    return result;
   }
 }
 
