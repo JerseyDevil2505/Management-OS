@@ -760,24 +760,19 @@ const AdminJobManagement = ({ onJobSelect }) => {
     }
   };
 
-  const groupJobsByCounty = (jobList) => {
-    const grouped = jobList.reduce((acc, job) => {
-      const county = job.county || 'Unknown County';
-      if (!acc[county]) acc[county] = [];
-      acc[county].push(job);
-      return acc;
-    }, {});
-
-    const sortedCounties = Object.keys(grouped).sort();
-    const result = {};
-    
-    sortedCounties.forEach(county => {
-      result[county] = grouped[county].sort((a, b) => 
-        (a.municipality || '').localeCompare(b.municipality || '')
-      );
+  const sortJobsByBilling = (jobList) => {
+    return jobList.sort((a, b) => {
+      const aBilling = a.percentBilled || 0;
+      const bBilling = b.percentBilled || 0;
+      
+      // Primary sort: billing percentage (ascending - lower percentages first)
+      if (aBilling !== bBilling) {
+        return aBilling - bBilling;
+      }
+      
+      // Secondary sort: municipality name (alphabetical)
+      return (a.municipality || '').localeCompare(b.municipality || '');
     });
-
-    return result;
   };
 
   const handleStatusTileClick = (tab) => {
@@ -1566,7 +1561,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
             </div>
 
             {/* County Grouped Job Cards */}
-            <div className="space-y-6">
+            <div className="space-y-3">
               {jobs.length === 0 ? (
                 <div className="text-center text-gray-500 py-12">
                   <div className="text-4xl mb-4">📋</div>
@@ -1574,141 +1569,142 @@ const AdminJobManagement = ({ onJobSelect }) => {
                   <p className="text-sm">Create your first job to get started!</p>
                 </div>
               ) : (
-                Object.entries(groupJobsByCounty(jobs)).map(([county, countyJobs]) => (
-                  <div key={county} className="space-y-3">
-                    <h3 className="text-lg font-bold text-gray-800 border-b border-gray-300 pb-2">
-                      📍 {county} County ({countyJobs.length} jobs)
-                    </h3>
-                    <div className="space-y-3">
-                      {countyJobs.map(job => (
-                        <div key={job.id} className={`p-4 bg-white rounded-lg border-l-4 shadow-md hover:shadow-lg transition-all transform hover:scale-[1.01] ${
-                          job.vendor === 'Microsystems' ? 'border-blue-400 hover:bg-blue-50' : 'border-orange-300 hover:bg-orange-50'
-                        }`}>
-                          <div className="flex justify-between items-start mb-3">
-                            <div className="flex-1">
-                              <div className="flex justify-between items-center mb-2">
-                                <h4 className="text-lg font-bold text-gray-900">{job.name}</h4>
-                                <div className="flex items-center space-x-2">
-                                  <span className={`px-3 py-1 rounded-full text-xs font-medium shadow-sm ${
-                                    job.vendor === 'Microsystems' 
-                                      ? 'bg-blue-100 text-blue-800' 
-                                      : 'bg-orange-200 text-orange-800'
-                                  }`}>
-                                    {job.vendor}
-                                  </span>
-                                  <span className={`px-3 py-1 rounded-full text-xs font-medium shadow-sm ${getStatusColor(job.status)}`}>
-                                    {job.status || 'Active'}
-                                  </span>
-                                  <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium shadow-sm">
-                                    {(job.percentBilled || 0).toFixed(2)}% Billed
-                                  </span>
-                                </div>
-                              </div>
-                              <div className="flex items-center space-x-4 text-sm text-gray-600 mb-3">
-                                <span className="flex items-center space-x-1">
-                                  <span className="font-bold text-blue-600">{job.ccddCode}</span>
-                                  <span>•</span>
-                                  <MapPin className="w-4 h-4" />
-                                  <span>{job.municipality}</span>
-                                </span>
-                                <span className="flex items-center space-x-1">
-                                  <Calendar className="w-4 h-4" />
-                                  <span>Due: {job.dueDate ? job.dueDate.split('-')[0] : 'TBD'}</span>
-                                </span>
-                                {job.assignedManagers && job.assignedManagers.length > 0 && (
-                                  <span className="flex items-center space-x-1">
-                                    <Users className="w-4 h-4" />
-                                    <span>{job.assignedManagers.map(m => `${m.name} (${m.role})`).join(', ')}</span>
-                                  </span>
-                                )}
-                              </div>
-                              
-                              {/* Production Metrics */}
-                              <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-3 p-3 bg-gray-50 rounded-lg">
-                                <div className="text-center">
-                                  <div className="text-lg font-bold text-blue-600">
-                                    {(job.inspectedProperties || 0).toLocaleString()} of {(job.totalProperties || 0).toLocaleString()}
-                                  </div>
-                                  <div className="text-xs text-gray-600">Properties Inspected</div>
-                                  <div className="text-sm font-medium text-blue-600">
-                                    {job.totalProperties > 0 ? Math.round(((job.inspectedProperties || 0) / job.totalProperties) * 100) : 0}% Complete
-                                  </div>
-                                </div>
-                                
-                                <div className="text-center">
-                                  <div className="text-lg font-bold text-green-600">
-                                    {job.workflowStats?.rates?.entryRate || 0}%
-                                  </div>
-                                  <div className="text-xs text-gray-600">Entry Rate</div>
-                                </div>
-                                
-                                <div className="text-center">
-                                  <div className="text-lg font-bold text-red-600">
-                                    {job.workflowStats?.rates?.refusalRate || 0}%
-                                  </div>
-                                  <div className="text-xs text-gray-600">Refusal Rate</div>
-                                </div>
-
-                                <div className="text-center">
-                                  <div className="text-lg font-bold text-purple-600">
-                                    {job.workflowStats?.rates?.commercialInspectionRate || 0}%
-                                  </div>
-                                  <div className="text-xs text-gray-600">Commercial Complete</div>
-                                </div>
-
-                                <div className="text-center">
-                                  <div className="text-lg font-bold text-indigo-600">
-                                    {job.workflowStats?.rates?.pricingRate || 0}%
-                                  </div>
-                                  <div className="text-xs text-gray-600">Pricing Complete</div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Action Buttons */}
-                          <div className="flex justify-end space-x-2 pt-3 border-t border-gray-100">
-                            <button 
-                              onClick={() => goToJob(job)}
-                              className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
-                            >
-                              <Eye className="w-4 h-4" />
-                              <span>Go to Job</span>
-                            </button>
-                            <button 
-                              onClick={() => {
-                                setEditingJob(job);
-                                setNewJob({
-                                  name: job.name,
-                                  ccddCode: job.ccddCode,
-                                  municipality: job.municipality,
-                                  county: job.county,
-                                  state: job.state,
-                                  dueDate: job.dueDate,
-                                  assignedManagers: job.assignedManagers || [],
-                                  sourceFile: null,
-                                  codeFile: null,
-                                  vendor: job.vendor,
-                                  vendorDetection: job.vendorDetection,
-                                  percentBilled: job.percent_billed || ''
-                                });
-                                setShowCreateJob(true);
-                              }}
-                              className="px-3 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
-                            >
-                              <Edit3 className="w-4 h-4" />
-                              <span>Edit</span>
-                            </button>
-                            <button 
-                              onClick={() => setShowDeleteConfirm(job)}
-                              className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                              <span>Delete</span>
-                            </button>
+                sortJobsByBilling(jobs).map(job => (
+                  <div key={job.id} className={`p-4 bg-white rounded-lg border-l-4 shadow-md hover:shadow-lg transition-all transform hover:scale-[1.01] ${
+                    job.vendor === 'Microsystems' ? 'border-blue-400 hover:bg-blue-50' : 'border-orange-300 hover:bg-orange-50'
+                  }`}>
+                    <div className="flex justify-between items-start mb-3">
+                      <div className="flex-1">
+                        <div className="flex justify-between items-center mb-2">
+                          <h4 className="text-lg font-bold text-gray-900">{job.name}</h4>
+                          <div className="flex items-center space-x-2">
+                            <span className={`px-3 py-1 rounded-full text-xs font-medium shadow-sm ${
+                              job.vendor === 'Microsystems' 
+                                ? 'bg-blue-100 text-blue-800' 
+                                : 'bg-orange-200 text-orange-800'
+                            }`}>
+                              {job.vendor}
+                            </span>
+                            <span className={`px-3 py-1 rounded-full text-xs font-medium shadow-sm ${getStatusColor(job.status)}`}>
+                              {job.status || 'Active'}
+                            </span>
+                            <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium shadow-sm">
+                              {(job.percentBilled || 0).toFixed(2)}% Billed
+                            </span>
                           </div>
                         </div>
-                      ))}
+                        <div className="flex items-center space-x-4 text-sm text-gray-600 mb-3">
+                          <span className="flex items-center space-x-1">
+                            <span className="font-bold text-blue-600">{job.ccddCode}</span>
+                            <span>•</span>
+                            <MapPin className="w-4 h-4" />
+                            <span>{job.municipality}</span>
+                          </span>
+                          <span className="flex items-center space-x-1">
+                            <Calendar className="w-4 h-4" />
+                            <span>Due: {job.dueDate ? job.dueDate.split('-')[0] : 'TBD'}</span>
+                          </span>
+                          {job.assignedManagers && job.assignedManagers.length > 0 && (
+                            <span className="flex items-center space-x-1">
+                              <Users className="w-4 h-4" />
+                              <span>{job.assignedManagers.map(m => `${m.name} (${m.role})`).join(', ')}</span>
+                            </span>
+                          )}
+                        </div>
+                        
+                        {/* Production Metrics */}
+                        <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-3 p-3 bg-gray-50 rounded-lg">
+                          <div className="text-center">
+                            <div className="text-lg font-bold text-blue-600">
+                              {(job.inspectedProperties || 0).toLocaleString()} of {(job.totalProperties || 0).toLocaleString()}
+                            </div>
+                            <div className="text-xs text-gray-600">Properties Inspected</div>
+                            <div className="text-sm font-medium text-blue-600">
+                              {job.totalProperties > 0 ? Math.round(((job.inspectedProperties || 0) / job.totalProperties) * 100) : 0}% Complete
+                            </div>
+                          </div>
+                          
+                          <div className="text-center">
+                            <div className="text-lg font-bold text-green-600">
+                              {job.workflowStats?.rates?.entryRate || 0}%
+                            </div>
+                            <div className="text-xs text-gray-600">Entry Rate</div>
+                          </div>
+                          
+                          <div className="text-center">
+                            <div className="text-lg font-bold text-red-600">
+                              {job.workflowStats?.rates?.refusalRate || 0}%
+                            </div>
+                            <div className="text-xs text-gray-600">Refusal Rate</div>
+                          </div>
+
+                          <div className="text-center">
+                            <div className="text-lg font-bold text-purple-600">
+                              {job.workflowStats?.rates?.commercialInspectionRate || 0}%
+                            </div>
+                            <div className="text-xs text-gray-600">Commercial Complete</div>
+                          </div>
+
+                          <div className="text-center">
+                            <div className="text-lg font-bold text-indigo-600">
+                              {job.workflowStats?.rates?.pricingRate || 0}%
+                            </div>
+                            <div className="text-xs text-gray-600">Pricing Complete</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex justify-between items-center pt-3 border-t border-gray-100">
+                      {/* County Badge - Bottom Left */}
+                      <div className="flex items-center">
+                        <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded-full text-xs font-medium">
+                          📍 {job.county} County
+                        </span>
+                      </div>
+                      
+                      {/* Action Buttons - Bottom Right */}
+                      <div className="flex space-x-2">
+                        <button 
+                          onClick={() => goToJob(job)}
+                          className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
+                        >
+                          <Eye className="w-4 h-4" />
+                          <span>Go to Job</span>
+                        </button>
+                        <button 
+                          onClick={() => {
+                            setEditingJob(job);
+                            setNewJob({
+                              name: job.name,
+                              ccddCode: job.ccddCode,
+                              municipality: job.municipality,
+                              county: job.county,
+                              state: job.state,
+                              dueDate: job.dueDate,
+                              assignedManagers: job.assignedManagers || [],
+                              sourceFile: null,
+                              codeFile: null,
+                              vendor: job.vendor,
+                              vendorDetection: job.vendorDetection,
+                              percentBilled: job.percent_billed || ''
+                            });
+                            setShowCreateJob(true);
+                          }}
+                          className="px-3 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
+                        >
+                          <Edit3 className="w-4 h-4" />
+                          <span>Edit</span>
+                        </button>
+                        <button 
+                          onClick={() => setShowDeleteConfirm(job)}
+                          className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          <span>Delete</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))
