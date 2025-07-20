@@ -266,6 +266,22 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     });
   };
 
+  // Get descriptive status for file timestamps
+  const getFileStatus = (timestamp, type) => {
+    if (!timestamp) return 'Never';
+    
+    // Check if this is from initial job creation (within 5 minutes of job creation)
+    const fileDate = new Date(timestamp);
+    const jobDate = new Date(job.created_at);
+    const timeDiff = Math.abs(fileDate - jobDate) / (1000 * 60); // Difference in minutes
+    
+    if (timeDiff <= 5) {
+      return `Imported at Job Creation (${formatDate(timestamp)})`;
+    } else {
+      return `Updated via FileUpload (${formatDate(timestamp)})`;
+    }
+  };
+
   // Handle file upload
   const handleFileUpload = async (file, type) => {
     if (!file) return;
@@ -366,7 +382,8 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
           {
             source_file_name: file.name,
             source_file_version_id: crypto.randomUUID(),
-            source_file_uploaded_at: new Date().toISOString()
+            source_file_uploaded_at: new Date().toISOString(),
+            source_file_as_of_date: asOfDates.source
           }
         );
         
@@ -399,7 +416,8 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
           job.vendor,
           {
             code_file_name: file.name,
-            code_file_updated_at: new Date().toISOString()
+            code_file_updated_at: new Date().toISOString(),
+            code_file_as_of_date: asOfDates.code
           }
         );
 
@@ -853,59 +871,145 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
   };
 
   return (
-    <div className="flex items-center gap-4">
-      {/* Source File Section */}
-      <div className="flex items-center gap-2">
-        <FileText className="w-4 h-4 text-blue-600" />
-        <span className="text-sm text-gray-700">
-          Source: Imported ({formatDate(fileTimestamps.source || job.created_at)})
-        </span>
-        <input
-          ref={sourceFileRef}
-          type="file"
-          accept=".csv,.txt"
-          onChange={(e) => handleFileUpload(e.target.files[0], 'source')}
-          className="hidden"
-        />
-        <button
-          onClick={() => sourceFileRef.current.click()}
-          disabled={isUploading && uploadType === 'source'}
-          className="px-3 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600 disabled:bg-gray-400 flex items-center gap-1"
-        >
-          {isUploading && uploadType === 'source' ? (
-            <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
-          ) : (
-            <Upload className="w-3 h-3" />
-          )}
-          Update
-        </button>
+    <div className="space-y-4">
+      {/* "As Of" Date Configuration */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <h3 className="text-sm font-semibold text-blue-800 mb-3">📅 Data Currency Dates</h3>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-medium text-blue-700 mb-1">
+              Source Data "As Of" Date
+            </label>
+            <input
+              type="date"
+              value={asOfDates.source}
+              onChange={(e) => setAsOfDates(prev => ({ ...prev, source: e.target.value }))}
+              className="w-full px-2 py-1 text-xs border border-blue-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+            />
+            <p className="text-xs text-blue-600 mt-1">When was this property data current?</p>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-blue-700 mb-1">
+              Code Definitions "As Of" Date
+            </label>
+            <input
+              type="date"
+              value={asOfDates.code}
+              onChange={(e) => setAsOfDates(prev => ({ ...prev, code: e.target.value }))}
+              className="w-full px-2 py-1 text-xs border border-blue-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+            />
+            <p className="text-xs text-blue-600 mt-1">When were these codes effective?</p>
+          </div>
+        </div>
       </div>
 
-      {/* Code File Section */}
-      <div className="flex items-center gap-2">
-        <Settings className="w-4 h-4 text-green-600" />
-        <span className="text-sm text-gray-700">
-          Code: Current ({formatDate(fileTimestamps.code || job.created_at)})
-        </span>
-        <input
-          ref={codeFileRef}
-          type="file"
-          accept=".txt,.json"
-          onChange={(e) => handleFileUpload(e.target.files[0], 'code')}
-          className="hidden"
-        />
-        <button
-          onClick={() => codeFileRef.current.click()}
-          disabled={isUploading && uploadType === 'code'}
-          className="px-3 py-1 bg-green-500 text-white text-xs rounded hover:bg-green-600 disabled:bg-gray-400 flex items-center gap-1"
-        >
-          {isUploading && uploadType === 'code' ? (
-            <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+      {/* File Upload Controls */}
+      <div className="flex items-center gap-6">
+        {/* Source File Section */}
+        <div className="flex items-center gap-2">
+          <FileText className="w-4 h-4 text-blue-600" />
+          <span className="text-sm text-gray-700">
+            Source: {getFileStatus(fileTimestamps.source || job.created_at, 'source')}
+          </span>
+          
+          {/* File Selection */}
+          <input
+            ref={sourceFileRef}
+            type="file"
+            accept=".csv,.txt"
+            onChange={(e) => handleFileUpload(e.target.files[0], 'source')}
+            className="hidden"
+          />
+          
+          {!selectedFiles.source ? (
+            <button
+              onClick={() => sourceFileRef.current.click()}
+              disabled={isUploading}
+              className="px-3 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600 disabled:bg-gray-400 flex items-center gap-1"
+            >
+              <Upload className="w-3 h-3" />
+              Select File
+            </button>
           ) : (
-            <Upload className="w-3 h-3" />
+            <div className="flex items-center gap-2">
+              <div className="bg-blue-50 border border-blue-200 rounded px-2 py-1">
+                <span className="text-xs text-blue-800 font-medium">{selectedFiles.source.name}</span>
+              </div>
+              <button
+                onClick={() => clearSelectedFile('source')}
+                className="text-red-500 hover:text-red-700 p-1"
+                title="Remove selected file"
+              >
+                <X className="w-3 h-3" />
+              </button>
+              <button
+                onClick={() => processSelectedFile('source')}
+                disabled={isUploading && uploadType === 'source'}
+                className="px-3 py-1 bg-green-500 text-white text-xs rounded hover:bg-green-600 disabled:bg-gray-400 flex items-center gap-1"
+              >
+                {isUploading && uploadType === 'source' ? (
+                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+                ) : (
+                  <CheckCircle className="w-3 h-3" />
+                )}
+                Update
+              </button>
+            </div>
           )}
-          Update
-        </button>
+        </div>
+
+        {/* Code File Section */}
+        <div className="flex items-center gap-2">
+          <Settings className="w-4 h-4 text-green-600" />
+          <span className="text-sm text-gray-700">
+            Code: {getFileStatus(fileTimestamps.code || job.created_at, 'code')}
+          </span>
+          
+          {/* File Selection */}
+          <input
+            ref={codeFileRef}
+            type="file"
+            accept=".txt,.json"
+            onChange={(e) => handleFileUpload(e.target.files[0], 'code')}
+            className="hidden"
+          />
+          
+          {!selectedFiles.code ? (
+            <button
+              onClick={() => codeFileRef.current.click()}
+              disabled={isUploading}
+              className="px-3 py-1 bg-green-500 text-white text-xs rounded hover:bg-green-600 disabled:bg-gray-400 flex items-center gap-1"
+            >
+              <Upload className="w-3 h-3" />
+              Select File
+            </button>
+          ) : (
+            <div className="flex items-center gap-2">
+              <div className="bg-green-50 border border-green-200 rounded px-2 py-1">
+                <span className="text-xs text-green-800 font-medium">{selectedFiles.code.name}</span>
+              </div>
+              <button
+                onClick={() => clearSelectedFile('code')}
+                className="text-red-500 hover:text-red-700 p-1"
+                title="Remove selected file"
+              >
+                <X className="w-3 h-3" />
+              </button>
+              <button
+                onClick={() => processSelectedFile('code')}
+                disabled={isUploading && uploadType === 'code'}
+                className="px-3 py-1 bg-green-500 text-white text-xs rounded hover:bg-green-600 disabled:bg-gray-400 flex items-center gap-1"
+              >
+                {isUploading && uploadType === 'code' ? (
+                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+                ) : (
+                  <CheckCircle className="w-3 h-3" />
+                )}
+                Update
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Comparison Report Modal */}
@@ -1145,9 +1249,9 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                     }
                     
                     // Continue with processing
-                    const fileContent = sourceFileRef.current.files[0];
+                    const fileContent = selectedFiles.source;
                     if (fileContent) {
-                      processFile(fileContent, 'source', null);
+                      processSelectedFile('source');
                     }
                   }}
                   className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center gap-2"
