@@ -13,6 +13,14 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     source: null,
     code: null
   });
+  const [asOfDates, setAsOfDates] = useState({
+    source: new Date().toISOString().split('T')[0], // Default to today
+    code: new Date().toISOString().split('T')[0]
+  });
+  const [selectedFiles, setSelectedFiles] = useState({
+    source: null,
+    code: null
+  });
   
   const sourceFileRef = useRef();
   const codeFileRef = useRef();
@@ -262,6 +270,33 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
   const handleFileUpload = async (file, type) => {
     if (!file) return;
 
+    // Store the selected file
+    setSelectedFiles(prev => ({
+      ...prev,
+      [type]: file
+    }));
+  };
+
+  // Clear selected file
+  const clearSelectedFile = (type) => {
+    setSelectedFiles(prev => ({
+      ...prev,
+      [type]: null
+    }));
+    
+    // Clear the file input
+    if (type === 'source') {
+      sourceFileRef.current.value = '';
+    } else {
+      codeFileRef.current.value = '';
+    }
+  };
+
+  // Process the selected file (triggered by user confirmation)
+  const processSelectedFile = async (type) => {
+    const file = selectedFiles[type];
+    if (!file) return;
+
     setIsUploading(true);
     setUploadType(type);
 
@@ -294,6 +329,9 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
 
       // Process the file directly if no review needed
       await processFile(file, type, fileContent);
+      
+      // Clear the selected file after successful processing
+      clearSelectedFile(type);
       
     } catch (error) {
       console.error('File upload error:', error);
