@@ -469,12 +469,13 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       const sourceRecords = parseSourceFile(sourceFileContent, detectedVendor);
       console.log(`📊 Parsed ${sourceRecords.length} source records`);
       
-      // FIXED: Get current database records from current_properties view
+      // FIXED: Get current database records from current_properties view with proper limit
       setProcessingStatus('Fetching current database records...');
       const { data: dbRecords, error: dbError } = await supabase
         .from('current_properties')  // Using the view instead of property_records
         .select('property_composite_key, property_block, property_lot, property_qualifier, property_location, sales_price, sales_date, property_m4_class, property_cama_class')
-        .eq('job_id', job.id);
+        .eq('job_id', job.id)
+        .limit(50000);  // Set high limit to ensure we get all records
       
       if (dbError) {
         throw new Error(`Database fetch failed: ${dbError.message}`);
@@ -485,7 +486,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       // Generate composite keys for source records using EXACT processor logic
       setProcessingStatus('Generating composite keys...');
       const yearCreated = job.year_created || new Date().getFullYear();
-      const ccddCode = job.ccdd || job.ccddCode;
+      const ccddCode = job.ccdd_code || job.ccddCode;
       
       const sourceKeys = new Set();
       const sourceKeyMap = new Map();
@@ -538,11 +539,17 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         const pricesDifferent = Math.abs(sourceSalesPrice - dbSalesPrice) > 0.01;
         const datesDifferent = sourceSalesDate !== dbSalesDate;
         
-        // Debug logging for sales comparison
-        if (pricesDifferent || datesDifferent) {
+        // DEBUG: Log the first few sales comparisons to see what's happening
+        if ((pricesDifferent || datesDifferent) && salesChanges.length < 3) {
           console.log(`🔍 Sales difference detected for ${key}:`, {
-            prices: { source: sourceSalesPrice, db: dbSalesPrice, different: pricesDifferent },
-            dates: { source: sourceSalesDate, db: dbSalesDate, different: datesDifferent }
+            sourcePrice: sourceSalesPrice,
+            dbPrice: dbSalesPrice, 
+            pricesDifferent,
+            sourceDateRaw: sourceRecord[detectedVendor === 'BRT' ? 'CURRENTSALE_DATE' : 'Sale Date'],
+            sourceDateNormalized: sourceSalesDate,
+            dbDateRaw: dbRecord.sales_date,
+            dbDateNormalized: dbSalesDate,
+            datesDifferent
           });
         }
         
@@ -705,7 +712,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         codeFileContent,
         job.id,
         job.year_created || new Date().getFullYear(),
-        job.ccdd || job.ccddCode,
+        job.ccdd_code || job.ccddCode,
         detectedVendor,
         {
           source_file_name: sourceFile?.name,
