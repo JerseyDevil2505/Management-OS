@@ -213,8 +213,6 @@ export const jobService = {
         totalProperties: job.total_properties || 0,
         inspectedProperties: job.inspected_properties || 0,
         sourceFileStatus: job.source_file_status || 'pending',
-        source_file_version: job.source_file_version || 1,
-        code_file_version: job.code_file_version || 1,
         codeFileStatus: job.code_file_status || 'pending',
         vendorDetection: job.vendor_detection,
         workflowStats: job.workflow_stats,
@@ -229,6 +227,10 @@ export const jobService = {
         created_at: job.created_at,
         source_file_uploaded_at: job.source_file_uploaded_at,
         code_file_uploaded_at: job.code_file_uploaded_at,
+        
+        // ADDED: File version tracking
+        source_file_version: job.source_file_version || 1,
+        code_file_version: job.code_file_version || 1,
         
         assignedManagers: job.job_assignments?.map(ja => ({
           id: ja.employee.id,
@@ -267,6 +269,10 @@ export const jobService = {
         vendor_detection: componentFields.vendorDetection,
         workflow_stats: componentFields.workflowStats,
         percent_billed: componentFields.percentBilled || 0,
+        
+        // ADDED: File version tracking
+        source_file_version: componentFields.source_file_version || 1,
+        code_file_version: componentFields.code_file_version || 1,
         
         // ADDED: File tracking fields for FileUploadButton
         source_file_name: componentFields.source_file_name,
@@ -884,7 +890,7 @@ export const utilityService = {
     }
   },
 
-  // FIXED: Enhanced stats function with correct property class field names
+  // ENHANCED: Assignment-aware stats function with correct property class field names
   async getStats() {
     try {
       // Get basic counts separately to avoid Promise.all masking errors
@@ -896,22 +902,25 @@ export const utilityService = {
         .from('jobs')
         .select('id', { count: 'exact', head: true });
 
+      // UPDATED: Count all properties (assigned or unassigned)
       const { count: propertyCount, error: propError } = await supabase
         .from('property_records')
-        .select('id', { count: 'exact', head: true });
+        .select('id', { count: 'exact', head: true })
+        .or('is_assigned_property.is.null,is_assigned_property.eq.true');
 
-      // FIXED: Use property_m4_class (not property_cama_class) for Microsystems compatibility
-      // Get residential properties (M4 class 1, 2, 3A, 3B)
+      // UPDATED: Get residential properties (M4 class 2, 3A) - assignment-aware
       const { count: residentialCount, error: residentialError } = await supabase
         .from('property_records')
         .select('id', { count: 'exact', head: true })
-        .in('property_m4_class', ['2', '3A']);
+        .in('property_m4_class', ['2', '3A'])
+        .or('is_assigned_property.is.null,is_assigned_property.eq.true');
 
-      // Get commercial properties (M4 class 4A, 4B, 4C)
+      // UPDATED: Get commercial properties (M4 class 4A, 4B, 4C) - assignment-aware
       const { count: commercialCount, error: commercialError } = await supabase
         .from('property_records')
         .select('id', { count: 'exact', head: true })
-        .in('property_m4_class', ['4A', '4B', '4C']);
+        .in('property_m4_class', ['4A', '4B', '4C'])
+        .or('is_assigned_property.is.null,is_assigned_property.eq.true');
 
       // Log any errors but don't fail completely
       if (empError) console.error('Employee count error:', empError);
