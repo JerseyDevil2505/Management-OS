@@ -266,19 +266,17 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     });
   };
 
-  // Get descriptive status for file timestamps
+  // UPDATED: Get descriptive status for file timestamps using version logic
   const getFileStatus = (timestamp, type) => {
     if (!timestamp) return 'Never';
     
-    // Check if this is from initial job creation (within 5 minutes of job creation)
-    const fileDate = new Date(timestamp);
-    const jobDate = new Date(job.created_at);
-    const timeDiff = Math.abs(fileDate - jobDate) / (1000 * 60); // Difference in minutes
+    // NEW: Use version logic instead of timing
+    const version = type === 'source' ? job.source_file_version : job.code_file_version;
     
-    if (timeDiff <= 5) {
+    if (version === 1) {
       return `Imported at Job Creation (${formatDate(timestamp)})`;
     } else {
-      return `Updated via FileUpload (${formatDate(timestamp)})`;
+      return `Updated via FileUpload (${type} v${version}) (${formatDate(timestamp)})`;
     }
   };
 
