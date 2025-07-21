@@ -684,19 +684,29 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     }
   };
 
-  // NEW: Sales Decision Modal Component
+  // FIXED: Sales Decision Modal Component with close button and better sizing
   const SalesDecisionModal = () => {
     if (!pendingSalesChanges.length) return null;
     
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-        <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+        <div className="bg-white rounded-lg max-w-5xl w-full max-h-[95vh] overflow-y-auto shadow-2xl">
           <div className="p-6 border-b border-gray-200">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
                 <Target className="w-6 h-6 text-blue-600" />
                 <h2 className="text-xl font-bold text-gray-900">Sales Change Decisions</h2>
               </div>
+              {/* FIXED: Added close button */}
+              <button
+                onClick={() => {
+                  setShowSalesDecisionModal(false);
+                  setShowComparisonModal(true); // Go back to comparison modal
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
             </div>
             <p className="text-gray-600 mt-2">
               Review each sales change and decide how to handle it for valuation purposes.
@@ -772,8 +782,20 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
           </div>
 
           <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-between">
-            <div className="text-sm text-gray-600">
-              {salesDecisions.size} of {pendingSalesChanges.length} decisions made
+            <div className="flex space-x-3">
+              {/* FIXED: Added Cancel button to close modal */}
+              <button
+                onClick={() => {
+                  setShowSalesDecisionModal(false);
+                  setShowComparisonModal(true); // Go back to comparison modal
+                }}
+                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
+              >
+                Cancel
+              </button>
+              <div className="text-sm text-gray-600 flex items-center">
+                {salesDecisions.size} of {pendingSalesChanges.length} decisions made
+              </div>
             </div>
             <button
               onClick={completeSalesDecisions}
