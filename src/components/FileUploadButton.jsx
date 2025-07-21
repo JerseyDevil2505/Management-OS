@@ -319,17 +319,8 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       const fileContent = await readFileAsText(file);
       
       if (type === 'source') {
-        // Parse CSV data for comparison
-        const Papa = await import('papaparse');
-        const parsedData = Papa.parse(fileContent, {
-          header: true,
-          dynamicTyping: true,
-          skipEmptyLines: true,
-          delimitersToGuess: [',', '\t', '|', ';']
-        });
-
         // Generate comparison report for source files
-        const report = await generateComparisonReport(parsedData.data, job.id);
+        const report = await generateComparisonReport(fileContent, job.id);
         setComparisonReport(report);
         
         if (report.hasChanges) {
@@ -358,7 +349,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     }
   };
 
-  // Enhanced upsert process with permanent tracking
+  // Enhanced upsert process with version tracking and permanent tracking
   const processFile = async (file, type, fileContent) => {
     try {
       setIsUploading(true);
@@ -369,7 +360,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
           await saveSalesDecisions();
         }
 
-        // ENHANCED: Smart upsert approach instead of add-only
+        // ENHANCED: Smart upsert approach with proper version tracking
         await performSmartUpsert(fileContent, file.name);
         
       } else if (type === 'code') {
@@ -414,33 +405,45 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     }
   };
 
-  // Smart upsert with permanent change tracking
+  // FIXED: Smart upsert with proper version tracking
   const performSmartUpsert = async (sourceFileContent, sourceFileName, codeFileContent = null, codeFileName = null) => {
     try {
-      console.log('🔄 Starting smart upsert with permanent tracking...');
+      console.log('🔄 Starting smart upsert with version tracking...');
       
-      // 1. Get current yearCCDD prefix for this job
-      const jobYear = new Date(job.created_at).getFullYear();
-      const jobCCDD = job.ccdd || job.ccddCode || '0000';
-      const yearCCDDPrefix = `${jobYear}${jobCCDD}`;
+      // 1. Get current version numbers from jobs table
+      const { data: currentJob, error: jobError } = await supabase
+        .from('jobs')
+        .select('source_file_version, code_file_version')
+        .eq('id', job.id)
+        .single();
       
-      // 2. Get ALL current property records for this yearCCDD
-      const { data: currentRecords, error: currentError } = await supabase
+      if (jobError) throw jobError;
+      
+      // 2. Calculate new version numbers
+      const newSourceVersion = (currentJob.source_file_version || 1) + 1;
+      const newCodeVersion = codeFileContent ? (currentJob.code_file_version || 1) + 1 : currentJob.code_file_version;
+      
+      console.log(`📊 Version tracking: Source ${currentJob.source_file_version || 1} → ${newSourceVersion}, Code ${currentJob.code_file_version || 1} → ${newCodeVersion}`);
+      
+      // 3. Delete ALL existing records for this job (clean slate approach)
+      console.log('🗑️ Clearing existing property records for clean import...');
+      const { error: deleteError } = await supabase
         .from('property_records')
-        .select('*')
-        .like('property_composite_key', `${yearCCDDPrefix}-%`);
+        .delete()
+        .eq('job_id', job.id);
       
-      if (currentError) throw currentError;
+      if (deleteError) {
+        console.error('Error deleting existing records:', deleteError);
+        throw deleteError;
+      }
       
-      console.log(`📊 Found ${currentRecords?.length || 0} existing records for ${yearCCDDPrefix}`);
-      
-      // 3. Process new data using proven processors
+      // 4. Process new data using proven processors with version info
       console.log('⚙️ Processing new data through processors...');
       const result = await propertyService.importCSVData(
         sourceFileContent,
         codeFileContent,
         job.id,
-        jobYear,
+        new Date(job.created_at).getFullYear(),
         job.ccdd || job.ccddCode,
         job.vendor,
         {
@@ -451,208 +454,46 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
           code_file_name: codeFileName,
           code_file_updated_at: codeFileContent ? new Date().toISOString() : null,
           code_file_as_of_date: codeFileContent ? asOfDates.code : null,
+          file_version: newSourceVersion,
           is_fileupload_update: true // Flag to indicate this is an update
         }
       );
       
       console.log(`✅ Processors completed: ${result.processed} records processed`);
       
-      // 4. Get the newly inserted records
-      const { data: newRecords, error: newError } = await supabase
-        .from('property_records')
-        .select('*')
-        .like('property_composite_key', `${yearCCDDPrefix}-%`)
-        .gte('created_at', new Date(Date.now() - 60000).toISOString()); // Records created in last minute
+      // 5. Update job with new version numbers and file info
+      const jobUpdateFields = {
+        source_file_version: newSourceVersion,
+        source_file_uploaded_at: new Date().toISOString()
+      };
       
-      if (newError) throw newError;
-      
-      // 5. Perform UPSERT logic and track changes
-      const changeTracking = await performUpsertAndTrackChanges(
-        currentRecords || [], 
-        newRecords || [], 
-        yearCCDDPrefix
-      );
-      
-      // 6. Save permanent change tracking to comparison_reports
-      if (changeTracking.totalChanges > 0) {
-        await saveChangeTracking(changeTracking, sourceFileName, codeFileName);
+      if (codeFileContent) {
+        jobUpdateFields.code_file_version = newCodeVersion;
+        jobUpdateFields.code_file_uploaded_at = new Date().toISOString();
       }
       
-      console.log(`🎯 Upsert complete: ${changeTracking.totalChanges} changes tracked`);
-      console.log(`📝 Final state: ${changeTracking.finalRecordCount} property records for ${yearCCDDPrefix}`);
+      const { error: jobUpdateError } = await supabase
+        .from('jobs')
+        .update(jobUpdateFields)
+        .eq('id', job.id);
+      
+      if (jobUpdateError) {
+        console.error('Error updating job versions:', jobUpdateError);
+        throw jobUpdateError;
+      }
+      
+      console.log(`🎯 Upsert complete with version tracking: ${result.processed} records imported`);
+      console.log(`📝 Job updated: Source v${newSourceVersion}, Code v${newCodeVersion}`);
       
       return {
         processed: result.processed,
-        changes: changeTracking
+        sourceVersion: newSourceVersion,
+        codeVersion: newCodeVersion
       };
       
     } catch (error) {
       console.error('Smart upsert error:', error);
       throw error;
-    }
-  };
-
-  // Perform upsert logic and track all changes
-  const performUpsertAndTrackChanges = async (currentRecords, newRecords, yearCCDDPrefix) => {
-    try {
-      // Create maps for efficient lookup
-      const currentMap = new Map();
-      const newMap = new Map();
-      
-      currentRecords.forEach(record => {
-        currentMap.set(record.property_composite_key, record);
-      });
-      
-      newRecords.forEach(record => {
-        newMap.set(record.property_composite_key, record);
-      });
-      
-      const addedProperties = [];
-      const removedProperties = [];
-      const updatedProperties = [];
-      const unchangedCount = 0;
-      
-      // Find properties to DELETE (in current but not in new)
-      for (const [compositeKey, currentRecord] of currentMap) {
-        if (!newMap.has(compositeKey)) {
-          removedProperties.push({
-            composite_key: compositeKey,
-            block: currentRecord.property_block,
-            lot: currentRecord.property_lot,
-            qualifier: currentRecord.property_qualifier,
-            property_location: currentRecord.property_location,
-            removed_data: {
-              sales_price: currentRecord.sales_price,
-              property_class: currentRecord.property_cama_class || currentRecord.property_m4_class
-            }
-          });
-          
-          // DELETE from database
-          await supabase
-            .from('property_records')
-            .delete()
-            .eq('property_composite_key', compositeKey);
-        }
-      }
-      
-      // Find properties to ADD or UPDATE
-      for (const [compositeKey, newRecord] of newMap) {
-        if (!currentMap.has(compositeKey)) {
-          // NEW property - already inserted by processor
-          addedProperties.push({
-            composite_key: compositeKey,
-            block: newRecord.property_block,
-            lot: newRecord.property_lot,
-            qualifier: newRecord.property_qualifier,
-            property_location: newRecord.property_location,
-            added_data: {
-              sales_price: newRecord.sales_price,
-              property_class: newRecord.property_cama_class || newRecord.property_m4_class
-            }
-          });
-        } else {
-          // EXISTING property - UPDATE if different
-          const currentRecord = currentMap.get(compositeKey);
-          
-          // Check if significant fields changed
-          const hasChanges = (
-            currentRecord.sales_price !== newRecord.sales_price ||
-            currentRecord.sales_date !== newRecord.sales_date ||
-            currentRecord.property_cama_class !== newRecord.property_cama_class ||
-            currentRecord.property_m4_class !== newRecord.property_m4_class ||
-            JSON.stringify(currentRecord.raw_data) !== JSON.stringify(newRecord.raw_data)
-          );
-          
-          if (hasChanges) {
-            updatedProperties.push({
-              composite_key: compositeKey,
-              block: newRecord.property_block,
-              lot: newRecord.property_lot,
-              qualifier: newRecord.property_qualifier,
-              property_location: newRecord.property_location,
-              old_data: {
-                sales_price: currentRecord.sales_price,
-                sales_date: currentRecord.sales_date,
-                property_class: currentRecord.property_cama_class || currentRecord.property_m4_class
-              },
-              new_data: {
-                sales_price: newRecord.sales_price,
-                sales_date: newRecord.sales_date,
-                property_class: newRecord.property_cama_class || newRecord.property_m4_class
-              }
-            });
-            
-            // UPDATE database - replace old record with new data
-            await supabase
-              .from('property_records')
-              .delete()
-              .eq('property_composite_key', compositeKey);
-            // New record already inserted by processor
-          } else {
-            // No changes - remove the duplicate new record
-            await supabase
-              .from('property_records')
-              .delete()
-              .eq('id', newRecord.id);
-          }
-        }
-      }
-      
-      // Get final record count
-      const { count: finalCount } = await supabase
-        .from('property_records')
-        .select('id', { count: 'exact', head: true })
-        .like('property_composite_key', `${yearCCDDPrefix}-%`);
-      
-      return {
-        addedProperties,
-        removedProperties,
-        updatedProperties,
-        totalChanges: addedProperties.length + removedProperties.length + updatedProperties.length,
-        finalRecordCount: finalCount || 0
-      };
-      
-    } catch (error) {
-      console.error('Upsert and tracking error:', error);
-      throw error;
-    }
-  };
-
-  // Save permanent change tracking for end-of-job reporting
-  const saveChangeTracking = async (changeTracking, sourceFileName, codeFileName) => {
-    try {
-      const changeRecord = {
-        job_id: job.id,
-        change_date: new Date().toISOString(),
-        change_type: 'fileupload_update',
-        source_file_name: sourceFileName,
-        code_file_name: codeFileName,
-        change_data: {
-          added_properties: changeTracking.addedProperties,
-          removed_properties: changeTracking.removedProperties,
-          updated_properties: changeTracking.updatedProperties,
-          summary: {
-            properties_added: changeTracking.addedProperties.length,
-            properties_removed: changeTracking.removedProperties.length,
-            properties_updated: changeTracking.updatedProperties.length,
-            total_changes: changeTracking.totalChanges,
-            final_property_count: changeTracking.finalRecordCount
-          }
-        },
-        processed_by: 'fileupload',
-        created_by: 'current-user' // TODO: Get actual user ID
-      };
-
-      const { error } = await supabase
-        .from('property_change_log') // New table for permanent tracking
-        .insert([changeRecord]);
-
-      if (error) throw error;
-      
-      console.log('💾 Change tracking saved for end-of-job reporting');
-    } catch (error) {
-      console.error('Error saving change tracking:', error);
-      // Don't fail the upload if tracking fails
     }
   };
 
@@ -672,10 +513,10 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     return `${headerLine}\n${dataLine}`;
   };
 
-  // Generate comparison report using property_records table
-  const generateComparisonReport = async (newData, jobId) => {
+  // FIXED: Generate comparison report using processor header logic
+  const generateComparisonReport = async (newFileContent, jobId) => {
     try {
-      // Get previous data from property_records table (unified table)
+      // Get previous data from property_records table
       const { data: previousData, error } = await supabase
         .from('property_records')
         .select('*')
@@ -688,7 +529,10 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         return { hasChanges: false, isFirstUpload: true };
       }
 
-      // Compare data sets
+      // FIXED: Parse new data using the same logic as the processor
+      const newData = parseFileWithProcessorLogic(newFileContent, job.vendor);
+      
+      // Compare data sets using consistent header logic
       const comparison = compareDataSets(previousData, newData);
       
       return {
@@ -703,8 +547,98 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     }
   };
 
-  // Compare two data sets (updated for property_records field names)
+  // NEW: Parse file using the same header logic as the processors
+  const parseFileWithProcessorLogic = (fileContent, vendor) => {
+    console.log('🔍 Parsing file with processor header logic for vendor:', vendor);
+    
+    if (vendor === 'Microsystems') {
+      // Use the SAME logic as microsystems-processor.js
+      const lines = fileContent.split('\n').filter(line => line.trim());
+      if (lines.length < 2) {
+        throw new Error('File must have at least header and one data row');
+      }
+      
+      // Parse headers and rename duplicates (SAME AS PROCESSOR)
+      const originalHeaders = lines[0].split('|');
+      const renamedHeaders = renameDuplicateHeaders(originalHeaders);
+      
+      console.log(`📋 Found ${renamedHeaders.length} headers with duplicates renamed`);
+      console.log('🔄 Duplicate mapping:', {
+        'Location': renamedHeaders.indexOf('Location'),
+        'Location2': renamedHeaders.indexOf('Location2'),
+        'Land Value': renamedHeaders.indexOf('Land Value'),
+        'Land Value2': renamedHeaders.indexOf('Land Value2'),
+        'Impr Value': renamedHeaders.indexOf('Impr Value'),
+        'Impr Value2': renamedHeaders.indexOf('Impr Value2'),
+        'Totl Value': renamedHeaders.indexOf('Totl Value'),
+        'Totl Value2': renamedHeaders.indexOf('Totl Value2')
+      });
+      
+      // Parse data rows with renamed headers
+      const records = [];
+      for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].split('|');
+        
+        if (values.length !== renamedHeaders.length) {
+          console.warn(`Row ${i} has ${values.length} values but ${renamedHeaders.length} headers - possibly broken pipes`);
+          continue;
+        }
+        
+        // Create record object with renamed headers (SAME AS PROCESSOR)
+        const record = {};
+        renamedHeaders.forEach((header, index) => {
+          record[header] = values[index] || null;
+        });
+        
+        records.push(record);
+      }
+      
+      console.log(`✅ Parsed ${records.length} records using processor logic`);
+      return records;
+      
+    } else if (vendor === 'BRT') {
+      // For BRT, parse as CSV (no duplicate header issues)
+      const lines = fileContent.split('\n').filter(line => line.trim());
+      if (lines.length < 2) {
+        throw new Error('File must have at least header and one data row');
+      }
+      
+      const headers = lines[0].split(',');
+      const records = [];
+      
+      for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].split(',');
+        const record = {};
+        headers.forEach((header, index) => {
+          record[header] = values[index] || null;
+        });
+        records.push(record);
+      }
+      
+      return records;
+    }
+    
+    throw new Error(`Unsupported vendor: ${vendor}`);
+  };
+
+  // NEW: Rename duplicate headers (SAME LOGIC AS PROCESSOR)
+  const renameDuplicateHeaders = (originalHeaders) => {
+    const headerCounts = {};
+    return originalHeaders.map(header => {
+      if (headerCounts[header]) {
+        headerCounts[header]++;
+        return `${header}${headerCounts[header]}`;
+      } else {
+        headerCounts[header] = 1;
+        return header;
+      }
+    });
+  };
+
+  // FIXED: Compare two data sets using consistent composite key generation
   const compareDataSets = (oldData, newData) => {
+    console.log('🔍 Comparing datasets with processor-consistent logic...');
+    
     const oldMap = new Map();
     const newMap = new Map();
 
@@ -712,24 +646,42 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     const jobYear = new Date(job.created_at).getFullYear();
     const jobCCDD = job.ccdd || job.ccddCode || '0000';
 
-    // Create maps with composite property keys
+    // Create maps with composite property keys from existing database records
     oldData.forEach(row => {
-      const key = row.property_composite_key || 
-        `${jobYear}${jobCCDD}-${row.property_block}-${row.property_lot}_${row.property_qualifier || 'NONE'}-${row.property_addl_card || 'NONE'}-${row.property_location || 'NONE'}`;
+      const key = row.property_composite_key; // Use the stored composite key directly
       oldMap.set(key, row);
     });
 
+    // FIXED: Create new data map using the SAME composite key logic as the processor
     newData.forEach(row => {
-      // Handle both BRT and Microsystems formats
-      const block = row.BLOCK || row.Block;
-      const lot = row.LOT || row.Lot;
-      const qualifier = row.QUALIFIER || row.Qual;
-      const card = row.CARD || row.Bldg;
-      const location = row.PROPERTY_LOCATION || row.Location;
+      let key;
       
-      const key = `${jobYear}${jobCCDD}-${block}-${lot}_${qualifier || 'NONE'}-${card || 'NONE'}-${location || 'NONE'}`;
+      if (job.vendor === 'Microsystems') {
+        // Use processor logic for Microsystems (with renamed headers)
+        const block = row['Block'];
+        const lot = row['Lot'];
+        const qualifier = row['Qual'];
+        const card = row['Bldg'];
+        const location = row['Location']; // This now uses the FIRST Location due to header renaming
+        
+        key = `${jobYear}${jobCCDD}-${block}-${lot}_${(qualifier || '').trim() || 'NONE'}-${(card || '').trim() || 'NONE'}-${(location || '').trim() || 'NONE'}`;
+      } else if (job.vendor === 'BRT') {
+        // Use processor logic for BRT
+        const block = row['BLOCK'];
+        const lot = row['LOT'];
+        const qualifier = row['QUALIFIER'];
+        const card = row['CARD'];
+        const location = row['PROPERTY_LOCATION'];
+        
+        key = `${jobYear}${jobCCDD}-${block}-${lot}_${(qualifier || '').trim() || 'NONE'}-${(card || '').trim() || 'NONE'}-${(location || '').trim() || 'NONE'}`;
+      }
+      
       newMap.set(key, row);
     });
+
+    console.log(`📊 Comparison: ${oldMap.size} existing records vs ${newMap.size} new records`);
+    console.log('🔍 Sample keys - Old:', Array.from(oldMap.keys()).slice(0, 3));
+    console.log('🔍 Sample keys - New:', Array.from(newMap.keys()).slice(0, 3));
 
     const removedProperties = [];
     const addedProperties = [];
@@ -751,12 +703,21 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
 
     // Find added properties and changes
     newMap.forEach((newRow, key) => {
-      const block = newRow.BLOCK || newRow.Block;
-      const lot = newRow.LOT || newRow.Lot;
-      const qualifier = newRow.QUALIFIER || newRow.Qual;
-      const location = newRow.PROPERTY_LOCATION || newRow.Location;
-      
       if (!oldMap.has(key)) {
+        // Extract identifiers based on vendor
+        let block, lot, qualifier, location;
+        if (job.vendor === 'Microsystems') {
+          block = newRow['Block'];
+          lot = newRow['Lot'];
+          qualifier = newRow['Qual'];
+          location = newRow['Location'];
+        } else {
+          block = newRow['BLOCK'];
+          lot = newRow['LOT'];
+          qualifier = newRow['QUALIFIER'];
+          location = newRow['PROPERTY_LOCATION'];
+        }
+        
         addedProperties.push({
           key,
           block,
@@ -772,6 +733,19 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         const newClass = getClassComparison(newRow, 'new');
         
         if (hasClassChanged(oldClass, newClass)) {
+          let block, lot, qualifier, location;
+          if (job.vendor === 'Microsystems') {
+            block = newRow['Block'];
+            lot = newRow['Lot'];
+            qualifier = newRow['Qual'];
+            location = newRow['Location'];
+          } else {
+            block = newRow['BLOCK'];
+            lot = newRow['LOT'];
+            qualifier = newRow['QUALIFIER'];
+            location = newRow['PROPERTY_LOCATION'];
+          }
+          
           classChanges.push({
             key,
             block,
@@ -793,13 +767,24 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
           nu: oldRow.sales_nu
         };
 
-        const newSale = {
-          date: newRow.CURRENTSALE_DATE || newRow['Sale Date'],
-          price: newRow.CURRENTSALE_PRICE || newRow['Sale Price'],
-          book: newRow.CURRENTSALE_DEEDBOOK || newRow['Sale Book'],
-          page: newRow.CURRENTSALE_DEEDPAGE || newRow['Sale Page'],
-          nu: newRow.CURRENTSALE_NUC || newRow['Sale Nu']
-        };
+        let newSale;
+        if (job.vendor === 'Microsystems') {
+          newSale = {
+            date: newRow['Sale Date'],
+            price: newRow['Sale Price'],
+            book: newRow['Sale Book'],
+            page: newRow['Sale Page'],
+            nu: newRow['Sale Nu']
+          };
+        } else {
+          newSale = {
+            date: newRow['CURRENTSALE_DATE'],
+            price: newRow['CURRENTSALE_PRICE'],
+            book: newRow['CURRENTSALE_DEEDBOOK'],
+            page: newRow['CURRENTSALE_DEEDPAGE'],
+            nu: newRow['CURRENTSALE_NUC']
+          };
+        }
 
         // Check if sales data actually changed
         const salesChanged = oldSale.date !== newSale.date || 
@@ -811,6 +796,19 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         if (salesChanged) {
           // Check if we have a previous decision for this property
           const existingDecision = salesDecisions[key];
+          
+          let block, lot, qualifier, location;
+          if (job.vendor === 'Microsystems') {
+            block = newRow['Block'];
+            lot = newRow['Lot'];
+            qualifier = newRow['Qual'];
+            location = newRow['Location'];
+          } else {
+            block = newRow['BLOCK'];
+            lot = newRow['LOT'];
+            qualifier = newRow['QUALIFIER'];
+            location = newRow['PROPERTY_LOCATION'];
+          }
           
           salesChanges.push({
             key,
@@ -826,6 +824,8 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         }
       }
     });
+
+    console.log(`📈 Comparison results: ${removedProperties.length} removed, ${addedProperties.length} added, ${classChanges.length} class changes, ${salesChanges.length} sales changes`);
 
     return {
       removedProperties,
