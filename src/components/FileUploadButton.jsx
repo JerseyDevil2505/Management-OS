@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, FileText, CheckCircle, AlertTriangle, X, Database, Target, Calendar, Settings, Download } from 'lucide-react';
+import { Upload, FileText, CheckCircle, AlertTriangle, X, Database, Settings, Download, Eye, Calendar } from 'lucide-react';
 import { jobService, propertyService, supabase } from '../lib/supabaseClient';
 
 const FileUploadButton = ({ job, onFileProcessed }) => {
@@ -8,31 +8,12 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
   const [detectedVendor, setDetectedVendor] = useState(null);
   const [sourceFileContent, setSourceFileContent] = useState(null);
   const [codeFileContent, setCodeFileContent] = useState(null);
-  const [comparing, setComparing] = useState(false);
-  const [comparison, setComparison] = useState(null);
-  const [showComparisonModal, setShowComparisonModal] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [processingStatus, setProcessingStatus] = useState('');
   const [notifications, setNotifications] = useState([]);
-  const [comparisonStatus, setComparisonStatus] = useState('');
-  
-  // NEW: Sales decisions state
+  const [showResultsModal, setShowResultsModal] = useState(false);
+  const [comparisonResults, setComparisonResults] = useState(null);
   const [salesDecisions, setSalesDecisions] = useState(new Map());
-  const [showSalesDecisionModal, setShowSalesDecisionModal] = useState(false);
-  const [pendingSalesChanges, setPendingSalesChanges] = useState([]);
-
-  // FIXED: ESC key handler to close modals with proper cleanup
-  useEffect(() => {
-    const handleEscKey = (event) => {
-      if (event.key === 'Escape') {
-        forceCloseAllModals();
-        addNotification('Modal closed with ESC key', 'info');
-      }
-    };
-
-    document.addEventListener('keydown', handleEscKey);
-    return () => document.removeEventListener('keydown', handleEscKey);
-  }, []);
 
   const addNotification = (message, type = 'info') => {
     const id = Date.now();
@@ -46,17 +27,6 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
 
   const removeNotification = (id) => {
     setNotifications(prev => prev.filter(n => n.id !== id));
-  };
-
-  // FIXED: Force close all modals with complete state reset
-  const forceCloseAllModals = () => {
-    setShowSalesDecisionModal(false);
-    setShowComparisonModal(false);
-    setPendingSalesChanges([]);
-    setSalesDecisions(new Map());
-    setComparing(false);
-    setComparisonStatus('');
-    console.log('🔒 All modals force closed and state reset');
   };
 
   // FIXED: Date parsing to handle MM/DD/YYYY vs ISO formats
@@ -277,10 +247,10 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
 
   // NEW: Export comparison results to Excel
   const exportComparisonReport = () => {
-    if (!comparison) return;
+    if (!comparisonResults) return;
 
     const exportData = {
-      summary: comparison.summary,
+      summary: comparisonResults.summary,
       timestamp: new Date().toISOString(),
       job: job.name,
       vendor: detectedVendor,
@@ -291,8 +261,8 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     let csvContent = "Type,Block,Lot,Location,Details\n";
     
     // Add new records
-    if (comparison.details.missing?.length > 0) {
-      comparison.details.missing.forEach(record => {
+    if (comparisonResults.details.missing?.length > 0) {
+      comparisonResults.details.missing.forEach(record => {
         const blockField = detectedVendor === 'BRT' ? 'BLOCK' : 'Block';
         const lotField = detectedVendor === 'BRT' ? 'LOT' : 'Lot';
         const locationField = detectedVendor === 'BRT' ? 'PROPERTY_LOCATION' : 'Location';
@@ -301,8 +271,8 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     }
 
     // Add sales changes with decisions
-    if (comparison.details.salesChanges?.length > 0) {
-      comparison.details.salesChanges.forEach(change => {
+    if (comparisonResults.details.salesChanges?.length > 0) {
+      comparisonResults.details.salesChanges.forEach(change => {
         const decision = salesDecisions.get(change.property_composite_key) || 'Keep New (default)';
         csvContent += `Sales Change,${change.property_block},${change.property_lot},${change.property_location},Price: $${change.differences.sales_price.old} → $${change.differences.sales_price.new} | Decision: ${decision}\n`;
       });
@@ -322,20 +292,41 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     addNotification('📊 Comparison report exported', 'success');
   };
 
+  // NEW: View all reports
+  const viewAllReports = async () => {
+    try {
+      const { data: reports, error } = await supabase
+        .from('comparison_reports')
+        .select('*')
+        .eq('job_id', job.id)
+        .order('report_date', { ascending: false });
+
+      if (error) throw error;
+
+      console.log('📊 All reports for job:', reports);
+      addNotification(`Found ${reports.length} comparison reports for this job`, 'info');
+      
+      // TODO: Could open a separate modal to show all reports
+      
+    } catch (error) {
+      console.error('Error fetching reports:', error);
+      addNotification('Error fetching reports: ' + error.message, 'error');
+    }
+  };
+
   // ENHANCED: Comparison logic with sales changes, class changes, and fixed date comparison
   const performComparison = async () => {
-    if (!sourceFileContent || !job) return;
+    if (!sourceFileContent || !job) return null;
     
     try {
-      setComparing(true);
-      setComparisonStatus('Analyzing files...');
+      setProcessingStatus('Analyzing files...');
       
       // Parse source file
       const sourceRecords = parseSourceFile(sourceFileContent, detectedVendor);
       console.log(`📊 Parsed ${sourceRecords.length} source records`);
       
       // Get current database records
-      setComparisonStatus('Fetching database records...');
+      setProcessingStatus('Fetching database records...');
       const { data: dbRecords, error: dbError } = await supabase
         .from('property_records')
         .select('property_composite_key, property_block, property_lot, property_location, sales_price, sales_date, property_m4_class, property_cama_class')
@@ -348,7 +339,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       console.log(`📊 Found ${dbRecords.length} database records`);
       
       // Generate composite keys for source records using EXACT processor logic
-      setComparisonStatus('Generating composite keys...');
+      setProcessingStatus('Generating composite keys...');
       const yearCreated = job.year_created || new Date().getFullYear();
       const ccddCode = job.ccdd || job.ccddCode;
       
@@ -372,7 +363,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       console.log(`🔑 Found ${dbKeys.size} database composite keys`);
       
       // Find differences
-      setComparisonStatus('Comparing records...');
+      setProcessingStatus('Comparing records...');
       
       // Missing records (in source but not in database)
       const missingKeys = [...sourceKeys].filter(key => !dbKeys.has(key));
@@ -487,35 +478,11 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       };
       
       console.log('📊 Comparison Results:', results.summary);
-      
-      setComparison(results);
-      setComparisonStatus('Analysis complete');
-      
-      // Check if sales changes need decisions
-      if (salesChanges.length > 0) {
-        setPendingSalesChanges(salesChanges);
-        setShowSalesDecisionModal(true);
-      } else {
-        // Only show modal if there are actual changes to review
-        const hasAnyChanges = results.summary.missing > 0 || 
-                             results.summary.changes > 0 || 
-                             results.summary.deletions > 0 || 
-                             results.summary.classChanges > 0;
-        
-        if (hasAnyChanges) {
-          setShowComparisonModal(true);
-        } else {
-          // Just show a success notification for no changes
-          addNotification('✅ No changes detected - files match database perfectly', 'success');
-        }
-      }
+      return results;
       
     } catch (error) {
       console.error('Comparison error:', error);
-      addNotification(`Comparison failed: ${error.message}`, 'error');
-      setComparisonStatus('Comparison failed');
-    } finally {
-      setComparing(false);
+      throw error;
     }
   };
 
@@ -524,36 +491,30 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     setSalesDecisions(prev => new Map(prev.set(propertyKey, decision)));
   };
 
-  // NEW: Complete sales decision process
-  const completeSalesDecisions = () => {
-    // Set default decisions for any unhandled sales changes
-    pendingSalesChanges.forEach(change => {
-      if (!salesDecisions.has(change.property_composite_key)) {
-        salesDecisions.set(change.property_composite_key, 'Keep New');
-      }
-    });
-    
-    setShowSalesDecisionModal(false);
-    setShowComparisonModal(true);
-  };
-
-  // ENHANCED: Process changes with sales decisions storage
-  const handleProcessChanges = async () => {
-    if (!sourceFile || !sourceFileContent) {
+  // MAIN: Process file with automatic comparison and single modal results
+  const handleProcessFile = async (fileType) => {
+    if (fileType === 'source' && (!sourceFile || !sourceFileContent)) {
       addNotification('Please select a source file first', 'error');
+      return;
+    }
+    
+    if (fileType === 'code' && (!codeFile || !codeFileContent)) {
+      addNotification('Please select a code file first', 'error');
       return;
     }
     
     try {
       setProcessing(true);
-      setProcessingStatus(`Processing ${detectedVendor} data via processor...`);
+      setProcessingStatus('Starting file processing...');
       
-      // Save comparison report first
-      await saveComparisonReport(comparison, salesDecisions);
+      // Step 1: Perform comparison FIRST
+      const comparison = await performComparison();
+      
+      // Step 2: Process file via processors
+      setProcessingStatus(`Processing ${detectedVendor} data via processor...`);
       
       console.log('🚀 Calling processor with same params as AdminJobManagement...');
       
-      // FIXED: Call the EXACT SAME processor method as AdminJobManagement
       const result = await propertyService.importCSVData(
         sourceFileContent,
         codeFileContent,
@@ -562,7 +523,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         job.ccdd || job.ccddCode,
         detectedVendor,
         {
-          source_file_name: sourceFile.name,
+          source_file_name: sourceFile?.name,
           source_file_version_id: crypto.randomUUID(),
           source_file_uploaded_at: new Date().toISOString(),
           file_version: (job.source_file_version || 1) + 1
@@ -571,77 +532,14 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       
       console.log('📊 Processor completed with result:', result);
       
-      // NEW: Store sales decisions in sales_history for affected properties
-      if (salesDecisions.size > 0) {
-        setProcessingStatus('Saving sales decisions...');
-        
-        const salesDecisionUpdates = Array.from(salesDecisions.entries()).map(([compositeKey, decision]) => {
-          const salesChange = comparison.details.salesChanges.find(sc => sc.property_composite_key === compositeKey);
-          return {
-            property_composite_key: compositeKey,
-            sales_history: {
-              comparison_date: new Date().toISOString().split('T')[0],
-              sales_decision: {
-                decision_type: decision,
-                old_price: salesChange?.differences.sales_price.old,
-                new_price: salesChange?.differences.sales_price.new,
-                old_date: salesChange?.differences.sales_date.old,
-                new_date: salesChange?.differences.sales_date.new,
-                decided_by: 'user', // TODO: Get actual user ID
-                decided_at: new Date().toISOString()
-              }
-            }
-          };
-        });
-        
-        // Update sales_history for each affected property
-        for (const update of salesDecisionUpdates) {
-          try {
-            const { error } = await supabase
-              .from('property_records')
-              .update({ 
-                sales_history: update.sales_history 
-              })
-              .eq('property_composite_key', update.property_composite_key)
-              .eq('job_id', job.id);
-            
-            if (error) {
-              console.error('Error updating sales history:', error);
-            }
-          } catch (updateError) {
-            console.error('Failed to update sales history for property:', update.property_composite_key, updateError);
-          }
-        }
-        
-        console.log(`✅ Saved ${salesDecisionUpdates.length} sales decisions to property records`);
-      }
+      // Step 3: Save comparison report
+      await saveComparisonReport(comparison, salesDecisions);
       
-      const totalProcessed = result.processed || 0;
-      const errorCount = result.errors || 0;
-      const warnings = result.warnings || [];
-      
-      if (errorCount > 0) {
-        addNotification(`❌ Processing completed with ${errorCount} errors. ${totalProcessed} records processed.`, 'warning');
-      } else {
-        addNotification(`✅ Successfully processed ${totalProcessed} records via ${detectedVendor} processor`, 'success');
-        
-        if (salesDecisions.size > 0) {
-          addNotification(`💾 Saved ${salesDecisions.size} sales decisions`, 'success');
-        }
-      }
-      
-      // Show warnings if any
-      if (warnings.length > 0) {
-        warnings.slice(0, 3).forEach(warning => {
-          addNotification(`⚠️ ${warning}`, 'warning');
-        });
-      }
-      
-      // FIXED: Update job with new file version info
+      // Step 4: Update job with new file version info
       try {
         await jobService.update(job.id, {
-          sourceFileStatus: errorCount > 0 ? 'error' : 'imported',
-          totalProperties: totalProcessed,
+          sourceFileStatus: result.errors > 0 ? 'error' : 'imported',
+          totalProperties: result.processed,
           source_file_version: (job.source_file_version || 1) + 1,
           source_file_uploaded_at: new Date().toISOString()
         });
@@ -651,19 +549,30 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         addNotification('Data processed but job update failed', 'warning');
       }
       
-      // Close modal and refresh
-      forceCloseAllModals();
+      // Step 5: Show results in single modal
+      setComparisonResults(comparison);
+      setShowResultsModal(true);
       
-      // Give processor time to complete, then refresh comparison for next upload
-      setTimeout(async () => {
-        console.log('🔄 Refreshing after processing...');
-        if (onFileProcessed) {
-          onFileProcessed(result);
-        }
-      }, 2000);
+      const totalProcessed = result.processed || 0;
+      const errorCount = result.errors || 0;
+      
+      if (errorCount > 0) {
+        addNotification(`❌ Processing completed with ${errorCount} errors. ${totalProcessed} records processed.`, 'warning');
+      } else {
+        addNotification(`✅ Successfully processed ${totalProcessed} records via ${detectedVendor} processor`, 'success');
+      }
+      
+      // Clear files
+      setSourceFile(null);
+      setSourceFileContent(null);
+      
+      // Notify parent
+      if (onFileProcessed) {
+        onFileProcessed(result);
+      }
       
     } catch (error) {
-      console.error('❌ Processor call failed:', error);
+      console.error('❌ File processing failed:', error);
       addNotification(`Processing failed: ${error.message}`, 'error');
     } finally {
       setProcessing(false);
@@ -708,161 +617,11 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     }
   };
 
-  // COMPLETELY FIXED: Sales Decision Modal with proper sizing and escape
-  const SalesDecisionModal = () => {
-    if (!pendingSalesChanges.length) return null;
+  // SINGLE RESULTS MODAL - Clean and properly sized
+  const ResultsModal = () => {
+    if (!comparisonResults || !showResultsModal) return null;
     
-    return (
-      <div 
-        className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-[9999]"
-        onClick={(e) => {
-          // Click outside to close
-          if (e.target === e.currentTarget) {
-            forceCloseAllModals();
-          }
-        }}
-      >
-        <div 
-          className="bg-white rounded-xl w-full max-w-4xl max-h-[80vh] flex flex-col shadow-2xl border"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {/* FIXED Header with prominent close button */}
-          <div className="flex items-center justify-between p-4 border-b bg-blue-50 rounded-t-xl shrink-0">
-            <div className="flex items-center space-x-3">
-              <Target className="w-5 h-5 text-blue-600" />
-              <div>
-                <h2 className="text-lg font-bold text-gray-900">Sales Change Decisions Required</h2>
-                <p className="text-sm text-gray-600">{pendingSalesChanges.length} properties need review</p>
-              </div>
-            </div>
-            
-            {/* TRIPLE close buttons for guaranteed escape */}
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={forceCloseAllModals}
-                className="px-3 py-1 bg-red-500 text-white rounded text-sm font-medium hover:bg-red-600"
-              >
-                CLOSE
-              </button>
-              <button
-                onClick={forceCloseAllModals}
-                className="text-gray-400 hover:text-gray-600 p-1"
-              >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-          </div>
-
-          {/* FIXED Scrollable content with proper height */}
-          <div className="flex-1 overflow-y-auto p-4">
-            <div className="space-y-4">
-              {pendingSalesChanges.map((change, idx) => {
-                const currentDecision = salesDecisions.get(change.property_composite_key);
-                
-                return (
-                  <div key={idx} className="border border-blue-200 rounded-lg p-4 bg-blue-50">
-                    <div className="flex justify-between items-start mb-3">
-                      <div>
-                        <h3 className="text-lg font-bold text-gray-900">
-                          Property {change.property_block}-{change.property_lot}
-                        </h3>
-                        <p className="text-gray-600 text-sm">{change.property_location}</p>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-sm text-gray-600">Sales Price Change</div>
-                        <div className="text-base font-bold text-red-600">
-                          ${change.differences.sales_price.old?.toLocaleString() || 0} 
-                        </div>
-                        <div className="text-base font-bold text-green-600">
-                          → ${change.differences.sales_price.new?.toLocaleString() || 0}
-                        </div>
-                        {/* FIXED: Add sale dates to help with decisions */}
-                        <div className="text-xs text-gray-500 mt-1">
-                          {change.differences.sales_date.old || 'No Date'} → {change.differences.sales_date.new || 'No Date'}
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        onClick={() => handleSalesDecision(change.property_composite_key, 'Keep Old')}
-                        className={`px-4 py-2 rounded text-sm font-medium ${
-                          currentDecision === 'Keep Old' 
-                            ? 'bg-red-600 text-white shadow-md' 
-                            : 'bg-red-100 text-red-800 hover:bg-red-200'
-                        }`}
-                      >
-                        Keep Old (${change.differences.sales_price.old?.toLocaleString()})
-                      </button>
-                      
-                      <button
-                        onClick={() => handleSalesDecision(change.property_composite_key, 'Keep New')}
-                        className={`px-4 py-2 rounded text-sm font-medium ${
-                          currentDecision === 'Keep New' 
-                            ? 'bg-green-600 text-white shadow-md' 
-                            : 'bg-green-100 text-green-800 hover:bg-green-200'
-                        }`}
-                      >
-                        Keep New (${change.differences.sales_price.new?.toLocaleString()})
-                      </button>
-                      
-                      <button
-                        onClick={() => handleSalesDecision(change.property_composite_key, 'Keep Both')}
-                        className={`px-4 py-2 rounded text-sm font-medium ${
-                          currentDecision === 'Keep Both' 
-                            ? 'bg-blue-600 text-white shadow-md' 
-                            : 'bg-blue-100 text-blue-800 hover:bg-blue-200'
-                        }`}
-                      >
-                        Keep Both
-                      </button>
-                    </div>
-                    
-                    {currentDecision && (
-                      <div className="mt-2 p-2 bg-green-100 rounded">
-                        <div className="text-sm font-medium text-green-800">
-                          ✓ Decision: {currentDecision}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* FIXED Footer with proper spacing */}
-          <div className="p-4 border-t bg-gray-50 flex justify-between items-center rounded-b-xl shrink-0">
-            <div className="text-sm text-gray-600">
-              Progress: {salesDecisions.size} of {pendingSalesChanges.length} decisions made
-            </div>
-            
-            <div className="flex space-x-2">
-              <button
-                onClick={forceCloseAllModals}
-                className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
-              >
-                Cancel
-              </button>
-              
-              <button
-                onClick={completeSalesDecisions}
-                className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-medium"
-              >
-                Continue →
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  // COMPLETELY FIXED: Comparison Modal with proper sizing and controls
-  const ComparisonModal = () => {
-    if (!comparison) return null;
-    
-    const { summary, details } = comparison;
+    const { summary, details } = comparisonResults;
     const hasNewRecords = summary.missing > 0;
     const hasChanges = summary.changes > 0;
     const hasDeletions = summary.deletions > 0;
@@ -871,27 +630,17 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     const hasAnyChanges = hasNewRecords || hasChanges || hasDeletions || hasSalesChanges || hasClassChanges;
     
     return (
-      <div 
-        className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[9998]"
-        onClick={(e) => {
-          if (e.target === e.currentTarget) {
-            forceCloseAllModals();
-          }
-        }}
-      >
-        <div 
-          className="bg-white rounded-lg max-w-4xl w-full max-h-[85vh] overflow-hidden shadow-2xl flex flex-col"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {/* FIXED Header */}
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="bg-white rounded-lg max-w-4xl w-full max-h-[70vh] overflow-hidden shadow-2xl flex flex-col">
+          {/* Header */}
           <div className="p-4 border-b border-gray-200 bg-gray-50 shrink-0">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
                 <FileText className="w-5 h-5 text-blue-600" />
-                <h2 className="text-lg font-bold text-gray-900">File Comparison Results</h2>
+                <h2 className="text-lg font-bold text-gray-900">File Update Results</h2>
               </div>
               <button
-                onClick={forceCloseAllModals}
+                onClick={() => setShowResultsModal(false)}
                 className="text-gray-400 hover:text-gray-600 p-1"
               >
                 <X className="w-6 h-6" />
@@ -899,53 +648,139 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
             </div>
           </div>
 
-          {/* FIXED Scrollable content */}
-          <div className="flex-1 overflow-y-auto p-4">
-            {/* Summary Cards */}
-            <div className="grid grid-cols-5 gap-3 mb-6">
-              {/* New Records Card */}
-              <div className={`p-3 rounded-lg border-2 text-center ${hasNewRecords ? 'border-green-400 bg-green-50' : 'border-gray-200 bg-gray-50'}`}>
-                <div className={`text-xl font-bold ${hasNewRecords ? 'text-green-600' : 'text-gray-500'}`}>
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto p-6">
+            {/* Summary Tiles */}
+            <div className="grid grid-cols-5 gap-4 mb-6">
+              {/* New Records */}
+              <div className={`p-4 rounded-lg border-2 text-center ${hasNewRecords ? 'border-green-400 bg-green-50' : 'border-gray-200 bg-gray-50'}`}>
+                <div className={`text-2xl font-bold ${hasNewRecords ? 'text-green-600' : 'text-gray-500'}`}>
                   {summary.missing || 0}
                 </div>
-                <div className="text-xs text-gray-600">New Records</div>
+                <div className="text-sm text-gray-600">New Records</div>
               </div>
 
-              {/* Changes Card */}
-              <div className={`p-3 rounded-lg border-2 text-center ${hasChanges ? 'border-yellow-400 bg-yellow-50' : 'border-gray-200 bg-gray-50'}`}>
-                <div className={`text-xl font-bold ${hasChanges ? 'text-yellow-600' : 'text-gray-500'}`}>
-                  {summary.changes || 0}
-                </div>
-                <div className="text-xs text-gray-600">Changes</div>
-              </div>
-
-              {/* Deletions Card */}
-              <div className={`p-3 rounded-lg border-2 text-center ${hasDeletions ? 'border-red-400 bg-red-50' : 'border-gray-200 bg-gray-50'}`}>
-                <div className={`text-xl font-bold ${hasDeletions ? 'text-red-600' : 'text-gray-500'}`}>
+              {/* Deletions */}
+              <div className={`p-4 rounded-lg border-2 text-center ${hasDeletions ? 'border-red-400 bg-red-50' : 'border-gray-200 bg-gray-50'}`}>
+                <div className={`text-2xl font-bold ${hasDeletions ? 'text-red-600' : 'text-gray-500'}`}>
                   {summary.deletions || 0}
                 </div>
-                <div className="text-xs text-gray-600">Deletions</div>
+                <div className="text-sm text-gray-600">Deletions</div>
               </div>
 
-              {/* Sales Changes Card */}
-              <div className={`p-3 rounded-lg border-2 text-center ${hasSalesChanges ? 'border-blue-400 bg-blue-50' : 'border-gray-200 bg-gray-50'}`}>
-                <div className={`text-xl font-bold ${hasSalesChanges ? 'text-blue-600' : 'text-gray-500'}`}>
+              {/* Changes */}
+              <div className={`p-4 rounded-lg border-2 text-center ${hasChanges ? 'border-yellow-400 bg-yellow-50' : 'border-gray-200 bg-gray-50'}`}>
+                <div className={`text-2xl font-bold ${hasChanges ? 'text-yellow-600' : 'text-gray-500'}`}>
+                  {summary.changes || 0}
+                </div>
+                <div className="text-sm text-gray-600">Changes</div>
+              </div>
+
+              {/* Sales Changes */}
+              <div className={`p-4 rounded-lg border-2 text-center ${hasSalesChanges ? 'border-blue-400 bg-blue-50' : 'border-gray-200 bg-gray-50'}`}>
+                <div className={`text-2xl font-bold ${hasSalesChanges ? 'text-blue-600' : 'text-gray-500'}`}>
                   {summary.salesChanges || 0}
                 </div>
-                <div className="text-xs text-gray-600">Sales Changes</div>
-                {hasSalesChanges && (
-                  <div className="text-xs text-green-600 mt-1">✓ Decisions Made</div>
-                )}
+                <div className="text-sm text-gray-600">Sales Changes</div>
               </div>
 
-              {/* Class Changes Card */}
-              <div className={`p-3 rounded-lg border-2 text-center ${hasClassChanges ? 'border-purple-400 bg-purple-50' : 'border-gray-200 bg-gray-50'}`}>
-                <div className={`text-xl font-bold ${hasClassChanges ? 'text-purple-600' : 'text-gray-500'}`}>
+              {/* Class Changes */}
+              <div className={`p-4 rounded-lg border-2 text-center ${hasClassChanges ? 'border-purple-400 bg-purple-50' : 'border-gray-200 bg-gray-50'}`}>
+                <div className={`text-2xl font-bold ${hasClassChanges ? 'text-purple-600' : 'text-gray-500'}`}>
                   {summary.classChanges || 0}
                 </div>
-                <div className="text-xs text-gray-600">Class Changes</div>
+                <div className="text-sm text-gray-600">Class Changes</div>
               </div>
             </div>
+
+            {/* No Changes State */}
+            {!hasAnyChanges && (
+              <div className="text-center py-8">
+                <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
+                <h3 className="text-lg font-bold text-gray-900 mb-2">✅ Files Match Database</h3>
+                <p className="text-gray-600">All data is current and synchronized.</p>
+              </div>
+            )}
+
+            {/* Sales Changes Section (if any) */}
+            {hasSalesChanges && (
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Sales Changes Requiring Decisions:</h3>
+                <div className="space-y-4 max-h-60 overflow-y-auto">
+                  {details.salesChanges.map((change, idx) => {
+                    const currentDecision = salesDecisions.get(change.property_composite_key);
+                    
+                    return (
+                      <div key={idx} className="border border-blue-200 rounded-lg p-4 bg-blue-50">
+                        <div className="flex justify-between items-start mb-3">
+                          <div>
+                            <h4 className="font-bold text-gray-900">
+                              Property {change.property_block}-{change.property_lot}
+                            </h4>
+                            <p className="text-gray-600 text-sm">{change.property_location}</p>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-sm text-gray-600">Price Change</div>
+                            <div className="text-sm font-bold text-red-600">
+                              ${change.differences.sales_price.old?.toLocaleString() || 0} 
+                            </div>
+                            <div className="text-sm font-bold text-green-600">
+                              → ${change.differences.sales_price.new?.toLocaleString() || 0}
+                            </div>
+                            <div className="text-xs text-gray-500 mt-1">
+                              {change.differences.sales_date.old || 'No Date'} → {change.differences.sales_date.new || 'No Date'}
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleSalesDecision(change.property_composite_key, 'Keep Old')}
+                            className={`px-3 py-1 rounded text-sm font-medium ${
+                              currentDecision === 'Keep Old' 
+                                ? 'bg-red-600 text-white' 
+                                : 'bg-red-100 text-red-800 hover:bg-red-200'
+                            }`}
+                          >
+                            Keep Old
+                          </button>
+                          
+                          <button
+                            onClick={() => handleSalesDecision(change.property_composite_key, 'Keep New')}
+                            className={`px-3 py-1 rounded text-sm font-medium ${
+                              currentDecision === 'Keep New' 
+                                ? 'bg-green-600 text-white' 
+                                : 'bg-green-100 text-green-800 hover:bg-green-200'
+                            }`}
+                          >
+                            Keep New
+                          </button>
+                          
+                          <button
+                            onClick={() => handleSalesDecision(change.property_composite_key, 'Keep Both')}
+                            className={`px-3 py-1 rounded text-sm font-medium ${
+                              currentDecision === 'Keep Both' 
+                                ? 'bg-blue-600 text-white' 
+                                : 'bg-blue-100 text-blue-800 hover:bg-blue-200'
+                            }`}
+                          >
+                            Keep Both
+                          </button>
+                        </div>
+                        
+                        {currentDecision && (
+                          <div className="mt-2 p-2 bg-green-100 rounded">
+                            <div className="text-sm font-medium text-green-800">
+                              ✓ Decision: {currentDecision}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Processing Status */}
             {processing && (
@@ -957,45 +792,27 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
               </div>
             )}
 
-            {/* No Changes State */}
-            {!hasAnyChanges && (
-              <div className="text-center py-8">
-                <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
-                <h3 className="text-lg font-bold text-gray-900 mb-2">✅ Files Match Database</h3>
-                <p className="text-gray-600">All data is current and synchronized.</p>
+            {/* Debug Info */}
+            <div className="mt-6 p-4 bg-gray-100 rounded-lg">
+              <h3 className="font-bold text-gray-900 mb-2">🔍 Debug Info:</h3>
+              <div className="text-sm text-gray-700 space-y-1">
+                <div>Vendor: {detectedVendor}</div>
+                <div>Job ID: {job.id}</div>
+                <div>Source File: {sourceFile?.name}</div>
+                <div>Total Changes: {summary.missing + summary.changes + summary.deletions + summary.salesChanges + summary.classChanges}</div>
               </div>
-            )}
-
-            {/* Show change details if any exist */}
-            {hasAnyChanges && (
-              <div className="text-center py-4">
-                <p className="text-gray-600">Changes detected - processing will update database with new data.</p>
-              </div>
-            )}
-
-            {/* DEBUGGING: Show comparison details for troubleshooting */}
-            {comparison && (
-              <div className="mt-6 p-4 bg-gray-100 rounded-lg">
-                <h3 className="font-bold text-gray-900 mb-2">🔍 Debug Info:</h3>
-                <div className="text-sm text-gray-700 space-y-1">
-                  <div>Vendor: {detectedVendor}</div>
-                  <div>Job ID: {job.id}</div>
-                  <div>Source File: {sourceFile?.name}</div>
-                  <div>DB Records Found: {comparison.dbRecordCount}</div>
-                  <div>Source Records Parsed: {comparison.sourceRecordCount}</div>
-                </div>
-              </div>
-            )}
+            </div>
           </div>
 
-          {/* FIXED Footer */}
-          <div className="px-4 py-3 border-t border-gray-200 bg-gray-50 flex justify-between shrink-0">
-            <div className="flex space-x-2">
+          {/* Footer */}
+          <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-between shrink-0">
+            <div className="flex space-x-3">
               <button
-                onClick={forceCloseAllModals}
-                className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
+                onClick={viewAllReports}
+                className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 flex items-center space-x-2"
               >
-                Close
+                <Eye className="w-4 h-4" />
+                <span>View All Reports</span>
               </button>
               
               <button
@@ -1003,19 +820,16 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                 className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 flex items-center space-x-2"
               >
                 <Download className="w-4 h-4" />
-                <span>Export Report</span>
+                <span>Export This Report</span>
               </button>
             </div>
             
-            {hasAnyChanges && (
-              <button
-                onClick={handleProcessChanges}
-                disabled={processing}
-                className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 font-medium"
-              >
-                {processing ? 'Processing...' : `🔄 Process Changes`}
-              </button>
-            )}
+            <button
+              onClick={() => setShowResultsModal(false)}
+              className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-medium"
+            >
+              Acknowledge & Close
+            </button>
           </div>
         </div>
       </div>
@@ -1061,7 +875,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
   return (
     <div className="space-y-3">
       {/* Notifications */}
-      <div className="fixed top-4 right-4 z-50 space-y-2">
+      <div className="fixed top-4 right-4 z-40 space-y-2">
         {notifications.map(notification => (
           <div
             key={notification.id}
@@ -1085,7 +899,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         ))}
       </div>
 
-      {/* Source File Section - COMPACT DARK FORMAT */}
+      {/* Source File Section */}
       <div className="flex items-center gap-3 text-gray-300">
         <FileText className="w-4 h-4 text-blue-400" />
         <span className="text-sm min-w-0 flex-1">
@@ -1102,7 +916,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         
         <button
           onClick={() => document.getElementById('source-file-upload').click()}
-          disabled={comparing}
+          disabled={processing}
           className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:bg-gray-500 flex items-center gap-1"
         >
           <Upload className="w-3 h-3" />
@@ -1111,21 +925,21 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         
         {sourceFile && (
           <button
-            onClick={performComparison}
-            disabled={comparing}
+            onClick={() => handleProcessFile('source')}
+            disabled={processing}
             className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 disabled:bg-gray-500 flex items-center gap-1"
           >
-            {comparing ? (
+            {processing ? (
               <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
             ) : (
               <CheckCircle className="w-3 h-3" />
             )}
-            Compare
+            Update
           </button>
         )}
       </div>
 
-      {/* Code File Section - COMPACT DARK FORMAT */}
+      {/* Code File Section */}
       <div className="flex items-center gap-3 text-gray-300">
         <Settings className="w-4 h-4 text-green-400" />
         <span className="text-sm min-w-0 flex-1">
@@ -1142,18 +956,31 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         
         <button
           onClick={() => document.getElementById('code-file-upload').click()}
-          className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 flex items-center gap-1"
+          disabled={processing}
+          className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 disabled:bg-gray-500 flex items-center gap-1"
         >
           <Upload className="w-3 h-3" />
           {codeFile ? codeFile.name.substring(0, 10) + '...' : 'Select File'}
         </button>
+        
+        {codeFile && (
+          <button
+            onClick={() => handleProcessFile('code')}
+            disabled={processing}
+            className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 disabled:bg-gray-500 flex items-center gap-1"
+          >
+            {processing ? (
+              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+            ) : (
+              <CheckCircle className="w-3 h-3" />
+            )}
+            Update
+          </button>
+        )}
       </div>
 
-      {/* Sales Decision Modal */}
-      {showSalesDecisionModal && <SalesDecisionModal />}
-
-      {/* Comparison Modal */}
-      {showComparisonModal && <ComparisonModal />}
+      {/* Results Modal */}
+      <ResultsModal />
     </div>
   );
 };
