@@ -36,22 +36,25 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
   // Load current file timestamps from property_records table
   const loadFileTimestamps = async () => {
     try {
-      const { data, error } = await supabase
-        .from('property_records')
-        .select('source_file_uploaded_at, code_file_updated_at')
-        .eq('job_id', job.id)
-        .order('upload_date', { ascending: false })
-        .limit(1);
+      // Get latest file info from jobs table (has version numbers)
+      const { data: jobData, error: jobError } = await supabase
+        .from('jobs')
+        .select('source_file_uploaded_at, code_file_uploaded_at, source_file_version, code_file_version')
+        .eq('id', job.id)
+        .single();
 
-      if (error) throw error;
+      if (jobError) throw jobError;
 
-      if (data && data.length > 0) {
+      if (jobData) {
         setFileTimestamps({
-          source: data[0].source_file_uploaded_at,
-          code: data[0].code_file_updated_at
+          source: jobData.source_file_uploaded_at || job.created_at,
+          code: jobData.code_file_uploaded_at || job.created_at
         });
+        // Update job object with current versions for banner display
+        job.source_file_version = jobData.source_file_version || 1;
+        job.code_file_version = jobData.code_file_version || 1;
       } else {
-        // Fallback to job creation date (no uploads yet)
+        // Fallback to job creation date
         setFileTimestamps({
           source: job.created_at,
           code: job.created_at
@@ -520,8 +523,12 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       let allPreviousData = [];
       let from = 0;
       const batchSize = 1000;
+      let attempts = 0;
+      const maxAttempts = 50; // Increased from default 3 to handle large datasets
       
-      while (true) {
+      while (true && attempts < maxAttempts) {
+        attempts++;
+        
         const { data: batchData, error: batchError } = await supabase
           .from('property_records')
           .select('*')
@@ -529,11 +536,17 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
           .order('upload_date', { ascending: false })
           .range(from, from + batchSize - 1);
         
-        if (batchError) throw batchError;
+        if (batchError) {
+          console.error(`Batch ${attempts} error:`, batchError);
+          if (attempts >= maxAttempts) throw batchError;
+          await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retry
+          continue;
+        }
         
         if (!batchData || batchData.length === 0) break;
         
         allPreviousData = [...allPreviousData, ...batchData];
+        console.log(`📊 Loaded batch ${attempts}: ${batchData.length} records (total: ${allPreviousData.length})`);
         
         if (batchData.length < batchSize) break; // Last batch
         
@@ -1477,8 +1490,8 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                   Cancel
                 </button>
                 <button
-                  onClick={() => {
-                    // Check if all sales changes have decisions
+                  onClick={async () => {
+                    // Check if all sales changes have decisions (only if sales changes exist)
                     const needsReview = comparisonReport.salesChanges?.filter(c => !c.hasExistingDecision) || [];
                     const pendingCount = Object.keys(pendingSalesDecisions).length;
                     
@@ -1492,8 +1505,10 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                       markReportAsReviewed(comparisonReport.reportId);
                     }
                     
-                    // Continue with processing
-                    processSelectedFile('source');
+                    // Continue with processing and close modal
+                    setShowReport(false);
+                    setPendingSalesDecisions({});
+                    await processSelectedFile('source');
                   }}
                   className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center gap-2"
                 >
