@@ -853,7 +853,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
       const planningData = {
         ccddCode: newPlanningJob.ccddCode,
         municipality: newPlanningJob.municipality,
-        potentialYear: new Date(newPlanningJob.dueDate).getFullYear(),
+        end_date: newPlanningJob.dueDate,
         comments: newPlanningJob.comments || '',
         created_by: currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad'
       };
@@ -923,7 +923,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
     try {
       const updateData = {
         municipality: newPlanningJob.municipality,
-        potentialYear: new Date(newPlanningJob.dueDate).getFullYear(),
+        end_date: newPlanningJob.dueDate,
         comments: newPlanningJob.comments || ''
       };
 
@@ -1715,7 +1715,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Target Year *
+                  Target Date *
                 </label>
                 <input
                   type="date"
