@@ -1,4 +1,12 @@
-import React, { useState, useEffect } from 'react';
+console.log('🔍 FileUploadButton rendering with job:', job);
+console.log('🔍 Job exists:', !!job);
+
+if (!job) {
+  console.log('🔍 No job provided - showing placeholder');
+  return <div>NO JOB PROVIDED</div>;
+}
+
+console.log('🔍 About to render file upload UI');import React, { useState, useEffect } from 'react';
 import { Upload, FileText, CheckCircle, AlertTriangle, X, Database, Target } from 'lucide-react';
 import { jobService, propertyService } from '../lib/supabaseClient';
 
