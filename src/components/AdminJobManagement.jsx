@@ -801,6 +801,7 @@ const uploadPropertyAssignment = async (job) => {
         state: newJob.state,
         vendor: newJob.vendor,
         dueDate: newJob.dueDate,
+        year_created: new Date().getFullYear(),
         assignedManagers: newJob.assignedManagers,
         totalProperties: fileAnalysis.propertyCount,
         inspectedProperties: 0,
