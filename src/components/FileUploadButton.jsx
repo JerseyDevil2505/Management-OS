@@ -1,1469 +1,1043 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Upload, FileText, Settings, AlertTriangle, CheckCircle, Download, Eye, X, Calendar } from 'lucide-react';
-import { supabase, propertyService } from '../lib/supabaseClient';
+import { createClient } from '@supabase/supabase-js';
 
-const FileUploadButton = ({ job, onFileProcessed }) => {
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadType, setUploadType] = useState(null);
-  const [comparisonReport, setComparisonReport] = useState(null);
-  const [showReport, setShowReport] = useState(false);
-  const [salesDecisions, setSalesDecisions] = useState({});
-  const [pendingSalesDecisions, setPendingSalesDecisions] = useState({});
-  const [fileTimestamps, setFileTimestamps] = useState({
-    source: null,
-    code: null
-  });
-  const [asOfDates, setAsOfDates] = useState({
-    source: new Date().toISOString().split('T')[0], // Default to today
-    code: new Date().toISOString().split('T')[0]
-  });
-  const [selectedFiles, setSelectedFiles] = useState({
-    source: null,
-    code: null
-  });
-  
-  const sourceFileRef = useRef();
-  const codeFileRef = useRef();
+const supabaseUrl = process.env.REACT_APP_SUPABASE_URL || 'https://zxvavttfvpsagzluqqwn.supabase.co';
+const supabaseKey = process.env.REACT_APP_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp4dmF2dHRmdnBzYWd6bHVxcXduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIzNDA4NjcsImV4cCI6MjA2NzkxNjg2N30.Rrn2pTnImCpBIoKPcdlzzZ9hMwnYtIO5s7i1ejwQReg';
 
-  // Load file timestamps and previous sales decisions on mount
-  useEffect(() => {
-    if (job?.id) {
-      loadFileTimestamps();
-      loadPreviousSalesDecisions();
-    }
-  }, [job?.id]);
+export const supabase = createClient(supabaseUrl, supabaseKey);
 
-  // Load current file timestamps from property_records table
-  const loadFileTimestamps = async () => {
+// ===== EMPLOYEE MANAGEMENT SERVICES =====
+export const employeeService = {
+  async getAll() {
     try {
       const { data, error } = await supabase
-        .from('property_records')
-        .select('source_file_uploaded_at, code_file_updated_at')
-        .eq('job_id', job.id)
-        .order('upload_date', { ascending: false })
-        .limit(1);
-
-      if (error) throw error;
-
-      if (data && data.length > 0) {
-        setFileTimestamps({
-          source: data[0].source_file_uploaded_at,
-          code: data[0].code_file_updated_at
-        });
-      } else {
-        // Fallback to job creation date (no uploads yet)
-        setFileTimestamps({
-          source: job.created_at,
-          code: job.created_at
-        });
-      }
-    } catch (error) {
-      console.error('Error loading file timestamps:', error);
-      // Fall back to job creation date
-      setFileTimestamps({
-        source: job.created_at,
-        code: job.created_at
-      });
-    }
-  };
-
-  // Load previous sales decisions from sales_history JSONB field
-  const loadPreviousSalesDecisions = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('property_records')
-        .select('property_composite_key, sales_history')
-        .eq('job_id', job.id)
-        .not('sales_history', 'is', null);
-
-      if (error) throw error;
-
-      const decisionsMap = {};
-      data.forEach(record => {
-        if (record.sales_history?.decisions?.length > 0) {
-          // Get the most recent decision
-          const latestDecision = record.sales_history.decisions[record.sales_history.decisions.length - 1];
-          decisionsMap[record.property_composite_key] = latestDecision;
-        }
-      });
-
-      setSalesDecisions(decisionsMap);
-    } catch (error) {
-      console.error('Error loading sales decisions:', error);
-      setSalesDecisions({});
-    }
-  };
-
-  // Save complete comparison report for audit trail
-  const saveComparisonReport = async (reportData) => {
-    try {
-      const reportRecord = {
-        job_id: job.id,
-        report_date: new Date().toISOString(),
-        report_data: reportData,
-        status: 'pending_review',
-        generated_by: 'current-user', // TODO: Get actual user ID
-        reviewed_by: null,
-        reviewed_date: null
-      };
-
-      const { error } = await supabase
-        .from('comparison_reports') // You'll need to create this table
-        .insert([reportRecord]);
-
-      if (error) throw error;
+        .from('employees')
+        .select('*')
+        .order('last_name');
       
-      console.log('Comparison report saved for audit trail');
+      if (error) throw error;
+      return data;
     } catch (error) {
-      console.error('Error saving comparison report:', error);
-      // Don't fail the upload if report saving fails
+      console.error('Employee service error:', error);
+      return [];
     }
-  };
+  },
 
-  // Mark comparison report as reviewed
-  const markReportAsReviewed = async (reportId) => {
+  async getById(id) {
+    try {
+      const { data, error } = await supabase
+        .from('employees')
+        .select('*')
+        .eq('id', id)
+        .single();
+      
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Employee service error:', error);
+      return null;
+    }
+  },
+
+  async create(employee) {
+    try {
+      const { data, error } = await supabase
+        .from('employees')
+        .insert([employee])
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Employee service error:', error);
+      throw error;
+    }
+  },
+
+  async update(id, updates) {
+    try {
+      const { data, error } = await supabase
+        .from('employees')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Employee service error:', error);
+      throw error;
+    }
+  },
+
+  async delete(id) {
     try {
       const { error } = await supabase
-        .from('comparison_reports')
-        .update({
-          status: 'acknowledged',
-          reviewed_by: 'current-user', // TODO: Get actual user ID
-          reviewed_date: new Date().toISOString()
+        .from('employees')
+        .delete()
+        .eq('id', id);
+      
+      if (error) throw error;
+    } catch (error) {
+      console.error('Employee service error:', error);
+      throw error;
+    }
+  },
+
+  async bulkImport(employees) {
+    try {
+      const { data, error } = await supabase
+        .from('employees')
+        .insert(employees)
+        .select();
+      
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Employee service error:', error);
+      throw error;
+    }
+  },
+
+  async bulkUpsert(employees) {
+    try {
+      const { data, error } = await supabase
+        .from('employees')
+        .upsert(employees, { 
+          onConflict: 'email',
+          ignoreDuplicates: false 
         })
-        .eq('id', reportId);
-
+        .select();
+      
       if (error) throw error;
-      console.log('Report marked as reviewed');
+      return data;
     } catch (error) {
-      console.error('Error marking report as reviewed:', error);
+      console.error('Employee bulk upsert error:', error);
+      throw error;
     }
-  };
+  },
 
-  // Export all comparison reports for this job as CSV
-  const exportAllReports = async () => {
+  async bulkUpdate(employees) {
     try {
-      const { data: reports, error } = await supabase
+      const updates = await Promise.all(
+        employees.map(emp => 
+          supabase
+            .from('employees')
+            .update(emp)
+            .eq('id', emp.id)
+            .select()
+        )
+      );
+      
+      return updates.map(result => result.data).flat();
+    } catch (error) {
+      console.error('Employee bulk update error:', error);
+      throw error;
+    }
+  },
+
+  async getManagers() {
+    try {
+      const { data, error } = await supabase
+        .from('employees')
+        .select('*')
+        .in('role', ['Management', 'Owner'])
+        .order('last_name');
+      
+      if (error) throw error;
+      
+      // Hard-code admin capabilities for the three admins
+      const managersWithAdminRoles = data.map(emp => {
+        const fullName = `${emp.first_name} ${emp.last_name}`.toLowerCase();
+        
+        const isAdmin = emp.role === 'Owner' || 
+                       fullName.includes('tom davis') || 
+                       fullName.includes('brian schneider') || 
+                       fullName.includes('james duda');
+        
+        return {
+          ...emp,
+          can_be_lead: true,
+          is_admin: isAdmin,
+          effective_role: 'admin'
+        };
+      });
+      
+      return managersWithAdminRoles;
+    } catch (error) {
+      console.error('Manager service error:', error);
+      return this.getAll();
+    }
+  }
+};
+
+// ===== JOB MANAGEMENT SERVICES =====
+export const jobService = {
+  async getAll() {
+    try {
+      const { data, error } = await supabase
+        .from('jobs')
+        .select(`
+          *,
+          job_assignments (
+            id,
+            role,
+            employee:employees!job_assignments_employee_id_fkey (
+              id,
+              first_name,
+              last_name,
+              email,
+              region
+            )
+          )
+        `)
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      
+      return data.map(job => ({
+        id: job.id,
+        name: job.job_name,
+        ccddCode: job.ccdd_code,
+        ccdd: job.ccdd_code, // ADDED: Alternative accessor for backward compatibility
+        municipality: job.municipality || job.client_name,
+        job_number: job.job_number,
+        year_created: job.year_created,
+        county: job.county,
+        state: job.state,
+        vendor: job.vendor_type,
+        status: job.status,
+        createdDate: job.start_date,
+        dueDate: job.end_date || job.target_completion_date,
+        totalProperties: job.total_properties || 0,
+        inspectedProperties: job.inspected_properties || 0,
+        sourceFileStatus: job.source_file_status || 'pending',
+        codeFileStatus: job.code_file_status || 'pending',
+        vendorDetection: job.vendor_detection,
+        workflowStats: job.workflow_stats,
+        percent_billed: job.percent_billed,  // FIXED: was percentBilling, now percent_billed
+        
+        // ADDED: Property assignment tracking for enhanced metrics
+        has_property_assignments: job.has_property_assignments || false,
+        assigned_has_commercial: job.assigned_has_commercial || false,
+        assignedPropertyCount: job.assigned_property_count || 0,
+        
+        // ADDED: File timestamp tracking for FileUploadButton
+        created_at: job.created_at,
+        source_file_uploaded_at: job.source_file_uploaded_at,
+        code_file_uploaded_at: job.code_file_uploaded_at,
+        
+        // ADDED: File version tracking
+        source_file_version: job.source_file_version || 1,
+        code_file_version: job.code_file_version || 1,
+        
+        assignedManagers: job.job_assignments?.map(ja => ({
+          id: ja.employee.id,
+          name: `${ja.employee.first_name} ${ja.employee.last_name}`,
+          role: ja.role,
+          email: ja.employee.email,
+          region: ja.employee.region
+        })) || []
+      }));
+    } catch (error) {
+      console.error('Jobs service error:', error);
+      return [];
+    }
+  },
+
+  async create(jobData) {
+    try {
+      const { assignedManagers, ...componentFields } = jobData;
+      
+      const dbFields = {
+        job_name: componentFields.name,
+        client_name: componentFields.municipality,
+        ccdd_code: componentFields.ccdd,
+        municipality: componentFields.municipality,
+        county: componentFields.county,
+        state: componentFields.state || 'NJ',
+        vendor_type: componentFields.vendor,
+        status: componentFields.status || 'draft',
+        start_date: componentFields.createdDate || new Date().toISOString().split('T')[0],
+        end_date: componentFields.dueDate,
+        target_completion_date: componentFields.dueDate,
+        total_properties: componentFields.totalProperties || 0,
+        inspected_properties: componentFields.inspectedProperties || 0,
+        source_file_status: componentFields.sourceFileStatus || 'pending',
+        code_file_status: componentFields.codeFileStatus || 'pending',
+        vendor_detection: componentFields.vendorDetection,
+        workflow_stats: componentFields.workflowStats,
+        percent_billed: componentFields.percentBilled || 0,
+        
+        // ADDED: File version tracking
+        source_file_version: componentFields.source_file_version || 1,
+        code_file_version: componentFields.code_file_version || 1,
+        
+        // ADDED: File tracking fields for FileUploadButton
+        source_file_name: componentFields.source_file_name,
+        source_file_version_id: componentFields.source_file_version_id,
+        source_file_uploaded_at: componentFields.source_file_uploaded_at,
+        
+        created_by: componentFields.created_by || componentFields.createdBy
+      };
+      
+      const { data: job, error: jobError } = await supabase
+        .from('jobs')
+        .insert([dbFields])
+        .select()
+        .single();
+      
+      if (jobError) throw jobError;
+
+      if (assignedManagers && assignedManagers.length > 0) {
+        const assignments = assignedManagers.map(manager => ({
+          job_id: job.id,
+          employee_id: manager.id,
+          role: manager.role,
+          assigned_by: dbFields.created_by,
+          assigned_date: new Date().toISOString().split('T')[0],
+          is_active: true
+        }));
+
+        const { error: assignError } = await supabase
+          .from('job_assignments')
+          .insert(assignments);
+        
+        if (assignError) {
+          console.error('Manager assignment error:', assignError);
+        }
+      }
+
+      return job;
+    } catch (error) {
+      console.error('Job creation error:', error);
+      throw error;
+    }
+  },
+
+  async update(id, updates) {
+    try {
+      const { assignedManagers, ...componentFields } = updates;
+      
+      console.log('🔧 DEBUG - jobService.update() called with:', { id, updates });
+      console.log('🔧 DEBUG - componentFields after destructuring:', componentFields);
+      
+      const dbFields = {};
+      
+      // Map component fields to database fields
+      if (componentFields.name) dbFields.job_name = componentFields.name;
+      if (componentFields.municipality) dbFields.municipality = componentFields.municipality;
+      if (componentFields.ccdd) dbFields.ccdd_code = componentFields.ccdd;
+      if (componentFields.county) dbFields.county = componentFields.county;
+      if (componentFields.state) dbFields.state = componentFields.state;
+      if (componentFields.vendor) dbFields.vendor_type = componentFields.vendor;
+      if (componentFields.status) dbFields.status = componentFields.status;
+      if (componentFields.dueDate) {
+        dbFields.end_date = componentFields.dueDate;
+        dbFields.target_completion_date = componentFields.dueDate;
+      }
+      if (componentFields.totalProperties !== undefined) dbFields.total_properties = componentFields.totalProperties;
+      if (componentFields.inspectedProperties !== undefined) dbFields.inspected_properties = componentFields.inspectedProperties;
+      if (componentFields.sourceFileStatus) dbFields.source_file_status = componentFields.sourceFileStatus;
+      if (componentFields.codeFileStatus) dbFields.code_file_status = componentFields.codeFileStatus;
+      if (componentFields.vendorDetection) dbFields.vendor_detection = componentFields.vendorDetection;
+      if (componentFields.workflowStats) dbFields.workflow_stats = componentFields.workflowStats;
+      
+      // FIXED PERCENT BILLED MAPPING WITH DEBUG
+      if (componentFields.percent_billed !== undefined) {
+        console.log('🎯 DEBUG - Found percent_billed field, value:', componentFields.percent_billed);
+        dbFields.percent_billed = componentFields.percent_billed;
+      } else {
+        console.log('⚠️ DEBUG - percent_billed field NOT found in componentFields');
+        console.log('📋 DEBUG - Available fields:', Object.keys(componentFields));
+      }
+
+      console.log('💾 DEBUG - Final dbFields being sent to Supabase:', dbFields);
+
+      const { data, error } = await supabase
+        .from('jobs')
+        .update(dbFields)
+        .eq('id', id)
+        .select()
+        .single();
+      
+      if (error) {
+        console.error('❌ DEBUG - Supabase update error:', error);
+        throw error;
+      }
+      
+      console.log('✅ DEBUG - Supabase update successful, returned data:', data);
+      return data;
+    } catch (error) {
+      console.error('Job update error:', error);
+      throw error;
+    }
+  },
+
+  // ENHANCED: Delete method with proper cascade deletion
+  async delete(id) {
+    try {
+      console.log(`🗑️ Starting deletion process for job ${id}...`);
+
+      // Step 1: Delete related comparison_reports first
+      const { error: reportsError } = await supabase
         .from('comparison_reports')
-        .select('*')
-        .eq('job_id', job.id)
-        .order('report_date', { ascending: false });
+        .delete()
+        .eq('job_id', id);
+      
+      if (reportsError) {
+        console.error('Error deleting comparison reports:', reportsError);
+        // Don't throw here - continue with job deletion even if no reports exist
+      } else {
+        console.log('✅ Deleted comparison_reports for job', id);
+      }
 
+      // Step 2: Delete related property_change_log records (commented out - table doesn't exist)
+      // const { error: changeLogError } = await supabase
+      //   .from('property_change_log')
+      //   .delete()
+      //   .eq('job_id', id);
+      // 
+      // if (changeLogError) {
+      //   console.error('Error deleting change log:', changeLogError);
+      //   // Don't throw here - table might not exist or no records
+      // } else {
+      //   console.log('✅ Deleted property_change_log for job', id);
+      // }
+
+      // Step 3: Delete related job_assignments
+      const { error: assignmentsError } = await supabase
+        .from('job_assignments')
+        .delete()
+        .eq('job_id', id);
+      
+      if (assignmentsError) {
+        console.error('Error deleting job assignments:', assignmentsError);
+      } else {
+        console.log('✅ Deleted job_assignments for job', id);
+      }
+
+      // Step 4: Delete related job_responsibilities (property assignments)
+      const { error: responsibilitiesError } = await supabase
+        .from('job_responsibilities')
+        .delete()
+        .eq('job_id', id);
+      
+      if (responsibilitiesError) {
+        console.error('Error deleting job responsibilities:', responsibilitiesError);
+      } else {
+        console.log('✅ Deleted job_responsibilities for job', id);
+      }
+
+      // Step 5: Delete related property_records
+      const { error: propertyError } = await supabase
+        .from('property_records')
+        .delete()
+        .eq('job_id', id);
+      
+      if (propertyError) {
+        console.error('Error deleting property records:', propertyError);
+      } else {
+        console.log('✅ Deleted property_records for job', id);
+      }
+
+      // Step 6: Delete related source_file_versions
+      const { error: sourceFileError } = await supabase
+        .from('source_file_versions')
+        .delete()
+        .eq('job_id', id);
+      
+      if (sourceFileError) {
+        console.error('Error deleting source file versions:', sourceFileError);
+      } else {
+        console.log('✅ Deleted source_file_versions for job', id);
+      }
+
+      // Step 7: Finally delete the job itself
+      const { error: jobError } = await supabase
+        .from('jobs')
+        .delete()
+        .eq('id', id);
+      
+      if (jobError) {
+        console.error('❌ FINAL ERROR - Failed to delete job:', jobError);
+        throw jobError;
+      }
+
+      console.log('🎉 Job deletion completed successfully!');
+      
+    } catch (error) {
+      console.error('Job deletion error:', error);
+      throw error;
+    }
+  }
+};
+
+// ===== PLANNING JOB SERVICES =====
+export const planningJobService = {
+  async getAll() {
+    try {
+      const { data, error } = await supabase
+        .from('planning_jobs')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
       if (error) throw error;
-
-      if (!reports || reports.length === 0) {
-        alert('No comparison reports found for this job.');
-        return;
-      }
-
-      // Flatten all reports into CSV rows
-      const csvData = [];
-      csvData.push(['Report_Date', 'Change_Type', 'Block', 'Lot', 'Qualifier', 'Property_Location', 'Old_Value', 'New_Value', 'Status', 'Reviewed_By', 'Reviewed_Date']);
-
-      reports.forEach(report => {
-        const reportDate = new Date(report.report_date).toLocaleDateString();
-        const reportData = report.report_data;
-
-        // Add removed properties
-        reportData.removedProperties?.forEach(prop => {
-          csvData.push([
-            reportDate,
-            'Property_Removed',
-            prop.block,
-            prop.lot,
-            prop.qualifier || '',
-            prop.property_location || '',
-            'Property_Existed',
-            'Property_Removed',
-            report.status,
-            report.reviewed_by || '',
-            report.reviewed_date ? new Date(report.reviewed_date).toLocaleDateString() : ''
-          ]);
-        });
-
-        // Add added properties
-        reportData.addedProperties?.forEach(prop => {
-          csvData.push([
-            reportDate,
-            'Property_Added',
-            prop.block,
-            prop.lot,
-            prop.qualifier || '',
-            prop.property_location || '',
-            'Property_Not_Existed',
-            'Property_Added',
-            report.status,
-            report.reviewed_by || '',
-            report.reviewed_date ? new Date(report.reviewed_date).toLocaleDateString() : ''
-          ]);
-        });
-
-        // Add class changes
-        reportData.classChanges?.forEach(change => {
-          csvData.push([
-            reportDate,
-            'Class_Change',
-            change.block,
-            change.lot,
-            change.qualifier || '',
-            change.property_location || '',
-            change.oldClass || '',
-            change.newClass || '',
-            report.status,
-            report.reviewed_by || '',
-            report.reviewed_date ? new Date(report.reviewed_date).toLocaleDateString() : ''
-          ]);
-        });
-
-        // Add sales changes
-        reportData.salesChanges?.forEach(change => {
-          const oldSaleValue = change.oldSale.price ? `$${change.oldSale.price.toLocaleString()} (${change.oldSale.date})` : 'No_Sale';
-          const newSaleValue = change.newSale.price ? `$${change.newSale.price.toLocaleString()} (${change.newSale.date})` : 'No_Sale';
-          
-          csvData.push([
-            reportDate,
-            'Sales_Change',
-            change.block,
-            change.lot,
-            change.qualifier || '',
-            change.property_location || '',
-            oldSaleValue,
-            newSaleValue,
-            change.hasExistingDecision ? 'Reviewed' : report.status,
-            report.reviewed_by || '',
-            report.reviewed_date ? new Date(report.reviewed_date).toLocaleDateString() : ''
-          ]);
-        });
-      });
-
-      // Convert to CSV and download
-      const csvContent = csvData.map(row => row.map(field => `"${field}"`).join(',')).join('\n');
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement('a');
-      const url = URL.createObjectURL(blob);
-      link.setAttribute('href', url);
-      link.setAttribute('download', `${job.name}_All_Comparison_Reports_${new Date().toISOString().split('T')[0]}.csv`);
-      link.style.visibility = 'hidden';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-
+      
+      return data.map(pj => ({
+        id: pj.id,
+        ccddCode: pj.ccdd_code,
+        ccdd: pj.ccdd_code, // Alternative accessor
+        municipality: pj.municipality,
+        end_date: pj.end_date,  // Use end_date instead
+        comments: pj.comments
+      }));
     } catch (error) {
-      console.error('Error exporting reports:', error);
-      alert('Error exporting reports: ' + error.message);
+      console.error('Planning jobs error:', error);
+      return [];
     }
-  };
+  },
 
-  // Format date for display - Eastern Time
-  const formatDate = (dateStr) => {
-    if (!dateStr) return 'Never';
-    
-    const date = new Date(dateStr);
-    return date.toLocaleDateString('en-US', { 
-      month: 'numeric', 
-      day: 'numeric', 
-      year: '2-digit',
-      timeZone: 'America/New_York'
-    });
-  };
-
-  // UPDATED: Get descriptive status for file timestamps using version logic
-  const getFileStatus = (timestamp, type) => {
-    if (!timestamp) return 'Never';
-    
-    // NEW: Use version logic instead of timing
-    const version = type === 'source' ? job.source_file_version : job.code_file_version;
-    
-    if (version === 1) {
-      return `Imported at Job Creation (${formatDate(timestamp)})`;
-    } else {
-      return `Updated via FileUpload (${type} v${version}) (${formatDate(timestamp)})`;
-    }
-  };
-
-  // Handle file upload
-  const handleFileUpload = async (file, type) => {
-    if (!file) return;
-
-    // Store the selected file
-    setSelectedFiles(prev => ({
-      ...prev,
-      [type]: file
-    }));
-  };
-
-  // Clear selected file
-  const clearSelectedFile = (type) => {
-    setSelectedFiles(prev => ({
-      ...prev,
-      [type]: null
-    }));
-    
-    // Clear the file input
-    if (type === 'source') {
-      sourceFileRef.current.value = '';
-    } else {
-      codeFileRef.current.value = '';
-    }
-  };
-
-  // Process the selected file (triggered by user confirmation)
-  const processSelectedFile = async (type) => {
-    const file = selectedFiles[type];
-    if (!file) return;
-
-    setIsUploading(true);
-    setUploadType(type);
-
+  async create(planningJobData) {
     try {
-      // Read file content
-      const fileContent = await readFileAsText(file);
-      
-      if (type === 'source') {
-        // Parse CSV data for comparison
-        const Papa = await import('papaparse');
-        const parsedData = Papa.parse(fileContent, {
-          header: true,
-          dynamicTyping: true,
-          skipEmptyLines: true,
-          delimitersToGuess: [',', '\t', '|', ';']
-        });
-
-        // Generate comparison report for source files
-        const report = await generateComparisonReport(parsedData.data, job.id);
-        setComparisonReport(report);
-        
-        if (report.hasChanges) {
-          // Save the comparison report for audit trail
-          await saveComparisonReport(report);
-          setShowReport(true);
-          setIsUploading(false);
-          return; // Wait for user to review before processing
-        }
-      }
-
-      // Process the file directly if no review needed
-      await processFile(file, type, fileContent);
-      
-      // Clear the selected file after successful processing
-      clearSelectedFile(type);
-      
-    } catch (error) {
-      console.error('File upload error:', error);
-      alert(`Error uploading ${type} file: ${error.message}`);
-    } finally {
-      if (!showReport) {
-        setIsUploading(false);
-        setUploadType(null);
-      }
-    }
-  };
-
-  // Enhanced upsert process with permanent tracking
-  const processFile = async (file, type, fileContent) => {
-    try {
-      setIsUploading(true);
-      
-      if (type === 'source') {
-        // Save sales decisions first if any
-        if (Object.keys(pendingSalesDecisions).length > 0) {
-          await saveSalesDecisions();
-        }
-
-        // ENHANCED: Smart upsert approach instead of add-only
-        await performSmartUpsert(fileContent, file.name);
-        
-      } else if (type === 'code') {
-        // For code file updates, we need to reprocess with the new code file
-        // Get the most recent source file content first
-        const { data: latestRecord, error } = await supabase
-          .from('property_records')
-          .select('raw_data, source_file_name')
-          .eq('job_id', job.id)
-          .order('upload_date', { ascending: false })
-          .limit(1);
-
-        if (error || !latestRecord?.[0]) {
-          throw new Error('Could not find source data to reprocess with new code file');
-        }
-
-        // Reconstruct source file content from raw_data
-        const sourceFileContent = reconstructSourceFile(latestRecord);
-        
-        // Enhanced: Smart upsert for code file updates too
-        await performSmartUpsert(sourceFileContent, latestRecord[0].source_file_name, fileContent, file.name);
-      }
-
-      // Refresh timestamps
-      await loadFileTimestamps();
-
-      // Notify parent component
-      if (onFileProcessed) {
-        onFileProcessed(type, file.name);
-      }
-
-      alert(`✅ ${type === 'source' ? 'Source' : 'Code'} file updated successfully!`);
-      
-    } catch (error) {
-      console.error('File processing error:', error);
-      alert(`Error processing ${type} file: ${error.message}`);
-    } finally {
-      setIsUploading(false);
-      setUploadType(null);
-      setShowReport(false);
-      setPendingSalesDecisions({});
-    }
-  };
-
-  // Smart upsert with permanent change tracking
-  const performSmartUpsert = async (sourceFileContent, sourceFileName, codeFileContent = null, codeFileName = null) => {
-    try {
-      console.log('🔄 Starting smart upsert with permanent tracking...');
-      
-      // 1. Get current yearCCDD prefix for this job
-      const jobYear = new Date(job.created_at).getFullYear();
-      const jobCCDD = job.ccdd || job.ccddCode || '0000';
-      const yearCCDDPrefix = `${jobYear}${jobCCDD}`;
-      
-      // 2. Get ALL current property records for this yearCCDD
-      const { data: currentRecords, error: currentError } = await supabase
-        .from('property_records')
-        .select('*')
-        .like('property_composite_key', `${yearCCDDPrefix}-%`);
-      
-      if (currentError) throw currentError;
-      
-      console.log(`📊 Found ${currentRecords?.length || 0} existing records for ${yearCCDDPrefix}`);
-      
-      // 3. Process new data using proven processors
-      console.log('⚙️ Processing new data through processors...');
-      const result = await propertyService.importCSVData(
-        sourceFileContent,
-        codeFileContent,
-        job.id,
-        jobYear,
-        job.ccdd || job.ccddCode,
-        job.vendor,
-        {
-          source_file_name: sourceFileName,
-          source_file_version_id: crypto.randomUUID(),
-          source_file_uploaded_at: new Date().toISOString(),
-          source_file_as_of_date: asOfDates.source,
-          code_file_name: codeFileName,
-          code_file_updated_at: codeFileContent ? new Date().toISOString() : null,
-          code_file_as_of_date: codeFileContent ? asOfDates.code : null,
-          is_fileupload_update: true // Flag to indicate this is an update
-        }
-      );
-      
-      console.log(`✅ Processors completed: ${result.processed} records processed`);
-      
-      // 4. Get the newly inserted records
-      const { data: newRecords, error: newError } = await supabase
-        .from('property_records')
-        .select('*')
-        .like('property_composite_key', `${yearCCDDPrefix}-%`)
-        .gte('created_at', new Date(Date.now() - 60000).toISOString()); // Records created in last minute
-      
-      if (newError) throw newError;
-      
-      // 5. Perform UPSERT logic and track changes
-      const changeTracking = await performUpsertAndTrackChanges(
-        currentRecords || [], 
-        newRecords || [], 
-        yearCCDDPrefix
-      );
-      
-      // 6. Save permanent change tracking to comparison_reports
-      if (changeTracking.totalChanges > 0) {
-        await saveChangeTracking(changeTracking, sourceFileName, codeFileName);
-      }
-      
-      console.log(`🎯 Upsert complete: ${changeTracking.totalChanges} changes tracked`);
-      console.log(`📝 Final state: ${changeTracking.finalRecordCount} property records for ${yearCCDDPrefix}`);
-      
-      return {
-        processed: result.processed,
-        changes: changeTracking
+      const dbFields = {
+        ccdd_code: planningJobData.ccddCode || planningJobData.ccdd,
+        municipality: planningJobData.municipality,
+        end_date: planningJobData.end_date,
+        comments: planningJobData.comments,
+        created_by: planningJobData.created_by
       };
       
+      const { data, error } = await supabase
+        .from('planning_jobs')
+        .insert([dbFields])
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return data;
     } catch (error) {
-      console.error('Smart upsert error:', error);
+      console.error('Planning job creation error:', error);
       throw error;
     }
-  };
+  },
 
-  // Perform upsert logic and track all changes
-  const performUpsertAndTrackChanges = async (currentRecords, newRecords, yearCCDDPrefix) => {
+  async update(id, updates) {
     try {
-      // Create maps for efficient lookup
-      const currentMap = new Map();
-      const newMap = new Map();
-      
-      currentRecords.forEach(record => {
-        currentMap.set(record.property_composite_key, record);
-      });
-      
-      newRecords.forEach(record => {
-        newMap.set(record.property_composite_key, record);
-      });
-      
-      const addedProperties = [];
-      const removedProperties = [];
-      const updatedProperties = [];
-      const unchangedCount = 0;
-      
-      // Find properties to DELETE (in current but not in new)
-      for (const [compositeKey, currentRecord] of currentMap) {
-        if (!newMap.has(compositeKey)) {
-          removedProperties.push({
-            composite_key: compositeKey,
-            block: currentRecord.property_block,
-            lot: currentRecord.property_lot,
-            qualifier: currentRecord.property_qualifier,
-            property_location: currentRecord.property_location,
-            removed_data: {
-              sales_price: currentRecord.sales_price,
-              property_class: currentRecord.property_cama_class || currentRecord.property_m4_class
-            }
-          });
-          
-          // DELETE from database
-          await supabase
-            .from('property_records')
-            .delete()
-            .eq('property_composite_key', compositeKey);
-        }
-      }
-      
-      // Find properties to ADD or UPDATE
-      for (const [compositeKey, newRecord] of newMap) {
-        if (!currentMap.has(compositeKey)) {
-          // NEW property - already inserted by processor
-          addedProperties.push({
-            composite_key: compositeKey,
-            block: newRecord.property_block,
-            lot: newRecord.property_lot,
-            qualifier: newRecord.property_qualifier,
-            property_location: newRecord.property_location,
-            added_data: {
-              sales_price: newRecord.sales_price,
-              property_class: newRecord.property_cama_class || newRecord.property_m4_class
-            }
-          });
-        } else {
-          // EXISTING property - UPDATE if different
-          const currentRecord = currentMap.get(compositeKey);
-          
-          // Check if significant fields changed
-          const hasChanges = (
-            currentRecord.sales_price !== newRecord.sales_price ||
-            currentRecord.sales_date !== newRecord.sales_date ||
-            currentRecord.property_cama_class !== newRecord.property_cama_class ||
-            currentRecord.property_m4_class !== newRecord.property_m4_class ||
-            JSON.stringify(currentRecord.raw_data) !== JSON.stringify(newRecord.raw_data)
-          );
-          
-          if (hasChanges) {
-            updatedProperties.push({
-              composite_key: compositeKey,
-              block: newRecord.property_block,
-              lot: newRecord.property_lot,
-              qualifier: newRecord.property_qualifier,
-              property_location: newRecord.property_location,
-              old_data: {
-                sales_price: currentRecord.sales_price,
-                sales_date: currentRecord.sales_date,
-                property_class: currentRecord.property_cama_class || currentRecord.property_m4_class
-              },
-              new_data: {
-                sales_price: newRecord.sales_price,
-                sales_date: newRecord.sales_date,
-                property_class: newRecord.property_cama_class || newRecord.property_m4_class
-              }
-            });
-            
-            // UPDATE database - replace old record with new data
-            await supabase
-              .from('property_records')
-              .delete()
-              .eq('property_composite_key', compositeKey);
-            // New record already inserted by processor
-          } else {
-            // No changes - remove the duplicate new record
-            await supabase
-              .from('property_records')
-              .delete()
-              .eq('id', newRecord.id);
-          }
-        }
-      }
-      
-      // Get final record count
-      const { count: finalCount } = await supabase
-        .from('property_records')
-        .select('id', { count: 'exact', head: true })
-        .like('property_composite_key', `${yearCCDDPrefix}-%`);
-      
-      return {
-        addedProperties,
-        removedProperties,
-        updatedProperties,
-        totalChanges: addedProperties.length + removedProperties.length + updatedProperties.length,
-        finalRecordCount: finalCount || 0
+      const dbFields = {
+        ccdd_code: updates.ccddCode || updates.ccdd,
+        municipality: updates.municipality,
+        end_date: updates.end_date,
+        comments: updates.comments
       };
+
+      const { data, error } = await supabase
+        .from('planning_jobs')
+        .update(dbFields)
+        .eq('id', id)
+        .select()
+        .single();
       
+      if (error) throw error;
+      return data;
     } catch (error) {
-      console.error('Upsert and tracking error:', error);
+      console.error('Planning job update error:', error);
       throw error;
     }
-  };
+  },
 
-  // Save permanent change tracking for end-of-job reporting
-  const saveChangeTracking = async (changeTracking, sourceFileName, codeFileName) => {
+  async delete(id) {
     try {
-      const changeRecord = {
-        job_id: job.id,
-        change_date: new Date().toISOString(),
-        change_type: 'fileupload_update',
-        source_file_name: sourceFileName,
-        code_file_name: codeFileName,
-        change_data: {
-          added_properties: changeTracking.addedProperties,
-          removed_properties: changeTracking.removedProperties,
-          updated_properties: changeTracking.updatedProperties,
-          summary: {
-            properties_added: changeTracking.addedProperties.length,
-            properties_removed: changeTracking.removedProperties.length,
-            properties_updated: changeTracking.updatedProperties.length,
-            total_changes: changeTracking.totalChanges,
-            final_property_count: changeTracking.finalRecordCount
-          }
-        },
-        processed_by: 'fileupload',
-        created_by: 'current-user' // TODO: Get actual user ID
-      };
-
       const { error } = await supabase
-        .from('property_change_log') // New table for permanent tracking
-        .insert([changeRecord]);
-
-      if (error) throw error;
+        .from('planning_jobs')
+        .delete()
+        .eq('id', id);
       
-      console.log('💾 Change tracking saved for end-of-job reporting');
+      if (error) throw error;
     } catch (error) {
-      console.error('Error saving change tracking:', error);
-      // Don't fail the upload if tracking fails
+      console.error('Planning job deletion error:', error);
+      throw error;
     }
-  };
+  }
+};
 
-  // Reconstruct source file content from raw_data (for code file updates)
-  const reconstructSourceFile = (records) => {
-    if (!records || records.length === 0) return '';
-    
-    const firstRecord = records[0];
-    const rawData = firstRecord.raw_data;
-    
-    // This is a simplified reconstruction - in practice, you might want to
-    // store the original file content or have a more sophisticated method
-    const headers = Object.keys(rawData);
-    const headerLine = headers.join(',');
-    const dataLine = headers.map(h => rawData[h] || '').join(',');
-    
-    return `${headerLine}\n${dataLine}`;
-  };
-
-  // Generate comparison report using property_records table
-  const generateComparisonReport = async (newData, jobId) => {
+// ===== UNIFIED PROPERTY MANAGEMENT SERVICES =====
+export const propertyService = {
+  async getAll(jobId) {
     try {
-      // Get previous data from property_records table (unified table)
-      const { data: previousData, error } = await supabase
+      const { data, error } = await supabase
         .from('property_records')
         .select('*')
         .eq('job_id', jobId)
-        .order('upload_date', { ascending: false });
-
+        .order('created_at', { ascending: false });
+      
       if (error) throw error;
-
-      if (!previousData || previousData.length === 0) {
-        return { hasChanges: false, isFirstUpload: true };
-      }
-
-      // Compare data sets
-      const comparison = compareDataSets(previousData, newData);
-      
-      return {
-        hasChanges: comparison.totalChanges > 0,
-        isFirstUpload: false,
-        ...comparison
-      };
-
+      return data;
     } catch (error) {
-      console.error('Comparison error:', error);
-      return { hasChanges: false, error: error.message };
+      console.error('Property service error:', error);
+      return [];
     }
-  };
+  },
 
-  // Compare two data sets (updated for property_records field names)
-  const compareDataSets = (oldData, newData) => {
-    const oldMap = new Map();
-    const newMap = new Map();
-
-    // Get job year and CCDD for composite key generation
-    const jobYear = new Date(job.created_at).getFullYear();
-    const jobCCDD = job.ccdd || job.ccddCode || '0000';
-
-    // Create maps with composite property keys
-    oldData.forEach(row => {
-      const key = row.property_composite_key || 
-        `${jobYear}${jobCCDD}-${row.property_block}-${row.property_lot}_${row.property_qualifier || 'NONE'}-${row.property_addl_card || 'NONE'}-${row.property_location || 'NONE'}`;
-      oldMap.set(key, row);
-    });
-
-    newData.forEach(row => {
-      // Handle both BRT and Microsystems formats
-      const block = row.BLOCK || row.Block;
-      const lot = row.LOT || row.Lot;
-      const qualifier = row.QUALIFIER || row.Qual;
-      const card = row.CARD || row.Bldg;
-      const location = row.PROPERTY_LOCATION || row.Location;
-      
-      const key = `${jobYear}${jobCCDD}-${block}-${lot}_${qualifier || 'NONE'}-${card || 'NONE'}-${location || 'NONE'}`;
-      newMap.set(key, row);
-    });
-
-    const removedProperties = [];
-    const addedProperties = [];
-    const classChanges = [];
-    const salesChanges = [];
-
-    // Find removed properties
-    oldMap.forEach((oldRow, key) => {
-      if (!newMap.has(key)) {
-        removedProperties.push({
-          key,
-          block: oldRow.property_block,
-          lot: oldRow.property_lot,
-          qualifier: oldRow.property_qualifier,
-          property_location: oldRow.property_location
-        });
-      }
-    });
-
-    // Find added properties and changes
-    newMap.forEach((newRow, key) => {
-      const block = newRow.BLOCK || newRow.Block;
-      const lot = newRow.LOT || newRow.Lot;
-      const qualifier = newRow.QUALIFIER || newRow.Qual;
-      const location = newRow.PROPERTY_LOCATION || newRow.Location;
-      
-      if (!oldMap.has(key)) {
-        addedProperties.push({
-          key,
-          block,
-          lot,
-          qualifier,
-          property_location: location
-        });
-      } else {
-        const oldRow = oldMap.get(key);
-        
-        // Check for property class changes with vendor-specific logic
-        const oldClass = getClassComparison(oldRow, 'old');
-        const newClass = getClassComparison(newRow, 'new');
-        
-        if (hasClassChanged(oldClass, newClass)) {
-          classChanges.push({
-            key,
-            block,
-            lot,
-            qualifier,
-            property_location: location,
-            oldClass: formatClassDisplay(oldClass),
-            newClass: formatClassDisplay(newClass),
-            vendor: job.vendor
-          });
-        }
-
-        // Check for sales changes
-        const oldSale = {
-          date: oldRow.sales_date,
-          price: oldRow.sales_price,
-          book: oldRow.sales_book,
-          page: oldRow.sales_page,
-          nu: oldRow.sales_nu
-        };
-
-        const newSale = {
-          date: newRow.CURRENTSALE_DATE || newRow['Sale Date'],
-          price: newRow.CURRENTSALE_PRICE || newRow['Sale Price'],
-          book: newRow.CURRENTSALE_DEEDBOOK || newRow['Sale Book'],
-          page: newRow.CURRENTSALE_DEEDPAGE || newRow['Sale Page'],
-          nu: newRow.CURRENTSALE_NUC || newRow['Sale Nu']
-        };
-
-        // Check if sales data actually changed
-        const salesChanged = oldSale.date !== newSale.date || 
-                           oldSale.price !== newSale.price || 
-                           oldSale.book !== newSale.book || 
-                           oldSale.page !== newSale.page ||
-                           oldSale.nu !== newSale.nu;
-
-        if (salesChanged) {
-          // Check if we have a previous decision for this property
-          const existingDecision = salesDecisions[key];
-          
-          salesChanges.push({
-            key,
-            block,
-            lot,
-            qualifier,
-            property_location: location,
-            oldSale,
-            newSale,
-            hasExistingDecision: !!existingDecision,
-            existingDecision: existingDecision || null
-          });
-        }
-      }
-    });
-
-    return {
-      removedProperties,
-      addedProperties,
-      classChanges,
-      salesChanges,
-      totalChanges: removedProperties.length + addedProperties.length + classChanges.length + salesChanges.length
-    };
-  };
-
-  // Vendor-specific class comparison logic
-  const getClassComparison = (row, type) => {
-    if (type === 'old') {
-      // From property_records table
-      return {
-        cama: row.property_cama_class,
-        m4: row.property_m4_class
-      };
-    } else {
-      // From new file data
-      if (job.vendor === 'BRT') {
-        return {
-          cama: row.PROPCLASS,
-          m4: row.PROPERTY_CLASS
-        };
-      } else if (job.vendor === 'Microsystems') {
-        return {
-          cama: null, // Microsystems doesn't have CAMA class
-          m4: row.Class
-        };
-      }
-    }
-    return { cama: null, m4: null };
-  };
-
-  // Check if class has changed based on vendor
-  const hasClassChanged = (oldClass, newClass) => {
-    if (job.vendor === 'BRT') {
-      // For BRT, check both CAMA and M4 classes
-      return (oldClass.cama !== newClass.cama) || (oldClass.m4 !== newClass.m4);
-    } else if (job.vendor === 'Microsystems') {
-      // For Microsystems, only check M4 class
-      return oldClass.m4 !== newClass.m4;
-    }
-    return false;
-  };
-
-  // Format class display for reporting
-  const formatClassDisplay = (classObj) => {
-    if (job.vendor === 'BRT') {
-      return `CAMA: ${classObj.cama || 'N/A'}, M4: ${classObj.m4 || 'N/A'}`;
-    } else if (job.vendor === 'Microsystems') {
-      return `M4: ${classObj.m4 || 'N/A'}`;
-    }
-    return 'Unknown';
-  };
-
-  // Handle sales decision
-  const handleSalesDecision = (propertyKey, decision, salesChange) => {
-    setPendingSalesDecisions(prev => ({
-      ...prev,
-      [propertyKey]: {
-        decision,
-        oldSale: salesChange.oldSale,
-        newSale: salesChange.newSale,
-        block: salesChange.block,
-        lot: salesChange.lot,
-        qualifier: salesChange.qualifier,
-        decided_at: new Date().toISOString(),
-        decided_by: 'current-user' // TODO: Get actual user ID
-      }
-    }));
-  };
-
-  // Save sales decisions to sales_history JSONB field in property_records
-  const saveSalesDecisions = async () => {
+  async getById(id) {
     try {
-      for (const [propertyKey, decision] of Object.entries(pendingSalesDecisions)) {
-        // Get the current record
-        const { data: currentRecord, error: fetchError } = await supabase
-          .from('property_records')
-          .select('sales_history, sales_date, sales_price, sales_book, sales_page, sales_nu')
-          .eq('property_composite_key', propertyKey)
-          .single();
-
-        if (fetchError) {
-          console.error(`Error fetching record for ${propertyKey}:`, fetchError);
-          continue;
-        }
-
-        // Build the sales history object
-        const currentSalesHistory = currentRecord.sales_history || {};
-        
-        // Add the current sale to previous_sales if we're replacing it
-        const previousSales = currentSalesHistory.previous_sales || [];
-        if (decision.decision === 'use_new' && currentRecord.sales_price) {
-          previousSales.push({
-            date: currentRecord.sales_date,
-            price: currentRecord.sales_price,
-            book: currentRecord.sales_book,
-            page: currentRecord.sales_page,
-            nu: currentRecord.sales_nu,
-            replaced_on: decision.decided_at,
-            decision: decision.decision
-          });
-        }
-
-        // Add the decision to the decisions array
-        const decisions = currentSalesHistory.decisions || [];
-        decisions.push({
-          timestamp: decision.decided_at,
-          type: decision.decision,
-          reason: getDecisionReason(decision.decision),
-          decided_by: decision.decided_by,
-          old_sale: decision.oldSale,
-          new_sale: decision.newSale
-        });
-
-        // Determine which sale data to keep in the main fields
-        let salesUpdate = {};
-        if (decision.decision === 'use_new') {
-          salesUpdate = {
-            sales_date: decision.newSale.date ? new Date(decision.newSale.date).toISOString().split('T')[0] : null,
-            sales_price: decision.newSale.price,
-            sales_book: decision.newSale.book,
-            sales_page: decision.newSale.page,
-            sales_nu: decision.newSale.nu
-          };
-        }
-        // For 'keep_old' or 'keep_both', we don't update the main sales fields
-
-        // Update the record with sales history and potentially new sales data
-        const { error: updateError } = await supabase
-          .from('property_records')
-          .update({
-            sales_history: {
-              ...currentSalesHistory,
-              previous_sales: previousSales,
-              decisions: decisions
-            },
-            ...salesUpdate
-          })
-          .eq('property_composite_key', propertyKey);
-
-        if (updateError) {
-          console.error(`Error updating sales history for ${propertyKey}:`, updateError);
-        }
-      }
-
-      console.log(`Saved ${Object.keys(pendingSalesDecisions).length} sales decisions to sales_history`);
+      const { data, error } = await supabase
+        .from('property_records')
+        .select('*')
+        .eq('id', id)
+        .single();
+      
+      if (error) throw error;
+      return data;
     } catch (error) {
-      console.error('Error saving sales decisions:', error);
+      console.error('Property service error:', error);
+      return null;
+    }
+  },
+
+  async create(propertyData) {
+    try {
+      const { data, error } = await supabase
+        .from('property_records')
+        .insert([propertyData])
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Property creation error:', error);
       throw error;
     }
-  };
+  },
 
-  // Get human-readable decision reason
-  const getDecisionReason = (decisionType) => {
-    switch (decisionType) {
-      case 'keep_old': return 'Keep original sale data';
-      case 'use_new': return 'Use new sale data';
-      case 'keep_both': return 'Keep both sales for analysis';
-      default: return 'Unknown decision';
-    }
-  };
-
-  // Export comparison report to Excel
-  const exportComparisonReport = async () => {
+  async bulkCreate(propertyDataArray) {
     try {
-      const XLSX = await import('xlsx');
-      const workbook = XLSX.utils.book_new();
-
-      // Summary sheet
-      const summaryData = [
-        ['Comparison Report Summary'],
-        ['Generated', new Date().toLocaleString()],
-        ['Job', job.job_name || job.name],
-        [''],
-        ['Change Type', 'Count'],
-        ['Properties Removed', comparisonReport.removedProperties?.length || 0],
-        ['Properties Added', comparisonReport.addedProperties?.length || 0],
-        ['Class Changes', comparisonReport.classChanges?.length || 0],
-        ['Sales Changes', comparisonReport.salesChanges?.length || 0],
-      ];
-
-      const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
-      XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary');
-
-      // Sales changes sheet
-      if (comparisonReport.salesChanges && comparisonReport.salesChanges.length > 0) {
-        const salesData = [
-          ['Block', 'Lot', 'Qualifier', 'Property Location', 'Old Sale Date', 'Old Sale Price', 'New Sale Date', 'New Sale Price', 'Review Status']
-        ];
-
-        comparisonReport.salesChanges.forEach(change => {
-          salesData.push([
-            change.block,
-            change.lot,
-            change.qualifier || '',
-            change.property_location || '',
-            change.oldSale.date || '',
-            change.oldSale.price || '',
-            change.newSale.date || '',
-            change.newSale.price || '',
-            change.hasExistingDecision ? 'Previously Reviewed' : 'Needs Review'
-          ]);
-        });
-
-        const salesSheet = XLSX.utils.aoa_to_sheet(salesData);
-        salesSheet['!cols'] = [
-          { wch: 8 }, { wch: 8 }, { wch: 12 }, { wch: 35 },
-          { wch: 12 }, { wch: 15 }, { wch: 12 }, { wch: 15 }, { wch: 20 }
-        ];
-        XLSX.utils.book_append_sheet(workbook, salesSheet, 'Sales Changes');
-      }
-
-      // Property changes sheet
-      if (comparisonReport.removedProperties?.length > 0 || comparisonReport.addedProperties?.length > 0) {
-        const propertyData = [
-          ['Change Type', 'Block', 'Lot', 'Qualifier', 'Property Location']
-        ];
-
-        comparisonReport.removedProperties?.forEach(prop => {
-          propertyData.push(['REMOVED', prop.block, prop.lot, prop.qualifier || '', prop.property_location || '']);
-        });
-
-        comparisonReport.addedProperties?.forEach(prop => {
-          propertyData.push(['ADDED', prop.block, prop.lot, prop.qualifier || '', prop.property_location || '']);
-        });
-
-        const propertySheet = XLSX.utils.aoa_to_sheet(propertyData);
-        propertySheet['!cols'] = [{ wch: 12 }, { wch: 8 }, { wch: 8 }, { wch: 12 }, { wch: 35 }];
-        XLSX.utils.book_append_sheet(workbook, propertySheet, 'Property Changes');
-      }
-
-      // Download file
-      const fileName = `${job.job_name || job.name}_Comparison_Report_${new Date().toISOString().split('T')[0]}.xlsx`;
-      XLSX.writeFile(workbook, fileName);
-
+      const { data, error } = await supabase
+        .from('property_records')
+        .insert(propertyDataArray)
+        .select();
+      
+      if (error) throw error;
+      return data;
     } catch (error) {
-      console.error('Export error:', error);
-      alert('Error exporting report: ' + error.message);
+      console.error('Property bulk creation error:', error);
+      throw error;
     }
-  };
+  },
 
-  // Helper function to read file as text
-  const readFileAsText = (file) => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (e) => resolve(e.target.result);
-      reader.onerror = (e) => reject(e);
-      reader.readAsText(file);
-    });
-  };
+  async update(id, updates) {
+    try {
+      const { data, error } = await supabase
+        .from('property_records')
+        .update({
+          ...updates,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', id)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Property update error:', error);
+      throw error;
+    }
+  },
 
-  return (
-    <div className="space-y-3">
-      {/* Source File Section */}
-      <div className="flex items-center gap-3 text-gray-300">
-        <FileText className="w-4 h-4 text-blue-400" />
-        <span className="text-sm min-w-0 flex-1">
-          📄 Source: {getFileStatus(fileTimestamps.source || job.created_at, 'source')}
-        </span>
-        
-        {/* As Of Date */}
-        <div className="flex items-center gap-2">
-          <Calendar className="w-3 h-3 text-blue-400" />
-          <span className="text-xs text-gray-400">As of:</span>
-          <input
-            type="date"
-            value={asOfDates.source}
-            onChange={(e) => setAsOfDates(prev => ({ ...prev, source: e.target.value }))}
-            className="px-2 py-1 text-xs bg-gray-700 border border-gray-600 rounded text-gray-300 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-          />
-        </div>
-        
-        {/* File Selection */}
-        <input
-          ref={sourceFileRef}
-          type="file"
-          accept=".csv,.txt"
-          onChange={(e) => handleFileUpload(e.target.files[0], 'source')}
-          className="hidden"
-        />
-        
-        {!selectedFiles.source ? (
-          <button
-            onClick={() => sourceFileRef.current.click()}
-            disabled={isUploading}
-            className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:bg-gray-500 flex items-center gap-1"
-          >
-            <Upload className="w-3 h-3" />
-            Select File
-          </button>
-        ) : (
-          <div className="flex items-center gap-2">
-            <div className="bg-blue-600 bg-opacity-20 border border-blue-500 rounded px-2 py-1">
-              <span className="text-xs text-blue-300 font-medium">{selectedFiles.source.name}</span>
-            </div>
-            <button
-              onClick={() => clearSelectedFile('source')}
-              className="text-red-400 hover:text-red-300 p-1"
-              title="Remove selected file"
-            >
-              <X className="w-3 h-3" />
-            </button>
-            <button
-              onClick={() => processSelectedFile('source')}
-              disabled={isUploading && uploadType === 'source'}
-              className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 disabled:bg-gray-500 flex items-center gap-1"
-            >
-              {isUploading && uploadType === 'source' ? (
-                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
-              ) : (
-                <CheckCircle className="w-3 h-3" />
-              )}
-              Update
-            </button>
-          </div>
-        )}
-      </div>
+  async delete(id) {
+    try {
+      const { error } = await supabase
+        .from('property_records')
+        .delete()
+        .eq('id', id);
+      
+      if (error) throw error;
+    } catch (error) {
+      console.error('Property deletion error:', error);
+      throw error;
+    }
+  },
 
-      {/* Code File Section */}
-      <div className="flex items-center gap-3 text-gray-300">
-        <Settings className="w-4 h-4 text-green-400" />
-        <span className="text-sm min-w-0 flex-1">
-          ⚙️ Code: {getFileStatus(fileTimestamps.code || job.created_at, 'code')}
-        </span>
-        
-        {/* As Of Date */}
-        <div className="flex items-center gap-2">
-          <Calendar className="w-3 h-3 text-green-400" />
-          <span className="text-xs text-gray-400">As of:</span>
-          <input
-            type="date"
-            value={asOfDates.code}
-            onChange={(e) => setAsOfDates(prev => ({ ...prev, code: e.target.value }))}
-            className="px-2 py-1 text-xs bg-gray-700 border border-gray-600 rounded text-gray-300 focus:ring-1 focus:ring-green-500 focus:border-green-500"
-          />
-        </div>
-        
-        {/* File Selection */}
-        <input
-          ref={codeFileRef}
-          type="file"
-          accept=".txt,.json"
-          onChange={(e) => handleFileUpload(e.target.files[0], 'code')}
-          className="hidden"
-        />
-        
-        {!selectedFiles.code ? (
-          <button
-            onClick={() => codeFileRef.current.click()}
-            disabled={isUploading}
-            className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 disabled:bg-gray-500 flex items-center gap-1"
-          >
-            <Upload className="w-3 h-3" />
-            Select File
-          </button>
-        ) : (
-          <div className="flex items-center gap-2">
-            <div className="bg-green-600 bg-opacity-20 border border-green-500 rounded px-2 py-1">
-              <span className="text-xs text-green-300 font-medium">{selectedFiles.code.name}</span>
-            </div>
-            <button
-              onClick={() => clearSelectedFile('code')}
-              className="text-red-400 hover:text-red-300 p-1"
-              title="Remove selected file"
-            >
-              <X className="w-3 h-3" />
-            </button>
-            <button
-              onClick={() => processSelectedFile('code')}
-              disabled={isUploading && uploadType === 'code'}
-              className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 disabled:bg-gray-500 flex items-center gap-1"
-            >
-              {isUploading && uploadType === 'code' ? (
-                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
-              ) : (
-                <CheckCircle className="w-3 h-3" />
-              )}
-              Update
-            </button>
-          </div>
-        )}
-      </div>
+  // FIXED: Import method with versionInfo parameter for FileUploadButton support
+  async importCSVData(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, vendorType, versionInfo = {}) {
+    try {
+      console.log(`Processing ${vendorType} files for job ${jobId}`);
+      console.log('🔍 DEBUG - versionInfo received:', versionInfo);
+      
+      // Use updated processors for single-table insertion
+      if (vendorType === 'BRT') {
+        const { brtProcessor } = await import('./data-pipeline/brt-processor.js');
+        return await brtProcessor.processFile(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, versionInfo);
+      } else if (vendorType === 'Microsystems') {
+        const { microsystemsProcessor } = await import('./data-pipeline/microsystems-processor.js');
+        return await microsystemsProcessor.processFile(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, versionInfo);
+      } else {
+        throw new Error(`Unsupported vendor type: ${vendorType}`);
+      }
+    } catch (error) {
+      console.error('Property import error:', error);
+      return {
+        processed: 0,
+        errors: 1,
+        warnings: [error.message]
+      };
+    }
+  },
 
-      {/* Comparison Report Modal */}
-      {showReport && comparisonReport && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-6xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold flex items-center gap-2">
-                <AlertTriangle className="w-5 h-5 text-orange-500" />
-                File Comparison Report
-              </h3>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={exportAllReports}
-                  className="px-3 py-1 bg-purple-500 text-white text-sm rounded hover:bg-purple-600 flex items-center gap-1"
-                >
-                  <Download className="w-3 h-3" />
-                  Export All Reports
-                </button>
-                <button
-                  onClick={exportComparisonReport}
-                  className="px-3 py-1 bg-green-500 text-white text-sm rounded hover:bg-green-600 flex items-center gap-1"
-                >
-                  <Download className="w-3 h-3" />
-                  Export This Report
-                </button>
-                <button
-                  onClick={() => setShowReport(false)}
-                  className="text-gray-500 hover:text-gray-700"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
+  // Query raw_data JSON field for dynamic reporting
+  async queryRawData(jobId, fieldName, value) {
+    try {
+      const { data, error } = await supabase
+        .from('property_records')
+        .select('*')
+        .eq('job_id', jobId)
+        .eq(`raw_data->>${fieldName}`, value);
+      
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Property raw data query error:', error);
+      return [];
+    }
+  },
 
-            <div className="space-y-6">
-              {/* Summary Cards */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="text-center p-3 bg-red-50 rounded">
-                  <div className="text-2xl font-bold text-red-600">{comparisonReport.removedProperties?.length || 0}</div>
-                  <div className="text-sm text-gray-600">Properties Removed</div>
-                </div>
-                <div className="text-center p-3 bg-green-50 rounded">
-                  <div className="text-2xl font-bold text-green-600">{comparisonReport.addedProperties?.length || 0}</div>
-                  <div className="text-sm text-gray-600">Properties Added</div>
-                </div>
-                <div className="text-center p-3 bg-blue-50 rounded">
-                  <div className="text-2xl font-bold text-blue-600">{comparisonReport.classChanges?.length || 0}</div>
-                  <div className="text-sm text-gray-600">Class Changes</div>
-                </div>
-                <div className="text-center p-3 bg-orange-50 rounded">
-                  <div className="text-2xl font-bold text-orange-600">{comparisonReport.salesChanges?.length || 0}</div>
-                  <div className="text-sm text-gray-600">Sales Changes</div>
-                </div>
-              </div>
+  // Advanced filtering for analysis
+  async getByCondition(jobId, condition) {
+    try {
+      const { data, error } = await supabase
+        .from('property_records')
+        .select('*')
+        .eq('job_id', jobId)
+        .eq('condition_rating', condition)
+        .order('property_location');
+      
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Property condition query error:', error);
+      return [];
+    }
+  },
 
-              {/* Sales Changes Section */}
-              {comparisonReport.salesChanges && comparisonReport.salesChanges.length > 0 && (
-                <div className="border-t pt-4">
-                  <h4 className="font-semibold mb-3 flex items-center gap-2">
-                    💰 Sales Changes Requiring Review:
-                    <span className="text-sm text-gray-600">
-                      ({comparisonReport.salesChanges.filter(c => !c.hasExistingDecision).length} need review, 
-                       {comparisonReport.salesChanges.filter(c => c.hasExistingDecision).length} auto-handled)
-                    </span>
-                  </h4>
-                  
-                  <div className="space-y-3 max-h-96 overflow-y-auto">
-                    {comparisonReport.salesChanges.map((change, index) => (
-                      <div key={index} className={`p-4 border rounded-lg ${
-                        change.hasExistingDecision ? 'bg-yellow-50 border-yellow-200' : 'bg-orange-50 border-orange-200'
-                      }`}>
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="font-medium">
-                            Block {change.block}, Lot {change.lot}
-                            {change.qualifier && ` (${change.qualifier})`}
-                          </div>
-                          {change.hasExistingDecision && (
-                            <div className="flex items-center gap-1 text-sm text-yellow-700">
-                              <Eye className="w-3 h-3" />
-                              Previously Reviewed
-                            </div>
-                          )}
-                        </div>
-                        
-                        <div className="grid grid-cols-2 gap-4 mb-3">
-                          <div className="text-sm">
-                            <span className="text-red-600 font-medium">OLD SALE:</span>
-                            <div>${change.oldSale.price?.toLocaleString() || 'N/A'}</div>
-                            <div>{change.oldSale.date || 'No date'}</div>
-                            <div>Book {change.oldSale.book || 'N/A'}, Page {change.oldSale.page || 'N/A'}</div>
-                          </div>
-                          <div className="text-sm">
-                            <span className="text-green-600 font-medium">NEW SALE:</span>
-                            <div>${change.newSale.price?.toLocaleString() || 'N/A'}</div>
-                            <div>{change.newSale.date || 'No date'}</div>
-                            <div>Book {change.newSale.book || 'N/A'}, Page {change.newSale.page || 'N/A'}</div>
-                          </div>
-                        </div>
+  // Get properties needing inspection
+  async getPendingInspections(jobId) {
+    try {
+      const { data, error } = await supabase
+        .from('property_records')
+        .select('*')
+        .eq('job_id', jobId)
+        .is('inspection_info_by', null)
+        .order('property_location');
+      
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Property pending inspections query error:', error);
+      return [];
+    }
+  },
 
-                        {change.hasExistingDecision ? (
-                          <div className="text-sm text-yellow-700 bg-yellow-100 p-2 rounded">
-                            Previous decision: {change.existingDecision.type === 'keep_old' ? 'Keep OLD sale' : 
-                                               change.existingDecision.type === 'use_new' ? 'Use NEW sale' : 'Keep BOTH sales'}
-                            <button
-                              onClick={() => handleSalesDecision(change.key, 'review_again', change)}
-                              className="ml-2 text-blue-600 hover:text-blue-800 underline"
-                            >
-                              Change Decision
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => handleSalesDecision(change.key, 'keep_old', change)}
-                              className={`px-3 py-1 text-xs rounded ${
-                                pendingSalesDecisions[change.key]?.decision === 'keep_old' 
-                                  ? 'bg-red-600 text-white' 
-                                  : 'bg-red-100 text-red-600 hover:bg-red-200'
-                              }`}
-                            >
-                              Prioritize Old Sale
-                            </button>
-                            <button
-                              onClick={() => handleSalesDecision(change.key, 'use_new', change)}
-                              className={`px-3 py-1 text-xs rounded ${
-                                pendingSalesDecisions[change.key]?.decision === 'use_new' 
-                                  ? 'bg-green-600 text-white' 
-                                  : 'bg-green-100 text-green-600 hover:bg-green-200'
-                              }`}
-                            >
-                              Keep New Sale
-                            </button>
-                            <button
-                              onClick={() => handleSalesDecision(change.key, 'keep_both', change)}
-                              className={`px-3 py-1 text-xs rounded ${
-                                pendingSalesDecisions[change.key]?.decision === 'keep_both' 
-                                  ? 'bg-blue-600 text-white' 
-                                  : 'bg-blue-100 text-blue-600 hover:bg-blue-200'
-                              }`}
-                            >
-                              Keep BOTH
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Other Changes Summary */}
-              {(comparisonReport.removedProperties?.length > 0 || 
-                comparisonReport.addedProperties?.length > 0 || 
-                comparisonReport.classChanges?.length > 0) && (
-                <div className="border-t pt-4">
-                  <h4 className="font-semibold mb-3">📋 Other Changes (Auto-flagged):</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                    {comparisonReport.removedProperties?.length > 0 && (
-                      <div className="bg-red-50 p-3 rounded">
-                        <div className="font-medium text-red-800 mb-2">Removed Properties ({comparisonReport.removedProperties.length})</div>
-                        <div className="space-y-1 max-h-32 overflow-y-auto">
-                          {comparisonReport.removedProperties.slice(0, 5).map((prop, i) => (
-                            <div key={i} className="text-red-700">Block {prop.block}, Lot {prop.lot}</div>
-                          ))}
-                          {comparisonReport.removedProperties.length > 5 && (
-                            <div className="text-red-600">... and {comparisonReport.removedProperties.length - 5} more</div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    {comparisonReport.addedProperties?.length > 0 && (
-                      <div className="bg-green-50 p-3 rounded">
-                        <div className="font-medium text-green-800 mb-2">Added Properties ({comparisonReport.addedProperties.length})</div>
-                        <div className="space-y-1 max-h-32 overflow-y-auto">
-                          {comparisonReport.addedProperties.slice(0, 5).map((prop, i) => (
-                            <div key={i} className="text-green-700">Block {prop.block}, Lot {prop.lot}</div>
-                          ))}
-                          {comparisonReport.addedProperties.length > 5 && (
-                            <div className="text-green-600">... and {comparisonReport.addedProperties.length - 5} more</div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    {comparisonReport.classChanges?.length > 0 && (
-                      <div className="bg-blue-50 p-3 rounded">
-                        <div className="font-medium text-blue-800 mb-2">Class Changes ({comparisonReport.classChanges.length})</div>
-                        <div className="space-y-1 max-h-32 overflow-y-auto">
-                          {comparisonReport.classChanges.slice(0, 5).map((change, i) => (
-                            <div key={i} className="text-blue-700 text-xs">
-                              <div className="font-medium">Block {change.block}, Lot {change.lot}</div>
-                              <div className="text-blue-600">
-                                OLD: {change.oldClass}
-                              </div>
-                              <div className="text-blue-600">
-                                NEW: {change.newClass}
-                              </div>
-                            </div>
-                          ))}
-                          {comparisonReport.classChanges.length > 5 && (
-                            <div className="text-blue-600">... and {comparisonReport.classChanges.length - 5} more</div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Action Buttons */}
-              <div className="flex justify-end gap-3 pt-4 border-t">
-                <button
-                  onClick={() => {
-                    setShowReport(false);
-                    setPendingSalesDecisions({});
-                  }}
-                  className="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => {
-                    // Check if all sales changes have decisions
-                    const needsReview = comparisonReport.salesChanges?.filter(c => !c.hasExistingDecision) || [];
-                    const pendingCount = Object.keys(pendingSalesDecisions).length;
-                    
-                    if (needsReview.length > 0 && pendingCount < needsReview.length) {
-                      alert(`Please make decisions for all ${needsReview.length} sales changes before proceeding.`);
-                      return;
-                    }
-                    
-                    // Mark report as reviewed in audit trail
-                    if (comparisonReport.reportId) {
-                      markReportAsReviewed(comparisonReport.reportId);
-                    }
-                    
-                    // Continue with processing
-                    processSelectedFile('source');
-                  }}
-                  className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center gap-2"
-                >
-                  <CheckCircle className="w-4 h-4" />
-                  Mark Reviewed & Proceed
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+  // Bulk update inspection data
+  async bulkUpdateInspections(inspectionUpdates) {
+    try {
+      const updates = await Promise.all(
+        inspectionUpdates.map(update => 
+          supabase
+            .from('property_records')
+            .update({
+              ...update.data,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', update.id)
+            .select()
+        )
+      );
+      
+      return updates.map(result => result.data).flat();
+    } catch (error) {
+      console.error('Property bulk inspection update error:', error);
+      throw error;
+    }
+  }
 };
 
-export default FileUploadButton;
+// ===== SOURCE FILE SERVICES =====
+export const sourceFileService = {
+  async createVersion(jobId, fileName, fileSize, uploadedBy) {
+    try {
+      const { data, error } = await supabase
+        .from('source_file_versions')
+        .insert([{
+          job_id: jobId,
+          file_name: fileName,
+          file_size: fileSize,
+          status: 'pending',
+          uploaded_by: uploadedBy
+        }])
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Source file creation error:', error);
+      return {
+        id: Date.now(),
+        version_number: 1,
+        file_name: fileName,
+        status: 'pending'
+      };
+    }
+  },
+
+  async getVersions(jobId) {
+    try {
+      const { data, error } = await supabase
+        .from('source_file_versions')
+        .select('*')
+        .eq('job_id', jobId)
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Source file versions error:', error);
+      return [];
+    }
+  },
+
+  async updateStatus(id, status) {
+    try {
+      const { data, error } = await supabase
+        .from('source_file_versions')
+        .update({ status })
+        .eq('id', id)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Source file status update error:', error);
+      throw error;
+    }
+  }
+};
+
+// ===== PRODUCTION DATA SERVICES =====
+export const productionDataService = {
+  async updateSummary(jobId) {
+    try {
+      console.log(`Updating production summary for job ${jobId}`);
+      
+      // Get property counts from single table
+      const { count, error: countError } = await supabase
+        .from('property_records')
+        .select('id', { count: 'exact', head: true })
+        .eq('job_id', jobId);
+
+      if (countError) throw countError;
+
+      // Count properties with inspection data
+      const { count: inspectedCount, error: inspectedError } = await supabase
+        .from('property_records')
+        .select('id', { count: 'exact', head: true })
+        .eq('job_id', jobId)
+        .not('inspection_info_by', 'is', null);
+
+      if (inspectedError) throw inspectedError;
+
+      // Update job with current totals
+      const { data, error } = await supabase
+        .from('jobs')
+        .update({
+          total_properties: count || 0,
+          inspected_properties: inspectedCount || 0,
+          workflow_stats: {
+            properties_processed: count || 0,
+            properties_inspected: inspectedCount || 0,
+            last_updated: new Date().toISOString()
+          }
+        })
+        .eq('id', jobId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return { success: true, data };
+    } catch (error) {
+      console.error('Production data update error:', error);
+      return { success: false, error: error.message };
+    }
+  }
+};
+
+// ===== UTILITY SERVICES =====
+export const utilityService = {
+  async testConnection() {
+    try {
+      const { data, error } = await supabase
+        .from('employees')
+        .select('id')
+        .limit(1);
+      
+      return { success: !error, error };
+    } catch (error) {
+      return { success: false, error: error };
+    }
+  },
+
+  // ENHANCED: Assignment-aware stats function with correct property class field names
+  async getStats() {
+    try {
+      // Get basic counts separately to avoid Promise.all masking errors
+      const { count: employeeCount, error: empError } = await supabase
+        .from('employees')
+        .select('id', { count: 'exact', head: true });
+
+      const { count: jobCount, error: jobError } = await supabase
+        .from('jobs')
+        .select('id', { count: 'exact', head: true });
+
+      // UPDATED: Count all properties (assigned or unassigned)
+      const { count: propertyCount, error: propError } = await supabase
+        .from('property_records')
+        .select('id', { count: 'exact', head: true })
+        .or('is_assigned_property.is.null,is_assigned_property.eq.true');
+
+      // UPDATED: Get residential properties (M4 class 2, 3A) - assignment-aware
+      const { count: residentialCount, error: residentialError } = await supabase
+        .from('property_records')
+        .select('id', { count: 'exact', head: true })
+        .in('property_m4_class', ['2', '3A'])
+        .or('is_assigned_property.is.null,is_assigned_property.eq.true');
+
+      // UPDATED: Get commercial properties (M4 class 4A, 4B, 4C) - assignment-aware
+      const { count: commercialCount, error: commercialError } = await supabase
+        .from('property_records')
+        .select('id', { count: 'exact', head: true })
+        .in('property_m4_class', ['4A', '4B', '4C'])
+        .or('is_assigned_property.is.null,is_assigned_property.eq.true');
+
+      // Log any errors but don't fail completely
+      if (empError) console.error('Employee count error:', empError);
+      if (jobError) console.error('Job count error:', jobError);
+      if (propError) console.error('Property count error:', propError);
+      if (residentialError) console.error('Residential count error:', residentialError);
+      if (commercialError) console.error('Commercial count error:', commercialError);
+
+      const totalProperties = propertyCount || 0;
+      const residential = residentialCount || 0;
+      const commercial = commercialCount || 0;
+      const other = Math.max(0, totalProperties - residential - commercial);
+
+      return {
+        employees: employeeCount || 0,
+        jobs: jobCount || 0,
+        properties: totalProperties,
+        propertiesBreakdown: {
+          total: totalProperties,
+          residential: residential,
+          commercial: commercial,
+          other: other
+        }
+      };
+    } catch (error) {
+      console.error('Stats fetch error:', error);
+      return {
+        employees: 0,
+        jobs: 0,
+        properties: 0,
+        propertiesBreakdown: {
+          total: 0,
+          residential: 0,
+          commercial: 0,
+          other: 0
+        }
+      };
+    }
+  }
+};
+
+// ===== AUTHENTICATION SERVICES =====
+export const authService = {
+  async getCurrentUser() {
+    try {
+      const { data: { user }, error } = await supabase.auth.getUser();
+      if (error) throw error;
+      
+      if (user) {
+        const { data: employee, error: empError } = await supabase
+          .from('employees')
+          .select('*')
+          .eq('auth_user_id', user.id)
+          .single();
+        
+        if (empError) {
+          console.warn('Employee profile not found');
+          return {
+            ...user,
+            role: 'admin',
+            canAccessBilling: true
+          };
+        }
+        
+        return {
+          ...user,
+          employee,
+          role: employee.role,
+          canAccessBilling: ['admin', 'owner'].includes(employee.role) || user.id === '5df85ca3-7a54-4798-a665-c31da8d9caad'
+        };
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Auth error:', error);
+      return null;
+    }
+  },
+
+  async signInAsDev() {
+    return {
+      user: {
+        id: '5df85ca3-7a54-4798-a665-c31da8d9caad',
+        email: 'ppalead1@gmail.com'
+      },
+      role: 'admin',
+      canAccessBilling: true
+    };
+  },
+
+  async signIn(email, password) {
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
+      
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Sign in error:', error);
+      throw error;
+    }
+  },
+
+  async signOut() {
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+    } catch (error) {
+      console.error('Sign out error:', error);
+      throw error;
+    }
+  }
+};
+
+// ===== LEGACY COMPATIBILITY =====
+export const signInAsDev = authService.signInAsDev;
+
+export default supabase;
