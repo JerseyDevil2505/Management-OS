@@ -775,7 +775,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
           });
         }
 
-        // Check for sales changes
+        // Check for sales changes with proper data normalization
         const oldSale = {
           date: oldRow.sales_date,
           price: oldRow.sales_price,
@@ -787,16 +787,16 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         let newSale;
         if (job.vendor === 'Microsystems') {
           newSale = {
-            date: newRow['Sale Date'],
-            price: newRow['Sale Price'],
+            date: parseDate(newRow['Sale Date']), // Normalize date format
+            price: parseNumeric(newRow['Sale Price']), // Normalize price format
             book: newRow['Sale Book'],
             page: newRow['Sale Page'],
             nu: newRow['Sale Nu']
           };
         } else {
           newSale = {
-            date: newRow['CURRENTSALE_DATE'],
-            price: newRow['CURRENTSALE_PRICE'],
+            date: parseDate(newRow['CURRENTSALE_DATE']),
+            price: parseNumeric(newRow['CURRENTSALE_PRICE']),
             book: newRow['CURRENTSALE_DEEDBOOK'],
             page: newRow['CURRENTSALE_DEEDPAGE'],
             nu: newRow['CURRENTSALE_NUC']
@@ -882,7 +882,20 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
   const hasClassChanged = (oldClass, newClass) => {
     if (job.vendor === 'BRT') {
       // For BRT, check both CAMA and M4 classes
-      return (oldClass.cama !== newClass.cama) || (oldClass.m4 !== newClass.m4);
+      // Helper parsing functions (same logic as processor)
+  const parseDate = (dateString) => {
+    if (!dateString || dateString.trim() === '' || dateString === '00/00/00') return null;
+    const date = new Date(dateString);
+    return isNaN(date.getTime()) ? null : date.toISOString().split('T')[0];
+  };
+
+  const parseNumeric = (value) => {
+    if (!value || value === '') return null;
+    const num = parseFloat(String(value).replace(/[,$]/g, ''));
+    return isNaN(num) ? null : num;
+  };
+
+  return (oldClass.cama !== newClass.cama) || (oldClass.m4 !== newClass.m4);
     } else if (job.vendor === 'Microsystems') {
       // For Microsystems, only check M4 class
       return oldClass.m4 !== newClass.m4;
