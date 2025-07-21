@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Upload, FileText, CheckCircle, AlertTriangle, X, Database, Target } from 'lucide-react';
 import { jobService, propertyService } from '../lib/supabaseClient';
 
-const FileUploadButton = ({ selectedJob, onFileProcessed }) => {
+const FileUploadButton = ({ job, onFileProcessed }) => {
   const [sourceFile, setSourceFile] = useState(null);
   const [codeFile, setCodeFile] = useState(null);
   const [detectedVendor, setDetectedVendor] = useState(null);
@@ -187,7 +187,7 @@ const FileUploadButton = ({ selectedJob, onFileProcessed }) => {
 
   // FIXED: Comparison logic with exact processor composite key matching
   const performComparison = async () => {
-    if (!sourceFileContent || !selectedJob) return;
+    if (!sourceFileContent || !job) return;
     
     try {
       setComparing(true);
@@ -202,7 +202,7 @@ const FileUploadButton = ({ selectedJob, onFileProcessed }) => {
       const { data: dbRecords, error: dbError } = await propertyService.supabase
         .from('property_records')
         .select('property_composite_key, property_block, property_lot, property_location, sales_price, sales_date')
-        .eq('job_id', selectedJob.id);
+        .eq('job_id', job.id);
       
       if (dbError) {
         throw new Error(`Database fetch failed: ${dbError.message}`);
@@ -212,8 +212,8 @@ const FileUploadButton = ({ selectedJob, onFileProcessed }) => {
       
       // Generate composite keys for source records using EXACT processor logic
       setComparisonStatus('Generating composite keys...');
-      const yearCreated = selectedJob.year_created || new Date().getFullYear();
-      const ccddCode = selectedJob.ccdd || selectedJob.ccddCode;
+      const yearCreated = job.year_created || new Date().getFullYear();
+      const ccddCode = job.ccdd || job.ccddCode;
       
       const sourceKeys = new Set();
       const sourceKeyMap = new Map();
@@ -333,9 +333,9 @@ const FileUploadButton = ({ selectedJob, onFileProcessed }) => {
       const result = await propertyService.importCSVData(
         sourceFileContent,
         codeFileContent,
-        selectedJob.id,
-        selectedJob.year_created || new Date().getFullYear(),
-        selectedJob.ccdd || selectedJob.ccddCode,
+        job.id,
+        job.year_created || new Date().getFullYear(),
+        job.ccdd || job.ccddCode,
         detectedVendor,
         {
           source_file_name: sourceFile.name,
@@ -360,7 +360,7 @@ const FileUploadButton = ({ selectedJob, onFileProcessed }) => {
         addNotification(`✅ Successfully inserted ${actualProcessed} records`, 'success');
         
         // Update job
-        await jobService.update(selectedJob.id, {
+        await jobService.update(job.id, {
           sourceFileStatus: 'imported',
           totalProperties: actualProcessed
         });
@@ -618,7 +618,7 @@ const FileUploadButton = ({ selectedJob, onFileProcessed }) => {
     );
   };
 
-  if (!selectedJob) {
+  if (!job) {
     return (
       <div className="text-center text-gray-500 py-8">
         <Database className="w-12 h-12 mx-auto mb-4" />
@@ -657,7 +657,7 @@ const FileUploadButton = ({ selectedJob, onFileProcessed }) => {
       {/* FIXED: Header without PPA and redundant dates */}
       <div className="mb-6">
         <h2 className="text-xl font-bold text-gray-900 mb-2">Management OS</h2>
-        <div className="text-sm text-gray-600">Working on: <span className="font-medium">{selectedJob.name}</span></div>
+        <div className="text-sm text-gray-600">Working on: <span className="font-medium">{job.name}</span></div>
       </div>
 
       {/* File Upload Section */}
@@ -705,7 +705,7 @@ const FileUploadButton = ({ selectedJob, onFileProcessed }) => {
         {/* Code File */}
         <div className="space-y-3">
           <label className="block text-sm font-medium text-gray-700">
-            ⚙️ Code: {selectedJob.code_file_name ? `Imported at Job Creation (${selectedJob.code_file_uploaded_at?.split('T')[0]})` : 'Select File'}
+            ⚙️ Code: {job.code_file_name ? `Imported at Job Creation (${job.code_file_uploaded_at?.split('T')[0]})` : 'Select File'}
           </label>
           
           <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-blue-400 transition-colors">
@@ -719,12 +719,12 @@ const FileUploadButton = ({ selectedJob, onFileProcessed }) => {
             <label htmlFor="code-file-upload" className="cursor-pointer">
               <FileText className="w-8 h-8 mx-auto mb-2 text-gray-400" />
               <div className="text-sm text-gray-600">
-                {codeFile ? codeFile.name : (selectedJob.code_file_name || 'Click to upload code file')}
+                {codeFile ? codeFile.name : (job.code_file_name || 'Click to upload code file')}
               </div>
             </label>
           </div>
 
-          {selectedJob.code_file_name && (
+          {job.code_file_name && (
             <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
               <div className="text-sm text-green-800">
                 ✅ Code file available from job creation
