@@ -8,6 +8,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
   const [detectedVendor, setDetectedVendor] = useState(null);
   const [sourceFileContent, setSourceFileContent] = useState(null);
   const [codeFileContent, setCodeFileContent] = useState(null);
+  const [comparing, setComparing] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [processingStatus, setProcessingStatus] = useState('');
   const [notifications, setNotifications] = useState([]);
@@ -29,27 +30,48 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     setNotifications(prev => prev.filter(n => n.id !== id));
   };
 
-  // FIXED: Date parsing to handle MM/DD/YYYY vs ISO formats
-  const parseDate = (dateString) => {
+  // FIXED: Comprehensive date parsing to handle all formats and normalize for comparison
+  const parseAndNormalizeDate = (dateString) => {
     if (!dateString || dateString.trim() === '') return null;
     
+    const cleanDate = dateString.trim();
+    
     // Handle MM/DD/YYYY format from source files
-    if (dateString.includes('/')) {
-      const [month, day, year] = dateString.split('/');
-      if (month && day && year) {
-        const date = new Date(year, month - 1, day);
+    if (cleanDate.includes('/')) {
+      const parts = cleanDate.split('/');
+      if (parts.length === 3) {
+        let [month, day, year] = parts;
+        
+        // Handle 2-digit years (convert to 4-digit)
+        if (year.length === 2) {
+          const currentYear = new Date().getFullYear();
+          const currentCentury = Math.floor(currentYear / 100) * 100;
+          year = parseInt(year) <= 30 ? currentCentury + parseInt(year) : currentCentury - 100 + parseInt(year);
+        }
+        
+        // Create date and return normalized YYYY-MM-DD format
+        const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
         if (!isNaN(date.getTime())) {
           return date.toISOString().split('T')[0]; // Return as YYYY-MM-DD
         }
       }
     }
     
-    // Handle ISO format or other standard formats
-    const date = new Date(dateString);
+    // Handle YYYY-MM-DD format (already normalized)
+    if (cleanDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      const date = new Date(cleanDate);
+      if (!isNaN(date.getTime())) {
+        return cleanDate; // Already in correct format
+      }
+    }
+    
+    // Handle other standard formats
+    const date = new Date(cleanDate);
     if (!isNaN(date.getTime())) {
       return date.toISOString().split('T')[0];
     }
     
+    console.warn('Could not parse date:', dateString);
     return null;
   };
 
@@ -208,12 +230,107 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     });
   };
 
-  // NEW: Save comparison report to database
+  // NEW: Save comparison report to database in old CSV format
   const saveComparisonReport = async (comparisonResults, salesDecisions) => {
     try {
+      // Structure data to match old CSV format
+      const reportChanges = [];
+      const reportDate = new Date().toLocaleDateString();
+      
+      // Add removed properties
+      if (comparisonResults.details.missing?.length > 0) {
+        comparisonResults.details.missing.forEach(record => {
+          const blockField = detectedVendor === 'BRT' ? 'BLOCK' : 'Block';
+          const lotField = detectedVendor === 'BRT' ? 'LOT' : 'Lot';
+          const qualifierField = detectedVendor === 'BRT' ? 'QUALIFIER' : 'Qual';
+          const locationField = detectedVendor === 'BRT' ? 'PROPERTY_LOCATION' : 'Location';
+          
+          reportChanges.push({
+            Report_Date: reportDate,
+            Change_Type: 'Property_Added',
+            Block: record[blockField],
+            Lot: record[lotField],
+            Qualifier: record[qualifierField] || '',
+            Property_Location: record[locationField] || '',
+            Old_Value: 'Property_Not_Existed',
+            New_Value: 'Property_Added',
+            Status: 'pending_review',
+            Reviewed_By: null,
+            Reviewed_Date: null
+          });
+        });
+      }
+
+      // Add deleted properties
+      if (comparisonResults.details.deletions?.length > 0) {
+        comparisonResults.details.deletions.forEach(record => {
+          reportChanges.push({
+            Report_Date: reportDate,
+            Change_Type: 'Property_Removed',
+            Block: record.property_block,
+            Lot: record.property_lot,
+            Qualifier: record.property_qualifier || '',
+            Property_Location: record.property_location || '',
+            Old_Value: 'Property_Existed',
+            New_Value: 'Property_Removed',
+            Status: 'pending_review',
+            Reviewed_By: null,
+            Reviewed_Date: null
+          });
+        });
+      }
+
+      // Add class changes
+      if (comparisonResults.details.classChanges?.length > 0) {
+        comparisonResults.details.classChanges.forEach(change => {
+          change.changes.forEach(classChange => {
+            reportChanges.push({
+              Report_Date: reportDate,
+              Change_Type: 'Class_Change',
+              Block: change.property_block,
+              Lot: change.property_lot,
+              Qualifier: change.property_qualifier || '',
+              Property_Location: change.property_location || '',
+              Old_Value: classChange.old || '',
+              New_Value: classChange.new || '',
+              Status: 'pending_review',
+              Reviewed_By: null,
+              Reviewed_Date: null
+            });
+          });
+        });
+      }
+
+      // Add sales changes with decisions
+      if (comparisonResults.details.salesChanges?.length > 0) {
+        comparisonResults.details.salesChanges.forEach(change => {
+          const decision = salesDecisions.get(change.property_composite_key) || 'Keep New (default)';
+          const oldSaleValue = change.differences.sales_price.old ? 
+            `$${change.differences.sales_price.old.toLocaleString()} (${change.differences.sales_date.old || 'No Date'})` : 
+            'No_Sale';
+          const newSaleValue = change.differences.sales_price.new ? 
+            `$${change.differences.sales_price.new.toLocaleString()} (${change.differences.sales_date.new || 'No Date'})` : 
+            'No_Sale';
+            
+          reportChanges.push({
+            Report_Date: reportDate,
+            Change_Type: 'Sales_Change',
+            Block: change.property_block,
+            Lot: change.property_lot,
+            Qualifier: change.property_qualifier || '',
+            Property_Location: change.property_location || '',
+            Old_Value: oldSaleValue,
+            New_Value: newSaleValue,
+            Status: 'reviewed',
+            Reviewed_By: 'user', // TODO: Get actual user
+            Reviewed_Date: new Date().toLocaleDateString()
+          });
+        });
+      }
+
       const reportData = {
         summary: comparisonResults.summary,
-        details: comparisonResults.details,
+        changes: reportChanges,
         sales_decisions: Object.fromEntries(salesDecisions),
         vendor_detected: detectedVendor,
         source_file_name: sourceFile?.name,
@@ -245,28 +362,24 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     }
   };
 
-  // NEW: Export comparison results to Excel
+  // NEW: Export comparison results in old CSV format
   const exportComparisonReport = () => {
     if (!comparisonResults) return;
 
-    const exportData = {
-      summary: comparisonResults.summary,
-      timestamp: new Date().toISOString(),
-      job: job.name,
-      vendor: detectedVendor,
-      sales_decisions: Object.fromEntries(salesDecisions)
-    };
-
-    // Create CSV content for download
-    let csvContent = "Type,Block,Lot,Location,Details\n";
+    // Create CSV content matching old format
+    let csvContent = "Report_Date,Change_Type,Block,Lot,Qualifier,Property_Location,Old_Value,New_Value,Status,Reviewed_By,Reviewed_Date\n";
+    
+    const reportDate = new Date().toLocaleDateString();
     
     // Add new records
     if (comparisonResults.details.missing?.length > 0) {
       comparisonResults.details.missing.forEach(record => {
         const blockField = detectedVendor === 'BRT' ? 'BLOCK' : 'Block';
         const lotField = detectedVendor === 'BRT' ? 'LOT' : 'Lot';
+        const qualifierField = detectedVendor === 'BRT' ? 'QUALIFIER' : 'Qual';
         const locationField = detectedVendor === 'BRT' ? 'PROPERTY_LOCATION' : 'Location';
-        csvContent += `New Record,${record[blockField]},${record[lotField]},${record[locationField] || 'No Address'},New property\n`;
+        
+        csvContent += `"${reportDate}","Property_Added","${record[blockField]}","${record[lotField]}","${record[qualifierField] || ''}","${record[locationField] || ''}","Property_Not_Existed","Property_Added","pending_review","",""\n`;
       });
     }
 
@@ -274,7 +387,14 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     if (comparisonResults.details.salesChanges?.length > 0) {
       comparisonResults.details.salesChanges.forEach(change => {
         const decision = salesDecisions.get(change.property_composite_key) || 'Keep New (default)';
-        csvContent += `Sales Change,${change.property_block},${change.property_lot},${change.property_location},Price: $${change.differences.sales_price.old} → $${change.differences.sales_price.new} | Decision: ${decision}\n`;
+        const oldSaleValue = change.differences.sales_price.old ? 
+          `$${change.differences.sales_price.old.toLocaleString()} (${change.differences.sales_date.old || 'No Date'})` : 
+          'No_Sale';
+        const newSaleValue = change.differences.sales_price.new ? 
+          `$${change.differences.sales_price.new.toLocaleString()} (${change.differences.sales_date.new || 'No Date'})` : 
+          'No_Sale';
+          
+        csvContent += `"${reportDate}","Sales_Change","${change.property_block}","${change.property_lot}","${change.property_qualifier || ''}","${change.property_location || ''}","${oldSaleValue}","${newSaleValue}","reviewed","user","${reportDate}"\n`;
       });
     }
 
@@ -283,7 +403,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `comparison_report_${job.name}_${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `${job.name}_Comparison_Report_${new Date().toISOString().split('T')[0]}.csv`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -306,7 +426,31 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       console.log('📊 All reports for job:', reports);
       addNotification(`Found ${reports.length} comparison reports for this job`, 'info');
       
-      // TODO: Could open a separate modal to show all reports
+      // Export all reports in old CSV format
+      if (reports.length > 0) {
+        let csvContent = "Report_Date,Change_Type,Block,Lot,Qualifier,Property_Location,Old_Value,New_Value,Status,Reviewed_By,Reviewed_Date\n";
+        
+        reports.forEach(report => {
+          const reportData = report.report_data;
+          if (reportData.changes) {
+            reportData.changes.forEach(change => {
+              csvContent += `"${change.Report_Date}","${change.Change_Type}","${change.Block}","${change.Lot}","${change.Qualifier}","${change.Property_Location}","${change.Old_Value}","${change.New_Value}","${change.Status}","${change.Reviewed_By || ''}","${change.Reviewed_Date || ''}"\n`;
+            });
+          }
+        });
+
+        const blob = new Blob([csvContent], { type: 'text/csv' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${job.name}_All_Comparison_Reports_${new Date().toISOString().split('T')[0]}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+
+        addNotification('📊 All reports exported', 'success');
+      }
       
     } catch (error) {
       console.error('Error fetching reports:', error);
@@ -314,7 +458,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     }
   };
 
-  // ENHANCED: Comparison logic with sales changes, class changes, and fixed date comparison
+  // FIXED: Comparison logic using current_properties view and proper date normalization
   const performComparison = async () => {
     if (!sourceFileContent || !job) return null;
     
@@ -325,18 +469,18 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       const sourceRecords = parseSourceFile(sourceFileContent, detectedVendor);
       console.log(`📊 Parsed ${sourceRecords.length} source records`);
       
-      // Get current database records
-      setProcessingStatus('Fetching database records...');
+      // FIXED: Get current database records from current_properties view
+      setProcessingStatus('Fetching current database records...');
       const { data: dbRecords, error: dbError } = await supabase
-        .from('property_records')
-        .select('property_composite_key, property_block, property_lot, property_location, sales_price, sales_date, property_m4_class, property_cama_class')
+        .from('current_properties')  // Using the view instead of property_records
+        .select('property_composite_key, property_block, property_lot, property_qualifier, property_location, sales_price, sales_date, property_m4_class, property_cama_class')
         .eq('job_id', job.id);
       
       if (dbError) {
         throw new Error(`Database fetch failed: ${dbError.message}`);
       }
       
-      console.log(`📊 Found ${dbRecords.length} database records`);
+      console.log(`📊 Found ${dbRecords.length} current database records`);
       
       // Generate composite keys for source records using EXACT processor logic
       setProcessingStatus('Generating composite keys...');
@@ -382,22 +526,32 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         const sourceRecord = sourceKeyMap.get(key);
         const dbRecord = dbKeyMap.get(key);
         
-        // FIXED: Check for sales changes with proper number comparison (not string)
+        // FIXED: Check for sales changes with proper number and date comparison
         const sourceSalesPrice = parseFloat(String(sourceRecord[detectedVendor === 'BRT' ? 'CURRENTSALE_PRICE' : 'Sale Price'] || 0).replace(/[,$]/g, '')) || 0;
         const dbSalesPrice = parseFloat(dbRecord.sales_price || 0);
         
-        const sourceSalesDate = parseDate(sourceRecord[detectedVendor === 'BRT' ? 'CURRENTSALE_DATE' : 'Sale Date']);
-        const dbSalesDate = dbRecord.sales_date;
+        // FIXED: Normalize both dates for accurate comparison
+        const sourceSalesDate = parseAndNormalizeDate(sourceRecord[detectedVendor === 'BRT' ? 'CURRENTSALE_DATE' : 'Sale Date']);
+        const dbSalesDate = parseAndNormalizeDate(dbRecord.sales_date);
         
-        // FIXED: Use proper number comparison with reasonable tolerance
+        // FIXED: Use proper number comparison with reasonable tolerance AND normalized date comparison
         const pricesDifferent = Math.abs(sourceSalesPrice - dbSalesPrice) > 0.01;
         const datesDifferent = sourceSalesDate !== dbSalesDate;
+        
+        // Debug logging for sales comparison
+        if (pricesDifferent || datesDifferent) {
+          console.log(`🔍 Sales difference detected for ${key}:`, {
+            prices: { source: sourceSalesPrice, db: dbSalesPrice, different: pricesDifferent },
+            dates: { source: sourceSalesDate, db: dbSalesDate, different: datesDifferent }
+          });
+        }
         
         if (pricesDifferent || datesDifferent) {
           salesChanges.push({
             property_composite_key: key,
             property_block: dbRecord.property_block,
             property_lot: dbRecord.property_lot,
+            property_qualifier: dbRecord.property_qualifier,
             property_location: dbRecord.property_location,
             differences: {
               sales_price: { old: dbSalesPrice, new: sourceSalesPrice },
@@ -406,7 +560,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
           });
         }
         
-        // NEW: Check for class changes
+        // Check for class changes
         if (detectedVendor === 'BRT') {
           // BRT: Check both property_m4_class and property_cama_class
           const sourceM4Class = sourceRecord['PROPERTY_CLASS'];
@@ -435,6 +589,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
               property_composite_key: key,
               property_block: dbRecord.property_block,
               property_lot: dbRecord.property_lot,
+              property_qualifier: dbRecord.property_qualifier,
               property_location: dbRecord.property_location,
               changes: classChangesForProperty
             });
@@ -449,6 +604,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
               property_composite_key: key,
               property_block: dbRecord.property_block,
               property_lot: dbRecord.property_lot,
+              property_qualifier: dbRecord.property_qualifier,
               property_location: dbRecord.property_location,
               changes: [{
                 field: 'property_m4_class',
@@ -491,30 +647,59 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     setSalesDecisions(prev => new Map(prev.set(propertyKey, decision)));
   };
 
-  // MAIN: Process file with automatic comparison and single modal results
-  const handleProcessFile = async (fileType) => {
+  // FIXED: Compare only (don't process yet) - show modal for review
+  const handleCompareFile = async (fileType) => {
     if (fileType === 'source' && (!sourceFile || !sourceFileContent)) {
       addNotification('Please select a source file first', 'error');
       return;
     }
     
-    if (fileType === 'code' && (!codeFile || !codeFileContent)) {
-      addNotification('Please select a code file first', 'error');
+    try {
+      setComparing(true);
+      setProcessingStatus('Starting comparison...');
+      
+      // Perform comparison only (no processing yet)
+      const comparison = await performComparison();
+      
+      // Show results in modal for review
+      setComparisonResults(comparison);
+      setShowResultsModal(true);
+      
+      const hasAnyChanges = comparison.summary.missing > 0 || 
+                           comparison.summary.changes > 0 || 
+                           comparison.summary.deletions > 0 || 
+                           comparison.summary.salesChanges > 0 || 
+                           comparison.summary.classChanges > 0;
+      
+      if (hasAnyChanges) {
+        addNotification(`📊 Found ${comparison.summary.missing + comparison.summary.changes + comparison.summary.deletions + comparison.summary.salesChanges + comparison.summary.classChanges} total changes`, 'info');
+      } else {
+        addNotification('✅ No changes detected - files match database perfectly', 'success');
+      }
+      
+    } catch (error) {
+      console.error('❌ Comparison failed:', error);
+      addNotification(`Comparison failed: ${error.message}`, 'error');
+    } finally {
+      setComparing(false);
+      setProcessingStatus('');
+    }
+  };
+
+  // NEW: Process changes after review and approval
+  const handleProcessChanges = async () => {
+    if (!sourceFile || !sourceFileContent) {
+      addNotification('No source file to process', 'error');
       return;
     }
     
     try {
       setProcessing(true);
-      setProcessingStatus('Starting file processing...');
-      
-      // Step 1: Perform comparison FIRST
-      const comparison = await performComparison();
-      
-      // Step 2: Process file via processors
       setProcessingStatus(`Processing ${detectedVendor} data via processor...`);
       
-      console.log('🚀 Calling processor with same params as AdminJobManagement...');
+      console.log('🚀 Processing approved changes...');
       
+      // Call the processor to update the database
       const result = await propertyService.importCSVData(
         sourceFileContent,
         codeFileContent,
@@ -532,10 +717,48 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       
       console.log('📊 Processor completed with result:', result);
       
-      // Step 3: Save comparison report
-      await saveComparisonReport(comparison, salesDecisions);
+      // Save comparison report with sales decisions
+      await saveComparisonReport(comparisonResults, salesDecisions);
       
-      // Step 4: Update job with new file version info
+      // Store sales decisions as JSON in property records
+      if (salesDecisions.size > 0) {
+        setProcessingStatus('Saving sales decisions...');
+        
+        for (const [compositeKey, decision] of salesDecisions.entries()) {
+          const salesChange = comparisonResults.details.salesChanges.find(sc => sc.property_composite_key === compositeKey);
+          
+          try {
+            const { error } = await supabase
+              .from('property_records')
+              .update({ 
+                sales_history: {
+                  comparison_date: new Date().toISOString().split('T')[0],
+                  sales_decision: {
+                    decision_type: decision,
+                    old_price: salesChange?.differences.sales_price.old,
+                    new_price: salesChange?.differences.sales_price.new,
+                    old_date: salesChange?.differences.sales_date.old,
+                    new_date: salesChange?.differences.sales_date.new,
+                    decided_by: 'user', // TODO: Get actual user ID
+                    decided_at: new Date().toISOString()
+                  }
+                }
+              })
+              .eq('property_composite_key', compositeKey)
+              .eq('job_id', job.id);
+            
+            if (error) {
+              console.error('Error updating sales history:', error);
+            }
+          } catch (updateError) {
+            console.error('Failed to update sales history for property:', compositeKey, updateError);
+          }
+        }
+        
+        console.log(`✅ Saved ${salesDecisions.size} sales decisions to property records`);
+      }
+      
+      // Update job with new file version info
       try {
         await jobService.update(job.id, {
           sourceFileStatus: result.errors > 0 ? 'error' : 'imported',
@@ -549,10 +772,6 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         addNotification('Data processed but job update failed', 'warning');
       }
       
-      // Step 5: Show results in single modal
-      setComparisonResults(comparison);
-      setShowResultsModal(true);
-      
       const totalProcessed = result.processed || 0;
       const errorCount = result.errors || 0;
       
@@ -560,11 +779,17 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         addNotification(`❌ Processing completed with ${errorCount} errors. ${totalProcessed} records processed.`, 'warning');
       } else {
         addNotification(`✅ Successfully processed ${totalProcessed} records via ${detectedVendor} processor`, 'success');
+        
+        if (salesDecisions.size > 0) {
+          addNotification(`💾 Saved ${salesDecisions.size} sales decisions`, 'success');
+        }
       }
       
-      // Clear files
+      // Close modal and clean up
+      setShowResultsModal(false);
       setSourceFile(null);
       setSourceFileContent(null);
+      setSalesDecisions(new Map());
       
       // Notify parent
       if (onFileProcessed) {
@@ -572,7 +797,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       }
       
     } catch (error) {
-      console.error('❌ File processing failed:', error);
+      console.error('❌ Processing failed:', error);
       addNotification(`Processing failed: ${error.message}`, 'error');
     } finally {
       setProcessing(false);
@@ -617,7 +842,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     }
   };
 
-  // SINGLE RESULTS MODAL - Clean and properly sized
+  // SINGLE RESULTS MODAL - Clean and properly sized with comparison first workflow
   const ResultsModal = () => {
     if (!comparisonResults || !showResultsModal) return null;
     
@@ -631,13 +856,13 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-        <div className="bg-white rounded-lg max-w-4xl w-full max-h-[70vh] overflow-hidden shadow-2xl flex flex-col">
+        <div className="bg-white rounded-lg max-w-5xl w-full max-h-[70vh] overflow-hidden shadow-2xl flex flex-col">
           {/* Header */}
           <div className="p-4 border-b border-gray-200 bg-gray-50 shrink-0">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
                 <FileText className="w-5 h-5 text-blue-600" />
-                <h2 className="text-lg font-bold text-gray-900">File Update Results</h2>
+                <h2 className="text-lg font-bold text-gray-900">File Comparison Results</h2>
               </div>
               <button
                 onClick={() => setShowResultsModal(false)}
@@ -800,6 +1025,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                 <div>Job ID: {job.id}</div>
                 <div>Source File: {sourceFile?.name}</div>
                 <div>Total Changes: {summary.missing + summary.changes + summary.deletions + summary.salesChanges + summary.classChanges}</div>
+                <div>Using: current_properties view (latest versions only)</div>
               </div>
             </div>
           </div>
@@ -824,12 +1050,22 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
               </button>
             </div>
             
-            <button
-              onClick={() => setShowResultsModal(false)}
-              className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-medium"
-            >
-              Acknowledge & Close
-            </button>
+            {hasAnyChanges ? (
+              <button
+                onClick={handleProcessChanges}
+                disabled={processing}
+                className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 font-medium"
+              >
+                {processing ? 'Processing...' : 'Mark Reviewed & Process'}
+              </button>
+            ) : (
+              <button
+                onClick={() => setShowResultsModal(false)}
+                className="px-6 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 font-medium"
+              >
+                Acknowledge & Close
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -916,7 +1152,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         
         <button
           onClick={() => document.getElementById('source-file-upload').click()}
-          disabled={processing}
+          disabled={comparing || processing}
           className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:bg-gray-500 flex items-center gap-1"
         >
           <Upload className="w-3 h-3" />
@@ -925,11 +1161,11 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         
         {sourceFile && (
           <button
-            onClick={() => handleProcessFile('source')}
-            disabled={processing}
+            onClick={() => handleCompareFile('source')}
+            disabled={comparing || processing}
             className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 disabled:bg-gray-500 flex items-center gap-1"
           >
-            {processing ? (
+            {comparing ? (
               <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
             ) : (
               <CheckCircle className="w-3 h-3" />
@@ -956,27 +1192,12 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         
         <button
           onClick={() => document.getElementById('code-file-upload').click()}
-          disabled={processing}
+          disabled={comparing || processing}
           className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 disabled:bg-gray-500 flex items-center gap-1"
         >
           <Upload className="w-3 h-3" />
           {codeFile ? codeFile.name.substring(0, 10) + '...' : 'Select File'}
         </button>
-        
-        {codeFile && (
-          <button
-            onClick={() => handleProcessFile('code')}
-            disabled={processing}
-            className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 disabled:bg-gray-500 flex items-center gap-1"
-          >
-            {processing ? (
-              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
-            ) : (
-              <CheckCircle className="w-3 h-3" />
-            )}
-            Update
-          </button>
-        )}
       </div>
 
       {/* Results Modal */}
