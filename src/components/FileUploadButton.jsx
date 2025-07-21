@@ -47,8 +47,8 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       if (parts.length === 3) {
         let [month, day, year] = parts;
         
-        // FIXED: Check for zero values that indicate "no date"
-        if (parseInt(month) === 0 || parseInt(day) === 0 || parseInt(year) === 0) {
+        // FIXED: Check for zero values that indicate "no date" (but allow valid year 2000)
+        if (parseInt(month) === 0 || parseInt(day) === 0) {
           return null;
         }
         
@@ -111,25 +111,29 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     return null;
   };
 
-  // FIXED: Auto-detect vendor with proper format detection
+  // FIXED: Auto-detect vendor with proper BRT tab-delimited detection
   const detectVendorType = (fileContent) => {
     const firstLine = fileContent.split('\n')[0];
     
-    // BRT detection: comma-separated or tab-separated with BRT headers
-    const commaHeaders = firstLine.split(',');
+    // BRT detection: BRT files are primarily TAB-delimited
     const tabHeaders = firstLine.split('\t');
-    
-    const hasBRTCommaFormat = commaHeaders.includes('BLOCK') && 
-                             commaHeaders.includes('LOT') && 
-                             commaHeaders.includes('QUALIFIER') &&
-                             commaHeaders.includes('BATHTOT');
-                             
     const hasBRTTabFormat = tabHeaders.includes('BLOCK') && 
                            tabHeaders.includes('LOT') && 
                            tabHeaders.includes('QUALIFIER') &&
                            tabHeaders.includes('BATHTOT');
     
-    if (hasBRTCommaFormat || hasBRTTabFormat) {
+    if (hasBRTTabFormat) {
+      return 'BRT';
+    }
+    
+    // Fallback: Check comma-separated (less common for BRT)
+    const commaHeaders = firstLine.split(',');
+    const hasBRTCommaFormat = commaHeaders.includes('BLOCK') && 
+                             commaHeaders.includes('LOT') && 
+                             commaHeaders.includes('QUALIFIER') &&
+                             commaHeaders.includes('BATHTOT');
+    
+    if (hasBRTCommaFormat) {
       return 'BRT';
     }
     
@@ -1035,7 +1039,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
               </div>
             )}
 
-            {/* Debug Info */}
+            {/* Debug Info - ENHANCED: Show composite keys for debugging */}
             <div className="mt-6 p-4 bg-gray-100 rounded-lg">
               <h3 className="font-bold text-gray-900 mb-2">🔍 Debug Info:</h3>
               <div className="text-sm text-gray-700 space-y-1">
@@ -1044,6 +1048,38 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                 <div>Source File: {sourceFile?.name}</div>
                 <div>Total Changes: {summary.missing + summary.changes + summary.deletions + summary.salesChanges + summary.classChanges}</div>
                 <div>Using: current_properties view (latest versions only)</div>
+                
+                {/* Show sample composite keys for debugging */}
+                {hasNewRecords && details.missing?.length > 0 && (
+                  <div className="mt-2 p-2 bg-yellow-50 rounded">
+                    <div className="font-medium text-yellow-800 mb-1">Sample "New" Record Keys:</div>
+                    {details.missing.slice(0, 3).map((record, idx) => {
+                      const yearCreated = job.year_created || new Date().getFullYear();
+                      const ccddCode = job.ccdd_code || job.ccddCode;
+                      const generatedKey = generateCompositeKey(record, detectedVendor, yearCreated, ccddCode);
+                      
+                      return (
+                        <div key={idx} className="text-xs text-yellow-700 font-mono">
+                          {detectedVendor === 'BRT' ? 
+                            `${record.BLOCK}-${record.LOT} → ${generatedKey}` :
+                            `${record.Block}-${record.Lot} → ${generatedKey}`
+                          }
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                
+                {hasDeletions && details.deletions?.length > 0 && (
+                  <div className="mt-2 p-2 bg-red-50 rounded">
+                    <div className="font-medium text-red-800 mb-1">Sample "Deleted" Record Keys:</div>
+                    {details.deletions.slice(0, 3).map((record, idx) => (
+                      <div key={idx} className="text-xs text-red-700 font-mono">
+                        {record.property_block}-{record.property_lot} → {record.property_composite_key}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </div>
