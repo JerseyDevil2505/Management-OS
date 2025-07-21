@@ -319,60 +319,90 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     }
   };
 
-  // Insert new records when user clicks button
-  const handleInsertNewRecords = async () => {
-    if (!comparison?.details?.missing?.length) {
-      addNotification('No new records to insert', 'info');
+  // FIXED: Process new data using the EXACT SAME processor method as AdminJobManagement
+  const handleProcessChanges = async () => {
+    if (!sourceFile || !sourceFileContent) {
+      addNotification('Please select a source file first', 'error');
       return;
     }
     
     try {
       setProcessing(true);
-      setProcessingStatus(`Inserting ${comparison.details.missing.length} new records...`);
+      setProcessingStatus(`Processing ${detectedVendor} data via processor (replaces all existing data)...`);
       
+      console.log('🚀 Calling processor with same params as AdminJobManagement...');
+      console.log('📊 Parameters:', {
+        vendor: detectedVendor,
+        jobId: job.id,
+        yearCreated: job.year_created,
+        ccdd: job.ccdd || job.ccddCode,
+        sourceFileName: sourceFile.name
+      });
+      
+      // FIXED: Call the EXACT SAME processor method as AdminJobManagement
       const result = await propertyService.importCSVData(
         sourceFileContent,
-        codeFileContent,
+        codeFileContent, // Can be null - processors handle it
         job.id,
         job.year_created || new Date().getFullYear(),
         job.ccdd || job.ccddCode,
         detectedVendor,
         {
+          // Version tracking info for processors (same as AdminJobManagement)
           source_file_name: sourceFile.name,
           source_file_version_id: crypto.randomUUID(),
-          source_file_uploaded_at: new Date().toISOString()
+          source_file_uploaded_at: new Date().toISOString(),
+          file_version: (job.source_file_version || 1) + 1
         }
       );
       
-      const expectedRecords = comparison.details.missing.length;
-      const actualProcessed = result.processed || 0;
-      const isPartialSuccess = actualProcessed < expectedRecords && actualProcessed > 0;
+      console.log('📊 Processor completed with result:', result);
       
-      if (isPartialSuccess) {
-        const missing = expectedRecords - actualProcessed;
-        addNotification(
-          `⚠️ Partial Insert: ${actualProcessed} of ${expectedRecords} records inserted. ${missing} failed.`,
-          'warning'
-        );
-      } else if (result.errors > 0) {
-        addNotification(`❌ Insert failed: ${result.errors} errors`, 'error');
+      const totalProcessed = result.processed || 0;
+      const errorCount = result.errors || 0;
+      const warnings = result.warnings || [];
+      
+      if (errorCount > 0) {
+        addNotification(`❌ Processing completed with ${errorCount} errors. ${totalProcessed} records processed.`, 'warning');
       } else {
-        addNotification(`✅ Successfully inserted ${actualProcessed} records`, 'success');
-        
-        // Update job
-        await jobService.update(job.id, {
-          sourceFileStatus: 'imported',
-          totalProperties: actualProcessed
-        });
-        
-        // Refresh comparison to show updated state
-        setShowComparisonModal(false);
-        await performComparison();
+        addNotification(`✅ Successfully processed ${totalProcessed} records via ${detectedVendor} processor`, 'success');
       }
       
+      // Show warnings if any
+      if (warnings.length > 0) {
+        warnings.slice(0, 3).forEach(warning => {
+          addNotification(`⚠️ ${warning}`, 'warning');
+        });
+      }
+      
+      // FIXED: Update job with new file version info (same as AdminJobManagement)
+      try {
+        await jobService.update(job.id, {
+          sourceFileStatus: errorCount > 0 ? 'error' : 'imported',
+          totalProperties: totalProcessed,
+          source_file_version: (job.source_file_version || 1) + 1,
+          source_file_uploaded_at: new Date().toISOString()
+        });
+        console.log('✅ Job updated with new version info');
+      } catch (updateError) {
+        console.error('❌ Failed to update job:', updateError);
+        addNotification('Data processed but job update failed', 'warning');
+      }
+      
+      // Close modal and refresh
+      setShowComparisonModal(false);
+      
+      // Give processor time to complete, then refresh comparison for next upload
+      setTimeout(async () => {
+        console.log('🔄 Refreshing comparison after processing...');
+        if (onFileProcessed) {
+          onFileProcessed(result);
+        }
+      }, 2000);
+      
     } catch (error) {
-      console.error('Insert error:', error);
-      addNotification(`Insert failed: ${error.message}`, 'error');
+      console.error('❌ Processor call failed:', error);
+      addNotification(`Processing failed: ${error.message}`, 'error');
     } finally {
       setProcessing(false);
       setProcessingStatus('');
@@ -425,6 +455,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     const hasChanges = summary.changes > 0;
     const hasDeletions = summary.deletions > 0;
     const hasSalesChanges = summary.salesChanges > 0;
+    const hasAnyChanges = hasNewRecords || hasChanges || hasDeletions || hasSalesChanges;
     
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -447,24 +478,13 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
           <div className="p-6">
             {/* Summary Cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-              {/* New Records Card with Insert Button */}
+              {/* New Records Card */}
               <div className={`p-4 rounded-lg border-2 ${hasNewRecords ? 'border-green-400 bg-green-50' : 'border-gray-200 bg-gray-50'}`}>
                 <div className="text-center">
                   <div className={`text-2xl font-bold ${hasNewRecords ? 'text-green-600' : 'text-gray-500'}`}>
                     {summary.missing || 0}
                   </div>
                   <div className="text-sm text-gray-600">New Records</div>
-                  {hasNewRecords && !processing && (
-                    <button
-                      onClick={handleInsertNewRecords}
-                      className="mt-2 px-3 py-1 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm font-medium"
-                    >
-                      Insert {summary.missing}
-                    </button>
-                  )}
-                  {processing && (
-                    <div className="mt-2 text-xs text-green-600">Processing...</div>
-                  )}
                 </div>
               </div>
 
@@ -488,7 +508,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                 </div>
               </div>
 
-              {/* FIXED: Sales Changes Card - Always shows count */}
+              {/* Sales Changes Card */}
               <div className={`p-4 rounded-lg border-2 ${hasSalesChanges ? 'border-blue-400 bg-blue-50' : 'border-gray-200 bg-gray-50'}`}>
                 <div className="text-center">
                   <div className={`text-2xl font-bold ${hasSalesChanges ? 'text-blue-600' : 'text-gray-500'}`}>
@@ -510,13 +530,13 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
             )}
 
             {/* Detailed Results */}
-            {(hasNewRecords || hasChanges || hasDeletions || hasSalesChanges) && (
+            {hasAnyChanges && (
               <div className="space-y-4">
                 {/* New Records Section */}
                 {hasNewRecords && details.missing && (
                   <div className="border border-green-200 rounded-lg p-4">
                     <h3 className="font-bold text-green-800 mb-2">
-                      🆕 New Records to Insert ({details.missing.length})
+                      🆕 New Records to Process ({details.missing.length})
                     </h3>
                     <div className="max-h-32 overflow-y-auto">
                       <div className="grid grid-cols-1 gap-1 text-sm">
@@ -595,7 +615,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
             )}
 
             {/* No Changes State */}
-            {!hasNewRecords && !hasChanges && !hasDeletions && !hasSalesChanges && (
+            {!hasAnyChanges && (
               <div className="text-center py-8">
                 <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
                 <h3 className="text-lg font-bold text-gray-900 mb-2">✅ Files Match Database</h3>
@@ -605,13 +625,24 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
           </div>
 
           {/* Footer */}
-          <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-end">
+          <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-between">
             <button
               onClick={() => setShowComparisonModal(false)}
               className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
             >
-              Close
+              Cancel
             </button>
+            
+            {/* FIXED: Process Changes Button - Calls Processors */}
+            {hasAnyChanges && (
+              <button
+                onClick={handleProcessChanges}
+                disabled={processing}
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium"
+              >
+                {processing ? 'Processing...' : `🔄 Process All Changes (${detectedVendor} Processor)`}
+              </button>
+            )}
           </div>
         </div>
       </div>
