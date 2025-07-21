@@ -32,7 +32,7 @@ function App() {
       {/* Top Navigation */}
       <div className="bg-gray-900 text-white p-4 mb-6">
         <div className="max-w-6xl mx-auto">
-          <h1 className="text-2xl font-bold mb-4">PPA Management OS</h1>
+          <h1 className="text-2xl font-bold mb-4">Management OS</h1>
           
           {/* Only show main navigation when NOT in job-specific modules */}
           {activeModule !== 'job-modules' && (
