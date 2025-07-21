@@ -490,7 +490,7 @@ export const planningJobService = {
         ccddCode: pj.ccdd_code,
         ccdd: pj.ccdd_code, // Alternative accessor
         municipality: pj.municipality,
-        end_date: updates.end_date,
+        end_date: pj.end_date,  // Use end_date instead
         comments: pj.comments
       }));
     } catch (error) {
@@ -528,7 +528,7 @@ export const planningJobService = {
       const dbFields = {
         ccdd_code: updates.ccddCode || updates.ccdd,
         municipality: updates.municipality,
-        end_date: planningJobData.end_date,
+        end_date: updates.end_date,
         comments: updates.comments
       };
 
