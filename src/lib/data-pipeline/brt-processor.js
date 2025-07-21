@@ -318,6 +318,15 @@ export class BRTProcessor {
     for (let i = 1; i < lines.length; i++) {
       const values = this.parseCSVLine(lines[i]);
       
+      if (values[this.headers.indexOf('BLOCK')] === '118' && 
+          values[this.headers.indexOf('LOT')] && 
+          values[this.headers.indexOf('LOT')].startsWith('87')) {
+        console.log('🔍 DEBUG - Raw CSV line:', lines[i].substring(0, 100));
+        console.log('🔍 DEBUG - Parsed LOT value:', JSON.stringify(values[this.headers.indexOf('LOT')]));
+        console.log('🔍 DEBUG - LOT value type:', typeof values[this.headers.indexOf('LOT')]);
+      }    
+      
+      
       if (values.length !== this.headers.length) {
         console.warn(`Row ${i} has ${values.length} values but ${this.headers.length} headers - skipping`);
         continue;
