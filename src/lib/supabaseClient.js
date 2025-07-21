@@ -504,7 +504,7 @@ export const planningJobService = {
       const dbFields = {
         ccdd_code: planningJobData.ccddCode || planningJobData.ccdd,
         municipality: planningJobData.municipality,
-        potential_year: planningJobData.potentialYear,
+        end_date: planningJobData.end_date,
         comments: planningJobData.comments,
         created_by: planningJobData.created_by
       };
@@ -528,7 +528,7 @@ export const planningJobService = {
       const dbFields = {
         ccdd_code: updates.ccddCode || updates.ccdd,
         municipality: updates.municipality,
-        potential_year: updates.potentialYear,
+        end_date: planningJobData.end_date,
         comments: updates.comments
       };
 
