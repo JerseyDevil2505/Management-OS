@@ -296,7 +296,19 @@ const FileUploadButton = ({ selectedJob, onFileProcessed }) => {
       
       setComparison(results);
       setComparisonStatus('Analysis complete');
-      setShowComparisonModal(true);
+      
+      // Only show modal if there are actual changes to review
+      const hasAnyChanges = results.summary.missing > 0 || 
+                           results.summary.changes > 0 || 
+                           results.summary.deletions > 0 || 
+                           results.summary.salesChanges > 0;
+      
+      if (hasAnyChanges) {
+        setShowComparisonModal(true);
+      } else {
+        // Just show a success notification for no changes
+        addNotification('✅ No changes detected - files match database perfectly', 'success');
+      }
       
     } catch (error) {
       console.error('Comparison error:', error);
