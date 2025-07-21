@@ -30,7 +30,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     setNotifications(prev => prev.filter(n => n.id !== id));
   };
 
-  // FIXED: Comprehensive date parsing to handle all formats and normalize for comparison
+  // FIXED: Date parsing to handle all 2-digit years as 1900s
   const parseAndNormalizeDate = (dateString) => {
     if (!dateString || dateString.trim() === '') return null;
     
@@ -52,11 +52,9 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
           return null;
         }
         
-        // Handle 2-digit years (convert to 4-digit)
+        // FIXED: Handle 2-digit years - ALL 2-digit years become 1900s for property data
         if (year.length === 2) {
-          const currentYear = new Date().getFullYear();
-          const currentCentury = Math.floor(currentYear / 100) * 100;
-          year = parseInt(year) <= 30 ? currentCentury + parseInt(year) : currentCentury - 100 + parseInt(year);
+          year = 1900 + parseInt(year);
         }
         
         // Create date and return normalized YYYY-MM-DD format
@@ -473,7 +471,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     }
   };
 
-  // FIXED: Comparison logic using current_properties view and proper date normalization
+  // FIXED: Comparison logic using property_records directly instead of current_properties view
   const performComparison = async () => {
     if (!sourceFileContent || !job) return null;
     
@@ -484,13 +482,12 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       const sourceRecords = parseSourceFile(sourceFileContent, detectedVendor);
       console.log(`📊 Parsed ${sourceRecords.length} source records`);
       
-      // FIXED: Get current database records from current_properties view with proper limit
+      // FIXED: Get ALL database records from property_records table directly
       setProcessingStatus('Fetching current database records...');
       const { data: dbRecords, error: dbError } = await supabase
-        .from('current_properties')  // Using the view instead of property_records
+        .from('property_records')  // Direct table access instead of view
         .select('property_composite_key, property_block, property_lot, property_qualifier, property_location, sales_price, sales_date, property_m4_class, property_cama_class')
-        .eq('job_id', job.id)
-        .limit(50000);  // Set high limit to ensure we get all records
+        .eq('job_id', job.id);  // Get ALL records for this job (no limit)
       
       if (dbError) {
         throw new Error(`Database fetch failed: ${dbError.message}`);
@@ -1047,7 +1044,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                 <div>Job ID: {job.id}</div>
                 <div>Source File: {sourceFile?.name}</div>
                 <div>Total Changes: {summary.missing + summary.changes + summary.deletions + summary.salesChanges + summary.classChanges}</div>
-                <div>Using: current_properties view (latest versions only)</div>
+                <div>Using: property_records table (all versions)</div>
                 
                 {/* Show sample composite keys for debugging */}
                 {hasNewRecords && details.missing?.length > 0 && (
