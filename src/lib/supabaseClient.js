@@ -490,7 +490,7 @@ export const planningJobService = {
         ccddCode: pj.ccdd_code,
         ccdd: pj.ccdd_code, // Alternative accessor
         municipality: pj.municipality,
-        potentialYear: pj.potential_year,
+        end_date: pj.end_date,  // <-- Use end_date instead
         comments: pj.comments
       }));
     } catch (error) {
