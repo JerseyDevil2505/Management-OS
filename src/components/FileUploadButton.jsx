@@ -36,11 +36,21 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     
     const cleanDate = dateString.trim();
     
+    // FIXED: Handle "no date" patterns like 00/00/00, 0/0/0, etc.
+    if (cleanDate.match(/^0+\/0+\/0+$/) || cleanDate === '00/00/00' || cleanDate === '0/0/0') {
+      return null;
+    }
+    
     // Handle MM/DD/YYYY format from source files
     if (cleanDate.includes('/')) {
       const parts = cleanDate.split('/');
       if (parts.length === 3) {
         let [month, day, year] = parts;
+        
+        // FIXED: Check for zero values that indicate "no date"
+        if (parseInt(month) === 0 || parseInt(day) === 0 || parseInt(year) === 0) {
+          return null;
+        }
         
         // Handle 2-digit years (convert to 4-digit)
         if (year.length === 2) {
@@ -87,13 +97,14 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       
       return `${yearCreated}${ccddCode}-${blockValue}-${lotValue}_${qualifierValue}-${cardValue}-${locationValue}`;
     } else if (vendor === 'Microsystems') {
-      // Microsystems format: handle renamed duplicate headers
+      // FIXED: Microsystems format - EXACT MATCH to processor logic
       const blockValue = String(record['Block'] || '').trim();
       const lotValue = String(record['Lot'] || '').trim();
       const qualValue = String(record['Qual'] || '').trim() || 'NONE';
       const bldgValue = String(record['Bldg'] || '').trim() || 'NONE';
-      const locationValue = String(record['Location'] || '').trim() || 'NONE'; // First Location field
+      const locationValue = String(record['Location'] || '').trim() || 'NONE';
       
+      // This EXACTLY matches the processor: property_composite_key: `${yearCreated}${ccddCode}-${rawRecord['Block']}-${rawRecord['Lot']}_${(rawRecord['Qual'] || '').trim() || 'NONE'}-${(rawRecord['Bldg'] || '').trim() || 'NONE'}-${(rawRecord['Location'] || '').trim() || 'NONE'}`
       return `${yearCreated}${ccddCode}-${blockValue}-${lotValue}_${qualValue}-${bldgValue}-${locationValue}`;
     }
     
