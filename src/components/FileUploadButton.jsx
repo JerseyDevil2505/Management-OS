@@ -21,12 +21,11 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
   const [showSalesDecisionModal, setShowSalesDecisionModal] = useState(false);
   const [pendingSalesChanges, setPendingSalesChanges] = useState([]);
 
-  // EMERGENCY: ESC key handler to close modals
+  // FIXED: ESC key handler to close modals with proper cleanup
   useEffect(() => {
     const handleEscKey = (event) => {
       if (event.key === 'Escape') {
-        setShowSalesDecisionModal(false);
-        setShowComparisonModal(false);
+        forceCloseAllModals();
         addNotification('Modal closed with ESC key', 'info');
       }
     };
@@ -49,13 +48,15 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     setNotifications(prev => prev.filter(n => n.id !== id));
   };
 
-  // EMERGENCY: Force close all modals
+  // FIXED: Force close all modals with complete state reset
   const forceCloseAllModals = () => {
     setShowSalesDecisionModal(false);
     setShowComparisonModal(false);
     setPendingSalesChanges([]);
     setSalesDecisions(new Map());
-    addNotification('All modals closed', 'success');
+    setComparing(false);
+    setComparisonStatus('');
+    console.log('🔒 All modals force closed and state reset');
   };
 
   // FIXED: Date parsing to handle MM/DD/YYYY vs ISO formats
@@ -390,14 +391,18 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         const sourceRecord = sourceKeyMap.get(key);
         const dbRecord = dbKeyMap.get(key);
         
-        // FIXED: Check for sales changes with proper date parsing
+        // FIXED: Check for sales changes with proper number comparison (not string)
         const sourceSalesPrice = parseFloat(String(sourceRecord[detectedVendor === 'BRT' ? 'CURRENTSALE_PRICE' : 'Sale Price'] || 0).replace(/[,$]/g, '')) || 0;
         const dbSalesPrice = parseFloat(dbRecord.sales_price || 0);
         
         const sourceSalesDate = parseDate(sourceRecord[detectedVendor === 'BRT' ? 'CURRENTSALE_DATE' : 'Sale Date']);
         const dbSalesDate = dbRecord.sales_date;
         
-        if (Math.abs(sourceSalesPrice - dbSalesPrice) > 0.01 || sourceSalesDate !== dbSalesDate) {
+        // FIXED: Use proper number comparison with reasonable tolerance
+        const pricesDifferent = Math.abs(sourceSalesPrice - dbSalesPrice) > 0.01;
+        const datesDifferent = sourceSalesDate !== dbSalesDate;
+        
+        if (pricesDifferent || datesDifferent) {
           salesChanges.push({
             property_composite_key: key,
             property_block: dbRecord.property_block,
@@ -703,7 +708,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     }
   };
 
-  // EMERGENCY FIXED: Sales Decision Modal with GUARANTEED close functionality
+  // COMPLETELY FIXED: Sales Decision Modal with proper sizing and escape
   const SalesDecisionModal = () => {
     if (!pendingSalesChanges.length) return null;
     
@@ -718,15 +723,15 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         }}
       >
         <div 
-          className="bg-white rounded-xl w-full max-w-6xl h-[90vh] flex flex-col shadow-2xl border"
+          className="bg-white rounded-xl w-full max-w-4xl max-h-[80vh] flex flex-col shadow-2xl border"
           onClick={(e) => e.stopPropagation()}
         >
           {/* FIXED Header with prominent close button */}
-          <div className="flex items-center justify-between p-6 border-b bg-blue-50 rounded-t-xl">
+          <div className="flex items-center justify-between p-4 border-b bg-blue-50 rounded-t-xl shrink-0">
             <div className="flex items-center space-x-3">
-              <Target className="w-6 h-6 text-blue-600" />
+              <Target className="w-5 h-5 text-blue-600" />
               <div>
-                <h2 className="text-xl font-bold text-gray-900">Sales Change Decisions Required</h2>
+                <h2 className="text-lg font-bold text-gray-900">Sales Change Decisions Required</h2>
                 <p className="text-sm text-gray-600">{pendingSalesChanges.length} properties need review</p>
               </div>
             </div>
@@ -737,49 +742,53 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                 onClick={forceCloseAllModals}
                 className="px-3 py-1 bg-red-500 text-white rounded text-sm font-medium hover:bg-red-600"
               >
-                FORCE CLOSE
+                CLOSE
               </button>
               <button
                 onClick={forceCloseAllModals}
-                className="text-gray-400 hover:text-gray-600 p-2"
+                className="text-gray-400 hover:text-gray-600 p-1"
               >
-                <X className="w-8 h-8" />
+                <X className="w-6 h-6" />
               </button>
             </div>
           </div>
 
-          {/* FIXED Scrollable content */}
-          <div className="flex-1 overflow-y-auto p-6">
-            <div className="space-y-6">
+          {/* FIXED Scrollable content with proper height */}
+          <div className="flex-1 overflow-y-auto p-4">
+            <div className="space-y-4">
               {pendingSalesChanges.map((change, idx) => {
                 const currentDecision = salesDecisions.get(change.property_composite_key);
                 
                 return (
-                  <div key={idx} className="border-2 border-blue-200 rounded-xl p-6 bg-blue-50">
-                    <div className="flex justify-between items-start mb-4">
+                  <div key={idx} className="border border-blue-200 rounded-lg p-4 bg-blue-50">
+                    <div className="flex justify-between items-start mb-3">
                       <div>
-                        <h3 className="text-xl font-bold text-gray-900">
+                        <h3 className="text-lg font-bold text-gray-900">
                           Property {change.property_block}-{change.property_lot}
                         </h3>
-                        <p className="text-gray-600">{change.property_location}</p>
+                        <p className="text-gray-600 text-sm">{change.property_location}</p>
                       </div>
                       <div className="text-right">
                         <div className="text-sm text-gray-600">Sales Price Change</div>
-                        <div className="text-lg font-bold text-red-600">
+                        <div className="text-base font-bold text-red-600">
                           ${change.differences.sales_price.old?.toLocaleString() || 0} 
                         </div>
-                        <div className="text-lg font-bold text-green-600">
+                        <div className="text-base font-bold text-green-600">
                           → ${change.differences.sales_price.new?.toLocaleString() || 0}
+                        </div>
+                        {/* FIXED: Add sale dates to help with decisions */}
+                        <div className="text-xs text-gray-500 mt-1">
+                          {change.differences.sales_date.old || 'No Date'} → {change.differences.sales_date.new || 'No Date'}
                         </div>
                       </div>
                     </div>
                     
-                    <div className="flex flex-wrap gap-3">
+                    <div className="flex flex-wrap gap-2">
                       <button
                         onClick={() => handleSalesDecision(change.property_composite_key, 'Keep Old')}
-                        className={`px-6 py-3 rounded-lg text-sm font-bold ${
+                        className={`px-4 py-2 rounded text-sm font-medium ${
                           currentDecision === 'Keep Old' 
-                            ? 'bg-red-600 text-white shadow-lg' 
+                            ? 'bg-red-600 text-white shadow-md' 
                             : 'bg-red-100 text-red-800 hover:bg-red-200'
                         }`}
                       >
@@ -788,9 +797,9 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                       
                       <button
                         onClick={() => handleSalesDecision(change.property_composite_key, 'Keep New')}
-                        className={`px-6 py-3 rounded-lg text-sm font-bold ${
+                        className={`px-4 py-2 rounded text-sm font-medium ${
                           currentDecision === 'Keep New' 
-                            ? 'bg-green-600 text-white shadow-lg' 
+                            ? 'bg-green-600 text-white shadow-md' 
                             : 'bg-green-100 text-green-800 hover:bg-green-200'
                         }`}
                       >
@@ -799,20 +808,20 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                       
                       <button
                         onClick={() => handleSalesDecision(change.property_composite_key, 'Keep Both')}
-                        className={`px-6 py-3 rounded-lg text-sm font-bold ${
+                        className={`px-4 py-2 rounded text-sm font-medium ${
                           currentDecision === 'Keep Both' 
-                            ? 'bg-blue-600 text-white shadow-lg' 
+                            ? 'bg-blue-600 text-white shadow-md' 
                             : 'bg-blue-100 text-blue-800 hover:bg-blue-200'
                         }`}
                       >
-                        Keep Both (Track Both Sales)
+                        Keep Both
                       </button>
                     </div>
                     
                     {currentDecision && (
-                      <div className="mt-3 p-2 bg-green-100 rounded-lg">
-                        <div className="text-sm font-bold text-green-800">
-                          ✓ Decision Made: {currentDecision}
+                      <div className="mt-2 p-2 bg-green-100 rounded">
+                        <div className="text-sm font-medium text-green-800">
+                          ✓ Decision: {currentDecision}
                         </div>
                       </div>
                     )}
@@ -822,27 +831,25 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
             </div>
           </div>
 
-          {/* FIXED Footer with better buttons */}
-          <div className="p-6 border-t bg-gray-50 flex justify-between items-center rounded-b-xl">
-            <div className="text-sm text-gray-600 flex items-center space-x-4">
-              <span className="font-medium">
-                Progress: {salesDecisions.size} of {pendingSalesChanges.length} decisions made
-              </span>
+          {/* FIXED Footer with proper spacing */}
+          <div className="p-4 border-t bg-gray-50 flex justify-between items-center rounded-b-xl shrink-0">
+            <div className="text-sm text-gray-600">
+              Progress: {salesDecisions.size} of {pendingSalesChanges.length} decisions made
             </div>
             
-            <div className="flex space-x-3">
+            <div className="flex space-x-2">
               <button
                 onClick={forceCloseAllModals}
-                className="px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 font-medium"
+                className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
               >
-                Cancel All
+                Cancel
               </button>
               
               <button
                 onClick={completeSalesDecisions}
-                className="px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold text-lg"
+                className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-medium"
               >
-                Continue with Decisions →
+                Continue →
               </button>
             </div>
           </div>
@@ -851,7 +858,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     );
   };
 
-  // Comparison Modal Component
+  // COMPLETELY FIXED: Comparison Modal with proper sizing and controls
   const ComparisonModal = () => {
     if (!comparison) return null;
     
@@ -865,22 +872,26 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     
     return (
       <div 
-        className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+        className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[9998]"
         onClick={(e) => {
           if (e.target === e.currentTarget) {
-            setShowComparisonModal(false);
+            forceCloseAllModals();
           }
         }}
       >
-        <div className="bg-white rounded-lg max-w-5xl w-full max-h-[95vh] overflow-y-auto shadow-2xl">
-          <div className="p-6 border-b border-gray-200">
+        <div 
+          className="bg-white rounded-lg max-w-4xl w-full max-h-[85vh] overflow-hidden shadow-2xl flex flex-col"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* FIXED Header */}
+          <div className="p-4 border-b border-gray-200 bg-gray-50 shrink-0">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
-                <FileText className="w-6 h-6 text-blue-600" />
-                <h2 className="text-xl font-bold text-gray-900">File Comparison Results</h2>
+                <FileText className="w-5 h-5 text-blue-600" />
+                <h2 className="text-lg font-bold text-gray-900">File Comparison Results</h2>
               </div>
               <button
-                onClick={() => setShowComparisonModal(false)}
+                onClick={forceCloseAllModals}
                 className="text-gray-400 hover:text-gray-600 p-1"
               >
                 <X className="w-6 h-6" />
@@ -888,60 +899,51 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
             </div>
           </div>
 
-          <div className="p-6">
+          {/* FIXED Scrollable content */}
+          <div className="flex-1 overflow-y-auto p-4">
             {/* Summary Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+            <div className="grid grid-cols-5 gap-3 mb-6">
               {/* New Records Card */}
-              <div className={`p-4 rounded-lg border-2 ${hasNewRecords ? 'border-green-400 bg-green-50' : 'border-gray-200 bg-gray-50'}`}>
-                <div className="text-center">
-                  <div className={`text-2xl font-bold ${hasNewRecords ? 'text-green-600' : 'text-gray-500'}`}>
-                    {summary.missing || 0}
-                  </div>
-                  <div className="text-sm text-gray-600">New Records</div>
+              <div className={`p-3 rounded-lg border-2 text-center ${hasNewRecords ? 'border-green-400 bg-green-50' : 'border-gray-200 bg-gray-50'}`}>
+                <div className={`text-xl font-bold ${hasNewRecords ? 'text-green-600' : 'text-gray-500'}`}>
+                  {summary.missing || 0}
                 </div>
+                <div className="text-xs text-gray-600">New Records</div>
               </div>
 
               {/* Changes Card */}
-              <div className={`p-4 rounded-lg border-2 ${hasChanges ? 'border-yellow-400 bg-yellow-50' : 'border-gray-200 bg-gray-50'}`}>
-                <div className="text-center">
-                  <div className={`text-2xl font-bold ${hasChanges ? 'text-yellow-600' : 'text-gray-500'}`}>
-                    {summary.changes || 0}
-                  </div>
-                  <div className="text-sm text-gray-600">Changes</div>
+              <div className={`p-3 rounded-lg border-2 text-center ${hasChanges ? 'border-yellow-400 bg-yellow-50' : 'border-gray-200 bg-gray-50'}`}>
+                <div className={`text-xl font-bold ${hasChanges ? 'text-yellow-600' : 'text-gray-500'}`}>
+                  {summary.changes || 0}
                 </div>
+                <div className="text-xs text-gray-600">Changes</div>
               </div>
 
               {/* Deletions Card */}
-              <div className={`p-4 rounded-lg border-2 ${hasDeletions ? 'border-red-400 bg-red-50' : 'border-gray-200 bg-gray-50'}`}>
-                <div className="text-center">
-                  <div className={`text-2xl font-bold ${hasDeletions ? 'text-red-600' : 'text-gray-500'}`}>
-                    {summary.deletions || 0}
-                  </div>
-                  <div className="text-sm text-gray-600">Deletions</div>
+              <div className={`p-3 rounded-lg border-2 text-center ${hasDeletions ? 'border-red-400 bg-red-50' : 'border-gray-200 bg-gray-50'}`}>
+                <div className={`text-xl font-bold ${hasDeletions ? 'text-red-600' : 'text-gray-500'}`}>
+                  {summary.deletions || 0}
                 </div>
+                <div className="text-xs text-gray-600">Deletions</div>
               </div>
 
               {/* Sales Changes Card */}
-              <div className={`p-4 rounded-lg border-2 ${hasSalesChanges ? 'border-blue-400 bg-blue-50' : 'border-gray-200 bg-gray-50'}`}>
-                <div className="text-center">
-                  <div className={`text-2xl font-bold ${hasSalesChanges ? 'text-blue-600' : 'text-gray-500'}`}>
-                    {summary.salesChanges || 0}
-                  </div>
-                  <div className="text-sm text-gray-600">Sales Changes</div>
-                  {hasSalesChanges && (
-                    <div className="text-xs text-green-600 mt-1">✓ Decisions Made</div>
-                  )}
+              <div className={`p-3 rounded-lg border-2 text-center ${hasSalesChanges ? 'border-blue-400 bg-blue-50' : 'border-gray-200 bg-gray-50'}`}>
+                <div className={`text-xl font-bold ${hasSalesChanges ? 'text-blue-600' : 'text-gray-500'}`}>
+                  {summary.salesChanges || 0}
                 </div>
+                <div className="text-xs text-gray-600">Sales Changes</div>
+                {hasSalesChanges && (
+                  <div className="text-xs text-green-600 mt-1">✓ Decisions Made</div>
+                )}
               </div>
 
-              {/* NEW: Class Changes Card */}
-              <div className={`p-4 rounded-lg border-2 ${hasClassChanges ? 'border-purple-400 bg-purple-50' : 'border-gray-200 bg-gray-50'}`}>
-                <div className="text-center">
-                  <div className={`text-2xl font-bold ${hasClassChanges ? 'text-purple-600' : 'text-gray-500'}`}>
-                    {summary.classChanges || 0}
-                  </div>
-                  <div className="text-sm text-gray-600">Class Changes</div>
+              {/* Class Changes Card */}
+              <div className={`p-3 rounded-lg border-2 text-center ${hasClassChanges ? 'border-purple-400 bg-purple-50' : 'border-gray-200 bg-gray-50'}`}>
+                <div className={`text-xl font-bold ${hasClassChanges ? 'text-purple-600' : 'text-gray-500'}`}>
+                  {summary.classChanges || 0}
                 </div>
+                <div className="text-xs text-gray-600">Class Changes</div>
               </div>
             </div>
 
@@ -970,36 +972,48 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                 <p className="text-gray-600">Changes detected - processing will update database with new data.</p>
               </div>
             )}
+
+            {/* DEBUGGING: Show comparison details for troubleshooting */}
+            {comparison && (
+              <div className="mt-6 p-4 bg-gray-100 rounded-lg">
+                <h3 className="font-bold text-gray-900 mb-2">🔍 Debug Info:</h3>
+                <div className="text-sm text-gray-700 space-y-1">
+                  <div>Vendor: {detectedVendor}</div>
+                  <div>Job ID: {job.id}</div>
+                  <div>Source File: {sourceFile?.name}</div>
+                  <div>DB Records Found: {comparison.dbRecordCount}</div>
+                  <div>Source Records Parsed: {comparison.sourceRecordCount}</div>
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Footer */}
-          <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-between">
-            <div className="flex space-x-3">
+          {/* FIXED Footer */}
+          <div className="px-4 py-3 border-t border-gray-200 bg-gray-50 flex justify-between shrink-0">
+            <div className="flex space-x-2">
               <button
-                onClick={() => setShowComparisonModal(false)}
-                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
+                onClick={forceCloseAllModals}
+                className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
               >
-                Cancel
+                Close
               </button>
               
-              {/* NEW: Export Report Button - Always visible for testing */}
               <button
                 onClick={exportComparisonReport}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center space-x-2"
+                className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 flex items-center space-x-2"
               >
                 <Download className="w-4 h-4" />
                 <span>Export Report</span>
               </button>
             </div>
             
-            {/* FIXED: Process Changes Button */}
             {hasAnyChanges && (
               <button
                 onClick={handleProcessChanges}
                 disabled={processing}
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium"
+                className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 font-medium"
               >
-                {processing ? 'Processing...' : `🔄 Process All Changes`}
+                {processing ? 'Processing...' : `🔄 Process Changes`}
               </button>
             )}
           </div>
@@ -1046,18 +1060,6 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
 
   return (
     <div className="space-y-3">
-      {/* EMERGENCY: Force close button always visible */}
-      {(showSalesDecisionModal || showComparisonModal) && (
-        <div className="fixed top-4 left-4 z-[10000]">
-          <button
-            onClick={forceCloseAllModals}
-            className="px-4 py-2 bg-red-600 text-white rounded-lg font-bold shadow-lg hover:bg-red-700"
-          >
-            🚨 EMERGENCY CLOSE
-          </button>
-        </div>
-      )}
-
       {/* Notifications */}
       <div className="fixed top-4 right-4 z-50 space-y-2">
         {notifications.map(notification => (
