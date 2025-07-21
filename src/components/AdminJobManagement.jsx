@@ -712,7 +712,8 @@ const AdminJobManagement = ({ onJobSelect }) => {
         codeFileStatus: 'current',
         vendorDetection: { vendor: newJob.vendor },
         percent_billed: newJob.percentBilled,
-        
+        source_file_version: 1,
+        code_file_version: 1,
         source_file_name: newJob.sourceFile.name,
         source_file_version_id: crypto.randomUUID(),
         source_file_uploaded_at: new Date().toISOString(),
