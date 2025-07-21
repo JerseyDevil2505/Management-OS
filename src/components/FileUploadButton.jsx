@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, FileText, CheckCircle, AlertTriangle, X, Database, Target, Calendar, Settings } from 'lucide-react';
-import { jobService, propertyService } from '../lib/supabaseClient';
+import { Upload, FileText, CheckCircle, AlertTriangle, X, Database, Target, Calendar, Settings, Download } from 'lucide-react';
+import { jobService, propertyService, supabase } from '../lib/supabaseClient';
 
 const FileUploadButton = ({ job, onFileProcessed }) => {
   const [sourceFile, setSourceFile] = useState(null);
@@ -15,6 +15,11 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
   const [processingStatus, setProcessingStatus] = useState('');
   const [notifications, setNotifications] = useState([]);
   const [comparisonStatus, setComparisonStatus] = useState('');
+  
+  // NEW: Sales decisions state
+  const [salesDecisions, setSalesDecisions] = useState(new Map());
+  const [showSalesDecisionModal, setShowSalesDecisionModal] = useState(false);
+  const [pendingSalesChanges, setPendingSalesChanges] = useState([]);
 
   const addNotification = (message, type = 'info') => {
     const id = Date.now();
@@ -28,6 +33,30 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
 
   const removeNotification = (id) => {
     setNotifications(prev => prev.filter(n => n.id !== id));
+  };
+
+  // FIXED: Date parsing to handle MM/DD/YYYY vs ISO formats
+  const parseDate = (dateString) => {
+    if (!dateString || dateString.trim() === '') return null;
+    
+    // Handle MM/DD/YYYY format from source files
+    if (dateString.includes('/')) {
+      const [month, day, year] = dateString.split('/');
+      if (month && day && year) {
+        const date = new Date(year, month - 1, day);
+        if (!isNaN(date.getTime())) {
+          return date.toISOString().split('T')[0]; // Return as YYYY-MM-DD
+        }
+      }
+    }
+    
+    // Handle ISO format or other standard formats
+    const date = new Date(dateString);
+    if (!isNaN(date.getTime())) {
+      return date.toISOString().split('T')[0];
+    }
+    
+    return null;
   };
 
   // FIXED: Composite key generation that matches processors EXACTLY
@@ -185,7 +214,91 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     });
   };
 
-  // FIXED: Comparison logic with exact processor composite key matching
+  // NEW: Save comparison report to database
+  const saveComparisonReport = async (comparisonResults, salesDecisions) => {
+    try {
+      const reportData = {
+        summary: comparisonResults.summary,
+        details: comparisonResults.details,
+        sales_decisions: Object.fromEntries(salesDecisions),
+        vendor_detected: detectedVendor,
+        source_file_name: sourceFile?.name,
+        comparison_timestamp: new Date().toISOString()
+      };
+
+      const { data, error } = await supabase
+        .from('comparison_reports')
+        .insert([{
+          job_id: job.id,
+          report_data: reportData,
+          report_date: new Date().toISOString(),
+          generated_by: 'FileUploadButton',
+          status: 'generated'
+        }])
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error saving comparison report:', error);
+        addNotification('⚠️ Comparison completed but report save failed', 'warning');
+      } else {
+        console.log('✅ Comparison report saved:', data.id);
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Failed to save comparison report:', error);
+    }
+  };
+
+  // NEW: Export comparison results to Excel
+  const exportComparisonReport = () => {
+    if (!comparison) return;
+
+    const exportData = {
+      summary: comparison.summary,
+      timestamp: new Date().toISOString(),
+      job: job.name,
+      vendor: detectedVendor,
+      sales_decisions: Object.fromEntries(salesDecisions)
+    };
+
+    // Create CSV content for download
+    let csvContent = "Type,Block,Lot,Location,Details\n";
+    
+    // Add new records
+    if (comparison.details.missing?.length > 0) {
+      comparison.details.missing.forEach(record => {
+        const blockField = detectedVendor === 'BRT' ? 'BLOCK' : 'Block';
+        const lotField = detectedVendor === 'BRT' ? 'LOT' : 'Lot';
+        const locationField = detectedVendor === 'BRT' ? 'PROPERTY_LOCATION' : 'Location';
+        csvContent += `New Record,${record[blockField]},${record[lotField]},${record[locationField] || 'No Address'},New property\n`;
+      });
+    }
+
+    // Add sales changes with decisions
+    if (comparison.details.salesChanges?.length > 0) {
+      comparison.details.salesChanges.forEach(change => {
+        const decision = salesDecisions.get(change.property_composite_key) || 'Keep New (default)';
+        csvContent += `Sales Change,${change.property_block},${change.property_lot},${change.property_location},Price: $${change.differences.sales_price.old} → $${change.differences.sales_price.new} | Decision: ${decision}\n`;
+      });
+    }
+
+    // Download the file
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `comparison_report_${job.name}_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+
+    addNotification('📊 Comparison report exported', 'success');
+  };
+
+  // ENHANCED: Comparison logic with sales changes, class changes, and fixed date comparison
   const performComparison = async () => {
     if (!sourceFileContent || !job) return;
     
@@ -199,9 +312,9 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       
       // Get current database records
       setComparisonStatus('Fetching database records...');
-      const { data: dbRecords, error: dbError } = await propertyService.supabase
+      const { data: dbRecords, error: dbError } = await supabase
         .from('property_records')
-        .select('property_composite_key, property_block, property_lot, property_location, sales_price, sales_date')
+        .select('property_composite_key, property_block, property_lot, property_location, sales_price, sales_date, property_m4_class, property_cama_class')
         .eq('job_id', job.id);
       
       if (dbError) {
@@ -248,16 +361,17 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       // Changed records (same key, different data)
       const changes = [];
       const salesChanges = [];
+      const classChanges = [];
       
       [...sourceKeys].filter(key => dbKeys.has(key)).forEach(key => {
         const sourceRecord = sourceKeyMap.get(key);
         const dbRecord = dbKeyMap.get(key);
         
-        // Check for sales changes
+        // FIXED: Check for sales changes with proper date parsing
         const sourceSalesPrice = parseFloat(String(sourceRecord[detectedVendor === 'BRT' ? 'CURRENTSALE_PRICE' : 'Sale Price'] || 0).replace(/[,$]/g, '')) || 0;
         const dbSalesPrice = parseFloat(dbRecord.sales_price || 0);
         
-        const sourceSalesDate = sourceRecord[detectedVendor === 'BRT' ? 'CURRENTSALE_DATE' : 'Sale Date'];
+        const sourceSalesDate = parseDate(sourceRecord[detectedVendor === 'BRT' ? 'CURRENTSALE_DATE' : 'Sale Date']);
         const dbSalesDate = dbRecord.sales_date;
         
         if (Math.abs(sourceSalesPrice - dbSalesPrice) > 0.01 || sourceSalesDate !== dbSalesDate) {
@@ -273,8 +387,58 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
           });
         }
         
-        // Add other field changes if needed
-        // For now, focus on sales changes as primary comparison
+        // NEW: Check for class changes
+        if (detectedVendor === 'BRT') {
+          // BRT: Check both property_m4_class and property_cama_class
+          const sourceM4Class = sourceRecord['PROPERTY_CLASS'];
+          const sourceCamaClass = sourceRecord['PROPCLASS'];
+          
+          const classChangesForProperty = [];
+          
+          if (sourceM4Class !== dbRecord.property_m4_class) {
+            classChangesForProperty.push({
+              field: 'property_m4_class',
+              old: dbRecord.property_m4_class,
+              new: sourceM4Class
+            });
+          }
+          
+          if (sourceCamaClass !== dbRecord.property_cama_class) {
+            classChangesForProperty.push({
+              field: 'property_cama_class',
+              old: dbRecord.property_cama_class,
+              new: sourceCamaClass
+            });
+          }
+          
+          if (classChangesForProperty.length > 0) {
+            classChanges.push({
+              property_composite_key: key,
+              property_block: dbRecord.property_block,
+              property_lot: dbRecord.property_lot,
+              property_location: dbRecord.property_location,
+              changes: classChangesForProperty
+            });
+          }
+          
+        } else if (detectedVendor === 'Microsystems') {
+          // Microsystems: Check only property_m4_class
+          const sourceM4Class = sourceRecord['Class'];
+          
+          if (sourceM4Class !== dbRecord.property_m4_class) {
+            classChanges.push({
+              property_composite_key: key,
+              property_block: dbRecord.property_block,
+              property_lot: dbRecord.property_lot,
+              property_location: dbRecord.property_location,
+              changes: [{
+                field: 'property_m4_class',
+                old: dbRecord.property_m4_class,
+                new: sourceM4Class
+              }]
+            });
+          }
+        }
       });
       
       const results = {
@@ -282,13 +446,15 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
           missing: missing.length,
           changes: changes.length,
           deletions: deletions.length,
-          salesChanges: salesChanges.length // FIXED: Always include count
+          salesChanges: salesChanges.length,
+          classChanges: classChanges.length
         },
         details: {
           missing,
           changes,
           deletions,
-          salesChanges
+          salesChanges,
+          classChanges
         }
       };
       
@@ -297,17 +463,23 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       setComparison(results);
       setComparisonStatus('Analysis complete');
       
-      // Only show modal if there are actual changes to review
-      const hasAnyChanges = results.summary.missing > 0 || 
-                           results.summary.changes > 0 || 
-                           results.summary.deletions > 0 || 
-                           results.summary.salesChanges > 0;
-      
-      if (hasAnyChanges) {
-        setShowComparisonModal(true);
+      // Check if sales changes need decisions
+      if (salesChanges.length > 0) {
+        setPendingSalesChanges(salesChanges);
+        setShowSalesDecisionModal(true);
       } else {
-        // Just show a success notification for no changes
-        addNotification('✅ No changes detected - files match database perfectly', 'success');
+        // Only show modal if there are actual changes to review
+        const hasAnyChanges = results.summary.missing > 0 || 
+                             results.summary.changes > 0 || 
+                             results.summary.deletions > 0 || 
+                             results.summary.classChanges > 0;
+        
+        if (hasAnyChanges) {
+          setShowComparisonModal(true);
+        } else {
+          // Just show a success notification for no changes
+          addNotification('✅ No changes detected - files match database perfectly', 'success');
+        }
       }
       
     } catch (error) {
@@ -319,7 +491,25 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     }
   };
 
-  // FIXED: Process new data using the EXACT SAME processor method as AdminJobManagement
+  // NEW: Handle sales decisions
+  const handleSalesDecision = (propertyKey, decision) => {
+    setSalesDecisions(prev => new Map(prev.set(propertyKey, decision)));
+  };
+
+  // NEW: Complete sales decision process
+  const completeSalesDecisions = () => {
+    // Set default decisions for any unhandled sales changes
+    pendingSalesChanges.forEach(change => {
+      if (!salesDecisions.has(change.property_composite_key)) {
+        salesDecisions.set(change.property_composite_key, 'Keep New');
+      }
+    });
+    
+    setShowSalesDecisionModal(false);
+    setShowComparisonModal(true);
+  };
+
+  // ENHANCED: Process changes with sales decisions storage
   const handleProcessChanges = async () => {
     if (!sourceFile || !sourceFileContent) {
       addNotification('Please select a source file first', 'error');
@@ -328,27 +518,22 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     
     try {
       setProcessing(true);
-      setProcessingStatus(`Processing ${detectedVendor} data via processor (replaces all existing data)...`);
+      setProcessingStatus(`Processing ${detectedVendor} data via processor...`);
+      
+      // Save comparison report first
+      await saveComparisonReport(comparison, salesDecisions);
       
       console.log('🚀 Calling processor with same params as AdminJobManagement...');
-      console.log('📊 Parameters:', {
-        vendor: detectedVendor,
-        jobId: job.id,
-        yearCreated: job.year_created,
-        ccdd: job.ccdd || job.ccddCode,
-        sourceFileName: sourceFile.name
-      });
       
       // FIXED: Call the EXACT SAME processor method as AdminJobManagement
       const result = await propertyService.importCSVData(
         sourceFileContent,
-        codeFileContent, // Can be null - processors handle it
+        codeFileContent,
         job.id,
         job.year_created || new Date().getFullYear(),
         job.ccdd || job.ccddCode,
         detectedVendor,
         {
-          // Version tracking info for processors (same as AdminJobManagement)
           source_file_name: sourceFile.name,
           source_file_version_id: crypto.randomUUID(),
           source_file_uploaded_at: new Date().toISOString(),
@@ -358,6 +543,51 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       
       console.log('📊 Processor completed with result:', result);
       
+      // NEW: Store sales decisions in sales_history for affected properties
+      if (salesDecisions.size > 0) {
+        setProcessingStatus('Saving sales decisions...');
+        
+        const salesDecisionUpdates = Array.from(salesDecisions.entries()).map(([compositeKey, decision]) => {
+          const salesChange = comparison.details.salesChanges.find(sc => sc.property_composite_key === compositeKey);
+          return {
+            property_composite_key: compositeKey,
+            sales_history: {
+              comparison_date: new Date().toISOString().split('T')[0],
+              sales_decision: {
+                decision_type: decision,
+                old_price: salesChange?.differences.sales_price.old,
+                new_price: salesChange?.differences.sales_price.new,
+                old_date: salesChange?.differences.sales_date.old,
+                new_date: salesChange?.differences.sales_date.new,
+                decided_by: 'user', // TODO: Get actual user ID
+                decided_at: new Date().toISOString()
+              }
+            }
+          };
+        });
+        
+        // Update sales_history for each affected property
+        for (const update of salesDecisionUpdates) {
+          try {
+            const { error } = await supabase
+              .from('property_records')
+              .update({ 
+                sales_history: update.sales_history 
+              })
+              .eq('property_composite_key', update.property_composite_key)
+              .eq('job_id', job.id);
+            
+            if (error) {
+              console.error('Error updating sales history:', error);
+            }
+          } catch (updateError) {
+            console.error('Failed to update sales history for property:', update.property_composite_key, updateError);
+          }
+        }
+        
+        console.log(`✅ Saved ${salesDecisionUpdates.length} sales decisions to property records`);
+      }
+      
       const totalProcessed = result.processed || 0;
       const errorCount = result.errors || 0;
       const warnings = result.warnings || [];
@@ -366,6 +596,10 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         addNotification(`❌ Processing completed with ${errorCount} errors. ${totalProcessed} records processed.`, 'warning');
       } else {
         addNotification(`✅ Successfully processed ${totalProcessed} records via ${detectedVendor} processor`, 'success');
+        
+        if (salesDecisions.size > 0) {
+          addNotification(`💾 Saved ${salesDecisions.size} sales decisions`, 'success');
+        }
       }
       
       // Show warnings if any
@@ -375,7 +609,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         });
       }
       
-      // FIXED: Update job with new file version info (same as AdminJobManagement)
+      // FIXED: Update job with new file version info
       try {
         await jobService.update(job.id, {
           sourceFileStatus: errorCount > 0 ? 'error' : 'imported',
@@ -392,9 +626,13 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       // Close modal and refresh
       setShowComparisonModal(false);
       
+      // Clear decisions for next comparison
+      setSalesDecisions(new Map());
+      setPendingSalesChanges([]);
+      
       // Give processor time to complete, then refresh comparison for next upload
       setTimeout(async () => {
-        console.log('🔄 Refreshing comparison after processing...');
+        console.log('🔄 Refreshing after processing...');
         if (onFileProcessed) {
           onFileProcessed(result);
         }
@@ -446,6 +684,109 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     }
   };
 
+  // NEW: Sales Decision Modal Component
+  const SalesDecisionModal = () => {
+    if (!pendingSalesChanges.length) return null;
+    
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+          <div className="p-6 border-b border-gray-200">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <Target className="w-6 h-6 text-blue-600" />
+                <h2 className="text-xl font-bold text-gray-900">Sales Change Decisions</h2>
+              </div>
+            </div>
+            <p className="text-gray-600 mt-2">
+              Review each sales change and decide how to handle it for valuation purposes.
+            </p>
+          </div>
+
+          <div className="p-6">
+            <div className="space-y-4">
+              {pendingSalesChanges.map((change, idx) => {
+                const currentDecision = salesDecisions.get(change.property_composite_key);
+                
+                return (
+                  <div key={idx} className="border border-blue-200 rounded-lg p-4 bg-blue-50">
+                    <div className="flex justify-between items-start mb-3">
+                      <div>
+                        <h3 className="font-bold text-gray-900">
+                          {change.property_block}-{change.property_lot}
+                        </h3>
+                        <p className="text-gray-600 text-sm">{change.property_location}</p>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm text-gray-600">Price Change</div>
+                        <div className="font-medium">
+                          ${change.differences.sales_price.old?.toLocaleString()} → ${change.differences.sales_price.new?.toLocaleString()}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="flex space-x-3">
+                      <button
+                        onClick={() => handleSalesDecision(change.property_composite_key, 'Keep Old')}
+                        className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                          currentDecision === 'Keep Old' 
+                            ? 'bg-red-600 text-white' 
+                            : 'bg-red-100 text-red-800 hover:bg-red-200'
+                        }`}
+                      >
+                        Keep Old (${change.differences.sales_price.old?.toLocaleString()})
+                      </button>
+                      
+                      <button
+                        onClick={() => handleSalesDecision(change.property_composite_key, 'Keep New')}
+                        className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                          currentDecision === 'Keep New' 
+                            ? 'bg-green-600 text-white' 
+                            : 'bg-green-100 text-green-800 hover:bg-green-200'
+                        }`}
+                      >
+                        Keep New (${change.differences.sales_price.new?.toLocaleString()})
+                      </button>
+                      
+                      <button
+                        onClick={() => handleSalesDecision(change.property_composite_key, 'Keep Both')}
+                        className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                          currentDecision === 'Keep Both' 
+                            ? 'bg-blue-600 text-white' 
+                            : 'bg-blue-100 text-blue-800 hover:bg-blue-200'
+                        }`}
+                      >
+                        Keep Both
+                      </button>
+                    </div>
+                    
+                    {currentDecision && (
+                      <div className="mt-2 text-sm text-green-600 font-medium">
+                        ✓ Decision: {currentDecision}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-between">
+            <div className="text-sm text-gray-600">
+              {salesDecisions.size} of {pendingSalesChanges.length} decisions made
+            </div>
+            <button
+              onClick={completeSalesDecisions}
+              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+            >
+              Continue with Decisions
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // Comparison Modal Component
   const ComparisonModal = () => {
     if (!comparison) return null;
@@ -455,7 +796,8 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     const hasChanges = summary.changes > 0;
     const hasDeletions = summary.deletions > 0;
     const hasSalesChanges = summary.salesChanges > 0;
-    const hasAnyChanges = hasNewRecords || hasChanges || hasDeletions || hasSalesChanges;
+    const hasClassChanges = summary.classChanges > 0;
+    const hasAnyChanges = hasNewRecords || hasChanges || hasDeletions || hasSalesChanges || hasClassChanges;
     
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -477,7 +819,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
 
           <div className="p-6">
             {/* Summary Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
               {/* New Records Card */}
               <div className={`p-4 rounded-lg border-2 ${hasNewRecords ? 'border-green-400 bg-green-50' : 'border-gray-200 bg-gray-50'}`}>
                 <div className="text-center">
@@ -515,6 +857,19 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                     {summary.salesChanges || 0}
                   </div>
                   <div className="text-sm text-gray-600">Sales Changes</div>
+                  {hasSalesChanges && (
+                    <div className="text-xs text-green-600 mt-1">✓ Decisions Made</div>
+                  )}
+                </div>
+              </div>
+
+              {/* NEW: Class Changes Card */}
+              <div className={`p-4 rounded-lg border-2 ${hasClassChanges ? 'border-purple-400 bg-purple-50' : 'border-gray-200 bg-gray-50'}`}>
+                <div className="text-center">
+                  <div className={`text-2xl font-bold ${hasClassChanges ? 'text-purple-600' : 'text-gray-500'}`}>
+                    {summary.classChanges || 0}
+                  </div>
+                  <div className="text-sm text-gray-600">Class Changes</div>
                 </div>
               </div>
             </div>
@@ -565,23 +920,57 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                 {hasSalesChanges && details.salesChanges && (
                   <div className="border border-blue-200 rounded-lg p-4">
                     <h3 className="font-bold text-blue-800 mb-2">
-                      💰 Sales Changes ({details.salesChanges.length})
+                      💰 Sales Changes with Decisions ({details.salesChanges.length})
                     </h3>
                     <div className="max-h-32 overflow-y-auto">
                       <div className="space-y-2 text-sm">
-                        {details.salesChanges.slice(0, 3).map((change, idx) => (
-                          <div key={idx} className="border-l-2 border-blue-400 pl-2">
-                            <div className="font-medium text-gray-800">
-                              {change.property_block}-{change.property_lot}
+                        {details.salesChanges.slice(0, 3).map((change, idx) => {
+                          const decision = salesDecisions.get(change.property_composite_key) || 'Keep New (default)';
+                          return (
+                            <div key={idx} className="border-l-2 border-blue-400 pl-2">
+                              <div className="font-medium text-gray-800">
+                                {change.property_block}-{change.property_lot}
+                              </div>
+                              <div className="text-gray-600">
+                                Price: ${change.differences.sales_price.old.toLocaleString()} → ${change.differences.sales_price.new.toLocaleString()}
+                              </div>
+                              <div className="text-green-600 font-medium">Decision: {decision}</div>
                             </div>
-                            <div className="text-gray-600">
-                              Price: ${change.differences.sales_price.old.toLocaleString()} → ${change.differences.sales_price.new.toLocaleString()}
-                            </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                         {details.salesChanges.length > 3 && (
                           <div className="text-gray-500 italic">
                             ...and {details.salesChanges.length - 3} more changes
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* NEW: Class Changes Section */}
+                {hasClassChanges && details.classChanges && (
+                  <div className="border border-purple-200 rounded-lg p-4">
+                    <h3 className="font-bold text-purple-800 mb-2">
+                      🏷️ Class Changes ({details.classChanges.length})
+                    </h3>
+                    <div className="max-h-32 overflow-y-auto">
+                      <div className="space-y-2 text-sm">
+                        {details.classChanges.slice(0, 3).map((change, idx) => (
+                          <div key={idx} className="border-l-2 border-purple-400 pl-2">
+                            <div className="font-medium text-gray-800">
+                              {change.property_block}-{change.property_lot}
+                            </div>
+                            {change.changes.map((classChange, changeIdx) => (
+                              <div key={changeIdx} className="text-gray-600">
+                                {classChange.field}: {classChange.old} → {classChange.new}
+                              </div>
+                            ))}
+                          </div>
+                        ))}
+                        {details.classChanges.length > 3 && (
+                          <div className="text-gray-500 italic">
+                            ...and {details.classChanges.length - 3} more changes
                           </div>
                         )}
                       </div>
@@ -626,14 +1015,27 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
 
           {/* Footer */}
           <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-between">
-            <button
-              onClick={() => setShowComparisonModal(false)}
-              className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
-            >
-              Cancel
-            </button>
+            <div className="flex space-x-3">
+              <button
+                onClick={() => setShowComparisonModal(false)}
+                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
+              >
+                Cancel
+              </button>
+              
+              {/* NEW: Export Report Button */}
+              {hasAnyChanges && (
+                <button
+                  onClick={exportComparisonReport}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center space-x-2"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Export Report</span>
+                </button>
+              )}
+            </div>
             
-            {/* FIXED: Process Changes Button - Calls Processors */}
+            {/* FIXED: Process Changes Button */}
             {hasAnyChanges && (
               <button
                 onClick={handleProcessChanges}
@@ -665,10 +1067,9 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
   const getFileStatus = (timestamp, type) => {
     if (!timestamp) return 'Never';
     
-    // Check if this is from initial job creation (within 5 minutes of job creation)
     const fileDate = new Date(timestamp);
     const jobDate = new Date(job.created_at);
-    const timeDiff = Math.abs(fileDate - jobDate) / (1000 * 60); // Difference in minutes
+    const timeDiff = Math.abs(fileDate - jobDate) / (1000 * 60);
     
     if (timeDiff <= 5) {
       return `Imported at Job Creation (${formatDate(timestamp)})`;
@@ -776,6 +1177,9 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
           {codeFile ? codeFile.name.substring(0, 10) + '...' : 'Select File'}
         </button>
       </div>
+
+      {/* Sales Decision Modal */}
+      {showSalesDecisionModal && <SalesDecisionModal />}
 
       {/* Comparison Modal */}
       {showComparisonModal && <ComparisonModal />}
