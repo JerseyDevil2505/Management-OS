@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, FileText, CheckCircle, AlertTriangle, X, Database, Target } from 'lucide-react';
+import { Upload, FileText, CheckCircle, AlertTriangle, X, Database, Target, Calendar, Settings } from 'lucide-react';
 import { jobService, propertyService } from '../lib/supabaseClient';
 
 const FileUploadButton = ({ job, onFileProcessed }) => {
@@ -618,6 +618,34 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     );
   };
 
+  // Format date for display
+  const formatDate = (dateStr) => {
+    if (!dateStr) return 'Never';
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('en-US', { 
+      month: 'numeric', 
+      day: 'numeric', 
+      year: '2-digit',
+      timeZone: 'America/New_York'
+    });
+  };
+
+  // Get file status description
+  const getFileStatus = (timestamp, type) => {
+    if (!timestamp) return 'Never';
+    
+    // Check if this is from initial job creation (within 5 minutes of job creation)
+    const fileDate = new Date(timestamp);
+    const jobDate = new Date(job.created_at);
+    const timeDiff = Math.abs(fileDate - jobDate) / (1000 * 60); // Difference in minutes
+    
+    if (timeDiff <= 5) {
+      return `Imported at Job Creation (${formatDate(timestamp)})`;
+    } else {
+      return `Updated via FileUpload (${formatDate(timestamp)})`;
+    }
+  };
+
   if (!job) {
     return (
       <div className="text-center text-gray-500 py-8">
@@ -628,7 +656,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
   }
 
   return (
-    <div className="bg-white border-2 border-gray-200 rounded-lg p-6">
+    <div className="space-y-3">
       {/* Notifications */}
       <div className="fixed top-4 right-4 z-50 space-y-2">
         {notifications.map(notification => (
@@ -654,97 +682,69 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         ))}
       </div>
 
-      {/* FIXED: Header without PPA and redundant dates */}
-      <div className="mb-6">
-        <h2 className="text-xl font-bold text-gray-900 mb-2">Management OS</h2>
-        <div className="text-sm text-gray-600">Working on: <span className="font-medium">{job.name}</span></div>
-      </div>
-
-      {/* File Upload Section */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        {/* Source File */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <label className="block text-sm font-medium text-gray-700">
-              📁 Source: {sourceFile ? 'Updated via FileUpload' : 'Select File'}
-            </label>
-            {detectedVendor && (
-              <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
-                {detectedVendor} Format
-              </span>
+      {/* Source File Section - COMPACT DARK FORMAT */}
+      <div className="flex items-center gap-3 text-gray-300">
+        <FileText className="w-4 h-4 text-blue-400" />
+        <span className="text-sm min-w-0 flex-1">
+          📄 Source: {getFileStatus(job.source_file_uploaded_at || job.created_at, 'source')}
+        </span>
+        
+        <input
+          type="file"
+          accept=".csv,.txt"
+          onChange={handleSourceFileUpload}
+          className="hidden"
+          id="source-file-upload"
+        />
+        
+        <button
+          onClick={() => document.getElementById('source-file-upload').click()}
+          disabled={comparing}
+          className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:bg-gray-500 flex items-center gap-1"
+        >
+          <Upload className="w-3 h-3" />
+          {sourceFile ? sourceFile.name.substring(0, 10) + '...' : 'Select File'}
+        </button>
+        
+        {sourceFile && (
+          <button
+            onClick={performComparison}
+            disabled={comparing}
+            className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 disabled:bg-gray-500 flex items-center gap-1"
+          >
+            {comparing ? (
+              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+            ) : (
+              <CheckCircle className="w-3 h-3" />
             )}
-          </div>
-          
-          <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-blue-400 transition-colors">
-            <input
-              type="file"
-              accept=".txt,.csv,.xlsx"
-              onChange={handleSourceFileUpload}
-              className="hidden"
-              id="source-file-upload"
-            />
-            <label htmlFor="source-file-upload" className="cursor-pointer">
-              <Upload className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-              <div className="text-sm text-gray-600">
-                {sourceFile ? sourceFile.name : 'Click to upload source file'}
-              </div>
-            </label>
-          </div>
-
-          {sourceFile && (
-            <button
-              onClick={performComparison}
-              disabled={comparing}
-              className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 font-medium"
-            >
-              {comparing ? 'Analyzing...' : '🔍 Compare with Database'}
-            </button>
-          )}
-        </div>
-
-        {/* Code File */}
-        <div className="space-y-3">
-          <label className="block text-sm font-medium text-gray-700">
-            ⚙️ Code: {job.code_file_name ? `Imported at Job Creation (${job.code_file_uploaded_at?.split('T')[0]})` : 'Select File'}
-          </label>
-          
-          <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-blue-400 transition-colors">
-            <input
-              type="file"
-              accept=".txt,.json"
-              onChange={handleCodeFileUpload}
-              className="hidden"
-              id="code-file-upload"
-            />
-            <label htmlFor="code-file-upload" className="cursor-pointer">
-              <FileText className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-              <div className="text-sm text-gray-600">
-                {codeFile ? codeFile.name : (job.code_file_name || 'Click to upload code file')}
-              </div>
-            </label>
-          </div>
-
-          {job.code_file_name && (
-            <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
-              <div className="text-sm text-green-800">
-                ✅ Code file available from job creation
-              </div>
-            </div>
-          )}
-        </div>
+            Compare
+          </button>
+        )}
       </div>
 
-      {/* Status Section */}
-      {(comparing || comparisonStatus) && (
-        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-          <div className="flex items-center space-x-2">
-            {comparing && <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>}
-            <span className="text-blue-800 font-medium">
-              {comparisonStatus || 'Ready to compare'}
-            </span>
-          </div>
-        </div>
-      )}
+      {/* Code File Section - COMPACT DARK FORMAT */}
+      <div className="flex items-center gap-3 text-gray-300">
+        <Settings className="w-4 h-4 text-green-400" />
+        <span className="text-sm min-w-0 flex-1">
+          ⚙️ Code: {getFileStatus(job.code_file_uploaded_at || job.created_at, 'code')}
+        </span>
+        
+        <input
+          type="file"
+          accept=".txt,.json"
+          onChange={handleCodeFileUpload}
+          className="hidden"
+          id="code-file-upload"
+        />
+        
+        <button
+          onClick={() => document.getElementById('code-file-upload').click()}
+          className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 flex items-center gap-1"
+        >
+          <Upload className="w-3 h-3" />
+          {codeFile ? codeFile.name.substring(0, 10) + '...' : 'Select File'}
+        </button>
+      </div>
 
       {/* Comparison Modal */}
       {showComparisonModal && <ComparisonModal />}
