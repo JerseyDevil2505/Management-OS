@@ -1,9 +1,6 @@
 /**
  * Enhanced BRT Processor 
- * Handles CSV source files and mixed-format code files
- * UPDATED: Single table insertion to property_records with all 82 fields
- * ENHANCED: Added retry logic for connection issues and query cancellations
- * NEW: Proper code file storage in jobs table and enhanced lot calculations
+ * FIXED: Preserve original string format for block/lot values to prevent zero-padding
  */
 
 import { supabase } from '../supabaseClient.js';
@@ -16,6 +13,18 @@ export class BRTProcessor {
     
     // NEW: Store all parsed code sections for database storage
     this.allCodeSections = {};
+  }
+
+  /**
+   * FIXED: Ensure string values are preserved exactly as-is
+   * Prevents JavaScript from converting "87.1" to number and back to "87.10"
+   */
+  preserveStringValue(value) {
+    if (value === null || value === undefined || value === '') {
+      return null;
+    }
+    // Force to string and trim whitespace, but preserve original format
+    return String(value).trim();
   }
 
   /**
@@ -327,22 +336,30 @@ export class BRTProcessor {
   }
 
   /**
-   * Map BRT record to property_records table (ALL 82 FIELDS)
-   * UPDATED: Combines original property_records + analysis fields into single record
+   * FIXED: Map BRT record to property_records table with string preservation
+   * UPDATED: Uses preserveStringValue to maintain original block/lot format
    */
   mapToPropertyRecord(rawRecord, yearCreated, ccddCode, jobId, versionInfo = {}) {
+    // FIXED: Preserve original string format for block and lot
+    const blockValue = this.preserveStringValue(rawRecord.BLOCK);
+    const lotValue = this.preserveStringValue(rawRecord.LOT);
+    const qualifierValue = this.preserveStringValue(rawRecord.QUALIFIER) || 'NONE';
+    const cardValue = this.preserveStringValue(rawRecord.CARD) || 'NONE';
+    const locationValue = this.preserveStringValue(rawRecord.PROPERTY_LOCATION) || 'NONE';
+    
     return {
       // Job context
       job_id: jobId,
       
-      // Property identifiers
-      property_block: rawRecord.BLOCK,
-      property_lot: rawRecord.LOT,
-      property_qualifier: rawRecord.QUALIFIER,
-      property_addl_card: rawRecord.CARD,
+      // Property identifiers - FIXED: Use preserved string values
+      property_block: blockValue,
+      property_lot: lotValue,
+      property_qualifier: qualifierValue === 'NONE' ? null : qualifierValue,
+      property_addl_card: cardValue === 'NONE' ? null : cardValue,
       property_addl_lot: null, // Not available in BRT
-      property_location: rawRecord.PROPERTY_LOCATION,
-      property_composite_key: `${yearCreated}${ccddCode}-${rawRecord.BLOCK}-${rawRecord.LOT}_${rawRecord.QUALIFIER || 'NONE'}-${rawRecord.CARD || 'NONE'}-${rawRecord.PROPERTY_LOCATION || 'NONE'}`,
+      property_location: locationValue === 'NONE' ? null : locationValue,
+      // FIXED: Use preserved string values in composite key
+      property_composite_key: `${yearCreated}${ccddCode}-${blockValue}-${lotValue}_${qualifierValue}-${cardValue}-${locationValue}`,
       property_cama_class: rawRecord.PROPCLASS,
       property_m4_class: rawRecord.PROPERTY_CLASS,
       property_facility: rawRecord.EXEMPT_FACILITYNAME,
