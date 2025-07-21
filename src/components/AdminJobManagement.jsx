@@ -41,7 +41,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
   const [hpiFile, setHpiFile] = useState(null);
   const [importingHpi, setImportingHpi] = useState(false);
 
-  // NEW: Assigned Properties state
+  // ENHANCED: Assigned Properties state with better feedback
   const [showAssignmentUpload, setShowAssignmentUpload] = useState(null);
   const [assignmentFile, setAssignmentFile] = useState(null);
   const [uploadingAssignment, setUploadingAssignment] = useState(false);
@@ -108,7 +108,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
     ).join(' ');
   };
 
-  // NEW: Smart Metrics Display Logic
+  // ENHANCED: Smart Metrics Display Logic with better assignment handling
   const getMetricsDisplay = (job) => {
     const baseMetrics = {
       entryRate: job.workflowStats?.rates?.entryRate || 0,
@@ -143,7 +143,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
     };
   };
 
-  // NEW: Get property count display (assigned vs total)
+  // FIXED: Get property count display with dynamic assigned count calculation
   const getPropertyCountDisplay = (job) => {
     if (!job.has_property_assignments) {
       return {
@@ -154,6 +154,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
       };
     }
 
+    // Use dynamically calculated assigned count instead of job field
     return {
       inspected: job.inspectedProperties || 0,
       total: job.assignedPropertyCount || job.totalProperties || 0,
@@ -226,7 +227,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
     });
   };
 
-  // NEW: Property Assignment Upload Handler
+  // FIXED: Property Assignment Upload Handler with corrected composite key format
   const uploadPropertyAssignment = async (job) => {
     if (!assignmentFile) {
       addNotification('Please select an assignment file', 'error');
@@ -274,8 +275,8 @@ const AdminJobManagement = ({ onJobSelect }) => {
           const card = values[cardIdx] || '';
           const location = values[locationIdx] || '';
 
-          // Create composite key (year-ccdd-block-lot-qual-card-location)
-          const compositeKey = `${year}-${ccdd}-${block}-${lot}-${qual}-${card}-${location}`;
+          // FIXED: Use BRT processor composite key format
+          const compositeKey = `${year}${ccdd}-${block}-${lot}_${qual || 'NONE'}-${card || 'NONE'}-${location || 'NONE'}`;
           
           assignments.push({
             property_composite_key: compositeKey,
@@ -362,25 +363,63 @@ const AdminJobManagement = ({ onJobSelect }) => {
         }
       }
       
+      // ENHANCED: Better assignment feedback
       setAssignmentResults({
         success: true,
+        uploaded: assignments.length,
         matched: matchedCount,
-        total: assignments.length,
+        unmatched: assignments.length - matchedCount,
+        matchRate: assignments.length > 0 ? Math.round((matchedCount / assignments.length) * 100) : 0,
         hasCommercial: hasCommercial,
         jobName: job.name
       });
 
-      // Refresh jobs data and property stats to reflect assignment changes
+      // Refresh jobs data with updated assigned property counts
+      await refreshJobsWithAssignedCounts();
+
+      addNotification(`Successfully assigned ${matchedCount} of ${assignments.length} properties (${Math.round((matchedCount / assignments.length) * 100)}% match rate)`, 'success');
+      
+    } catch (error) {
+      console.error('Assignment upload error:', error);
+      addNotification('Error uploading assignments: ' + error.message, 'error');
+    } finally {
+      setUploadingAssignment(false);
+    }
+  };
+
+  // NEW: Refresh jobs with dynamically calculated assigned property counts
+  const refreshJobsWithAssignedCounts = async () => {
+    try {
       const updatedJobs = await jobService.getAll();
       const activeJobs = updatedJobs.filter(job => job.status !== 'archived');
       const archived = updatedJobs.filter(job => job.status === 'archived');
       
-      setJobs(activeJobs.map(job => ({
-        ...job,
-        status: job.status === 'active' ? 'Active' : (job.status || 'Active'),
-        county: capitalizeCounty(job.county),
-        percentBilled: job.percent_billed || 0.00
-      })));
+      // Calculate assigned property counts for jobs with assignments
+      const jobsWithAssignedCounts = await Promise.all(
+        activeJobs.map(async (job) => {
+          if (job.has_property_assignments) {
+            // Dynamically count assigned properties
+            const { count, error } = await supabase
+              .from('property_records')
+              .select('id', { count: 'exact' })
+              .eq('job_id', job.id)
+              .eq('is_assigned_property', true);
+
+            if (!error) {
+              job.assignedPropertyCount = count;
+            }
+          }
+          
+          return {
+            ...job,
+            status: job.status === 'active' ? 'Active' : (job.status || 'Active'),
+            county: capitalizeCounty(job.county),
+            percentBilled: job.percent_billed || 0.00
+          };
+        })
+      );
+
+      setJobs(jobsWithAssignedCounts);
       setArchivedJobs(archived.map(job => ({
         ...job,
         county: capitalizeCounty(job.county)
@@ -390,13 +429,8 @@ const AdminJobManagement = ({ onJobSelect }) => {
       const refreshedStats = await utilityService.getStats();
       setDbStats(refreshedStats);
 
-      addNotification(`Successfully assigned ${matchedCount} of ${assignments.length} properties`, 'success');
-      
     } catch (error) {
-      console.error('Assignment upload error:', error);
-      addNotification('Error uploading assignments: ' + error.message, 'error');
-    } finally {
-      setUploadingAssignment(false);
+      console.error('Error refreshing jobs with assigned counts:', error);
     }
   };
 
@@ -517,7 +551,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
     }
   };
 
-  // Load real data from database
+  // Load real data from database with assigned property counts
   useEffect(() => {
     const initializeData = async () => {
       try {
@@ -531,7 +565,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
             jobService.getAll(),
             planningJobService.getAll(),
             employeeService.getManagers(),
-            utilityService.getStats(), // Use existing stats instead
+            utilityService.getStats(),
             authService.getCurrentUser()
           ]);
           
@@ -539,27 +573,44 @@ const AdminJobManagement = ({ onJobSelect }) => {
           const activeJobs = jobsData.filter(job => job.status !== 'archived');
           const archived = jobsData.filter(job => job.status === 'archived');
           
-          // Set default status to 'Active' for jobs without status and capitalize counties
-          const processedActiveJobs = activeJobs.map(job => ({
-            ...job,
-            status: job.status === 'active' ? 'Active' : (job.status || 'Active'),
-            county: capitalizeCounty(job.county),
-            percentBilled: job.percent_billed || 0.00
-          }));
+          // ENHANCED: Calculate assigned property counts for jobs with assignments
+          const jobsWithAssignedCounts = await Promise.all(
+            activeJobs.map(async (job) => {
+              if (job.has_property_assignments) {
+                // Dynamically count assigned properties
+                const { count, error } = await supabase
+                  .from('property_records')
+                  .select('id', { count: 'exact' })
+                  .eq('job_id', job.id)
+                  .eq('is_assigned_property', true);
+
+                if (!error) {
+                  job.assignedPropertyCount = count;
+                }
+              }
+              
+              return {
+                ...job,
+                status: job.status === 'active' ? 'Active' : (job.status || 'Active'),
+                county: capitalizeCounty(job.county),
+                percentBilled: job.percent_billed || 0.00
+              };
+            })
+          );
           
           const processedArchivedJobs = archived.map(job => ({
             ...job,
             county: capitalizeCounty(job.county)
           }));
           
-          setJobs(processedActiveJobs);
+          setJobs(jobsWithAssignedCounts);
           setArchivedJobs(processedArchivedJobs);
           setPlanningJobs(planningData);
           setManagers(managersData);
           setDbStats(statsData);
           setCurrentUser(userData || { role: 'admin', canAccessBilling: true });
 
-          // FIXED: Load HPI data from database
+          // Load HPI data from database
           await loadCountyHpiData();
         }
       } catch (error) {
@@ -792,24 +843,8 @@ const AdminJobManagement = ({ onJobSelect }) => {
         
         updateProcessingStatus('Refreshing job list...', 95);
         
-        const updatedJobs = await jobService.getAll();
-        const activeJobs = updatedJobs.filter(job => job.status !== 'archived');
-        const archived = updatedJobs.filter(job => job.status === 'archived');
-        
-        setJobs(activeJobs.map(job => ({
-          ...job,
-          status: job.status === 'active' ? 'Active' : (job.status || 'Active'),
-          county: capitalizeCounty(job.county),
-          percentBilled: job.percent_billed || 0.00
-        })));
-        setArchivedJobs(archived.map(job => ({
-          ...job,
-          county: capitalizeCounty(job.county)
-        })));
-        
-        // Refresh property stats after job creation
-        const refreshedStats = await utilityService.getStats();
-        setDbStats(refreshedStats);
+        // Refresh with assigned property counts
+        await refreshJobsWithAssignedCounts();
         
         updateProcessingStatus('Complete!', 100);
         
@@ -891,20 +926,8 @@ const AdminJobManagement = ({ onJobSelect }) => {
 
       await jobService.update(editingJob.id, updateData);
       
-      const updatedJobs = await jobService.getAll();
-      const activeJobs = updatedJobs.filter(job => job.status !== 'archived');
-      const archived = updatedJobs.filter(job => job.status === 'archived');
-      
-      setJobs(activeJobs.map(job => ({
-        ...job,
-        status: job.status === 'active' ? 'Active' : (job.status || 'Active'),
-        county: capitalizeCounty(job.county),
-        percentBilled: job.percent_billed || 0.00
-      })));
-      setArchivedJobs(archived.map(job => ({
-        ...job,
-        county: capitalizeCounty(job.county)
-      })));
+      // Refresh with assigned property counts
+      await refreshJobsWithAssignedCounts();
       
       closeJobModal();
       addNotification('Job updated successfully!', 'success');
@@ -943,20 +966,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
   const deleteJob = async (job) => {
     try {
       await jobService.delete(job.id);
-      const updatedJobs = await jobService.getAll();
-      const activeJobs = updatedJobs.filter(job => job.status !== 'archived');
-      const archived = updatedJobs.filter(job => job.status === 'archived');
-      
-      setJobs(activeJobs.map(job => ({
-        ...job,
-        status: job.status === 'active' ? 'Active' : (job.status || 'Active'),
-        county: capitalizeCounty(job.county),
-        percentBilled: job.percent_billed || 0.00
-      })));
-      setArchivedJobs(archived.map(job => ({
-        ...job,
-        county: capitalizeCounty(job.county)
-      })));
+      await refreshJobsWithAssignedCounts();
       setShowDeleteConfirm(null);
       addNotification('Job deleted successfully', 'success');
     } catch (error) {
@@ -1122,7 +1132,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
         ))}
       </div>
 
-      {/* Assignment Upload Modal */}
+      {/* ENHANCED Assignment Upload Modal with better feedback */}
       {showAssignmentUpload && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg max-w-md w-full p-6 shadow-2xl">
@@ -1145,12 +1155,23 @@ const AdminJobManagement = ({ onJobSelect }) => {
                 </p>
               </div>
 
+              {/* ENHANCED: Better assignment results display */}
               {assignmentResults && (
-                <div className="mb-4 p-3 bg-green-50 rounded-lg border border-green-200">
+                <div className="mb-4 p-4 bg-green-50 rounded-lg border border-green-200">
                   <div className="text-sm text-green-800">
-                    <div className="font-medium">✅ Assignment Complete!</div>
-                    <div>Matched: {assignmentResults.matched} of {assignmentResults.total} properties</div>
-                    <div>Scope: {assignmentResults.hasCommercial ? 'Mixed (Residential + Commercial)' : 'Residential Only'}</div>
+                    <div className="font-bold text-lg mb-2">✅ Assignment Complete!</div>
+                    <div className="grid grid-cols-2 gap-2 text-left">
+                      <div>Uploaded:</div>
+                      <div className="font-medium">{assignmentResults.uploaded}</div>
+                      <div>Matched:</div>
+                      <div className="font-medium">{assignmentResults.matched}</div>
+                      <div>Unmatched:</div>
+                      <div className="font-medium text-orange-600">{assignmentResults.unmatched}</div>
+                      <div>Match Rate:</div>
+                      <div className="font-medium">{assignmentResults.matchRate}%</div>
+                      <div>Scope:</div>
+                      <div className="font-medium">{assignmentResults.hasCommercial ? 'Mixed (Res + Com)' : 'Residential Only'}</div>
+                    </div>
                   </div>
                 </div>
               )}
@@ -1892,7 +1913,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
         </div>
       </div>
 
-      {/* Active Jobs Tab with NEW Assigned Properties Button */}
+      {/* Active Jobs Tab with FIXED Assigned Properties Button */}
       {activeTab === 'jobs' && (
         <div className="space-y-6">
           <div className="bg-gradient-to-r from-blue-50 to-green-50 rounded-lg border-2 border-blue-200 p-6">
@@ -1918,7 +1939,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
               </button>
             </div>
 
-            {/* Enhanced Job Cards with Assigned Properties */}
+            {/* Enhanced Job Cards with Fixed Assigned Properties Display */}
             <div className="space-y-3">
               {jobs.length === 0 ? (
                 <div className="text-center text-gray-500 py-12">
@@ -1974,7 +1995,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
                             )}
                           </div>
                           
-                          {/* Enhanced Production Metrics with Smart Display */}
+                          {/* FIXED: Enhanced Production Metrics with Smart Display */}
                           <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-3 p-3 bg-gray-50 rounded-lg">
                             <div className="text-center">
                               <div className="text-lg font-bold text-blue-600">
@@ -1985,7 +2006,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
                                 {propertyDisplay.total > 0 ? Math.round((propertyDisplay.inspected / propertyDisplay.total) * 100) : 0}% Complete
                               </div>
                               {propertyDisplay.isAssigned && (
-                                <div className="text-xs text-green-600 mt-1">Assigned Scope</div>
+                                <div className="text-xs text-green-600 mt-1">✅ Assigned Scope ({propertyDisplay.total} properties)</div>
                               )}
                             </div>
                             
@@ -2024,7 +2045,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
                         </div>
                       </div>
 
-                      {/* Action Buttons with NEW Assigned Properties Button */}
+                      {/* Action Buttons with FIXED Assigned Properties Button */}
                       <div className="flex justify-between items-center pt-3 border-t border-gray-100">
                         {/* Left Side: County Badge + Assigned Properties Button */}
                         <div className="flex items-center space-x-3">
@@ -2032,7 +2053,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
                             📍 {job.county} County
                           </span>
                           
-                          {/* NEW: Assigned Properties Button */}
+                          {/* FIXED: Assigned Properties Button with better status */}
                           <button
                             onClick={() => setShowAssignmentUpload(job)}
                             className={`px-3 py-2 rounded-lg flex items-center space-x-1 text-sm font-medium transition-all ${
@@ -2044,12 +2065,12 @@ const AdminJobManagement = ({ onJobSelect }) => {
                             {job.has_property_assignments ? (
                               <>
                                 <CheckCircle className="w-4 h-4" />
-                                <span>✅ Assigned Properties</span>
+                                <span>✅ {job.assignedPropertyCount || 0} Assigned</span>
                               </>
                             ) : (
                               <>
                                 <Target className="w-4 h-4" />
-                                <span>🎯 Assigned Properties</span>
+                                <span>🎯 Assign Properties</span>
                               </>
                             )}
                           </button>
