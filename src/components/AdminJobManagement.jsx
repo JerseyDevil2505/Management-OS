@@ -227,165 +227,211 @@ const AdminJobManagement = ({ onJobSelect }) => {
     });
   };
 
-  // FIXED: Property Assignment Upload Handler with corrected composite key format
-  const uploadPropertyAssignment = async (job) => {
-    if (!assignmentFile) {
-      addNotification('Please select an assignment file', 'error');
+// FIXED: Property Assignment Upload Handler with improved composite key matching
+const uploadPropertyAssignment = async (job) => {
+  if (!assignmentFile) {
+    addNotification('Please select an assignment file', 'error');
+    return;
+  }
+
+  try {
+    setUploadingAssignment(true);
+    const fileContent = await assignmentFile.text();
+    const lines = fileContent.split('\n').filter(line => line.trim());
+    
+    if (lines.length < 2) {
+      addNotification('Invalid CSV file format', 'error');
       return;
     }
 
-    try {
-      setUploadingAssignment(true);
-      const fileContent = await assignmentFile.text();
-      const lines = fileContent.split('\n').filter(line => line.trim());
-      
-      if (lines.length < 2) {
-        addNotification('Invalid CSV file format', 'error');
-        return;
-      }
+    const header = lines[0].toLowerCase().split(',').map(h => h.trim());
+    const requiredFields = ['block', 'lot'];
+    const missingFields = requiredFields.filter(field => 
+      !header.some(h => h.includes(field))
+    );
 
-      const header = lines[0].toLowerCase().split(',').map(h => h.trim());
-      const requiredFields = ['block', 'lot'];
-      const missingFields = requiredFields.filter(field => 
-        !header.some(h => h.includes(field))
-      );
-
-      if (missingFields.length > 0) {
-        addNotification(`Missing required columns: ${missingFields.join(', ')}`, 'error');
-        return;
-      }
-
-      // Parse CSV and create composite keys
-      const assignments = [];
-      const year = new Date().getFullYear();
-      const ccdd = job.ccdd || job.ccddCode;
-
-      for (let i = 1; i < lines.length; i++) {
-        const values = lines[i].split(',').map(v => v.trim());
-        if (values.length >= 2) {
-          const blockIdx = header.findIndex(h => h.includes('block'));
-          const lotIdx = header.findIndex(h => h.includes('lot'));
-          const qualIdx = header.findIndex(h => h.includes('qual'));
-          const cardIdx = header.findIndex(h => h.includes('card'));
-          const locationIdx = header.findIndex(h => h.includes('location'));
-
-          const block = values[blockIdx] || '';
-          const lot = values[lotIdx] || '';
-          const qual = values[qualIdx] || '';
-          const card = values[cardIdx] || '';
-          const location = values[locationIdx] || '';
-
-          // FIXED: Use BRT processor composite key format
-          const compositeKey = `${year}${ccdd}-${block}-${lot}_${qual || 'NONE'}-${card || 'NONE'}-${location || 'NONE'}`;
-          
-          assignments.push({
-            property_composite_key: compositeKey,
-            property_block: block,
-            property_lot: lot,
-            property_qualifier: qual,
-            property_addl_card: card,
-            property_location: location
-          });
-        }
-      }
-
-      // Process assignments through Supabase
-      console.log(`Processing ${assignments.length} property assignments for job ${job.id}`);
-      
-      // First, clear existing assignments for this job
-      const { error: deleteError } = await supabase
-        .from('job_responsibilities')
-        .delete()
-        .eq('job_id', job.id);
-
-      if (deleteError) {
-        console.error('Error clearing existing assignments:', deleteError);
-      }
-
-      // Insert new assignments
-      const assignmentRecords = assignments.map(assignment => ({
-        job_id: job.id,
-        ...assignment,
-        responsibility_file_name: assignmentFile.name,
-        responsibility_file_uploaded_at: new Date().toISOString(),
-        uploaded_by: currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad'
-      }));
-
-      const { data: insertData, error: insertError } = await supabase
-        .from('job_responsibilities')
-        .insert(assignmentRecords);
-
-      if (insertError) {
-        throw new Error('Assignment insert failed: ' + insertError.message);
-      }
-
-      // Check how many properties were matched in property_records
-      const { data: matchedProperties, error: matchError } = await supabase
-        .from('property_records')
-        .select('property_composite_key, property_m4_class')
-        .eq('job_id', job.id)
-        .in('property_composite_key', assignments.map(a => a.property_composite_key));
-
-      if (matchError) {
-        console.error('Error checking matched properties:', matchError);
-      }
-
-      const matchedCount = matchedProperties?.length || 0;
-      
-      // Check for commercial properties (4A, 4B, 4C)
-      const hasCommercial = matchedProperties?.some(prop => 
-        ['4A', '4B', '4C'].includes(prop.property_m4_class)
-      ) || false;
-
-      // Update job flags
-      const { error: jobUpdateError } = await supabase
-        .from('jobs')
-        .update({
-          has_property_assignments: true,
-          assigned_has_commercial: hasCommercial
-        })
-        .eq('id', job.id);
-
-      if (jobUpdateError) {
-        console.error('Error updating job flags:', jobUpdateError);
-      }
-
-      // Update property_records assignment flags
-      if (matchedCount > 0) {
-        const { error: propUpdateError } = await supabase
-          .from('property_records')
-          .update({ is_assigned_property: true })
-          .eq('job_id', job.id)
-          .in('property_composite_key', assignments.map(a => a.property_composite_key));
-
-        if (propUpdateError) {
-          console.error('Error updating property flags:', propUpdateError);
-        }
-      }
-      
-      // ENHANCED: Better assignment feedback
-      setAssignmentResults({
-        success: true,
-        uploaded: assignments.length,
-        matched: matchedCount,
-        unmatched: assignments.length - matchedCount,
-        matchRate: assignments.length > 0 ? Math.round((matchedCount / assignments.length) * 100) : 0,
-        hasCommercial: hasCommercial,
-        jobName: job.name
-      });
-
-      // Refresh jobs data with updated assigned property counts
-      await refreshJobsWithAssignedCounts();
-
-      addNotification(`Successfully assigned ${matchedCount} of ${assignments.length} properties (${Math.round((matchedCount / assignments.length) * 100)}% match rate)`, 'success');
-      
-    } catch (error) {
-      console.error('Assignment upload error:', error);
-      addNotification('Error uploading assignments: ' + error.message, 'error');
-    } finally {
-      setUploadingAssignment(false);
+    if (missingFields.length > 0) {
+      addNotification(`Missing required columns: ${missingFields.join(', ')}`, 'error');
+      return;
     }
-  };
+
+    // Parse CSV and create composite keys
+    const assignments = [];
+    // FIXED: Use job's year_created instead of current year
+    const year = job.year_created || new Date().getFullYear();
+    const ccdd = job.ccdd || job.ccddCode;
+
+    console.log(`🔍 DEBUG - Building composite keys with year: ${year}, ccdd: ${ccdd}`);
+
+    for (let i = 1; i < lines.length; i++) {
+      const values = lines[i].split(',').map(v => v.trim());
+      if (values.length >= 2) {
+        const blockIdx = header.findIndex(h => h.includes('block'));
+        const lotIdx = header.findIndex(h => h.includes('lot'));
+        const qualIdx = header.findIndex(h => h.includes('qual'));
+        const cardIdx = header.findIndex(h => h.includes('card'));
+        const locationIdx = header.findIndex(h => h.includes('location'));
+
+        const block = values[blockIdx] || '';
+        const lot = values[lotIdx] || '';
+        const qual = values[qualIdx] || '';
+        const card = values[cardIdx] || '';
+        const location = values[locationIdx] || '';
+
+        // FIXED: Ensure consistent composite key format matching processors
+        const compositeKey = `${year}${ccdd}-${block}-${lot}_${qual || 'NONE'}-${card || 'NONE'}-${location || 'NONE'}`;
+        
+        // DEBUG: Log first few composite keys
+        if (i <= 3) {
+          console.log(`🔍 DEBUG - Assignment composite key ${i}: ${compositeKey}`);
+        }
+        
+        assignments.push({
+          property_composite_key: compositeKey,
+          property_block: block,
+          property_lot: lot,
+          property_qualifier: qual,
+          property_addl_card: card,
+          property_location: location
+        });
+      }
+    }
+
+    // Process assignments through Supabase
+    console.log(`Processing ${assignments.length} property assignments for job ${job.id}`);
+    
+    // First, clear existing assignments for this job
+    const { error: deleteError } = await supabase
+      .from('job_responsibilities')
+      .delete()
+      .eq('job_id', job.id);
+
+    if (deleteError) {
+      console.error('Error clearing existing assignments:', deleteError);
+    }
+
+    // Insert new assignments
+    const assignmentRecords = assignments.map(assignment => ({
+      job_id: job.id,
+      ...assignment,
+      responsibility_file_name: assignmentFile.name,
+      responsibility_file_uploaded_at: new Date().toISOString(),
+      uploaded_by: currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad'
+    }));
+
+    const { data: insertData, error: insertError } = await supabase
+      .from('job_responsibilities')
+      .insert(assignmentRecords);
+
+    if (insertError) {
+      throw new Error('Assignment insert failed: ' + insertError.message);
+    }
+
+    console.log(`✅ Inserted ${assignmentRecords.length} assignment records`);
+
+    // ENHANCED: Check how many properties were matched with better debugging
+    const assignmentKeys = assignments.map(a => a.property_composite_key);
+    console.log(`🔍 DEBUG - Looking for matches among ${assignmentKeys.length} composite keys`);
+    console.log(`🔍 DEBUG - Sample assignment keys:`, assignmentKeys.slice(0, 3));
+
+    const { data: matchedProperties, error: matchError } = await supabase
+      .from('property_records')
+      .select('property_composite_key, property_m4_class')
+      .eq('job_id', job.id)
+      .in('property_composite_key', assignmentKeys);
+
+    if (matchError) {
+      console.error('❌ Error checking matched properties:', matchError);
+      addNotification('Error checking property matches: ' + matchError.message, 'error');
+      return;
+    }
+
+    const matchedCount = matchedProperties?.length || 0;
+    console.log(`✅ Found ${matchedCount} matching properties in property_records`);
+    
+    if (matchedProperties && matchedProperties.length > 0) {
+      console.log(`🔍 DEBUG - Sample matched keys:`, matchedProperties.slice(0, 3).map(p => p.property_composite_key));
+    }
+
+    // Check for commercial properties (4A, 4B, 4C)
+    const hasCommercial = matchedProperties?.some(prop => 
+      ['4A', '4B', '4C'].includes(prop.property_m4_class)
+    ) || false;
+
+    // Update job flags
+    const { error: jobUpdateError } = await supabase
+      .from('jobs')
+      .update({
+        has_property_assignments: true,
+        assigned_has_commercial: hasCommercial
+      })
+      .eq('id', job.id);
+
+    if (jobUpdateError) {
+      console.error('❌ Error updating job flags:', jobUpdateError);
+      addNotification('Error updating job flags: ' + jobUpdateError.message, 'error');
+    }
+
+    // FIXED: Update property_records assignment flags with better error handling
+    if (matchedCount > 0) {
+      console.log(`🔄 Updating is_assigned_property = true for ${matchedCount} properties...`);
+      
+      const { error: propUpdateError } = await supabase
+        .from('property_records')
+        .update({ is_assigned_property: true })
+        .eq('job_id', job.id)
+        .in('property_composite_key', assignmentKeys);
+
+      if (propUpdateError) {
+        console.error('❌ Error updating property flags:', propUpdateError);
+        addNotification('Error updating property assignment flags: ' + propUpdateError.message, 'error');
+        // Don't return here - still show results
+      } else {
+        console.log(`✅ Successfully updated is_assigned_property for ${matchedCount} properties`);
+      }
+    } else {
+      console.log('⚠️ No matching properties found - no is_assigned_property updates made');
+      
+      // DEBUG: Show sample property_records keys for comparison
+      const { data: sampleProperties } = await supabase
+        .from('property_records')
+        .select('property_composite_key')
+        .eq('job_id', job.id)
+        .limit(3);
+        
+      if (sampleProperties && sampleProperties.length > 0) {
+        console.log(`🔍 DEBUG - Sample property_records keys for comparison:`, 
+          sampleProperties.map(p => p.property_composite_key));
+      }
+    }
+    
+    // ENHANCED: Better assignment feedback
+    setAssignmentResults({
+      success: true,
+      uploaded: assignments.length,
+      matched: matchedCount,
+      unmatched: assignments.length - matchedCount,
+      matchRate: assignments.length > 0 ? Math.round((matchedCount / assignments.length) * 100) : 0,
+      hasCommercial: hasCommercial,
+      jobName: job.name
+    });
+
+    // Refresh jobs data with updated assigned property counts
+    await refreshJobsWithAssignedCounts();
+
+    const matchPercentage = assignments.length > 0 ? Math.round((matchedCount / assignments.length) * 100) : 0;
+    addNotification(
+      `Successfully assigned ${matchedCount} of ${assignments.length} properties (${matchPercentage}% match rate)`, 
+      matchedCount > 0 ? 'success' : 'warning'
+    );
+    
+  } catch (error) {
+    console.error('Assignment upload error:', error);
+    addNotification('Error uploading assignments: ' + error.message, 'error');
+  } finally {
+    setUploadingAssignment(false);
+  }
+};
 
   // NEW: Refresh jobs with dynamically calculated assigned property counts
   const refreshJobsWithAssignedCounts = async () => {
