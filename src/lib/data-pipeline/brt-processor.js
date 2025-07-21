@@ -21,7 +21,7 @@ export class BRTProcessor {
   /**
    * Insert batch with retry logic for connection issues
    */
-  async insertBatchWithRetry(batch, batchNumber, retries = 3) {
+  async insertBatchWithRetry(batch, batchNumber, retries = 50) {
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
         console.log(`🔄 Batch ${batchNumber}, attempt ${attempt}...`);
