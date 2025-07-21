@@ -903,7 +903,7 @@ export const utilityService = {
       const { count: residentialCount, error: residentialError } = await supabase
         .from('property_records')
         .select('id', { count: 'exact', head: true })
-        .in('property_m4_class', ['1', '2', '3A', '3B']);
+        .in('property_m4_class', ['2', '3A']);
 
       // Get commercial properties (M4 class 4A, 4B, 4C)
       const { count: commercialCount, error: commercialError } = await supabase
