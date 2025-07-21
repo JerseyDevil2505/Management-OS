@@ -516,12 +516,31 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
   // FIXED: Generate comparison report using processor header logic
   const generateComparisonReport = async (newFileContent, jobId) => {
     try {
-      // Get previous data from property_records table
-      const { data: previousData, error } = await supabase
-        .from('property_records')
-        .select('*')
-        .eq('job_id', jobId)
-        .order('upload_date', { ascending: false });
+      // Get ALL previous data from property_records table (no limit for large jobs)
+      let allPreviousData = [];
+      let from = 0;
+      const batchSize = 1000;
+      
+      while (true) {
+        const { data: batchData, error } = await supabase
+          .from('property_records')
+          .select('*')
+          .eq('job_id', jobId)
+          .order('upload_date', { ascending: false })
+          .range(from, from + batchSize - 1);
+        
+        if (error) throw error;
+        
+        if (!batchData || batchData.length === 0) break;
+        
+        allPreviousData = [...allPreviousData, ...batchData];
+        
+        if (batchData.length < batchSize) break; // Last batch
+        
+        from += batchSize;
+      }
+      
+      const previousData = allPreviousData;
 
       if (error) throw error;
 
