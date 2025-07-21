@@ -213,6 +213,8 @@ export const jobService = {
         totalProperties: job.total_properties || 0,
         inspectedProperties: job.inspected_properties || 0,
         sourceFileStatus: job.source_file_status || 'pending',
+        source_file_version: job.source_file_version || 1,
+        code_file_version: job.code_file_version || 1,
         codeFileStatus: job.code_file_status || 'pending',
         vendorDetection: job.vendor_detection,
         workflowStats: job.workflow_stats,
