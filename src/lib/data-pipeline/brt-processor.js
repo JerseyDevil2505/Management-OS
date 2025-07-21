@@ -1,5 +1,6 @@
 /**
  * Enhanced BRT Processor 
+ * FIXED: Handles both comma-separated CSV and tab-separated files automatically
  * FIXED: Preserve original string format for block/lot values to prevent zero-padding
  */
 
@@ -10,6 +11,7 @@ export class BRTProcessor {
     this.codeLookups = new Map();
     this.vcsLookups = new Map();
     this.headers = [];
+    this.isTabSeparated = false; // Track file format
     
     // NEW: Store all parsed code sections for database storage
     this.allCodeSections = {};
@@ -25,6 +27,23 @@ export class BRTProcessor {
     }
     // Force to string and trim whitespace, but preserve original format
     return String(value).trim();
+  }
+
+  /**
+   * NEW: Auto-detect file format (comma-separated vs tab-separated)
+   */
+  detectSeparator(firstLine) {
+    const commaCount = (firstLine.match(/,/g) || []).length;
+    const tabCount = (firstLine.match(/\t/g) || []).length;
+    
+    // If significantly more tabs than commas, it's tab-separated
+    if (tabCount > 10 && tabCount > commaCount * 2) {
+      console.log(`🔍 Detected TAB-SEPARATED file: ${tabCount} tabs vs ${commaCount} commas`);
+      return '\t';
+    } else {
+      console.log(`🔍 Detected COMMA-SEPARATED file: ${commaCount} commas vs ${tabCount} tabs`);
+      return ',';
+    }
   }
 
   /**
@@ -83,12 +102,21 @@ export class BRTProcessor {
    */
   detectFileType(fileContent) {
     const firstLine = fileContent.split('\n')[0];
-    const headers = firstLine.split(',');
+    // Try both comma and tab separation
+    const commaHeaders = firstLine.split(',');
+    const tabHeaders = firstLine.split('\t');
     
-    return headers.includes('BLOCK') && 
-           headers.includes('LOT') && 
-           headers.includes('QUALIFIER') &&
-           headers.includes('BATHTOT');
+    const hasCommaFormat = commaHeaders.includes('BLOCK') && 
+                          commaHeaders.includes('LOT') && 
+                          commaHeaders.includes('QUALIFIER') &&
+                          commaHeaders.includes('BATHTOT');
+                          
+    const hasTabFormat = tabHeaders.includes('BLOCK') && 
+                        tabHeaders.includes('LOT') && 
+                        tabHeaders.includes('QUALIFIER') &&
+                        tabHeaders.includes('BATHTOT');
+    
+    return hasCommaFormat || hasTabFormat;
   }
 
   /**
@@ -261,6 +289,7 @@ export class BRTProcessor {
 
   /**
    * Parse a single CSV line with proper handling of quoted fields and commas
+   * ONLY used for comma-separated files
    */
   parseCSVLine(line) {
     const result = [];
@@ -299,48 +328,69 @@ export class BRTProcessor {
   }
 
   /**
-   * Parse CSV BRT file (comma-delimited with proper CSV parsing)
+   * FIXED: Parse line with automatic format detection (comma vs tab)
+   */
+  parseLine(line, separator) {
+    if (separator === ',') {
+      // Use complex CSV parsing for comma-separated (handles quotes)
+      return this.parseCSVLine(line);
+    } else {
+      // Simple split for tab-separated (no quote handling needed)
+      return line.split('\t').map(value => value.trim());
+    }
+  }
+
+  /**
+   * FIXED: Parse BRT file with automatic format detection and string preservation
    */
   parseSourceFile(fileContent) {
-    console.log('Parsing BRT source file...');
+    console.log('Parsing BRT source file with format auto-detection...');
     
     const lines = fileContent.split('\n').filter(line => line.trim());
     if (lines.length < 2) {
       throw new Error('File must have at least header and one data row');
     }
     
-    // Use proper CSV parsing to handle quoted fields and commas within fields
-    this.headers = this.parseCSVLine(lines[0]);
-    console.log(`Found ${this.headers.length} headers`);
-    console.log('Headers:', this.headers.slice(0, 10));
+    // FIXED: Auto-detect separator format
+    const separator = this.detectSeparator(lines[0]);
+    this.isTabSeparated = (separator === '\t');
+    
+    // Parse headers using detected format
+    this.headers = this.parseLine(lines[0], separator);
+    console.log(`Found ${this.headers.length} headers using ${this.isTabSeparated ? 'TAB' : 'COMMA'} separation`);
+    console.log('First 10 headers:', this.headers.slice(0, 10));
     
     const records = [];
     for (let i = 1; i < lines.length; i++) {
-      const values = this.parseCSVLine(lines[i]);
+      const values = this.parseLine(lines[i], separator);
       
-      if (values[this.headers.indexOf('BLOCK')] === '118' && 
-          values[this.headers.indexOf('LOT')] && 
-          values[this.headers.indexOf('LOT')].startsWith('87')) {
-        console.log('🔍 DEBUG - Raw CSV line:', lines[i].substring(0, 100));
-        console.log('🔍 DEBUG - Parsed LOT value:', JSON.stringify(values[this.headers.indexOf('LOT')]));
+      // FIXED: Add debug for first row to track the issue
+      if (i === 1) {
+        console.log('🔍 DEBUG - Raw line:', lines[i].substring(0, 200));
+        console.log('🔍 DEBUG - Separator used:', JSON.stringify(separator));
+        console.log('🔍 DEBUG - BLOCK index:', this.headers.indexOf('BLOCK'));
+        console.log('🔍 DEBUG - LOT index:', this.headers.indexOf('LOT'));
+        console.log('🔍 DEBUG - BLOCK value:', JSON.stringify(values[this.headers.indexOf('BLOCK')]));
+        console.log('🔍 DEBUG - LOT value:', JSON.stringify(values[this.headers.indexOf('LOT')]));
         console.log('🔍 DEBUG - LOT value type:', typeof values[this.headers.indexOf('LOT')]);
-      }    
-      
+      }
       
       if (values.length !== this.headers.length) {
         console.warn(`Row ${i} has ${values.length} values but ${this.headers.length} headers - skipping`);
+        console.warn(`Row content: ${lines[i].substring(0, 100)}...`);
         continue;
       }
       
       const record = {};
       this.headers.forEach((header, index) => {
+        // FIXED: Store all values as strings to preserve original format
         record[header] = values[index] || null;
       });
       
       records.push(record);
     }
     
-    console.log(`Parsed ${records.length} records`);
+    console.log(`Parsed ${records.length} records using ${this.isTabSeparated ? 'TAB' : 'COMMA'} separation`);
     return records;
   }
 
@@ -355,6 +405,15 @@ export class BRTProcessor {
     const qualifierValue = this.preserveStringValue(rawRecord.QUALIFIER) || 'NONE';
     const cardValue = this.preserveStringValue(rawRecord.CARD) || 'NONE';
     const locationValue = this.preserveStringValue(rawRecord.PROPERTY_LOCATION) || 'NONE';
+    
+    // FIXED: Add debug for the specific property we're tracking
+    if (blockValue === '118' && lotValue && lotValue.startsWith('87')) {
+      console.log('🎯 DEBUG - Found target property in mapping:');
+      console.log('🎯 DEBUG - Raw BLOCK:', JSON.stringify(rawRecord.BLOCK));
+      console.log('🎯 DEBUG - Raw LOT:', JSON.stringify(rawRecord.LOT));
+      console.log('🎯 DEBUG - Preserved BLOCK:', JSON.stringify(blockValue));
+      console.log('🎯 DEBUG - Preserved LOT:', JSON.stringify(lotValue));
+    }
     
     return {
       // Job context
@@ -600,7 +659,7 @@ export class BRTProcessor {
    */
   async processFile(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, versionInfo = {}) {
     try {
-      console.log('Starting Enhanced BRT file processing (SINGLE TABLE WITH CODE STORAGE)...');
+      console.log('Starting Enhanced BRT file processing (SINGLE TABLE WITH CODE STORAGE + FORMAT DETECTION)...');
       
       // NEW: Process and store code file if provided
       if (codeFileContent) {
@@ -652,7 +711,7 @@ export class BRTProcessor {
         }
       }
       
-      console.log('🚀 ENHANCED SINGLE TABLE PROCESSING COMPLETE WITH CODE STORAGE:', results);
+      console.log('🚀 ENHANCED SINGLE TABLE PROCESSING COMPLETE WITH CODE STORAGE + FORMAT DETECTION:', results);
       return results;
       
     } catch (error) {
