@@ -522,14 +522,14 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       const batchSize = 1000;
       
       while (true) {
-        const { data: batchData, error } = await supabase
+        const { data: batchData, error: batchError } = await supabase
           .from('property_records')
           .select('*')
           .eq('job_id', jobId)
           .order('upload_date', { ascending: false })
           .range(from, from + batchSize - 1);
         
-        if (error) throw error;
+        if (batchError) throw batchError;
         
         if (!batchData || batchData.length === 0) break;
         
@@ -541,8 +541,6 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       }
       
       const previousData = allPreviousData;
-
-      if (error) throw error;
 
       if (!previousData || previousData.length === 0) {
         return { hasChanges: false, isFirstUpload: true };
