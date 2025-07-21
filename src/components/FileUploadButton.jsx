@@ -21,6 +21,20 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
   const [showSalesDecisionModal, setShowSalesDecisionModal] = useState(false);
   const [pendingSalesChanges, setPendingSalesChanges] = useState([]);
 
+  // EMERGENCY: ESC key handler to close modals
+  useEffect(() => {
+    const handleEscKey = (event) => {
+      if (event.key === 'Escape') {
+        setShowSalesDecisionModal(false);
+        setShowComparisonModal(false);
+        addNotification('Modal closed with ESC key', 'info');
+      }
+    };
+
+    document.addEventListener('keydown', handleEscKey);
+    return () => document.removeEventListener('keydown', handleEscKey);
+  }, []);
+
   const addNotification = (message, type = 'info') => {
     const id = Date.now();
     const notification = { id, message, type, timestamp: new Date() };
@@ -33,6 +47,15 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
 
   const removeNotification = (id) => {
     setNotifications(prev => prev.filter(n => n.id !== id));
+  };
+
+  // EMERGENCY: Force close all modals
+  const forceCloseAllModals = () => {
+    setShowSalesDecisionModal(false);
+    setShowComparisonModal(false);
+    setPendingSalesChanges([]);
+    setSalesDecisions(new Map());
+    addNotification('All modals closed', 'success');
   };
 
   // FIXED: Date parsing to handle MM/DD/YYYY vs ISO formats
@@ -624,11 +647,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       }
       
       // Close modal and refresh
-      setShowComparisonModal(false);
-      
-      // Clear decisions for next comparison
-      setSalesDecisions(new Map());
-      setPendingSalesChanges([]);
+      forceCloseAllModals();
       
       // Give processor time to complete, then refresh comparison for next upload
       setTimeout(async () => {
@@ -684,63 +703,83 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     }
   };
 
-  // FIXED: Sales Decision Modal Component with close button and better sizing
+  // EMERGENCY FIXED: Sales Decision Modal with GUARANTEED close functionality
   const SalesDecisionModal = () => {
     if (!pendingSalesChanges.length) return null;
     
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-        <div className="bg-white rounded-lg max-w-5xl w-full max-h-[95vh] overflow-y-auto shadow-2xl">
-          <div className="p-6 border-b border-gray-200">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <Target className="w-6 h-6 text-blue-600" />
-                <h2 className="text-xl font-bold text-gray-900">Sales Change Decisions</h2>
+      <div 
+        className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-[9999]"
+        onClick={(e) => {
+          // Click outside to close
+          if (e.target === e.currentTarget) {
+            forceCloseAllModals();
+          }
+        }}
+      >
+        <div 
+          className="bg-white rounded-xl w-full max-w-6xl h-[90vh] flex flex-col shadow-2xl border"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* FIXED Header with prominent close button */}
+          <div className="flex items-center justify-between p-6 border-b bg-blue-50 rounded-t-xl">
+            <div className="flex items-center space-x-3">
+              <Target className="w-6 h-6 text-blue-600" />
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">Sales Change Decisions Required</h2>
+                <p className="text-sm text-gray-600">{pendingSalesChanges.length} properties need review</p>
               </div>
-              {/* FIXED: Added close button */}
+            </div>
+            
+            {/* TRIPLE close buttons for guaranteed escape */}
+            <div className="flex items-center space-x-2">
               <button
-                onClick={() => {
-                  setShowSalesDecisionModal(false);
-                  setShowComparisonModal(true); // Go back to comparison modal
-                }}
-                className="text-gray-400 hover:text-gray-600"
+                onClick={forceCloseAllModals}
+                className="px-3 py-1 bg-red-500 text-white rounded text-sm font-medium hover:bg-red-600"
               >
-                <X className="w-6 h-6" />
+                FORCE CLOSE
+              </button>
+              <button
+                onClick={forceCloseAllModals}
+                className="text-gray-400 hover:text-gray-600 p-2"
+              >
+                <X className="w-8 h-8" />
               </button>
             </div>
-            <p className="text-gray-600 mt-2">
-              Review each sales change and decide how to handle it for valuation purposes.
-            </p>
           </div>
 
-          <div className="p-6">
-            <div className="space-y-4">
+          {/* FIXED Scrollable content */}
+          <div className="flex-1 overflow-y-auto p-6">
+            <div className="space-y-6">
               {pendingSalesChanges.map((change, idx) => {
                 const currentDecision = salesDecisions.get(change.property_composite_key);
                 
                 return (
-                  <div key={idx} className="border border-blue-200 rounded-lg p-4 bg-blue-50">
-                    <div className="flex justify-between items-start mb-3">
+                  <div key={idx} className="border-2 border-blue-200 rounded-xl p-6 bg-blue-50">
+                    <div className="flex justify-between items-start mb-4">
                       <div>
-                        <h3 className="font-bold text-gray-900">
-                          {change.property_block}-{change.property_lot}
+                        <h3 className="text-xl font-bold text-gray-900">
+                          Property {change.property_block}-{change.property_lot}
                         </h3>
-                        <p className="text-gray-600 text-sm">{change.property_location}</p>
+                        <p className="text-gray-600">{change.property_location}</p>
                       </div>
                       <div className="text-right">
-                        <div className="text-sm text-gray-600">Price Change</div>
-                        <div className="font-medium">
-                          ${change.differences.sales_price.old?.toLocaleString()} → ${change.differences.sales_price.new?.toLocaleString()}
+                        <div className="text-sm text-gray-600">Sales Price Change</div>
+                        <div className="text-lg font-bold text-red-600">
+                          ${change.differences.sales_price.old?.toLocaleString() || 0} 
+                        </div>
+                        <div className="text-lg font-bold text-green-600">
+                          → ${change.differences.sales_price.new?.toLocaleString() || 0}
                         </div>
                       </div>
                     </div>
                     
-                    <div className="flex space-x-3">
+                    <div className="flex flex-wrap gap-3">
                       <button
                         onClick={() => handleSalesDecision(change.property_composite_key, 'Keep Old')}
-                        className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                        className={`px-6 py-3 rounded-lg text-sm font-bold ${
                           currentDecision === 'Keep Old' 
-                            ? 'bg-red-600 text-white' 
+                            ? 'bg-red-600 text-white shadow-lg' 
                             : 'bg-red-100 text-red-800 hover:bg-red-200'
                         }`}
                       >
@@ -749,9 +788,9 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                       
                       <button
                         onClick={() => handleSalesDecision(change.property_composite_key, 'Keep New')}
-                        className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                        className={`px-6 py-3 rounded-lg text-sm font-bold ${
                           currentDecision === 'Keep New' 
-                            ? 'bg-green-600 text-white' 
+                            ? 'bg-green-600 text-white shadow-lg' 
                             : 'bg-green-100 text-green-800 hover:bg-green-200'
                         }`}
                       >
@@ -760,19 +799,21 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                       
                       <button
                         onClick={() => handleSalesDecision(change.property_composite_key, 'Keep Both')}
-                        className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                        className={`px-6 py-3 rounded-lg text-sm font-bold ${
                           currentDecision === 'Keep Both' 
-                            ? 'bg-blue-600 text-white' 
+                            ? 'bg-blue-600 text-white shadow-lg' 
                             : 'bg-blue-100 text-blue-800 hover:bg-blue-200'
                         }`}
                       >
-                        Keep Both
+                        Keep Both (Track Both Sales)
                       </button>
                     </div>
                     
                     {currentDecision && (
-                      <div className="mt-2 text-sm text-green-600 font-medium">
-                        ✓ Decision: {currentDecision}
+                      <div className="mt-3 p-2 bg-green-100 rounded-lg">
+                        <div className="text-sm font-bold text-green-800">
+                          ✓ Decision Made: {currentDecision}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -781,28 +822,29 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
             </div>
           </div>
 
-          <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-between">
-            <div className="flex space-x-3">
-              {/* FIXED: Added Cancel button to close modal */}
-              <button
-                onClick={() => {
-                  setShowSalesDecisionModal(false);
-                  setShowComparisonModal(true); // Go back to comparison modal
-                }}
-                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
-              >
-                Cancel
-              </button>
-              <div className="text-sm text-gray-600 flex items-center">
-                {salesDecisions.size} of {pendingSalesChanges.length} decisions made
-              </div>
+          {/* FIXED Footer with better buttons */}
+          <div className="p-6 border-t bg-gray-50 flex justify-between items-center rounded-b-xl">
+            <div className="text-sm text-gray-600 flex items-center space-x-4">
+              <span className="font-medium">
+                Progress: {salesDecisions.size} of {pendingSalesChanges.length} decisions made
+              </span>
             </div>
-            <button
-              onClick={completeSalesDecisions}
-              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
-            >
-              Continue with Decisions
-            </button>
+            
+            <div className="flex space-x-3">
+              <button
+                onClick={forceCloseAllModals}
+                className="px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 font-medium"
+              >
+                Cancel All
+              </button>
+              
+              <button
+                onClick={completeSalesDecisions}
+                className="px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold text-lg"
+              >
+                Continue with Decisions →
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -822,8 +864,15 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     const hasAnyChanges = hasNewRecords || hasChanges || hasDeletions || hasSalesChanges || hasClassChanges;
     
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-        <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+      <div 
+        className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) {
+            setShowComparisonModal(false);
+          }
+        }}
+      >
+        <div className="bg-white rounded-lg max-w-5xl w-full max-h-[95vh] overflow-y-auto shadow-2xl">
           <div className="p-6 border-b border-gray-200">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
@@ -832,7 +881,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
               </div>
               <button
                 onClick={() => setShowComparisonModal(false)}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-gray-400 hover:text-gray-600 p-1"
               >
                 <X className="w-6 h-6" />
               </button>
@@ -906,131 +955,19 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
               </div>
             )}
 
-            {/* Detailed Results */}
-            {hasAnyChanges && (
-              <div className="space-y-4">
-                {/* New Records Section */}
-                {hasNewRecords && details.missing && (
-                  <div className="border border-green-200 rounded-lg p-4">
-                    <h3 className="font-bold text-green-800 mb-2">
-                      🆕 New Records to Process ({details.missing.length})
-                    </h3>
-                    <div className="max-h-32 overflow-y-auto">
-                      <div className="grid grid-cols-1 gap-1 text-sm">
-                        {details.missing.slice(0, 5).map((record, idx) => {
-                          const blockField = detectedVendor === 'BRT' ? 'BLOCK' : 'Block';
-                          const lotField = detectedVendor === 'BRT' ? 'LOT' : 'Lot';
-                          const locationField = detectedVendor === 'BRT' ? 'PROPERTY_LOCATION' : 'Location';
-                          
-                          return (
-                            <div key={idx} className="text-gray-700">
-                              {record[blockField]}-{record[lotField]} • {record[locationField] || 'No Address'}
-                            </div>
-                          );
-                        })}
-                        {details.missing.length > 5 && (
-                          <div className="text-gray-500 italic">
-                            ...and {details.missing.length - 5} more records
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Sales Changes Section */}
-                {hasSalesChanges && details.salesChanges && (
-                  <div className="border border-blue-200 rounded-lg p-4">
-                    <h3 className="font-bold text-blue-800 mb-2">
-                      💰 Sales Changes with Decisions ({details.salesChanges.length})
-                    </h3>
-                    <div className="max-h-32 overflow-y-auto">
-                      <div className="space-y-2 text-sm">
-                        {details.salesChanges.slice(0, 3).map((change, idx) => {
-                          const decision = salesDecisions.get(change.property_composite_key) || 'Keep New (default)';
-                          return (
-                            <div key={idx} className="border-l-2 border-blue-400 pl-2">
-                              <div className="font-medium text-gray-800">
-                                {change.property_block}-{change.property_lot}
-                              </div>
-                              <div className="text-gray-600">
-                                Price: ${change.differences.sales_price.old.toLocaleString()} → ${change.differences.sales_price.new.toLocaleString()}
-                              </div>
-                              <div className="text-green-600 font-medium">Decision: {decision}</div>
-                            </div>
-                          );
-                        })}
-                        {details.salesChanges.length > 3 && (
-                          <div className="text-gray-500 italic">
-                            ...and {details.salesChanges.length - 3} more changes
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* NEW: Class Changes Section */}
-                {hasClassChanges && details.classChanges && (
-                  <div className="border border-purple-200 rounded-lg p-4">
-                    <h3 className="font-bold text-purple-800 mb-2">
-                      🏷️ Class Changes ({details.classChanges.length})
-                    </h3>
-                    <div className="max-h-32 overflow-y-auto">
-                      <div className="space-y-2 text-sm">
-                        {details.classChanges.slice(0, 3).map((change, idx) => (
-                          <div key={idx} className="border-l-2 border-purple-400 pl-2">
-                            <div className="font-medium text-gray-800">
-                              {change.property_block}-{change.property_lot}
-                            </div>
-                            {change.changes.map((classChange, changeIdx) => (
-                              <div key={changeIdx} className="text-gray-600">
-                                {classChange.field}: {classChange.old} → {classChange.new}
-                              </div>
-                            ))}
-                          </div>
-                        ))}
-                        {details.classChanges.length > 3 && (
-                          <div className="text-gray-500 italic">
-                            ...and {details.classChanges.length - 3} more changes
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Deletions Section */}
-                {hasDeletions && details.deletions && (
-                  <div className="border border-red-200 rounded-lg p-4">
-                    <h3 className="font-bold text-red-800 mb-2">
-                      🗑️ Records to Delete ({details.deletions.length})
-                    </h3>
-                    <div className="max-h-32 overflow-y-auto">
-                      <div className="grid grid-cols-1 gap-1 text-sm">
-                        {details.deletions.slice(0, 5).map((record, idx) => (
-                          <div key={idx} className="text-red-700">
-                            {record.property_block}-{record.property_lot} • {record.property_location || 'No Address'}
-                          </div>
-                        ))}
-                        {details.deletions.length > 5 && (
-                          <div className="text-red-500 italic">
-                            ...and {details.deletions.length - 5} more deletions
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
             {/* No Changes State */}
             {!hasAnyChanges && (
               <div className="text-center py-8">
                 <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
                 <h3 className="text-lg font-bold text-gray-900 mb-2">✅ Files Match Database</h3>
                 <p className="text-gray-600">All data is current and synchronized.</p>
+              </div>
+            )}
+
+            {/* Show change details if any exist */}
+            {hasAnyChanges && (
+              <div className="text-center py-4">
+                <p className="text-gray-600">Changes detected - processing will update database with new data.</p>
               </div>
             )}
           </div>
@@ -1045,16 +982,14 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                 Cancel
               </button>
               
-              {/* NEW: Export Report Button */}
-              {hasAnyChanges && (
-                <button
-                  onClick={exportComparisonReport}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center space-x-2"
-                >
-                  <Download className="w-4 h-4" />
-                  <span>Export Report</span>
-                </button>
-              )}
+              {/* NEW: Export Report Button - Always visible for testing */}
+              <button
+                onClick={exportComparisonReport}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center space-x-2"
+              >
+                <Download className="w-4 h-4" />
+                <span>Export Report</span>
+              </button>
             </div>
             
             {/* FIXED: Process Changes Button */}
@@ -1064,7 +999,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                 disabled={processing}
                 className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium"
               >
-                {processing ? 'Processing...' : `🔄 Process All Changes (${detectedVendor} Processor)`}
+                {processing ? 'Processing...' : `🔄 Process All Changes`}
               </button>
             )}
           </div>
@@ -1111,6 +1046,18 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
 
   return (
     <div className="space-y-3">
+      {/* EMERGENCY: Force close button always visible */}
+      {(showSalesDecisionModal || showComparisonModal) && (
+        <div className="fixed top-4 left-4 z-[10000]">
+          <button
+            onClick={forceCloseAllModals}
+            className="px-4 py-2 bg-red-600 text-white rounded-lg font-bold shadow-lg hover:bg-red-700"
+          >
+            🚨 EMERGENCY CLOSE
+          </button>
+        </div>
+      )}
+
       {/* Notifications */}
       <div className="fixed top-4 right-4 z-50 space-y-2">
         {notifications.map(notification => (
