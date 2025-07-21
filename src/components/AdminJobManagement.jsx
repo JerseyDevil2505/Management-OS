@@ -1007,7 +1007,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
 
   const convertPlanningToJob = (planningJob) => {
     setNewJob({
-      name: `${planningJob.municipality} ${planningJob.potentialYear}`,
+      name: `${planningJob.municipality} ${new Date(planningJob.end_date).getFullYear()}`,
       ccddCode: planningJob.ccddCode,
       municipality: planningJob.municipality,
       county: '',
@@ -2140,7 +2140,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
                         <div className="flex justify-between items-center mb-2">
-                          <h4 className="text-lg font-bold text-gray-900">{planningJob.municipality} {planningJob.potentialYear}</h4>
+                          <h4 className="text-lg font-bold text-gray-900">{planningJob.municipality} {new Date(planningJob.end_date).getFullYear()}</h4>
                           <span className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs font-medium shadow-sm">
                             Planning Phase
                           </span>
@@ -2149,7 +2149,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
                           <span className="flex items-center space-x-1">
                             <span className="font-bold text-yellow-600">{planningJob.ccddCode}</span>
                             <span>•</span>
-                            <span>Target: {planningJob.potentialYear}</span>
+                            <span>Target: {new Date(planningJob.end_date).getFullYear()}</span>
                           </span>
                         </div>
                         {planningJob.comments && (
@@ -2173,7 +2173,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
                           setNewPlanningJob({
                             ccddCode: planningJob.ccddCode,
                             municipality: planningJob.municipality,
-                            dueDate: `${planningJob.potentialYear}-01-01`,
+                            dueDate: planningJob.end_date,
                             comments: planningJob.comments || ''
                           });
                           setShowEditPlanning(true);
