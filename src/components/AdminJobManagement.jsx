@@ -162,53 +162,6 @@ const AdminJobManagement = ({ onJobSelect }) => {
     };
   };
 
-  // Enhanced stats loading with real property counts
-  const loadEnhancedStats = async () => {
-    try {
-      // Get basic stats
-      const basicStats = await utilityService.getStats();
-      
-      // Get real property breakdown from property_records
-      const { data: propertyBreakdown, error } = await supabase
-        .from('property_records')
-        .select('property_m4_class')
-        .not('property_m4_class', 'is', null);
-      
-      if (error) {
-        console.error('Error loading property breakdown:', error);
-        return basicStats;
-      }
-      
-      // Count properties by M4 class
-      const counts = { residential: 0, commercial: 0, other: 0 };
-      
-      propertyBreakdown.forEach(record => {
-        const m4Class = record.property_m4_class;
-        if (['1', '2', '3A', '3B'].includes(m4Class)) {
-          counts.residential++;
-        } else if (['4A', '4B', '4C'].includes(m4Class)) {
-          counts.commercial++;
-        } else {
-          counts.other++;
-        }
-      });
-      
-      return {
-        ...basicStats,
-        properties: propertyBreakdown.length,
-        propertiesBreakdown: {
-          total: propertyBreakdown.length,
-          residential: counts.residential,
-          commercial: counts.commercial,
-          other: counts.other
-        }
-      };
-    } catch (error) {
-      console.error('Error loading enhanced stats:', error);
-      return await utilityService.getStats();
-    }
-  };
-
   // FIXED: Load HPI data from database on component mount
   const loadCountyHpiData = async () => {
     try {
@@ -434,7 +387,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
       })));
 
       // Refresh property stats to show updated counts
-      const refreshedStats = await loadEnhancedStats();
+      const refreshedStats = await utilityService.getStats();
       setDbStats(refreshedStats);
 
       addNotification(`Successfully assigned ${matchedCount} of ${assignments.length} properties`, 'success');
@@ -854,7 +807,7 @@ const AdminJobManagement = ({ onJobSelect }) => {
         })));
         
         // Refresh property stats after job creation
-        const refreshedStats = await loadEnhancedStats();
+        const refreshedStats = await utilityService.getStats();
         setDbStats(refreshedStats);
         
         updateProcessingStatus('Complete!', 100);
