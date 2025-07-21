@@ -652,6 +652,19 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     });
   };
 
+  // Helper parsing functions (same logic as processor)
+  const parseDate = (dateString) => {
+    if (!dateString || dateString.trim() === '' || dateString === '00/00/00') return null;
+    const date = new Date(dateString);
+    return isNaN(date.getTime()) ? null : date.toISOString().split('T')[0];
+  };
+
+  const parseNumeric = (value) => {
+    if (!value || value === '') return null;
+    const num = parseFloat(String(value).replace(/[,$]/g, ''));
+    return isNaN(num) ? null : num;
+  };
+
   // FIXED: Compare two data sets using consistent composite key generation
   const compareDataSets = (oldData, newData) => {
     console.log('🔍 Comparing datasets with processor-consistent logic...');
