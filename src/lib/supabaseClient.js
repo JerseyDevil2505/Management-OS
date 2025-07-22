@@ -661,7 +661,7 @@ export const propertyService = {
     }
   },
 
-  // FIXED: Import method with versionInfo parameter for FileUploadButton support
+  // EXISTING: Import method with versionInfo parameter for FileUploadButton support - CALLS PROCESSORS (INSERT)
   async importCSVData(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, vendorType, versionInfo = {}) {
     try {
       console.log(`Processing ${vendorType} files for job ${jobId}`);
@@ -679,6 +679,32 @@ export const propertyService = {
       }
     } catch (error) {
       console.error('Property import error:', error);
+      return {
+        processed: 0,
+        errors: 1,
+        warnings: [error.message]
+      };
+    }
+  },
+
+  // NEW: Update method that calls UPDATERS (UPSERT) for existing jobs
+  async updateCSVData(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, vendorType, versionInfo = {}) {
+    try {
+      console.log(`Updating ${vendorType} files for job ${jobId} using UPSERT`);
+      console.log('🔍 DEBUG - versionInfo received:', versionInfo);
+      
+      // Use updaters for UPSERT operations
+      if (vendorType === 'BRT') {
+        const { brtUpdater } = await import('./data-pipeline/brt-updater.js');
+        return await brtUpdater.processFile(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, versionInfo);
+      } else if (vendorType === 'Microsystems') {
+        const { microsystemsUpdater } = await import('./data-pipeline/microsystems-updater.js');
+        return await microsystemsUpdater.processFile(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, versionInfo);
+      } else {
+        throw new Error(`Unsupported vendor type: ${vendorType}`);
+      }
+    } catch (error) {
+      console.error('Property update error:', error);
       return {
         processed: 0,
         errors: 1,
