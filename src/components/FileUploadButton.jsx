@@ -64,18 +64,26 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     return null;
   };
 
-  // FIXED: Simplified vendor detection using KISS method - matches AdminJobManagement logic
-  const detectVendorType = (fileContent, fileName) => {
+  // FIXED: Vendor detection matching AdminJobManagement logic exactly
+  const detectVendorType = (fileContent, fileName, fileType = 'source') => {
     if (!fileName) return null;
     
-    // BRT: Simple file extension check (.csv files are BRT)
-    if (fileName.endsWith('.csv')) {
-      return 'BRT';
-    }
-    
-    // Microsystems: .txt files that contain pipe delimiters
-    if (fileName.endsWith('.txt') && fileContent.includes('|')) {
-      return 'Microsystems';
+    if (fileType === 'source') {
+      // Source file detection
+      if (fileName.endsWith('.csv')) {
+        return 'BRT';
+      }
+      if (fileName.endsWith('.txt') && fileContent.includes('|')) {
+        return 'Microsystems';
+      }
+    } else if (fileType === 'code') {
+      // Code file detection - matches AdminJobManagement exactly
+      if (fileName.endsWith('.txt') && fileContent.includes('=')) {
+        return 'Microsystems';
+      }
+      if (fileContent.includes('{')) {
+        return 'BRT';  // BRT codes are JSON with { characters
+      }
     }
     
     return null;
@@ -949,7 +957,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       const content = await file.text();
       setSourceFileContent(content);
       
-      const vendor = detectVendorType(content, file.name);
+      const vendor = detectVendorType(content, file.name, 'source');
       if (vendor) {
         setDetectedVendor(vendor);
         addNotification(`✅ ${vendor} format detected`, 'success');
@@ -971,8 +979,8 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       const content = await file.text();
       setCodeFileContent(content);
       
-      // Detect vendor for code file too
-      const vendor = detectVendorType(content, file.name);
+      // Detect vendor for code file using code-specific detection
+      const vendor = detectVendorType(content, file.name, 'code');
       if (vendor) {
         setDetectedVendor(vendor);
         addNotification(`✅ ${vendor} code file format detected`, 'success');
