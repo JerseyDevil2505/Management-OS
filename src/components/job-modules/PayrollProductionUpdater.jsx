@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Factory, Settings, Download, RefreshCw, AlertTriangle, CheckCircle, TrendingUp, DollarSign, Users, Calendar, X, ChevronDown, ChevronUp, Eye, FileText } from 'lucide-react';
 import { supabase, jobService } from '../../lib/supabaseClient';
 
-const ProductionTracker = ({ jobData, onBackToJobs }) => {
+const PayrollProductionUpdater = ({ jobData, onBackToJobs }) => {
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [rawPropertyData, setRawPropertyData] = useState([]);
@@ -860,7 +860,7 @@ const ProductionTracker = ({ jobData, onBackToJobs }) => {
             <Factory className="w-8 h-8 mr-3 text-blue-600" />
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Production Tracker</h1>
-              <p className="text-gray-600">{jobData.name} - Enhanced Analytics & Validation Engine</p>
+              <p className="text-gray-600">{jobData.name} - Enhanced Analytics & Validation Engine (PayrollProductionUpdater)</p>
             </div>
           </div>
           <button
@@ -1349,4 +1349,4 @@ const ProductionTracker = ({ jobData, onBackToJobs }) => {
   );
 };
 
-export default ProductionTracker;
+export default PayrollProductionUpdater;
