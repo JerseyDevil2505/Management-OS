@@ -64,50 +64,43 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     return null;
   };
 
-  // FIXED: Vendor detection matching AdminJobManagement logic exactly
-  const detectVendorType = (fileContent, fileName, fileType = 'source') => {
+  // FIXED: Simplified vendor detection using KISS method - matches AdminJobManagement logic
+  const detectVendorType = (fileContent, fileName) => {
     if (!fileName) return null;
     
-    if (fileType === 'source') {
-      // Source file detection
-      if (fileName.endsWith('.csv')) {
-        return 'BRT';
-      }
-      if (fileName.endsWith('.txt') && fileContent.includes('|')) {
-        return 'Microsystems';
-      }
-    } else if (fileType === 'code') {
-      // Code file detection - matches AdminJobManagement exactly
-      if (fileName.endsWith('.txt') && fileContent.includes('=')) {
-        return 'Microsystems';
-      }
-      if (fileContent.includes('{')) {
-        return 'BRT';  // BRT codes are JSON with { characters
-      }
+    // BRT: Simple file extension check (.csv files are BRT)
+    if (fileName.endsWith('.csv')) {
+      return 'BRT';
+    }
+    
+    // Microsystems: .txt files that contain pipe delimiters
+    if (fileName.endsWith('.txt') && fileContent.includes('|')) {
+      return 'Microsystems';
     }
     
     return null;
   };
 
-  // KISS: Simple code file parsing matching AdminJobManagement exactly
+  // NEW: Parse code files for both vendors
   const parseCodeFile = (fileContent, vendor) => {
     try {
       if (vendor === 'BRT') {
-        // BRT: Just return a simple object indicating we have the content
-        // The actual parsing happens in the processors
-        return { raw_content: fileContent, type: 'BRT_codes' };
+        // BRT codes are JSON format
+        const codeData = JSON.parse(fileContent);
+        return codeData;
       } else if (vendor === 'Microsystems') {
-        // Microsystems: Just return a simple object indicating we have the content
-        // The actual parsing happens in the processors
-        return { raw_content: fileContent, type: 'Microsystems_codes' };
-      }
-      
-      return null;
-    } catch (error) {
-      console.error('Error with code file:', error);
-      return null;
-    }
-  };
+        // Microsystems codes are pipe-delimited text
+        const lines = fileContent.split('\n').filter(line => line.trim());
+        const codes = {};
+        
+        lines.forEach(line => {
+          const parts = line.split('|');
+          if (parts.length >= 2) {
+            const code = parts[0].trim();
+            const description = parts[1].trim();
+            codes[code] = description;
+          }
+        });
         
         return codes;
       }
@@ -138,14 +131,14 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       console.log('🔍 DEBUG - Starting code file update');
       console.log('🔍 DEBUG - Current job.code_file_version:', job.code_file_version);
 
-      // KISS: Simple validation that we have content, processors handle the rest
+      // Parse the code file
       const parsedCodes = parseCodeFile(codeFileContent, detectedVendor);
       
       if (!parsedCodes) {
-        throw new Error('Failed to read code file');
+        throw new Error('Failed to parse code file');
       }
 
-      console.log('🔍 DEBUG - Code file ready for processor:', parsedCodes.type);
+      console.log('🔍 DEBUG - Parsed codes count:', Object.keys(parsedCodes).length);
 
       // FIXED: Properly escape special characters to prevent Unicode errors
       const sanitizedContent = codeFileContent
@@ -181,7 +174,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
 
       console.log('🔍 DEBUG - Database update successful');
 
-      addNotification(`✅ Successfully updated code definitions for ${detectedVendor}`, 'success');
+      addNotification(`✅ Successfully updated ${Object.keys(parsedCodes).length} code definitions for ${detectedVendor}`, 'success');
       
       // Clear code file selection
       setCodeFile(null);
@@ -194,6 +187,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       if (onFileProcessed) {
         onFileProcessed({ 
           type: 'code_update', 
+          codes_updated: Object.keys(parsedCodes).length,
           vendor: detectedVendor 
         });
       }
@@ -955,7 +949,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       const content = await file.text();
       setSourceFileContent(content);
       
-      const vendor = detectVendorType(content, file.name, 'source');
+      const vendor = detectVendorType(content, file.name);
       if (vendor) {
         setDetectedVendor(vendor);
         addNotification(`✅ ${vendor} format detected`, 'success');
@@ -977,8 +971,8 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       const content = await file.text();
       setCodeFileContent(content);
       
-      // Detect vendor for code file using code-specific detection
-      const vendor = detectVendorType(content, file.name, 'code');
+      // Detect vendor for code file too
+      const vendor = detectVendorType(content, file.name);
       if (vendor) {
         setDetectedVendor(vendor);
         addNotification(`✅ ${vendor} code file format detected`, 'success');
