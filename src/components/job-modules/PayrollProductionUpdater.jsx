@@ -1,155 +1,33 @@
 import React, { useState, useEffect } from 'react';
-import { AlertTriangle, Settings, Play, Download, CheckCircle, Clock, Users, BarChart3, FileText, X, Lock, Save } from 'lucide-react';
-import { employeeService, jobService, propertyService, supabase } from '../../lib/supabaseClient';
+import { Factory, Settings, Download, RefreshCw, AlertTriangle, CheckCircle, TrendingUp, DollarSign, Users, Calendar, X, ChevronDown, ChevronUp, Eye, FileText } from 'lucide-react';
+import { supabase, jobService } from '../../lib/supabaseClient';
 
-const ProductionTracker = ({ jobData, onBackToJobs, onUpdateJobMetrics }) => {
-  // Map JobContainer props to internal naming
-  const currentJob = jobData;
-  
+const ProductionTracker = ({ jobData, onBackToJobs }) => {
+  const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
-  const [results, setResults] = useState(null);
-  const [showDataWarning, setShowDataWarning] = useState(false);
+  const [rawPropertyData, setRawPropertyData] = useState([]);
+  const [cleanInspectionData, setCleanInspectionData] = useState([]);
+  const [employeeData, setEmployeeData] = useState({});
+  const [analytics, setAnalytics] = useState(null);
+  const [billingAnalytics, setBillingAnalytics] = useState(null);
   const [validationReport, setValidationReport] = useState(null);
-  const [billingTotals, setBillingTotals] = useState(null);
-  const [inspectorDefinitions, setInspectorDefinitions] = useState({});
-  const [employees, setEmployees] = useState([]);
+  const [sessionHistory, setSessionHistory] = useState([]);
   const [notifications, setNotifications] = useState([]);
-  const [settingsLocked, setSettingsLocked] = useState(false);
-  const [currentProcessingSession, setCurrentProcessingSession] = useState(null);
   
-  const [settings, setSettings] = useState({
-    projectStartDate: '2025-01-01',
-    infoByCodeMappings: {
-      entryCodes: '01,02,03,04',
-      refusalCodes: '06', 
-      estimationCodes: '07',
-      invalidCodes: '00,05',
-      pricingCodes: '08,09'
-    }
-  });
+  // Settings state - Dynamic InfoBy codes
+  const [availableInfoByCodes, setAvailableInfoByCodes] = useState([]);
+  const [selectedInfoByCodes, setSelectedInfoByCodes] = useState([]);
+  const [infoBySearchTerm, setInfoBySearchTerm] = useState('');
+  const [showInfoByDropdown, setShowInfoByDropdown] = useState(false);
+  const [projectStartDate, setProjectStartDate] = useState('');
+  const [sessionId, setSessionId] = useState(null);
+  const [settingsLocked, setSettingsLocked] = useState(false);
 
-  // Load employees and inspector definitions
-  const loadEmployeeData = async () => {
-    try {
-      const employeesData = await employeeService.getAll();
-      setEmployees(employeesData);
-      
-      const definitions = {};
-      const validInitials = [];
-      employeesData.forEach(emp => {
-        if (emp.role === 'inspector' && emp.initials) {
-          definitions[emp.initials] = {
-            name: `${emp.first_name} ${emp.last_name}`,
-            type: emp.inspector_type || 'residential'
-          };
-          validInitials.push(emp.initials);
-        }
-      });
-      setInspectorDefinitions(definitions);
-      return validInitials;
-    } catch (error) {
-      console.error('Error loading employee data:', error);
-      return [];
-    }
-  };
+  // UI state
+  const [activeTab, setActiveTab] = useState('analytics');
+  const [selectedInspectorIssues, setSelectedInspectorIssues] = useState(null);
+  const [maxFileVersion, setMaxFileVersion] = useState(1);
 
-  // Check for existing processing session and load settings
-  const loadExistingSession = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('inspection_data')
-        .select('import_session_id, project_start_date')
-        .eq('job_id', currentJob.id)
-        .order('upload_date', { ascending: false })
-        .limit(1);
-      
-      if (error) throw error;
-      
-      if (data && data.length > 0) {
-        const session = data[0];
-        setCurrentProcessingSession(session.import_session_id);
-        setSettings(prev => ({
-          ...prev,
-          projectStartDate: session.project_start_date || prev.projectStartDate
-        }));
-        setSettingsLocked(true);
-      }
-    } catch (error) {
-      console.error('Error loading existing session:', error);
-    }
-  };
-
-  // Load billing totals from inspection_data
-  const loadBillingTotals = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('inspection_data')
-        .select('property_class, measure_by, measure_date')
-        .eq('job_id', currentJob.id)
-        .not('measure_by', 'is', null)
-        .not('measure_date', 'is', null);
-      
-      if (error) throw error;
-      
-      // Count by property class
-      const classCounts = {};
-      data.forEach(record => {
-        const propertyClass = record.property_class;
-        if (propertyClass) {
-          classCounts[propertyClass] = (classCounts[propertyClass] || 0) + 1;
-        }
-      });
-      
-      // Calculate grouped totals
-      const residential = (classCounts['2'] || 0) + (classCounts['3A'] || 0);
-      const commercial4A = classCounts['4A'] || 0;
-      const commercial4B = classCounts['4B'] || 0;
-      const commercial4C = classCounts['4C'] || 0;
-      const total4 = commercial4A + commercial4B + commercial4C;
-      const grandTotal = Object.values(classCounts).reduce((sum, count) => sum + count, 0);
-      
-      setBillingTotals({
-        individual: classCounts,
-        grouped: {
-          residential,
-          commercial4A,
-          commercial4B, 
-          commercial4C,
-          total4,
-          grandTotal
-        }
-      });
-      
-    } catch (error) {
-      console.error('Error loading billing totals:', error);
-    }
-  };
-
-  useEffect(() => {
-    if (currentJob) {
-      loadEmployeeData();
-      loadExistingSession();
-      loadBillingTotals();
-      checkDataFreshness();
-    }
-  }, [currentJob]);
-
-  const checkDataFreshness = () => {
-    if (!currentJob?.source_file_uploaded_at) return;
-    
-    const sourceFileAge = Math.floor((new Date() - new Date(currentJob.source_file_uploaded_at)) / (1000 * 60 * 60 * 24));
-    
-    if (sourceFileAge > 7) {
-      setShowDataWarning({
-        show: true,
-        message: `Source file last updated ${sourceFileAge} days ago`,
-        recommendation: "Consider updating source data first in the Upload module",
-        allowProceed: true
-      });
-    }
-  };
-
-  // Notification system
   const addNotification = (message, type = 'info') => {
     const id = Date.now();
     const notification = { id, message, type, timestamp: new Date() };
@@ -160,525 +38,689 @@ const ProductionTracker = ({ jobData, onBackToJobs, onUpdateJobMetrics }) => {
     }, 5000);
   };
 
-  // Save settings to database (lock them in)
-  const saveSettings = async () => {
+  // Debug logging
+  const debugLog = (section, message, data = null) => {
+    console.log(`🔍 [${section}] ${message}`, data || '');
+  };
+
+  // Load employee data for inspector details
+  const loadEmployeeData = async () => {
     try {
-      // In production, save settings to a job_settings or processing_sessions table
-      console.log('Saving settings for job:', currentJob.id, settings);
-      setSettingsLocked(true);
-      addNotification('Settings locked and saved to database', 'success');
+      const { data: employees, error } = await supabase
+        .from('employees')
+        .select('id, first_name, last_name, inspector_type, employment_status')
+        .eq('employment_status', 'full_time');
+
+      if (error) throw error;
+
+      const employeeMap = {};
+      employees.forEach(emp => {
+        const initials = `${emp.first_name.charAt(0)}${emp.last_name.charAt(0)}`;
+        employeeMap[initials] = {
+          id: emp.id,
+          name: `${emp.first_name} ${emp.last_name}`,
+          fullName: `${emp.last_name}, ${emp.first_name}`,
+          inspector_type: emp.inspector_type,
+          initials: initials
+        };
+      });
+
+      setEmployeeData(employeeMap);
+      debugLog('EMPLOYEES', 'Loaded employee data', { count: Object.keys(employeeMap).length });
     } catch (error) {
-      console.error('Error saving settings:', error);
-      addNotification('Error saving settings: ' + error.message, 'error');
+      console.error('Error loading employee data:', error);
+      addNotification('Error loading employee data', 'error');
     }
   };
 
-  // Query property records for this job
-  const getPropertyRecords = async () => {
+  // Load available InfoBy codes from job's parsed code definitions
+  const loadAvailableInfoByCodes = async () => {
+    if (!jobData?.id) return;
+
     try {
-      const { data, error } = await supabase
+      const { data: job, error } = await supabase
+        .from('jobs')
+        .select('parsed_code_definitions, vendor')
+        .eq('id', jobData.id)
+        .single();
+
+      if (error || !job?.parsed_code_definitions) {
+        debugLog('CODES', 'No parsed code definitions found for job');
+        return;
+      }
+
+      const codes = [];
+      const vendor = job.vendor;
+
+      if (vendor === 'BRT') {
+        const sections = job.parsed_code_definitions.sections || job.parsed_code_definitions;
+        
+        Object.keys(sections).forEach(sectionName => {
+          const section = sections[sectionName];
+          if (typeof section === 'object') {
+            Object.keys(section).forEach(code => {
+              const item = section[code];
+              if (item && item.DATA && item.DATA.VALUE) {
+                codes.push({
+                  code: code,
+                  description: item.DATA.VALUE,
+                  section: sectionName
+                });
+              }
+            });
+          }
+        });
+      } else if (vendor === 'Microsystems') {
+        Object.keys(job.parsed_code_definitions).forEach(code => {
+          const description = job.parsed_code_definitions[code];
+          codes.push({
+            code: code,
+            description: description,
+            section: 'InfoBy'
+          });
+        });
+      }
+
+      setAvailableInfoByCodes(codes);
+      debugLog('CODES', `Loaded ${codes.length} InfoBy codes from ${vendor} definitions`);
+
+    } catch (error) {
+      console.error('Error loading InfoBy codes:', error);
+      addNotification('Error loading InfoBy codes from code file', 'error');
+    }
+  };
+
+  // Load raw property data (latest versions only) 
+  const loadRawPropertyData = async () => {
+    if (!jobData?.id) return;
+
+    try {
+      debugLog('DATA', 'Loading raw property data with version filtering');
+
+      // Get latest file version for this job
+      const { data: versionData, error: versionError } = await supabase
+        .from('property_records')
+        .select('file_version')
+        .eq('job_id', jobData.id)
+        .order('file_version', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (versionError) {
+        console.warn('Could not determine max version:', versionError);
+        setMaxFileVersion(1);
+      } else {
+        setMaxFileVersion(versionData.file_version || 1);
+        debugLog('VERSION', `Max file version detected: ${versionData.file_version}`);
+      }
+
+      // Get only records with the highest file_version
+      const { data: rawData, error } = await supabase
         .from('property_records')
         .select(`
           property_composite_key,
           property_block,
           property_lot,
           property_qualifier,
-          property_addl_card,
           property_location,
           property_m4_class,
           property_cama_class,
-          inspection_measure_by,
-          inspection_measure_date,
+          inspection_info_by,
           inspection_list_by,
           inspection_list_date,
           inspection_price_by,
           inspection_price_date,
-          inspection_info_by,
-          values_mod_improvement,
-          values_cama_improvement,
-          source_file_name,
-          source_file_uploaded_at,
-          code_file_name,
-          code_file_updated_at,
-          file_version
+          sales_price,
+          sales_date,
+          file_version,
+          processed_at,
+          vendor_source
         `)
-        .eq('job_id', currentJob.id);
-      
+        .eq('job_id', jobData.id)
+        .eq('file_version', versionData?.file_version || 1)
+        .order('property_block', { ascending: true })
+        .order('property_lot', { ascending: true });
+
       if (error) throw error;
-      return data;
+
+      setRawPropertyData(rawData || []);
+      debugLog('DATA', `Loaded ${rawData?.length || 0} raw property records on version ${versionData?.file_version || 1}`);
+
     } catch (error) {
-      console.error('Error fetching property records:', error);
-      throw error;
+      console.error('Error loading raw property data:', error);
+      addNotification('Error loading property data: ' + error.message, 'error');
     }
   };
 
-  // Enhanced scrub and validation function
-  const scrubAndValidateData = (data, startDate, validInitials, codeMapping) => {
-    console.log('Starting enhanced scrub and validation...');
-    
-    const parseCodeString = (codeStr) => {
-      return codeStr.split(',').map(code => {
-        const num = parseInt(code.trim());
-        return isNaN(num) ? parseInt(code.trim().replace(/^0+/, '')) || 0 : num;
+  // Load existing clean inspection data
+  const loadCleanInspectionData = async () => {
+    if (!jobData?.id) return;
+
+    try {
+      const { data: cleanData, error } = await supabase
+        .from('inspection_data')
+        .select(`
+          property_composite_key,
+          block,
+          lot,
+          qualifier,
+          property_location,
+          property_class,
+          info_by_code,
+          list_by,
+          list_date,
+          price_by,
+          price_date,
+          sale_price,
+          sale_date,
+          import_session_id,
+          project_start_date,
+          validation_report,
+          upload_date
+        `)
+        .eq('job_id', jobData.id)
+        .order('block', { ascending: true })
+        .order('lot', { ascending: true });
+
+      if (error) throw error;
+
+      setCleanInspectionData(cleanData || []);
+      debugLog('DATA', `Loaded ${cleanData?.length || 0} clean inspection records`);
+
+      // Load session history from validation reports
+      const sessionMap = new Map();
+      (cleanData || []).forEach(record => {
+        if (record.validation_report && record.import_session_id) {
+          if (!sessionMap.has(record.import_session_id)) {
+            sessionMap.set(record.import_session_id, {
+              session_id: record.import_session_id,
+              processed_at: record.upload_date,
+              project_start_date: record.project_start_date,
+              validation_summary: record.validation_report?.summary || {}
+            });
+          }
+        }
       });
-    };
-    
-    const entryCodes = parseCodeString(codeMapping.entryCodes);
-    const refusalCodes = parseCodeString(codeMapping.refusalCodes);
-    const estimationCodes = parseCodeString(codeMapping.estimationCodes);
-    const invalidCodes = parseCodeString(codeMapping.invalidCodes);
-    const pricingCodes = parseCodeString(codeMapping.pricingCodes);
-    const allValidCodes = [...entryCodes, ...refusalCodes, ...estimationCodes, ...pricingCodes];
-    
-    const scrubReport = {
-      scrubbed: {
-        measureValidDateMissingInitials: 0,
-        measureValidInitialsMissingDate: 0,
-        listValidDateMissingInitials: 0,
-        listValidInitialsMissingDate: 0,
-        priceValidDateMissingInitials: 0,
-        priceValidInitialsMissingDate: 0,
-        invalidInfoBy: 0
-      },
-      flagged: {
-        refusalMismatch: 0,
-        entryMismatch: 0,
-        estimationMismatch: 0,
-        inspectorMismatch: 0,
-        zeroImprovementMismatch: 0
-      }
-    };
-    
-    const flaggedIssues = [];
-    const scrubbedData = [];
-    
-    data.forEach(row => {
-      let cleanRow = { ...row };
-      let wasModified = false;
-      let shouldInsert = true;
-      
-      const measureDate = cleanRow.inspection_measure_date ? new Date(cleanRow.inspection_measure_date) : null;
-      const measureBy = cleanRow.inspection_measure_by;
-      const listDate = cleanRow.inspection_list_date ? new Date(cleanRow.inspection_list_date) : null;
-      const listBy = cleanRow.inspection_list_by;
-      const priceDate = cleanRow.inspection_price_date ? new Date(cleanRow.inspection_price_date) : null;
-      const priceBy = cleanRow.inspection_price_by;
-      const infoBy = parseInt(cleanRow.inspection_info_by) || 0;
-      const improvementValue = cleanRow.values_mod_improvement || cleanRow.values_cama_improvement || 0;
-      const propertyClass = cleanRow.property_m4_class || cleanRow.property_cama_class;
-      
-      // SCRUB RULES (Clean & Remove)
-      
-      // 1. Measure field scrubbing
-      if (measureDate && measureDate >= startDate && !validInitials.includes(measureBy)) {
-        cleanRow.inspection_measure_date = null;
-        cleanRow.inspection_measure_by = null;
-        cleanRow.inspection_info_by = null;
-        scrubReport.scrubbed.measureValidDateMissingInitials++;
-        wasModified = true;
-      } else if (validInitials.includes(measureBy) && (!measureDate || measureDate < startDate)) {
-        cleanRow.inspection_measure_date = null;
-        cleanRow.inspection_measure_by = null;
-        cleanRow.inspection_info_by = null;
-        scrubReport.scrubbed.measureValidInitialsMissingDate++;
-        wasModified = true;
-      }
-      
-      // 2. List field scrubbing
-      if (listDate && listDate >= startDate && !validInitials.includes(listBy)) {
-        cleanRow.inspection_list_date = null;
-        cleanRow.inspection_list_by = null;
-        scrubReport.scrubbed.listValidDateMissingInitials++;
-        wasModified = true;
-      } else if (validInitials.includes(listBy) && (!listDate || listDate < startDate)) {
-        cleanRow.inspection_list_date = null;
-        cleanRow.inspection_list_by = null;
-        scrubReport.scrubbed.listValidInitialsMissingDate++;
-        wasModified = true;
-      }
-      
-      // 3. Price field scrubbing (BRT only)
-      if (currentJob.vendor === 'BRT') {
-        if (priceDate && priceDate >= startDate && !validInitials.includes(priceBy)) {
-          cleanRow.inspection_price_date = null;
-          cleanRow.inspection_price_by = null;
-          scrubReport.scrubbed.priceValidDateMissingInitials++;
-          wasModified = true;
-        } else if (validInitials.includes(priceBy) && (!priceDate || priceDate < startDate)) {
-          cleanRow.inspection_price_date = null;
-          cleanRow.inspection_price_by = null;
-          scrubReport.scrubbed.priceValidInitialsMissingDate++;
-          wasModified = true;
-        }
-      }
-      
-      // 4. Invalid InfoBy codes scrubbing
-      if (infoBy && !allValidCodes.includes(infoBy) && !invalidCodes.includes(infoBy)) {
-        cleanRow.inspection_measure_date = null;
-        cleanRow.inspection_measure_by = null;
-        cleanRow.inspection_info_by = null;
-        scrubReport.scrubbed.invalidInfoBy++;
-        wasModified = true;
-      }
-      
-      // VALIDATION FLAGS (Report Only - after scrubbing)
-      const hasValidInspection = cleanRow.inspection_measure_by && cleanRow.inspection_measure_date;
-      const hasListingData = cleanRow.inspection_list_by && cleanRow.inspection_list_date;
-      
-      if (hasValidInspection && cleanRow.inspection_info_by) {
-        const property = {
-          block: cleanRow.property_block,
-          lot: cleanRow.property_lot,
-          qualifier: cleanRow.property_qualifier || '',
-          card: cleanRow.property_addl_card || '',
-          propertyLocation: cleanRow.property_location || '',
-          inspector: cleanRow.inspection_measure_by,
-          propertyClass: propertyClass
-        };
-        
-        // 5. Refusal code but missing listing data
-        if (refusalCodes.includes(cleanRow.inspection_info_by) && !hasListingData) {
-          flaggedIssues.push({ ...property, warning: 'Refusal code but missing listing data' });
-          scrubReport.flagged.refusalMismatch++;
-        }
-        
-        // 6. Entry code but missing listing data
-        if (entryCodes.includes(cleanRow.inspection_info_by) && !hasListingData) {
-          flaggedIssues.push({ ...property, warning: 'Entry code but missing listing data' });
-          scrubReport.flagged.entryMismatch++;
-        }
-        
-        // 7. Estimation code but has listing data
-        if (estimationCodes.includes(cleanRow.inspection_info_by) && hasListingData) {
-          flaggedIssues.push({ ...property, warning: 'Estimation code but has listing data' });
-          scrubReport.flagged.estimationMismatch++;
-        }
-        
-        // 8. Residential inspector on commercial property
-        const inspectorType = inspectorDefinitions[cleanRow.inspection_measure_by]?.type;
-        if (inspectorType === 'residential' && ['4A', '4B', '4C'].includes(propertyClass)) {
-          flaggedIssues.push({ ...property, warning: 'Residential inspector on commercial property' });
-          scrubReport.flagged.inspectorMismatch++;
-        }
-        
-        // 9. Zero improvement but missing listing data
-        if (improvementValue === 0 && hasValidInspection && !hasListingData) {
-          flaggedIssues.push({ ...property, warning: 'Zero improvement but missing listing data' });
-          scrubReport.flagged.zeroImprovementMismatch++;
-        }
-      }
-      
-      // Add to clean data for insertion
-      if (shouldInsert) {
-        scrubbedData.push(cleanRow);
-      }
-    });
-    
-    console.log('Scrub complete:', scrubReport);
-    return { scrubbedData, scrubReport, flaggedIssues };
-  };
 
-  // Insert clean data into inspection_data table
-  const insertIntoInspectionData = async (scrubbedData, sessionId) => {
-    try {
-      const insertData = scrubbedData.map(row => ({
-        job_id: currentJob.id,
-        import_session_id: sessionId,
-        property_composite_key: row.property_composite_key,
-        block: row.property_block,
-        lot: row.property_lot,
-        qualifier: row.property_qualifier,
-        card: row.property_addl_card,
-        property_location: row.property_location,
-        property_class: row.property_m4_class || row.property_cama_class,
-        measure_by: row.inspection_measure_by,
-        measure_date: row.inspection_measure_date,
-        list_by: row.inspection_list_by,
-        list_date: row.inspection_list_date,
-        price_by: row.inspection_price_by,
-        price_date: row.inspection_price_date,
-        info_by_code: row.inspection_info_by,
-        project_start_date: settings.projectStartDate,
-        source_file_name: row.source_file_name,
-        source_file_uploaded_at: row.source_file_uploaded_at,
-        code_file_name: row.code_file_name,
-        code_file_updated_at: row.code_file_updated_at,
-        file_version: row.file_version,
-        upload_date: new Date().toISOString(),
-        is_new_since_last_upload: true // Will be calculated in production
-      }));
-      
-      // Clear existing data for this session if re-processing
-      const { error: deleteError } = await supabase
-        .from('inspection_data')
-        .delete()
-        .eq('job_id', currentJob.id)
-        .eq('import_session_id', sessionId);
-      
-      if (deleteError) console.error('Error clearing existing inspection data:', deleteError);
-      
-      // Insert new clean data
-      const { data, error } = await supabase
-        .from('inspection_data')
-        .insert(insertData);
-        
-      if (error) throw error;
-      
-      console.log(`Inserted ${insertData.length} clean records into inspection_data`);
-      return insertData.length;
-      
+      setSessionHistory(Array.from(sessionMap.values()).slice(0, 10)); // Latest 10 sessions
+
     } catch (error) {
-      console.error('Error inserting into inspection_data:', error);
-      throw error;
+      console.error('Error loading clean inspection data:', error);
+      addNotification('Error loading inspection data: ' + error.message, 'error');
     }
   };
 
-  // Calculate analytics from inspection_data
-  const calculateAnalytics = async (sessionId, codeMapping) => {
+  // Initialize data loading
+  useEffect(() => {
+    if (jobData?.id) {
+      loadEmployeeData();
+      loadAvailableInfoByCodes();
+      loadRawPropertyData();
+      loadCleanInspectionData();
+    }
+  }, [jobData?.id]);
+
+  // Process analytics when data is loaded
+  useEffect(() => {
+    if (rawPropertyData.length > 0 && Object.keys(employeeData).length > 0) {
+      setLoading(false);
+      processAnalytics();
+    }
+  }, [rawPropertyData, employeeData, selectedInfoByCodes, projectStartDate]);
+
+  // Enhanced validation and analytics processing
+  const processAnalytics = async () => {
+    if (!rawPropertyData.length || !projectStartDate) return;
+
     try {
-      const { data, error } = await supabase
-        .from('inspection_data')
-        .select('*')
-        .eq('job_id', currentJob.id)
-        .eq('import_session_id', sessionId);
-        
-      if (error) throw error;
-      
-      const parseCodeString = (codeStr) => {
-        return codeStr.split(',').map(code => {
-          const num = parseInt(code.trim());
-          return isNaN(num) ? parseInt(code.trim().replace(/^0+/, '')) || 0 : num;
-        });
-      };
-      
-      const entryCodes = parseCodeString(codeMapping.entryCodes);
-      const refusalCodes = parseCodeString(codeMapping.refusalCodes);
-      const pricingCodes = parseCodeString(codeMapping.pricingCodes);
-      
-      const validInspections = data.filter(row => row.measure_by && row.measure_date);
-      const eligibleProperties = data.filter(row => ['2', '3A'].includes(row.property_class));
-      const commercialProperties = data.filter(row => ['4A', '4B', '4C'].includes(row.property_class));
-      
-      const entryRateProperties = validInspections.filter(row => 
-        ['2', '3A'].includes(row.property_class) && 
-        entryCodes.includes(row.info_by_code)
-      );
-      
-      const refusalRateProperties = validInspections.filter(row => 
-        ['2', '3A'].includes(row.property_class) && 
-        refusalCodes.includes(row.info_by_code)
-      );
-      
-      // Pricing calculations (vendor-specific)
-      const pricingRateProperties = currentJob.vendor === 'BRT' 
-        ? commercialProperties.filter(row => row.price_by && row.price_date)
-        : validInspections.filter(row => 
-            ['4A', '4B', '4C'].includes(row.property_class) && 
-            pricingCodes.includes(row.info_by_code)
-          );
-      
-      // Inspector performance
+      debugLog('ANALYTICS', 'Starting analytics processing', { 
+        rawRecords: rawPropertyData.length,
+        startDate: projectStartDate,
+        infoByCodes: selectedInfoByCodes.length 
+      });
+
+      const startDate = new Date(projectStartDate);
       const inspectorStats = {};
-      validInspections.forEach(row => {
-        const inspector = row.measure_by;
-        if (!inspector) return;
-        
+      const classBreakdown = {};
+      const billingByClass = {};
+      const validationIssues = [];
+      const inspectorIssuesMap = {};
+
+      // Initialize class counters
+      const allClasses = ['1', '2', '3A', '3B', '4A', '4C', '15A', '15B', '15C', '15D', '15E', '15F', '5A', '5B', '6A', '6B'];
+      allClasses.forEach(cls => {
+        classBreakdown[cls] = { total: 0, inspected: 0, entry: 0, refusal: 0, priced: 0 };
+        billingByClass[cls] = { total: 0, inspected: 0, billable: 0 };
+      });
+
+      rawPropertyData.forEach((record, index) => {
+        const inspector = record.inspection_list_by || 'UNASSIGNED';
+        const propertyClass = record.property_m4_class || 'UNKNOWN';
+        const infoByCode = record.inspection_info_by;
+        const listDate = record.inspection_list_date ? new Date(record.inspection_list_date) : null;
+        const priceDate = record.inspection_price_date ? new Date(record.inspection_price_date) : null;
+
+        // Initialize inspector stats
         if (!inspectorStats[inspector]) {
+          const employeeInfo = employeeData[inspector] || {};
           inspectorStats[inspector] = {
-            name: inspectorDefinitions[inspector]?.name || `Inspector ${inspector}`,
-            type: inspectorDefinitions[inspector]?.type || 'residential',
-            totalInspections: 0,
+            name: employeeInfo.name || inspector,
+            fullName: employeeInfo.fullName || inspector,
+            inspector_type: employeeInfo.inspector_type || 'unknown',
+            total: 0,
+            inspected: 0,
+            entry: 0,
+            refusal: 0,
+            priced: 0,
+            residentialOnly: 0,
+            classes: { residential: 0, commercial: 0, other: 0 },
             dailyAverage: 0,
-            daysWorked: new Set(),
-            residential: 0,
-            commercial: 0
+            datesWorked: new Set()
           };
+          inspectorIssuesMap[inspector] = [];
         }
-        
-        inspectorStats[inspector].totalInspections++;
-        
-        // Track unique working days (BRT only)
-        if (currentJob.vendor === 'BRT' && row.measure_date) {
-          inspectorStats[inspector].daysWorked.add(row.measure_date);
+
+        // Count totals
+        inspectorStats[inspector].total++;
+        if (classBreakdown[propertyClass]) {
+          classBreakdown[propertyClass].total++;
+          billingByClass[propertyClass].total++;
         }
+
+        // Enhanced validation with detailed issue tracking
+        let isValid = true;
+        let hasValidDate = listDate && listDate >= startDate;
+        let hasValidInitials = inspector && inspector !== 'UNASSIGNED' && inspector.trim() !== '';
         
-        // Classify by property type
-        if (['2', '3A'].includes(row.property_class)) {
-          inspectorStats[inspector].residential++;
-        } else if (['4A', '4B', '4C'].includes(row.property_class)) {
-          inspectorStats[inspector].commercial++;
+        const addValidationIssue = (message, severity = 'medium') => {
+          const issue = {
+            index: index + 1,
+            block: record.property_block,
+            lot: record.property_lot,
+            qualifier: record.property_qualifier || '',
+            card: '1', // Default card
+            property_location: record.property_location || '',
+            warning_message: message,
+            inspector: inspector,
+            severity: severity
+          };
+          
+          validationIssues.push(issue);
+          inspectorIssuesMap[inspector].push(issue);
+          isValid = false;
+        };
+
+        // Validation Rule 1: Valid date + missing initials → scrub
+        if (hasValidDate && !hasValidInitials) {
+          addValidationIssue('Valid date but missing initials', 'high');
+          debugLog('VALIDATION', `Rule 1 triggered: ${record.property_block}-${record.property_lot}`);
+        }
+
+        // Validation Rule 2: Valid initials + missing/invalid date → scrub  
+        if (hasValidInitials && !hasValidDate) {
+          addValidationIssue('Valid initials but invalid/missing date', 'high');
+          debugLog('VALIDATION', `Rule 2 triggered: ${record.property_block}-${record.property_lot}`);
+        }
+
+        // Validation Rule 3: Invalid InfoBy codes → scrub
+        if (selectedInfoByCodes.length > 0 && infoByCode && !selectedInfoByCodes.includes(infoByCode.toString())) {
+          addValidationIssue(`Info By Code Invalid: ${infoByCode}`, 'medium');
+          debugLog('VALIDATION', `Rule 3 triggered: Invalid InfoBy ${infoByCode}`);
+        }
+
+        // Validation Rules 4-6: InfoBy code validation patterns
+        const isRefusalCode = ['12', '13', '14'].includes(infoByCode?.toString());
+        const isEntryCode = ['08', '09', '10', '11'].includes(infoByCode?.toString());  
+        const hasListingData = record.inspection_list_date && record.inspection_list_by;
+
+        if (isRefusalCode && !hasListingData) {
+          addValidationIssue(`Info By Mismatch-Inspected? (Refusal code ${infoByCode} but missing listing data)`, 'medium');
+        }
+
+        if (isEntryCode && !hasListingData) {
+          addValidationIssue(`Info By Mismatch-Inspected? (Entry code ${infoByCode} but missing listing data)`, 'medium');
+        }
+
+        // Validation Rule 7: Zero improvement validation (similar to your Excel report)
+        if (propertyClass && ['2', '3A', '3B'].includes(propertyClass) && !hasListingData) {
+          addValidationIssue('InfoBy Code and Inspection Info Invalid for No Improvement', 'medium');
+        }
+
+        // Only count valid records for analytics
+        if (isValid && hasValidDate && hasValidInitials) {
+          inspectorStats[inspector].inspected++;
+          if (listDate) {
+            inspectorStats[inspector].datesWorked.add(listDate.toISOString().split('T')[0]);
+          }
+
+          if (classBreakdown[propertyClass]) {
+            classBreakdown[propertyClass].inspected++;
+            billingByClass[propertyClass].inspected++;
+            billingByClass[propertyClass].billable++;
+          }
+
+          // Determine inspection type
+          if (isEntryCode) {
+            inspectorStats[inspector].entry++;
+            if (classBreakdown[propertyClass]) {
+              classBreakdown[propertyClass].entry++;
+            }
+          } else if (isRefusalCode) {
+            inspectorStats[inspector].refusal++;
+            if (classBreakdown[propertyClass]) {
+              classBreakdown[propertyClass].refusal++;
+            }
+          }
+
+          // Count pricing
+          if (priceDate && priceDate >= startDate) {
+            inspectorStats[inspector].priced++;
+            if (classBreakdown[propertyClass]) {
+              classBreakdown[propertyClass].priced++;
+            }
+          }
+
+          // Class categorization
+          if (['2', '3A', '3B'].includes(propertyClass)) {
+            inspectorStats[inspector].classes.residential++;
+            inspectorStats[inspector].residentialOnly++;
+          } else if (['4A', '4B', '4C'].includes(propertyClass)) {
+            inspectorStats[inspector].classes.commercial++;
+          } else {
+            inspectorStats[inspector].classes.other++;
+          }
         }
       });
-      
-      // Calculate daily averages
+
+      // Calculate rates and daily averages for each inspector
       Object.keys(inspectorStats).forEach(inspector => {
         const stats = inspectorStats[inspector];
-        if (currentJob.vendor === 'BRT' && stats.daysWorked.size > 0) {
-          stats.dailyAverage = Math.round((stats.totalInspections / stats.daysWorked.size) * 10) / 10;
-        } else {
-          stats.dailyAverage = null;
+        const daysWorked = stats.datesWorked.size;
+        
+        if (stats.inspected > 0) {
+          stats.entryRate = Math.round((stats.entry / stats.inspected) * 100);
+          stats.refusalRate = Math.round((stats.refusal / stats.inspected) * 100);
+          stats.pricingRate = Math.round((stats.priced / stats.inspected) * 100);
         }
-        stats.daysWorked = stats.daysWorked.size;
+        
+        if (daysWorked > 0) {
+          stats.dailyAverage = Math.round(stats.inspected / daysWorked);
+          stats.totalResidentialAverage = Math.round(stats.residentialOnly / daysWorked);
+        }
+        
+        delete stats.datesWorked; // Clean up for storage
       });
-      
-      return {
-        totalProperties: data.length,
-        inspectedProperties: validInspections.length,
-        entryRate: {
-          count: entryRateProperties.length,
-          total: eligibleProperties.length,
-          percentage: eligibleProperties.length > 0 ? Math.round((entryRateProperties.length / eligibleProperties.length) * 100) : 0
+
+      // Create validation report in Excel format
+      const validationReportData = {
+        summary: {
+          total_inspectors: Object.keys(inspectorIssuesMap).filter(k => inspectorIssuesMap[k].length > 0).length,
+          total_issues: validationIssues.length,
+          inspector_breakdown: Object.keys(inspectorIssuesMap)
+            .filter(inspector => inspectorIssuesMap[inspector].length > 0)
+            .map(inspector => ({
+              inspector_code: inspector,
+              inspector_name: inspectorStats[inspector]?.fullName || inspector,
+              total_issues: inspectorIssuesMap[inspector].length
+            }))
         },
-        refusalRate: {
-          count: refusalRateProperties.length,
-          total: eligibleProperties.length,
-          percentage: eligibleProperties.length > 0 ? Math.round((refusalRateProperties.length / eligibleProperties.length) * 100) : 0
-        },
-        pricingRate: {
-          count: pricingRateProperties.length,
-          total: commercialProperties.length,
-          percentage: commercialProperties.length > 0 ? Math.round((pricingRateProperties.length / commercialProperties.length) * 100) : 0
-        },
-        inspectorStats
+        detailed_issues: inspectorIssuesMap
       };
-      
+
+      setAnalytics({
+        totalRecords: rawPropertyData.length,
+        validRecords: rawPropertyData.length - validationIssues.filter(v => v.severity === 'high').length,
+        inspectorStats,
+        classBreakdown,
+        validationIssues: validationIssues.length,
+        processingDate: new Date().toISOString()
+      });
+
+      setBillingAnalytics({
+        byClass: billingByClass,
+        grouped: {
+          commercial: ['4A', '4C'].reduce((sum, cls) => sum + (billingByClass[cls]?.billable || 0), 0),
+          exempt: ['15A', '15B', '15C', '15D', '15E', '15F'].reduce((sum, cls) => sum + (billingByClass[cls]?.billable || 0), 0),
+          railroad: ['5A', '5B'].reduce((sum, cls) => sum + (billingByClass[cls]?.billable || 0), 0),
+          personalProperty: ['6A', '6B'].reduce((sum, cls) => sum + (billingByClass[cls]?.billable || 0), 0)
+        },
+        totalBillable: Object.values(billingByClass).reduce((sum, cls) => sum + cls.billable, 0)
+      });
+
+      setValidationReport(validationReportData);
+
+      debugLog('ANALYTICS', 'Analytics processing complete', {
+        validRecords: rawPropertyData.length - validationIssues.length,
+        totalIssues: validationIssues.length,
+        inspectors: Object.keys(inspectorStats).length
+      });
+
+      if (validationIssues.length > 0) {
+        addNotification(`Found ${validationIssues.length} validation issues`, 'warning');
+      }
+
     } catch (error) {
-      console.error('Error calculating analytics:', error);
-      throw error;
+      console.error('Error processing analytics:', error);
+      addNotification('Error processing analytics: ' + error.message, 'error');
     }
   };
 
-  // Main processing function
-  const processProductionData = async () => {
-    if (!currentJob) {
-      addNotification('No job selected', 'error');
-      return;
-    }
+  // Handle InfoBy code selection
+  const handleInfoByToggle = (code) => {
+    if (settingsLocked) return;
     
-    if (!settingsLocked) {
-      addNotification('Please save settings before processing', 'warning');
+    setSelectedInfoByCodes(prev => 
+      prev.includes(code) 
+        ? prev.filter(c => c !== code)
+        : [...prev, code]
+    );
+  };
+
+  // Filter InfoBy codes for search
+  const filteredInfoByCodes = availableInfoByCodes.filter(item =>
+    item.code.toLowerCase().includes(infoBySearchTerm.toLowerCase()) ||
+    item.description.toLowerCase().includes(infoBySearchTerm.toLowerCase())
+  );
+
+  // Start processing session - Move data from property_records to inspection_data
+  const startProcessingSession = async () => {
+    if (!projectStartDate || selectedInfoByCodes.length === 0) {
+      addNotification('Please set project start date and select InfoBy codes', 'error');
       return;
     }
 
+    const newSessionId = crypto.randomUUID();
+    setSessionId(newSessionId);
+    setSettingsLocked(true);
     setProcessing(true);
+
     try {
-      console.log('Starting complete production data processing...');
-      
-      // 1. Load valid employee initials
-      const validInitials = await loadEmployeeData();
-      
-      // 2. Query property records from database
-      const propertyData = await getPropertyRecords();
-      
-      if (!propertyData || propertyData.length === 0) {
-        addNotification('No property records found for this job', 'warning');
-        return;
+      debugLog('SESSION', 'Starting processing session', { 
+        sessionId: newSessionId,
+        startDate: projectStartDate,
+        infoByCodes: selectedInfoByCodes 
+      });
+
+      // Process analytics first to get validation results
+      await processAnalytics();
+
+      if (!analytics || !validationReport) {
+        throw new Error('Analytics processing failed');
       }
 
-      console.log(`Processing ${propertyData.length} property records...`);
-      
-      // 3. Apply enhanced scrubbing and validation
-      const startDate = new Date(settings.projectStartDate);
-      const { scrubbedData, scrubReport, flaggedIssues } = scrubAndValidateData(
-        propertyData, 
-        startDate, 
-        validInitials, 
-        settings.infoByCodeMappings
-      );
-      
-      // 4. Create new processing session
-      const sessionId = crypto.randomUUID();
-      setCurrentProcessingSession(sessionId);
-      
-      // 5. Insert clean data into inspection_data
-      const insertedCount = await insertIntoInspectionData(scrubbedData, sessionId);
-      
-      // 6. Calculate analytics from clean data
-      const analytics = await calculateAnalytics(sessionId, settings.infoByCodeMappings);
-      
-      // 7. Update billing totals
-      await loadBillingTotals();
-      
-      // 8. Generate validation report
-      const report = flaggedIssues.length > 0 ? {
-        totalIssues: flaggedIssues.length,
-        inspectorCount: new Set(flaggedIssues.map(issue => issue.inspector)).size,
-        issuesByInspector: flaggedIssues.reduce((acc, issue) => {
-          if (!acc[issue.inspector]) acc[issue.inspector] = [];
-          acc[issue.inspector].push(issue);
-          return acc;
-        }, {})
-      } : null;
-      
-      setValidationReport(report);
-      
-      // 9. Combine results
-      const finalResults = {
-        ...analytics,
-        processingInfo: {
-          totalRecords: propertyData.length,
-          insertedRecords: insertedCount,
-          processingTime: new Date(),
-          vendor: currentJob.vendor,
-          sessionId,
-          scrubReport,
-          flaggedIssues: flaggedIssues.length
-        }
-      };
-      
-      setResults(finalResults);
-      
-      // 10. Update job metrics back to AdminJobManagement
-      if (onUpdateJobMetrics) {
-        onUpdateJobMetrics(currentJob.id, {
-          entryRate: analytics.entryRate.percentage,
-          refusalRate: analytics.refusalRate.percentage,
-          inspectedProperties: analytics.inspectedProperties,
-          pricingRate: analytics.pricingRate.percentage
-        });
-      }
-      
-      addNotification(`Processing complete! ${insertedCount} clean records inserted.`, 'success');
-      
+      // Move clean data to inspection_data table
+      const validRecords = rawPropertyData.filter((record, index) => {
+        const inspector = record.inspection_list_by || 'UNASSIGNED';
+        const listDate = record.inspection_list_date ? new Date(record.inspection_list_date) : null;
+        const startDate = new Date(projectStartDate);
+        const hasValidDate = listDate && listDate >= startDate;
+        const hasValidInitials = inspector && inspector !== 'UNASSIGNED' && inspector.trim() !== '';
+        const infoByCode = record.inspection_info_by;
+        const validInfoBy = selectedInfoByCodes.length === 0 || !infoByCode || selectedInfoByCodes.includes(infoByCode.toString());
+        
+        return hasValidDate && hasValidInitials && validInfoBy;
+      });
+
+      debugLog('SESSION', `Moving ${validRecords.length} valid records to inspection_data`);
+
+      // Clear existing data for this session
+      await supabase
+        .from('inspection_data')
+        .delete()
+        .eq('job_id', jobData.id);
+
+      // Insert clean records
+      const inspectionRecords = validRecords.map(record => ({
+        job_id: jobData.id,
+        import_session_id: newSessionId,
+        property_composite_key: record.property_composite_key,
+        block: record.property_block,
+        lot: record.property_lot,
+        qualifier: record.property_qualifier,
+        property_location: record.property_location,
+        property_class: record.property_m4_class,
+        info_by_code: record.inspection_info_by,
+        list_by: record.inspection_list_by,
+        list_date: record.inspection_list_date,
+        price_by: record.inspection_price_by,
+        price_date: record.inspection_price_date,
+        sale_price: record.sales_price,
+        sale_date: record.sales_date,
+        project_start_date: projectStartDate,
+        validation_report: validationReport,
+        file_version: maxFileVersion,
+        source_file_name: `version_${maxFileVersion}`,
+        upload_date: new Date().toISOString()
+      }));
+
+      // Batch insert to inspection_data
+      const { error: insertError } = await supabase
+        .from('inspection_data')
+        .insert(inspectionRecords);
+
+      if (insertError) throw insertError;
+
+      // Update job statistics for other modules
+      await updateJobStatistics();
+
+      // Reload clean data
+      await loadCleanInspectionData();
+
+      debugLog('SESSION', 'Processing session completed successfully');
+      addNotification(`✅ Processing session completed! ${validRecords.length} clean records moved to inspection_data`, 'success');
+
     } catch (error) {
-      console.error('Processing error:', error);
-      addNotification('Error processing data: ' + error.message, 'error');
+      console.error('Error in processing session:', error);
+      addNotification('Processing session failed: ' + error.message, 'error');
+      setSettingsLocked(false);
+      setSessionId(null);
     } finally {
       setProcessing(false);
     }
   };
 
-  // Download validation report as Excel
-  const downloadValidationReport = () => {
-    if (!validationReport) return;
+  // Update job statistics for AdminJobManagement tiles and ManagementChecklist
+  const updateJobStatistics = async () => {
+    if (!analytics) return;
+
+    try {
+      const totalInspected = Object.values(analytics.inspectorStats).reduce((sum, stats) => sum + stats.inspected, 0);
+      const totalEntry = Object.values(analytics.inspectorStats).reduce((sum, stats) => sum + stats.entry, 0);
+      const totalRefusal = Object.values(analytics.inspectorStats).reduce((sum, stats) => sum + stats.refusal, 0);
+      const totalPriced = Object.values(analytics.inspectorStats).reduce((sum, stats) => sum + stats.priced, 0);
+      const commercialInspected = Object.values(analytics.classBreakdown)
+        .filter(cls => ['4A', '4B', '4C'].includes(cls))
+        .reduce((sum, cls) => sum + cls.inspected, 0);
+      const commercialTotal = Object.values(analytics.classBreakdown)
+        .filter(cls => ['4A', '4B', '4C'].includes(cls))
+        .reduce((sum, cls) => sum + cls.total, 0);
+
+      const workflowStats = {
+        rates: {
+          entryRate: totalInspected > 0 ? Math.round((totalEntry / totalInspected) * 100) : 0,
+          refusalRate: totalInspected > 0 ? Math.round((totalRefusal / totalInspected) * 100) : 0,
+          pricingRate: totalInspected > 0 ? Math.round((totalPriced / totalInspected) * 100) : 0,
+          commercialInspectionRate: commercialTotal > 0 ? Math.round((commercialInspected / commercialTotal) * 100) : 0
+        },
+        inspectionPhases: {
+          firstAttempt: 'COMPLETED',
+          secondAttempt: totalRefusal > 0 ? 'IN_PROGRESS' : 'PENDING',
+          thirdAttempt: 'PENDING'
+        },
+        appeals: {
+          totalCount: 0,
+          percentOfWhole: 0,
+          byClass: {}
+        }
+      };
+
+      // Update job with new statistics
+      const { error } = await supabase
+        .from('jobs')
+        .update({
+          workflow_stats: workflowStats,
+          inspected_properties: totalInspected,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', jobData.id);
+
+      if (error) throw error;
+
+      debugLog('JOB_UPDATE', 'Job statistics updated', workflowStats);
+
+    } catch (error) {
+      console.error('Error updating job statistics:', error);
+    }
+  };
+
+  // Export validation report in Excel format
+  const exportValidationReport = () => {
+    if (!validationReport || !validationReport.detailed_issues) return;
+
+    let csvContent = "Inspector,Total Issues,Inspector Name\n";
     
-    console.log('Generating validation report...', validationReport);
-    addNotification('Validation report download would start here', 'info');
+    // Summary sheet
+    validationReport.summary.inspector_breakdown.forEach(inspector => {
+      csvContent += `"${inspector.inspector_code}","${inspector.total_issues}","${inspector.inspector_name}"\n`;
+    });
+
+    csvContent += "\n\nDetailed Issues:\n";
+    csvContent += "Inspector,Block,Lot,Qualifier,Card,Property Location,Warning Message\n";
+    
+    // Detailed issues
+    Object.keys(validationReport.detailed_issues).forEach(inspector => {
+      const issues = validationReport.detailed_issues[inspector];
+      issues.forEach(issue => {
+        csvContent += `"${inspector}","${issue.block}","${issue.lot}","${issue.qualifier}","${issue.card}","${issue.property_location}","${issue.warning_message}"\n`;
+      });
+    });
+
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Inspection_Validation_Report_${jobData.ccdd || jobData.ccddCode}_${new Date().toISOString().split('T')[0].replace(/-/g, '')}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+
+    addNotification('📊 Validation report exported in Excel format', 'success');
   };
 
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString();
-  };
-
-  const getDaysAgo = (dateString) => {
-    const days = Math.floor((new Date() - new Date(dateString)) / (1000 * 60 * 60 * 24));
-    return days === 0 ? 'Today' : days === 1 ? '1 day ago' : `${days} days ago`;
-  };
-
-  if (!currentJob) {
+  if (loading) {
     return (
-      <div className="max-w-6xl mx-auto p-6 bg-white">
-        <div className="text-center text-gray-500 py-12">
-          <div className="text-4xl mb-4">📋</div>
-          <h4 className="text-lg font-medium mb-2">No Job Selected</h4>
-          <p className="text-sm">Please select a job to use the Production Tracker.</p>
+      <div className="max-w-6xl mx-auto p-6">
+        <div className="flex items-center justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mr-3"></div>
+          <span className="text-gray-600">Loading production data...</span>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-6xl mx-auto p-6 bg-white">
+    <div className="max-w-6xl mx-auto p-6 space-y-6">
       {/* Notifications */}
       <div className="fixed top-4 right-4 z-50 space-y-2">
         {notifications.map(notification => (
@@ -697,477 +739,542 @@ const ProductionTracker = ({ jobData, onBackToJobs, onUpdateJobMetrics }) => {
                 onClick={() => setNotifications(prev => prev.filter(n => n.id !== notification.id))}
                 className="ml-2 text-gray-400 hover:text-gray-600"
               >
-                ×
+                <X className="w-4 h-4" />
               </button>
             </div>
           </div>
         ))}
       </div>
 
+      {/* Version Status Banner */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <div className="flex items-center justify-between">
+          <span className="font-medium text-blue-800">
+            📊 Using Current Version - File Version: {maxFileVersion}
+          </span>
+          <span className="text-sm text-blue-600">
+            {rawPropertyData.length.toLocaleString()} properties on version {maxFileVersion}
+          </span>
+        </div>
+      </div>
+
       {/* Header */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              {currentJob.name} - Production Tracker
-            </h1>
-            <p className="text-gray-600">
-              Process inspection data, validate field work, and generate payroll analytics
-            </p>
+      <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border-2 border-blue-200 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center">
+            <Factory className="w-8 h-8 mr-3 text-blue-600" />
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Production Tracker</h1>
+              <p className="text-gray-600">{jobData.name} - Analytics & Validation Engine</p>
+            </div>
           </div>
-          {onBackToJobs && (
-            <button
-              onClick={onBackToJobs}
-              className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
-            >
-              ← Back to Jobs
-            </button>
-          )}
+          <button
+            onClick={onBackToJobs}
+            className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-all"
+          >
+            ← Back to Jobs
+          </button>
         </div>
-      </div>
 
-      {/* Job Info Banner */}
-      <div className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-green-50 rounded-lg border border-blue-200">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-6">
-            <div>
-              <span className="text-sm font-medium text-gray-600">Vendor:</span>
-              <span className={`ml-2 px-3 py-1 rounded-full text-sm font-medium ${
-                currentJob.vendor === 'Microsystems' 
-                  ? 'bg-blue-100 text-blue-800' 
-                  : 'bg-orange-100 text-orange-800'
-              }`}>
-                {currentJob.vendor}
-              </span>
-            </div>
-            <div>
-              <span className="text-sm font-medium text-gray-600">CCDD:</span>
-              <span className="ml-2 font-bold text-blue-600">{currentJob.ccdd || currentJob.ccddCode}</span>
-            </div>
-            <div>
-              <span className="text-sm font-medium text-gray-600">Municipality:</span>
-              <span className="ml-2 text-gray-800">{currentJob.municipality}</span>
-            </div>
-            {settingsLocked && (
-              <div className="flex items-center text-green-600">
-                <Lock className="w-4 h-4 mr-1" />
-                <span className="text-sm font-medium">Settings Locked</span>
+        {/* Quick Stats */}
+        {analytics && (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="bg-white p-4 rounded-lg border shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Raw Properties</p>
+                  <p className="text-2xl font-bold text-blue-600">{analytics.totalRecords.toLocaleString()}</p>
+                </div>
+                <TrendingUp className="w-8 h-8 text-blue-500" />
               </div>
-            )}
-          </div>
-          <div className="text-right">
-            <div className="text-2xl font-bold text-green-600">
-              {currentJob.inspectedProperties?.toLocaleString() || 0} of {currentJob.totalProperties?.toLocaleString() || 0}
             </div>
-            <div className="text-sm text-gray-600">Properties Inspected</div>
+            
+            <div className="bg-white p-4 rounded-lg border shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Clean Records</p>
+                  <p className="text-2xl font-bold text-green-600">{cleanInspectionData.length.toLocaleString()}</p>
+                </div>
+                <CheckCircle className="w-8 h-8 text-green-500" />
+              </div>
+            </div>
+
+            <div className="bg-white p-4 rounded-lg border shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Inspectors Active</p>
+                  <p className="text-2xl font-bold text-purple-600">{Object.keys(analytics.inspectorStats).length}</p>
+                </div>
+                <Users className="w-8 h-8 text-purple-500" />
+              </div>
+            </div>
+
+            <div className="bg-white p-4 rounded-lg border shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Validation Issues</p>
+                  <p className="text-2xl font-bold text-red-600">{analytics.validationIssues}</p>
+                </div>
+                <AlertTriangle className="w-8 h-8 text-red-500" />
+              </div>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
-      {/* Project Settings - Lock In */}
-      <div className="mb-6 p-4 bg-indigo-50 border border-indigo-200 rounded-lg">
-        <div className="flex items-center justify-between">
+      {/* Settings Panel - Dynamic InfoBy Codes */}
+      <div className="bg-white rounded-lg border shadow-sm p-6">
+        <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
+          <Settings className="w-5 h-5 mr-2" />
+          Processing Settings
+          {settingsLocked && (
+            <span className="ml-3 px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
+              Session Active: {sessionId?.slice(-8)}
+            </span>
+          )}
+        </h3>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Project Start Date */}
           <div>
-            <h3 className="text-lg font-semibold text-indigo-800 flex items-center space-x-2">
-              <Lock className="w-5 h-5" />
-              <span>Project Settings</span>
-            </h3>
-            <p className="text-sm text-indigo-600 mt-1">Lock in project start date for consistent scrubbing</p>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Project Start Date * 
+              {settingsLocked && (
+                <span className="ml-2 text-xs text-green-600">🔒 Locked</span>
+              )}
+            </label>
+            <input
+              type="date"
+              value={projectStartDate}
+              onChange={(e) => setProjectStartDate(e.target.value)}
+              disabled={settingsLocked}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"
+            />
           </div>
-          <div className="flex items-center space-x-4">
-            <div>
-              <label className="block text-sm font-medium text-indigo-700 mb-1">Project Start Date</label>
-              <input
-                type="date"
-                value={settings.projectStartDate}
-                onChange={(e) => setSettings({...settings, projectStartDate: e.target.value})}
-                disabled={settingsLocked}
-                className="px-3 py-2 border border-indigo-300 rounded-md text-sm disabled:bg-gray-100"
-              />
-            </div>
-            {!settingsLocked && (
-              <button
-                onClick={saveSettings}
-                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center space-x-2 text-sm font-medium"
-              >
-                <Save className="w-4 h-4" />
-                <span>Lock Settings</span>
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
 
-      {/* Data Freshness Warning */}
-      {showDataWarning?.show && (
-        <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-          <div className="flex items-start space-x-3">
-            <AlertTriangle className="w-5 h-5 text-yellow-600 mt-0.5" />
-            <div className="flex-1">
-              <h3 className="text-sm font-medium text-yellow-800">Data Freshness Notice</h3>
-              <p className="text-sm text-yellow-700 mt-1">
-                {showDataWarning.message}. {showDataWarning.recommendation}.
-              </p>
-              {currentJob.source_file_uploaded_at && currentJob.code_file_updated_at && (
-                <div className="mt-2 flex items-center space-x-4 text-xs text-yellow-600">
-                  <span>📄 Source: {getDaysAgo(currentJob.source_file_uploaded_at)}</span>
-                  <span>📋 Code: {getDaysAgo(currentJob.code_file_updated_at)}</span>
+          {/* Dynamic InfoBy Codes */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Valid InfoBy Codes * ({selectedInfoByCodes.length} selected)
+              {settingsLocked && (
+                <span className="ml-2 text-xs text-green-600">🔒 Locked</span>
+              )}
+            </label>
+            <div className="relative">
+              <div
+                onClick={() => !settingsLocked && setShowInfoByDropdown(!showInfoByDropdown)}
+                className={`w-full px-3 py-2 border border-gray-300 rounded-lg bg-white cursor-pointer flex items-center justify-between ${
+                  settingsLocked ? 'bg-gray-100 cursor-not-allowed' : 'hover:border-gray-400'
+                }`}
+              >
+                <span className="text-gray-700">
+                  {selectedInfoByCodes.length === 0 
+                    ? 'Select InfoBy codes...' 
+                    : `${selectedInfoByCodes.length} codes selected`
+                  }
+                </span>
+                {!settingsLocked && (
+                  showInfoByDropdown ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
+                )}
+              </div>
+
+              {showInfoByDropdown && !settingsLocked && (
+                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                  {/* Search */}
+                  <div className="p-2 border-b">
+                    <input
+                      type="text"
+                      placeholder="Search codes..."
+                      value={infoBySearchTerm}
+                      onChange={(e) => setInfoBySearchTerm(e.target.value)}
+                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                    />
+                  </div>
+
+                  {/* Code List */}
+                  <div className="max-h-48 overflow-y-auto">
+                    {filteredInfoByCodes.length === 0 ? (
+                      <div className="p-3 text-sm text-gray-500 text-center">
+                        {availableInfoByCodes.length === 0 
+                          ? 'No InfoBy codes available. Upload a code file first.'
+                          : 'No codes match your search.'
+                        }
+                      </div>
+                    ) : (
+                      filteredInfoByCodes.map((item) => (
+                        <div
+                          key={item.code}
+                          onClick={() => handleInfoByToggle(item.code)}
+                          className={`px-3 py-2 cursor-pointer hover:bg-gray-50 border-b border-gray-100 ${
+                            selectedInfoByCodes.includes(item.code) ? 'bg-blue-50 text-blue-800' : ''
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <span className="font-medium">{item.code}</span>
+                              <span className="text-sm text-gray-600 ml-2">{item.description}</span>
+                            </div>
+                            {selectedInfoByCodes.includes(item.code) && (
+                              <CheckCircle className="w-4 h-4 text-blue-600" />
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
                 </div>
               )}
             </div>
-            <button
-              onClick={() => setShowDataWarning({ ...showDataWarning, show: false })}
-              className="text-yellow-600 hover:text-yellow-800"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        {/* Configuration Panel */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* InfoBy Code Configuration */}
-          <div className={`p-6 border rounded-lg ${settingsLocked ? 'bg-gray-50 border-gray-300' : 'bg-blue-50 border-blue-200'}`}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-blue-800 flex items-center space-x-2">
-                <Settings className="w-5 h-5" />
-                <span>InfoBy Code Configuration</span>
-                <span className="text-sm font-normal text-blue-600">
-                  ({currentJob.vendor} Format)
-                </span>
-              </h3>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-blue-700 mb-2">Entry Codes</label>
-                <input
-                  type="text"
-                  value={settings.infoByCodeMappings.entryCodes}
-                  onChange={(e) => setSettings({
-                    ...settings, 
-                    infoByCodeMappings: {...settings.infoByCodeMappings, entryCodes: e.target.value}
-                  })}
-                  disabled={settingsLocked}
-                  placeholder="01,02,03,04"
-                  className="w-full p-2 border border-blue-300 rounded-md text-sm disabled:bg-gray-100"
-                />
-                <p className="text-xs text-blue-600 mt-1">Successful interior access codes</p>
+            {/* Selected Codes Display */}
+            {selectedInfoByCodes.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1">
+                {selectedInfoByCodes.slice(0, 10).map(code => (
+                  <span key={code} className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
+                    {code}
+                    {!settingsLocked && (
+                      <button
+                        onClick={() => handleInfoByToggle(code)}
+                        className="ml-1 text-blue-600 hover:text-blue-800"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </span>
+                ))}
+                {selectedInfoByCodes.length > 10 && (
+                  <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full">
+                    +{selectedInfoByCodes.length - 10} more
+                  </span>
+                )}
               </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-blue-700 mb-2">Refusal Codes</label>
-                <input
-                  type="text"
-                  value={settings.infoByCodeMappings.refusalCodes}
-                  onChange={(e) => setSettings({
-                    ...settings, 
-                    infoByCodeMappings: {...settings.infoByCodeMappings, refusalCodes: e.target.value}
-                  })}
-                  disabled={settingsLocked}
-                  placeholder="06"
-                  className="w-full p-2 border border-blue-300 rounded-md text-sm disabled:bg-gray-100"
-                />
-                <p className="text-xs text-blue-600 mt-1">Property access refusal codes</p>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-blue-700 mb-2">Estimation Codes</label>
-                <input
-                  type="text"
-                  value={settings.infoByCodeMappings.estimationCodes}
-                  onChange={(e) => setSettings({
-                    ...settings, 
-                    infoByCodeMappings: {...settings.infoByCodeMappings, estimationCodes: e.target.value}
-                  })}
-                  disabled={settingsLocked}
-                  placeholder="07"
-                  className="w-full p-2 border border-blue-300 rounded-md text-sm disabled:bg-gray-100"
-                />
-                <p className="text-xs text-blue-600 mt-1">Estimated inspection codes</p>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-blue-700 mb-2">Invalid Codes</label>
-                <input
-                  type="text"
-                  value={settings.infoByCodeMappings.invalidCodes}
-                  onChange={(e) => setSettings({
-                    ...settings, 
-                    infoByCodeMappings: {...settings.infoByCodeMappings, invalidCodes: e.target.value}
-                  })}
-                  disabled={settingsLocked}
-                  placeholder="00,05"
-                  className="w-full p-2 border border-blue-300 rounded-md text-sm disabled:bg-gray-100"
-                />
-                <p className="text-xs text-blue-600 mt-1">Invalid/exclude codes</p>
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-blue-700 mb-2">
-                  Pricing Codes
-                  {currentJob.vendor === 'Microsystems' && (
-                    <span className="text-xs text-blue-500 ml-2">(Microsystems uses InfoBy for pricing)</span>
-                  )}
-                </label>
-                <input
-                  type="text"
-                  value={settings.infoByCodeMappings.pricingCodes}
-                  onChange={(e) => setSettings({
-                    ...settings, 
-                    infoByCodeMappings: {...settings.infoByCodeMappings, pricingCodes: e.target.value}
-                  })}
-                  disabled={settingsLocked}
-                  placeholder="08,09"
-                  className="w-full p-2 border border-blue-300 rounded-md text-sm disabled:bg-gray-100"
-                />
-                <p className="text-xs text-blue-600 mt-1">
-                  {currentJob.vendor === 'BRT' 
-                    ? 'Commercial pricing completion codes' 
-                    : 'InfoBy codes that indicate pricing work completed'
-                  }
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Additional Settings */}
-          <div className={`p-6 border rounded-lg ${settingsLocked ? 'bg-gray-50 border-gray-300' : 'bg-yellow-50 border-yellow-200'}`}>
-            <h3 className="text-lg font-semibold text-yellow-800 mb-4 flex items-center space-x-2">
-              <Clock className="w-5 h-5" />
-              <span>Additional Settings</span>
-            </h3>
-            
-            <div className="text-center text-gray-500 py-8">
-              <Clock className="w-12 h-12 mx-auto mb-2 text-gray-400" />
-              <p className="text-sm">Additional date settings will be available in future updates</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Control Panel */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Process Button */}
-          <div className="p-6 bg-green-50 border border-green-200 rounded-lg">
-            <h3 className="text-lg font-semibold text-green-800 mb-4 flex items-center space-x-2">
-              <Play className="w-5 h-5" />
-              <span>Process Data</span>
-            </h3>
-            
-            <button
-              onClick={processProductionData}
-              disabled={processing || !settingsLocked}
-              className="w-full px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-md hover:shadow-lg transition-all"
-            >
-              {processing ? (
-                <span className="flex items-center justify-center space-x-2">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                  <span>Processing...</span>
-                </span>
-              ) : (
-                <span className="flex items-center justify-center space-x-2">
-                  <Play className="w-4 h-4" />
-                  <span>🔄 Process Production Data</span>
-                </span>
-              )}
-            </button>
-            
-            <p className="text-xs text-green-600 mt-2 text-center">
-              Scrub data, validate inspections, calculate metrics
-            </p>
-            
-            {!settingsLocked && (
-              <p className="text-xs text-red-600 mt-2 text-center">
-                Please save and lock settings before processing
-              </p>
             )}
           </div>
+        </div>
 
-          {/* Billing Totals */}
-          {billingTotals && (
-            <div className="p-6 bg-purple-50 border border-purple-200 rounded-lg">
-              <h3 className="text-lg font-semibold text-purple-800 mb-4 flex items-center space-x-2">
-                <BarChart3 className="w-5 h-5" />
-                <span>Billing Summary</span>
-              </h3>
-              
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div className="space-y-2">
-                    <div className="font-medium text-purple-700">By Class:</div>
-                    {Object.entries(billingTotals.individual).map(([propClass, count]) => (
-                      <div key={propClass} className="flex justify-between">
-                        <span>Class {propClass}:</span>
-                        <span className="font-bold">{count}</span>
+        {/* Session History */}
+        {sessionHistory.length > 0 && (
+          <div className="mt-6 pt-6 border-t border-gray-200">
+            <h4 className="text-md font-semibold text-gray-800 mb-3">Recent Processing Sessions</h4>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {sessionHistory.slice(0, 6).map((session, idx) => (
+                <div key={idx} className="p-3 bg-gray-50 rounded-lg border text-sm">
+                  <div className="font-medium text-gray-900">
+                    Session {session.session_id?.slice(-8) || 'Unknown'}
+                  </div>
+                  <div className="text-xs text-gray-600 mt-1">
+                    {new Date(session.processed_at).toLocaleDateString()}
+                  </div>
+                  {session.validation_summary && (
+                    <div className="text-xs text-gray-600 mt-1">
+                      {session.validation_summary.total_issues || 0} issues found
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Action Button */}
+        <div className="mt-6 flex justify-end">
+          <button
+            onClick={startProcessingSession}
+            disabled={processing || settingsLocked || !projectStartDate || selectedInfoByCodes.length === 0}
+            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+          >
+            {processing ? (
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+            ) : (
+              <RefreshCw className="w-4 h-4" />
+            )}
+            <span>{processing ? 'Processing...' : 'Start Processing Session'}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Main Content Tabs */}
+      {analytics && (
+        <div className="bg-white rounded-lg border shadow-sm">
+          {/* Tab Navigation */}
+          <div className="border-b border-gray-200">
+            <nav className="-mb-px flex space-x-8 px-6">
+              <button
+                onClick={() => setActiveTab('analytics')}
+                className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'analytics'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                📊 Inspector Analytics
+              </button>
+              <button
+                onClick={() => setActiveTab('billing')}
+                className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'billing'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                💰 Summary for Billing
+              </button>
+              <button
+                onClick={() => setActiveTab('validation')}
+                className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'validation'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                ⚠️ Validation Report ({validationReport?.summary.total_issues || 0})
+              </button>
+            </nav>
+          </div>
+
+          {/* Tab Content */}
+          <div className="p-6">
+            {/* Inspector Analytics Tab */}
+            {activeTab === 'analytics' && (
+              <div className="space-y-6">
+                <h3 className="text-lg font-bold text-gray-900">Inspector Performance Analytics</h3>
+                
+                {Object.keys(analytics.inspectorStats).length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <Users className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+                    <p>No inspector data available yet</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-4">
+                    {Object.entries(analytics.inspectorStats).map(([inspector, stats]) => (
+                      <div key={inspector} className="bg-gray-50 rounded-lg p-4 border">
+                        <div className="flex justify-between items-start mb-3">
+                          <div>
+                            <h4 className="font-bold text-gray-900">
+                              {stats.name} ({inspector})
+                              <span className="ml-2 text-sm text-gray-600">
+                                {stats.inspector_type === 'commercial' ? '🏢 Commercial' : '🏠 Residential'}
+                              </span>
+                            </h4>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-sm text-gray-600">Completion Rate</div>
+                            <div className="text-lg font-bold text-blue-600">
+                              {stats.total > 0 ? Math.round((stats.inspected / stats.total) * 100) : 0}%
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 md:grid-cols-6 gap-4 text-sm">
+                          <div>
+                            <div className="text-gray-600">Total Assigned</div>
+                            <div className="font-bold text-gray-900">{stats.total.toLocaleString()}</div>
+                          </div>
+                          <div>
+                            <div className="text-gray-600">Inspected</div>
+                            <div className="font-bold text-green-600">{stats.inspected.toLocaleString()}</div>
+                          </div>
+                          <div>
+                            <div className="text-gray-600">Daily Average</div>
+                            <div className="font-bold text-blue-600">{stats.dailyAverage}</div>
+                          </div>
+                          <div>
+                            <div className="text-gray-600">Residential Avg</div>
+                            <div className="font-bold text-blue-600">{stats.totalResidentialAverage}</div>
+                          </div>
+                          <div>
+                            <div className="text-gray-600">Entry Rate</div>
+                            <div className="font-bold text-green-600">{stats.entryRate || 0}%</div>
+                          </div>
+                          <div>
+                            <div className="text-gray-600">Refusal Rate</div>
+                            <div className="font-bold text-red-600">{stats.refusalRate || 0}%</div>
+                          </div>
+                        </div>
+
+                        {stats.inspector_type === 'commercial' && (
+                          <div className="mt-3 text-sm">
+                            <div className="text-gray-600">Pricing Rate</div>
+                            <div className="font-bold text-purple-600">{stats.pricingRate || 0}%</div>
+                          </div>
+                        )}
+
+                        <div className="mt-3 text-xs text-gray-500">
+                          Classes: {stats.classes.residential} Res, {stats.classes.commercial} Com, {stats.classes.other} Other
+                        </div>
                       </div>
                     ))}
                   </div>
-                  
-                  <div className="space-y-2">
-                    <div className="font-medium text-purple-700">Grouped:</div>
-                    <div className="flex justify-between">
-                      <span>Residential:</span>
-                      <span className="font-bold">{billingTotals.grouped.residential}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Commercial 4A:</span>
-                      <span className="font-bold">{billingTotals.grouped.commercial4A}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Commercial 4B:</span>
-                      <span className="font-bold">{billingTotals.grouped.commercial4B}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Commercial 4C:</span>
-                      <span className="font-bold">{billingTotals.grouped.commercial4C}</span>
-                    </div>
-                    <div className="flex justify-between border-t pt-2">
-                      <span>Total 4 Class:</span>
-                      <span className="font-bold">{billingTotals.grouped.total4}</span>
-                    </div>
-                    <div className="flex justify-between border-t pt-2 font-bold text-purple-800">
-                      <span>Grand Total:</span>
-                      <span>{billingTotals.grouped.grandTotal}</span>
-                    </div>
+                )}
+              </div>
+            )}
+
+            {/* Summary for Billing Tab */}
+            {activeTab === 'billing' && billingAnalytics && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-bold text-gray-900">Summary for Billing</h3>
+                  <div className="text-sm text-gray-600">
+                    Total Billable: <span className="font-bold text-green-600">{billingAnalytics.totalBillable.toLocaleString()}</span>
                   </div>
                 </div>
-              </div>
-            </div>
-          )}
 
-          {/* Validation Report */}
-          {validationReport && (
-            <div className="p-6 bg-orange-50 border border-orange-200 rounded-lg">
-              <h3 className="text-lg font-semibold text-orange-800 mb-4 flex items-center space-x-2">
-                <FileText className="w-5 h-5" />
-                <span>Validation Report</span>
-              </h3>
-              
-              <div className="space-y-3">
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-orange-600">{validationReport.totalIssues}</div>
-                  <div className="text-sm text-gray-600">Issues Found</div>
-                </div>
-                
-                <div className="text-center">
-                  <div className="text-lg font-bold text-orange-600">{validationReport.inspectorCount}</div>
-                  <div className="text-sm text-gray-600">Inspectors with Issues</div>
-                </div>
-                
-                <button
-                  onClick={downloadValidationReport}
-                  className="w-full px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 flex items-center justify-center space-x-2 text-sm font-medium"
-                >
-                  <Download className="w-4 h-4" />
-                  <span>Download Report</span>
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                  {/* Individual Classes */}
+                  <div>
+                    <h4 className="text-md font-semibold text-gray-800 mb-4">Individual Classes</h4>
+                    <div className="space-y-3">
+                      {Object.entries(billingAnalytics.byClass)
+                        .filter(([cls, data]) => data.total > 0)
+                        .map(([cls, data]) => (
+                        <div key={cls} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                          <div>
+                            <span className="font-medium text-gray-900">Class {cls}</span>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-bold text-blue-600">{data.billable.toLocaleString()}</div>
+                            <div className="text-xs text-gray-500">of {data.total.toLocaleString()}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
 
-      {/* Results Section */}
-      {results && (
-        <div className="mt-8 space-y-6">
-          <div className="bg-gradient-to-r from-green-50 to-blue-50 rounded-lg border-2 border-green-200 p-6">
-            <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center space-x-2">
-              <CheckCircle className="w-8 h-8 text-green-600" />
-              <span>🎉 Processing Complete!</span>
-            </h2>
-            
-            {/* Key Metrics */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-              <div className="text-center p-4 bg-white rounded-lg border shadow-sm">
-                <div className="text-2xl font-bold text-blue-600">{results.totalProperties.toLocaleString()}</div>
-                <div className="text-sm text-gray-600">Total Properties</div>
-              </div>
-              <div className="text-center p-4 bg-white rounded-lg border shadow-sm">
-                <div className="text-2xl font-bold text-green-600">{results.inspectedProperties.toLocaleString()}</div>
-                <div className="text-sm text-gray-600">Properties Inspected</div>
-              </div>
-              <div className="text-center p-4 bg-white rounded-lg border shadow-sm">
-                <div className="text-2xl font-bold text-green-600">{results.entryRate.percentage}%</div>
-                <div className="text-sm text-gray-600">Entry Rate</div>
-              </div>
-              <div className="text-center p-4 bg-white rounded-lg border shadow-sm">
-                <div className="text-2xl font-bold text-red-600">{results.refusalRate.percentage}%</div>
-                <div className="text-sm text-gray-600">Refusal Rate</div>
-              </div>
-            </div>
+                  {/* Grouped Categories */}
+                  <div>
+                    <h4 className="text-md font-semibold text-gray-800 mb-4">Grouped Categories</h4>
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center p-3 bg-orange-50 rounded-lg border border-orange-200">
+                        <div>
+                          <span className="font-medium text-gray-900">Commercial (4A, 4C)</span>
+                          <div className="text-xs text-gray-600">Commercial properties</div>
+                        </div>
+                        <div className="font-bold text-orange-600">{billingAnalytics.grouped.commercial.toLocaleString()}</div>
+                      </div>
 
-            {/* Processing Summary */}
-            {results.processingInfo && (
-              <div className="mb-6 p-4 bg-white rounded-lg border">
-                <h3 className="text-lg font-semibold text-gray-800 mb-3">Processing Summary</h3>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
-                  <div>
-                    <span className="font-medium text-gray-700">Records Processed:</span>
-                    <span className="ml-2 text-blue-600 font-bold">{results.processingInfo.totalRecords}</span>
-                  </div>
-                  <div>
-                    <span className="font-medium text-gray-700">Clean Records:</span>
-                    <span className="ml-2 text-green-600 font-bold">{results.processingInfo.insertedRecords}</span>
-                  </div>
-                  <div>
-                    <span className="font-medium text-gray-700">Records Scrubbed:</span>
-                    <span className="ml-2 text-orange-600 font-bold">
-                      {Object.values(results.processingInfo.scrubReport.scrubbed).reduce((a, b) => a + b, 0)}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="font-medium text-gray-700">Issues Flagged:</span>
-                    <span className="ml-2 text-red-600 font-bold">{results.processingInfo.flaggedIssues}</span>
+                      <div className="flex justify-between items-center p-3 bg-purple-50 rounded-lg border border-purple-200">
+                        <div>
+                          <span className="font-medium text-gray-900">Exempt (15A-15F)</span>
+                          <div className="text-xs text-gray-600">Tax-exempt properties</div>
+                        </div>
+                        <div className="font-bold text-purple-600">{billingAnalytics.grouped.exempt.toLocaleString()}</div>
+                      </div>
+
+                      <div className="flex justify-between items-center p-3 bg-green-50 rounded-lg border border-green-200">
+                        <div>
+                          <span className="font-medium text-gray-900">Railroad (5A, 5B)</span>
+                          <div className="text-xs text-gray-600">Railroad properties</div>
+                        </div>
+                        <div className="font-bold text-green-600">{billingAnalytics.grouped.railroad.toLocaleString()}</div>
+                      </div>
+
+                      <div className="flex justify-between items-center p-3 bg-blue-50 rounded-lg border border-blue-200">
+                        <div>
+                          <span className="font-medium text-gray-900">Personal Property (6A, 6B)</span>
+                          <div className="text-xs text-gray-600">Personal property</div>
+                        </div>
+                        <div className="font-bold text-blue-600">{billingAnalytics.grouped.personalProperty.toLocaleString()}</div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Inspector Performance */}
-            <div className="p-4 bg-white rounded-lg border">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center space-x-2">
-                <Users className="w-5 h-5" />
-                <span>Inspector Performance</span>
-              </h3>
-              
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="text-left p-2">Inspector</th>
-                      <th className="text-right p-2">Total</th>
-                      <th className="text-right p-2">Daily Avg</th>
-                      <th className="text-right p-2">Residential</th>
-                      <th className="text-right p-2">Commercial</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {Object.entries(results.inspectorStats).map(([initials, stats]) => (
-                      <tr key={initials} className="border-b hover:bg-gray-50">
-                        <td className="p-2">
-                          <div className="font-medium">{stats.name}</div>
-                          <div className="text-xs text-gray-500">{initials}</div>
-                        </td>
-                        <td className="text-right p-2 font-bold">{stats.totalInspections}</td>
-                        <td className="text-right p-2 text-green-600 font-medium">
-                          {stats.dailyAverage ? stats.dailyAverage.toFixed(1) : 'N/A'}
-                        </td>
-                        <td className="text-right p-2 text-blue-600">{stats.residential}</td>
-                        <td className="text-right p-2 text-purple-600">{stats.commercial}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            {/* Validation Report Tab */}
+            {activeTab === 'validation' && validationReport && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-bold text-gray-900">
+                    Validation Report - Excel Format
+                  </h3>
+                  {validationReport.summary.total_issues > 0 && (
+                    <button
+                      onClick={exportValidationReport}
+                      className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center space-x-2"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span>Export Excel Report</span>
+                    </button>
+                  )}
+                </div>
+
+                {validationReport.summary.total_issues === 0 ? (
+                  <div className="text-center py-8">
+                    <CheckCircle className="w-12 h-12 mx-auto mb-4 text-green-500" />
+                    <h4 className="text-lg font-semibold text-gray-900 mb-2">No Validation Issues</h4>
+                    <p className="text-gray-600">All records passed validation checks</p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Summary Section */}
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+                      <h4 className="font-semibold text-yellow-800 mb-3">Inspector Summary</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {validationReport.summary.inspector_breakdown.map((inspector, idx) => (
+                          <div 
+                            key={idx}
+                            onClick={() => setSelectedInspectorIssues(
+                              selectedInspectorIssues === inspector.inspector_code ? null : inspector.inspector_code
+                            )}
+                            className="p-3 bg-white rounded border cursor-pointer hover:bg-yellow-50 transition-colors"
+                          >
+                            <div className="flex justify-between items-center">
+                              <div>
+                                <div className="font-medium text-gray-900">{inspector.inspector_code}</div>
+                                <div className="text-sm text-gray-600">{inspector.inspector_name}</div>
+                              </div>
+                              <div className="text-right">
+                                <div className="font-bold text-red-600">{inspector.total_issues}</div>
+                                <div className="text-xs text-gray-500">issues</div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Detailed Issues Section */}
+                    {selectedInspectorIssues && validationReport.detailed_issues[selectedInspectorIssues] && (
+                      <div className="bg-white border border-gray-200 rounded-lg p-4">
+                        <h4 className="font-semibold text-gray-900 mb-4">
+                          Issues for {selectedInspectorIssues} - {validationReport.summary.inspector_breakdown.find(i => i.inspector_code === selectedInspectorIssues)?.inspector_name}
+                        </h4>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead className="bg-gray-50">
+                              <tr>
+                                <th className="px-3 py-2 text-left font-medium text-gray-700">Block</th>
+                                <th className="px-3 py-2 text-left font-medium text-gray-700">Lot</th>
+                                <th className="px-3 py-2 text-left font-medium text-gray-700">Property Location</th>
+                                <th className="px-3 py-2 text-left font-medium text-gray-700">Warning Message</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {validationReport.detailed_issues[selectedInspectorIssues].map((issue, idx) => (
+                                <tr key={idx} className="border-t border-gray-200">
+                                  <td className="px-3 py-2">{issue.block}</td>
+                                  <td className="px-3 py-2">{issue.lot}</td>
+                                  <td className="px-3 py-2">{issue.property_location}</td>
+                                  <td className="px-3 py-2 text-red-600">{issue.warning_message}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {!selectedInspectorIssues && (
+                      <div className="text-center py-8 text-gray-500">
+                        <FileText className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+                        <p>Click on an inspector above to view detailed issues</p>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
-              
-              {currentJob.vendor === 'Microsystems' && (
-                <p className="text-xs text-gray-500 mt-2">
-                  * Daily averages not available for Microsystems (no measure date tracking)
-                </p>
-              )}
-            </div>
+            )}
           </div>
         </div>
       )}
