@@ -1256,18 +1256,33 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         </button>
         
         {sourceFile && (
-          <button
-            onClick={() => handleCompareFile('source')}
-            disabled={comparing || processing}
-            className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 disabled:bg-gray-500 flex items-center gap-1"
-          >
-            {comparing ? (
-              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
-            ) : (
-              <CheckCircle className="w-3 h-3" />
-            )}
-            Update
-          </button>
+          <>
+            <button
+              onClick={() => {
+                setSourceFile(null);
+                setSourceFileContent(null);
+                setDetectedVendor(null);
+                document.getElementById('source-file-upload').value = '';
+                addNotification('Source file cleared', 'info');
+              }}
+              disabled={comparing || processing}
+              className="px-2 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600 disabled:bg-gray-500 flex items-center"
+            >
+              <X className="w-3 h-3" />
+            </button>
+            <button
+              onClick={() => handleCompareFile('source')}
+              disabled={comparing || processing}
+              className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 disabled:bg-gray-500 flex items-center gap-1"
+            >
+              {comparing ? (
+                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+              ) : (
+                <CheckCircle className="w-3 h-3" />
+              )}
+              Update
+            </button>
+          </>
         )}
       </div>
 
@@ -1294,6 +1309,21 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
           <Upload className="w-3 h-3" />
           {codeFile ? codeFile.name.substring(0, 10) + '...' : 'Select File'}
         </button>
+        
+        {codeFile && (
+          <button
+            onClick={() => {
+              setCodeFile(null);
+              setCodeFileContent(null);
+              document.getElementById('code-file-upload').value = '';
+              addNotification('Code file cleared', 'info');
+            }}
+            disabled={comparing || processing}
+            className="px-2 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600 disabled:bg-gray-500 flex items-center"
+          >
+            <X className="w-3 h-3" />
+          </button>
+        )}
       </div>
 
       {/* Results Modal */}
