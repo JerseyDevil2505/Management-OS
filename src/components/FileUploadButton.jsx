@@ -89,20 +89,25 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     return null;
   };
 
-  // NEW: Parse code files for both vendors
+  // KISS: Simple code file parsing matching AdminJobManagement exactly
   const parseCodeFile = (fileContent, vendor) => {
     try {
       if (vendor === 'BRT') {
-        // BRT codes are JSON format
-        const codeData = JSON.parse(fileContent);
-        return codeData;
+        // BRT: Just return a simple object indicating we have the content
+        // The actual parsing happens in the processors
+        return { raw_content: fileContent, type: 'BRT_codes' };
       } else if (vendor === 'Microsystems') {
-        // Microsystems codes are pipe-delimited text
-        const lines = fileContent.split('\n').filter(line => line.trim());
-        const codes = {};
-        
-        lines.forEach(line => {
-          const parts = line.split('|');
+        // Microsystems: Just return a simple object indicating we have the content
+        // The actual parsing happens in the processors
+        return { raw_content: fileContent, type: 'Microsystems_codes' };
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Error with code file:', error);
+      return null;
+    }
+  };');
           if (parts.length >= 2) {
             const code = parts[0].trim();
             const description = parts[1].trim();
@@ -139,14 +144,14 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       console.log('🔍 DEBUG - Starting code file update');
       console.log('🔍 DEBUG - Current job.code_file_version:', job.code_file_version);
 
-      // Parse the code file
+      // KISS: Simple validation that we have content, processors handle the rest
       const parsedCodes = parseCodeFile(codeFileContent, detectedVendor);
       
       if (!parsedCodes) {
-        throw new Error('Failed to parse code file');
+        throw new Error('Failed to read code file');
       }
 
-      console.log('🔍 DEBUG - Parsed codes count:', Object.keys(parsedCodes).length);
+      console.log('🔍 DEBUG - Code file ready for processor:', parsedCodes.type);
 
       // FIXED: Properly escape special characters to prevent Unicode errors
       const sanitizedContent = codeFileContent
@@ -182,7 +187,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
 
       console.log('🔍 DEBUG - Database update successful');
 
-      addNotification(`✅ Successfully updated ${Object.keys(parsedCodes).length} code definitions for ${detectedVendor}`, 'success');
+      addNotification(`✅ Successfully updated code definitions for ${detectedVendor}`, 'success');
       
       // Clear code file selection
       setCodeFile(null);
@@ -195,7 +200,6 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       if (onFileProcessed) {
         onFileProcessed({ 
           type: 'code_update', 
-          codes_updated: Object.keys(parsedCodes).length,
           vendor: detectedVendor 
         });
       }
