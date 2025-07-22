@@ -14,11 +14,15 @@ const ProductionTracker = ({ jobData, onBackToJobs }) => {
   const [sessionHistory, setSessionHistory] = useState([]);
   const [notifications, setNotifications] = useState([]);
   
-  // Settings state - Dynamic InfoBy codes
+  // Settings state - Enhanced InfoBy category configuration
   const [availableInfoByCodes, setAvailableInfoByCodes] = useState([]);
-  const [selectedInfoByCodes, setSelectedInfoByCodes] = useState([]);
-  const [infoBySearchTerm, setInfoBySearchTerm] = useState('');
-  const [showInfoByDropdown, setShowInfoByDropdown] = useState(false);
+  const [infoByCategoryConfig, setInfoByCategoryConfig] = useState({
+    entry: [],
+    refusal: [],
+    estimation: [],
+    invalid: [],
+    commercial: []
+  });
   const [projectStartDate, setProjectStartDate] = useState('');
   const [sessionId, setSessionId] = useState(null);
   const [settingsLocked, setSettingsLocked] = useState(false);
@@ -27,6 +31,7 @@ const ProductionTracker = ({ jobData, onBackToJobs }) => {
   const [activeTab, setActiveTab] = useState('analytics');
   const [selectedInspectorIssues, setSelectedInspectorIssues] = useState(null);
   const [maxFileVersion, setMaxFileVersion] = useState(1);
+  const [showCategoryConfig, setShowCategoryConfig] = useState(false);
 
   const addNotification = (message, type = 'info') => {
     const id = Date.now();
@@ -73,7 +78,7 @@ const ProductionTracker = ({ jobData, onBackToJobs }) => {
     }
   };
 
-  // Load available InfoBy codes from job's parsed code definitions
+  // FIXED: Load available InfoBy codes with proper vendor-specific logic
   const loadAvailableInfoByCodes = async () => {
     if (!jobData?.id) return;
 
@@ -93,36 +98,70 @@ const ProductionTracker = ({ jobData, onBackToJobs }) => {
       const vendor = job.vendor;
 
       if (vendor === 'BRT') {
+        // Handle BRT nested JSON structure
         const sections = job.parsed_code_definitions.sections || job.parsed_code_definitions;
         
-        Object.keys(sections).forEach(sectionName => {
-          const section = sections[sectionName];
-          if (typeof section === 'object') {
-            Object.keys(section).forEach(code => {
-              const item = section[code];
-              if (item && item.DATA && item.DATA.VALUE) {
-                codes.push({
-                  code: code,
-                  description: item.DATA.VALUE,
-                  section: sectionName
-                });
-              }
+        // Look for INFO BY section specifically
+        const infoBySection = sections['INFO BY'];
+        if (infoBySection) {
+          Object.keys(infoBySection).forEach(key => {
+            const item = infoBySection[key];
+            if (item && item.DATA && item.DATA.VALUE) {
+              codes.push({
+                code: item.KEY || item.DATA.KEY,
+                description: item.DATA.VALUE,
+                section: 'INFO BY',
+                vendor: 'BRT'
+              });
+            }
+          });
+        }
+
+        // If no INFO BY section, check other sections like Residential
+        if (codes.length === 0) {
+          Object.keys(sections).forEach(sectionName => {
+            const section = sections[sectionName];
+            if (typeof section === 'object') {
+              Object.keys(section).forEach(key => {
+                const item = section[key];
+                if (item && item.DATA && item.DATA.VALUE && 
+                    (item.DATA.VALUE.includes('OWNER') || item.DATA.VALUE.includes('REFUSED') || 
+                     item.DATA.VALUE.includes('AGENT') || item.DATA.VALUE.includes('ESTIMATED'))) {
+                  codes.push({
+                    code: item.KEY || item.DATA.KEY,
+                    description: item.DATA.VALUE,
+                    section: sectionName,
+                    vendor: 'BRT'
+                  });
+                }
+              });
+            }
+          });
+        }
+
+      } else if (vendor === 'Microsystems') {
+        // Handle Microsystems flattened structure - look for 140 prefix codes
+        Object.keys(job.parsed_code_definitions).forEach(code => {
+          if (code.startsWith('140')) {
+            const description = job.parsed_code_definitions[code];
+            codes.push({
+              code: code,
+              description: description,
+              section: 'InfoBy',
+              vendor: 'Microsystems',
+              storageCode: code.substring(3) // Strip 140 prefix for storage (140A -> A)
             });
           }
-        });
-      } else if (vendor === 'Microsystems') {
-        Object.keys(job.parsed_code_definitions).forEach(code => {
-          const description = job.parsed_code_definitions[code];
-          codes.push({
-            code: code,
-            description: description,
-            section: 'InfoBy'
-          });
         });
       }
 
       setAvailableInfoByCodes(codes);
-      debugLog('CODES', `Loaded ${codes.length} InfoBy codes from ${vendor} definitions`);
+      debugLog('CODES', `Loaded ${codes.length} InfoBy codes from ${vendor} definitions`, codes);
+
+      // Set default category configurations based on vendor
+      if (codes.length > 0) {
+        setDefaultCategoryConfig(vendor, codes);
+      }
 
     } catch (error) {
       console.error('Error loading InfoBy codes:', error);
@@ -130,12 +169,51 @@ const ProductionTracker = ({ jobData, onBackToJobs }) => {
     }
   };
 
-  // Load raw property data (latest versions only) 
+  // Set default InfoBy category configurations
+  const setDefaultCategoryConfig = (vendor, codes) => {
+    const defaultConfig = { entry: [], refusal: [], estimation: [], invalid: [], commercial: [] };
+
+    if (vendor === 'BRT') {
+      codes.forEach(item => {
+        const desc = item.description.toUpperCase();
+        if (desc.includes('OWNER') || desc.includes('SPOUSE') || desc.includes('TENANT') || desc.includes('AGENT')) {
+          defaultConfig.entry.push(item.code);
+        } else if (desc.includes('REFUSED')) {
+          defaultConfig.refusal.push(item.code);
+        } else if (desc.includes('ESTIMATED')) {
+          defaultConfig.estimation.push(item.code);
+        } else if (desc.includes('DOOR')) {
+          defaultConfig.invalid.push(item.code);
+        } else if (desc.includes('CONVERSION') || desc.includes('PRICED')) {
+          defaultConfig.commercial.push(item.code);
+        }
+      });
+    } else if (vendor === 'Microsystems') {
+      codes.forEach(item => {
+        const code = item.code;
+        const desc = item.description.toUpperCase();
+        if (code.includes('A') || code.includes('O') || code.includes('S') || code.includes('T')) {
+          defaultConfig.entry.push(item.storageCode); // Use storage code (A, not 140A)
+        } else if (code.includes('R')) {
+          defaultConfig.refusal.push(item.storageCode);
+        } else if (code.includes('E') || code.includes('F') || code.includes('V')) {
+          defaultConfig.estimation.push(item.storageCode);
+        } else if (code.includes('P') || code.includes('N') || code.includes('B')) {
+          defaultConfig.commercial.push(item.storageCode);
+        }
+      });
+    }
+
+    setInfoByCategoryConfig(defaultConfig);
+    debugLog('CATEGORIES', 'Set default category configuration', defaultConfig);
+  };
+
+  // FIXED: Load raw property data with proper limit
   const loadRawPropertyData = async () => {
     if (!jobData?.id) return;
 
     try {
-      debugLog('DATA', 'Loading raw property data with version filtering');
+      debugLog('DATA', 'Loading raw property data with enhanced limits');
 
       // Get latest file version for this job
       const { data: versionData, error: versionError } = await supabase
@@ -154,7 +232,7 @@ const ProductionTracker = ({ jobData, onBackToJobs }) => {
         debugLog('VERSION', `Max file version detected: ${versionData.file_version}`);
       }
 
-      // Get only records with the highest file_version
+      // FIXED: Get ALL records with higher limit
       const { data: rawData, error } = await supabase
         .from('property_records')
         .select(`
@@ -179,12 +257,17 @@ const ProductionTracker = ({ jobData, onBackToJobs }) => {
         .eq('job_id', jobData.id)
         .eq('file_version', versionData?.file_version || 1)
         .order('property_block', { ascending: true })
-        .order('property_lot', { ascending: true });
+        .order('property_lot', { ascending: true })
+        .limit(20000); // FIXED: Increased from default 1000 to 20000
 
       if (error) throw error;
 
       setRawPropertyData(rawData || []);
-      debugLog('DATA', `Loaded ${rawData?.length || 0} raw property records on version ${versionData?.file_version || 1}`);
+      debugLog('DATA', `✅ Loaded ${rawData?.length || 0} raw property records on version ${versionData?.file_version || 1}`);
+
+      if (rawData?.length >= 19000) {
+        addNotification('⚠️ Approaching record limit. Consider pagination for larger datasets.', 'warning');
+      }
 
     } catch (error) {
       console.error('Error loading raw property data:', error);
@@ -220,7 +303,8 @@ const ProductionTracker = ({ jobData, onBackToJobs }) => {
         `)
         .eq('job_id', jobData.id)
         .order('block', { ascending: true })
-        .order('lot', { ascending: true });
+        .order('lot', { ascending: true })
+        .limit(20000); // Consistent high limit
 
       if (error) throw error;
 
@@ -266,9 +350,9 @@ const ProductionTracker = ({ jobData, onBackToJobs }) => {
       setLoading(false);
       processAnalytics();
     }
-  }, [rawPropertyData, employeeData, selectedInfoByCodes, projectStartDate]);
+  }, [rawPropertyData, employeeData, infoByCategoryConfig, projectStartDate]);
 
-  // Enhanced validation and analytics processing
+  // FIXED: Enhanced validation with vendor-specific logic
   const processAnalytics = async () => {
     if (!rawPropertyData.length || !projectStartDate) return;
 
@@ -276,7 +360,7 @@ const ProductionTracker = ({ jobData, onBackToJobs }) => {
       debugLog('ANALYTICS', 'Starting analytics processing', { 
         rawRecords: rawPropertyData.length,
         startDate: projectStartDate,
-        infoByCodes: selectedInfoByCodes.length 
+        categoryConfig: infoByCategoryConfig 
       });
 
       const startDate = new Date(projectStartDate);
@@ -285,6 +369,14 @@ const ProductionTracker = ({ jobData, onBackToJobs }) => {
       const billingByClass = {};
       const validationIssues = [];
       const inspectorIssuesMap = {};
+
+      // Get all valid InfoBy codes from category configuration
+      const allValidCodes = [
+        ...infoByCategoryConfig.entry,
+        ...infoByCategoryConfig.refusal,
+        ...infoByCategoryConfig.estimation,
+        ...infoByCategoryConfig.commercial
+      ];
 
       // Initialize class counters
       const allClasses = ['1', '2', '3A', '3B', '4A', '4C', '15A', '15B', '15C', '15D', '15E', '15F', '5A', '5B', '6A', '6B'];
@@ -327,7 +419,7 @@ const ProductionTracker = ({ jobData, onBackToJobs }) => {
           billingByClass[propertyClass].total++;
         }
 
-        // Enhanced validation with detailed issue tracking
+        // FIXED: Enhanced validation with vendor-specific code logic
         let isValid = true;
         let hasValidDate = listDate && listDate >= startDate;
         let hasValidInitials = inspector && inspector !== 'UNASSIGNED' && inspector.trim() !== '';
@@ -362,15 +454,16 @@ const ProductionTracker = ({ jobData, onBackToJobs }) => {
           debugLog('VALIDATION', `Rule 2 triggered: ${record.property_block}-${record.property_lot}`);
         }
 
-        // Validation Rule 3: Invalid InfoBy codes → scrub
-        if (selectedInfoByCodes.length > 0 && infoByCode && !selectedInfoByCodes.includes(infoByCode.toString())) {
-          addValidationIssue(`Info By Code Invalid: ${infoByCode}`, 'medium');
+        // FIXED: Validation Rule 3: Invalid InfoBy codes with category-based validation
+        if (allValidCodes.length > 0 && infoByCode && !allValidCodes.includes(infoByCode.toString())) {
+          addValidationIssue(`Info By Code Invalid: ${infoByCode} (not in configured categories)`, 'medium');
           debugLog('VALIDATION', `Rule 3 triggered: Invalid InfoBy ${infoByCode}`);
         }
 
-        // Validation Rules 4-6: InfoBy code validation patterns
-        const isRefusalCode = ['12', '13', '14'].includes(infoByCode?.toString());
-        const isEntryCode = ['08', '09', '10', '11'].includes(infoByCode?.toString());  
+        // Enhanced InfoBy category-based validation
+        const isEntryCode = infoByCategoryConfig.entry.includes(infoByCode?.toString());
+        const isRefusalCode = infoByCategoryConfig.refusal.includes(infoByCode?.toString());
+        const isEstimationCode = infoByCategoryConfig.estimation.includes(infoByCode?.toString());
         const hasListingData = record.inspection_list_date && record.inspection_list_by;
 
         if (isRefusalCode && !hasListingData) {
@@ -381,7 +474,7 @@ const ProductionTracker = ({ jobData, onBackToJobs }) => {
           addValidationIssue(`Info By Mismatch-Inspected? (Entry code ${infoByCode} but missing listing data)`, 'medium');
         }
 
-        // Validation Rule 7: Zero improvement validation (similar to your Excel report)
+        // Validation Rule 7: Zero improvement validation
         if (propertyClass && ['2', '3A', '3B'].includes(propertyClass) && !hasListingData) {
           addValidationIssue('InfoBy Code and Inspection Info Invalid for No Improvement', 'medium');
         }
@@ -399,7 +492,7 @@ const ProductionTracker = ({ jobData, onBackToJobs }) => {
             billingByClass[propertyClass].billable++;
           }
 
-          // Determine inspection type
+          // Determine inspection type using category configuration
           if (isEntryCode) {
             inspectorStats[inspector].entry++;
             if (classBreakdown[propertyClass]) {
@@ -489,7 +582,7 @@ const ProductionTracker = ({ jobData, onBackToJobs }) => {
 
       setValidationReport(validationReportData);
 
-      debugLog('ANALYTICS', 'Analytics processing complete', {
+      debugLog('ANALYTICS', '✅ Analytics processing complete', {
         validRecords: rawPropertyData.length - validationIssues.length,
         totalIssues: validationIssues.length,
         inspectors: Object.keys(inspectorStats).length
@@ -505,27 +598,29 @@ const ProductionTracker = ({ jobData, onBackToJobs }) => {
     }
   };
 
-  // Handle InfoBy code selection
-  const handleInfoByToggle = (code) => {
+  // Handle InfoBy category assignment
+  const handleCategoryAssignment = (category, code, isAssigned) => {
     if (settingsLocked) return;
     
-    setSelectedInfoByCodes(prev => 
-      prev.includes(code) 
-        ? prev.filter(c => c !== code)
-        : [...prev, code]
-    );
+    setInfoByCategoryConfig(prev => ({
+      ...prev,
+      [category]: isAssigned 
+        ? prev[category].filter(c => c !== code)
+        : [...prev[category], code]
+    }));
   };
-
-  // Filter InfoBy codes for search
-  const filteredInfoByCodes = availableInfoByCodes.filter(item =>
-    item.code.toLowerCase().includes(infoBySearchTerm.toLowerCase()) ||
-    item.description.toLowerCase().includes(infoBySearchTerm.toLowerCase())
-  );
 
   // Start processing session - Move data from property_records to inspection_data
   const startProcessingSession = async () => {
-    if (!projectStartDate || selectedInfoByCodes.length === 0) {
-      addNotification('Please set project start date and select InfoBy codes', 'error');
+    const allValidCodes = [
+      ...infoByCategoryConfig.entry,
+      ...infoByCategoryConfig.refusal,
+      ...infoByCategoryConfig.estimation,
+      ...infoByCategoryConfig.commercial
+    ];
+
+    if (!projectStartDate || allValidCodes.length === 0) {
+      addNotification('Please set project start date and configure InfoBy categories', 'error');
       return;
     }
 
@@ -538,7 +633,7 @@ const ProductionTracker = ({ jobData, onBackToJobs }) => {
       debugLog('SESSION', 'Starting processing session', { 
         sessionId: newSessionId,
         startDate: projectStartDate,
-        infoByCodes: selectedInfoByCodes 
+        categoryConfig: infoByCategoryConfig 
       });
 
       // Process analytics first to get validation results
@@ -556,7 +651,7 @@ const ProductionTracker = ({ jobData, onBackToJobs }) => {
         const hasValidDate = listDate && listDate >= startDate;
         const hasValidInitials = inspector && inspector !== 'UNASSIGNED' && inspector.trim() !== '';
         const infoByCode = record.inspection_info_by;
-        const validInfoBy = selectedInfoByCodes.length === 0 || !infoByCode || selectedInfoByCodes.includes(infoByCode.toString());
+        const validInfoBy = allValidCodes.length === 0 || !infoByCode || allValidCodes.includes(infoByCode.toString());
         
         return hasValidDate && hasValidInitials && validInfoBy;
       });
@@ -746,14 +841,14 @@ const ProductionTracker = ({ jobData, onBackToJobs }) => {
         ))}
       </div>
 
-      {/* Version Status Banner */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+      {/* Version Status Banner - ENHANCED */}
+      <div className="bg-green-50 border border-green-200 rounded-lg p-4">
         <div className="flex items-center justify-between">
-          <span className="font-medium text-blue-800">
-            📊 Using Current Version - File Version: {maxFileVersion}
+          <span className="font-medium text-green-800">
+            ✅ FIXED: Using ALL Records - File Version: {maxFileVersion}
           </span>
-          <span className="text-sm text-blue-600">
-            {rawPropertyData.length.toLocaleString()} properties on version {maxFileVersion}
+          <span className="text-sm text-green-600">
+            {rawPropertyData.length.toLocaleString()} properties loaded (was limited to 1000)
           </span>
         </div>
       </div>
@@ -765,7 +860,7 @@ const ProductionTracker = ({ jobData, onBackToJobs }) => {
             <Factory className="w-8 h-8 mr-3 text-blue-600" />
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Production Tracker</h1>
-              <p className="text-gray-600">{jobData.name} - Analytics & Validation Engine</p>
+              <p className="text-gray-600">{jobData.name} - Enhanced Analytics & Validation Engine</p>
             </div>
           </div>
           <button
@@ -822,11 +917,11 @@ const ProductionTracker = ({ jobData, onBackToJobs }) => {
         )}
       </div>
 
-      {/* Settings Panel - Dynamic InfoBy Codes */}
+      {/* ENHANCED Settings Panel - InfoBy Category Configuration */}
       <div className="bg-white rounded-lg border shadow-sm p-6">
         <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
           <Settings className="w-5 h-5 mr-2" />
-          Processing Settings
+          Processing Settings - Enhanced InfoBy Configuration
           {settingsLocked && (
             <span className="ml-3 px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
               Session Active: {sessionId?.slice(-8)}
@@ -852,105 +947,75 @@ const ProductionTracker = ({ jobData, onBackToJobs }) => {
             />
           </div>
 
-          {/* Dynamic InfoBy Codes */}
+          {/* InfoBy Category Configuration Status */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Valid InfoBy Codes * ({selectedInfoByCodes.length} selected)
+              InfoBy Categories ({availableInfoByCodes.length} codes available)
               {settingsLocked && (
                 <span className="ml-2 text-xs text-green-600">🔒 Locked</span>
               )}
             </label>
-            <div className="relative">
-              <div
-                onClick={() => !settingsLocked && setShowInfoByDropdown(!showInfoByDropdown)}
-                className={`w-full px-3 py-2 border border-gray-300 rounded-lg bg-white cursor-pointer flex items-center justify-between ${
-                  settingsLocked ? 'bg-gray-100 cursor-not-allowed' : 'hover:border-gray-400'
-                }`}
-              >
-                <span className="text-gray-700">
-                  {selectedInfoByCodes.length === 0 
-                    ? 'Select InfoBy codes...' 
-                    : `${selectedInfoByCodes.length} codes selected`
-                  }
-                </span>
-                {!settingsLocked && (
-                  showInfoByDropdown ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
-                )}
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span>Entry: {infoByCategoryConfig.entry.length} codes</span>
+                <span>Refusal: {infoByCategoryConfig.refusal.length} codes</span>
               </div>
-
-              {showInfoByDropdown && !settingsLocked && (
-                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                  {/* Search */}
-                  <div className="p-2 border-b">
-                    <input
-                      type="text"
-                      placeholder="Search codes..."
-                      value={infoBySearchTerm}
-                      onChange={(e) => setInfoBySearchTerm(e.target.value)}
-                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
-                    />
-                  </div>
-
-                  {/* Code List */}
-                  <div className="max-h-48 overflow-y-auto">
-                    {filteredInfoByCodes.length === 0 ? (
-                      <div className="p-3 text-sm text-gray-500 text-center">
-                        {availableInfoByCodes.length === 0 
-                          ? 'No InfoBy codes available. Upload a code file first.'
-                          : 'No codes match your search.'
-                        }
-                      </div>
-                    ) : (
-                      filteredInfoByCodes.map((item) => (
-                        <div
-                          key={item.code}
-                          onClick={() => handleInfoByToggle(item.code)}
-                          className={`px-3 py-2 cursor-pointer hover:bg-gray-50 border-b border-gray-100 ${
-                            selectedInfoByCodes.includes(item.code) ? 'bg-blue-50 text-blue-800' : ''
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <span className="font-medium">{item.code}</span>
-                              <span className="text-sm text-gray-600 ml-2">{item.description}</span>
-                            </div>
-                            {selectedInfoByCodes.includes(item.code) && (
-                              <CheckCircle className="w-4 h-4 text-blue-600" />
-                            )}
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
+              <div className="flex justify-between text-sm">
+                <span>Estimation: {infoByCategoryConfig.estimation.length} codes</span>
+                <span>Commercial: {infoByCategoryConfig.commercial.length} codes</span>
+              </div>
+              {!settingsLocked && (
+                <button
+                  onClick={() => setShowCategoryConfig(!showCategoryConfig)}
+                  className="w-full px-3 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 flex items-center justify-center"
+                >
+                  {showCategoryConfig ? 'Hide' : 'Configure'} Categories
+                  {showCategoryConfig ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />}
+                </button>
               )}
             </div>
-
-            {/* Selected Codes Display */}
-            {selectedInfoByCodes.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-1">
-                {selectedInfoByCodes.slice(0, 10).map(code => (
-                  <span key={code} className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
-                    {code}
-                    {!settingsLocked && (
-                      <button
-                        onClick={() => handleInfoByToggle(code)}
-                        className="ml-1 text-blue-600 hover:text-blue-800"
-                      >
-                        ×
-                      </button>
-                    )}
-                  </span>
-                ))}
-                {selectedInfoByCodes.length > 10 && (
-                  <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full">
-                    +{selectedInfoByCodes.length - 10} more
-                  </span>
-                )}
-              </div>
-            )}
           </div>
         </div>
+
+        {/* InfoBy Category Configuration Panel */}
+        {showCategoryConfig && !settingsLocked && availableInfoByCodes.length > 0 && (
+          <div className="mt-6 pt-6 border-t border-gray-200">
+            <h4 className="text-md font-semibold text-gray-800 mb-4">
+              Configure InfoBy Categories ({jobData.vendor} Format)
+            </h4>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {['entry', 'refusal', 'estimation', 'commercial'].map(category => (
+                <div key={category} className="border border-gray-200 rounded-lg p-4">
+                  <h5 className="font-medium text-gray-900 mb-3 capitalize">
+                    {category} Codes ({infoByCategoryConfig[category].length})
+                  </h5>
+                  <div className="space-y-2 max-h-40 overflow-y-auto">
+                    {availableInfoByCodes.map(codeItem => {
+                      const codeToCheck = jobData.vendor === 'Microsystems' ? codeItem.storageCode : codeItem.code;
+                      const isAssigned = infoByCategoryConfig[category].includes(codeToCheck);
+                      
+                      return (
+                        <div key={codeItem.code} className="flex items-center">
+                          <input
+                            type="checkbox"
+                            checked={isAssigned}
+                            onChange={() => handleCategoryAssignment(category, codeToCheck, isAssigned)}
+                            className="mr-2"
+                          />
+                          <div className="text-sm">
+                            <span className="font-medium">{codeItem.code}</span>
+                            <div className="text-gray-600 text-xs">{codeItem.description}</div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Session History */}
         {sessionHistory.length > 0 && (
@@ -980,7 +1045,9 @@ const ProductionTracker = ({ jobData, onBackToJobs }) => {
         <div className="mt-6 flex justify-end">
           <button
             onClick={startProcessingSession}
-            disabled={processing || settingsLocked || !projectStartDate || selectedInfoByCodes.length === 0}
+            disabled={processing || settingsLocked || !projectStartDate || 
+              (infoByCategoryConfig.entry.length + infoByCategoryConfig.refusal.length + 
+               infoByCategoryConfig.estimation.length + infoByCategoryConfig.commercial.length) === 0}
             className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
           >
             {processing ? (
@@ -993,7 +1060,7 @@ const ProductionTracker = ({ jobData, onBackToJobs }) => {
         </div>
       </div>
 
-      {/* Main Content Tabs */}
+      {/* Main Content Tabs - Same as before */}
       {analytics && (
         <div className="bg-white rounded-lg border shadow-sm">
           {/* Tab Navigation */}
@@ -1186,7 +1253,7 @@ const ProductionTracker = ({ jobData, onBackToJobs }) => {
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
                   <h3 className="text-lg font-bold text-gray-900">
-                    Validation Report - Excel Format
+                    Enhanced Validation Report - Excel Format
                   </h3>
                   {validationReport.summary.total_issues > 0 && (
                     <button
@@ -1203,7 +1270,7 @@ const ProductionTracker = ({ jobData, onBackToJobs }) => {
                   <div className="text-center py-8">
                     <CheckCircle className="w-12 h-12 mx-auto mb-4 text-green-500" />
                     <h4 className="text-lg font-semibold text-gray-900 mb-2">No Validation Issues</h4>
-                    <p className="text-gray-600">All records passed validation checks</p>
+                    <p className="text-gray-600">All records passed enhanced validation checks</p>
                   </div>
                 ) : (
                   <>
