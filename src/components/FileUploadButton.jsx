@@ -30,57 +30,11 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     setNotifications(prev => prev.filter(n => n.id !== id));
   };
 
-  // FIXED: Date parsing to handle all 2-digit years as 1900s
-  const parseAndNormalizeDate = (dateString) => {
+  // FIXED: Use exact same date parsing method as processors
+  const parseDate = (dateString) => {
     if (!dateString || dateString.trim() === '') return null;
-    
-    const cleanDate = dateString.trim();
-    
-    // FIXED: Handle "no date" patterns like 00/00/00, 0/0/0, etc.
-    if (cleanDate.match(/^0+\/0+\/0+$/) || cleanDate === '00/00/00' || cleanDate === '0/0/0') {
-      return null;
-    }
-    
-    // Handle MM/DD/YYYY format from source files
-    if (cleanDate.includes('/')) {
-      const parts = cleanDate.split('/');
-      if (parts.length === 3) {
-        let [month, day, year] = parts;
-        
-        // FIXED: Check for zero values that indicate "no date" (but allow valid year 2000)
-        if (parseInt(month) === 0 || parseInt(day) === 0) {
-          return null;
-        }
-        
-        // FIXED: Handle 2-digit years - ALL 2-digit years become 1900s for property data
-        if (year.length === 2) {
-          year = 1900 + parseInt(year);
-        }
-        
-        // Create date and return normalized YYYY-MM-DD format
-        const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-        if (!isNaN(date.getTime())) {
-          return date.toISOString().split('T')[0]; // Return as YYYY-MM-DD
-        }
-      }
-    }
-    
-    // Handle YYYY-MM-DD format (already normalized)
-    if (cleanDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
-      const date = new Date(cleanDate);
-      if (!isNaN(date.getTime())) {
-        return cleanDate; // Already in correct format
-      }
-    }
-    
-    // Handle other standard formats
-    const date = new Date(cleanDate);
-    if (!isNaN(date.getTime())) {
-      return date.toISOString().split('T')[0];
-    }
-    
-    console.warn('Could not parse date:', dateString);
-    return null;
+    const date = new Date(dateString);
+    return isNaN(date.getTime()) ? null : date.toISOString().split('T')[0];
   };
 
   // FIXED: Composite key generation that matches processors EXACTLY
@@ -484,6 +438,16 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       
       // FIXED: Get ALL database records from property_records table directly
       setProcessingStatus('Fetching current database records...');
+      
+      // DEBUG: Check actual count in database
+      const { count: actualCount, error: countError } = await supabase
+        .from('property_records')
+        .select('*', { count: 'exact', head: true })
+        .eq('job_id', job.id);
+
+      console.log('🔍 DEBUG - Actual database count:', actualCount);
+      console.log('🔍 DEBUG - Count error:', countError);
+      
       const { data: dbRecords, error: dbError } = await supabase
         .from('property_records')  // Direct table access instead of view
         .select('property_composite_key, property_block, property_lot, property_qualifier, property_location, sales_price, sales_date, property_m4_class, property_cama_class')
@@ -543,9 +507,9 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         const sourceSalesPrice = parseFloat(String(sourceRecord[detectedVendor === 'BRT' ? 'CURRENTSALE_PRICE' : 'Sale Price'] || 0).replace(/[,$]/g, '')) || 0;
         const dbSalesPrice = parseFloat(dbRecord.sales_price || 0);
         
-        // FIXED: Normalize both dates for accurate comparison
-        const sourceSalesDate = parseAndNormalizeDate(sourceRecord[detectedVendor === 'BRT' ? 'CURRENTSALE_DATE' : 'Sale Date']);
-        const dbSalesDate = parseAndNormalizeDate(dbRecord.sales_date);
+        // FIXED: Normalize both dates for accurate comparison using processor method
+        const sourceSalesDate = parseDate(sourceRecord[detectedVendor === 'BRT' ? 'CURRENTSALE_DATE' : 'Sale Date']);
+        const dbSalesDate = parseDate(dbRecord.sales_date);
         
         // FIXED: Use proper number comparison with reasonable tolerance AND normalized date comparison
         const pricesDifferent = Math.abs(sourceSalesPrice - dbSalesPrice) > 0.01;
