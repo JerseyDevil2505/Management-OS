@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Factory, Settings, Download, RefreshCw, AlertTriangle, CheckCircle, TrendingUp, DollarSign, Users, Calendar, X, ChevronDown, ChevronUp, Eye, FileText } from 'lucide-react';
+import { Factory, Settings, Download, RefreshCw, AlertTriangle, CheckCircle, TrendingUp, DollarSign, Users, Calendar, X, ChevronDown, ChevronUp, Eye, FileText, Lock, Unlock } from 'lucide-react';
 import { supabase, jobService } from '../../lib/supabaseClient';
 
-const PayrollProductionUpdater = ({ jobData, onBackToJobs }) => {
+const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, propertyRecordsCount }) => {
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
-  const [rawPropertyData, setRawPropertyData] = useState([]);
-  const [cleanInspectionData, setCleanInspectionData] = useState([]);
+  const [processed, setProcessed] = useState(false);
   const [employeeData, setEmployeeData] = useState({});
   const [analytics, setAnalytics] = useState(null);
   const [billingAnalytics, setBillingAnalytics] = useState(null);
@@ -24,13 +23,13 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs }) => {
     commercial: []
   });
   const [projectStartDate, setProjectStartDate] = useState('');
+  const [isDateLocked, setIsDateLocked] = useState(false);
   const [sessionId, setSessionId] = useState(null);
   const [settingsLocked, setSettingsLocked] = useState(false);
 
   // UI state
   const [activeTab, setActiveTab] = useState('analytics');
   const [selectedInspectorIssues, setSelectedInspectorIssues] = useState(null);
-  const [maxFileVersion, setMaxFileVersion] = useState(1);
   const [showCategoryConfig, setShowCategoryConfig] = useState(false);
 
   const addNotification = (message, type = 'info') => {
@@ -53,14 +52,15 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs }) => {
     try {
       const { data: employees, error } = await supabase
         .from('employees')
-        .select('id, first_name, last_name, inspector_type, employment_status')
+        .select('id, first_name, last_name, inspector_type, employment_status, initials')
         .eq('employment_status', 'full_time');
 
       if (error) throw error;
 
       const employeeMap = {};
       employees.forEach(emp => {
-        const initials = `${emp.first_name.charAt(0)}${emp.last_name.charAt(0)}`;
+        // Use database initials field directly
+        const initials = emp.initials || `${emp.first_name.charAt(0)}${emp.last_name.charAt(0)}`;
         employeeMap[initials] = {
           id: emp.id,
           name: `${emp.first_name} ${emp.last_name}`,
@@ -91,6 +91,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs }) => {
 
       if (error || !job?.parsed_code_definitions) {
         debugLog('CODES', 'No parsed code definitions found for job');
+        addNotification('No code definitions found. Upload code file first.', 'warning');
         return;
       }
 
@@ -117,7 +118,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs }) => {
           });
         }
 
-        // If no INFO BY section, check other sections like Residential
+        // If no INFO BY section, check other sections for inspection-related codes
         if (codes.length === 0) {
           Object.keys(sections).forEach(sectionName => {
             const section = sections[sectionName];
@@ -156,7 +157,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs }) => {
       }
 
       setAvailableInfoByCodes(codes);
-      debugLog('CODES', `Loaded ${codes.length} InfoBy codes from ${vendor} definitions`, codes);
+      debugLog('CODES', `✅ Loaded ${codes.length} InfoBy codes from ${vendor} definitions`);
 
       // Set default category configurations based on vendor
       if (codes.length > 0) {
@@ -205,34 +206,99 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs }) => {
     }
 
     setInfoByCategoryConfig(defaultConfig);
-    debugLog('CATEGORIES', 'Set default category configuration', defaultConfig);
+    debugLog('CATEGORIES', '✅ Set default category configuration', defaultConfig);
   };
 
-  // FIXED: Load raw property data with proper limit
-  const loadRawPropertyData = async () => {
-    if (!jobData?.id) return;
+  // Load existing project start date from property_records
+  const loadProjectStartDate = async () => {
+    if (!jobData?.id || !latestFileVersion) return;
 
     try {
-      debugLog('DATA', 'Loading raw property data with enhanced limits');
-
-      // Get latest file version for this job
-      const { data: versionData, error: versionError } = await supabase
+      const { data: records, error } = await supabase
         .from('property_records')
-        .select('file_version')
+        .select('project_start_date')
         .eq('job_id', jobData.id)
-        .order('file_version', { ascending: false })
+        .eq('file_version', latestFileVersion)
+        .not('project_start_date', 'is', null)
         .limit(1)
         .single();
 
-      if (versionError) {
-        console.warn('Could not determine max version:', versionError);
-        setMaxFileVersion(1);
-      } else {
-        setMaxFileVersion(versionData.file_version || 1);
-        debugLog('VERSION', `Max file version detected: ${versionData.file_version}`);
+      if (!error && records?.project_start_date) {
+        setProjectStartDate(records.project_start_date);
+        setIsDateLocked(true);
+        debugLog('START_DATE', `Loaded existing start date: ${records.project_start_date}`);
       }
+    } catch (error) {
+      // No existing start date found - that's okay
+      debugLog('START_DATE', 'No existing start date found');
+    }
+  };
 
-      // FIXED: Get ALL records with higher limit
+  // Lock start date - save to property_records
+  const lockStartDate = async () => {
+    if (!projectStartDate || !jobData?.id || !latestFileVersion) {
+      addNotification('Please set a project start date first', 'error');
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('property_records')
+        .update({ project_start_date: projectStartDate })
+        .eq('job_id', jobData.id)
+        .eq('file_version', latestFileVersion);
+
+      if (error) throw error;
+
+      setIsDateLocked(true);
+      addNotification('✅ Project start date locked and saved to all property records', 'success');
+      debugLog('START_DATE', `Locked start date: ${projectStartDate}`);
+
+    } catch (error) {
+      console.error('Error locking start date:', error);
+      addNotification('Error saving start date: ' + error.message, 'error');
+    }
+  };
+
+  // Unlock start date
+  const unlockStartDate = () => {
+    setIsDateLocked(false);
+    addNotification('Project start date unlocked for editing', 'info');
+  };
+
+  // Initialize data loading
+  useEffect(() => {
+    if (jobData?.id && latestFileVersion) {
+      loadEmployeeData();
+      loadAvailableInfoByCodes();
+      loadProjectStartDate();
+      setLoading(false);
+    }
+  }, [jobData?.id, latestFileVersion]);
+
+  // ENHANCED: Process analytics with efficient queries and proper validation rules
+  const processAnalytics = async () => {
+    if (!projectStartDate || !jobData?.id || !latestFileVersion) {
+      addNotification('Project start date and job data required', 'error');
+      return null;
+    }
+
+    try {
+      debugLog('ANALYTICS', 'Starting enhanced analytics processing', { 
+        jobId: jobData.id,
+        fileVersion: latestFileVersion,
+        startDate: projectStartDate,
+        categoryConfig: infoByCategoryConfig 
+      });
+
+      const allValidCodes = [
+        ...infoByCategoryConfig.entry,
+        ...infoByCategoryConfig.refusal,
+        ...infoByCategoryConfig.estimation,
+        ...infoByCategoryConfig.commercial
+      ];
+
+      // FIXED: Get ALL records with proper limit
       const { data: rawData, error } = await supabase
         .from('property_records')
         .select(`
@@ -242,126 +308,24 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs }) => {
           property_qualifier,
           property_location,
           property_m4_class,
-          property_cama_class,
           inspection_info_by,
           inspection_list_by,
           inspection_list_date,
+          inspection_measured_by,
+          inspection_measured_date,
           inspection_price_by,
           inspection_price_date,
-          sales_price,
-          sales_date,
-          file_version,
-          processed_at,
-          vendor_source
+          values_mod_improvement
         `)
         .eq('job_id', jobData.id)
-        .eq('file_version', versionData?.file_version || 1)
+        .eq('file_version', latestFileVersion)
         .order('property_block', { ascending: true })
         .order('property_lot', { ascending: true })
-        .limit(20000); // FIXED: Increased from default 1000 to 20000
+        .limit(50000); // FIXED: Much higher limit to get all records
 
       if (error) throw error;
 
-      setRawPropertyData(rawData || []);
-      debugLog('DATA', `✅ Loaded ${rawData?.length || 0} raw property records on version ${versionData?.file_version || 1}`);
-
-      if (rawData?.length >= 19000) {
-        addNotification('⚠️ Approaching record limit. Consider pagination for larger datasets.', 'warning');
-      }
-
-    } catch (error) {
-      console.error('Error loading raw property data:', error);
-      addNotification('Error loading property data: ' + error.message, 'error');
-    }
-  };
-
-  // Load existing clean inspection data
-  const loadCleanInspectionData = async () => {
-    if (!jobData?.id) return;
-
-    try {
-      const { data: cleanData, error } = await supabase
-        .from('inspection_data')
-        .select(`
-          property_composite_key,
-          block,
-          lot,
-          qualifier,
-          property_location,
-          property_class,
-          info_by_code,
-          list_by,
-          list_date,
-          price_by,
-          price_date,
-          sale_price,
-          sale_date,
-          import_session_id,
-          project_start_date,
-          validation_report,
-          upload_date
-        `)
-        .eq('job_id', jobData.id)
-        .order('block', { ascending: true })
-        .order('lot', { ascending: true })
-        .limit(20000); // Consistent high limit
-
-      if (error) throw error;
-
-      setCleanInspectionData(cleanData || []);
-      debugLog('DATA', `Loaded ${cleanData?.length || 0} clean inspection records`);
-
-      // Load session history from validation reports
-      const sessionMap = new Map();
-      (cleanData || []).forEach(record => {
-        if (record.validation_report && record.import_session_id) {
-          if (!sessionMap.has(record.import_session_id)) {
-            sessionMap.set(record.import_session_id, {
-              session_id: record.import_session_id,
-              processed_at: record.upload_date,
-              project_start_date: record.project_start_date,
-              validation_summary: record.validation_report?.summary || {}
-            });
-          }
-        }
-      });
-
-      setSessionHistory(Array.from(sessionMap.values()).slice(0, 10)); // Latest 10 sessions
-
-    } catch (error) {
-      console.error('Error loading clean inspection data:', error);
-      addNotification('Error loading inspection data: ' + error.message, 'error');
-    }
-  };
-
-  // Initialize data loading
-  useEffect(() => {
-    if (jobData?.id) {
-      loadEmployeeData();
-      loadAvailableInfoByCodes();
-      loadRawPropertyData();
-      loadCleanInspectionData();
-    }
-  }, [jobData?.id]);
-
-  // Process analytics when data is loaded
-  useEffect(() => {
-    if (rawPropertyData.length > 0 && Object.keys(employeeData).length > 0) {
-      setLoading(false);
-      processAnalytics();
-    }
-  }, [rawPropertyData, employeeData, infoByCategoryConfig, projectStartDate]);
-
-  // FIXED: Enhanced validation with vendor-specific logic
-  const processAnalytics = async () => {
-    if (!rawPropertyData.length || !projectStartDate) return;
-
-    try {
-      debugLog('ANALYTICS', 'Starting analytics processing', { 
-        rawRecords: rawPropertyData.length,
-        startDate: projectStartDate,
-        categoryConfig: infoByCategoryConfig 
-      });
+      debugLog('ANALYTICS', `✅ Loaded ${rawData?.length || 0} property records for analysis`);
 
       const startDate = new Date(projectStartDate);
       const inspectorStats = {};
@@ -370,25 +334,18 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs }) => {
       const validationIssues = [];
       const inspectorIssuesMap = {};
 
-      // Get all valid InfoBy codes from category configuration
-      const allValidCodes = [
-        ...infoByCategoryConfig.entry,
-        ...infoByCategoryConfig.refusal,
-        ...infoByCategoryConfig.estimation,
-        ...infoByCategoryConfig.commercial
-      ];
-
-      // Initialize class counters
-      const allClasses = ['1', '2', '3A', '3B', '4A', '4C', '15A', '15B', '15C', '15D', '15E', '15F', '5A', '5B', '6A', '6B'];
+      // Initialize class counters - FIXED: Include 4B in commercial
+      const allClasses = ['1', '2', '3A', '3B', '4A', '4B', '4C', '15A', '15B', '15C', '15D', '15E', '15F', '5A', '5B', '6A', '6B'];
       allClasses.forEach(cls => {
         classBreakdown[cls] = { total: 0, inspected: 0, entry: 0, refusal: 0, priced: 0 };
         billingByClass[cls] = { total: 0, inspected: 0, billable: 0 };
       });
 
-      rawPropertyData.forEach((record, index) => {
-        const inspector = record.inspection_list_by || 'UNASSIGNED';
+      rawData.forEach((record, index) => {
+        const inspector = record.inspection_measured_by || 'UNASSIGNED';
         const propertyClass = record.property_m4_class || 'UNKNOWN';
         const infoByCode = record.inspection_info_by;
+        const measuredDate = record.inspection_measured_date ? new Date(record.inspection_measured_date) : null;
         const listDate = record.inspection_list_date ? new Date(record.inspection_list_date) : null;
         const priceDate = record.inspection_price_date ? new Date(record.inspection_price_date) : null;
 
@@ -399,12 +356,11 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs }) => {
             name: employeeInfo.name || inspector,
             fullName: employeeInfo.fullName || inspector,
             inspector_type: employeeInfo.inspector_type || 'unknown',
-            total: 0,
             inspected: 0,
+            residentialInspected: 0,
             entry: 0,
             refusal: 0,
             priced: 0,
-            residentialOnly: 0,
             classes: { residential: 0, commercial: 0, other: 0 },
             dailyAverage: 0,
             datesWorked: new Set()
@@ -413,16 +369,16 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs }) => {
         }
 
         // Count totals
-        inspectorStats[inspector].total++;
         if (classBreakdown[propertyClass]) {
           classBreakdown[propertyClass].total++;
           billingByClass[propertyClass].total++;
         }
 
-        // FIXED: Enhanced validation with vendor-specific code logic
-        let isValid = true;
-        let hasValidDate = listDate && listDate >= startDate;
-        let hasValidInitials = inspector && inspector !== 'UNASSIGNED' && inspector.trim() !== '';
+        // ENHANCED: New validation rules based on business logic
+        let isValidInspection = true;
+        let hasValidMeasuredBy = inspector && inspector !== 'UNASSIGNED' && inspector.trim() !== '';
+        let hasValidMeasuredDate = measuredDate && measuredDate >= startDate;
+        let hasValidInfoBy = infoByCode && allValidCodes.includes(infoByCode.toString());
         
         const addValidationIssue = (message, severity = 'medium') => {
           const issue = {
@@ -430,7 +386,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs }) => {
             block: record.property_block,
             lot: record.property_lot,
             qualifier: record.property_qualifier || '',
-            card: '1', // Default card
+            card: '1',
             property_location: record.property_location || '',
             warning_message: message,
             inspector: inspector,
@@ -439,51 +395,59 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs }) => {
           
           validationIssues.push(issue);
           inspectorIssuesMap[inspector].push(issue);
-          isValid = false;
+          isValidInspection = false;
         };
 
-        // Validation Rule 1: Valid date + missing initials → scrub
-        if (hasValidDate && !hasValidInitials) {
-          addValidationIssue('Valid date but missing initials', 'high');
-          debugLog('VALIDATION', `Rule 1 triggered: ${record.property_block}-${record.property_lot}`);
+        // CORE PACKAGE VALIDATION: Must have all 3 (info_by + measured_by + measured_date)
+        if (!hasValidInfoBy) {
+          addValidationIssue(`Invalid InfoBy code: ${infoByCode}`, 'high');
+        }
+        if (!hasValidMeasuredBy) {
+          addValidationIssue('Missing or invalid measured_by inspector', 'high');
+        }
+        if (!hasValidMeasuredDate) {
+          addValidationIssue('Missing or invalid measured_date', 'high');
         }
 
-        // Validation Rule 2: Valid initials + missing/invalid date → scrub  
-        if (hasValidInitials && !hasValidDate) {
-          addValidationIssue('Valid initials but invalid/missing date', 'high');
-          debugLog('VALIDATION', `Rule 2 triggered: ${record.property_block}-${record.property_lot}`);
-        }
-
-        // FIXED: Validation Rule 3: Invalid InfoBy codes with category-based validation
-        if (allValidCodes.length > 0 && infoByCode && !allValidCodes.includes(infoByCode.toString())) {
-          addValidationIssue(`Info By Code Invalid: ${infoByCode} (not in configured categories)`, 'medium');
-          debugLog('VALIDATION', `Rule 3 triggered: Invalid InfoBy ${infoByCode}`);
-        }
-
-        // Enhanced InfoBy category-based validation
+        // InfoBy LOGIC VALIDATION
         const isEntryCode = infoByCategoryConfig.entry.includes(infoByCode?.toString());
         const isRefusalCode = infoByCategoryConfig.refusal.includes(infoByCode?.toString());
         const isEstimationCode = infoByCategoryConfig.estimation.includes(infoByCode?.toString());
-        const hasListingData = record.inspection_list_date && record.inspection_list_by;
+        const hasListingData = record.inspection_list_by && record.inspection_list_date;
 
         if (isRefusalCode && !hasListingData) {
-          addValidationIssue(`Info By Mismatch-Inspected? (Refusal code ${infoByCode} but missing listing data)`, 'medium');
+          addValidationIssue(`Refusal code ${infoByCode} but missing list_by/list_date`, 'medium');
         }
-
         if (isEntryCode && !hasListingData) {
-          addValidationIssue(`Info By Mismatch-Inspected? (Entry code ${infoByCode} but missing listing data)`, 'medium');
+          addValidationIssue(`Entry code ${infoByCode} but missing list_by/list_date`, 'medium');
+        }
+        if (isEstimationCode && hasListingData) {
+          addValidationIssue(`Estimation code ${infoByCode} but has list_by/list_date`, 'medium');
         }
 
-        // Validation Rule 7: Zero improvement validation
-        if (propertyClass && ['2', '3A', '3B'].includes(propertyClass) && !hasListingData) {
-          addValidationIssue('InfoBy Code and Inspection Info Invalid for No Improvement', 'medium');
+        // INSPECTOR TYPE MISMATCH: Residential on commercial
+        const isCommercialProperty = ['4A', '4B', '4C'].includes(propertyClass);
+        const isResidentialInspector = employeeData[inspector]?.inspector_type === 'residential';
+        if (isCommercialProperty && isResidentialInspector) {
+          addValidationIssue(`Residential inspector ${inspector} assigned to commercial property`, 'medium');
         }
 
-        // Only count valid records for analytics
-        if (isValid && hasValidDate && hasValidInitials) {
+        // ZERO IMPROVEMENT LOGIC: Must have list data
+        if (record.values_mod_improvement === 0 && !hasListingData) {
+          addValidationIssue('Zero improvement property missing list_by/list_date', 'medium');
+        }
+
+        // Only count valid inspections for analytics
+        if (isValidInspection && hasValidInfoBy && hasValidMeasuredBy && hasValidMeasuredDate) {
           inspectorStats[inspector].inspected++;
-          if (listDate) {
-            inspectorStats[inspector].datesWorked.add(listDate.toISOString().split('T')[0]);
+          
+          // Count residential inspected separately
+          if (['2', '3A'].includes(propertyClass)) {
+            inspectorStats[inspector].residentialInspected++;
+          }
+
+          if (measuredDate) {
+            inspectorStats[inspector].datesWorked.add(measuredDate.toISOString().split('T')[0]);
           }
 
           if (classBreakdown[propertyClass]) {
@@ -505,8 +469,13 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs }) => {
             }
           }
 
-          // Count pricing
-          if (priceDate && priceDate >= startDate) {
+          // Count pricing - FIXED: BRT vs Microsystems logic
+          if (jobData.vendor === 'BRT' && priceDate && priceDate >= startDate) {
+            inspectorStats[inspector].priced++;
+            if (classBreakdown[propertyClass]) {
+              classBreakdown[propertyClass].priced++;
+            }
+          } else if (jobData.vendor === 'Microsystems' && infoByCategoryConfig.commercial.includes(infoByCode?.toString())) {
             inspectorStats[inspector].priced++;
             if (classBreakdown[propertyClass]) {
               classBreakdown[propertyClass].priced++;
@@ -516,7 +485,6 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs }) => {
           // Class categorization
           if (['2', '3A', '3B'].includes(propertyClass)) {
             inspectorStats[inspector].classes.residential++;
-            inspectorStats[inspector].residentialOnly++;
           } else if (['4A', '4B', '4C'].includes(propertyClass)) {
             inspectorStats[inspector].classes.commercial++;
           } else {
@@ -538,13 +506,12 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs }) => {
         
         if (daysWorked > 0) {
           stats.dailyAverage = Math.round(stats.inspected / daysWorked);
-          stats.totalResidentialAverage = Math.round(stats.residentialOnly / daysWorked);
         }
-        
-        delete stats.datesWorked; // Clean up for storage
+
+        stats.daysWorked = daysWorked; // Keep for display
       });
 
-      // Create validation report in Excel format
+      // Create validation report
       const validationReportData = {
         summary: {
           total_inspectors: Object.keys(inspectorIssuesMap).filter(k => inspectorIssuesMap[k].length > 0).length,
@@ -560,41 +527,43 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs }) => {
         detailed_issues: inspectorIssuesMap
       };
 
-      setAnalytics({
-        totalRecords: rawPropertyData.length,
-        validRecords: rawPropertyData.length - validationIssues.filter(v => v.severity === 'high').length,
+      const analyticsResult = {
+        totalRecords: rawData.length,
+        validInspections: Object.values(inspectorStats).reduce((sum, stats) => sum + stats.inspected, 0),
         inspectorStats,
         classBreakdown,
         validationIssues: validationIssues.length,
         processingDate: new Date().toISOString()
-      });
+      };
 
-      setBillingAnalytics({
+      const billingResult = {
         byClass: billingByClass,
         grouped: {
-          commercial: ['4A', '4C'].reduce((sum, cls) => sum + (billingByClass[cls]?.billable || 0), 0),
+          commercial: ['4A', '4B', '4C'].reduce((sum, cls) => sum + (billingByClass[cls]?.billable || 0), 0), // FIXED: Added 4B
           exempt: ['15A', '15B', '15C', '15D', '15E', '15F'].reduce((sum, cls) => sum + (billingByClass[cls]?.billable || 0), 0),
           railroad: ['5A', '5B'].reduce((sum, cls) => sum + (billingByClass[cls]?.billable || 0), 0),
           personalProperty: ['6A', '6B'].reduce((sum, cls) => sum + (billingByClass[cls]?.billable || 0), 0)
         },
         totalBillable: Object.values(billingByClass).reduce((sum, cls) => sum + cls.billable, 0)
-      });
+      };
 
+      setAnalytics(analyticsResult);
+      setBillingAnalytics(billingResult);
       setValidationReport(validationReportData);
 
-      debugLog('ANALYTICS', '✅ Analytics processing complete', {
-        validRecords: rawPropertyData.length - validationIssues.length,
+      debugLog('ANALYTICS', '✅ Enhanced analytics processing complete', {
+        totalRecords: rawData.length,
+        validInspections: analyticsResult.validInspections,
         totalIssues: validationIssues.length,
         inspectors: Object.keys(inspectorStats).length
       });
 
-      if (validationIssues.length > 0) {
-        addNotification(`Found ${validationIssues.length} validation issues`, 'warning');
-      }
+      return { analyticsResult, billingResult, validationReportData };
 
     } catch (error) {
       console.error('Error processing analytics:', error);
       addNotification('Error processing analytics: ' + error.message, 'error');
+      return null;
     }
   };
 
@@ -610,8 +579,13 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs }) => {
     }));
   };
 
-  // Start processing session - Move data from property_records to inspection_data
+  // FIXED: Start processing session with proper state management
   const startProcessingSession = async () => {
+    if (!isDateLocked) {
+      addNotification('Please lock the project start date first', 'error');
+      return;
+    }
+
     const allValidCodes = [
       ...infoByCategoryConfig.entry,
       ...infoByCategoryConfig.refusal,
@@ -619,8 +593,8 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs }) => {
       ...infoByCategoryConfig.commercial
     ];
 
-    if (!projectStartDate || allValidCodes.length === 0) {
-      addNotification('Please set project start date and configure InfoBy categories', 'error');
+    if (allValidCodes.length === 0) {
+      addNotification('Please configure InfoBy categories first', 'error');
       return;
     }
 
@@ -628,6 +602,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs }) => {
     setSessionId(newSessionId);
     setSettingsLocked(true);
     setProcessing(true);
+    setProcessed(false);
 
     try {
       debugLog('SESSION', 'Starting processing session', { 
@@ -636,73 +611,95 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs }) => {
         categoryConfig: infoByCategoryConfig 
       });
 
-      // Process analytics first to get validation results
-      await processAnalytics();
-
-      if (!analytics || !validationReport) {
+      // Process analytics first
+      const results = await processAnalytics();
+      if (!results) {
         throw new Error('Analytics processing failed');
       }
 
-      // Move clean data to inspection_data table
-      const validRecords = rawPropertyData.filter((record, index) => {
-        const inspector = record.inspection_list_by || 'UNASSIGNED';
-        const listDate = record.inspection_list_date ? new Date(record.inspection_list_date) : null;
-        const startDate = new Date(projectStartDate);
-        const hasValidDate = listDate && listDate >= startDate;
-        const hasValidInitials = inspector && inspector !== 'UNASSIGNED' && inspector.trim() !== '';
-        const infoByCode = record.inspection_info_by;
-        const validInfoBy = allValidCodes.length === 0 || !infoByCode || allValidCodes.includes(infoByCode.toString());
-        
-        return hasValidDate && hasValidInitials && validInfoBy;
-      });
+      // Move valid inspections to inspection_data table
+      const { data: validRecords, error: selectError } = await supabase
+        .from('property_records')
+        .select(`
+          property_composite_key,
+          property_block,
+          property_lot,
+          property_qualifier,
+          property_location,
+          property_m4_class,
+          inspection_info_by,
+          inspection_list_by,
+          inspection_list_date,
+          inspection_measured_by,
+          inspection_measured_date,
+          inspection_price_by,
+          inspection_price_date,
+          values_mod_improvement
+        `)
+        .eq('job_id', jobData.id)
+        .eq('file_version', latestFileVersion)
+        .not('inspection_info_by', 'is', null)
+        .not('inspection_measured_by', 'is', null)
+        .not('inspection_measured_date', 'is', null)
+        .gte('inspection_measured_date', projectStartDate)
+        .limit(50000);
 
-      debugLog('SESSION', `Moving ${validRecords.length} valid records to inspection_data`);
+      if (selectError) throw selectError;
 
-      // Clear existing data for this session
+      // Filter valid records based on InfoBy categories
+      const validInspectionRecords = validRecords.filter(record => 
+        allValidCodes.includes(record.inspection_info_by?.toString())
+      );
+
+      debugLog('SESSION', `Moving ${validInspectionRecords.length} valid records to inspection_data`);
+
+      // Clear existing data for this job
       await supabase
         .from('inspection_data')
         .delete()
         .eq('job_id', jobData.id);
 
-      // Insert clean records
-      const inspectionRecords = validRecords.map(record => ({
-        job_id: jobData.id,
-        import_session_id: newSessionId,
-        property_composite_key: record.property_composite_key,
-        block: record.property_block,
-        lot: record.property_lot,
-        qualifier: record.property_qualifier,
-        property_location: record.property_location,
-        property_class: record.property_m4_class,
-        info_by_code: record.inspection_info_by,
-        list_by: record.inspection_list_by,
-        list_date: record.inspection_list_date,
-        price_by: record.inspection_price_by,
-        price_date: record.inspection_price_date,
-        sale_price: record.sales_price,
-        sale_date: record.sales_date,
-        project_start_date: projectStartDate,
-        validation_report: validationReport,
-        file_version: maxFileVersion,
-        source_file_name: `version_${maxFileVersion}`,
-        upload_date: new Date().toISOString()
-      }));
+      // Insert clean records in batches
+      const batchSize = 1000;
+      for (let i = 0; i < validInspectionRecords.length; i += batchSize) {
+        const batch = validInspectionRecords.slice(i, i + batchSize);
+        const inspectionRecords = batch.map(record => ({
+          job_id: jobData.id,
+          import_session_id: newSessionId,
+          property_composite_key: record.property_composite_key,
+          block: record.property_block,
+          lot: record.property_lot,
+          qualifier: record.property_qualifier,
+          property_location: record.property_location,
+          property_class: record.property_m4_class,
+          info_by_code: parseInt(record.inspection_info_by) || 0,
+          list_by: record.inspection_list_by,
+          list_date: record.inspection_list_date,
+          measure_by: record.inspection_measured_by,
+          measure_date: record.inspection_measured_date,
+          price_by: record.inspection_price_by,
+          price_date: record.inspection_price_date,
+          project_start_date: projectStartDate,
+          validation_report: results.validationReportData,
+          file_version: latestFileVersion,
+          source_file_name: `version_${latestFileVersion}`,
+          upload_date: new Date().toISOString()
+        }));
 
-      // Batch insert to inspection_data
-      const { error: insertError } = await supabase
-        .from('inspection_data')
-        .insert(inspectionRecords);
+        const { error: insertError } = await supabase
+          .from('inspection_data')
+          .insert(inspectionRecords);
 
-      if (insertError) throw insertError;
+        if (insertError) throw insertError;
+      }
 
-      // Update job statistics for other modules
-      await updateJobStatistics();
+      // Update job statistics
+      await updateJobStatistics(results.analyticsResult);
 
-      // Reload clean data
-      await loadCleanInspectionData();
+      debugLog('SESSION', '✅ Processing session completed successfully');
+      addNotification(`✅ Processing completed! ${validInspectionRecords.length} valid inspections moved to inspection_data`, 'success');
 
-      debugLog('SESSION', 'Processing session completed successfully');
-      addNotification(`✅ Processing session completed! ${validRecords.length} clean records moved to inspection_data`, 'success');
+      setProcessed(true);
 
     } catch (error) {
       console.error('Error in processing session:', error);
@@ -714,8 +711,8 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs }) => {
     }
   };
 
-  // Update job statistics for AdminJobManagement tiles and ManagementChecklist
-  const updateJobStatistics = async () => {
+  // Update job statistics for other modules
+  const updateJobStatistics = async (analytics) => {
     if (!analytics) return;
 
     try {
@@ -723,34 +720,18 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs }) => {
       const totalEntry = Object.values(analytics.inspectorStats).reduce((sum, stats) => sum + stats.entry, 0);
       const totalRefusal = Object.values(analytics.inspectorStats).reduce((sum, stats) => sum + stats.refusal, 0);
       const totalPriced = Object.values(analytics.inspectorStats).reduce((sum, stats) => sum + stats.priced, 0);
-      const commercialInspected = Object.values(analytics.classBreakdown)
-        .filter(cls => ['4A', '4B', '4C'].includes(cls))
-        .reduce((sum, cls) => sum + cls.inspected, 0);
-      const commercialTotal = Object.values(analytics.classBreakdown)
-        .filter(cls => ['4A', '4B', '4C'].includes(cls))
-        .reduce((sum, cls) => sum + cls.total, 0);
 
       const workflowStats = {
         rates: {
           entryRate: totalInspected > 0 ? Math.round((totalEntry / totalInspected) * 100) : 0,
           refusalRate: totalInspected > 0 ? Math.round((totalRefusal / totalInspected) * 100) : 0,
-          pricingRate: totalInspected > 0 ? Math.round((totalPriced / totalInspected) * 100) : 0,
-          commercialInspectionRate: commercialTotal > 0 ? Math.round((commercialInspected / commercialTotal) * 100) : 0
+          pricingRate: totalInspected > 0 ? Math.round((totalPriced / totalInspected) * 100) : 0
         },
-        inspectionPhases: {
-          firstAttempt: 'COMPLETED',
-          secondAttempt: totalRefusal > 0 ? 'IN_PROGRESS' : 'PENDING',
-          thirdAttempt: 'PENDING'
-        },
-        appeals: {
-          totalCount: 0,
-          percentOfWhole: 0,
-          byClass: {}
-        }
+        validInspections: totalInspected,
+        lastProcessed: new Date().toISOString()
       };
 
-      // Update job with new statistics
-      const { error } = await supabase
+      await supabase
         .from('jobs')
         .update({
           workflow_stats: workflowStats,
@@ -759,22 +740,19 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs }) => {
         })
         .eq('id', jobData.id);
 
-      if (error) throw error;
-
-      debugLog('JOB_UPDATE', 'Job statistics updated', workflowStats);
+      debugLog('JOB_UPDATE', '✅ Job statistics updated');
 
     } catch (error) {
       console.error('Error updating job statistics:', error);
     }
   };
 
-  // Export validation report in Excel format
+  // Export validation report
   const exportValidationReport = () => {
     if (!validationReport || !validationReport.detailed_issues) return;
 
     let csvContent = "Inspector,Total Issues,Inspector Name\n";
     
-    // Summary sheet
     validationReport.summary.inspector_breakdown.forEach(inspector => {
       csvContent += `"${inspector.inspector_code}","${inspector.total_issues}","${inspector.inspector_name}"\n`;
     });
@@ -782,7 +760,6 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs }) => {
     csvContent += "\n\nDetailed Issues:\n";
     csvContent += "Inspector,Block,Lot,Qualifier,Card,Property Location,Warning Message\n";
     
-    // Detailed issues
     Object.keys(validationReport.detailed_issues).forEach(inspector => {
       const issues = validationReport.detailed_issues[inspector];
       issues.forEach(issue => {
@@ -800,7 +777,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs }) => {
     document.body.removeChild(a);
     window.URL.revokeObjectURL(url);
 
-    addNotification('📊 Validation report exported in Excel format', 'success');
+    addNotification('📊 Validation report exported', 'success');
   };
 
   if (loading) {
@@ -841,18 +818,6 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs }) => {
         ))}
       </div>
 
-      {/* Version Status Banner - ENHANCED */}
-      <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-        <div className="flex items-center justify-between">
-          <span className="font-medium text-green-800">
-            ✅ FIXED: Using ALL Records - File Version: {maxFileVersion}
-          </span>
-          <span className="text-sm text-green-600">
-            {rawPropertyData.length.toLocaleString()} properties loaded (was limited to 1000)
-          </span>
-        </div>
-      </div>
-
       {/* Header */}
       <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border-2 border-blue-200 p-6">
         <div className="flex items-center justify-between mb-4">
@@ -860,7 +825,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs }) => {
             <Factory className="w-8 h-8 mr-3 text-blue-600" />
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Production Tracker</h1>
-              <p className="text-gray-600">{jobData.name} - Enhanced Analytics & Validation Engine (PayrollProductionUpdater)</p>
+              <p className="text-gray-600">{jobData.name} - Enhanced Analytics & Validation Engine</p>
             </div>
           </div>
           <button
@@ -871,14 +836,14 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs }) => {
           </button>
         </div>
 
-        {/* Quick Stats */}
+        {/* FIXED: Enhanced Quick Stats */}
         {analytics && (
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="bg-white p-4 rounded-lg border shadow-sm">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-600">Raw Properties</p>
-                  <p className="text-2xl font-bold text-blue-600">{analytics.totalRecords.toLocaleString()}</p>
+                  <p className="text-2xl font-bold text-blue-600">{propertyRecordsCount?.toLocaleString() || analytics.totalRecords.toLocaleString()}</p>
                 </div>
                 <TrendingUp className="w-8 h-8 text-blue-500" />
               </div>
@@ -887,8 +852,8 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs }) => {
             <div className="bg-white p-4 rounded-lg border shadow-sm">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-gray-600">Clean Records</p>
-                  <p className="text-2xl font-bold text-green-600">{cleanInspectionData.length.toLocaleString()}</p>
+                  <p className="text-sm text-gray-600">Valid Inspections</p>
+                  <p className="text-2xl font-bold text-green-600">{analytics.validInspections.toLocaleString()}</p>
                 </div>
                 <CheckCircle className="w-8 h-8 text-green-500" />
               </div>
@@ -917,11 +882,11 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs }) => {
         )}
       </div>
 
-      {/* ENHANCED Settings Panel - InfoBy Category Configuration */}
+      {/* ENHANCED Settings Panel with Lock Functionality */}
       <div className="bg-white rounded-lg border shadow-sm p-6">
         <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
           <Settings className="w-5 h-5 mr-2" />
-          Processing Settings - Enhanced InfoBy Configuration
+          Processing Settings - Enhanced Configuration
           {settingsLocked && (
             <span className="ml-3 px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
               Session Active: {sessionId?.slice(-8)}
@@ -930,41 +895,52 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs }) => {
         </h3>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Project Start Date */}
+          {/* Project Start Date with Lock */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Project Start Date * 
-              {settingsLocked && (
-                <span className="ml-2 text-xs text-green-600">🔒 Locked</span>
-              )}
+              Project Start Date *
             </label>
-            <input
-              type="date"
-              value={projectStartDate}
-              onChange={(e) => setProjectStartDate(e.target.value)}
-              disabled={settingsLocked}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"
-            />
+            <div className="flex gap-2">
+              <input
+                type="date"
+                value={projectStartDate}
+                onChange={(e) => setProjectStartDate(e.target.value)}
+                disabled={isDateLocked || settingsLocked}
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"
+              />
+              <button
+                onClick={isDateLocked ? unlockStartDate : lockStartDate}
+                disabled={settingsLocked || (!projectStartDate && !isDateLocked)}
+                className={`px-3 py-2 rounded-lg flex items-center gap-1 ${
+                  isDateLocked 
+                    ? 'bg-green-100 text-green-700 hover:bg-green-200' 
+                    : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                } disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                {isDateLocked ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
+                {isDateLocked ? 'Unlock' : 'Lock'}
+              </button>
+            </div>
+            {isDateLocked && (
+              <p className="text-sm text-green-600 mt-1">
+                ✅ Date locked and saved to property records
+              </p>
+            )}
           </div>
 
-          {/* InfoBy Category Configuration Status */}
+          {/* InfoBy Category Status */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               InfoBy Categories ({availableInfoByCodes.length} codes available)
-              {settingsLocked && (
-                <span className="ml-2 text-xs text-green-600">🔒 Locked</span>
-              )}
             </label>
             <div className="space-y-2">
-              <div className="flex justify-between text-sm">
+              <div className="grid grid-cols-2 gap-2 text-sm">
                 <span>Entry: {infoByCategoryConfig.entry.length} codes</span>
                 <span>Refusal: {infoByCategoryConfig.refusal.length} codes</span>
-              </div>
-              <div className="flex justify-between text-sm">
                 <span>Estimation: {infoByCategoryConfig.estimation.length} codes</span>
                 <span>Commercial: {infoByCategoryConfig.commercial.length} codes</span>
               </div>
-              {!settingsLocked && (
+              {!settingsLocked && availableInfoByCodes.length > 0 && (
                 <button
                   onClick={() => setShowCategoryConfig(!showCategoryConfig)}
                   className="w-full px-3 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 flex items-center justify-center"
@@ -977,18 +953,18 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs }) => {
           </div>
         </div>
 
-        {/* InfoBy Category Configuration Panel */}
+        {/* FIXED: InfoBy Category Configuration Panel */}
         {showCategoryConfig && !settingsLocked && availableInfoByCodes.length > 0 && (
           <div className="mt-6 pt-6 border-t border-gray-200">
             <h4 className="text-md font-semibold text-gray-800 mb-4">
               Configure InfoBy Categories ({jobData.vendor} Format)
             </h4>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {['entry', 'refusal', 'estimation', 'commercial'].map(category => (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+              {['entry', 'refusal', 'estimation', 'invalid', 'commercial'].map(category => (
                 <div key={category} className="border border-gray-200 rounded-lg p-4">
                   <h5 className="font-medium text-gray-900 mb-3 capitalize">
-                    {category} Codes ({infoByCategoryConfig[category].length})
+                    {category} ({infoByCategoryConfig[category].length})
                   </h5>
                   <div className="space-y-2 max-h-40 overflow-y-auto">
                     {availableInfoByCodes.map(codeItem => {
@@ -996,16 +972,16 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs }) => {
                       const isAssigned = infoByCategoryConfig[category].includes(codeToCheck);
                       
                       return (
-                        <div key={codeItem.code} className="flex items-center">
+                        <div key={codeItem.code} className="flex items-start">
                           <input
                             type="checkbox"
                             checked={isAssigned}
                             onChange={() => handleCategoryAssignment(category, codeToCheck, isAssigned)}
-                            className="mr-2"
+                            className="mr-2 mt-1"
                           />
                           <div className="text-sm">
                             <span className="font-medium">{codeItem.code}</span>
-                            <div className="text-gray-600 text-xs">{codeItem.description}</div>
+                            <div className="text-gray-600 text-xs leading-tight">{codeItem.description}</div>
                           </div>
                         </div>
                       );
@@ -1017,53 +993,38 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs }) => {
           </div>
         )}
 
-        {/* Session History */}
-        {sessionHistory.length > 0 && (
-          <div className="mt-6 pt-6 border-t border-gray-200">
-            <h4 className="text-md font-semibold text-gray-800 mb-3">Recent Processing Sessions</h4>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              {sessionHistory.slice(0, 6).map((session, idx) => (
-                <div key={idx} className="p-3 bg-gray-50 rounded-lg border text-sm">
-                  <div className="font-medium text-gray-900">
-                    Session {session.session_id?.slice(-8) || 'Unknown'}
-                  </div>
-                  <div className="text-xs text-gray-600 mt-1">
-                    {new Date(session.processed_at).toLocaleDateString()}
-                  </div>
-                  {session.validation_summary && (
-                    <div className="text-xs text-gray-600 mt-1">
-                      {session.validation_summary.total_issues || 0} issues found
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Action Button */}
+        {/* FIXED: Processing Button with Proper States */}
         <div className="mt-6 flex justify-end">
           <button
             onClick={startProcessingSession}
-            disabled={processing || settingsLocked || !projectStartDate || 
+            disabled={processing || (!isDateLocked) || 
               (infoByCategoryConfig.entry.length + infoByCategoryConfig.refusal.length + 
                infoByCategoryConfig.estimation.length + infoByCategoryConfig.commercial.length) === 0}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+            className={`px-6 py-2 rounded-lg flex items-center space-x-2 transition-all ${
+              processed 
+                ? 'bg-green-600 text-white hover:bg-green-700'
+                : processing
+                ? 'bg-yellow-600 text-white'
+                : 'bg-blue-600 text-white hover:bg-blue-700'
+            } disabled:opacity-50 disabled:cursor-not-allowed`}
           >
             {processing ? (
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+            ) : processed ? (
+              <CheckCircle className="w-4 h-4" />
             ) : (
               <RefreshCw className="w-4 h-4" />
             )}
-            <span>{processing ? 'Processing...' : 'Start Processing Session'}</span>
+            <span>
+              {processing ? 'Processing...' : processed ? 'Processed ✓' : 'Start Processing Session'}
+            </span>
           </button>
         </div>
       </div>
 
-      {/* Main Content Tabs - Same as before */}
+      {/* Main Content Tabs */}
       {analytics && (
         <div className="bg-white rounded-lg border shadow-sm">
-          {/* Tab Navigation */}
           <div className="border-b border-gray-200">
             <nav className="-mb-px flex space-x-8 px-6">
               <button
@@ -1099,12 +1060,11 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs }) => {
             </nav>
           </div>
 
-          {/* Tab Content */}
           <div className="p-6">
-            {/* Inspector Analytics Tab */}
+            {/* FIXED: Enhanced Inspector Analytics */}
             {activeTab === 'analytics' && (
               <div className="space-y-6">
-                <h3 className="text-lg font-bold text-gray-900">Inspector Performance Analytics</h3>
+                <h3 className="text-lg font-bold text-gray-900">Enhanced Inspector Performance Analytics</h3>
                 
                 {Object.keys(analytics.inspectorStats).length === 0 ? (
                   <div className="text-center py-8 text-gray-500">
@@ -1124,30 +1084,24 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs }) => {
                               </span>
                             </h4>
                           </div>
-                          <div className="text-right">
-                            <div className="text-sm text-gray-600">Completion Rate</div>
-                            <div className="text-lg font-bold text-blue-600">
-                              {stats.total > 0 ? Math.round((stats.inspected / stats.total) * 100) : 0}%
-                            </div>
-                          </div>
                         </div>
                         
                         <div className="grid grid-cols-2 md:grid-cols-6 gap-4 text-sm">
                           <div>
-                            <div className="text-gray-600">Total Assigned</div>
-                            <div className="font-bold text-gray-900">{stats.total.toLocaleString()}</div>
+                            <div className="text-gray-600">Total Inspected</div>
+                            <div className="font-bold text-green-600">{stats.inspected.toLocaleString()}</div>
                           </div>
                           <div>
-                            <div className="text-gray-600">Inspected</div>
-                            <div className="font-bold text-green-600">{stats.inspected.toLocaleString()}</div>
+                            <div className="text-gray-600">Residential Inspected</div>
+                            <div className="font-bold text-blue-600">{stats.residentialInspected.toLocaleString()}</div>
+                          </div>
+                          <div>
+                            <div className="text-gray-600">Days Worked</div>
+                            <div className="font-bold text-purple-600">{stats.daysWorked}</div>
                           </div>
                           <div>
                             <div className="text-gray-600">Daily Average</div>
                             <div className="font-bold text-blue-600">{stats.dailyAverage}</div>
-                          </div>
-                          <div>
-                            <div className="text-gray-600">Residential Avg</div>
-                            <div className="font-bold text-blue-600">{stats.totalResidentialAverage}</div>
                           </div>
                           <div>
                             <div className="text-gray-600">Entry Rate</div>
@@ -1176,7 +1130,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs }) => {
               </div>
             )}
 
-            {/* Summary for Billing Tab */}
+            {/* FIXED: Summary for Billing with 4B */}
             {activeTab === 'billing' && billingAnalytics && (
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
@@ -1187,7 +1141,6 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs }) => {
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                  {/* Individual Classes */}
                   <div>
                     <h4 className="text-md font-semibold text-gray-800 mb-4">Individual Classes</h4>
                     <div className="space-y-3">
@@ -1207,13 +1160,12 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs }) => {
                     </div>
                   </div>
 
-                  {/* Grouped Categories */}
                   <div>
                     <h4 className="text-md font-semibold text-gray-800 mb-4">Grouped Categories</h4>
                     <div className="space-y-3">
                       <div className="flex justify-between items-center p-3 bg-orange-50 rounded-lg border border-orange-200">
                         <div>
-                          <span className="font-medium text-gray-900">Commercial (4A, 4C)</span>
+                          <span className="font-medium text-gray-900">Commercial (4A, 4B, 4C)</span>
                           <div className="text-xs text-gray-600">Commercial properties</div>
                         </div>
                         <div className="font-bold text-orange-600">{billingAnalytics.grouped.commercial.toLocaleString()}</div>
@@ -1248,12 +1200,12 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs }) => {
               </div>
             )}
 
-            {/* Validation Report Tab */}
+            {/* Enhanced Validation Report */}
             {activeTab === 'validation' && validationReport && (
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
                   <h3 className="text-lg font-bold text-gray-900">
-                    Enhanced Validation Report - Excel Format
+                    Enhanced Validation Report
                   </h3>
                   {validationReport.summary.total_issues > 0 && (
                     <button
@@ -1261,7 +1213,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs }) => {
                       className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center space-x-2"
                     >
                       <Download className="w-4 h-4" />
-                      <span>Export Excel Report</span>
+                      <span>Export Report</span>
                     </button>
                   )}
                 </div>
@@ -1274,7 +1226,6 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs }) => {
                   </div>
                 ) : (
                   <>
-                    {/* Summary Section */}
                     <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
                       <h4 className="font-semibold text-yellow-800 mb-3">Inspector Summary</h4>
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1301,7 +1252,6 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs }) => {
                       </div>
                     </div>
 
-                    {/* Detailed Issues Section */}
                     {selectedInspectorIssues && validationReport.detailed_issues[selectedInspectorIssues] && (
                       <div className="bg-white border border-gray-200 rounded-lg p-4">
                         <h4 className="font-semibold text-gray-900 mb-4">
