@@ -15,6 +15,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
   const [showResultsModal, setShowResultsModal] = useState(false);
   const [comparisonResults, setComparisonResults] = useState(null);
   const [salesDecisions, setSalesDecisions] = useState(new Map());
+  const [sourceFileVersion, setSourceFileVersion] = useState(1);
 
   const addNotification = (message, type = 'info') => {
     const id = Date.now();
@@ -1302,7 +1303,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                     setProcessing(false);
                     setProcessingStatus('');
                   }
-                }}}
+                }}
                 disabled={processing}
                 className="px-6 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 disabled:opacity-50 font-medium"
               >
@@ -1326,44 +1327,6 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       timeZone: 'America/New_York'
     });
   };
-
-  // FIXED: KISS file status using correct version field names
-  const getFileStatus = (timestamp, type) => {
-    if (!timestamp) return 'Never';
-    
-    // DEBUG: Log what's available in job object
-    console.log('🔍 DEBUG - Full job object keys:', Object.keys(job));
-    console.log('🔍 DEBUG - job.file_version:', job.file_version);
-    console.log('🔍 DEBUG - job.code_file_version:', job.code_file_version);
-    console.log('🔍 DEBUG - timestamp:', timestamp);
-    console.log('🔍 DEBUG - type:', type);
-    
-    // FIXED: Use correct field names from database
-    const sourceVersion = job.file_version || 1;        // Source files use file_version (from processors)
-    const codeVersion = job.code_file_version || 1;     // Code files use code_file_version
-    
-    console.log('🔍 DEBUG - calculated sourceVersion:', sourceVersion);
-    console.log('🔍 DEBUG - calculated codeVersion:', codeVersion);
-    
-    if (type === 'source') {
-      const result = sourceVersion === 1 
-        ? `Imported at Job Creation (${formatDate(timestamp)})`
-        : `Updated via FileUpload (${formatDate(timestamp)})`;
-      console.log('🔍 DEBUG - source result:', result);
-      return result;
-    } else if (type === 'code') {
-      const result = codeVersion === 1 
-        ? `Imported at Job Creation (${formatDate(timestamp)})`
-        : `Updated via FileUpload (${formatDate(timestamp)})`;
-      console.log('🔍 DEBUG - code result:', result);
-      return result;
-    }
-    
-    return `Updated (${formatDate(timestamp)})`;
-  };
-
-  // NEW: Get source file version from property_records table
-  const [sourceFileVersion, setSourceFileVersion] = useState(1);
 
   // NEW: Fetch source file version from property_records
   useEffect(() => {
@@ -1409,15 +1372,6 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       return result;
     } else if (type === 'code') {
       const codeVersion = job.code_file_version || 1;
-      const result = codeVersion === 1 
-        ? `Imported at Job Creation (${formatDate(timestamp)})`
-        : `Updated via FileUpload (${formatDate(timestamp)})`;
-      console.log('🔍 DEBUG - code result:', result);
-      return result;
-    }
-    
-    return `Updated (${formatDate(timestamp)})`;
-  }; (type === 'code') {
       const result = codeVersion === 1 
         ? `Imported at Job Creation (${formatDate(timestamp)})`
         : `Updated via FileUpload (${formatDate(timestamp)})`;
