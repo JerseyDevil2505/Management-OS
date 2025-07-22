@@ -80,6 +80,103 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     return null;
   };
 
+  // NEW: Parse code files for both vendors
+  const parseCodeFile = (fileContent, vendor) => {
+    try {
+      if (vendor === 'BRT') {
+        // BRT codes are JSON format
+        const codeData = JSON.parse(fileContent);
+        return codeData;
+      } else if (vendor === 'Microsystems') {
+        // Microsystems codes are pipe-delimited text
+        const lines = fileContent.split('\n').filter(line => line.trim());
+        const codes = {};
+        
+        lines.forEach(line => {
+          const parts = line.split('|');
+          if (parts.length >= 2) {
+            const code = parts[0].trim();
+            const description = parts[1].trim();
+            codes[code] = description;
+          }
+        });
+        
+        return codes;
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Error parsing code file:', error);
+      return null;
+    }
+  };
+
+  // NEW: Handle code file update - direct jobs table update
+  const handleCodeFileUpdate = async () => {
+    if (!codeFile || !codeFileContent) {
+      addNotification('Please select a code file first', 'error');
+      return;
+    }
+
+    if (!detectedVendor) {
+      addNotification('Could not detect vendor type for code file', 'error');
+      return;
+    }
+
+    try {
+      setProcessing(true);
+      setProcessingStatus('Processing code file...');
+
+      // Parse the code file
+      const parsedCodes = parseCodeFile(codeFileContent, detectedVendor);
+      
+      if (!parsedCodes) {
+        throw new Error('Failed to parse code file');
+      }
+
+      // Update jobs table directly
+      const { error } = await supabase
+        .from('jobs')
+        .update({
+          code_file_content: codeFileContent,
+          code_file_name: codeFile.name,
+          code_file_status: 'current',
+          code_file_uploaded_at: new Date().toISOString(),
+          code_file_version: (job.code_file_version || 1) + 1,
+          parsed_code_definitions: parsedCodes,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', job.id);
+
+      if (error) {
+        throw new Error(`Failed to update job: ${error.message}`);
+      }
+
+      addNotification(`✅ Successfully updated ${Object.keys(parsedCodes).length} code definitions for ${detectedVendor}`, 'success');
+      
+      // Clear code file selection
+      setCodeFile(null);
+      setCodeFileContent(null);
+      document.getElementById('code-file-upload').value = '';
+
+      // Notify parent component of the update
+      if (onFileProcessed) {
+        onFileProcessed({ 
+          type: 'code_update', 
+          codes_updated: Object.keys(parsedCodes).length,
+          vendor: detectedVendor 
+        });
+      }
+
+    } catch (error) {
+      console.error('❌ Code file update failed:', error);
+      addNotification(`Code file update failed: ${error.message}`, 'error');
+    } finally {
+      setProcessing(false);
+      setProcessingStatus('');
+    }
+  };
+
   // FIXED: Parse files with exact processor logic
   const parseSourceFile = (fileContent, vendor) => {
     const lines = fileContent.split('\n').filter(line => line.trim());
@@ -830,7 +927,15 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     try {
       const content = await file.text();
       setCodeFileContent(content);
-      addNotification('✅ Code file loaded', 'success');
+      
+      // Detect vendor for code file too
+      const vendor = detectVendorType(content, file.name);
+      if (vendor) {
+        setDetectedVendor(vendor);
+        addNotification(`✅ ${vendor} code file format detected`, 'success');
+      } else {
+        addNotification('⚠️ Could not detect vendor format for code file', 'warning');
+      }
     } catch (error) {
       addNotification(`Error reading code file: ${error.message}`, 'error');
     }
@@ -1180,19 +1285,25 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     });
   };
 
-  // Get file status description
+  // FIXED: KISS file status using version numbers instead of timestamp math
   const getFileStatus = (timestamp, type) => {
     if (!timestamp) return 'Never';
     
-    const fileDate = new Date(timestamp);
-    const jobDate = new Date(job.created_at);
-    const timeDiff = Math.abs(fileDate - jobDate) / (1000 * 60);
+    // Check version numbers instead of timestamps (KISS method)
+    const sourceVersion = job.source_file_version || 1;
+    const codeVersion = job.code_file_version || 1;
     
-    if (timeDiff <= 5) {
-      return `Imported at Job Creation (${formatDate(timestamp)})`;
-    } else {
-      return `Updated via FileUpload (${formatDate(timestamp)})`;
+    if (type === 'source') {
+      return sourceVersion === 1 
+        ? `Imported at Job Creation (${formatDate(timestamp)})`
+        : `Updated via FileUpload (${formatDate(timestamp)})`;
+    } else if (type === 'code') {
+      return codeVersion === 1 
+        ? `Imported at Job Creation (${formatDate(timestamp)})`
+        : `Updated via FileUpload (${formatDate(timestamp)})`;
     }
+    
+    return `Updated (${formatDate(timestamp)})`;
   };
 
   if (!job) {
@@ -1311,18 +1422,32 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         </button>
         
         {codeFile && (
-          <button
-            onClick={() => {
-              setCodeFile(null);
-              setCodeFileContent(null);
-              document.getElementById('code-file-upload').value = '';
-              addNotification('Code file cleared', 'info');
-            }}
-            disabled={comparing || processing}
-            className="px-2 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600 disabled:bg-gray-500 flex items-center"
-          >
-            <X className="w-3 h-3" />
-          </button>
+          <>
+            <button
+              onClick={() => {
+                setCodeFile(null);
+                setCodeFileContent(null);
+                document.getElementById('code-file-upload').value = '';
+                addNotification('Code file cleared', 'info');
+              }}
+              disabled={comparing || processing}
+              className="px-2 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600 disabled:bg-gray-500 flex items-center"
+            >
+              <X className="w-3 h-3" />
+            </button>
+            <button
+              onClick={handleCodeFileUpdate}
+              disabled={comparing || processing}
+              className="px-3 py-1 bg-yellow-600 text-white text-xs rounded hover:bg-yellow-700 disabled:bg-gray-500 flex items-center gap-1"
+            >
+              {processing ? (
+                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+              ) : (
+                <Settings className="w-3 h-3" />
+              )}
+              Update Codes
+            </button>
+          </>
         )}
       </div>
 
