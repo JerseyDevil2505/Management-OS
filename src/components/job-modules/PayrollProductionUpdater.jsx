@@ -957,7 +957,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
         {showCategoryConfig && !settingsLocked && availableInfoByCodes.length > 0 && (
           <div className="mt-6 pt-6 border-t border-gray-200">
             <h4 className="text-md font-semibold text-gray-800 mb-4">
-              Configure InfoBy Categories ({jobData.vendor} Format)
+              Configure InfoBy Categories ({jobData.vendor_type} Format)
             </h4>
             
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
@@ -968,19 +968,22 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
                   </h5>
                   <div className="space-y-2 max-h-40 overflow-y-auto">
                     {availableInfoByCodes.map(codeItem => {
-                      const codeToCheck = jobData.vendor_type === 'Microsystems' ? codeItem.storageCode : codeItem.code;
-                      const isAssigned = infoByCategoryConfig[category].includes(codeToCheck);
+                      // For Microsystems, use the single letter storage code (A, not 140A)
+                      // For BRT, use the code as-is
+                      const storageCode = jobData.vendor_type === 'Microsystems' ? codeItem.storageCode : codeItem.code;
+                      const displayCode = jobData.vendor_type === 'Microsystems' ? codeItem.storageCode : codeItem.code;
+                      const isAssigned = infoByCategoryConfig[category].includes(storageCode);
                       
                       return (
                         <div key={codeItem.code} className="flex items-start">
                           <input
                             type="checkbox"
                             checked={isAssigned}
-                            onChange={() => handleCategoryAssignment(category, codeToCheck, isAssigned)}
+                            onChange={() => handleCategoryAssignment(category, storageCode, isAssigned)}
                             className="mr-2 mt-1"
                           />
                           <div className="text-sm">
-                            <span className="font-medium">{codeItem.code}</span>
+                            <span className="font-medium">{displayCode}</span>
                             <div className="text-gray-600 text-xs leading-tight">{codeItem.description}</div>
                           </div>
                         </div>
