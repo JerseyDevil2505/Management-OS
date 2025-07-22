@@ -449,17 +449,42 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       console.log('🔍 DEBUG - Count error:', countError);
       
       // DEBUG: Log the exact query we're about to make
-      console.log('🔍 DEBUG - About to execute main query with limit 50000...');
+      console.log('🔍 DEBUG - About to execute main query with pagination...');
       
-      const { data: dbRecords, error: dbError } = await supabase
-        .from('property_records')  // Direct table access instead of view
-        .select('property_composite_key, property_block, property_lot, property_qualifier, property_location, sales_price, sales_date, property_m4_class, property_cama_class')
-        .eq('job_id', job.id)
-        .limit(50000);  // Set high limit to handle large jobs (largest was 34K records)
+      // FIXED: Use pagination to get ALL records instead of relying on limit
+      let allDbRecords = [];
+      let rangeStart = 0;
+      const batchSize = 1000;
+      let hasMore = true;
+      
+      while (hasMore) {
+        const { data: batch, error: batchError } = await supabase
+          .from('property_records')
+          .select('property_composite_key, property_block, property_lot, property_qualifier, property_location, sales_price, sales_date, property_m4_class, property_cama_class')
+          .eq('job_id', job.id)
+          .range(rangeStart, rangeStart + batchSize - 1);
+          
+        if (batchError) {
+          console.error('🔍 DEBUG - Batch error:', batchError);
+          break;
+        }
+        
+        console.log(`🔍 DEBUG - Batch ${Math.floor(rangeStart/batchSize) + 1}: got ${batch?.length || 0} records`);
+        
+        if (batch && batch.length > 0) {
+          allDbRecords = allDbRecords.concat(batch);
+          rangeStart += batchSize;
+          hasMore = batch.length === batchSize; // If we got less than batch size, we're done
+        } else {
+          hasMore = false;
+        }
+      }
+      
+      const dbRecords = allDbRecords;
+      const dbError = null;
         
       // DEBUG: Log what we actually got back
-      console.log('🔍 DEBUG - Query completed, records returned:', dbRecords?.length);
-      console.log('🔍 DEBUG - Query error:', dbError);
+      console.log('🔍 DEBUG - Pagination completed, total records:', dbRecords?.length);
       
       if (dbError) {
         throw new Error(`Database fetch failed: ${dbError.message}`);
