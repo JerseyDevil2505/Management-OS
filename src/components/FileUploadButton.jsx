@@ -134,11 +134,19 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         throw new Error('Failed to parse code file');
       }
 
+      // FIXED: Sanitize content to prevent Unicode escape sequence errors
+      const sanitizedContent = codeFileContent
+        .replace(/\\/g, '\\\\')  // Escape backslashes
+        .replace(/"/g, '\\"')    // Escape quotes
+        .replace(/\n/g, '\\n')   // Escape newlines
+        .replace(/\r/g, '\\r')   // Escape carriage returns
+        .replace(/\t/g, '\\t');  // Escape tabs
+
       // Update jobs table directly
       const { error } = await supabase
         .from('jobs')
         .update({
-          code_file_content: codeFileContent,
+          code_file_content: sanitizedContent,
           code_file_name: codeFile.name,
           code_file_status: 'current',
           code_file_uploaded_at: new Date().toISOString(),
@@ -1289,9 +1297,9 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
   const getFileStatus = (timestamp, type) => {
     if (!timestamp) return 'Never';
     
-    // Check version numbers instead of timestamps (KISS method)
-    const sourceVersion = job.source_file_version || 1;
-    const codeVersion = job.code_file_version || 1;
+    // FIXED: Check correct version field names
+    const sourceVersion = job.file_version || 1;  // Source files use file_version (from processors)
+    const codeVersion = job.code_file_version || 1;  // Code files use code_file_version
     
     if (type === 'source') {
       return sourceVersion === 1 
