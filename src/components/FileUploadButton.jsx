@@ -111,7 +111,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     }
   };
 
-  // NEW: Handle code file update - direct jobs table update
+  // FIXED: Handle code file update with proper Unicode sanitization
   const handleCodeFileUpdate = async () => {
     if (!codeFile || !codeFileContent) {
       addNotification('Please select a code file first', 'error');
@@ -134,12 +134,14 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         throw new Error('Failed to parse code file');
       }
 
-      // FIXED: Sanitize content to prevent Unicode escape sequence errors
+      // FIXED: Properly escape special characters to prevent Unicode errors
       const sanitizedContent = codeFileContent
-        .replace(/\\/g, '\\\\')  // Escape backslashes
-        .replace(/"/g, '\\"')    // Escape quotes
+        .replace(/\\/g, '\\\\')  // Escape backslashes first
+        .replace(/'/g, "''")     // Escape single quotes for SQL
+        .replace(/\x00/g, '\\0') // Escape null bytes
         .replace(/\n/g, '\\n')   // Escape newlines
         .replace(/\r/g, '\\r')   // Escape carriage returns
+        .replace(/\x1a/g, '\\Z') // Escape Ctrl+Z
         .replace(/\t/g, '\\t');  // Escape tabs
 
       // Update jobs table directly
@@ -1293,13 +1295,13 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     });
   };
 
-  // FIXED: KISS file status using version numbers instead of timestamp math
+  // FIXED: KISS file status using correct version field names
   const getFileStatus = (timestamp, type) => {
     if (!timestamp) return 'Never';
     
-    // FIXED: Check correct version field names
-    const sourceVersion = job.file_version || 1;  // Source files use file_version (from processors)
-    const codeVersion = job.code_file_version || 1;  // Code files use code_file_version
+    // FIXED: Use correct field names from database
+    const sourceVersion = job.file_version || 1;        // Source files use file_version (from processors)
+    const codeVersion = job.code_file_version || 1;     // Code files use code_file_version
     
     if (type === 'source') {
       return sourceVersion === 1 
