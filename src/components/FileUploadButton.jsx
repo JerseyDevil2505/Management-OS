@@ -1108,10 +1108,80 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
               </button>
             ) : (
               <button
-                onClick={() => setShowResultsModal(false)}
-                className="px-6 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 font-medium"
+                onClick={async () => {
+                  // Even with no changes, call processors to update with latest data and version
+                  if (!sourceFile || !sourceFileContent) {
+                    addNotification('No source file to process', 'error');
+                    return;
+                  }
+                  
+                  try {
+                    setProcessing(true);
+                    setProcessingStatus(`Processing ${detectedVendor} data via processor...`);
+                    
+                    console.log('🚀 Processing acknowledged file (no changes detected)...');
+                    
+                    // Call the processor to update the database with latest data
+                    const result = await propertyService.importCSVData(
+                      sourceFileContent,
+                      codeFileContent,
+                      job.id,
+                      job.year_created || new Date().getFullYear(),
+                      job.ccdd_code || job.ccddCode,
+                      detectedVendor,
+                      {
+                        source_file_name: sourceFile?.name,
+                        source_file_version_id: crypto.randomUUID(),
+                        source_file_uploaded_at: new Date().toISOString(),
+                        file_version: (job.source_file_version || 1) + 1
+                      }
+                    );
+                    
+                    console.log('📊 Processor completed with result:', result);
+                    
+                    // Save comparison report (showing no changes)
+                    await saveComparisonReport(comparisonResults, salesDecisions);
+                    
+                    // Update job with new file version info
+                    await jobService.update(job.id, {
+                      sourceFileStatus: result.errors > 0 ? 'error' : 'imported',
+                      totalProperties: result.processed,
+                      source_file_version: (job.source_file_version || 1) + 1,
+                      source_file_uploaded_at: new Date().toISOString()
+                    });
+                    
+                    const totalProcessed = result.processed || 0;
+                    const errorCount = result.errors || 0;
+                    
+                    if (errorCount > 0) {
+                      addNotification(`⚠️ Processing completed with ${errorCount} errors. ${totalProcessed} records updated.`, 'warning');
+                    } else {
+                      addNotification(`✅ Successfully updated ${totalProcessed} records with latest data via ${detectedVendor} processor`, 'success');
+                    }
+                    
+                    // Close modal and clean up
+                    setShowResultsModal(false);
+                    setSourceFile(null);
+                    setSourceFileContent(null);
+                    setSalesDecisions(new Map());
+                    
+                    // Notify parent
+                    if (onFileProcessed) {
+                      onFileProcessed(result);
+                    }
+                    
+                  } catch (error) {
+                    console.error('❌ Processing failed:', error);
+                    addNotification(`Processing failed: ${error.message}`, 'error');
+                  } finally {
+                    setProcessing(false);
+                    setProcessingStatus('');
+                  }
+                }}
+                disabled={processing}
+                className="px-6 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 disabled:opacity-50 font-medium"
               >
-                Acknowledge & Close
+                {processing ? 'Processing...' : 'Acknowledge & Close'}
               </button>
             )}
           </div>
