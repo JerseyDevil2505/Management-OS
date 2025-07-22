@@ -107,13 +107,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       console.error('Error with code file:', error);
       return null;
     }
-  };');
-          if (parts.length >= 2) {
-            const code = parts[0].trim();
-            const description = parts[1].trim();
-            codes[code] = description;
-          }
-        });
+  };
         
         return codes;
       }
