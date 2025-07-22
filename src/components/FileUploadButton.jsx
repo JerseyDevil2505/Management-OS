@@ -127,12 +127,17 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       setProcessing(true);
       setProcessingStatus('Processing code file...');
 
+      console.log('🔍 DEBUG - Starting code file update');
+      console.log('🔍 DEBUG - Current job.code_file_version:', job.code_file_version);
+
       // Parse the code file
       const parsedCodes = parseCodeFile(codeFileContent, detectedVendor);
       
       if (!parsedCodes) {
         throw new Error('Failed to parse code file');
       }
+
+      console.log('🔍 DEBUG - Parsed codes count:', Object.keys(parsedCodes).length);
 
       // FIXED: Properly escape special characters to prevent Unicode errors
       const sanitizedContent = codeFileContent
@@ -144,6 +149,9 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         .replace(/\x1a/g, '\\Z') // Escape Ctrl+Z
         .replace(/\t/g, '\\t');  // Escape tabs
 
+      const newVersion = (job.code_file_version || 1) + 1;
+      console.log('🔍 DEBUG - New version will be:', newVersion);
+
       // Update jobs table directly
       const { error } = await supabase
         .from('jobs')
@@ -152,15 +160,18 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
           code_file_name: codeFile.name,
           code_file_status: 'current',
           code_file_uploaded_at: new Date().toISOString(),
-          code_file_version: (job.code_file_version || 1) + 1,
+          code_file_version: newVersion,
           parsed_code_definitions: parsedCodes,
           updated_at: new Date().toISOString()
         })
         .eq('id', job.id);
 
       if (error) {
+        console.log('🔍 DEBUG - Database update error:', error);
         throw new Error(`Failed to update job: ${error.message}`);
       }
+
+      console.log('🔍 DEBUG - Database update successful');
 
       addNotification(`✅ Successfully updated ${Object.keys(parsedCodes).length} code definitions for ${detectedVendor}`, 'success');
       
@@ -168,6 +179,8 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       setCodeFile(null);
       setCodeFileContent(null);
       document.getElementById('code-file-upload').value = '';
+
+      console.log('🔍 DEBUG - About to call onFileProcessed');
 
       // Notify parent component of the update
       if (onFileProcessed) {
@@ -177,6 +190,8 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
           vendor: detectedVendor 
         });
       }
+
+      console.log('🔍 DEBUG - Code file update completed');
 
     } catch (error) {
       console.error('❌ Code file update failed:', error);
@@ -1299,18 +1314,32 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
   const getFileStatus = (timestamp, type) => {
     if (!timestamp) return 'Never';
     
+    // DEBUG: Log what's available in job object
+    console.log('🔍 DEBUG - Full job object keys:', Object.keys(job));
+    console.log('🔍 DEBUG - job.file_version:', job.file_version);
+    console.log('🔍 DEBUG - job.code_file_version:', job.code_file_version);
+    console.log('🔍 DEBUG - timestamp:', timestamp);
+    console.log('🔍 DEBUG - type:', type);
+    
     // FIXED: Use correct field names from database
     const sourceVersion = job.file_version || 1;        // Source files use file_version (from processors)
     const codeVersion = job.code_file_version || 1;     // Code files use code_file_version
     
+    console.log('🔍 DEBUG - calculated sourceVersion:', sourceVersion);
+    console.log('🔍 DEBUG - calculated codeVersion:', codeVersion);
+    
     if (type === 'source') {
-      return sourceVersion === 1 
+      const result = sourceVersion === 1 
         ? `Imported at Job Creation (${formatDate(timestamp)})`
         : `Updated via FileUpload (${formatDate(timestamp)})`;
+      console.log('🔍 DEBUG - source result:', result);
+      return result;
     } else if (type === 'code') {
-      return codeVersion === 1 
+      const result = codeVersion === 1 
         ? `Imported at Job Creation (${formatDate(timestamp)})`
         : `Updated via FileUpload (${formatDate(timestamp)})`;
+      console.log('🔍 DEBUG - code result:', result);
+      return result;
     }
     
     return `Updated (${formatDate(timestamp)})`;
