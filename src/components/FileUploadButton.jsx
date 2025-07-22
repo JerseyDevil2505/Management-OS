@@ -451,7 +451,8 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       const { data: dbRecords, error: dbError } = await supabase
         .from('property_records')  // Direct table access instead of view
         .select('property_composite_key, property_block, property_lot, property_qualifier, property_location, sales_price, sales_date, property_m4_class, property_cama_class')
-        .eq('job_id', job.id);  // Get ALL records for this job (no limit)
+        .eq('job_id', job.id)
+        .limit(50000);  // Set high limit to handle large jobs (largest was 34K records)
       
       if (dbError) {
         throw new Error(`Database fetch failed: ${dbError.message}`);
