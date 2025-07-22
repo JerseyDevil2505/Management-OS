@@ -907,9 +907,26 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       setSourceFileContent(null);
       setSalesDecisions(new Map());
       
-      // Notify parent
+      // Refresh source file version after source file processing
       if (onFileProcessed) {
         onFileProcessed(result);
+        
+        // Refresh source file version from property_records
+        try {
+          const { data, error } = await supabase
+            .from('property_records')
+            .select('file_version')
+            .eq('job_id', job.id)
+            .limit(1)
+            .single();
+            
+          if (data && !error) {
+            console.log('🔍 DEBUG - Refreshed source file_version after processing:', data.file_version);
+            setSourceFileVersion(data.file_version || 1);
+          }
+        } catch (error) {
+          console.error('🔍 DEBUG - Error refreshing source file version:', error);
+        }
       }
       
     } catch (error) {
@@ -1345,6 +1362,72 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     return `Updated (${formatDate(timestamp)})`;
   };
 
+  // NEW: Get source file version from property_records table
+  const [sourceFileVersion, setSourceFileVersion] = useState(1);
+
+  // NEW: Fetch source file version from property_records
+  useEffect(() => {
+    const fetchSourceFileVersion = async () => {
+      if (!job?.id) return;
+      
+      try {
+        const { data, error } = await supabase
+          .from('property_records')
+          .select('file_version')
+          .eq('job_id', job.id)
+          .limit(1)
+          .single();
+          
+        if (data && !error) {
+          console.log('🔍 DEBUG - Fetched source file_version from property_records:', data.file_version);
+          setSourceFileVersion(data.file_version || 1);
+        } else {
+          console.log('🔍 DEBUG - No property_records found or error:', error);
+          setSourceFileVersion(1);
+        }
+      } catch (error) {
+        console.error('🔍 DEBUG - Error fetching source file version:', error);
+        setSourceFileVersion(1);
+      }
+    };
+
+    fetchSourceFileVersion();
+  }, [job?.id]);
+
+  // UPDATED: Use fetched source file version for banner
+  const getFileStatusWithRealVersion = (timestamp, type) => {
+    if (!timestamp) return 'Never';
+    
+    console.log('🔍 DEBUG - sourceFileVersion from property_records:', sourceFileVersion);
+    console.log('🔍 DEBUG - job.code_file_version from jobs:', job.code_file_version);
+    
+    if (type === 'source') {
+      const result = sourceFileVersion === 1 
+        ? `Imported at Job Creation (${formatDate(timestamp)})`
+        : `Updated via FileUpload (${formatDate(timestamp)})`;
+      console.log('🔍 DEBUG - source result with real version:', result);
+      return result;
+    } else if (type === 'code') {
+      const codeVersion = job.code_file_version || 1;
+      const result = codeVersion === 1 
+        ? `Imported at Job Creation (${formatDate(timestamp)})`
+        : `Updated via FileUpload (${formatDate(timestamp)})`;
+      console.log('🔍 DEBUG - code result:', result);
+      return result;
+    }
+    
+    return `Updated (${formatDate(timestamp)})`;
+  }; (type === 'code') {
+      const result = codeVersion === 1 
+        ? `Imported at Job Creation (${formatDate(timestamp)})`
+        : `Updated via FileUpload (${formatDate(timestamp)})`;
+      console.log('🔍 DEBUG - code result:', result);
+      return result;
+    }
+    
+    return `Updated (${formatDate(timestamp)})`;
+  };
+
   if (!job) {
     return (
       <div className="text-center text-gray-500 py-8">
@@ -1385,7 +1468,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       <div className="flex items-center gap-3 text-gray-300">
         <FileText className="w-4 h-4 text-blue-400" />
         <span className="text-sm min-w-0 flex-1">
-          📄 Source: {getFileStatus(job.source_file_uploaded_at || job.created_at, 'source')}
+          📄 Source: {getFileStatusWithRealVersion(job.source_file_uploaded_at || job.created_at, 'source')}
         </span>
         
         <input
@@ -1440,7 +1523,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       <div className="flex items-center gap-3 text-gray-300">
         <Settings className="w-4 h-4 text-green-400" />
         <span className="text-sm min-w-0 flex-1">
-          ⚙️ Code: {getFileStatus(job.code_file_uploaded_at || job.created_at, 'code')}
+          ⚙️ Code: {getFileStatusWithRealVersion(job.code_file_uploaded_at || job.created_at, 'code')}
         </span>
         
         <input
