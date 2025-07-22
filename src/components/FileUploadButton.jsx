@@ -1121,8 +1121,8 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                     
                     console.log('🚀 Processing acknowledged file (no changes detected)...');
                     
-                    // Call the processor to update the database with latest data
-                    const result = await propertyService.importCSVData(
+                    // Call the updater to UPSERT the database with latest data
+                    const result = await propertyService.updateCSVData(
                       sourceFileContent,
                       codeFileContent,
                       job.id,
