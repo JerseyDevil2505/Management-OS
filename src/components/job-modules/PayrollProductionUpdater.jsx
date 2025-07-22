@@ -20,7 +20,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
     refusal: [],
     estimation: [],
     invalid: [],
-    commercial: []
+    priced: []
   });
   const [projectStartDate, setProjectStartDate] = useState('');
   const [isDateLocked, setIsDateLocked] = useState(false);
@@ -161,7 +161,10 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
 
       // Set default category configurations based on vendor
       if (codes.length > 0) {
-        setDefaultCategoryConfig(vendor, codes);
+        const existingConfig = await loadCategoriesFromDatabase();
+        if (!existingConfig) {
+          setDefaultCategoryConfig(vendor, codes);
+        }
       }
 
     } catch (error) {
@@ -172,7 +175,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
 
   // Set default InfoBy category configurations
   const setDefaultCategoryConfig = (vendor, codes) => {
-    const defaultConfig = { entry: [], refusal: [], estimation: [], invalid: [], commercial: [] };
+    const defaultConfig = { entry: [], refusal: [], estimation: [], invalid: [], priced: [] };
 
     if (vendor === 'BRT') {
       codes.forEach(item => {
@@ -186,30 +189,74 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
         } else if (desc.includes('DOOR')) {
           defaultConfig.invalid.push(item.code);
         } else if (desc.includes('CONVERSION') || desc.includes('PRICED')) {
-          defaultConfig.commercial.push(item.code);
+          defaultConfig.priced.push(item.code);
         }
       });
     } else if (vendor === 'Microsystems') {
       codes.forEach(item => {
-        const code = item.code;
+        const storageCode = item.storageCode; // Use the single letter (A, not 140A)
         const desc = item.description.toUpperCase();
-        if (code.includes('A') || code.includes('O') || code.includes('S') || code.includes('T')) {
-          defaultConfig.entry.push(item.storageCode); // Use storage code (A, not 140A)
-        } else if (code.includes('R')) {
-          defaultConfig.refusal.push(item.storageCode);
-        } else if (code.includes('E') || code.includes('F') || code.includes('V')) {
-          defaultConfig.estimation.push(item.storageCode);
-        } else if (code.includes('P') || code.includes('N') || code.includes('B')) {
-          defaultConfig.commercial.push(item.storageCode);
+        if (desc.includes('AGENT') || desc.includes('OWNER') || desc.includes('SPOUSE') || desc.includes('TENANT')) {
+          defaultConfig.entry.push(storageCode);
+        } else if (desc.includes('REFUSED')) {
+          defaultConfig.refusal.push(storageCode);
+        } else if (desc.includes('ESTIMATED') || desc.includes('VACANT')) {
+          defaultConfig.estimation.push(storageCode);
+        } else if (desc.includes('PRICED') || desc.includes('NARRATIVE') || desc.includes('ENCODED')) {
+          defaultConfig.priced.push(storageCode);
         }
       });
     }
 
     setInfoByCategoryConfig(defaultConfig);
-    debugLog('CATEGORIES', '✅ Set default category configuration', defaultConfig);
+    saveCategoriesToDatabase(defaultConfig);
+    debugLog('CATEGORIES', '✅ Set and saved default category configuration', defaultConfig);
   };
 
-  // Load existing project start date from property_records
+  // Save category configuration to database
+  const saveCategoriesToDatabase = async (config) => {
+    if (!jobData?.id) return;
+
+    try {
+      const { error } = await supabase
+        .from('jobs')
+        .update({ 
+          workflow_stats: {
+            ...jobData.workflow_stats,
+            infoByCategoryConfig: config,
+            lastConfigUpdate: new Date().toISOString()
+          }
+        })
+        .eq('id', jobData.id);
+
+      if (error) throw error;
+      debugLog('CATEGORIES', '✅ Saved category config to database');
+    } catch (error) {
+      console.error('Error saving category config:', error);
+    }
+  };
+
+  // Load existing category configuration from database
+  const loadCategoriesFromDatabase = async () => {
+    if (!jobData?.id) return;
+
+    try {
+      const { data: job, error } = await supabase
+        .from('jobs')
+        .select('workflow_stats')
+        .eq('id', jobData.id)
+        .single();
+
+      if (!error && job?.workflow_stats?.infoByCategoryConfig) {
+        setInfoByCategoryConfig(job.workflow_stats.infoByCategoryConfig);
+        debugLog('CATEGORIES', '✅ Loaded existing category config from database');
+        return true;
+      }
+    } catch (error) {
+      console.error('Error loading category config:', error);
+    }
+    return false;
+  };
   const loadProjectStartDate = async () => {
     if (!jobData?.id || !latestFileVersion) return;
 
@@ -272,6 +319,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
       loadEmployeeData();
       loadAvailableInfoByCodes();
       loadProjectStartDate();
+      loadCategoriesFromDatabase(); // Load saved categories
       setLoading(false);
     }
   }, [jobData?.id, latestFileVersion]);
@@ -295,7 +343,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
         ...infoByCategoryConfig.entry,
         ...infoByCategoryConfig.refusal,
         ...infoByCategoryConfig.estimation,
-        ...infoByCategoryConfig.commercial
+        ...infoByCategoryConfig.priced
       ];
 
       // FIXED: Get ALL records with proper limit
@@ -413,6 +461,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
         const isEntryCode = infoByCategoryConfig.entry.includes(infoByCode?.toString());
         const isRefusalCode = infoByCategoryConfig.refusal.includes(infoByCode?.toString());
         const isEstimationCode = infoByCategoryConfig.estimation.includes(infoByCode?.toString());
+        const isPricedCode = infoByCategoryConfig.priced.includes(infoByCode?.toString());
         const hasListingData = record.inspection_list_by && record.inspection_list_date;
 
         if (isRefusalCode && !hasListingData) {
@@ -475,7 +524,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
             if (classBreakdown[propertyClass]) {
               classBreakdown[propertyClass].priced++;
             }
-          } else if (jobData.vendor_type === 'Microsystems' && infoByCategoryConfig.commercial.includes(infoByCode?.toString())) {
+          } else if (jobData.vendor_type === 'Microsystems' && isPricedCode) {
             inspectorStats[inspector].priced++;
             if (classBreakdown[propertyClass]) {
               classBreakdown[propertyClass].priced++;
@@ -571,12 +620,15 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
   const handleCategoryAssignment = (category, code, isAssigned) => {
     if (settingsLocked) return;
     
-    setInfoByCategoryConfig(prev => ({
-      ...prev,
+    const newConfig = {
+      ...infoByCategoryConfig,
       [category]: isAssigned 
-        ? prev[category].filter(c => c !== code)
-        : [...prev[category], code]
-    }));
+        ? infoByCategoryConfig[category].filter(c => c !== code)
+        : [...infoByCategoryConfig[category], code]
+    };
+    
+    setInfoByCategoryConfig(newConfig);
+    saveCategoriesToDatabase(newConfig); // Auto-save changes
   };
 
   // FIXED: Start processing session with proper state management
@@ -590,7 +642,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
       ...infoByCategoryConfig.entry,
       ...infoByCategoryConfig.refusal,
       ...infoByCategoryConfig.estimation,
-      ...infoByCategoryConfig.commercial
+      ...infoByCategoryConfig.priced
     ];
 
     if (allValidCodes.length === 0) {
@@ -938,7 +990,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
                 <span>Entry: {infoByCategoryConfig.entry.length} codes</span>
                 <span>Refusal: {infoByCategoryConfig.refusal.length} codes</span>
                 <span>Estimation: {infoByCategoryConfig.estimation.length} codes</span>
-                <span>Commercial: {infoByCategoryConfig.commercial.length} codes</span>
+                <span>Priced: {infoByCategoryConfig.priced.length} codes</span>
               </div>
               {!settingsLocked && availableInfoByCodes.length > 0 && (
                 <button
@@ -961,17 +1013,15 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
             </h4>
             
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-              {['entry', 'refusal', 'estimation', 'invalid', 'commercial'].map(category => (
+              {['entry', 'refusal', 'estimation', 'invalid', 'priced'].map(category => (
                 <div key={category} className="border border-gray-200 rounded-lg p-4">
                   <h5 className="font-medium text-gray-900 mb-3 capitalize">
                     {category} ({infoByCategoryConfig[category].length})
                   </h5>
                   <div className="space-y-2 max-h-40 overflow-y-auto">
                     {availableInfoByCodes.map(codeItem => {
-                      // For Microsystems, use the single letter storage code (A, not 140A)
-                      // For BRT, use the code as-is
+                      // Always use storage code for consistency
                       const storageCode = jobData.vendor_type === 'Microsystems' ? codeItem.storageCode : codeItem.code;
-                      const displayCode = jobData.vendor_type === 'Microsystems' ? codeItem.storageCode : codeItem.code;
                       const isAssigned = infoByCategoryConfig[category].includes(storageCode);
                       
                       return (
@@ -983,7 +1033,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
                             className="mr-2 mt-1"
                           />
                           <div className="text-sm">
-                            <span className="font-medium">{displayCode}</span>
+                            <span className="font-medium">{storageCode}</span>
                             <div className="text-gray-600 text-xs leading-tight">{codeItem.description}</div>
                           </div>
                         </div>
@@ -1002,7 +1052,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
             onClick={startProcessingSession}
             disabled={processing || (!isDateLocked) || 
               (infoByCategoryConfig.entry.length + infoByCategoryConfig.refusal.length + 
-               infoByCategoryConfig.estimation.length + infoByCategoryConfig.commercial.length) === 0}
+               infoByCategoryConfig.estimation.length + infoByCategoryConfig.priced.length) === 0}
             className={`px-6 py-2 rounded-lg flex items-center space-x-2 transition-all ${
               processed 
                 ? 'bg-green-600 text-white hover:bg-green-700'
