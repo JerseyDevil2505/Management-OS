@@ -63,39 +63,17 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     return null;
   };
 
-  // FIXED: Auto-detect vendor with proper BRT tab-delimited detection
-  const detectVendorType = (fileContent) => {
-    const firstLine = fileContent.split('\n')[0];
+  // FIXED: Simplified vendor detection using KISS method - matches AdminJobManagement logic
+  const detectVendorType = (fileContent, fileName) => {
+    if (!fileName) return null;
     
-    // BRT detection: BRT files are primarily TAB-delimited
-    const tabHeaders = firstLine.split('\t');
-    const hasBRTTabFormat = tabHeaders.includes('BLOCK') && 
-                           tabHeaders.includes('LOT') && 
-                           tabHeaders.includes('QUALIFIER') &&
-                           tabHeaders.includes('BATHTOT');
-    
-    if (hasBRTTabFormat) {
+    // BRT: Simple file extension check (.csv files are BRT)
+    if (fileName.endsWith('.csv')) {
       return 'BRT';
     }
     
-    // Fallback: Check comma-separated (less common for BRT)
-    const commaHeaders = firstLine.split(',');
-    const hasBRTCommaFormat = commaHeaders.includes('BLOCK') && 
-                             commaHeaders.includes('LOT') && 
-                             commaHeaders.includes('QUALIFIER') &&
-                             commaHeaders.includes('BATHTOT');
-    
-    if (hasBRTCommaFormat) {
-      return 'BRT';
-    }
-    
-    // Microsystems detection: pipe-delimited with Microsystems headers
-    const pipeHeaders = firstLine.split('|');
-    const hasMicrosystemsFormat = pipeHeaders.includes('Block') && 
-                                 pipeHeaders.includes('Lot') && 
-                                 pipeHeaders.includes('Qual');
-    
-    if (hasMicrosystemsFormat) {
+    // Microsystems: .txt files that contain pipe delimiters
+    if (fileName.endsWith('.txt') && fileContent.includes('|')) {
       return 'Microsystems';
     }
     
@@ -831,12 +809,12 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       const content = await file.text();
       setSourceFileContent(content);
       
-      const vendor = detectVendorType(content);
+      const vendor = detectVendorType(content, file.name);
       if (vendor) {
         setDetectedVendor(vendor);
         addNotification(`✅ ${vendor} format detected`, 'success');
       } else {
-        addNotification('⚠️ Could not detect vendor format', 'warning');
+        addNotification('⚠️ Could not detect vendor format - check file extension (.csv for BRT, .txt for Microsystems)', 'warning');
       }
     } catch (error) {
       addNotification(`Error reading file: ${error.message}`, 'error');
