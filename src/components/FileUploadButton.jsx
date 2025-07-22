@@ -64,30 +64,113 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     return null;
   };
 
-  // FIXED: Simplified vendor detection using KISS method - matches AdminJobManagement logic
+  // FIXED: Enhanced vendor detection with BRT code file support
   const detectVendorType = (fileContent, fileName) => {
     if (!fileName) return null;
     
-    // BRT: Simple file extension check (.csv files are BRT)
+    // BRT source files: .csv extension
     if (fileName.endsWith('.csv')) {
       return 'BRT';
     }
     
-    // Microsystems: .txt files that contain pipe delimiters
-    if (fileName.endsWith('.txt') && fileContent.includes('|')) {
-      return 'Microsystems';
+    // Text files - distinguish by content
+    if (fileName.endsWith('.txt')) {
+      // BRT code files: contain JSON braces
+      if (fileContent.includes('{')) {
+        return 'BRT';
+      }
+      // Microsystems files: contain pipe delimiters
+      else if (fileContent.includes('|')) {
+        return 'Microsystems';
+      }
+    }
+    
+    // JSON files are BRT
+    if (fileName.endsWith('.json')) {
+      return 'BRT';
     }
     
     return null;
   };
 
-  // NEW: Parse code files for both vendors
+  // NEW: Parse BRT mixed format code files (headers + JSON sections)
+  const parseBRTMixedFormat = (fileContent) => {
+    const lines = fileContent.split('\n');
+    let currentSection = null;
+    let jsonBuffer = '';
+    let inJsonBlock = false;
+    const allSections = {};
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      
+      if (!line) continue;
+      
+      if (!line.startsWith('{') && !line.startsWith('"') && !inJsonBlock) {
+        // Process previous section if exists
+        if (jsonBuffer && currentSection) {
+          try {
+            allSections[currentSection] = JSON.parse(jsonBuffer);
+          } catch (error) {
+            console.warn(`Failed to parse section ${currentSection}:`, error);
+          }
+        }
+        
+        currentSection = line;
+        jsonBuffer = '';
+        inJsonBlock = false;
+        continue;
+      }
+      
+      if (line.startsWith('{') || inJsonBlock) {
+        inJsonBlock = true;
+        jsonBuffer += line;
+        
+        const openBrackets = (jsonBuffer.match(/\{/g) || []).length;
+        const closeBrackets = (jsonBuffer.match(/\}/g) || []).length;
+        
+        if (openBrackets === closeBrackets && openBrackets > 0) {
+          if (currentSection) {
+            try {
+              allSections[currentSection] = JSON.parse(jsonBuffer);
+            } catch (error) {
+              console.warn(`Failed to parse section ${currentSection}:`, error);
+            }
+          }
+          jsonBuffer = '';
+          inJsonBlock = false;
+        }
+      }
+    }
+    
+    // Process final section
+    if (jsonBuffer && currentSection) {
+      try {
+        allSections[currentSection] = JSON.parse(jsonBuffer);
+      } catch (error) {
+        console.warn(`Failed to parse final section ${currentSection}:`, error);
+      }
+    }
+    
+    return allSections;
+  };
+
+  // FIXED: Enhanced code file parsing with BRT mixed format support
   const parseCodeFile = (fileContent, vendor) => {
     try {
       if (vendor === 'BRT') {
-        // BRT codes are JSON format
-        const codeData = JSON.parse(fileContent);
-        return codeData;
+        // Check if it's pure JSON or mixed format
+        const trimmedContent = fileContent.trim();
+        if (trimmedContent.startsWith('{')) {
+          // Pure JSON format
+          const codeData = JSON.parse(fileContent);
+          return codeData;
+        } else {
+          // Mixed format with headers - extract JSON sections
+          const sections = parseBRTMixedFormat(fileContent);
+          console.log(`✅ Parsed BRT mixed format with sections: ${Object.keys(sections).join(', ')}`);
+          return sections;
+        }
       } else if (vendor === 'Microsystems') {
         // Microsystems codes are pipe-delimited text
         const lines = fileContent.split('\n').filter(line => line.trim());
@@ -112,7 +195,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     }
   };
 
-  // FIXED: Handle code file update with proper Unicode sanitization
+  // FIXED: Handle code file update with proper Unicode sanitization and BRT support
   const handleCodeFileUpdate = async () => {
     if (!codeFile || !codeFileContent) {
       addNotification('Please select a code file first', 'error');
@@ -130,6 +213,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
 
       console.log('🔍 DEBUG - Starting code file update');
       console.log('🔍 DEBUG - Current job.code_file_version:', job.code_file_version);
+      console.log('🔍 DEBUG - Detected vendor:', detectedVendor);
 
       // Parse the code file
       const parsedCodes = parseCodeFile(codeFileContent, detectedVendor);
@@ -138,7 +222,19 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         throw new Error('Failed to parse code file');
       }
 
-      console.log('🔍 DEBUG - Parsed codes count:', Object.keys(parsedCodes).length);
+      // Count codes for feedback
+      let codeCount = 0;
+      if (detectedVendor === 'BRT') {
+        // BRT has nested sections - count all entries
+        codeCount = Object.values(parsedCodes).reduce((total, section) => {
+          return total + (typeof section === 'object' ? Object.keys(section).length : 1);
+        }, 0);
+      } else {
+        // Microsystems has flat structure
+        codeCount = Object.keys(parsedCodes).length;
+      }
+
+      console.log('🔍 DEBUG - Parsed codes count:', codeCount);
 
       // FIXED: Properly escape special characters to prevent Unicode errors
       const sanitizedContent = codeFileContent
@@ -174,7 +270,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
 
       console.log('🔍 DEBUG - Database update successful');
 
-      addNotification(`✅ Successfully updated ${Object.keys(parsedCodes).length} code definitions for ${detectedVendor}`, 'success');
+      addNotification(`✅ Successfully updated ${codeCount} code definitions for ${detectedVendor}`, 'success');
       
       // Clear code file selection
       setCodeFile(null);
@@ -187,7 +283,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       if (onFileProcessed) {
         onFileProcessed({ 
           type: 'code_update', 
-          codes_updated: Object.keys(parsedCodes).length,
+          codes_updated: codeCount,
           vendor: detectedVendor 
         });
       }
