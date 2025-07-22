@@ -448,11 +448,18 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       console.log('🔍 DEBUG - Actual database count:', actualCount);
       console.log('🔍 DEBUG - Count error:', countError);
       
+      // DEBUG: Log the exact query we're about to make
+      console.log('🔍 DEBUG - About to execute main query with limit 50000...');
+      
       const { data: dbRecords, error: dbError } = await supabase
         .from('property_records')  // Direct table access instead of view
         .select('property_composite_key, property_block, property_lot, property_qualifier, property_location, sales_price, sales_date, property_m4_class, property_cama_class')
         .eq('job_id', job.id)
         .limit(50000);  // Set high limit to handle large jobs (largest was 34K records)
+        
+      // DEBUG: Log what we actually got back
+      console.log('🔍 DEBUG - Query completed, records returned:', dbRecords?.length);
+      console.log('🔍 DEBUG - Query error:', dbError);
       
       if (dbError) {
         throw new Error(`Database fetch failed: ${dbError.message}`);
