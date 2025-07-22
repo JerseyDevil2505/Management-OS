@@ -85,7 +85,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
     try {
       const { data: job, error } = await supabase
         .from('jobs')
-        .select('parsed_code_definitions, vendor')
+        .select('parsed_code_definitions, vendor_type')
         .eq('id', jobData.id)
         .single();
 
@@ -96,7 +96,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
       }
 
       const codes = [];
-      const vendor = job.vendor;
+      const vendor = job.vendor_type;
 
       if (vendor === 'BRT') {
         // Handle BRT nested JSON structure
@@ -470,12 +470,12 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
           }
 
           // Count pricing - FIXED: BRT vs Microsystems logic
-          if (jobData.vendor === 'BRT' && priceDate && priceDate >= startDate) {
+          if (jobData.vendor_type === 'BRT' && priceDate && priceDate >= startDate) {
             inspectorStats[inspector].priced++;
             if (classBreakdown[propertyClass]) {
               classBreakdown[propertyClass].priced++;
             }
-          } else if (jobData.vendor === 'Microsystems' && infoByCategoryConfig.commercial.includes(infoByCode?.toString())) {
+          } else if (jobData.vendor_type === 'Microsystems' && infoByCategoryConfig.commercial.includes(infoByCode?.toString())) {
             inspectorStats[inspector].priced++;
             if (classBreakdown[propertyClass]) {
               classBreakdown[propertyClass].priced++;
@@ -968,7 +968,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
                   </h5>
                   <div className="space-y-2 max-h-40 overflow-y-auto">
                     {availableInfoByCodes.map(codeItem => {
-                      const codeToCheck = jobData.vendor === 'Microsystems' ? codeItem.storageCode : codeItem.code;
+                      const codeToCheck = jobData.vendor_type === 'Microsystems' ? codeItem.storageCode : codeItem.code;
                       const isAssigned = infoByCategoryConfig[category].includes(codeToCheck);
                       
                       return (
