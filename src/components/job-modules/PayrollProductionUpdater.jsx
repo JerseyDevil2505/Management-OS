@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Factory, Settings, Download, RefreshCw, AlertTriangle, CheckCircle, TrendingUp, DollarSign, Users, Calendar, X, ChevronDown, ChevronUp, Eye, FileText, Lock, Unlock } from 'lucide-react';
+import { Factory, Settings, Download, RefreshCw, AlertTriangle, CheckCircle, TrendingUp, DollarSign, Users, Calendar, X, ChevronDown, ChevronUp, Eye, FileText, Lock, Unlock, Save } from 'lucide-react';
 import { supabase, jobService } from '../../lib/supabaseClient';
 
 const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, propertyRecordsCount }) => {
@@ -22,6 +22,8 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
     invalid: [],
     priced: []
   });
+  const [originalCategoryConfig, setOriginalCategoryConfig] = useState({});
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [projectStartDate, setProjectStartDate] = useState('');
   const [isDateLocked, setIsDateLocked] = useState(false);
   const [sessionId, setSessionId] = useState(null);
@@ -30,7 +32,6 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
   // UI state
   const [activeTab, setActiveTab] = useState('analytics');
   const [selectedInspectorIssues, setSelectedInspectorIssues] = useState(null);
-  const [showCategoryConfig, setShowCategoryConfig] = useState(false);
 
   const addNotification = (message, type = 'info') => {
     const id = Date.now();
@@ -159,17 +160,45 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
       setAvailableInfoByCodes(codes);
       debugLog('CODES', `✅ Loaded ${codes.length} InfoBy codes from ${vendor} definitions`);
 
-      // Set default category configurations based on vendor
-      if (codes.length > 0) {
-        const existingConfig = await loadCategoriesFromDatabase();
-        if (!existingConfig) {
-          setDefaultCategoryConfig(vendor, codes);
-        }
-      }
+      // Load existing category configuration
+      await loadCategoriesFromDatabase(codes, vendor);
 
     } catch (error) {
       console.error('Error loading InfoBy codes:', error);
       addNotification('Error loading InfoBy codes from code file', 'error');
+    }
+  };
+
+  // Load existing category configuration from database
+  const loadCategoriesFromDatabase = async (codes, vendor) => {
+    if (!jobData?.id) return;
+
+    try {
+      const { data: job, error } = await supabase
+        .from('jobs')
+        .select('infoby_category_config, workflow_stats')
+        .eq('id', jobData.id)
+        .single();
+
+      if (!error && job?.infoby_category_config && Object.keys(job.infoby_category_config).length > 0) {
+        // Load from new dedicated field
+        setInfoByCategoryConfig(job.infoby_category_config);
+        setOriginalCategoryConfig(job.infoby_category_config);
+        debugLog('CATEGORIES', '✅ Loaded existing category config from infoby_category_config field');
+      } else if (!error && job?.workflow_stats?.infoByCategoryConfig) {
+        // Migrate from old location
+        const oldConfig = job.workflow_stats.infoByCategoryConfig;
+        setInfoByCategoryConfig(oldConfig);
+        setOriginalCategoryConfig(oldConfig);
+        debugLog('CATEGORIES', '✅ Migrated category config from workflow_stats');
+        // Auto-save to new location
+        await saveCategoriesToDatabase(oldConfig);
+      } else if (codes && codes.length > 0) {
+        // Set smart defaults for new jobs
+        setDefaultCategoryConfig(vendor, codes);
+      }
+    } catch (error) {
+      console.error('Error loading category config:', error);
     }
   };
 
@@ -209,54 +238,41 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
     }
 
     setInfoByCategoryConfig(defaultConfig);
-    saveCategoriesToDatabase(defaultConfig);
-    debugLog('CATEGORIES', '✅ Set and saved default category configuration', defaultConfig);
+    setOriginalCategoryConfig(defaultConfig);
+    setHasUnsavedChanges(true); // Mark as needing save
+    debugLog('CATEGORIES', '✅ Set default category configuration', defaultConfig);
   };
 
   // Save category configuration to database
-  const saveCategoriesToDatabase = async (config) => {
+  const saveCategoriesToDatabase = async (config = null) => {
     if (!jobData?.id) return;
+
+    const configToSave = config || infoByCategoryConfig;
 
     try {
       const { error } = await supabase
         .from('jobs')
         .update({ 
-          workflow_stats: {
-            ...jobData.workflow_stats,
-            infoByCategoryConfig: config,
-            lastConfigUpdate: new Date().toISOString()
+          infoby_category_config: {
+            ...configToSave,
+            vendor_type: jobData.vendor_type,
+            last_updated: new Date().toISOString()
           }
         })
         .eq('id', jobData.id);
 
       if (error) throw error;
-      debugLog('CATEGORIES', '✅ Saved category config to database');
+      
+      setOriginalCategoryConfig(configToSave);
+      setHasUnsavedChanges(false);
+      addNotification('✅ InfoBy category configuration saved', 'success');
+      debugLog('CATEGORIES', '✅ Saved category config to new infoby_category_config field');
     } catch (error) {
       console.error('Error saving category config:', error);
+      addNotification('Error saving category configuration', 'error');
     }
   };
 
-  // Load existing category configuration from database
-  const loadCategoriesFromDatabase = async () => {
-    if (!jobData?.id) return;
-
-    try {
-      const { data: job, error } = await supabase
-        .from('jobs')
-        .select('workflow_stats')
-        .eq('id', jobData.id)
-        .single();
-
-      if (!error && job?.workflow_stats?.infoByCategoryConfig) {
-        setInfoByCategoryConfig(job.workflow_stats.infoByCategoryConfig);
-        debugLog('CATEGORIES', '✅ Loaded existing category config from database');
-        return true;
-      }
-    } catch (error) {
-      console.error('Error loading category config:', error);
-    }
-    return false;
-  };
   const loadProjectStartDate = async () => {
     if (!jobData?.id || !latestFileVersion) return;
 
@@ -319,10 +335,15 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
       loadEmployeeData();
       loadAvailableInfoByCodes();
       loadProjectStartDate();
-      loadCategoriesFromDatabase(); // Load saved categories
       setLoading(false);
     }
   }, [jobData?.id, latestFileVersion]);
+
+  // Track unsaved changes
+  useEffect(() => {
+    const hasChanges = JSON.stringify(infoByCategoryConfig) !== JSON.stringify(originalCategoryConfig);
+    setHasUnsavedChanges(hasChanges);
+  }, [infoByCategoryConfig, originalCategoryConfig]);
 
   // ENHANCED: Process analytics with efficient queries and proper validation rules
   const processAnalytics = async () => {
@@ -346,7 +367,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
         ...infoByCategoryConfig.priced
       ];
 
-      // FIXED: Get ALL records with proper limit
+      // FIXED: Get ALL records with proper limit and correct field names
       const { data: rawData, error } = await supabase
         .from('property_records')
         .select(`
@@ -359,8 +380,8 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
           inspection_info_by,
           inspection_list_by,
           inspection_list_date,
-          inspection_measured_by,
-          inspection_measured_date,
+          inspection_measure_by,
+          inspection_measure_date,
           inspection_price_by,
           inspection_price_date,
           values_mod_improvement
@@ -390,10 +411,10 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
       });
 
       rawData.forEach((record, index) => {
-        const inspector = record.inspection_measured_by || 'UNASSIGNED';
+        const inspector = record.inspection_measure_by || 'UNASSIGNED';
         const propertyClass = record.property_m4_class || 'UNKNOWN';
         const infoByCode = record.inspection_info_by;
-        const measuredDate = record.inspection_measured_date ? new Date(record.inspection_measured_date) : null;
+        const measuredDate = record.inspection_measure_date ? new Date(record.inspection_measure_date) : null;
         const listDate = record.inspection_list_date ? new Date(record.inspection_list_date) : null;
         const priceDate = record.inspection_price_date ? new Date(record.inspection_price_date) : null;
 
@@ -446,15 +467,15 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
           isValidInspection = false;
         };
 
-        // CORE PACKAGE VALIDATION: Must have all 3 (info_by + measured_by + measured_date)
+        // CORE PACKAGE VALIDATION: Must have all 3 (info_by + measure_by + measure_date)
         if (!hasValidInfoBy) {
           addValidationIssue(`Invalid InfoBy code: ${infoByCode}`, 'high');
         }
         if (!hasValidMeasuredBy) {
-          addValidationIssue('Missing or invalid measured_by inspector', 'high');
+          addValidationIssue('Missing or invalid measure_by inspector', 'high');
         }
         if (!hasValidMeasuredDate) {
-          addValidationIssue('Missing or invalid measured_date', 'high');
+          addValidationIssue('Missing or invalid measure_date', 'high');
         }
 
         // InfoBy LOGIC VALIDATION
@@ -628,13 +649,17 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
     };
     
     setInfoByCategoryConfig(newConfig);
-    saveCategoriesToDatabase(newConfig); // Auto-save changes
   };
 
   // FIXED: Start processing session with proper state management
   const startProcessingSession = async () => {
     if (!isDateLocked) {
       addNotification('Please lock the project start date first', 'error');
+      return;
+    }
+
+    if (hasUnsavedChanges) {
+      addNotification('Please save InfoBy category configuration first', 'error');
       return;
     }
 
@@ -669,7 +694,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
         throw new Error('Analytics processing failed');
       }
 
-      // Move valid inspections to inspection_data table
+      // FIXED: Move valid inspections to inspection_data table with correct field names
       const { data: validRecords, error: selectError } = await supabase
         .from('property_records')
         .select(`
@@ -682,8 +707,8 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
           inspection_info_by,
           inspection_list_by,
           inspection_list_date,
-          inspection_measured_by,
-          inspection_measured_date,
+          inspection_measure_by,
+          inspection_measure_date,
           inspection_price_by,
           inspection_price_date,
           values_mod_improvement
@@ -691,9 +716,9 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
         .eq('job_id', jobData.id)
         .eq('file_version', latestFileVersion)
         .not('inspection_info_by', 'is', null)
-        .not('inspection_measured_by', 'is', null)
-        .not('inspection_measured_date', 'is', null)
-        .gte('inspection_measured_date', projectStartDate)
+        .not('inspection_measure_by', 'is', null)
+        .not('inspection_measure_date', 'is', null)
+        .gte('inspection_measure_date', projectStartDate)
         .limit(50000);
 
       if (selectError) throw selectError;
@@ -711,7 +736,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
         .delete()
         .eq('job_id', jobData.id);
 
-      // Insert clean records in batches
+      // FIXED: Insert clean records in batches with correct field mapping
       const batchSize = 1000;
       for (let i = 0; i < validInspectionRecords.length; i += batchSize) {
         const batch = validInspectionRecords.slice(i, i + batchSize);
@@ -724,11 +749,11 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
           qualifier: record.property_qualifier,
           property_location: record.property_location,
           property_class: record.property_m4_class,
-          info_by_code: parseInt(record.inspection_info_by) || 0,
+          info_by_code: record.inspection_info_by, // FIXED: Now text field
           list_by: record.inspection_list_by,
           list_date: record.inspection_list_date,
-          measure_by: record.inspection_measured_by,
-          measure_date: record.inspection_measured_date,
+          measure_by: record.inspection_measure_by, // FIXED: Correct field name
+          measure_date: record.inspection_measure_date, // FIXED: Correct field name
           price_by: record.inspection_price_by,
           price_date: record.inspection_price_date,
           project_start_date: projectStartDate,
@@ -934,7 +959,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
         )}
       </div>
 
-      {/* ENHANCED Settings Panel with Lock Functionality */}
+      {/* ENHANCED Settings Panel with Save Button */}
       <div className="bg-white rounded-lg border shadow-sm p-6">
         <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
           <Settings className="w-5 h-5 mr-2" />
@@ -980,7 +1005,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
             )}
           </div>
 
-          {/* InfoBy Category Status */}
+          {/* InfoBy Category Status with Save Button */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               InfoBy Categories ({availableInfoByCodes.length} codes available)
@@ -992,24 +1017,32 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
                 <span>Estimation: {infoByCategoryConfig.estimation.length} codes</span>
                 <span>Priced: {infoByCategoryConfig.priced.length} codes</span>
               </div>
-              {!settingsLocked && availableInfoByCodes.length > 0 && (
-                <button
-                  onClick={() => setShowCategoryConfig(!showCategoryConfig)}
-                  className="w-full px-3 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 flex items-center justify-center"
-                >
-                  {showCategoryConfig ? 'Hide' : 'Configure'} Categories
-                  {showCategoryConfig ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />}
-                </button>
+              
+              {hasUnsavedChanges && (
+                <div className="text-sm text-orange-600 font-medium">
+                  ⚠️ Unsaved changes
+                </div>
               )}
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => saveCategoriesToDatabase()}
+                  disabled={!hasUnsavedChanges || settingsLocked}
+                  className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                >
+                  <Save className="w-4 h-4" />
+                  Save Config
+                </button>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* FIXED: InfoBy Category Configuration Panel */}
-        {showCategoryConfig && !settingsLocked && availableInfoByCodes.length > 0 && (
+        {/* FIXED: Clean InfoBy Category Configuration Panel */}
+        {availableInfoByCodes.length > 0 && (
           <div className="mt-6 pt-6 border-t border-gray-200">
             <h4 className="text-md font-semibold text-gray-800 mb-4">
-              Configure InfoBy Categories ({jobData.vendor_type} Format)
+              InfoBy Category Assignment ({jobData.vendor_type} Format)
             </h4>
             
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
@@ -1020,8 +1053,9 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
                   </h5>
                   <div className="space-y-2 max-h-40 overflow-y-auto">
                     {availableInfoByCodes.map(codeItem => {
-                      // Always use storage code for consistency
+                      // FIXED: Clean display logic - show storage code only
                       const storageCode = jobData.vendor_type === 'Microsystems' ? codeItem.storageCode : codeItem.code;
+                      const displayCode = storageCode; // Show the actual stored code (A, O, R or 01, 02, 06)
                       const isAssigned = infoByCategoryConfig[category].includes(storageCode);
                       
                       return (
@@ -1030,10 +1064,11 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
                             type="checkbox"
                             checked={isAssigned}
                             onChange={() => handleCategoryAssignment(category, storageCode, isAssigned)}
+                            disabled={settingsLocked}
                             className="mr-2 mt-1"
                           />
                           <div className="text-sm">
-                            <span className="font-medium">{storageCode}</span>
+                            <span className="font-medium">{displayCode}</span>
                             <div className="text-gray-600 text-xs leading-tight">{codeItem.description}</div>
                           </div>
                         </div>
@@ -1050,7 +1085,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
         <div className="mt-6 flex justify-end">
           <button
             onClick={startProcessingSession}
-            disabled={processing || (!isDateLocked) || 
+            disabled={processing || (!isDateLocked) || hasUnsavedChanges ||
               (infoByCategoryConfig.entry.length + infoByCategoryConfig.refusal.length + 
                infoByCategoryConfig.estimation.length + infoByCategoryConfig.priced.length) === 0}
             className={`px-6 py-2 rounded-lg flex items-center space-x-2 transition-all ${
