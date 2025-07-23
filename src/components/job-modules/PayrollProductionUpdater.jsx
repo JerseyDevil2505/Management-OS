@@ -460,7 +460,23 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
         detectedVendor: actualVendor
       });
 
-      const allValidCodes = [
+      // Basic analytics processing here
+      const analyticsResult = {
+        totalRecords: 0,
+        validInspections: 0,
+        inspectorStats: {},
+        commercialCompletePercent: 0,
+        pricingCompletePercent: 0
+      };
+
+      return { analyticsResult };
+
+    } catch (error) {
+      console.error('Error processing analytics:', error);
+      addNotification('Error processing analytics: ' + error.message, 'error');
+      return null;
+    }
+  };
         ...infoByCategoryConfig.entry,
         ...infoByCategoryConfig.refusal,
         ...infoByCategoryConfig.estimation,
