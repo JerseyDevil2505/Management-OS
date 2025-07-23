@@ -20,7 +20,6 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics = {}, isLoadingMetrics = f
         .from('jobs')
         .select(`
           *,
-          employees!jobs_assigned_manager_fkey(first_name, last_name),
           job_assignments(
             id,
             employee_id,
@@ -47,6 +46,25 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics = {}, isLoadingMetrics = f
   useEffect(() => {
     loadJobs();
   }, []);
+
+  // Helper function to get manager from job assignments
+  const getJobManager = (job) => {
+    const managerAssignment = job.job_assignments?.find(assignment => 
+      assignment.role === 'manager' || assignment.role === 'lead_manager'
+    );
+    
+    if (managerAssignment?.employees) {
+      return `${managerAssignment.employees.first_name} ${managerAssignment.employees.last_name}`;
+    }
+    
+    // Fallback to first assignment if no manager role found
+    if (job.job_assignments?.length > 0 && job.job_assignments[0].employees) {
+      const fallback = job.job_assignments[0].employees;
+      return `${fallback.first_name} ${fallback.last_name}`;
+    }
+    
+    return 'Unassigned';
+  };
 
   // ENHANCED: Display metrics with fallback to "-" for unprocessed jobs
   const displayMetric = (jobId, metricName, isPercentage = false, defaultValue = null) => {
@@ -271,6 +289,7 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics = {}, isLoadingMetrics = f
           filteredJobs.map((job) => {
             const completion = getCompletionDisplay(job.id);
             const metrics = jobMetrics[job.id];
+            const jobManager = getJobManager(job);
             
             return (
               <div key={job.id} className="bg-white rounded-lg border shadow-sm p-6">
@@ -311,7 +330,7 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics = {}, isLoadingMetrics = f
                       </div>
                       <div className="flex items-center">
                         <Users className="w-4 h-4 mr-1" />
-                        <span>{job.employees?.first_name} {job.employees?.last_name} (Lead Manager)</span>
+                        <span>{jobManager} (Lead Manager)</span>
                       </div>
                     </div>
                   </div>
