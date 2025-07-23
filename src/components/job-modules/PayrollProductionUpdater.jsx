@@ -79,7 +79,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
     }
   };
 
-  // FIXED: Load available InfoBy codes with proper vendor-specific logic
+  // FIXED: Load available InfoBy codes from correct BRT location
   const loadAvailableInfoByCodes = async () => {
     if (!jobData?.id) return;
 
@@ -100,27 +100,46 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
       const vendor = job.vendor_type;
 
       if (vendor === 'BRT') {
-        // Handle BRT nested JSON structure
+        // FIXED: Handle BRT nested JSON structure - look in Residential section key 30
         const sections = job.parsed_code_definitions.sections || job.parsed_code_definitions;
         
-        // Look for INFO BY section specifically
-        const infoBySection = sections['INFO BY'];
-        if (infoBySection) {
-          Object.keys(infoBySection).forEach(key => {
-            const item = infoBySection[key];
+        debugLog('CODES', 'BRT sections available:', Object.keys(sections));
+        
+        // Look for InfoBy codes in Residential section, key 30, MAP
+        const residentialSection = sections['Residential'];
+        if (residentialSection && residentialSection['30'] && residentialSection['30'].MAP) {
+          debugLog('CODES', 'Found Residential[30].MAP, checking for InfoBy codes...');
+          
+          // InfoBy codes are in Residential['30']['MAP'] - look for entries with inspection-related descriptions
+          Object.keys(residentialSection['30'].MAP).forEach(key => {
+            const item = residentialSection['30'].MAP[key];
             if (item && item.DATA && item.DATA.VALUE) {
-              codes.push({
-                code: item.KEY || item.DATA.KEY,
-                description: item.DATA.VALUE,
-                section: 'INFO BY',
-                vendor: 'BRT'
-              });
+              const description = item.DATA.VALUE.toUpperCase();
+              // Look for inspection-related terms
+              if (description.includes('OWNER') || description.includes('SPOUSE') || 
+                  description.includes('TENANT') || description.includes('AGENT') ||
+                  description.includes('REFUSED') || description.includes('ESTIMATED') ||
+                  description.includes('DOOR') || description.includes('CONVERSION') ||
+                  description.includes('PRICED')) {
+                
+                codes.push({
+                  code: item.KEY || item.DATA.KEY,
+                  description: item.DATA.VALUE,
+                  section: 'Residential[30]',
+                  vendor: 'BRT'
+                });
+                
+                debugLog('CODES', `Found InfoBy code: ${item.KEY} = ${item.DATA.VALUE}`);
+              }
             }
           });
+        } else {
+          debugLog('CODES', 'Residential[30].MAP not found, structure:', residentialSection?.['30']);
         }
 
-        // If no INFO BY section, check other sections for inspection-related codes
+        // Fallback: Search all sections for inspection-related codes
         if (codes.length === 0) {
+          debugLog('CODES', 'No codes found in Residential[30], searching all sections...');
           Object.keys(sections).forEach(sectionName => {
             const section = sections[sectionName];
             if (typeof section === 'object') {
@@ -1329,62 +1348,3 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
                               <div>
                                 <div className="font-medium text-gray-900">{inspector.inspector_code}</div>
                                 <div className="text-sm text-gray-600">{inspector.inspector_name}</div>
-                              </div>
-                              <div className="text-right">
-                                <div className="font-bold text-red-600">{inspector.total_issues}</div>
-                                <div className="text-xs text-gray-500">issues</div>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {selectedInspectorIssues && validationReport.detailed_issues[selectedInspectorIssues] && (
-                      <div className="bg-white border border-gray-200 rounded-lg p-4">
-                        <h4 className="font-semibold text-gray-900 mb-4">
-                          Issues for {selectedInspectorIssues} - {validationReport.summary.inspector_breakdown.find(i => i.inspector_code === selectedInspectorIssues)?.inspector_name}
-                        </h4>
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-sm">
-                            <thead className="bg-gray-50">
-                              <tr>
-                                <th className="px-3 py-2 text-left font-medium text-gray-700">Block</th>
-                                <th className="px-3 py-2 text-left font-medium text-gray-700">Lot</th>
-                                <th className="px-3 py-2 text-left font-medium text-gray-700">Property Location</th>
-                                <th className="px-3 py-2 text-left font-medium text-gray-700">Warning Message</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {validationReport.detailed_issues[selectedInspectorIssues].map((issue, idx) => (
-                                <tr key={idx} className="border-t border-gray-200">
-                                  <td className="px-3 py-2">{issue.block}</td>
-                                  <td className="px-3 py-2">{issue.lot}</td>
-                                  <td className="px-3 py-2">{issue.property_location}</td>
-                                  <td className="px-3 py-2 text-red-600">{issue.warning_message}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    )}
-
-                    {!selectedInspectorIssues && (
-                      <div className="text-center py-8 text-gray-500">
-                        <FileText className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-                        <p>Click on an inspector above to view detailed issues</p>
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
-export default PayrollProductionUpdater;
