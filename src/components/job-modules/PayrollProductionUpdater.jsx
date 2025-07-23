@@ -1,394 +1,131 @@
-import React, { useState, useEffect } from 'react';
-import { Factory, Settings, Download, RefreshCw, AlertTriangle, CheckCircle, TrendingUp, DollarSign, Users, Calendar, X, ChevronDown, ChevronUp, Eye, FileText, Lock, Unlock, Save } from 'lucide-react';
-import { supabase, jobService } from '../../lib/supabaseClient';
-
-const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, propertyRecordsCount }) => {
-  const [loading, setLoading] = useState(true);
-  const [processing, setProcessing] = useState(false);
-  const [processed, setProcessed] = useState(false);
-  const [employeeData, setEmployeeData] = useState({});
-  const [analytics, setAnalytics] = useState(null);
-  const [billingAnalytics, setBillingAnalytics] = useState(null);
-  const [validationReport, setValidationReport] = useState(null);
-  const [sessionHistory, setSessionHistory] = useState([]);
-  const [notifications, setNotifications] = useState([]);
-  
-  // Settings state - Enhanced InfoBy category configuration
-  const [availableInfoByCodes, setAvailableInfoByCodes] = useState([]);
-  const [infoByCategoryConfig, setInfoByCategoryConfig] = useState({
-    entry: [],
-    refusal: [],
-    estimation: [],
-    invalid: [],
-    priced: []
-  });
-  const [originalCategoryConfig, setOriginalCategoryConfig] = useState({});
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const [projectStartDate, setProjectStartDate] = useState('');
-  const [isDateLocked, setIsDateLocked] = useState(false);
-  const [sessionId, setSessionId] = useState(null);
-  const [settingsLocked, setSettingsLocked] = useState(false);
-
-  // UI state
-  const [activeTab, setActiveTab] = useState('analytics');
-  const [selectedInspectorIssues, setSelectedInspectorIssues] = useState(null);
-  
-  // Inspector filtering and sorting
-  const [inspectorFilter, setInspectorFilter] = useState('all');
-  const [inspectorSort, setInspectorSort] = useState('alphabetical');
-
-  const addNotification = (message, type = 'info') => {
-    const id = Date.now();
-    const notification = { id, message, type, timestamp: new Date() };
-    setNotifications(prev => [...prev, notification]);
-    
-    setTimeout(() => {
-      setNotifications(prev => prev.filter(n => n.id !== id));
-    }, 5000);
-  };
-
-  // Debug logging
-  const debugLog = (section, message, data = null) => {
-    console.log(`🔍 [${section}] ${message}`, data || '');
-  };
-
-  // Load employee data for inspector details
-  const loadEmployeeData = async () => {
-    try {
-      const { data: employees, error } = await supabase
-        .from('employees')
-        .select('id, first_name, last_name, inspector_type, employment_status, initials');
-
-      if (error) throw error;
-
-      const employeeMap = {};
-      employees.forEach(emp => {
-        const initials = emp.initials || `${emp.first_name.charAt(0)}${emp.last_name.charAt(0)}`;
-        employeeMap[initials] = {
-          id: emp.id,
-          name: `${emp.first_name} ${emp.last_name}`,
-          fullName: `${emp.last_name}, ${emp.first_name}`,
-          inspector_type: emp.inspector_type,
-          initials: initials
-        };
-      });
-
-      setEmployeeData(employeeMap);
-      debugLog('EMPLOYEES', 'Loaded employee data', { count: Object.keys(employeeMap).length });
-    } catch (error) {
-      console.error('Error loading employee data:', error);
-      addNotification('Error loading employee data', 'error');
-    }
-  };
-
-  // Load available InfoBy codes from correct BRT location
-  const loadAvailableInfoByCodes = async () => {
-    if (!jobData?.id) return;
-
-    try {
-      const { data: job, error } = await supabase
-        .from('jobs')
-        .select('parsed_code_definitions, vendor_type')
-        .eq('id', jobData.id)
-        .single();
-
-      if (error || !job?.parsed_code_definitions) {
-        debugLog('CODES', 'No parsed code definitions found for job');
-        addNotification('No code definitions found. Upload code file first.', 'warning');
-        return;
-      }
-
-      const codes = [];
-      const vendor = job.vendor_type;
-
-      if (vendor === 'BRT') {
-        const sections = job.parsed_code_definitions.sections || job.parsed_code_definitions;
-        
-        debugLog('CODES', 'BRT sections available:', Object.keys(sections));
-        
-        // Look for InfoBy codes in Residential section, key 30, MAP
-        const residentialSection = sections['Residential'];
-        if (residentialSection && residentialSection['30'] && residentialSection['30'].MAP) {
-          debugLog('CODES', 'Found Residential[30].MAP, checking for InfoBy codes...');
-          
-          Object.keys(residentialSection['30'].MAP).forEach(key => {
-            const item = residentialSection['30'].MAP[key];
-            if (item && item.DATA && item.DATA.VALUE) {
-              const description = item.DATA.VALUE.toUpperCase();
-              if (description.includes('OWNER') || description.includes('SPOUSE') || 
-                  description.includes('TENANT') || description.includes('AGENT') ||
-                  description.includes('REFUSED') || description.includes('ESTIMATED') ||
-                  description.includes('DOOR') || description.includes('CONVERSION') ||
-                  description.includes('PRICED')) {
+{/* NEW: Separate Residential and Commercial Inspector Analytics */}
+            {activeTab === 'analytics' && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-bold text-gray-900">Inspector Performance Analytics</h3>
+                  
+                  <div className="flex items-center space-x-4">
+                    <div className="flex items-center space-x-2">
+                      <label className="text-sm font-medium text-gray-700">Sort:</label>
+                      <select 
+                        value={inspectorSort}
+                        onChange={(e) => setInspectorSort(e.target.value)}
+                        className="px-3 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="alphabetical">Alphabetical</option>
+                        <option value="dailyAverage">Daily Average</option>
+                        <option value="entryRate">Entry Rate</option>
+                        <option value="totalInspected">Total Inspected</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
                 
-                codes.push({
-                  code: item.KEY || item.DATA.KEY,
-                  description: item.DATA.VALUE,
-                  section: 'Residential[30]',
-                  vendor: 'BRT'
-                });
-                
-                debugLog('CODES', `Found InfoBy code: ${item.KEY} = ${item.DATA.VALUE}`);
-              }
-            }
-          });
-        } else {
-          debugLog('CODES', 'Residential[30].MAP not found, structure:', residentialSection?.['30']);
-        }
+                {Object.keys(analytics.inspectorStats).length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <Users className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+                    <p>No inspector data available yet</p>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    {/* RESIDENTIAL INSPECTOR ANALYTICS */}
+                    <div className="bg-green-50 rounded-lg border border-green-200 p-6">
+                      <h4 className="text-lg font-semibold text-green-800 mb-4 flex items-center">
+                        <Users className="w-5 h-5 mr-2" />
+                        Residential Inspector Analytics
+                      </h4>
+                      
+                      {Object.entries(analytics.inspectorStats)
+                        .filter(([_, stats]) => stats.inspector_type === 'residential')
+                        .sort(([aKey, aStats], [bKey, bStats]) => {
+                          switch (inspectorSort) {
+                            case 'alphabetical':
+                              return aStats.name.localeCompare(bStats.name);
+                            case 'dailyAverage':
+                              return (bStats.dailyAverage || 0) - (aStats.dailyAverage || 0);
+                            case 'entryRate':
+                              return (bStats.entryRate || 0) - (aStats.entryRate || 0);
+                            case 'totalInspected':
+                              return bStats.totalInspected - aStats.totalInspected;
+                            default:
+                              return 0;
+                          }
+                        })
+                        .map(([inspector, stats]) => (
+                          <div key={inspector} className="bg-white border border-green-200 rounded-lg p-4 mb-3">
+                            {/* Header Row */}
+                            <div className="flex items-center justify-between mb-3">
+                              <div className="flex items-center space-x-3">
+                                <span className="font-semibold text-gray-900">{stats.name} ({inspector})</span>
+                                <span className="px-2 py-1 text-xs font-medium rounded bg-green-100 text-green-800">
+                                  Residential Inspector
+                                </span>
+                                <span className="text-sm text-gray-600">{stats.residentialFieldDays} residential field days</span>
+                              </div>
+                              <span className="text-lg font-bold text-green-600">{stats.totalInspected.toLocaleString()} Total</span>
+                            </div>
+                            
+                            {/* Metrics Grid */}
+                            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
+                              <div className="bg-green-50 p-3 rounded">
+                                <div className="font-bold text-green-700 text-xl">{stats.residentialInspected.toLocaleString()}</div>
+                                <div className="text-xs text-green-600 font-medium">Residential Inspected</div>
+                                <div className="text-xs text-gray-500">(Classes 2, 3A)</div>
+                              </div>
+                              <div className="bg-blue-50 p-3 rounded">
+                                <div className="font-bold text-blue-700 text-xl">{stats.dailyAverage || 0}</div>
+                                <div className="text-xs text-blue-600 font-medium">Daily Average</div>
+                                <div className="text-xs text-gray-500">Residential ÷ Field Days</div>
+                              </div>
+                              <div className="bg-green-50 p-3 rounded">
+                                <div className="font-bold text-green-700 text-xl">{stats.entryRate || 0}%</div>
+                                <div className="text-xs text-green-600 font-medium">Entry Rate</div>
+                                <div className="text-xs text-gray-500">On residential properties</div>
+                              </div>
+                              <div className="bg-red-50 p-3 rounded">
+                                <div className="font-bold text-red-700 text-xl">{stats.refusalRate || 0}%</div>
+                                <div className="text-xs text-red-600 font-medium">Refusal Rate</div>
+                                <div className="text-xs text-gray-500">On residential properties</div>
+                              </div>
+                              <div className="bg-gray-50 p-3 rounded">
+                                <div className="font-bold text-gray-700 text-xl">{(stats.totalInspected - stats.residentialInspected).toLocaleString()}</div>
+                                <div className="text-xs text-gray-600 font-medium">Other Properties</div>
+                                <div className="text-xs text-gray-500">Vacant, exempt, etc.</div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      
+                      {Object.entries(analytics.inspectorStats).filter(([_, stats]) => stats.inspector_type === 'residential').length === 0 && (
+                        <div className="text-center py-4 text-green-600">
+                          <p>No residential inspectors found</p>
+                        </div>
+                      )}
+                    </div>
 
-        // Fallback: Search all sections for inspection-related codes
-        if (codes.length === 0) {
-          debugLog('CODES', 'No codes found in Residential[30], searching all sections...');
-          Object.keys(sections).forEach(sectionName => {
-            const section = sections[sectionName];
-            if (typeof section === 'object') {
-              Object.keys(section).forEach(key => {
-                const item = section[key];
-                if (item && item.DATA && item.DATA.VALUE && 
-                    (item.DATA.VALUE.includes('OWNER') || item.DATA.VALUE.includes('REFUSED') || 
-                     item.DATA.VALUE.includes('AGENT') || item.DATA.VALUE.includes('ESTIMATED'))) {
-                  codes.push({
-                    code: item.KEY || item.DATA.KEY,
-                    description: item.DATA.VALUE,
-                    section: sectionName,
-                    vendor: 'BRT'
-                  });
-                }
-              });
-            }
-          });
-        }
-
-      } else if (vendor === 'Microsystems') {
-        Object.keys(job.parsed_code_definitions).forEach(code => {
-          if (code.startsWith('140')) {
-            const description = job.parsed_code_definitions[code];
-            codes.push({
-              code: code,
-              description: description,
-              section: 'InfoBy',
-              vendor: 'Microsystems',
-              storageCode: code.substring(3) // Strip 140 prefix for storage (140A -> A)
-            });
-          }
-        });
-      }
-
-      setAvailableInfoByCodes(codes);
-      debugLog('CODES', `✅ Loaded ${codes.length} InfoBy codes from ${vendor} definitions`);
-
-      // Load existing category configuration
-      await loadCategoriesFromDatabase(codes, vendor);
-
-    } catch (error) {
-      console.error('Error loading InfoBy codes:', error);
-      addNotification('Error loading InfoBy codes from code file', 'error');
-    }
-  };
-
-  // Load existing category configuration from database
-  const loadCategoriesFromDatabase = async (codes, vendor) => {
-    if (!jobData?.id) return;
-
-    try {
-      const { data: job, error } = await supabase
-        .from('jobs')
-        .select('infoby_category_config, workflow_stats')
-        .eq('id', jobData.id)
-        .single();
-
-      if (!error && job?.infoby_category_config && Object.keys(job.infoby_category_config).length > 0) {
-        setInfoByCategoryConfig(job.infoby_category_config);
-        setOriginalCategoryConfig(job.infoby_category_config);
-        debugLog('CATEGORIES', '✅ Loaded existing category config from infoby_category_config field');
-      } else if (!error && job?.workflow_stats?.infoByCategoryConfig) {
-        const oldConfig = job.workflow_stats.infoByCategoryConfig;
-        setInfoByCategoryConfig(oldConfig);
-        setOriginalCategoryConfig(oldConfig);
-        debugLog('CATEGORIES', '✅ Migrated category config from workflow_stats');
-        await saveCategoriesToDatabase(oldConfig);
-      } else if (codes && codes.length > 0) {
-        setDefaultCategoryConfig(vendor, codes);
-      }
-    } catch (error) {
-      console.error('Error loading category config:', error);
-    }
-  };
-
-  // Set default InfoBy category configurations
-  const setDefaultCategoryConfig = (vendor, codes) => {
-    const defaultConfig = { entry: [], refusal: [], estimation: [], invalid: [], priced: [] };
-
-    if (vendor === 'BRT') {
-      codes.forEach(item => {
-        const desc = item.description.toUpperCase();
-        if (desc.includes('OWNER') || desc.includes('SPOUSE') || desc.includes('TENANT') || desc.includes('AGENT')) {
-          defaultConfig.entry.push(item.code);
-        } else if (desc.includes('REFUSED')) {
-          defaultConfig.refusal.push(item.code);
-        } else if (desc.includes('ESTIMATED')) {
-          defaultConfig.estimation.push(item.code);
-        } else if (desc.includes('DOOR')) {
-          defaultConfig.invalid.push(item.code);
-        } else if (desc.includes('CONVERSION') || desc.includes('PRICED')) {
-          defaultConfig.priced.push(item.code);
-        }
-      });
-    } else if (vendor === 'Microsystems') {
-      codes.forEach(item => {
-        const storageCode = item.storageCode;
-        const desc = item.description.toUpperCase();
-        if (desc.includes('AGENT') || desc.includes('OWNER') || desc.includes('SPOUSE') || desc.includes('TENANT')) {
-          defaultConfig.entry.push(storageCode);
-        } else if (desc.includes('REFUSED')) {
-          defaultConfig.refusal.push(storageCode);
-        } else if (desc.includes('ESTIMATED') || desc.includes('VACANT')) {
-          defaultConfig.estimation.push(storageCode);
-        } else if (desc.includes('PRICED') || desc.includes('NARRATIVE') || desc.includes('ENCODED')) {
-          defaultConfig.priced.push(storageCode);
-        }
-      });
-    }
-
-    setInfoByCategoryConfig(defaultConfig);
-    setOriginalCategoryConfig(defaultConfig);
-    setHasUnsavedChanges(true);
-    debugLog('CATEGORIES', '✅ Set default category configuration', defaultConfig);
-  };
-
-  // Save category configuration to database and persist analytics
-  const saveCategoriesToDatabase = async (config = null) => {
-    if (!jobData?.id) return;
-
-    const configToSave = config || infoByCategoryConfig;
-
-    try {
-      const { error } = await supabase
-        .from('jobs')
-        .update({ 
-          infoby_category_config: {
-            ...configToSave,
-            vendor_type: jobData.vendor_type,
-            last_updated: new Date().toISOString()
-          },
-          // ENHANCED: Persist analytics data for navigation survival
-          workflow_stats: analytics ? {
-            ...analytics,
-            billingAnalytics,
-            validationReport,
-            lastProcessed: new Date().toISOString()
-          } : undefined
-        })
-        .eq('id', jobData.id);
-
-      if (error) throw error;
-      
-      setOriginalCategoryConfig(configToSave);
-      setHasUnsavedChanges(false);
-      addNotification('✅ Configuration and analytics saved', 'success');
-      debugLog('PERSISTENCE', '✅ Saved config and analytics to job record');
-    } catch (error) {
-      console.error('Error saving configuration:', error);
-      addNotification('Error saving configuration', 'error');
-    }
-  };
-
-  // Load persisted analytics on component mount
-  const loadPersistedAnalytics = async () => {
-    if (!jobData?.id) return;
-
-    try {
-      const { data: job, error } = await supabase
-        .from('jobs')
-        .select('workflow_stats')
-        .eq('id', jobData.id)
-        .single();
-
-      if (!error && job?.workflow_stats && job.workflow_stats.totalRecords) {
-        setAnalytics(job.workflow_stats);
-        setBillingAnalytics(job.workflow_stats.billingAnalytics);
-        setValidationReport(job.workflow_stats.validationReport);
-        setProcessed(true);
-        setSettingsLocked(true);
-        debugLog('PERSISTENCE', '✅ Loaded persisted analytics from job record');
-        addNotification('Previously processed analytics loaded', 'info');
-      }
-    } catch (error) {
-      console.error('Error loading persisted analytics:', error);
-    }
-  };
-
-  const loadProjectStartDate = async () => {
-    if (!jobData?.id || !latestFileVersion) return;
-
-    try {
-      const { data: records, error } = await supabase
-        .from('property_records')
-        .select('project_start_date')
-        .eq('job_id', jobData.id)
-        .eq('file_version', latestFileVersion)
-        .not('project_start_date', 'is', null)
-        .limit(1)
-        .single();
-
-      if (!error && records?.project_start_date) {
-        setProjectStartDate(records.project_start_date);
-        setIsDateLocked(true);
-        debugLog('START_DATE', `Loaded existing start date: ${records.project_start_date}`);
-      }
-    } catch (error) {
-      debugLog('START_DATE', 'No existing start date found');
-    }
-  };
-
-  const lockStartDate = async () => {
-    if (!projectStartDate || !jobData?.id || !latestFileVersion) {
-      addNotification('Please set a project start date first', 'error');
-      return;
-    }
-
-    try {
-      const { error } = await supabase
-        .from('property_records')
-        .update({ project_start_date: projectStartDate })
-        .eq('job_id', jobData.id)
-        .eq('file_version', latestFileVersion);
-
-      if (error) throw error;
-
-      setIsDateLocked(true);
-      addNotification('✅ Project start date locked and saved to all property records', 'success');
-      debugLog('START_DATE', `Locked start date: ${projectStartDate}`);
-
-    } catch (error) {
-      console.error('Error locking start date:', error);
-      addNotification('Error saving start date: ' + error.message, 'error');
-    }
-  };
-
-  const unlockStartDate = () => {
-    setIsDateLocked(false);
-    addNotification('Project start date unlocked for editing', 'info');
-  };
-
-  // Initialize data loading
-  useEffect(() => {
-    if (jobData?.id && latestFileVersion) {
-      loadEmployeeData();
-      loadAvailableInfoByCodes();
-      loadProjectStartDate();
-      loadPersistedAnalytics(); // ENHANCED: Load persisted analytics
-      setLoading(false);
-    }
-  }, [jobData?.id, latestFileVersion]);
-
-  // Track unsaved changes
-  useEffect(() => {
-    const hasChanges = JSON.stringify(infoByCategoryConfig) !== JSON.stringify(originalCategoryConfig);
-    setHasUnsavedChanges(hasChanges);
-  }, [infoByCategoryConfig, originalCategoryConfig]);
-
-  // ENHANCED: Process analytics with smart validation and commercial percentages
+                    {/* COMMERCIAL INSPECTOR ANALYTICS */}
+                    <div className="bg-blue-50 rounded-lg border border-blue-200 p-6">
+                      <h4 className="text-lg font-semibold text-blue-800 mb-4 flex items-center">
+                        <Factory className="w-5 h-5 mr-2" />
+                        Commercial Inspector Analytics
+                      </h4>
+                      
+                      {Object.entries(analytics.inspectorStats)
+                        .filter(([_, stats]) => stats.inspector_type === 'commercial')
+                        .sort(([aKey, aStats], [bKey, bStats]) => {
+                          switch (inspectorSort) {
+                            case 'alphabetical':
+                              return aStats.name.localeCompare(bStats.name);
+                            case 'dailyAverage':
+                              return (bStats.commercialAverage || 0) - (aStats.commercialAverage || 0);
+                            case 'totalInspected':
+                              return bStats.totalInspected - aStats.totalInspected;
+                            default:
+                              return 0;
+                          }
+                        })
+                        .map(([inspector, stats]) => (
+                          <div key={inspector} className  // ENHANCED: Process analytics with manager-focused counting and inspection_data persistence
   const processAnalytics = async () => {
     if (!projectStartDate || !jobData?.id || !latestFileVersion) {
       addNotification('Project start date and job data required', 'error');
@@ -396,11 +133,19 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
     }
 
     try {
-      debugLog('ANALYTICS', 'Starting enhanced analytics processing', { 
+      // VENDOR DETECTION DEBUG
+      debugLog('VENDOR', 'Vendor detection check', { 
+        vendor_type: jobData.vendor_type,
+        jobData_keys: Object.keys(jobData),
+        vendor_from_job: jobData.vendor_type 
+      });
+
+      debugLog('ANALYTICS', 'Starting manager-focused analytics processing', { 
         jobId: jobData.id,
         fileVersion: latestFileVersion,
         startDate: projectStartDate,
-        categoryConfig: infoByCategoryConfig 
+        categoryConfig: infoByCategoryConfig,
+        vendorType: jobData.vendor_type
       });
 
       const allValidCodes = [
@@ -460,10 +205,11 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
       const inspectorStats = {};
       const classBreakdown = {};
       const billingByClass = {};
-      const propertyIssues = {}; // ENHANCED: Compound validation messages
+      const propertyIssues = {};
       const inspectorIssuesMap = {};
+      const inspectionDataBatch = []; // NEW: For inspection_data UPSERT
 
-      // Initialize class counters
+      // Initialize class counters - FIXED: Count ALL properties for denominators
       const allClasses = ['1', '2', '3A', '3B', '4A', '4B', '4C', '15A', '15B', '15C', '15D', '15E', '15F', '5A', '5B', '6A', '6B'];
       allClasses.forEach(cls => {
         classBreakdown[cls] = { total: 0, inspected: 0, entry: 0, refusal: 0, priced: 0 };
@@ -479,7 +225,13 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
         const priceDate = record.inspection_price_date ? new Date(record.inspection_price_date) : null;
         const propertyKey = record.property_composite_key || `${record.property_block}-${record.property_lot}-${record.property_qualifier || ''}`;
 
-        // ENHANCED: Skip UNASSIGNED - they're not real inspectors
+        // FIXED: Always count ALL properties for denominators (manager progress view)
+        if (classBreakdown[propertyClass]) {
+          classBreakdown[propertyClass].total++;
+          billingByClass[propertyClass].total++;
+        }
+
+        // Skip UNASSIGNED for inspector analytics but continue for totals
         if (inspector === 'UNASSIGNED') return;
 
         // Initialize inspector stats
@@ -488,30 +240,23 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
           inspectorStats[inspector] = {
             name: employeeInfo.name || inspector,
             fullName: employeeInfo.fullName || inspector,
-            inspector_type: employeeInfo.inspector_type, // ENHANCED: Remove 'unknown' fallback
-            inspected: 0,
-            residentialInspected: 0,
-            commercialInspected: 0,
+            inspector_type: employeeInfo.inspector_type,
+            totalInspected: 0, // NEW: All valid inspections
+            residentialInspected: 0, // NEW: 2, 3A only
+            commercialInspected: 0, // NEW: 4A, 4B, 4C only
             entry: 0,
             refusal: 0,
             priced: 0,
-            classes: { residential: 0, commercial: 0, other: 0 },
-            // ENHANCED: Detailed day tracking for field days
+            // NEW: Separate field day tracking
             allWorkDays: new Set(),
-            residentialWorkDays: new Set(),
-            commercialWorkDays: new Set(),
+            residentialWorkDays: new Set(), // Days with 2/3A work
+            commercialWorkDays: new Set(), // Days with 4A/4B/4C work
             pricingWorkDays: new Set()
           };
           inspectorIssuesMap[inspector] = [];
         }
 
-        // Count totals
-        if (classBreakdown[propertyClass]) {
-          classBreakdown[propertyClass].total++;
-          billingByClass[propertyClass].total++;
-        }
-
-        // ENHANCED: Smart validation - only validate properties with inspection attempts
+        // Check for any inspection attempt
         const hasAnyInspectionAttempt = (
           (record.inspection_measure_by && record.inspection_measure_by.trim() !== '') ||
           record.inspection_measure_date ||
@@ -525,7 +270,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
           return;
         }
 
-        // Now validate attempted inspections
+        // Validate attempted inspections
         let isValidInspection = true;
         let hasValidMeasuredBy = inspector && inspector !== 'UNASSIGNED' && inspector.trim() !== '';
         let hasValidMeasuredDate = measuredDate && measuredDate >= startDate;
@@ -534,7 +279,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
         const normalizedValidCodes = allValidCodes.map(code => code.toString().padStart(2, '0'));
         let hasValidInfoBy = normalizedInfoBy && normalizedValidCodes.includes(normalizedInfoBy);
         
-        // ENHANCED: Compound validation messages per property
+        // Compound validation messages per property
         const addValidationIssue = (message) => {
           if (!propertyIssues[propertyKey]) {
             propertyIssues[propertyKey] = {
@@ -578,9 +323,12 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
           addValidationIssue(`Estimation code ${infoByCode} but has listing data`);
         }
 
+        // NEW: Corrected inspector type validation
         const isCommercialProperty = ['4A', '4B', '4C'].includes(propertyClass);
         const isResidentialProperty = ['2', '3A'].includes(propertyClass);
         const isResidentialInspector = employeeData[inspector]?.inspector_type === 'residential';
+        
+        // Residential inspectors CAN'T do commercial (4A, 4B, 4C) - everything else is OK
         if (isCommercialProperty && isResidentialInspector) {
           addValidationIssue(`Residential inspector on commercial property`);
         }
@@ -589,32 +337,28 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
           addValidationIssue('Zero improvement property missing listing data');
         }
 
-        // Only count valid inspections for analytics
+        // NEW: Process valid inspections with corrected counting
         if (isValidInspection && hasValidInfoBy && hasValidMeasuredBy && hasValidMeasuredDate) {
-          inspectorStats[inspector].inspected++;
           
-          // ENHANCED: Track work days by property type
-          const workDayString = measuredDate.toISOString().split('T')[0];
-          inspectorStats[inspector].allWorkDays.add(workDayString);
-
-          // Count residential and commercial separately with work days
-          if (isResidentialProperty) {
-            inspectorStats[inspector].residentialInspected++;
-            inspectorStats[inspector].residentialWorkDays.add(workDayString);
-          }
-          if (isCommercialProperty) {
-            inspectorStats[inspector].commercialInspected++;
-            inspectorStats[inspector].commercialWorkDays.add(workDayString);
-          }
-
+          // Count for manager progress (valid inspections against total properties)
           if (classBreakdown[propertyClass]) {
             classBreakdown[propertyClass].inspected++;
             billingByClass[propertyClass].inspected++;
             billingByClass[propertyClass].billable++;
           }
 
-          // ENHANCED: Entry/Refusal counting (only for residential properties 2, 3A)
+          // Inspector analytics - count ALL valid inspections
+          inspectorStats[inspector].totalInspected++;
+          
+          const workDayString = measuredDate.toISOString().split('T')[0];
+          inspectorStats[inspector].allWorkDays.add(workDayString);
+
+          // NEW: Separate residential and commercial counting for analytics
           if (isResidentialProperty) {
+            inspectorStats[inspector].residentialInspected++;
+            inspectorStats[inspector].residentialWorkDays.add(workDayString);
+            
+            // Entry/Refusal counting (only for residential properties 2, 3A)
             if (isEntryCode) {
               inspectorStats[inspector].entry++;
               if (classBreakdown[propertyClass]) {
@@ -627,39 +371,93 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
               }
             }
           }
+          
+          if (isCommercialProperty) {
+            inspectorStats[inspector].commercialInspected++;
+            inspectorStats[inspector].commercialWorkDays.add(workDayString);
+          }
 
-          // ENHANCED: Fixed BRT pricing logic - check both inspector and date
-          if (jobData.vendor_type === 'BRT' && 
-              record.inspection_price_by && 
-              record.inspection_price_by.trim() !== '' &&
-              priceDate && 
-              priceDate >= startDate && 
-              isCommercialProperty) {
-            
-            inspectorStats[inspector].priced++;
-            inspectorStats[inspector].pricingWorkDays.add(priceDate.toISOString().split('T')[0]);
-            if (classBreakdown[propertyClass]) {
-              classBreakdown[propertyClass].priced++;
-            }
-          } else if (jobData.vendor_type === 'Microsystems' && isPricedCode && isCommercialProperty) {
-            inspectorStats[inspector].priced++;
-            if (classBreakdown[propertyClass]) {
-              classBreakdown[propertyClass].priced++;
+          // FIXED: Pricing logic with vendor detection and debugging
+          debugLog('PRICING', `Checking pricing for ${propertyKey}`, {
+            vendor: jobData.vendor_type,
+            isCommercial: isCommercialProperty,
+            priceBy: record.inspection_price_by,
+            priceDate: priceDate,
+            isPricedCode: isPricedCode,
+            startDate: startDate
+          });
+
+          if (isCommercialProperty) {
+            if (jobData.vendor_type === 'BRT' && 
+                record.inspection_price_by && 
+                record.inspection_price_by.trim() !== '' &&
+                priceDate && 
+                priceDate >= startDate) {
+              
+              inspectorStats[inspector].priced++;
+              inspectorStats[inspector].pricingWorkDays.add(priceDate.toISOString().split('T')[0]);
+              if (classBreakdown[propertyClass]) {
+                classBreakdown[propertyClass].priced++;
+              }
+              debugLog('PRICING', `✅ BRT pricing counted for ${propertyKey}`);
+              
+            } else if (jobData.vendor_type === 'Microsystems' && isPricedCode) {
+              inspectorStats[inspector].priced++;
+              if (classBreakdown[propertyClass]) {
+                classBreakdown[propertyClass].priced++;
+              }
+              debugLog('PRICING', `✅ Microsystems pricing counted for ${propertyKey}`);
             }
           }
 
-          // Class categorization
-          if (['2', '3A', '3B'].includes(propertyClass)) {
-            inspectorStats[inspector].classes.residential++;
-          } else if (['4A', '4B', '4C'].includes(propertyClass)) {
-            inspectorStats[inspector].classes.commercial++;
-          } else {
-            inspectorStats[inspector].classes.other++;
-          }
+          // NEW: Prepare for inspection_data UPSERT
+          inspectionDataBatch.push({
+            job_id: jobData.id,
+            file_version: latestFileVersion,
+            property_composite_key: propertyKey,
+            block: record.property_block,
+            lot: record.property_lot,
+            qualifier: record.property_qualifier || '',
+            card: '1',
+            property_location: record.property_location || '',
+            property_class: propertyClass,
+            measure_by: inspector,
+            measure_date: record.inspection_measure_date,
+            info_by_code: infoByCode,
+            list_by: record.inspection_list_by,
+            list_date: record.inspection_list_date,
+            price_by: record.inspection_price_by,
+            price_date: record.inspection_price_date,
+            project_start_date: projectStartDate,
+            source_file_name: record.source_file_name,
+            upload_date: new Date().toISOString(),
+            validation_report: propertyIssues[propertyKey] ? {
+              issues: propertyIssues[propertyKey].issues,
+              severity: propertyIssues[propertyKey].issues.length > 2 ? 'high' : 'medium'
+            } : null
+          });
         }
       });
 
-      // ENHANCED: Calculate inspector rates and averages based on specifications
+      // NEW: UPSERT to inspection_data table for persistence
+      if (inspectionDataBatch.length > 0) {
+        debugLog('PERSISTENCE', `Upserting ${inspectionDataBatch.length} records to inspection_data`);
+        
+        const { error: upsertError } = await supabase
+          .from('inspection_data')
+          .upsert(inspectionDataBatch, {
+            onConflict: 'job_id,property_composite_key,file_version'
+          });
+
+        if (upsertError) {
+          console.error('Error upserting to inspection_data:', upsertError);
+          addNotification('Warning: Could not save to inspection_data table', 'warning');
+        } else {
+          debugLog('PERSISTENCE', '✅ Successfully upserted to inspection_data');
+        }
+      }
+
+      // NEW: Calculate inspector rates and averages with corrected field day logic
       Object.keys(inspectorStats).forEach(inspector => {
         const stats = inspectorStats[inspector];
         
@@ -669,35 +467,41 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
         stats.commercialFieldDays = stats.commercialWorkDays.size;
         stats.pricingDays = stats.pricingWorkDays.size;
         
-        // Residential calculations (only for class 2, 3A)
+        // Entry/Refusal rates (only for residential properties 2, 3A)
         if (stats.residentialInspected > 0) {
           stats.entryRate = Math.round((stats.entry / stats.residentialInspected) * 100);
           stats.refusalRate = Math.round((stats.refusal / stats.residentialInspected) * 100);
+        } else {
+          stats.entryRate = 0;
+          stats.refusalRate = 0;
         }
 
-        // Daily averages
+        // NEW: Type-specific daily averages
         if (stats.inspector_type === 'residential') {
-          // Residential inspectors: Residential Inspected ÷ Field Days (any work days)
-          stats.dailyAverage = stats.fieldDays > 0 ? Math.round(stats.residentialInspected / stats.fieldDays) : 0;
+          // Residential daily average: Residential work ÷ Residential field days
+          stats.dailyAverage = stats.residentialFieldDays > 0 ? 
+            Math.round(stats.residentialInspected / stats.residentialFieldDays) : 0;
         } else if (stats.inspector_type === 'commercial') {
-          // Commercial inspectors: Commercial Inspected ÷ Commercial Field Days
-          stats.commercialAverage = stats.commercialFieldDays > 0 ? Math.round(stats.commercialInspected / stats.commercialFieldDays) : 0;
-          // Pricing Average: Total Priced ÷ Pricing Days (BRT only)
+          // Commercial daily average: Commercial work ÷ Commercial field days
+          stats.commercialAverage = stats.commercialFieldDays > 0 ? 
+            Math.round(stats.commercialInspected / stats.commercialFieldDays) : 0;
+          // Pricing average (BRT only)
           if (jobData.vendor_type === 'BRT') {
-            stats.pricingAverage = stats.pricingDays > 0 ? Math.round(stats.priced / stats.pricingDays) : 0;
+            stats.pricingAverage = stats.pricingDays > 0 ? 
+              Math.round(stats.priced / stats.pricingDays) : 0;
           } else {
-            stats.pricingAverage = null; // Microsystems doesn't have pricing days
+            stats.pricingAverage = null;
           }
         }
 
-        // Clean up Sets (convert to numbers for display)
+        // Clean up Sets
         delete stats.allWorkDays;
         delete stats.residentialWorkDays;
         delete stats.commercialWorkDays;
         delete stats.pricingWorkDays;
       });
 
-      // ENHANCED: Create compound validation report
+      // Create compound validation report
       const validationIssues = [];
       Object.keys(propertyIssues).forEach(propertyKey => {
         const property = propertyIssues[propertyKey];
@@ -722,14 +526,14 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
         inspectorIssuesMap[property.inspector].push(issue);
       });
 
-      // Calculate job-level totals and commercial percentages
-      const totalInspected = Object.values(inspectorStats).reduce((sum, stats) => sum + stats.inspected, 0);
+      // Calculate job-level totals
+      const totalInspected = Object.values(inspectorStats).reduce((sum, stats) => sum + stats.totalInspected, 0);
       const totalResidentialInspected = Object.values(inspectorStats).reduce((sum, stats) => sum + (stats.residentialInspected || 0), 0);
       const totalEntry = Object.values(inspectorStats).reduce((sum, stats) => sum + stats.entry, 0);
       const totalRefusal = Object.values(inspectorStats).reduce((sum, stats) => sum + stats.refusal, 0);
       const totalPriced = Object.values(inspectorStats).reduce((sum, stats) => sum + stats.priced, 0);
 
-      // ENHANCED: Commercial percentage calculations
+      // FIXED: Commercial percentage calculations (valid ÷ total, not valid ÷ valid)
       const totalCommercialProperties = ['4A', '4B', '4C'].reduce((sum, cls) => sum + (classBreakdown[cls]?.total || 0), 0);
       const totalCommercialInspected = ['4A', '4B', '4C'].reduce((sum, cls) => sum + (classBreakdown[cls]?.inspected || 0), 0);
       const totalCommercialPriced = ['4A', '4B', '4C'].reduce((sum, cls) => sum + (classBreakdown[cls]?.priced || 0), 0);
@@ -757,11 +561,11 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
         validationIssues: validationIssues.length,
         processingDate: new Date().toISOString(),
         
-        // ENHANCED: Job-level metrics based on residential properties only (2, 3A)
+        // Job-level metrics based on residential properties only (2, 3A)
         jobEntryRate: totalResidentialInspected > 0 ? Math.round((totalEntry / totalResidentialInspected) * 100) : 0,
         jobRefusalRate: totalResidentialInspected > 0 ? Math.round((totalRefusal / totalResidentialInspected) * 100) : 0,
         
-        // Commercial metrics with percentages
+        // FIXED: Commercial metrics with correct percentages
         commercialInspections: totalCommercialInspected,
         commercialPricing: totalCommercialPriced,
         totalCommercialProperties,
@@ -769,7 +573,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
         pricingCompletePercent: totalCommercialProperties > 0 ? Math.round((totalCommercialPriced / totalCommercialProperties) * 100) : 0
       };
 
-      // ENHANCED: Billing analytics with progress calculations
+      // Billing analytics with progress calculations
       const billingResult = {
         byClass: billingByClass,
         grouped: {
@@ -778,7 +582,6 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
           railroad: ['5A', '5B'].reduce((sum, cls) => sum + (billingByClass[cls]?.billable || 0), 0),
           personalProperty: ['6A', '6B'].reduce((sum, cls) => sum + (billingByClass[cls]?.billable || 0), 0)
         },
-        // ENHANCED: Progress bar data
         progressData: {
           commercial: {
             total: ['4A', '4B', '4C'].reduce((sum, cls) => sum + (billingByClass[cls]?.total || 0), 0),
@@ -804,13 +607,14 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
       setBillingAnalytics(billingResult);
       setValidationReport(validationReportData);
 
-      debugLog('ANALYTICS', '✅ Enhanced analytics processing complete', {
+      debugLog('ANALYTICS', '✅ Manager-focused analytics processing complete', {
         totalRecords: rawData.length,
         validInspections: analyticsResult.validInspections,
         totalIssues: validationIssues.length,
         inspectors: Object.keys(inspectorStats).length,
         commercialComplete: analyticsResult.commercialCompletePercent,
-        pricingComplete: analyticsResult.pricingCompletePercent
+        pricingComplete: analyticsResult.pricingCompletePercent,
+        persistedRecords: inspectionDataBatch.length
       });
 
       return { analyticsResult, billingResult, validationReportData };
@@ -894,36 +698,6 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
     } finally {
       setProcessing(false);
     }
-  };
-
-  // Filter and sort inspectors
-  const getFilteredAndSortedInspectors = () => {
-    if (!analytics?.inspectorStats) return [];
-    
-    let inspectors = Object.entries(analytics.inspectorStats);
-    
-    if (inspectorFilter === 'residential') {
-      inspectors = inspectors.filter(([_, stats]) => stats.inspector_type === 'residential');
-    } else if (inspectorFilter === 'commercial') {
-      inspectors = inspectors.filter(([_, stats]) => stats.inspector_type === 'commercial');
-    }
-    
-    inspectors.sort(([aKey, aStats], [bKey, bStats]) => {
-      switch (inspectorSort) {
-        case 'alphabetical':
-          return aStats.name.localeCompare(bStats.name);
-        case 'dailyAverage':
-          return (bStats.dailyAverage || bStats.commercialAverage || 0) - (aStats.dailyAverage || aStats.commercialAverage || 0);
-        case 'entryRate':
-          return (bStats.entryRate || 0) - (aStats.entryRate || 0);
-        case 'totalInspected':
-          return bStats.inspected - aStats.inspected;
-        default:
-          return 0;
-      }
-    });
-    
-    return inspectors;
   };
 
   const exportValidationReport = () => {
@@ -1185,45 +959,76 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
           </div>
         </div>
 
-        {/* InfoBy Category Configuration Panel */}
+        {/* NEW: Collapsible InfoBy Category Configuration Panel */}
         {availableInfoByCodes.length > 0 && (
           <div className="mt-6 pt-6 border-t border-gray-200">
-            <h4 className="text-md font-semibold text-gray-800 mb-4">
-              InfoBy Category Assignment ({jobData.vendor_type} Format)
-            </h4>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-              {['entry', 'refusal', 'estimation', 'invalid', 'priced'].map(category => (
-                <div key={category} className="border border-gray-200 rounded-lg p-4">
-                  <h5 className="font-medium text-gray-900 mb-3 capitalize">
-                    {category} ({infoByCategoryConfig[category].length})
-                  </h5>
-                  <div className="space-y-2 max-h-40 overflow-y-auto">
-                    {availableInfoByCodes.map(codeItem => {
-                      const storageCode = jobData.vendor_type === 'Microsystems' ? codeItem.storageCode : codeItem.code;
-                      const displayCode = storageCode;
-                      const isAssigned = infoByCategoryConfig[category].includes(storageCode);
-                      
-                      return (
-                        <div key={codeItem.code} className="flex items-start">
-                          <input
-                            type="checkbox"
-                            checked={isAssigned}
-                            onChange={() => handleCategoryAssignment(category, storageCode, isAssigned)}
-                            disabled={settingsLocked}
-                            className="mr-2 mt-1"
-                          />
-                          <div className="text-sm">
-                            <span className="font-medium">{displayCode}</span>
-                            <div className="text-gray-600 text-xs leading-tight">{codeItem.description}</div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
+            <div className="flex items-center justify-between mb-4">
+              <h4 className="text-md font-semibold text-gray-800">
+                InfoBy Category Assignment ({jobData.vendor_type} Format)
+              </h4>
+              <button
+                onClick={() => setShowInfoByConfig(!showInfoByConfig)}
+                className="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg flex items-center gap-1"
+              >
+                {showInfoByConfig ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                {showInfoByConfig ? 'Hide' : 'Show'} Configuration
+              </button>
             </div>
+            
+            {/* Quick Summary (Always Visible) */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-sm mb-4">
+              <div className="bg-green-50 px-3 py-2 rounded border">
+                <span className="font-medium text-green-800">Entry:</span> {infoByCategoryConfig.entry.length}
+              </div>
+              <div className="bg-red-50 px-3 py-2 rounded border">
+                <span className="font-medium text-red-800">Refusal:</span> {infoByCategoryConfig.refusal.length}
+              </div>
+              <div className="bg-blue-50 px-3 py-2 rounded border">
+                <span className="font-medium text-blue-800">Estimation:</span> {infoByCategoryConfig.estimation.length}
+              </div>
+              <div className="bg-gray-50 px-3 py-2 rounded border">
+                <span className="font-medium text-gray-800">Invalid:</span> {infoByCategoryConfig.invalid.length}
+              </div>
+              <div className="bg-purple-50 px-3 py-2 rounded border">
+                <span className="font-medium text-purple-800">Priced:</span> {infoByCategoryConfig.priced.length}
+              </div>
+            </div>
+            
+            {/* Detailed Configuration (Collapsible) */}
+            {showInfoByConfig && (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                {['entry', 'refusal', 'estimation', 'invalid', 'priced'].map(category => (
+                  <div key={category} className="border border-gray-200 rounded-lg p-4">
+                    <h5 className="font-medium text-gray-900 mb-3 capitalize">
+                      {category} ({infoByCategoryConfig[category].length})
+                    </h5>
+                    <div className="space-y-2 max-h-40 overflow-y-auto">
+                      {availableInfoByCodes.map(codeItem => {
+                        const storageCode = jobData.vendor_type === 'Microsystems' ? codeItem.storageCode : codeItem.code;
+                        const displayCode = storageCode;
+                        const isAssigned = infoByCategoryConfig[category].includes(storageCode);
+                        
+                        return (
+                          <div key={codeItem.code} className="flex items-start">
+                            <input
+                              type="checkbox"
+                              checked={isAssigned}
+                              onChange={() => handleCategoryAssignment(category, storageCode, isAssigned)}
+                              disabled={settingsLocked}
+                              className="mr-2 mt-1"
+                            />
+                            <div className="text-sm">
+                              <span className="font-medium">{displayCode}</span>
+                              <div className="text-gray-600 text-xs leading-tight">{codeItem.description}</div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -1294,26 +1099,13 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
           </div>
 
           <div className="p-6">
-            {/* ENHANCED: Compact Inspector Analytics */}
+            {/* NEW: Separate Residential and Commercial Inspector Analytics */}
             {activeTab === 'analytics' && (
-              <div className="space-y-4">
+              <div className="space-y-6">
                 <div className="flex items-center justify-between">
                   <h3 className="text-lg font-bold text-gray-900">Inspector Performance Analytics</h3>
                   
                   <div className="flex items-center space-x-4">
-                    <div className="flex items-center space-x-2">
-                      <label className="text-sm font-medium text-gray-700">Filter:</label>
-                      <select 
-                        value={inspectorFilter}
-                        onChange={(e) => setInspectorFilter(e.target.value)}
-                        className="px-3 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="all">All Inspectors</option>
-                        <option value="residential">Residential Only</option>
-                        <option value="commercial">Commercial Only</option>
-                      </select>
-                    </div>
-                    
                     <div className="flex items-center space-x-2">
                       <label className="text-sm font-medium text-gray-700">Sort:</label>
                       <select 
@@ -1336,140 +1128,209 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
                     <p>No inspector data available yet</p>
                   </div>
                 ) : (
-                  <div className="space-y-1">
-                    {getFilteredAndSortedInspectors().map(([inspector, stats]) => (
-                      <div key={inspector} className="border border-gray-200 rounded p-2">
-                        {/* RESIDENTIAL INSPECTOR LAYOUT */}
-                        {stats.inspector_type === 'residential' && (
-                          <>
+                  <div className="space-y-6">
+                    {/* RESIDENTIAL INSPECTOR ANALYTICS */}
+                    <div className="bg-green-50 rounded-lg border border-green-200 p-6">
+                      <h4 className="text-lg font-semibold text-green-800 mb-4 flex items-center">
+                        <Users className="w-5 h-5 mr-2" />
+                        Residential Inspector Analytics
+                      </h4>
+                      
+                      {Object.entries(analytics.inspectorStats)
+                        .filter(([_, stats]) => stats.inspector_type === 'residential')
+                        .sort(([aKey, aStats], [bKey, bStats]) => {
+                          switch (inspectorSort) {
+                            case 'alphabetical':
+                              return aStats.name.localeCompare(bStats.name);
+                            case 'dailyAverage':
+                              return (bStats.dailyAverage || 0) - (aStats.dailyAverage || 0);
+                            case 'entryRate':
+                              return (bStats.entryRate || 0) - (aStats.entryRate || 0);
+                            case 'totalInspected':
+                              return bStats.totalInspected - aStats.totalInspected;
+                            default:
+                              return 0;
+                          }
+                        })
+                        .map(([inspector, stats]) => (
+                          <div key={inspector} className="bg-white border border-green-200 rounded-lg p-4 mb-3">
                             {/* Header Row */}
-                            <div className="flex items-center justify-between mb-1">
-                              <div className="flex items-center space-x-2">
-                                <span className="font-semibold text-sm text-gray-900">{stats.name} ({inspector})</span>
-                                <span className="px-2 py-0.5 text-xs font-medium rounded bg-green-100 text-green-800">
-                                  Residential
+                            <div className="flex items-center justify-between mb-3">
+                              <div className="flex items-center space-x-3">
+                                <span className="font-semibold text-gray-900">{stats.name} ({inspector})</span>
+                                <span className="px-2 py-1 text-xs font-medium rounded bg-green-100 text-green-800">
+                                  Residential Inspector
                                 </span>
-                                <span className="text-xs text-gray-500">{stats.fieldDays} field days</span>
+                                <span className="text-sm text-gray-600">{stats.residentialFieldDays} residential field days</span>
                               </div>
-                              <span className="text-sm text-gray-600">Total: {stats.inspected.toLocaleString()}</span>
+                              <span className="text-lg font-bold text-green-600">{stats.totalInspected.toLocaleString()} Total</span>
                             </div>
                             
-                            {/* Metrics Row */}
-                            <div className="grid grid-cols-4 gap-4 text-center text-sm">
-                              <div>
-                                <div className="font-bold text-green-600">{stats.residentialInspected.toLocaleString()}</div>
-                                <div className="text-xs text-gray-500">Residential Inspected</div>
+                            {/* Metrics Grid */}
+                            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
+                              <div className="bg-green-50 p-3 rounded">
+                                <div className="font-bold text-green-700 text-xl">{stats.residentialInspected.toLocaleString()}</div>
+                                <div className="text-xs text-green-600 font-medium">Residential Inspected</div>
+                                <div className="text-xs text-gray-500">(Classes 2, 3A)</div>
                               </div>
-                              <div>
-                                <div className="font-bold text-blue-600">{stats.dailyAverage}</div>
-                                <div className="text-xs text-gray-500">Daily Avg</div>
+                              <div className="bg-blue-50 p-3 rounded">
+                                <div className="font-bold text-blue-700 text-xl">{stats.dailyAverage || 0}</div>
+                                <div className="text-xs text-blue-600 font-medium">Daily Average</div>
+                                <div className="text-xs text-gray-500">Residential ÷ Field Days</div>
                               </div>
-                              <div>
-                                <div className="font-bold text-green-600">{stats.entryRate || 0}%</div>
-                                <div className="text-xs text-gray-500">Entry Rate</div>
+                              <div className="bg-green-50 p-3 rounded">
+                                <div className="font-bold text-green-700 text-xl">{stats.entryRate || 0}%</div>
+                                <div className="text-xs text-green-600 font-medium">Entry Rate</div>
+                                <div className="text-xs text-gray-500">On residential properties</div>
                               </div>
-                              <div>
-                                <div className="font-bold text-red-600">{stats.refusalRate || 0}%</div>
-                                <div className="text-xs text-gray-500">Refusal Rate</div>
+                              <div className="bg-red-50 p-3 rounded">
+                                <div className="font-bold text-red-700 text-xl">{stats.refusalRate || 0}%</div>
+                                <div className="text-xs text-red-600 font-medium">Refusal Rate</div>
+                                <div className="text-xs text-gray-500">On residential properties</div>
+                              </div>
+                              <div className="bg-gray-50 p-3 rounded">
+                                <div className="font-bold text-gray-700 text-xl">{(stats.totalInspected - stats.residentialInspected).toLocaleString()}</div>
+                                <div className="text-xs text-gray-600 font-medium">Other Properties</div>
+                                <div className="text-xs text-gray-500">Vacant, exempt, etc.</div>
                               </div>
                             </div>
-                          </>
-                        )}
+                          </div>
+                        ))}
+                      
+                      {Object.entries(analytics.inspectorStats).filter(([_, stats]) => stats.inspector_type === 'residential').length === 0 && (
+                        <div className="text-center py-4 text-green-600">
+                          <p>No residential inspectors found</p>
+                        </div>
+                      )}
+                    </div>
 
-                        {/* COMMERCIAL INSPECTOR LAYOUT */}
-                        {stats.inspector_type === 'commercial' && (
-                          <>
+                    {/* COMMERCIAL INSPECTOR ANALYTICS */}
+                    <div className="bg-blue-50 rounded-lg border border-blue-200 p-6">
+                      <h4 className="text-lg font-semibold text-blue-800 mb-4 flex items-center">
+                        <Factory className="w-5 h-5 mr-2" />
+                        Commercial Inspector Analytics
+                      </h4>
+                      
+                      {Object.entries(analytics.inspectorStats)
+                        .filter(([_, stats]) => stats.inspector_type === 'commercial')
+                        .sort(([aKey, aStats], [bKey, bStats]) => {
+                          switch (inspectorSort) {
+                            case 'alphabetical':
+                              return aStats.name.localeCompare(bStats.name);
+                            case 'dailyAverage':
+                              return (bStats.commercialAverage || 0) - (aStats.commercialAverage || 0);
+                            case 'totalInspected':
+                              return bStats.totalInspected - aStats.totalInspected;
+                            default:
+                              return 0;
+                          }
+                        })
+                        .map(([inspector, stats]) => (
+                          <div key={inspector} className="bg-white border border-blue-200 rounded-lg p-4 mb-3">
                             {/* Header Row */}
-                            <div className="flex items-center justify-between mb-1">
-                              <div className="flex items-center space-x-2">
-                                <span className="font-semibold text-sm text-gray-900">{stats.name} ({inspector})</span>
-                                <span className="px-2 py-0.5 text-xs font-medium rounded bg-blue-100 text-blue-800">
-                                  Commercial
+                            <div className="flex items-center justify-between mb-3">
+                              <div className="flex items-center space-x-3">
+                                <span className="font-semibold text-gray-900">{stats.name} ({inspector})</span>
+                                <span className="px-2 py-1 text-xs font-medium rounded bg-blue-100 text-blue-800">
+                                  Commercial Inspector
                                 </span>
-                                <span className="text-xs text-gray-500">{stats.commercialFieldDays} field days</span>
+                                <span className="text-sm text-gray-600">{stats.commercialFieldDays} commercial field days</span>
                               </div>
-                              <span className="text-sm text-gray-600">Total: {stats.inspected.toLocaleString()}</span>
+                              <span className="text-lg font-bold text-blue-600">{stats.totalInspected.toLocaleString()} Total</span>
                             </div>
                             
-                            {/* Metrics Row */}
-                            <div className="grid grid-cols-6 gap-2 text-center text-sm">
-                              <div>
-                                <div className="font-bold text-blue-600">{stats.commercialInspected.toLocaleString()}</div>
-                                <div className="text-xs text-gray-500">Commercial Inspected</div>
+                            {/* Metrics Grid */}
+                            <div className="grid grid-cols-2 md:grid-cols-7 gap-3 text-center">
+                              <div className="bg-blue-50 p-3 rounded">
+                                <div className="font-bold text-blue-700 text-lg">{stats.commercialInspected.toLocaleString()}</div>
+                                <div className="text-xs text-blue-600 font-medium">Commercial</div>
+                                <div className="text-xs text-gray-500">(4A, 4B, 4C)</div>
                               </div>
-                              <div>
-                                <div className="font-bold text-blue-600">{stats.commercialAverage || 0}</div>
-                                <div className="text-xs text-gray-500">Commercial Avg</div>
+                              <div className="bg-blue-50 p-3 rounded">
+                                <div className="font-bold text-blue-700 text-lg">{stats.commercialAverage || 0}</div>
+                                <div className="text-xs text-blue-600 font-medium">Commercial Avg</div>
+                                <div className="text-xs text-gray-500">Commercial ÷ Days</div>
                               </div>
-                              <div>
-                                <div className="font-bold text-purple-600">{stats.priced.toLocaleString()}</div>
-                                <div className="text-xs text-gray-500">Commercial Priced</div>
+                              <div className="bg-purple-50 p-3 rounded">
+                                <div className="font-bold text-purple-700 text-lg">{stats.priced.toLocaleString()}</div>
+                                <div className="text-xs text-purple-600 font-medium">Priced</div>
+                                <div className="text-xs text-gray-500">Commercial only</div>
                               </div>
-                              <div>
-                                {jobData.vendor_type === 'BRT' ? (
-                                  <>
-                                    <div className="font-bold text-purple-600">{stats.pricingDays || 0}</div>
-                                    <div className="text-xs text-gray-500">Priced Days</div>
-                                  </>
-                                ) : (
-                                  <>
-                                    <div className="font-bold text-gray-400">N/A</div>
-                                    <div className="text-xs text-gray-500">Priced Days</div>
-                                  </>
-                                )}
+                              <div className="bg-purple-50 p-3 rounded">
+                                <div className="font-bold text-purple-700 text-lg">{stats.pricingDays || 0}</div>
+                                <div className="text-xs text-purple-600 font-medium">Pricing Days</div>
+                                <div className="text-xs text-gray-500">{jobData.vendor_type === 'BRT' ? 'BRT only' : 'N/A'}</div>
                               </div>
-                              <div>
-                                {jobData.vendor_type === 'BRT' ? (
-                                  <>
-                                    <div className="font-bold text-purple-600">{stats.pricingAverage || 0}</div>
-                                    <div className="text-xs text-gray-500">Pricing Avg</div>
-                                  </>
-                                ) : (
-                                  <>
-                                    <div className="font-bold text-gray-400">N/A</div>
-                                    <div className="text-xs text-gray-500">Pricing Avg</div>
-                                  </>
-                                )}
+                              <div className="bg-purple-50 p-3 rounded">
+                                <div className="font-bold text-purple-700 text-lg">{stats.pricingAverage || 'N/A'}</div>
+                                <div className="text-xs text-purple-600 font-medium">Pricing Avg</div>
+                                <div className="text-xs text-gray-500">{jobData.vendor_type === 'BRT' ? 'Priced ÷ Days' : 'N/A'}</div>
                               </div>
-                              <div>
-                                <div className="font-bold text-gray-600">75</div>
-                                <div className="text-xs text-gray-500">Commercial Rate</div>
+                              <div className="bg-gray-50 p-3 rounded">
+                                <div className="font-bold text-gray-700 text-lg">75</div>
+                                <div className="text-xs text-gray-600 font-medium">Commercial Rate</div>
+                                <div className="text-xs text-gray-500">Standard rate</div>
+                              </div>
+                              <div className="bg-gray-50 p-3 rounded">
+                                <div className="font-bold text-gray-700 text-lg">{(stats.totalInspected - stats.commercialInspected).toLocaleString()}</div>
+                                <div className="text-xs text-gray-600 font-medium">Other Properties</div>
+                                <div className="text-xs text-gray-500">Non-commercial</div>
                               </div>
                             </div>
-                          </>
-                        )}
+                          </div>
+                        ))}
+                      
+                      {Object.entries(analytics.inspectorStats).filter(([_, stats]) => stats.inspector_type === 'commercial').length === 0 && (
+                        <div className="text-center py-4 text-blue-600">
+                          <p>No commercial inspectors found</p>
+                        </div>
+                      )}
+                    </div>
 
-                        {/* NO TYPE - MINIMAL LAYOUT */}
-                        {!stats.inspector_type && (
-                          <>
-                            {/* Header Row */}
-                            <div className="flex items-center justify-between mb-1">
-                              <div className="flex items-center space-x-2">
-                                <span className="font-semibold text-sm text-gray-900">{stats.name} ({inspector})</span>
-                                <span className="text-xs text-gray-500">{stats.fieldDays} field days</span>
+                    {/* UNTYPED INSPECTORS (If Any) */}
+                    {Object.entries(analytics.inspectorStats)
+                      .filter(([_, stats]) => !stats.inspector_type || (stats.inspector_type !== 'residential' && stats.inspector_type !== 'commercial'))
+                      .length > 0 && (
+                      <div className="bg-gray-50 rounded-lg border border-gray-200 p-6">
+                        <h4 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                          <AlertTriangle className="w-5 h-5 mr-2" />
+                          Other Inspectors (No Type Assigned)
+                        </h4>
+                        
+                        {Object.entries(analytics.inspectorStats)
+                          .filter(([_, stats]) => !stats.inspector_type || (stats.inspector_type !== 'residential' && stats.inspector_type !== 'commercial'))
+                          .sort(([aKey, aStats], [bKey, bStats]) => aStats.name.localeCompare(bStats.name))
+                          .map(([inspector, stats]) => (
+                            <div key={inspector} className="bg-white border border-gray-200 rounded-lg p-4 mb-3">
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center space-x-3">
+                                  <span className="font-semibold text-gray-900">{stats.name} ({inspector})</span>
+                                  <span className="px-2 py-1 text-xs font-medium rounded bg-yellow-100 text-yellow-800">
+                                    No Inspector Type
+                                  </span>
+                                  <span className="text-sm text-gray-600">{stats.fieldDays} field days</span>
+                                </div>
+                                <span className="text-lg font-bold text-gray-600">{stats.totalInspected.toLocaleString()} Total</span>
                               </div>
-                              <span className="text-sm text-gray-600">Total: {stats.inspected.toLocaleString()}</span>
+                              
+                              <div className="grid grid-cols-3 gap-4 text-center">
+                                <div className="bg-gray-50 p-3 rounded">
+                                  <div className="font-bold text-gray-700 text-lg">{stats.residentialInspected.toLocaleString()}</div>
+                                  <div className="text-xs text-gray-600 font-medium">Residential</div>
+                                </div>
+                                <div className="bg-gray-50 p-3 rounded">
+                                  <div className="font-bold text-gray-700 text-lg">{stats.commercialInspected.toLocaleString()}</div>
+                                  <div className="text-xs text-gray-600 font-medium">Commercial</div>
+                                </div>
+                                <div className="bg-gray-50 p-3 rounded">
+                                  <div className="font-bold text-gray-700 text-lg">{(stats.totalInspected - stats.residentialInspected - stats.commercialInspected).toLocaleString()}</div>
+                                  <div className="text-xs text-gray-600 font-medium">Other</div>
+                                </div>
+                              </div>
                             </div>
-                            
-                            {/* Basic Metrics Row */}
-                            <div className="grid grid-cols-3 gap-4 text-center text-sm">
-                              <div>
-                                <div className="font-bold text-gray-600">{stats.dailyAverage || 0}</div>
-                                <div className="text-xs text-gray-500">Daily Avg</div>
-                              </div>
-                              <div>
-                                <div className="font-bold text-gray-600">{stats.entryRate || 0}%</div>
-                                <div className="text-xs text-gray-500">Entry Rate</div>
-                              </div>
-                              <div>
-                                <div className="font-bold text-gray-600">{stats.refusalRate || 0}%</div>
-                                <div className="text-xs text-gray-500">Refusal Rate</div>
-                              </div>
-                            </div>
-                          </>
-                        )}
+                          ))}
                       </div>
-                    ))}
+                    )}
                   </div>
                 )}
               </div>
