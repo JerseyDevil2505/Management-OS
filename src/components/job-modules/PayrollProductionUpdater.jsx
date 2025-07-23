@@ -440,14 +440,6 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
       addNotification('Project start date and job data required', 'error');
       return null;
     }
-
-  // ENHANCED: Process analytics with manager-focused counting and inspection_data persistence
-  const processAnalytics = async () => {
-    if (!projectStartDate || !jobData?.id || !latestFileVersion) {
-      addNotification('Project start date and job data required', 'error');
-      return null;
-    }
-
     try {
       // NEW: Get actual vendor from property_records
       const actualVendor = await loadVendorSource();
