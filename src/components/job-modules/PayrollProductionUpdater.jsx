@@ -1,4 +1,4 @@
-{/* NEW: Separate Residential and Commercial Inspector Analytics */}
+{/* NEW: Separate Residential and Commercial Inspector Analytics */}}
             {activeTab === 'analytics' && (
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
@@ -959,7 +959,7 @@
           </div>
         </div>
 
-        {/* NEW: Collapsible InfoBy Category Configuration Panel */}
+        {/* NEW: Collapsible InfoBy Category Configuration Panel */}}
         {availableInfoByCodes.length > 0 && (
           <div className="mt-6 pt-6 border-t border-gray-200">
             <div className="flex items-center justify-between mb-4">
