@@ -35,7 +35,7 @@ function App() {
           } else if (job.workflow_stats && job.workflow_stats.totalRecords) {
             // Migration: Load from old workflow_stats field
             loadedStates[job.id] = {
-              productionTracker: {
+              payrollProductionTracker: {
                 analytics: job.workflow_stats,
                 billingAnalytics: job.workflow_stats.billingAnalytics,
                 validationReport: job.workflow_stats.validationReport,
@@ -52,7 +52,7 @@ function App() {
           } else {
             // Initialize empty state for jobs without module states
             loadedStates[job.id] = {
-              productionTracker: {
+              payrollProductionTracker: {
                 analytics: null,
                 billingAnalytics: null,
                 validationReport: null,
@@ -93,7 +93,7 @@ function App() {
       setJobModuleStates(prev => ({
         ...prev,
         [jobId]: {
-          productionTracker: {
+          payrollProductionTracker: {
             analytics: null,
             billingAnalytics: null,
             validationReport: null,
@@ -157,7 +157,7 @@ function App() {
   // ENHANCED: Get module state for a specific job (with defaults)
   const getJobModuleState = (jobId, moduleName) => {
     const defaultStates = {
-      productionTracker: {
+      payrollProductionTracker: {
         analytics: null,
         billingAnalytics: null,
         validationReport: null,
@@ -180,17 +180,17 @@ function App() {
     const metrics = {};
     
     Object.keys(jobModuleStates).forEach(jobId => {
-      const productionState = jobModuleStates[jobId]?.productionTracker;
+      const payrollProductionState = jobModuleStates[jobId]?.payrollProductionTracker;
       
-      if (productionState?.analytics && productionState.isProcessed) {
+      if (payrollProductionState?.analytics && payrollProductionState.isProcessed) {
         metrics[jobId] = {
-          totalProperties: productionState.analytics.totalRecords || 0,
-          propertiesInspected: productionState.analytics.validInspections || 0,
-          entryRate: productionState.analytics.jobEntryRate || 0,
-          refusalRate: productionState.analytics.jobRefusalRate || 0,
-          commercialComplete: productionState.analytics.commercialCompletePercent || 0,
-          pricingComplete: productionState.analytics.pricingCompletePercent || 0,
-          lastProcessed: productionState.lastProcessed,
+          totalProperties: payrollProductionState.analytics.totalRecords || 0,
+          propertiesInspected: payrollProductionState.analytics.validInspections || 0,
+          entryRate: payrollProductionState.analytics.jobEntryRate || 0,
+          refusalRate: payrollProductionState.analytics.jobRefusalRate || 0,
+          commercialComplete: payrollProductionState.analytics.commercialCompletePercent || 0,
+          pricingComplete: payrollProductionState.analytics.pricingCompletePercent || 0,
+          lastProcessed: payrollProductionState.lastProcessed,
           isProcessed: true
         };
       } else {
@@ -230,10 +230,10 @@ function App() {
     console.log(`📊 App.js: File processed for job ${selectedJob?.id}`, result);
     
     // If analytics were processed, invalidate them to force refresh
-    if (selectedJob?.id && jobModuleStates[selectedJob.id]?.productionTracker?.isProcessed) {
-      console.log('📊 App.js: Invalidating ProductionTracker analytics due to file update');
+    if (selectedJob?.id && jobModuleStates[selectedJob.id]?.payrollProductionTracker?.isProcessed) {
+      console.log('📊 App.js: Invalidating PayrollProductionTracker analytics due to file update');
       
-      await handleModuleStateUpdate(selectedJob.id, 'productionTracker', {
+      await handleModuleStateUpdate(selectedJob.id, 'payrollProductionTracker', {
         analytics: null,
         billingAnalytics: null,
         validationReport: null,
@@ -313,7 +313,7 @@ function App() {
                 {/* ENHANCED: Show job module state indicators */}
                 <div className="border-l border-gray-700 pl-6">
                   <div className="flex items-center space-x-2 text-sm">
-                    {getJobModuleState(selectedJob.id, 'productionTracker').isProcessed && (
+                    {getJobModuleState(selectedJob.id, 'payrollProductionTracker').isProcessed && (
                       <span className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-medium">
                         Analytics Ready
                       </span>
@@ -356,7 +356,7 @@ function App() {
             selectedJob={selectedJob} 
             onBackToJobs={handleBackToJobs}
             // ENHANCED: Pass module state management to JobContainer
-            moduleState={getJobModuleState(selectedJob.id, 'productionTracker')}
+            moduleState={getJobModuleState(selectedJob.id, 'payrollProductionTracker')}
             onUpdateModuleState={(moduleName, newState, persist = true) => 
               handleModuleStateUpdate(selectedJob.id, moduleName, newState, persist)
             }
