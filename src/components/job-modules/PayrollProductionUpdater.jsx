@@ -1336,126 +1336,137 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
                     <p>No inspector data available yet</p>
                   </div>
                 ) : (
-                  <div className="space-y-2">
+                  <div className="space-y-1">
                     {getFilteredAndSortedInspectors().map(([inspector, stats]) => (
-                      <div key={inspector} className="border border-gray-200 rounded-lg p-3">
-                        {/* ENHANCED: Compact Tile Header */}
-                        <div className="flex items-center justify-between mb-2">
-                          <div>
-                            <h4 className="text-base font-semibold text-gray-900">
-                              {stats.name} ({inspector})
-                            </h4>
-                            <div className="flex items-center space-x-2 mt-1">
-                              {stats.inspector_type === 'residential' && (
-                                <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">
-                                  🏠 Residential
-                                </span>
-                              )}
-                              {stats.inspector_type === 'commercial' && (
-                                <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
-                                  🏢 Commercial
-                                </span>
-                              )}
-                              <span className="text-xs text-gray-600">
-                                {stats.fieldDays} field days
-                              </span>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <div className="text-sm text-gray-600">Total Inspections</div>
-                            <div className="text-lg font-semibold text-gray-900">{stats.inspected.toLocaleString()}</div>
-                          </div>
-                        </div>
-
-                        {/* ENHANCED: Compact Metrics Grid */}
+                      <div key={inspector} className="border border-gray-200 rounded p-2">
+                        {/* RESIDENTIAL INSPECTOR LAYOUT */}
                         {stats.inspector_type === 'residential' && (
-                          <div className="grid grid-cols-4 gap-4 text-center">
-                            <div>
-                              <div className="text-lg font-bold text-green-600">{stats.residentialInspected.toLocaleString()}</div>
-                              <div className="text-xs text-gray-600">Residential Inspected</div>
+                          <>
+                            {/* Header Row */}
+                            <div className="flex items-center justify-between mb-1">
+                              <div className="flex items-center space-x-2">
+                                <span className="font-semibold text-sm text-gray-900">{stats.name} ({inspector})</span>
+                                <span className="px-2 py-0.5 text-xs font-medium rounded bg-green-100 text-green-800">
+                                  Residential
+                                </span>
+                                <span className="text-xs text-gray-500">{stats.fieldDays} field days</span>
+                              </div>
+                              <span className="text-sm text-gray-600">Total: {stats.inspected.toLocaleString()}</span>
                             </div>
-                            <div>
-                              <div className="text-lg font-bold text-blue-600">{stats.dailyAverage}</div>
-                              <div className="text-xs text-gray-600">Daily Avg</div>
+                            
+                            {/* Metrics Row */}
+                            <div className="grid grid-cols-4 gap-4 text-center text-sm">
+                              <div>
+                                <div className="font-bold text-green-600">{stats.residentialInspected.toLocaleString()}</div>
+                                <div className="text-xs text-gray-500">Residential Inspected</div>
+                              </div>
+                              <div>
+                                <div className="font-bold text-blue-600">{stats.dailyAverage}</div>
+                                <div className="text-xs text-gray-500">Daily Avg</div>
+                              </div>
+                              <div>
+                                <div className="font-bold text-green-600">{stats.entryRate || 0}%</div>
+                                <div className="text-xs text-gray-500">Entry Rate</div>
+                              </div>
+                              <div>
+                                <div className="font-bold text-red-600">{stats.refusalRate || 0}%</div>
+                                <div className="text-xs text-gray-500">Refusal Rate</div>
+                              </div>
                             </div>
-                            <div>
-                              <div className="text-lg font-bold text-green-600">{stats.entryRate || 0}%</div>
-                              <div className="text-xs text-gray-600">Entry Rate</div>
-                            </div>
-                            <div>
-                              <div className="text-lg font-bold text-red-600">{stats.refusalRate || 0}%</div>
-                              <div className="text-xs text-gray-600">Refusal Rate</div>
-                            </div>
-                          </div>
+                          </>
                         )}
 
+                        {/* COMMERCIAL INSPECTOR LAYOUT */}
                         {stats.inspector_type === 'commercial' && (
-                          <div className="grid grid-cols-6 gap-3 text-center">
-                            <div>
-                              <div className="text-lg font-bold text-blue-600">{stats.commercialInspected.toLocaleString()}</div>
-                              <div className="text-xs text-gray-600">Commercial Inspected</div>
+                          <>
+                            {/* Header Row */}
+                            <div className="flex items-center justify-between mb-1">
+                              <div className="flex items-center space-x-2">
+                                <span className="font-semibold text-sm text-gray-900">{stats.name} ({inspector})</span>
+                                <span className="px-2 py-0.5 text-xs font-medium rounded bg-blue-100 text-blue-800">
+                                  Commercial
+                                </span>
+                                <span className="text-xs text-gray-500">{stats.commercialFieldDays} field days</span>
+                              </div>
+                              <span className="text-sm text-gray-600">Total: {stats.inspected.toLocaleString()}</span>
                             </div>
-                            <div>
-                              <div className="text-lg font-bold text-blue-600">{stats.commercialFieldDays}</div>
-                              <div className="text-xs text-gray-600">Field Days</div>
+                            
+                            {/* Metrics Row */}
+                            <div className="grid grid-cols-6 gap-2 text-center text-sm">
+                              <div>
+                                <div className="font-bold text-blue-600">{stats.commercialInspected.toLocaleString()}</div>
+                                <div className="text-xs text-gray-500">Commercial Inspected</div>
+                              </div>
+                              <div>
+                                <div className="font-bold text-blue-600">{stats.commercialAverage || 0}</div>
+                                <div className="text-xs text-gray-500">Commercial Avg</div>
+                              </div>
+                              <div>
+                                <div className="font-bold text-purple-600">{stats.priced.toLocaleString()}</div>
+                                <div className="text-xs text-gray-500">Commercial Priced</div>
+                              </div>
+                              <div>
+                                {jobData.vendor_type === 'BRT' ? (
+                                  <>
+                                    <div className="font-bold text-purple-600">{stats.pricingDays || 0}</div>
+                                    <div className="text-xs text-gray-500">Priced Days</div>
+                                  </>
+                                ) : (
+                                  <>
+                                    <div className="font-bold text-gray-400">N/A</div>
+                                    <div className="text-xs text-gray-500">Priced Days</div>
+                                  </>
+                                )}
+                              </div>
+                              <div>
+                                {jobData.vendor_type === 'BRT' ? (
+                                  <>
+                                    <div className="font-bold text-purple-600">{stats.pricingAverage || 0}</div>
+                                    <div className="text-xs text-gray-500">Pricing Avg</div>
+                                  </>
+                                ) : (
+                                  <>
+                                    <div className="font-bold text-gray-400">N/A</div>
+                                    <div className="text-xs text-gray-500">Pricing Avg</div>
+                                  </>
+                                )}
+                              </div>
+                              <div>
+                                <div className="font-bold text-gray-600">75</div>
+                                <div className="text-xs text-gray-500">Commercial Rate</div>
+                              </div>
                             </div>
-                            <div>
-                              <div className="text-lg font-bold text-blue-600">{stats.commercialAverage || 0}</div>
-                              <div className="text-xs text-gray-600">Commercial Avg</div>
-                            </div>
-                            <div>
-                              <div className="text-lg font-bold text-purple-600">{stats.priced.toLocaleString()}</div>
-                              <div className="text-xs text-gray-600">Commercial Priced</div>
-                            </div>
-                            <div>
-                              {jobData.vendor_type === 'BRT' ? (
-                                <>
-                                  <div className="text-lg font-bold text-purple-600">{stats.pricingDays || 0}</div>
-                                  <div className="text-xs text-gray-600">Priced Days</div>
-                                </>
-                              ) : (
-                                <>
-                                  <div className="text-lg font-bold text-gray-400">N/A</div>
-                                  <div className="text-xs text-gray-600">Priced Days</div>
-                                </>
-                              )}
-                            </div>
-                            <div>
-                              {jobData.vendor_type === 'BRT' ? (
-                                <>
-                                  <div className="text-lg font-bold text-purple-600">{stats.pricingAverage || 0}</div>
-                                  <div className="text-xs text-gray-600">Pricing Avg</div>
-                                </>
-                              ) : (
-                                <>
-                                  <div className="text-lg font-bold text-gray-400">N/A</div>
-                                  <div className="text-xs text-gray-600">Pricing Avg</div>
-                                </>
-                              )}
-                            </div>
-                          </div>
+                          </>
                         )}
 
-                        {/* Unknown Type Fallback */}
+                        {/* NO TYPE - MINIMAL LAYOUT */}
                         {!stats.inspector_type && (
-                          <div className="grid grid-cols-4 gap-4 text-center">
-                            <div>
-                              <div className="text-base font-semibold text-gray-600">{stats.inspected.toLocaleString()}</div>
-                              <div className="text-xs text-gray-500">Inspected</div>
+                          <>
+                            {/* Header Row */}
+                            <div className="flex items-center justify-between mb-1">
+                              <div className="flex items-center space-x-2">
+                                <span className="font-semibold text-sm text-gray-900">{stats.name} ({inspector})</span>
+                                <span className="text-xs text-gray-500">{stats.fieldDays} field days</span>
+                              </div>
+                              <span className="text-sm text-gray-600">Total: {stats.inspected.toLocaleString()}</span>
                             </div>
-                            <div>
-                              <div className="text-base font-semibold text-gray-600">{stats.fieldDays}</div>
-                              <div className="text-xs text-gray-500">Field Days</div>
+                            
+                            {/* Basic Metrics Row */}
+                            <div className="grid grid-cols-3 gap-4 text-center text-sm">
+                              <div>
+                                <div className="font-bold text-gray-600">{stats.dailyAverage || 0}</div>
+                                <div className="text-xs text-gray-500">Daily Avg</div>
+                              </div>
+                              <div>
+                                <div className="font-bold text-gray-600">{stats.entryRate || 0}%</div>
+                                <div className="text-xs text-gray-500">Entry Rate</div>
+                              </div>
+                              <div>
+                                <div className="font-bold text-gray-600">{stats.refusalRate || 0}%</div>
+                                <div className="text-xs text-gray-500">Refusal Rate</div>
+                              </div>
                             </div>
-                            <div>
-                              <div className="text-base font-semibold text-gray-600">{stats.entryRate || 0}%</div>
-                              <div className="text-xs text-gray-500">Entry Rate</div>
-                            </div>
-                            <div>
-                              <div className="text-base font-semibold text-gray-600">{stats.refusalRate || 0}%</div>
-                              <div className="text-xs text-gray-500">Refusal Rate</div>
-                            </div>
-                          </div>
+                          </>
                         )}
                       </div>
                     ))}
