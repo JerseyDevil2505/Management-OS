@@ -1067,7 +1067,9 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
               </div>
             </div>
           </div>
-        // ADDED: Second row for commercial metrics
+        )}
+
+        {/* ADDED: Second row for commercial metrics */}
         {analytics && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
             <div className="bg-white p-4 rounded-lg border shadow-sm">
