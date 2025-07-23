@@ -53,8 +53,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
     try {
       const { data: employees, error } = await supabase
         .from('employees')
-        .select('id, first_name, last_name, inspector_type, employment_status, initials')
-        .eq('employment_status', 'full_time');
+        .select('id, first_name, last_name, inspector_type, initials');
 
       if (error) throw error;
 
@@ -386,7 +385,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
         ...infoByCategoryConfig.priced
       ];
 
-      // FIXED: Get ALL records with proper limit and correct field names
+      // FIXED: Get ALL records with explicit high limit to override Supabase default
       const { data: rawData, error } = await supabase
         .from('property_records')
         .select(`
@@ -409,7 +408,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
         .eq('file_version', latestFileVersion)
         .order('property_block', { ascending: true })
         .order('property_lot', { ascending: true })
-        .limit(50000); // FIXED: Much higher limit to get all records
+        .range(0, 100000); // FIXED: Use range instead of limit to get all records
 
       if (error) throw error;
 
@@ -466,7 +465,11 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
         let isValidInspection = true;
         let hasValidMeasuredBy = inspector && inspector !== 'UNASSIGNED' && inspector.trim() !== '';
         let hasValidMeasuredDate = measuredDate && measuredDate >= startDate;
-        let hasValidInfoBy = infoByCode && allValidCodes.includes(infoByCode.toString());
+        
+        // FIXED: Normalize InfoBy codes for comparison (handle "1" vs "01" mismatch)
+        const normalizedInfoBy = infoByCode?.toString().padStart(2, '0'); // 1 → "01", 6 → "06"
+        const normalizedValidCodes = allValidCodes.map(code => code.toString().padStart(2, '0'));
+        let hasValidInfoBy = normalizedInfoBy && normalizedValidCodes.includes(normalizedInfoBy);
         
         const addValidationIssue = (message, severity = 'medium') => {
           const issue = {
@@ -497,11 +500,11 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
           addValidationIssue('Missing or invalid measure_date', 'high');
         }
 
-        // InfoBy LOGIC VALIDATION
-        const isEntryCode = infoByCategoryConfig.entry.includes(infoByCode?.toString());
-        const isRefusalCode = infoByCategoryConfig.refusal.includes(infoByCode?.toString());
-        const isEstimationCode = infoByCategoryConfig.estimation.includes(infoByCode?.toString());
-        const isPricedCode = infoByCategoryConfig.priced.includes(infoByCode?.toString());
+        // InfoBy LOGIC VALIDATION - FIXED: Use normalized codes
+        const isEntryCode = infoByCategoryConfig.entry.includes(normalizedInfoBy);
+        const isRefusalCode = infoByCategoryConfig.refusal.includes(normalizedInfoBy);
+        const isEstimationCode = infoByCategoryConfig.estimation.includes(normalizedInfoBy);
+        const isPricedCode = infoByCategoryConfig.priced.includes(normalizedInfoBy);
         const hasListingData = record.inspection_list_by && record.inspection_list_date;
 
         if (isRefusalCode && !hasListingData) {
