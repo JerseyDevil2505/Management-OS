@@ -385,29 +385,51 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
         ...infoByCategoryConfig.priced
       ];
 
-      // NUCLEAR OPTION: Remove ALL limits and ordering to force Supabase to return everything
-      const { data: rawData, error } = await supabase
-        .from('property_records')
-        .select(`
-          property_composite_key,
-          property_block,
-          property_lot,
-          property_qualifier,
-          property_location,
-          property_m4_class,
-          inspection_info_by,
-          inspection_list_by,
-          inspection_list_date,
-          inspection_measure_by,
-          inspection_measure_date,
-          inspection_price_by,
-          inspection_price_date,
-          values_mod_improvement
-        `)
-        .eq('job_id', jobData.id)
-        .eq('file_version', latestFileVersion);
-
-      if (error) throw error;
+      // FIXED: Load ALL records using pagination to bypass Supabase 1000 limit
+      let allRecords = [];
+      let start = 0;
+      const batchSize = 1000;
+      
+      debugLog('ANALYTICS', 'Loading all property records using pagination...');
+      
+      while (true) {
+        const { data: batchData, error: batchError } = await supabase
+          .from('property_records')
+          .select(`
+            property_composite_key,
+            property_block,
+            property_lot,
+            property_qualifier,
+            property_location,
+            property_m4_class,
+            inspection_info_by,
+            inspection_list_by,
+            inspection_list_date,
+            inspection_measure_by,
+            inspection_measure_date,
+            inspection_price_by,
+            inspection_price_date,
+            values_mod_improvement
+          `)
+          .eq('job_id', jobData.id)
+          .eq('file_version', latestFileVersion)
+          .order('property_block', { ascending: true })
+          .order('property_lot', { ascending: true })
+          .range(start, start + batchSize - 1);
+        
+        if (batchError) throw batchError;
+        if (!batchData || batchData.length === 0) break;
+        
+        allRecords = [...allRecords, ...batchData];
+        debugLog('ANALYTICS', `Loaded batch ${Math.floor(start/batchSize) + 1}: ${batchData.length} records (total: ${allRecords.length})`);
+        
+        start += batchSize;
+        
+        // Break if we got less than full batch (end of data)
+        if (batchData.length < batchSize) break;
+      }
+      
+      const rawData = allRecords;
 
       debugLog('ANALYTICS', `✅ Loaded ${rawData?.length || 0} property records for analysis`);
 
@@ -738,7 +760,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
         .not('inspection_measure_by', 'is', null)
         .not('inspection_measure_date', 'is', null)
         .gte('inspection_measure_date', projectStartDate)
-        .limit(50000);
+        .limit(100000); // FIXED: High limit for any job size
 
       if (selectError) throw selectError;
 
