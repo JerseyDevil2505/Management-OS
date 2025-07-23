@@ -1,131 +1,397 @@
-{/* NEW: Separate Residential and Commercial Inspector Analytics */}}
-            {activeTab === 'analytics' && (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-bold text-gray-900">Inspector Performance Analytics</h3>
-                  
-                  <div className="flex items-center space-x-4">
-                    <div className="flex items-center space-x-2">
-                      <label className="text-sm font-medium text-gray-700">Sort:</label>
-                      <select 
-                        value={inspectorSort}
-                        onChange={(e) => setInspectorSort(e.target.value)}
-                        className="px-3 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="alphabetical">Alphabetical</option>
-                        <option value="dailyAverage">Daily Average</option>
-                        <option value="entryRate">Entry Rate</option>
-                        <option value="totalInspected">Total Inspected</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-                
-                {Object.keys(analytics.inspectorStats).length === 0 ? (
-                  <div className="text-center py-8 text-gray-500">
-                    <Users className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-                    <p>No inspector data available yet</p>
-                  </div>
-                ) : (
-                  <div className="space-y-6">
-                    {/* RESIDENTIAL INSPECTOR ANALYTICS */}
-                    <div className="bg-green-50 rounded-lg border border-green-200 p-6">
-                      <h4 className="text-lg font-semibold text-green-800 mb-4 flex items-center">
-                        <Users className="w-5 h-5 mr-2" />
-                        Residential Inspector Analytics
-                      </h4>
-                      
-                      {Object.entries(analytics.inspectorStats)
-                        .filter(([_, stats]) => stats.inspector_type === 'residential')
-                        .sort(([aKey, aStats], [bKey, bStats]) => {
-                          switch (inspectorSort) {
-                            case 'alphabetical':
-                              return aStats.name.localeCompare(bStats.name);
-                            case 'dailyAverage':
-                              return (bStats.dailyAverage || 0) - (aStats.dailyAverage || 0);
-                            case 'entryRate':
-                              return (bStats.entryRate || 0) - (aStats.entryRate || 0);
-                            case 'totalInspected':
-                              return bStats.totalInspected - aStats.totalInspected;
-                            default:
-                              return 0;
-                          }
-                        })
-                        .map(([inspector, stats]) => (
-                          <div key={inspector} className="bg-white border border-green-200 rounded-lg p-4 mb-3">
-                            {/* Header Row */}
-                            <div className="flex items-center justify-between mb-3">
-                              <div className="flex items-center space-x-3">
-                                <span className="font-semibold text-gray-900">{stats.name} ({inspector})</span>
-                                <span className="px-2 py-1 text-xs font-medium rounded bg-green-100 text-green-800">
-                                  Residential Inspector
-                                </span>
-                                <span className="text-sm text-gray-600">{stats.residentialFieldDays} residential field days</span>
-                              </div>
-                              <span className="text-lg font-bold text-green-600">{stats.totalInspected.toLocaleString()} Total</span>
-                            </div>
-                            
-                            {/* Metrics Grid */}
-                            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
-                              <div className="bg-green-50 p-3 rounded">
-                                <div className="font-bold text-green-700 text-xl">{stats.residentialInspected.toLocaleString()}</div>
-                                <div className="text-xs text-green-600 font-medium">Residential Inspected</div>
-                                <div className="text-xs text-gray-500">(Classes 2, 3A)</div>
-                              </div>
-                              <div className="bg-blue-50 p-3 rounded">
-                                <div className="font-bold text-blue-700 text-xl">{stats.dailyAverage || 0}</div>
-                                <div className="text-xs text-blue-600 font-medium">Daily Average</div>
-                                <div className="text-xs text-gray-500">Residential ÷ Field Days</div>
-                              </div>
-                              <div className="bg-green-50 p-3 rounded">
-                                <div className="font-bold text-green-700 text-xl">{stats.entryRate || 0}%</div>
-                                <div className="text-xs text-green-600 font-medium">Entry Rate</div>
-                                <div className="text-xs text-gray-500">On residential properties</div>
-                              </div>
-                              <div className="bg-red-50 p-3 rounded">
-                                <div className="font-bold text-red-700 text-xl">{stats.refusalRate || 0}%</div>
-                                <div className="text-xs text-red-600 font-medium">Refusal Rate</div>
-                                <div className="text-xs text-gray-500">On residential properties</div>
-                              </div>
-                              <div className="bg-gray-50 p-3 rounded">
-                                <div className="font-bold text-gray-700 text-xl">{(stats.totalInspected - stats.residentialInspected).toLocaleString()}</div>
-                                <div className="text-xs text-gray-600 font-medium">Other Properties</div>
-                                <div className="text-xs text-gray-500">Vacant, exempt, etc.</div>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      
-                      {Object.entries(analytics.inspectorStats).filter(([_, stats]) => stats.inspector_type === 'residential').length === 0 && (
-                        <div className="text-center py-4 text-green-600">
-                          <p>No residential inspectors found</p>
-                        </div>
-                      )}
-                    </div>
+import React, { useState, useEffect } from 'react';
+import { Factory, Settings, Download, RefreshCw, AlertTriangle, CheckCircle, TrendingUp, DollarSign, Users, Calendar, X, ChevronDown, ChevronUp, Eye, FileText, Lock, Unlock, Save } from 'lucide-react';
+import { supabase, jobService } from '../../lib/supabaseClient';
 
-                    {/* COMMERCIAL INSPECTOR ANALYTICS */}
-                    <div className="bg-blue-50 rounded-lg border border-blue-200 p-6">
-                      <h4 className="text-lg font-semibold text-blue-800 mb-4 flex items-center">
-                        <Factory className="w-5 h-5 mr-2" />
-                        Commercial Inspector Analytics
-                      </h4>
-                      
-                      {Object.entries(analytics.inspectorStats)
-                        .filter(([_, stats]) => stats.inspector_type === 'commercial')
-                        .sort(([aKey, aStats], [bKey, bStats]) => {
-                          switch (inspectorSort) {
-                            case 'alphabetical':
-                              return aStats.name.localeCompare(bStats.name);
-                            case 'dailyAverage':
-                              return (bStats.commercialAverage || 0) - (aStats.commercialAverage || 0);
-                            case 'totalInspected':
-                              return bStats.totalInspected - aStats.totalInspected;
-                            default:
-                              return 0;
-                          }
-                        })
-                        .map(([inspector, stats]) => (
-                          <div key={inspector} className  // ENHANCED: Process analytics with manager-focused counting and inspection_data persistence
+const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, propertyRecordsCount }) => {
+  const [loading, setLoading] = useState(true);
+  const [processing, setProcessing] = useState(false);
+  const [processed, setProcessed] = useState(false);
+  const [employeeData, setEmployeeData] = useState({});
+  const [analytics, setAnalytics] = useState(null);
+  const [billingAnalytics, setBillingAnalytics] = useState(null);
+  const [validationReport, setValidationReport] = useState(null);
+  const [sessionHistory, setSessionHistory] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  
+  // Settings state - Enhanced InfoBy category configuration
+  const [availableInfoByCodes, setAvailableInfoByCodes] = useState([]);
+  const [infoByCategoryConfig, setInfoByCategoryConfig] = useState({
+    entry: [],
+    refusal: [],
+    estimation: [],
+    invalid: [],
+    priced: []
+  });
+  const [originalCategoryConfig, setOriginalCategoryConfig] = useState({});
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [projectStartDate, setProjectStartDate] = useState('');
+  const [isDateLocked, setIsDateLocked] = useState(false);
+  const [sessionId, setSessionId] = useState(null);
+  const [settingsLocked, setSettingsLocked] = useState(false);
+
+  // UI state
+  const [activeTab, setActiveTab] = useState('analytics');
+  const [selectedInspectorIssues, setSelectedInspectorIssues] = useState(null);
+  
+  // NEW: Add collapsible InfoBy configuration state
+  const [showInfoByConfig, setShowInfoByConfig] = useState(true);
+  
+  // Inspector filtering and sorting
+  const [inspectorFilter, setInspectorFilter] = useState('all');
+  const [inspectorSort, setInspectorSort] = useState('alphabetical');
+
+  const addNotification = (message, type = 'info') => {
+    const id = Date.now();
+    const notification = { id, message, type, timestamp: new Date() };
+    setNotifications(prev => [...prev, notification]);
+    
+    setTimeout(() => {
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    }, 5000);
+  };
+
+  // Debug logging
+  const debugLog = (section, message, data = null) => {
+    console.log(`🔍 [${section}] ${message}`, data || '');
+  };
+
+  // Load employee data for inspector details
+  const loadEmployeeData = async () => {
+    try {
+      const { data: employees, error } = await supabase
+        .from('employees')
+        .select('id, first_name, last_name, inspector_type, employment_status, initials');
+
+      if (error) throw error;
+
+      const employeeMap = {};
+      employees.forEach(emp => {
+        const initials = emp.initials || `${emp.first_name.charAt(0)}${emp.last_name.charAt(0)}`;
+        employeeMap[initials] = {
+          id: emp.id,
+          name: `${emp.first_name} ${emp.last_name}`,
+          fullName: `${emp.last_name}, ${emp.first_name}`,
+          inspector_type: emp.inspector_type,
+          initials: initials
+        };
+      });
+
+      setEmployeeData(employeeMap);
+      debugLog('EMPLOYEES', 'Loaded employee data', { count: Object.keys(employeeMap).length });
+    } catch (error) {
+      console.error('Error loading employee data:', error);
+      addNotification('Error loading employee data', 'error');
+    }
+  };
+
+  // Load available InfoBy codes from correct BRT location
+  const loadAvailableInfoByCodes = async () => {
+    if (!jobData?.id) return;
+
+    try {
+      const { data: job, error } = await supabase
+        .from('jobs')
+        .select('parsed_code_definitions, vendor_type')
+        .eq('id', jobData.id)
+        .single();
+
+      if (error || !job?.parsed_code_definitions) {
+        debugLog('CODES', 'No parsed code definitions found for job');
+        addNotification('No code definitions found. Upload code file first.', 'warning');
+        return;
+      }
+
+      const codes = [];
+      const vendor = job.vendor_type;
+
+      if (vendor === 'BRT') {
+        const sections = job.parsed_code_definitions.sections || job.parsed_code_definitions;
+        
+        debugLog('CODES', 'BRT sections available:', Object.keys(sections));
+        
+        // Look for InfoBy codes in Residential section, key 30, MAP
+        const residentialSection = sections['Residential'];
+        if (residentialSection && residentialSection['30'] && residentialSection['30'].MAP) {
+          debugLog('CODES', 'Found Residential[30].MAP, checking for InfoBy codes...');
+          
+          Object.keys(residentialSection['30'].MAP).forEach(key => {
+            const item = residentialSection['30'].MAP[key];
+            if (item && item.DATA && item.DATA.VALUE) {
+              const description = item.DATA.VALUE.toUpperCase();
+              if (description.includes('OWNER') || description.includes('SPOUSE') || 
+                  description.includes('TENANT') || description.includes('AGENT') ||
+                  description.includes('REFUSED') || description.includes('ESTIMATED') ||
+                  description.includes('DOOR') || description.includes('CONVERSION') ||
+                  description.includes('PRICED')) {
+                
+                codes.push({
+                  code: item.KEY || item.DATA.KEY,
+                  description: item.DATA.VALUE,
+                  section: 'Residential[30]',
+                  vendor: 'BRT'
+                });
+                
+                debugLog('CODES', `Found InfoBy code: ${item.KEY} = ${item.DATA.VALUE}`);
+              }
+            }
+          });
+        } else {
+          debugLog('CODES', 'Residential[30].MAP not found, structure:', residentialSection?.['30']);
+        }
+
+        // Fallback: Search all sections for inspection-related codes
+        if (codes.length === 0) {
+          debugLog('CODES', 'No codes found in Residential[30], searching all sections...');
+          Object.keys(sections).forEach(sectionName => {
+            const section = sections[sectionName];
+            if (typeof section === 'object') {
+              Object.keys(section).forEach(key => {
+                const item = section[key];
+                if (item && item.DATA && item.DATA.VALUE && 
+                    (item.DATA.VALUE.includes('OWNER') || item.DATA.VALUE.includes('REFUSED') || 
+                     item.DATA.VALUE.includes('AGENT') || item.DATA.VALUE.includes('ESTIMATED'))) {
+                  codes.push({
+                    code: item.KEY || item.DATA.KEY,
+                    description: item.DATA.VALUE,
+                    section: sectionName,
+                    vendor: 'BRT'
+                  });
+                }
+              });
+            }
+          });
+        }
+
+      } else if (vendor === 'Microsystems') {
+        Object.keys(job.parsed_code_definitions).forEach(code => {
+          if (code.startsWith('140')) {
+            const description = job.parsed_code_definitions[code];
+            codes.push({
+              code: code,
+              description: description,
+              section: 'InfoBy',
+              vendor: 'Microsystems',
+              storageCode: code.substring(3) // Strip 140 prefix for storage (140A -> A)
+            });
+          }
+        });
+      }
+
+      setAvailableInfoByCodes(codes);
+      debugLog('CODES', `✅ Loaded ${codes.length} InfoBy codes from ${vendor} definitions`);
+
+      // Load existing category configuration
+      await loadCategoriesFromDatabase(codes, vendor);
+
+    } catch (error) {
+      console.error('Error loading InfoBy codes:', error);
+      addNotification('Error loading InfoBy codes from code file', 'error');
+    }
+  };
+
+  // Load existing category configuration from database
+  const loadCategoriesFromDatabase = async (codes, vendor) => {
+    if (!jobData?.id) return;
+
+    try {
+      const { data: job, error } = await supabase
+        .from('jobs')
+        .select('infoby_category_config, workflow_stats')
+        .eq('id', jobData.id)
+        .single();
+
+      if (!error && job?.infoby_category_config && Object.keys(job.infoby_category_config).length > 0) {
+        setInfoByCategoryConfig(job.infoby_category_config);
+        setOriginalCategoryConfig(job.infoby_category_config);
+        debugLog('CATEGORIES', '✅ Loaded existing category config from infoby_category_config field');
+      } else if (!error && job?.workflow_stats?.infoByCategoryConfig) {
+        const oldConfig = job.workflow_stats.infoByCategoryConfig;
+        setInfoByCategoryConfig(oldConfig);
+        setOriginalCategoryConfig(oldConfig);
+        debugLog('CATEGORIES', '✅ Migrated category config from workflow_stats');
+        await saveCategoriesToDatabase(oldConfig);
+      } else if (codes && codes.length > 0) {
+        setDefaultCategoryConfig(vendor, codes);
+      }
+    } catch (error) {
+      console.error('Error loading category config:', error);
+    }
+  };
+
+  // Set default InfoBy category configurations
+  const setDefaultCategoryConfig = (vendor, codes) => {
+    const defaultConfig = { entry: [], refusal: [], estimation: [], invalid: [], priced: [] };
+
+    if (vendor === 'BRT') {
+      codes.forEach(item => {
+        const desc = item.description.toUpperCase();
+        if (desc.includes('OWNER') || desc.includes('SPOUSE') || desc.includes('TENANT') || desc.includes('AGENT')) {
+          defaultConfig.entry.push(item.code);
+        } else if (desc.includes('REFUSED')) {
+          defaultConfig.refusal.push(item.code);
+        } else if (desc.includes('ESTIMATED')) {
+          defaultConfig.estimation.push(item.code);
+        } else if (desc.includes('DOOR')) {
+          defaultConfig.invalid.push(item.code);
+        } else if (desc.includes('CONVERSION') || desc.includes('PRICED')) {
+          defaultConfig.priced.push(item.code);
+        }
+      });
+    } else if (vendor === 'Microsystems') {
+      codes.forEach(item => {
+        const storageCode = item.storageCode;
+        const desc = item.description.toUpperCase();
+        if (desc.includes('AGENT') || desc.includes('OWNER') || desc.includes('SPOUSE') || desc.includes('TENANT')) {
+          defaultConfig.entry.push(storageCode);
+        } else if (desc.includes('REFUSED')) {
+          defaultConfig.refusal.push(storageCode);
+        } else if (desc.includes('ESTIMATED') || desc.includes('VACANT')) {
+          defaultConfig.estimation.push(storageCode);
+        } else if (desc.includes('PRICED') || desc.includes('NARRATIVE') || desc.includes('ENCODED')) {
+          defaultConfig.priced.push(storageCode);
+        }
+      });
+    }
+
+    setInfoByCategoryConfig(defaultConfig);
+    setOriginalCategoryConfig(defaultConfig);
+    setHasUnsavedChanges(true);
+    debugLog('CATEGORIES', '✅ Set default category configuration', defaultConfig);
+  };
+
+  // Save category configuration to database and persist analytics
+  const saveCategoriesToDatabase = async (config = null) => {
+    if (!jobData?.id) return;
+
+    const configToSave = config || infoByCategoryConfig;
+
+    try {
+      const { error } = await supabase
+        .from('jobs')
+        .update({ 
+          infoby_category_config: {
+            ...configToSave,
+            vendor_type: jobData.vendor_type,
+            last_updated: new Date().toISOString()
+          },
+          // ENHANCED: Persist analytics data for navigation survival
+          workflow_stats: analytics ? {
+            ...analytics,
+            billingAnalytics,
+            validationReport,
+            lastProcessed: new Date().toISOString()
+          } : undefined
+        })
+        .eq('id', jobData.id);
+
+      if (error) throw error;
+      
+      setOriginalCategoryConfig(configToSave);
+      setHasUnsavedChanges(false);
+      addNotification('✅ Configuration and analytics saved', 'success');
+      debugLog('PERSISTENCE', '✅ Saved config and analytics to job record');
+    } catch (error) {
+      console.error('Error saving configuration:', error);
+      addNotification('Error saving configuration', 'error');
+    }
+  };
+
+  // Load persisted analytics on component mount
+  const loadPersistedAnalytics = async () => {
+    if (!jobData?.id) return;
+
+    try {
+      const { data: job, error } = await supabase
+        .from('jobs')
+        .select('workflow_stats')
+        .eq('id', jobData.id)
+        .single();
+
+      if (!error && job?.workflow_stats && job.workflow_stats.totalRecords) {
+        setAnalytics(job.workflow_stats);
+        setBillingAnalytics(job.workflow_stats.billingAnalytics);
+        setValidationReport(job.workflow_stats.validationReport);
+        setProcessed(true);
+        setSettingsLocked(true);
+        debugLog('PERSISTENCE', '✅ Loaded persisted analytics from job record');
+        addNotification('Previously processed analytics loaded', 'info');
+      }
+    } catch (error) {
+      console.error('Error loading persisted analytics:', error);
+    }
+  };
+
+  const loadProjectStartDate = async () => {
+    if (!jobData?.id || !latestFileVersion) return;
+
+    try {
+      const { data: records, error } = await supabase
+        .from('property_records')
+        .select('project_start_date')
+        .eq('job_id', jobData.id)
+        .eq('file_version', latestFileVersion)
+        .not('project_start_date', 'is', null)
+        .limit(1)
+        .single();
+
+      if (!error && records?.project_start_date) {
+        setProjectStartDate(records.project_start_date);
+        setIsDateLocked(true);
+        debugLog('START_DATE', `Loaded existing start date: ${records.project_start_date}`);
+      }
+    } catch (error) {
+      debugLog('START_DATE', 'No existing start date found');
+    }
+  };
+
+  const lockStartDate = async () => {
+    if (!projectStartDate || !jobData?.id || !latestFileVersion) {
+      addNotification('Please set a project start date first', 'error');
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('property_records')
+        .update({ project_start_date: projectStartDate })
+        .eq('job_id', jobData.id)
+        .eq('file_version', latestFileVersion);
+
+      if (error) throw error;
+
+      setIsDateLocked(true);
+      addNotification('✅ Project start date locked and saved to all property records', 'success');
+      debugLog('START_DATE', `Locked start date: ${projectStartDate}`);
+
+    } catch (error) {
+      console.error('Error locking start date:', error);
+      addNotification('Error saving start date: ' + error.message, 'error');
+    }
+  };
+
+  const unlockStartDate = () => {
+    setIsDateLocked(false);
+    addNotification('Project start date unlocked for editing', 'info');
+  };
+
+  // Initialize data loading
+  useEffect(() => {
+    if (jobData?.id && latestFileVersion) {
+      loadEmployeeData();
+      loadAvailableInfoByCodes();
+      loadProjectStartDate();
+      loadPersistedAnalytics(); // ENHANCED: Load persisted analytics
+      setLoading(false);
+    }
+  }, [jobData?.id, latestFileVersion]);
+
+  // Track unsaved changes
+  useEffect(() => {
+    const hasChanges = JSON.stringify(infoByCategoryConfig) !== JSON.stringify(originalCategoryConfig);
+    setHasUnsavedChanges(hasChanges);
+  }, [infoByCategoryConfig, originalCategoryConfig]);
+
+  // ENHANCED: Process analytics with manager-focused counting and inspection_data persistence
   const processAnalytics = async () => {
     if (!projectStartDate || !jobData?.id || !latestFileVersion) {
       addNotification('Project start date and job data required', 'error');
@@ -959,7 +1225,7 @@
           </div>
         </div>
 
-        {/* NEW: Collapsible InfoBy Category Configuration Panel */}}
+        {/* NEW: Collapsible InfoBy Category Configuration Panel */}
         {availableInfoByCodes.length > 0 && (
           <div className="mt-6 pt-6 border-t border-gray-200">
             <div className="flex items-center justify-between mb-4">
