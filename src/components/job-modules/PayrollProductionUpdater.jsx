@@ -1547,7 +1547,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
                             </div>
                             
                             {/* Metrics Grid */}
-                            <div className="grid grid-cols-2 md:grid-cols-7 gap-3 text-center">
+                            <div className="grid grid-cols-2 md:grid-cols-6 gap-3 text-center">
                               <div className="bg-blue-50 p-3 rounded">
                                 <div className="font-bold text-blue-700 text-lg">{stats.commercialInspected.toLocaleString()}</div>
                                 <div className="text-xs text-blue-600 font-medium">Commercial</div>
@@ -1572,11 +1572,6 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
                                 <div className="font-bold text-purple-700 text-lg">{stats.pricingAverage || 'N/A'}</div>
                                 <div className="text-xs text-purple-600 font-medium">Pricing Avg</div>
                                 <div className="text-xs text-gray-500">{jobData.vendor_type === 'BRT' ? 'Priced ÷ Days' : 'N/A'}</div>
-                              </div>
-                              <div className="bg-gray-50 p-3 rounded">
-                                <div className="font-bold text-gray-700 text-lg">75</div>
-                                <div className="text-xs text-gray-600 font-medium">Commercial Rate</div>
-                                <div className="text-xs text-gray-500">Standard rate</div>
                               </div>
                               <div className="bg-gray-50 p-3 rounded">
                                 <div className="font-bold text-gray-700 text-lg">{(stats.totalInspected - stats.commercialInspected).toLocaleString()}</div>
