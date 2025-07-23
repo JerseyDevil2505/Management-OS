@@ -385,7 +385,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
         ...infoByCategoryConfig.priced
       ];
 
-      // FIXED: Get ALL records with explicit high limit to override Supabase default
+      // NUCLEAR OPTION: Remove ALL limits and ordering to force Supabase to return everything
       const { data: rawData, error } = await supabase
         .from('property_records')
         .select(`
@@ -405,10 +405,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
           values_mod_improvement
         `)
         .eq('job_id', jobData.id)
-        .eq('file_version', latestFileVersion)
-        .order('property_block', { ascending: true })
-        .order('property_lot', { ascending: true })
-        .range(0, 100000); // FIXED: Use range instead of limit to get all records
+        .eq('file_version', latestFileVersion);
 
       if (error) throw error;
 
