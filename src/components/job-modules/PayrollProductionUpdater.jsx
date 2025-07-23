@@ -32,6 +32,10 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
   // UI state
   const [activeTab, setActiveTab] = useState('analytics');
   const [selectedInspectorIssues, setSelectedInspectorIssues] = useState(null);
+  
+  // ADDED: Inspector filtering and sorting
+  const [inspectorFilter, setInspectorFilter] = useState('all');
+  const [inspectorSort, setInspectorSort] = useState('alphabetical');
 
   const addNotification = (message, type = 'info') => {
     const id = Date.now();
@@ -53,7 +57,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
     try {
       const { data: employees, error } = await supabase
         .from('employees')
-        .select('id, first_name, last_name, inspector_type, initials');
+        .select('id, first_name, last_name, inspector_type, employment_status, initials'); // FIXED: Load ALL employees for historical data integrity
 
       if (error) throw error;
 
@@ -353,9 +357,31 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
       loadEmployeeData();
       loadAvailableInfoByCodes();
       loadProjectStartDate();
+      loadProcessingState(); // ADDED: Check if already processed
       setLoading(false);
     }
   }, [jobData?.id, latestFileVersion]);
+
+  // ADDED: Load processing state from database
+  const loadProcessingState = async () => {
+    if (!jobData?.id) return;
+
+    try {
+      // Check if inspection_data exists for this job
+      const { count, error } = await supabase
+        .from('inspection_data')
+        .select('id', { count: 'exact', head: true })
+        .eq('job_id', jobData.id);
+
+      if (!error && count > 0) {
+        setProcessed(true);
+        setSettingsLocked(true);
+        debugLog('PROCESSING_STATE', `Found ${count} existing inspection records - marking as processed`);
+      }
+    } catch (error) {
+      console.error('Error loading processing state:', error);
+    }
+  };
 
   // Track unsaved changes
   useEffect(() => {
@@ -609,18 +635,26 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
         const stats = inspectorStats[inspector];
         const daysWorked = stats.datesWorked.size;
         
-        if (stats.inspected > 0) {
-          stats.entryRate = Math.round((stats.entry / stats.inspected) * 100);
-          stats.refusalRate = Math.round((stats.refusal / stats.inspected) * 100);
-          stats.pricingRate = Math.round((stats.priced / stats.inspected) * 100);
+        if (stats.residentialInspected > 0) {
+          // FIXED: Rates based on residential inspections only (class 2, 3A)
+          stats.entryRate = Math.round((stats.entry / stats.residentialInspected) * 100);
+          stats.refusalRate = Math.round((stats.refusal / stats.residentialInspected) * 100);
+          stats.pricingRate = Math.round((stats.priced / stats.residentialInspected) * 100);
         }
         
         if (daysWorked > 0) {
-          stats.dailyAverage = Math.round(stats.inspected / daysWorked);
+          // FIXED: Daily average based on residential inspections only
+          stats.dailyAverage = Math.round(stats.residentialInspected / daysWorked);
         }
 
         stats.daysWorked = daysWorked; // Keep for display
       });
+
+      // Calculate job-level totals
+      const totalInspected = Object.values(inspectorStats).reduce((sum, stats) => sum + stats.inspected, 0);
+      const totalEntry = Object.values(inspectorStats).reduce((sum, stats) => sum + stats.entry, 0);
+      const totalRefusal = Object.values(inspectorStats).reduce((sum, stats) => sum + stats.refusal, 0);
+      const totalPriced = Object.values(inspectorStats).reduce((sum, stats) => sum + stats.priced, 0);
 
       // Create validation report
       const validationReportData = {
@@ -644,7 +678,13 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
         inspectorStats,
         classBreakdown,
         validationIssues: validationIssues.length,
-        processingDate: new Date().toISOString()
+        processingDate: new Date().toISOString(),
+        
+        // FIXED: Job-level metrics with correct commercial calculations
+        jobEntryRate: totalInspected > 0 ? Math.round((totalEntry / totalInspected) * 100) : 0,
+        jobRefusalRate: totalInspected > 0 ? Math.round((totalRefusal / totalInspected) * 100) : 0,
+        commercialInspections: ['4A', '4B', '4C'].reduce((sum, cls) => sum + (classBreakdown[cls]?.inspected || 0), 0),
+        commercialPricing: ['4A', '4B', '4C'].reduce((sum, cls) => sum + (classBreakdown[cls]?.priced || 0), 0)
       };
 
       const billingResult = {
@@ -865,7 +905,37 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
     }
   };
 
-  // Export validation report
+  // ADDED: Filter and sort inspectors
+  const getFilteredAndSortedInspectors = () => {
+    if (!analytics?.inspectorStats) return [];
+    
+    let inspectors = Object.entries(analytics.inspectorStats);
+    
+    // Apply filter
+    if (inspectorFilter === 'residential') {
+      inspectors = inspectors.filter(([_, stats]) => stats.inspector_type === 'residential');
+    } else if (inspectorFilter === 'commercial') {
+      inspectors = inspectors.filter(([_, stats]) => stats.inspector_type === 'commercial');
+    }
+    
+    // Apply sort
+    inspectors.sort(([aKey, aStats], [bKey, bStats]) => {
+      switch (inspectorSort) {
+        case 'alphabetical':
+          return aStats.name.localeCompare(bStats.name);
+        case 'dailyAverage':
+          return bStats.dailyAverage - aStats.dailyAverage;
+        case 'entryRate':
+          return (bStats.entryRate || 0) - (aStats.entryRate || 0);
+        case 'totalInspected':
+          return bStats.inspected - aStats.inspected;
+        default:
+          return 0;
+      }
+    });
+    
+    return inspectors;
+  };
   const exportValidationReport = () => {
     if (!validationReport || !validationReport.detailed_issues) return;
 
@@ -954,13 +1024,13 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
           </button>
         </div>
 
-        {/* FIXED: Enhanced Quick Stats */}
+        {/* FIXED: Updated Quick Stats - Job-level metrics */}
         {analytics && (
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="bg-white p-4 rounded-lg border shadow-sm">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-gray-600">Raw Properties</p>
+                  <p className="text-sm text-gray-600">Total Properties</p>
                   <p className="text-2xl font-bold text-blue-600">{propertyRecordsCount?.toLocaleString() || analytics.totalRecords.toLocaleString()}</p>
                 </div>
                 <TrendingUp className="w-8 h-8 text-blue-500" />
@@ -970,7 +1040,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
             <div className="bg-white p-4 rounded-lg border shadow-sm">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-gray-600">Valid Inspections</p>
+                  <p className="text-sm text-gray-600">Total Inspections</p>
                   <p className="text-2xl font-bold text-green-600">{analytics.validInspections.toLocaleString()}</p>
                 </div>
                 <CheckCircle className="w-8 h-8 text-green-500" />
@@ -980,20 +1050,43 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
             <div className="bg-white p-4 rounded-lg border shadow-sm">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-gray-600">Inspectors Active</p>
-                  <p className="text-2xl font-bold text-purple-600">{Object.keys(analytics.inspectorStats).length}</p>
+                  <p className="text-sm text-gray-600">Job Entry Rate</p>
+                  <p className="text-2xl font-bold text-green-600">{analytics.jobEntryRate || 0}%</p>
                 </div>
-                <Users className="w-8 h-8 text-purple-500" />
+                <Users className="w-8 h-8 text-green-500" />
               </div>
             </div>
 
             <div className="bg-white p-4 rounded-lg border shadow-sm">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-gray-600">Validation Issues</p>
-                  <p className="text-2xl font-bold text-red-600">{analytics.validationIssues}</p>
+                  <p className="text-sm text-gray-600">Job Refusal Rate</p>
+                  <p className="text-2xl font-bold text-red-600">{analytics.jobRefusalRate || 0}%</p>
                 </div>
                 <AlertTriangle className="w-8 h-8 text-red-500" />
+              </div>
+            </div>
+          </div>
+        // ADDED: Second row for commercial metrics
+        {analytics && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+            <div className="bg-white p-4 rounded-lg border shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Commercial Inspections Complete</p>
+                  <p className="text-2xl font-bold text-blue-600">{analytics.commercialInspections.toLocaleString()}</p>
+                </div>
+                <Factory className="w-8 h-8 text-blue-500" />
+              </div>
+            </div>
+            
+            <div className="bg-white p-4 rounded-lg border shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Commercial Pricing Complete</p>
+                  <p className="text-2xl font-bold text-purple-600">{analytics.commercialPricing.toLocaleString()}</p>
+                </div>
+                <DollarSign className="w-8 h-8 text-purple-500" />
               </div>
             </div>
           </div>
@@ -1190,10 +1283,42 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
           </div>
 
           <div className="p-6">
-            {/* FIXED: Enhanced Inspector Analytics */}
+            {/* BEAST MODE: Enhanced Inspector Analytics with Filters */}
             {activeTab === 'analytics' && (
               <div className="space-y-6">
-                <h3 className="text-lg font-bold text-gray-900">Enhanced Inspector Performance Analytics</h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-bold text-gray-900">Inspector Performance Analytics</h3>
+                  
+                  {/* Filter and Sort Controls */}
+                  <div className="flex items-center space-x-4">
+                    <div className="flex items-center space-x-2">
+                      <label className="text-sm font-medium text-gray-700">Filter:</label>
+                      <select 
+                        value={inspectorFilter}
+                        onChange={(e) => setInspectorFilter(e.target.value)}
+                        className="px-3 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="all">All Inspectors</option>
+                        <option value="residential">Residential Only</option>
+                        <option value="commercial">Commercial Only</option>
+                      </select>
+                    </div>
+                    
+                    <div className="flex items-center space-x-2">
+                      <label className="text-sm font-medium text-gray-700">Sort:</label>
+                      <select 
+                        value={inspectorSort}
+                        onChange={(e) => setInspectorSort(e.target.value)}
+                        className="px-3 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="alphabetical">Alphabetical</option>
+                        <option value="dailyAverage">Daily Average</option>
+                        <option value="entryRate">Entry Rate</option>
+                        <option value="totalInspected">Total Inspected</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
                 
                 {Object.keys(analytics.inspectorStats).length === 0 ? (
                   <div className="text-center py-8 text-gray-500">
@@ -1202,56 +1327,98 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 gap-4">
-                    {Object.entries(analytics.inspectorStats).map(([inspector, stats]) => (
-                      <div key={inspector} className="bg-gray-50 rounded-lg p-4 border">
-                        <div className="flex justify-between items-start mb-3">
+                    {getFilteredAndSortedInspectors().map(([inspector, stats]) => (
+                      <div key={inspector} className={`rounded-lg p-6 border-2 shadow-sm ${
+                        stats.inspector_type === 'residential' 
+                          ? 'bg-green-50 border-green-200' 
+                          : stats.inspector_type === 'commercial'
+                          ? 'bg-blue-50 border-blue-200'
+                          : 'bg-gray-50 border-gray-200'
+                      }`}>
+                        <div className="flex justify-between items-start mb-4">
                           <div>
-                            <h4 className="font-bold text-gray-900">
+                            <h4 className="text-xl font-bold text-gray-900">
                               {stats.name} ({inspector})
-                              <span className="ml-2 text-sm text-gray-600">
-                                {stats.inspector_type === 'commercial' ? '🏢 Commercial' : '🏠 Residential'}
-                              </span>
                             </h4>
-                          </div>
-                        </div>
-                        
-                        <div className="grid grid-cols-2 md:grid-cols-6 gap-4 text-sm">
-                          <div>
-                            <div className="text-gray-600">Total Inspected</div>
-                            <div className="font-bold text-green-600">{stats.inspected.toLocaleString()}</div>
-                          </div>
-                          <div>
-                            <div className="text-gray-600">Residential Inspected</div>
-                            <div className="font-bold text-blue-600">{stats.residentialInspected.toLocaleString()}</div>
-                          </div>
-                          <div>
-                            <div className="text-gray-600">Days Worked</div>
-                            <div className="font-bold text-purple-600">{stats.daysWorked}</div>
-                          </div>
-                          <div>
-                            <div className="text-gray-600">Daily Average</div>
-                            <div className="font-bold text-blue-600">{stats.dailyAverage}</div>
-                          </div>
-                          <div>
-                            <div className="text-gray-600">Entry Rate</div>
-                            <div className="font-bold text-green-600">{stats.entryRate || 0}%</div>
-                          </div>
-                          <div>
-                            <div className="text-gray-600">Refusal Rate</div>
-                            <div className="font-bold text-red-600">{stats.refusalRate || 0}%</div>
+                            <div className="flex items-center mt-1">
+                              <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                                stats.inspector_type === 'residential'
+                                  ? 'bg-green-100 text-green-800'
+                                  : stats.inspector_type === 'commercial'
+                                  ? 'bg-blue-100 text-blue-800'
+                                  : 'bg-gray-100 text-gray-800'
+                              }`}>
+                                {stats.inspector_type === 'residential' ? '🏠 Residential' : 
+                                 stats.inspector_type === 'commercial' ? '🏢 Commercial' : '❓ Unknown'}
+                              </span>
+                            </div>
                           </div>
                         </div>
 
-                        {stats.inspector_type === 'commercial' && (
-                          <div className="mt-3 text-sm">
-                            <div className="text-gray-600">Pricing Rate</div>
-                            <div className="font-bold text-purple-600">{stats.pricingRate || 0}%</div>
+                        {/* RESIDENTIAL INSPECTOR LAYOUT */}
+                        {stats.inspector_type === 'residential' && (
+                          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                            {/* Main Metrics - Big and Bold */}
+                            <div className="text-center">
+                              <div className="text-3xl font-bold text-green-600">{stats.dailyAverage}</div>
+                              <div className="text-sm text-gray-600 mt-1">Daily Average</div>
+                            </div>
+                            <div className="text-center">
+                              <div className="text-3xl font-bold text-green-600">{stats.entryRate || 0}%</div>
+                              <div className="text-sm text-gray-600 mt-1">Entry Rate</div>
+                            </div>
+                            <div className="text-center">
+                              <div className="text-3xl font-bold text-red-600">{stats.refusalRate || 0}%</div>
+                              <div className="text-sm text-gray-600 mt-1">Refusal Rate</div>
+                            </div>
+                            <div className="text-center">
+                              <div className="text-2xl font-bold text-gray-700">{stats.residentialInspected.toLocaleString()}</div>
+                              <div className="text-sm text-gray-600 mt-1">Total Inspected</div>
+                              <div className="text-xs text-gray-500">{stats.daysWorked} days worked</div>
+                            </div>
                           </div>
                         )}
 
-                        <div className="mt-3 text-xs text-gray-500">
-                          Classes: {stats.classes.residential} Res, {stats.classes.commercial} Com, {stats.classes.other} Other
-                        </div>
+                        {/* COMMERCIAL INSPECTOR LAYOUT */}
+                        {stats.inspector_type === 'commercial' && (
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div className="text-center">
+                              <div className="text-3xl font-bold text-blue-600">{stats.classes.commercial.toLocaleString()}</div>
+                              <div className="text-sm text-gray-600 mt-1">Commercial Inspections</div>
+                            </div>
+                            <div className="text-center">
+                              <div className="text-3xl font-bold text-purple-600">{stats.priced.toLocaleString()}</div>
+                              <div className="text-sm text-gray-600 mt-1">Pricing Complete</div>
+                            </div>
+                            <div className="text-center">
+                              <div className="text-2xl font-bold text-gray-700">{stats.inspected.toLocaleString()}</div>
+                              <div className="text-sm text-gray-600 mt-1">Total Inspected</div>
+                              <div className="text-xs text-gray-500">{stats.daysWorked} days worked</div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* UNKNOWN TYPE FALLBACK */}
+                        {stats.inspector_type !== 'residential' && stats.inspector_type !== 'commercial' && (
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                            <div className="text-center">
+                              <div className="font-bold text-gray-600">{stats.inspected.toLocaleString()}</div>
+                              <div className="text-gray-500">Total Inspected</div>
+                            </div>
+                            <div className="text-center">
+                              <div className="font-bold text-gray-600">{stats.daysWorked}</div>
+                              <div className="text-gray-500">Days Worked</div>
+                            </div>
+                            <div className="text-center">
+                              <div className="font-bold text-gray-600">{stats.dailyAverage}</div>
+                              <div className="text-gray-500">Daily Average</div>
+                            </div>
+                            <div className="text-center">
+                              <div className="font-bold text-gray-600">{stats.inspector_type || 'Unknown'}</div>
+                              <div className="text-gray-500">Inspector Type</div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -1259,14 +1426,11 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
               </div>
             )}
 
-            {/* FIXED: Summary for Billing with 4B */}
+            {/* BEAST MODE: Summary for Billing with Colors and Counts */}
             {activeTab === 'billing' && billingAnalytics && (
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
                   <h3 className="text-lg font-bold text-gray-900">Summary for Billing</h3>
-                  <div className="text-sm text-gray-600">
-                    Total Billable: <span className="font-bold text-green-600">{billingAnalytics.totalBillable.toLocaleString()}</span>
-                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -1275,53 +1439,83 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
                     <div className="space-y-3">
                       {Object.entries(billingAnalytics.byClass)
                         .filter(([cls, data]) => data.total > 0)
-                        .map(([cls, data]) => (
-                        <div key={cls} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                          <div>
-                            <span className="font-medium text-gray-900">Class {cls}</span>
-                          </div>
-                          <div className="text-right">
-                            <div className="font-bold text-blue-600">{data.billable.toLocaleString()}</div>
-                            <div className="text-xs text-gray-500">of {data.total.toLocaleString()}</div>
-                          </div>
-                        </div>
-                      ))}
+                        .map(([cls, data]) => {
+                          // Color coding based on property class
+                          const isResidential = ['2', '3A'].includes(cls);
+                          const isCommercial = ['4A', '4B', '4C'].includes(cls);
+                          const colorClass = isResidential 
+                            ? 'bg-green-50 border-green-200' 
+                            : isCommercial 
+                            ? 'bg-blue-50 border-blue-200'
+                            : 'bg-gray-50 border-gray-200';
+                          const textColor = isResidential 
+                            ? 'text-green-600' 
+                            : isCommercial 
+                            ? 'text-blue-600' 
+                            : 'text-gray-600';
+                          
+                          return (
+                            <div key={cls} className={`flex justify-between items-center p-3 rounded-lg border ${colorClass}`}>
+                              <div>
+                                <span className="font-medium text-gray-900">Class {cls}</span>
+                                {isResidential && <span className="ml-2 text-xs text-green-600 font-medium">Residential</span>}
+                                {isCommercial && <span className="ml-2 text-xs text-blue-600 font-medium">Commercial</span>}
+                              </div>
+                              <div className="text-right">
+                                <div className={`font-bold ${textColor}`}>{data.billable.toLocaleString()}</div>
+                                <div className="text-xs text-gray-500">of {data.total.toLocaleString()}</div>
+                              </div>
+                            </div>
+                          );
+                        })}
                     </div>
                   </div>
 
                   <div>
                     <h4 className="text-md font-semibold text-gray-800 mb-4">Grouped Categories</h4>
                     <div className="space-y-3">
-                      <div className="flex justify-between items-center p-3 bg-orange-50 rounded-lg border border-orange-200">
+                      <div className="flex justify-between items-center p-4 bg-blue-50 rounded-lg border border-blue-200">
                         <div>
                           <span className="font-medium text-gray-900">Commercial (4A, 4B, 4C)</span>
                           <div className="text-xs text-gray-600">Commercial properties</div>
+                          <div className="text-xs text-blue-600 font-medium mt-1">
+                            Count: {['4A', '4B', '4C'].reduce((sum, cls) => sum + (billingAnalytics.byClass[cls]?.total || 0), 0).toLocaleString()}
+                          </div>
                         </div>
-                        <div className="font-bold text-orange-600">{billingAnalytics.grouped.commercial.toLocaleString()}</div>
+                        <div className="font-bold text-blue-600 text-xl">{billingAnalytics.grouped.commercial.toLocaleString()}</div>
                       </div>
 
-                      <div className="flex justify-between items-center p-3 bg-purple-50 rounded-lg border border-purple-200">
+                      <div className="flex justify-between items-center p-4 bg-purple-50 rounded-lg border border-purple-200">
                         <div>
                           <span className="font-medium text-gray-900">Exempt (15A-15F)</span>
                           <div className="text-xs text-gray-600">Tax-exempt properties</div>
+                          <div className="text-xs text-purple-600 font-medium mt-1">
+                            Count: {['15A', '15B', '15C', '15D', '15E', '15F'].reduce((sum, cls) => sum + (billingAnalytics.byClass[cls]?.total || 0), 0).toLocaleString()}
+                          </div>
                         </div>
-                        <div className="font-bold text-purple-600">{billingAnalytics.grouped.exempt.toLocaleString()}</div>
+                        <div className="font-bold text-purple-600 text-xl">{billingAnalytics.grouped.exempt.toLocaleString()}</div>
                       </div>
 
-                      <div className="flex justify-between items-center p-3 bg-green-50 rounded-lg border border-green-200">
+                      <div className="flex justify-between items-center p-4 bg-green-50 rounded-lg border border-green-200">
                         <div>
                           <span className="font-medium text-gray-900">Railroad (5A, 5B)</span>
                           <div className="text-xs text-gray-600">Railroad properties</div>
+                          <div className="text-xs text-green-600 font-medium mt-1">
+                            Count: {['5A', '5B'].reduce((sum, cls) => sum + (billingAnalytics.byClass[cls]?.total || 0), 0).toLocaleString()}
+                          </div>
                         </div>
-                        <div className="font-bold text-green-600">{billingAnalytics.grouped.railroad.toLocaleString()}</div>
+                        <div className="font-bold text-green-600 text-xl">{billingAnalytics.grouped.railroad.toLocaleString()}</div>
                       </div>
 
-                      <div className="flex justify-between items-center p-3 bg-blue-50 rounded-lg border border-blue-200">
+                      <div className="flex justify-between items-center p-4 bg-gray-50 rounded-lg border border-gray-200">
                         <div>
                           <span className="font-medium text-gray-900">Personal Property (6A, 6B)</span>
                           <div className="text-xs text-gray-600">Personal property</div>
+                          <div className="text-xs text-gray-600 font-medium mt-1">
+                            Count: {['6A', '6B'].reduce((sum, cls) => sum + (billingAnalytics.byClass[cls]?.total || 0), 0).toLocaleString()}
+                          </div>
                         </div>
-                        <div className="font-bold text-blue-600">{billingAnalytics.grouped.personalProperty.toLocaleString()}</div>
+                        <div className="font-bold text-gray-600 text-xl">{billingAnalytics.grouped.personalProperty.toLocaleString()}</div>
                       </div>
                     </div>
                   </div>
@@ -1392,6 +1586,8 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
                               <tr>
                                 <th className="px-3 py-2 text-left font-medium text-gray-700">Block</th>
                                 <th className="px-3 py-2 text-left font-medium text-gray-700">Lot</th>
+                                <th className="px-3 py-2 text-left font-medium text-gray-700">Qualifier</th>
+                                <th className="px-3 py-2 text-left font-medium text-gray-700">Card</th>
                                 <th className="px-3 py-2 text-left font-medium text-gray-700">Property Location</th>
                                 <th className="px-3 py-2 text-left font-medium text-gray-700">Warning Message</th>
                               </tr>
@@ -1401,6 +1597,8 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
                                 <tr key={idx} className="border-t border-gray-200">
                                   <td className="px-3 py-2">{issue.block}</td>
                                   <td className="px-3 py-2">{issue.lot}</td>
+                                  <td className="px-3 py-2">{issue.qualifier || '-'}</td>
+                                  <td className="px-3 py-2">{issue.card || '1'}</td>
                                   <td className="px-3 py-2">{issue.property_location}</td>
                                   <td className="px-3 py-2 text-red-600">{issue.warning_message}</td>
                                 </tr>
