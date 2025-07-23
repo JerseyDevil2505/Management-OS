@@ -35,6 +35,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
   
   // NEW: Add collapsible InfoBy configuration state
   const [showInfoByConfig, setShowInfoByConfig] = useState(true);
+  const [detectedVendor, setDetectedVendor] = useState(null);
   
   // Inspector filtering and sorting
   const [inspectorFilter, setInspectorFilter] = useState('all');
@@ -74,17 +75,58 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
           inspector_type: emp.inspector_type,
           initials: initials
         };
+        
+        // DEBUG: Log each employee's inspector type
+        debugLog('EMPLOYEE_TYPES', `${initials}: ${emp.inspector_type}`, {
+          name: `${emp.first_name} ${emp.last_name}`,
+          type: emp.inspector_type
+        });
       });
 
       setEmployeeData(employeeMap);
-      debugLog('EMPLOYEES', 'Loaded employee data', { count: Object.keys(employeeMap).length });
+      debugLog('EMPLOYEES', 'Loaded employee data with types', { 
+        count: Object.keys(employeeMap).length,
+        inspectorTypes: Object.values(employeeMap).reduce((acc, emp) => {
+          const type = emp.inspector_type || 'untyped';
+          acc[type] = (acc[type] || 0) + 1;
+          return acc;
+        }, {})
+      });
     } catch (error) {
       console.error('Error loading employee data:', error);
       addNotification('Error loading employee data', 'error');
     }
   };
 
-  // Load available InfoBy codes from correct BRT location
+  // NEW: Load vendor source from property_records
+  const loadVendorSource = async () => {
+    if (!jobData?.id || !latestFileVersion) return null;
+
+    try {
+      const { data: record, error } = await supabase
+        .from('property_records')
+        .select('vendor_source')
+        .eq('job_id', jobData.id)
+        .eq('file_version', latestFileVersion)
+        .not('vendor_source', 'is', null)
+        .limit(1)
+        .single();
+
+      if (!error && record?.vendor_source) {
+        debugLog('VENDOR_SOURCE', `Detected vendor from property_records: ${record.vendor_source}`);
+        setDetectedVendor(record.vendor_source);
+        return record.vendor_source;
+      }
+      
+      // Fallback to jobData vendor_type
+      debugLog('VENDOR_SOURCE', `Using fallback vendor from jobData: ${jobData.vendor_type}`);
+      setDetectedVendor(jobData.vendor_type);
+      return jobData.vendor_type;
+    } catch (error) {
+      debugLog('VENDOR_SOURCE', 'Error loading vendor source, using fallback');
+      return jobData.vendor_type;
+    }
+  };
   const loadAvailableInfoByCodes = async () => {
     if (!jobData?.id) return;
 
@@ -381,6 +423,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
       loadAvailableInfoByCodes();
       loadProjectStartDate();
       loadPersistedAnalytics(); // ENHANCED: Load persisted analytics
+      loadVendorSource(); // NEW: Load vendor source for display
       setLoading(false);
     }
   }, [jobData?.id, latestFileVersion]);
@@ -398,12 +441,22 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
       return null;
     }
 
+  // ENHANCED: Process analytics with manager-focused counting and inspection_data persistence
+  const processAnalytics = async () => {
+    if (!projectStartDate || !jobData?.id || !latestFileVersion) {
+      addNotification('Project start date and job data required', 'error');
+      return null;
+    }
+
     try {
+      // NEW: Get actual vendor from property_records
+      const actualVendor = await loadVendorSource();
+      
       // VENDOR DETECTION DEBUG
       debugLog('VENDOR', 'Vendor detection check', { 
-        vendor_type: jobData.vendor_type,
-        jobData_keys: Object.keys(jobData),
-        vendor_from_job: jobData.vendor_type 
+        vendor_from_property_records: actualVendor,
+        vendor_from_jobData: jobData.vendor_type,
+        using_vendor: actualVendor || jobData.vendor_type
       });
 
       debugLog('ANALYTICS', 'Starting manager-focused analytics processing', { 
@@ -411,7 +464,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
         fileVersion: latestFileVersion,
         startDate: projectStartDate,
         categoryConfig: infoByCategoryConfig,
-        vendorType: jobData.vendor_type
+        detectedVendor: actualVendor
       });
 
       const allValidCodes = [
@@ -643,18 +696,20 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
             inspectorStats[inspector].commercialWorkDays.add(workDayString);
           }
 
-          // FIXED: Pricing logic with vendor detection and debugging
-          debugLog('PRICING', `Checking pricing for ${propertyKey}`, {
-            vendor: jobData.vendor_type,
-            isCommercial: isCommercialProperty,
-            priceBy: record.inspection_price_by,
-            priceDate: priceDate,
-            isPricedCode: isPricedCode,
-            startDate: startDate
-          });
-
+          // FIXED: Pricing logic with vendor detection and targeted debugging
           if (isCommercialProperty) {
-            if (jobData.vendor_type === 'BRT' && 
+            const currentVendor = actualVendor || jobData.vendor_type;
+            
+            debugLog('PRICING', `Commercial property ${propertyKey} pricing check`, {
+              vendor: currentVendor,
+              priceBy: record.inspection_price_by,
+              priceDate: priceDate,
+              isPricedCode: isPricedCode,
+              startDate: startDate,
+              propertyClass: propertyClass
+            });
+
+            if (currentVendor === 'BRT' && 
                 record.inspection_price_by && 
                 record.inspection_price_by.trim() !== '' &&
                 priceDate && 
@@ -667,12 +722,18 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
               }
               debugLog('PRICING', `✅ BRT pricing counted for ${propertyKey}`);
               
-            } else if (jobData.vendor_type === 'Microsystems' && isPricedCode) {
+            } else if (currentVendor === 'Microsystems' && isPricedCode) {
               inspectorStats[inspector].priced++;
               if (classBreakdown[propertyClass]) {
                 classBreakdown[propertyClass].priced++;
               }
               debugLog('PRICING', `✅ Microsystems pricing counted for ${propertyKey}`);
+            } else {
+              debugLog('PRICING', `❌ No pricing counted for ${propertyKey}`, {
+                reason: currentVendor === 'BRT' ? 
+                  'Missing price_by, price_date, or date before start' : 
+                  'Not a priced InfoBy code'
+              });
             }
           }
 
@@ -721,6 +782,15 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
         } else {
           debugLog('PERSISTENCE', '✅ Successfully upserted to inspection_data');
         }
+      }'job_id,property_composite_key,file_version'
+          });
+
+        if (upsertError) {
+          console.error('Error upserting to inspection_data:', upsertError);
+          addNotification('Warning: Could not save to inspection_data table', 'warning');
+        } else {
+          debugLog('PERSISTENCE', '✅ Successfully upserted to inspection_data');
+        }
       }
 
       // NEW: Calculate inspector rates and averages with corrected field day logic
@@ -752,7 +822,8 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
           stats.commercialAverage = stats.commercialFieldDays > 0 ? 
             Math.round(stats.commercialInspected / stats.commercialFieldDays) : 0;
           // Pricing average (BRT only)
-          if (jobData.vendor_type === 'BRT') {
+          const currentVendor = actualVendor || jobData.vendor_type;
+          if (currentVendor === 'BRT') {
             stats.pricingAverage = stats.pricingDays > 0 ? 
               Math.round(stats.priced / stats.pricingDays) : 0;
           } else {
@@ -1064,7 +1135,12 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
             <Factory className="w-8 h-8 mr-3 text-blue-600" />
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Production Tracker</h1>
-              <p className="text-gray-600">{jobData.name} - Enhanced Analytics & Validation Engine</p>
+              <p className="text-gray-600">
+                {jobData.name} - Enhanced Analytics & Validation Engine
+                {detectedVendor && <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded font-medium">
+                  {detectedVendor} Format
+                </span>}
+              </p>
             </div>
           </div>
           <button
