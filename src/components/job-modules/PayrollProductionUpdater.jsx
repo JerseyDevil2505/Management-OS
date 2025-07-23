@@ -2,15 +2,18 @@ import React, { useState, useEffect } from 'react';
 import { Factory, Settings, Download, RefreshCw, AlertTriangle, CheckCircle, TrendingUp, DollarSign, Users, Calendar, X, ChevronDown, ChevronUp, Eye, FileText, Lock, Unlock, Save } from 'lucide-react';
 import { supabase, jobService } from '../../lib/supabaseClient';
 
-const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, propertyRecordsCount }) => {
+const PayrollProductionUpdater = ({ 
+  jobData, 
+  onBackToJobs, 
+  latestFileVersion, 
+  propertyRecordsCount,
+  // NEW: App.js Central State Integration
+  moduleState,
+  onUpdateModuleState
+}) => {
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
-  const [processed, setProcessed] = useState(false);
   const [employeeData, setEmployeeData] = useState({});
-  const [analytics, setAnalytics] = useState(null);
-  const [billingAnalytics, setBillingAnalytics] = useState(null);
-  const [validationReport, setValidationReport] = useState(null);
-  const [sessionHistory, setSessionHistory] = useState([]);
   const [notifications, setNotifications] = useState([]);
   
   // Settings state - Enhanced InfoBy category configuration
@@ -40,6 +43,12 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
   // Inspector filtering and sorting
   const [inspectorFilter, setInspectorFilter] = useState('all');
   const [inspectorSort, setInspectorSort] = useState('alphabetical');
+
+  // ENHANCED: Use App.js central state instead of local state
+  const analytics = moduleState?.analytics;
+  const billingAnalytics = moduleState?.billingAnalytics;
+  const validationReport = moduleState?.validationReport;
+  const processed = moduleState?.isProcessed || false;
 
   const addNotification = (message, type = 'info') => {
     const id = Date.now();
@@ -75,8 +84,6 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
           inspector_type: emp.inspector_type,
           initials: initials
         };
-        
-
       });
 
       setEmployeeData(employeeMap);
@@ -298,7 +305,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
     debugLog('CATEGORIES', '✅ Set default category configuration', defaultConfig);
   };
 
-  // Save category configuration to database and persist analytics
+  // ENHANCED: Save category configuration to database AND App.js state
   const saveCategoriesToDatabase = async (config = null) => {
     if (!jobData?.id) return;
 
@@ -312,14 +319,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
             ...configToSave,
             vendor_type: jobData.vendor_type,
             last_updated: new Date().toISOString()
-          },
-          // ENHANCED: Persist analytics data for navigation survival
-          workflow_stats: analytics ? {
-            ...analytics,
-            billingAnalytics,
-            validationReport,
-            lastProcessed: new Date().toISOString()
-          } : undefined
+          }
         })
         .eq('id', jobData.id);
 
@@ -327,36 +327,11 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
       
       setOriginalCategoryConfig(configToSave);
       setHasUnsavedChanges(false);
-      addNotification('✅ Configuration and analytics saved', 'success');
-      debugLog('PERSISTENCE', '✅ Saved config and analytics to job record');
+      addNotification('✅ Configuration saved', 'success');
+      debugLog('PERSISTENCE', '✅ Saved config to job record');
     } catch (error) {
       console.error('Error saving configuration:', error);
       addNotification('Error saving configuration', 'error');
-    }
-  };
-
-  // Load persisted analytics on component mount
-  const loadPersistedAnalytics = async () => {
-    if (!jobData?.id) return;
-
-    try {
-      const { data: job, error } = await supabase
-        .from('jobs')
-        .select('workflow_stats')
-        .eq('id', jobData.id)
-        .single();
-
-      if (!error && job?.workflow_stats && job.workflow_stats.totalRecords) {
-        setAnalytics(job.workflow_stats);
-        setBillingAnalytics(job.workflow_stats.billingAnalytics);
-        setValidationReport(job.workflow_stats.validationReport);
-        setProcessed(true);
-        setSettingsLocked(true);
-        debugLog('PERSISTENCE', '✅ Loaded persisted analytics from job record');
-        addNotification('Previously processed analytics loaded', 'info');
-      }
-    } catch (error) {
-      console.error('Error loading persisted analytics:', error);
     }
   };
 
@@ -419,11 +394,19 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
       loadEmployeeData();
       loadAvailableInfoByCodes();
       loadProjectStartDate();
-      loadPersistedAnalytics(); // ENHANCED: Load persisted analytics
-      loadVendorSource(); // NEW: Load vendor source for display
+      loadVendorSource();
+      
+      // REMOVED: No longer load persisted analytics from database
+      // Analytics now come from App.js moduleState prop
+      
+      // Set settings lock if analytics are already processed
+      if (processed) {
+        setSettingsLocked(true);
+      }
+      
       setLoading(false);
     }
-  }, [jobData?.id, latestFileVersion]);
+  }, [jobData?.id, latestFileVersion, processed]);
 
   // Track unsaved changes
   useEffect(() => {
@@ -431,7 +414,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
     setHasUnsavedChanges(hasChanges);
   }, [infoByCategoryConfig, originalCategoryConfig]);
 
-  // ENHANCED: Process analytics with manager-focused counting and inspection_data persistence
+  // ENHANCED: Process analytics with App.js state integration
   const processAnalytics = async () => {
     if (!projectStartDate || !jobData?.id || !latestFileVersion) {
       addNotification('Project start date and job data required', 'error');
@@ -442,13 +425,6 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
       // NEW: Get actual vendor from property_records
       const actualVendor = await loadVendorSource();
       
-      // VENDOR DETECTION DEBUG
-      debugLog('VENDOR', 'Vendor detection check', { 
-        vendor_from_property_records: actualVendor,
-        vendor_from_jobData: jobData.vendor_type,
-        using_vendor: actualVendor || jobData.vendor_type
-      });
-
       debugLog('ANALYTICS', 'Starting manager-focused analytics processing', { 
         jobId: jobData.id,
         fileVersion: latestFileVersion,
@@ -905,10 +881,6 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
         totalBillable: Object.values(billingByClass).reduce((sum, cls) => sum + cls.billable, 0)
       };
 
-      setAnalytics(analyticsResult);
-      setBillingAnalytics(billingResult);
-      setValidationReport(validationReportData);
-
       debugLog('ANALYTICS', '✅ Manager-focused analytics processing complete', {
         totalRecords: rawData.length,
         validInspections: analyticsResult.validInspections,
@@ -942,7 +914,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
     setInfoByCategoryConfig(newConfig);
   };
 
-  // ENHANCED: Start processing session with persistence
+  // ENHANCED: Start processing session with App.js state integration
   const startProcessingSession = async () => {
     if (!isDateLocked) {
       addNotification('Please lock the project start date first', 'error');
@@ -970,7 +942,6 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
     setSessionId(newSessionId);
     setSettingsLocked(true);
     setProcessing(true);
-    setProcessed(false);
 
     try {
       debugLog('SESSION', 'Starting processing session', { 
@@ -984,13 +955,20 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
         throw new Error('Analytics processing failed');
       }
 
-      // ENHANCED: Persist to database for navigation survival
-      await saveCategoriesToDatabase();
+      // ENHANCED: Update App.js central state instead of local database
+      await onUpdateModuleState('payrollProductionUpdater', {
+        analytics: results.analyticsResult,
+        billingAnalytics: results.billingResult,
+        validationReport: results.validationReportData,
+        isProcessed: true,
+        lastProcessed: new Date().toISOString(),
+        sessionId: newSessionId,
+        projectStartDate: projectStartDate,
+        infoByCategoryConfig: infoByCategoryConfig
+      }, true); // persist to database
 
       debugLog('SESSION', '✅ Processing session completed successfully');
       addNotification(`✅ Processing completed! Analytics saved and ready.`, 'success');
-
-      setProcessed(true);
 
     } catch (error) {
       console.error('Error in processing session:', error);
@@ -1406,7 +1384,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
           </div>
 
           <div className="p-6">
-            {/* NEW: Separate Residential and Commercial Inspector Analytics */}
+            {/* Inspector Analytics Tab */}
             {activeTab === 'analytics' && (
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
@@ -1461,7 +1439,6 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
                         })
                         .map(([inspector, stats]) => (
                           <div key={inspector} className="bg-white border border-green-200 rounded-lg p-4 mb-3">
-                            {/* Header Row */}
                             <div className="flex items-center justify-between mb-3">
                               <div className="flex items-center space-x-3">
                                 <span className="font-semibold text-gray-900">{stats.name} ({inspector})</span>
@@ -1473,7 +1450,6 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
                               <span className="text-lg font-bold text-green-600">{stats.totalInspected.toLocaleString()} Total</span>
                             </div>
                             
-                            {/* Metrics Grid */}
                             <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
                               <div className="bg-green-50 p-3 rounded">
                                 <div className="font-bold text-green-700 text-xl">{stats.residentialInspected.toLocaleString()}</div>
@@ -1534,7 +1510,6 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
                         })
                         .map(([inspector, stats]) => (
                           <div key={inspector} className="bg-white border border-blue-200 rounded-lg p-4 mb-3">
-                            {/* Header Row */}
                             <div className="flex items-center justify-between mb-3">
                               <div className="flex items-center space-x-3">
                                 <span className="font-semibold text-gray-900">{stats.name} ({inspector})</span>
@@ -1546,8 +1521,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
                               <span className="text-lg font-bold text-blue-600">{stats.totalInspected.toLocaleString()} Total</span>
                             </div>
                             
-                            {/* Metrics Grid */}
-                            <div className="grid grid-cols-2 md:grid-cols-7 gap-3 text-center">
+                            <div className="grid grid-cols-2 md:grid-cols-6 gap-3 text-center">
                               <div className="bg-blue-50 p-3 rounded">
                                 <div className="font-bold text-blue-700 text-lg">{stats.commercialInspected.toLocaleString()}</div>
                                 <div className="text-xs text-blue-600 font-medium">Commercial</div>
@@ -1574,11 +1548,6 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
                                 <div className="text-xs text-gray-500">{jobData.vendor_type === 'BRT' ? 'Priced ÷ Days' : 'N/A'}</div>
                               </div>
                               <div className="bg-gray-50 p-3 rounded">
-                                <div className="font-bold text-gray-700 text-lg">75</div>
-                                <div className="text-xs text-gray-600 font-medium">Commercial Rate</div>
-                                <div className="text-xs text-gray-500">Standard rate</div>
-                              </div>
-                              <div className="bg-gray-50 p-3 rounded">
                                 <div className="font-bold text-gray-700 text-lg">{(stats.totalInspected - stats.commercialInspected).toLocaleString()}</div>
                                 <div className="text-xs text-gray-600 font-medium">Other Properties</div>
                                 <div className="text-xs text-gray-500">Non-commercial</div>
@@ -1594,7 +1563,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
                       )}
                     </div>
 
-                    {/* UNTYPED INSPECTORS (If Any) */}
+                    {/* UNTYPED INSPECTORS */}
                     {Object.entries(analytics.inspectorStats)
                       .filter(([_, stats]) => !stats.inspector_type || (stats.inspector_type !== 'residential' && stats.inspector_type !== 'commercial'))
                       .length > 0 && (
@@ -1645,7 +1614,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
               </div>
             )}
 
-            {/* ENHANCED: Summary for Billing with Progress Bars */}
+            {/* Billing Tab */}
             {activeTab === 'billing' && billingAnalytics && (
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
@@ -1773,7 +1742,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
               </div>
             )}
 
-            {/* ENHANCED: Validation Report with Compound Messages */}
+            {/* Validation Tab */}
             {activeTab === 'validation' && validationReport && (
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
