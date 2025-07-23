@@ -127,6 +127,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
       return jobData.vendor_type;
     }
   };
+
   const loadAvailableInfoByCodes = async () => {
     if (!jobData?.id) return;
 
@@ -460,23 +461,8 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
         detectedVendor: actualVendor
       });
 
-      // Basic analytics processing here
-      const analyticsResult = {
-        totalRecords: 0,
-        validInspections: 0,
-        inspectorStats: {},
-        commercialCompletePercent: 0,
-        pricingCompletePercent: 0
-      };
-
-      return { analyticsResult };
-
-    } catch (error) {
-      console.error('Error processing analytics:', error);
-      addNotification('Error processing analytics: ' + error.message, 'error');
-      return null;
-    }
-  };
+      // Get all valid InfoBy codes for validation
+      const allValidCodes = [
         ...infoByCategoryConfig.entry,
         ...infoByCategoryConfig.refusal,
         ...infoByCategoryConfig.estimation,
@@ -783,15 +769,6 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
           .from('inspection_data')
           .upsert(inspectionDataBatch, {
             onConflict: 'job_id,property_composite_key,file_version'
-          });
-
-        if (upsertError) {
-          console.error('Error upserting to inspection_data:', upsertError);
-          addNotification('Warning: Could not save to inspection_data table', 'warning');
-        } else {
-          debugLog('PERSISTENCE', '✅ Successfully upserted to inspection_data');
-        }
-      }'job_id,property_composite_key,file_version'
           });
 
         if (upsertError) {
