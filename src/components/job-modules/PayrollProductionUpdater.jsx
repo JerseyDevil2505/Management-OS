@@ -479,22 +479,28 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
         const priceDate = record.inspection_price_date ? new Date(record.inspection_price_date) : null;
         const propertyKey = record.property_composite_key || `${record.property_block}-${record.property_lot}-${record.property_qualifier || ''}`;
 
+        // ENHANCED: Skip UNASSIGNED - they're not real inspectors
+        if (inspector === 'UNASSIGNED') return;
+
         // Initialize inspector stats
         if (!inspectorStats[inspector]) {
           const employeeInfo = employeeData[inspector] || {};
           inspectorStats[inspector] = {
             name: employeeInfo.name || inspector,
             fullName: employeeInfo.fullName || inspector,
-            inspector_type: employeeInfo.inspector_type || 'unknown',
+            inspector_type: employeeInfo.inspector_type, // ENHANCED: Remove 'unknown' fallback
             inspected: 0,
             residentialInspected: 0,
-            commercialInspected: 0, // ENHANCED: Track commercial separately
+            commercialInspected: 0,
             entry: 0,
             refusal: 0,
             priced: 0,
             classes: { residential: 0, commercial: 0, other: 0 },
-            dailyAverage: 0,
-            datesWorked: new Set()
+            // ENHANCED: Detailed day tracking for field days
+            allWorkDays: new Set(),
+            residentialWorkDays: new Set(),
+            commercialWorkDays: new Set(),
+            pricingWorkDays: new Set()
           };
           inspectorIssuesMap[inspector] = [];
         }
@@ -573,6 +579,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
         }
 
         const isCommercialProperty = ['4A', '4B', '4C'].includes(propertyClass);
+        const isResidentialProperty = ['2', '3A'].includes(propertyClass);
         const isResidentialInspector = employeeData[inspector]?.inspector_type === 'residential';
         if (isCommercialProperty && isResidentialInspector) {
           addValidationIssue(`Residential inspector on commercial property`);
@@ -586,16 +593,18 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
         if (isValidInspection && hasValidInfoBy && hasValidMeasuredBy && hasValidMeasuredDate) {
           inspectorStats[inspector].inspected++;
           
-          // ENHANCED: Count residential and commercial separately
-          if (['2', '3A'].includes(propertyClass)) {
-            inspectorStats[inspector].residentialInspected++;
-          }
-          if (['4A', '4B', '4C'].includes(propertyClass)) {
-            inspectorStats[inspector].commercialInspected++;
-          }
+          // ENHANCED: Track work days by property type
+          const workDayString = measuredDate.toISOString().split('T')[0];
+          inspectorStats[inspector].allWorkDays.add(workDayString);
 
-          if (measuredDate) {
-            inspectorStats[inspector].datesWorked.add(measuredDate.toISOString().split('T')[0]);
+          // Count residential and commercial separately with work days
+          if (isResidentialProperty) {
+            inspectorStats[inspector].residentialInspected++;
+            inspectorStats[inspector].residentialWorkDays.add(workDayString);
+          }
+          if (isCommercialProperty) {
+            inspectorStats[inspector].commercialInspected++;
+            inspectorStats[inspector].commercialWorkDays.add(workDayString);
           }
 
           if (classBreakdown[propertyClass]) {
@@ -604,25 +613,35 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
             billingByClass[propertyClass].billable++;
           }
 
-          if (isEntryCode) {
-            inspectorStats[inspector].entry++;
-            if (classBreakdown[propertyClass]) {
-              classBreakdown[propertyClass].entry++;
-            }
-          } else if (isRefusalCode) {
-            inspectorStats[inspector].refusal++;
-            if (classBreakdown[propertyClass]) {
-              classBreakdown[propertyClass].refusal++;
+          // ENHANCED: Entry/Refusal counting (only for residential properties 2, 3A)
+          if (isResidentialProperty) {
+            if (isEntryCode) {
+              inspectorStats[inspector].entry++;
+              if (classBreakdown[propertyClass]) {
+                classBreakdown[propertyClass].entry++;
+              }
+            } else if (isRefusalCode) {
+              inspectorStats[inspector].refusal++;
+              if (classBreakdown[propertyClass]) {
+                classBreakdown[propertyClass].refusal++;
+              }
             }
           }
 
-          // Pricing logic
-          if (jobData.vendor_type === 'BRT' && priceDate && priceDate >= startDate) {
+          // ENHANCED: Fixed BRT pricing logic - check both inspector and date
+          if (jobData.vendor_type === 'BRT' && 
+              record.inspection_price_by && 
+              record.inspection_price_by.trim() !== '' &&
+              priceDate && 
+              priceDate >= startDate && 
+              isCommercialProperty) {
+            
             inspectorStats[inspector].priced++;
+            inspectorStats[inspector].pricingWorkDays.add(priceDate.toISOString().split('T')[0]);
             if (classBreakdown[propertyClass]) {
               classBreakdown[propertyClass].priced++;
             }
-          } else if (jobData.vendor_type === 'Microsystems' && isPricedCode) {
+          } else if (jobData.vendor_type === 'Microsystems' && isPricedCode && isCommercialProperty) {
             inspectorStats[inspector].priced++;
             if (classBreakdown[propertyClass]) {
               classBreakdown[propertyClass].priced++;
@@ -638,6 +657,44 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
             inspectorStats[inspector].classes.other++;
           }
         }
+      });
+
+      // ENHANCED: Calculate inspector rates and averages based on specifications
+      Object.keys(inspectorStats).forEach(inspector => {
+        const stats = inspectorStats[inspector];
+        
+        // Convert Sets to counts
+        stats.fieldDays = stats.allWorkDays.size;
+        stats.residentialFieldDays = stats.residentialWorkDays.size;
+        stats.commercialFieldDays = stats.commercialWorkDays.size;
+        stats.pricingDays = stats.pricingWorkDays.size;
+        
+        // Residential calculations (only for class 2, 3A)
+        if (stats.residentialInspected > 0) {
+          stats.entryRate = Math.round((stats.entry / stats.residentialInspected) * 100);
+          stats.refusalRate = Math.round((stats.refusal / stats.residentialInspected) * 100);
+        }
+
+        // Daily averages
+        if (stats.inspector_type === 'residential') {
+          // Residential inspectors: Residential Inspected ÷ Field Days (any work days)
+          stats.dailyAverage = stats.fieldDays > 0 ? Math.round(stats.residentialInspected / stats.fieldDays) : 0;
+        } else if (stats.inspector_type === 'commercial') {
+          // Commercial inspectors: Commercial Inspected ÷ Commercial Field Days
+          stats.commercialAverage = stats.commercialFieldDays > 0 ? Math.round(stats.commercialInspected / stats.commercialFieldDays) : 0;
+          // Pricing Average: Total Priced ÷ Pricing Days (BRT only)
+          if (jobData.vendor_type === 'BRT') {
+            stats.pricingAverage = stats.pricingDays > 0 ? Math.round(stats.priced / stats.pricingDays) : 0;
+          } else {
+            stats.pricingAverage = null; // Microsystems doesn't have pricing days
+          }
+        }
+
+        // Clean up Sets (convert to numbers for display)
+        delete stats.allWorkDays;
+        delete stats.residentialWorkDays;
+        delete stats.commercialWorkDays;
+        delete stats.pricingWorkDays;
       });
 
       // ENHANCED: Create compound validation report
@@ -665,36 +722,9 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
         inspectorIssuesMap[property.inspector].push(issue);
       });
 
-      // Calculate inspector rates and daily averages
-      Object.keys(inspectorStats).forEach(inspector => {
-        const stats = inspectorStats[inspector];
-        const daysWorked = stats.datesWorked.size;
-        
-        if (stats.residentialInspected > 0) {
-          stats.entryRate = Math.round((stats.entry / stats.residentialInspected) * 100);
-          stats.refusalRate = Math.round((stats.refusal / stats.residentialInspected) * 100);
-        }
-
-        // ENHANCED: Commercial rates for commercial inspectors
-        if (stats.commercialInspected > 0) {
-          stats.commercialRate = Math.round((stats.commercialInspected / stats.inspected) * 100);
-          stats.pricingRate = Math.round((stats.priced / stats.commercialInspected) * 100);
-        }
-        
-        if (daysWorked > 0) {
-          // Daily average based on residential inspections for residential inspectors
-          if (stats.inspector_type === 'residential') {
-            stats.dailyAverage = Math.round(stats.residentialInspected / daysWorked);
-          } else {
-            stats.dailyAverage = Math.round(stats.inspected / daysWorked);
-          }
-        }
-
-        stats.daysWorked = daysWorked;
-      });
-
       // Calculate job-level totals and commercial percentages
       const totalInspected = Object.values(inspectorStats).reduce((sum, stats) => sum + stats.inspected, 0);
+      const totalResidentialInspected = Object.values(inspectorStats).reduce((sum, stats) => sum + (stats.residentialInspected || 0), 0);
       const totalEntry = Object.values(inspectorStats).reduce((sum, stats) => sum + stats.entry, 0);
       const totalRefusal = Object.values(inspectorStats).reduce((sum, stats) => sum + stats.refusal, 0);
       const totalPriced = Object.values(inspectorStats).reduce((sum, stats) => sum + stats.priced, 0);
@@ -727,11 +757,11 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
         validationIssues: validationIssues.length,
         processingDate: new Date().toISOString(),
         
-        // Job-level metrics
-        jobEntryRate: totalInspected > 0 ? Math.round((totalEntry / totalInspected) * 100) : 0,
-        jobRefusalRate: totalInspected > 0 ? Math.round((totalRefusal / totalInspected) * 100) : 0,
+        // ENHANCED: Job-level metrics based on residential properties only (2, 3A)
+        jobEntryRate: totalResidentialInspected > 0 ? Math.round((totalEntry / totalResidentialInspected) * 100) : 0,
+        jobRefusalRate: totalResidentialInspected > 0 ? Math.round((totalRefusal / totalResidentialInspected) * 100) : 0,
         
-        // ENHANCED: Commercial metrics with percentages
+        // Commercial metrics with percentages
         commercialInspections: totalCommercialInspected,
         commercialPricing: totalCommercialPriced,
         totalCommercialProperties,
@@ -883,7 +913,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
         case 'alphabetical':
           return aStats.name.localeCompare(bStats.name);
         case 'dailyAverage':
-          return bStats.dailyAverage - aStats.dailyAverage;
+          return (bStats.dailyAverage || bStats.commercialAverage || 0) - (aStats.dailyAverage || aStats.commercialAverage || 0);
         case 'entryRate':
           return (bStats.entryRate || 0) - (aStats.entryRate || 0);
         case 'totalInspected':
@@ -1264,9 +1294,9 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
           </div>
 
           <div className="p-6">
-            {/* ENHANCED: Inspector Analytics with Role-Specific Layouts */}
+            {/* ENHANCED: Compact Inspector Analytics */}
             {activeTab === 'analytics' && (
-              <div className="space-y-6">
+              <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-lg font-bold text-gray-900">Inspector Performance Analytics</h3>
                   
@@ -1306,105 +1336,124 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
                     <p>No inspector data available yet</p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 gap-4">
+                  <div className="space-y-2">
                     {getFilteredAndSortedInspectors().map(([inspector, stats]) => (
-                      <div key={inspector} className={`rounded-lg p-6 border-2 shadow-sm ${
-                        stats.inspector_type === 'residential' 
-                          ? 'bg-green-50 border-green-200' 
-                          : stats.inspector_type === 'commercial'
-                          ? 'bg-blue-50 border-blue-200'
-                          : 'bg-gray-50 border-gray-200'
-                      }`}>
-                        {/* ENHANCED: Inspector Header with Badge Under Name */}
-                        <div className="mb-4">
-                          <h4 className="text-xl font-bold text-gray-900">
-                            {stats.name} ({inspector})
-                          </h4>
-                          <div className="flex items-center mt-2 space-x-3">
-                            <span className={`px-3 py-1 text-sm font-medium rounded-full ${
-                              stats.inspector_type === 'residential'
-                                ? 'bg-green-100 text-green-800'
-                                : stats.inspector_type === 'commercial'
-                                ? 'bg-blue-100 text-blue-800'
-                                : 'bg-gray-100 text-gray-800'
-                            }`}>
-                              {stats.inspector_type === 'residential' ? '🏠 Residential' : 
-                               stats.inspector_type === 'commercial' ? '🏢 Commercial' : '❓ Unknown'}
-                            </span>
-                            <span className="text-sm text-gray-600">
-                              {stats.daysWorked} days worked
-                            </span>
+                      <div key={inspector} className="border border-gray-200 rounded-lg p-3">
+                        {/* ENHANCED: Compact Tile Header */}
+                        <div className="flex items-center justify-between mb-2">
+                          <div>
+                            <h4 className="text-base font-semibold text-gray-900">
+                              {stats.name} ({inspector})
+                            </h4>
+                            <div className="flex items-center space-x-2 mt-1">
+                              {stats.inspector_type === 'residential' && (
+                                <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">
+                                  🏠 Residential
+                                </span>
+                              )}
+                              {stats.inspector_type === 'commercial' && (
+                                <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
+                                  🏢 Commercial
+                                </span>
+                              )}
+                              <span className="text-xs text-gray-600">
+                                {stats.fieldDays} field days
+                              </span>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-sm text-gray-600">Total Inspections</div>
+                            <div className="text-lg font-semibold text-gray-900">{stats.inspected.toLocaleString()}</div>
                           </div>
                         </div>
 
-                        {/* Total Inspections (Small) */}
-                        <div className="mb-4">
-                          <p className="text-sm text-gray-600">Total Inspections</p>
-                          <p className="text-lg font-medium text-gray-700">{stats.inspected.toLocaleString()}</p>
-                        </div>
-
-                        {/* ENHANCED: Role-Specific Big Metrics */}
+                        {/* ENHANCED: Compact Metrics Grid */}
                         {stats.inspector_type === 'residential' && (
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                            <div className="text-center">
-                              <div className="text-3xl font-bold text-green-600">{stats.residentialInspected.toLocaleString()}</div>
-                              <div className="text-sm text-gray-600 mt-1">Residential Inspected</div>
+                          <div className="grid grid-cols-4 gap-4 text-center">
+                            <div>
+                              <div className="text-lg font-bold text-green-600">{stats.residentialInspected.toLocaleString()}</div>
+                              <div className="text-xs text-gray-600">Residential Inspected</div>
                             </div>
-                            <div className="text-center">
-                              <div className="text-3xl font-bold text-green-600">{stats.entryRate || 0}%</div>
-                              <div className="text-sm text-gray-600 mt-1">Entry Rate</div>
+                            <div>
+                              <div className="text-lg font-bold text-blue-600">{stats.dailyAverage}</div>
+                              <div className="text-xs text-gray-600">Daily Avg</div>
                             </div>
-                            <div className="text-center">
-                              <div className="text-3xl font-bold text-red-600">{stats.refusalRate || 0}%</div>
-                              <div className="text-sm text-gray-600 mt-1">Refusal Rate</div>
+                            <div>
+                              <div className="text-lg font-bold text-green-600">{stats.entryRate || 0}%</div>
+                              <div className="text-xs text-gray-600">Entry Rate</div>
                             </div>
-                            <div className="text-center">
-                              <div className="text-3xl font-bold text-blue-600">{stats.dailyAverage}</div>
-                              <div className="text-sm text-gray-600 mt-1">Daily Average</div>
+                            <div>
+                              <div className="text-lg font-bold text-red-600">{stats.refusalRate || 0}%</div>
+                              <div className="text-xs text-gray-600">Refusal Rate</div>
                             </div>
                           </div>
                         )}
 
-                        {/* ENHANCED: Commercial Inspector Layout */}
                         {stats.inspector_type === 'commercial' && (
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                            <div className="text-center">
-                              <div className="text-3xl font-bold text-blue-600">{stats.commercialInspected.toLocaleString()}</div>
-                              <div className="text-sm text-gray-600 mt-1">Commercial Inspected</div>
+                          <div className="grid grid-cols-6 gap-3 text-center">
+                            <div>
+                              <div className="text-lg font-bold text-blue-600">{stats.commercialInspected.toLocaleString()}</div>
+                              <div className="text-xs text-gray-600">Commercial Inspected</div>
                             </div>
-                            <div className="text-center">
-                              <div className="text-3xl font-bold text-blue-600">{stats.commercialRate || 0}%</div>
-                              <div className="text-sm text-gray-600 mt-1">Commercial Rate</div>
+                            <div>
+                              <div className="text-lg font-bold text-blue-600">{stats.commercialFieldDays}</div>
+                              <div className="text-xs text-gray-600">Field Days</div>
                             </div>
-                            <div className="text-center">
-                              <div className="text-3xl font-bold text-purple-600">{stats.priced.toLocaleString()}</div>
-                              <div className="text-sm text-gray-600 mt-1">Pricing Complete</div>
+                            <div>
+                              <div className="text-lg font-bold text-blue-600">{stats.commercialAverage || 0}</div>
+                              <div className="text-xs text-gray-600">Commercial Avg</div>
                             </div>
-                            <div className="text-center">
-                              <div className="text-3xl font-bold text-purple-600">{stats.pricingRate || 0}%</div>
-                              <div className="text-sm text-gray-600 mt-1">Pricing Rate</div>
+                            <div>
+                              <div className="text-lg font-bold text-purple-600">{stats.priced.toLocaleString()}</div>
+                              <div className="text-xs text-gray-600">Commercial Priced</div>
+                            </div>
+                            <div>
+                              {jobData.vendor_type === 'BRT' ? (
+                                <>
+                                  <div className="text-lg font-bold text-purple-600">{stats.pricingDays || 0}</div>
+                                  <div className="text-xs text-gray-600">Priced Days</div>
+                                </>
+                              ) : (
+                                <>
+                                  <div className="text-lg font-bold text-gray-400">N/A</div>
+                                  <div className="text-xs text-gray-600">Priced Days</div>
+                                </>
+                              )}
+                            </div>
+                            <div>
+                              {jobData.vendor_type === 'BRT' ? (
+                                <>
+                                  <div className="text-lg font-bold text-purple-600">{stats.pricingAverage || 0}</div>
+                                  <div className="text-xs text-gray-600">Pricing Avg</div>
+                                </>
+                              ) : (
+                                <>
+                                  <div className="text-lg font-bold text-gray-400">N/A</div>
+                                  <div className="text-xs text-gray-600">Pricing Avg</div>
+                                </>
+                              )}
                             </div>
                           </div>
                         )}
 
                         {/* Unknown Type Fallback */}
-                        {stats.inspector_type !== 'residential' && stats.inspector_type !== 'commercial' && (
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                            <div className="text-center">
-                              <div className="font-bold text-gray-600">{stats.inspected.toLocaleString()}</div>
-                              <div className="text-gray-500">Inspected</div>
+                        {!stats.inspector_type && (
+                          <div className="grid grid-cols-4 gap-4 text-center">
+                            <div>
+                              <div className="text-base font-semibold text-gray-600">{stats.inspected.toLocaleString()}</div>
+                              <div className="text-xs text-gray-500">Inspected</div>
                             </div>
-                            <div className="text-center">
-                              <div className="font-bold text-gray-600">{stats.dailyAverage}</div>
-                              <div className="text-gray-500">Daily Average</div>
+                            <div>
+                              <div className="text-base font-semibold text-gray-600">{stats.fieldDays}</div>
+                              <div className="text-xs text-gray-500">Field Days</div>
                             </div>
-                            <div className="text-center">
-                              <div className="font-bold text-gray-600">{stats.entryRate || 0}%</div>
-                              <div className="text-gray-500">Entry Rate</div>
+                            <div>
+                              <div className="text-base font-semibold text-gray-600">{stats.entryRate || 0}%</div>
+                              <div className="text-xs text-gray-500">Entry Rate</div>
                             </div>
-                            <div className="text-center">
-                              <div className="font-bold text-gray-600">{stats.refusalRate || 0}%</div>
-                              <div className="text-gray-500">Refusal Rate</div>
+                            <div>
+                              <div className="text-base font-semibold text-gray-600">{stats.refusalRate || 0}%</div>
+                              <div className="text-xs text-gray-500">Refusal Rate</div>
                             </div>
                           </div>
                         )}
