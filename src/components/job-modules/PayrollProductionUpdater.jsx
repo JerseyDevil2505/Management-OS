@@ -1,15 +1,27 @@
-import React, { useState, useEffect } from 'react';
+// ENHANCED: Sync with moduleState when it changes
+  useEffect(() => {
+    if (moduleState) {
+      setAnalytics(moduleState.analytics || null);
+      setBillingAnalytics(moduleState.billingAnalytics || null);
+      setValidationReport(moduleState.validationReport || null);
+      setProcessed(moduleState.isProcessed || false);
+      
+      if (moduleState.analytics) {
+        console.log('📊 PPU: Loaded analytics from App.js state');
+      }
+    }
+  }, [moduleState]);import React, { useState, useEffect } from 'react';
 import { Factory, Settings, Download, RefreshCw, AlertTriangle, CheckCircle, TrendingUp, DollarSign, Users, Calendar, X, ChevronDown, ChevronUp, Eye, FileText, Lock, Unlock, Save } from 'lucide-react';
 import { supabase, jobService } from '../../lib/supabaseClient';
 
-const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, propertyRecordsCount }) => {
+const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, propertyRecordsCount, moduleState = {}, onUpdateModuleState, allModuleStates = {} }) => {
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
-  const [processed, setProcessed] = useState(false);
+  const [processed, setProcessed] = useState(moduleState.isProcessed || false);
   const [employeeData, setEmployeeData] = useState({});
-  const [analytics, setAnalytics] = useState(null);
-  const [billingAnalytics, setBillingAnalytics] = useState(null);
-  const [validationReport, setValidationReport] = useState(null);
+  const [analytics, setAnalytics] = useState(moduleState.analytics || null);
+  const [billingAnalytics, setBillingAnalytics] = useState(moduleState.billingAnalytics || null);
+  const [validationReport, setValidationReport] = useState(moduleState.validationReport || null);
   const [sessionHistory, setSessionHistory] = useState([]);
   const [notifications, setNotifications] = useState([]);
   
@@ -313,13 +325,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
             vendor_type: jobData.vendor_type,
             last_updated: new Date().toISOString()
           },
-          // ENHANCED: Persist analytics data for navigation survival
-          workflow_stats: analytics ? {
-            ...analytics,
-            billingAnalytics,
-            validationReport,
-            lastProcessed: new Date().toISOString()
-          } : undefined
+          updated_at: new Date().toISOString()
         })
         .eq('id', jobData.id);
 
@@ -327,36 +333,44 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
       
       setOriginalCategoryConfig(configToSave);
       setHasUnsavedChanges(false);
-      addNotification('✅ Configuration and analytics saved', 'success');
-      debugLog('PERSISTENCE', '✅ Saved config and analytics to job record');
+      addNotification('✅ Configuration saved', 'success');
+      debugLog('PERSISTENCE', '✅ Saved config to job record');
     } catch (error) {
       console.error('Error saving configuration:', error);
       addNotification('Error saving configuration', 'error');
     }
   };
 
+  // ENHANCED: Save analytics to App.js state (replaces database persistence)
+  const saveAnalyticsToAppState = async (analyticsData, billingData, validationData) => {
+    if (!onUpdateModuleState) return;
+
+    const moduleStateUpdate = {
+      analytics: analyticsData,
+      billingAnalytics: billingData,
+      validationReport: validationData,
+      isProcessed: true,
+      lastProcessed: new Date().toISOString()
+    };
+
+    // Save to App.js state (with database persistence)
+    await onUpdateModuleState('payrollProductionUpdater', moduleStateUpdate, true);
+    
+    console.log('📊 PPU: Saved analytics to App.js state');
+    addNotification('✅ Analytics saved and ready for AdminJobManagement', 'success');
+  };
+
   // Load persisted analytics on component mount
   const loadPersistedAnalytics = async () => {
-    if (!jobData?.id) return;
-
-    try {
-      const { data: job, error } = await supabase
-        .from('jobs')
-        .select('workflow_stats')
-        .eq('id', jobData.id)
-        .single();
-
-      if (!error && job?.workflow_stats && job.workflow_stats.totalRecords) {
-        setAnalytics(job.workflow_stats);
-        setBillingAnalytics(job.workflow_stats.billingAnalytics);
-        setValidationReport(job.workflow_stats.validationReport);
-        setProcessed(true);
-        setSettingsLocked(true);
-        debugLog('PERSISTENCE', '✅ Loaded persisted analytics from job record');
-        addNotification('Previously processed analytics loaded', 'info');
-      }
-    } catch (error) {
-      console.error('Error loading persisted analytics:', error);
+    // ENHANCED: Analytics now come from moduleState prop, no need to load from database
+    if (moduleState && moduleState.analytics && moduleState.isProcessed) {
+      setAnalytics(moduleState.analytics);
+      setBillingAnalytics(moduleState.billingAnalytics);
+      setValidationReport(moduleState.validationReport);
+      setProcessed(true);
+      setSettingsLocked(true);
+      debugLog('PERSISTENCE', '✅ Using analytics from App.js state');
+      addNotification('Analytics loaded from saved state', 'info');
     }
   };
 
@@ -908,6 +922,9 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
       setAnalytics(analyticsResult);
       setBillingAnalytics(billingResult);
       setValidationReport(validationReportData);
+
+      // ENHANCED: Save to App.js state instead of just local state
+      await saveAnalyticsToAppState(analyticsResult, billingResult, validationReportData);
 
       debugLog('ANALYTICS', '✅ Manager-focused analytics processing complete', {
         totalRecords: rawData.length,
