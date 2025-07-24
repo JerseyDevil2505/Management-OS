@@ -234,18 +234,68 @@ const PayrollProductionUpdater = ({
         }
 
       } else if (vendor === 'Microsystems') {
-        Object.keys(job.parsed_code_definitions).forEach(code => {
-          if (code.startsWith('140')) {
-            const description = job.parsed_code_definitions[code];
+        // NEW: Read from dual-pattern parsing structure
+        const fieldCodes = job.parsed_code_definitions.field_codes;
+        const flatLookup = job.parsed_code_definitions.flat_lookup;
+        
+        debugLog('CODES', 'Microsystems parsed structure:', {
+          hasFieldCodes: !!fieldCodes,
+          hasFlatLookup: !!flatLookup,
+          fieldCodesKeys: fieldCodes ? Object.keys(fieldCodes) : [],
+          has140Category: !!(fieldCodes && fieldCodes['140'])
+        });
+
+        if (fieldCodes && fieldCodes['140']) {
+          // NEW: Read from structured field_codes['140']
+          debugLog('CODES', 'Found 140 category in field_codes, loading InfoBy codes...');
+          
+          Object.keys(fieldCodes['140']).forEach(actualCode => {
+            const codeData = fieldCodes['140'][actualCode];
             codes.push({
-              code: code,
-              description: description,
+              code: codeData.full_code || `140${actualCode}`, // Display full code like "140A   9999"
+              description: codeData.description,
               section: 'InfoBy',
               vendor: 'Microsystems',
-              storageCode: code.substring(3) // Strip 140 prefix for storage (140A -> A)
+              storageCode: actualCode // Store single letter like "A"
             });
-          }
-        });
+            
+            debugLog('CODES', `Found InfoBy code: ${actualCode} = ${codeData.description}`);
+          });
+          
+        } else if (flatLookup) {
+          // FALLBACK: Read from flat_lookup for backward compatibility
+          debugLog('CODES', 'No field_codes[140], trying flat_lookup fallback...');
+          
+          Object.keys(flatLookup).forEach(code => {
+            if (code.startsWith('140')) {
+              const description = flatLookup[code];
+              codes.push({
+                code: code,
+                description: description,
+                section: 'InfoBy',
+                vendor: 'Microsystems',
+                storageCode: code.substring(3) // Strip 140 prefix for storage (140A -> A)
+              });
+            }
+          });
+          
+        } else {
+          // LEGACY: Old format fallback
+          debugLog('CODES', 'No structured format found, trying legacy format...');
+          
+          Object.keys(job.parsed_code_definitions).forEach(code => {
+            if (code.startsWith('140')) {
+              const description = job.parsed_code_definitions[code];
+              codes.push({
+                code: code,
+                description: description,
+                section: 'InfoBy',
+                vendor: 'Microsystems',
+                storageCode: code.substring(3) // Strip 140 prefix for storage (140A -> A)
+              });
+            }
+          });
+        }
       }
 
       setAvailableInfoByCodes(codes);
@@ -1011,6 +1061,7 @@ const PayrollProductionUpdater = ({
     addNotification('🔄 Session reset - Settings unlocked for editing', 'info');
     debugLog('SESSION', 'Processing session reset by user');
   };
+
   const startProcessingSession = async () => {
     if (!isDateLocked) {
       addNotification('Please lock the project start date first', 'error');
@@ -1765,6 +1816,7 @@ const PayrollProductionUpdater = ({
                         </div>
                       )}
                     </div>
+
                     {/* UNTYPED INSPECTORS (If Any) */}
                     {Object.entries(analytics.inspectorStats)
                       .filter(([_, stats]) => !stats.inspector_type || 
