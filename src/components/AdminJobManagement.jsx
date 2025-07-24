@@ -19,18 +19,15 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics = {}, isLoadingMetrics = f
       const { data: jobsData, error: jobsError } = await supabase
         .from('jobs')
         .select(`
-          *,
-          job_assignments(
-            id,
-            employee_id,
-            role,
-            assigned_date,
-            employees!job_assignments_employee_id_fkey(first_name, last_name, initials)
-          )
+          *
         `)
         .order('created_at', { ascending: false });
 
       if (jobsError) throw jobsError;
+
+      console.log('🔍 Raw jobs data:', jobsData);
+      console.log('🔍 Jobs length:', jobsData?.length);
+      console.log('🔍 First job:', jobsData?.[0]);
 
       console.log('📊 AdminJobManagement: Loaded jobs from database', jobsData?.length);
       setJobs(jobsData || []);
@@ -47,23 +44,10 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics = {}, isLoadingMetrics = f
     loadJobs();
   }, []);
 
-  // Helper function to get manager from job assignments
+  // Helper function to get manager from job assignments - TEMPORARILY DISABLED
   const getJobManager = (job) => {
-    const managerAssignment = job.job_assignments?.find(assignment => 
-      assignment.role === 'manager' || assignment.role === 'lead_manager'
-    );
-    
-    if (managerAssignment?.employees) {
-      return `${managerAssignment.employees.first_name} ${managerAssignment.employees.last_name}`;
-    }
-    
-    // Fallback to first assignment if no manager role found
-    if (job.job_assignments?.length > 0 && job.job_assignments[0].employees) {
-      const fallback = job.job_assignments[0].employees;
-      return `${fallback.first_name} ${fallback.last_name}`;
-    }
-    
-    return 'Unassigned';
+    // TODO: Re-enable once we fix the job_assignments query
+    return 'Manager (Loading...)';
   };
 
   // ENHANCED: Display metrics with fallback to "-" for unprocessed jobs
