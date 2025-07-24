@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from './lib/supabaseClient';
 import EmployeeManagement from './components/EmployeeManagement';
 import AdminJobManagement from './components/AdminJobManagement';
@@ -10,187 +10,138 @@ function App() {
   const [activeModule, setActiveModule] = useState('jobs');
   const [selectedJob, setSelectedJob] = useState(null);
 
-  // ENHANCED: Central module state management for ALL jobs
-  const [jobModuleStates, setJobModuleStates] = useState({});
-  const [isLoadingModuleStates, setIsLoadingModuleStates] = useState(false);
+  // ENHANCED: Central module state management for ALL jobs using workflow_stats
+  const [jobWorkflowStats, setJobWorkflowStats] = useState({});
+  const [isLoadingWorkflowStats, setIsLoadingWorkflowStats] = useState(false);
 
-  // ENHANCED: Load persisted module states for all active jobs
-  const loadAllJobModuleStates = async () => {
-    setIsLoadingModuleStates(true);
+  // ENHANCED: Load persisted workflow stats for all active jobs
+  const loadAllJobWorkflowStats = useCallback(async () => {
+    setIsLoadingWorkflowStats(true);
     try {
-      // Get all active jobs with their module states
+      // Get all active jobs with their workflow stats
       const { data: jobs, error } = await supabase
         .from('jobs')
-        .select('id, module_states, workflow_stats')
+        .select('id, workflow_stats')
         .eq('status', 'active')
         .order('created_at', { ascending: false });
 
       if (!error && jobs) {
-        const loadedStates = {};
+        const loadedStats = {};
         
         jobs.forEach(job => {
-          if (job.module_states && Object.keys(job.module_states).length > 0) {
-            // Load from new module_states field
-            loadedStates[job.id] = job.module_states;
-          } else if (job.workflow_stats && job.workflow_stats.totalRecords) {
-            // Migration: Load from old workflow_stats field
-            loadedStates[job.id] = {
-              payrollProductionUpdater: {
-                analytics: job.workflow_stats,
-                billingAnalytics: job.workflow_stats.billingAnalytics,
-                validationReport: job.workflow_stats.validationReport,
-                lastProcessed: job.workflow_stats.lastProcessed,
-                isProcessed: true
-              },
-              managementChecklist: {
-                progress: null,
-                completedItems: 0,
-                totalItems: 29,
-                lastUpdated: null
-              }
+          if (job.workflow_stats && Object.keys(job.workflow_stats).length > 0) {
+            // Load existing workflow stats
+            loadedStats[job.id] = {
+              ...job.workflow_stats,
+              isProcessed: true,
+              lastLoaded: new Date().toISOString()
             };
           } else {
-            // Initialize empty state for jobs without module states
-            loadedStates[job.id] = {
-              payrollProductionUpdater: {
-                analytics: null,
-                billingAnalytics: null,
-                validationReport: null,
-                lastProcessed: null,
-                isProcessed: false
-              },
-              managementChecklist: {
-                progress: null,
-                completedItems: 0,
-                totalItems: 29,
-                lastUpdated: null
-              }
+            // Initialize empty state for jobs without workflow stats
+            loadedStats[job.id] = {
+              totalRecords: 0,
+              validInspections: 0,
+              jobEntryRate: 0,
+              jobRefusalRate: 0,
+              commercialCompletePercent: 0,
+              pricingCompletePercent: 0,
+              lastProcessed: null,
+              isProcessed: false
             };
           }
         });
 
-        setJobModuleStates(loadedStates);
-        console.log(`📊 App.js: Loaded module states for ${Object.keys(loadedStates).length} jobs`);
+        setJobWorkflowStats(loadedStats);
+        console.log(`📊 App.js: Loaded workflow stats for ${Object.keys(loadedStats).length} jobs`);
       }
     } catch (error) {
-      console.error('❌ Error loading job module states:', error);
+      console.error('❌ Error loading job workflow stats:', error);
     } finally {
-      setIsLoadingModuleStates(false);
+      setIsLoadingWorkflowStats(false);
     }
-  };
-
-  // Load module states on app startup
-  useEffect(() => {
-    loadAllJobModuleStates();
   }, []);
 
-  // ENHANCED: Update module state for a specific job
-  const handleModuleStateUpdate = async (jobId, moduleName, newState, persistToDatabase = true) => {
-    console.log(`📊 App.js: Updating ${moduleName} state for job ${jobId}`, newState);
+  // Load workflow stats on app startup
+  useEffect(() => {
+    loadAllJobWorkflowStats();
+  }, [loadAllJobWorkflowStats]);
 
-    // Initialize job state if it doesn't exist
-    if (!jobModuleStates[jobId]) {
-      setJobModuleStates(prev => ({
-        ...prev,
-        [jobId]: {
-          payrollProductionUpdater: {
-            analytics: null,
-            billingAnalytics: null,
-            validationReport: null,
-            lastProcessed: null,
-            isProcessed: false
-          },
-          managementChecklist: {
-            progress: null,
-            completedItems: 0,
-            totalItems: 29,
-            lastUpdated: null
-          }
-        }
-      }));
-    }
+  // ENHANCED: Update workflow stats for a specific job
+  const handleWorkflowStatsUpdate = async (jobId, newStats, persistToDatabase = true) => {
+    console.log(`📊 App.js: Updating workflow stats for job ${jobId}`, newStats);
 
     // Update local state immediately for real-time UI
-    setJobModuleStates(prev => ({
+    setJobWorkflowStats(prev => ({
       ...prev,
       [jobId]: {
         ...prev[jobId],
-        [moduleName]: {
-          ...prev[jobId]?.[moduleName],
-          ...newState,
-          lastUpdated: new Date().toISOString()
-        }
+        ...newStats,
+        isProcessed: true,
+        lastUpdated: new Date().toISOString()
       }
     }));
 
     // Persist to database for navigation survival
     if (persistToDatabase) {
       try {
-        const updatedJobState = {
-          ...jobModuleStates[jobId],
-          [moduleName]: {
-            ...jobModuleStates[jobId]?.[moduleName],
-            ...newState,
-            lastUpdated: new Date().toISOString()
-          }
+        const updatedStats = {
+          ...jobWorkflowStats[jobId],
+          ...newStats,
+          isProcessed: true,
+          lastUpdated: new Date().toISOString()
         };
 
         const { error } = await supabase
           .from('jobs')
           .update({ 
-            module_states: updatedJobState,
+            workflow_stats: updatedStats,
             updated_at: new Date().toISOString()
           })
           .eq('id', jobId);
 
         if (error) {
-          console.error('❌ Error persisting module state:', error);
+          console.error('❌ Error persisting workflow stats:', error);
         } else {
-          console.log(`✅ App.js: Persisted ${moduleName} state for job ${jobId}`);
+          console.log(`✅ App.js: Persisted workflow stats for job ${jobId}`);
         }
       } catch (error) {
-        console.error('❌ Failed to persist module state:', error);
+        console.error('❌ Failed to persist workflow stats:', error);
       }
     }
   };
 
-  // ENHANCED: Get module state for a specific job (with defaults)
-  const getJobModuleState = (jobId, moduleName) => {
-    const defaultStates = {
-      payrollProductionUpdater: {
-        analytics: null,
-        billingAnalytics: null,
-        validationReport: null,
-        lastProcessed: null,
-        isProcessed: false
-      },
-      managementChecklist: {
-        progress: null,
-        completedItems: 0,
-        totalItems: 29,
-        lastUpdated: null
-      }
+  // ENHANCED: Get workflow stats for a specific job (with defaults)
+  const getJobWorkflowStats = (jobId) => {
+    const defaultStats = {
+      totalRecords: 0,
+      validInspections: 0,
+      jobEntryRate: 0,
+      jobRefusalRate: 0,
+      commercialCompletePercent: 0,
+      pricingCompletePercent: 0,
+      lastProcessed: null,
+      isProcessed: false
     };
 
-    return jobModuleStates[jobId]?.[moduleName] || defaultStates[moduleName] || {};
+    return jobWorkflowStats[jobId] || defaultStats;
   };
 
   // ENHANCED: Get all job metrics for AdminJobManagement
   const getAllJobMetrics = () => {
     const metrics = {};
     
-    Object.keys(jobModuleStates).forEach(jobId => {
-      const payrollProductionState = jobModuleStates[jobId]?.payrollProductionUpdater;
+    Object.keys(jobWorkflowStats).forEach(jobId => {
+      const stats = jobWorkflowStats[jobId];
       
-      if (payrollProductionState?.analytics && payrollProductionState.isProcessed) {
+      if (stats && stats.isProcessed && stats.totalRecords) {
         metrics[jobId] = {
-          totalProperties: payrollProductionState.analytics.totalRecords || 0,
-          propertiesInspected: payrollProductionState.analytics.validInspections || 0,
-          entryRate: payrollProductionState.analytics.jobEntryRate || 0,
-          refusalRate: payrollProductionState.analytics.jobRefusalRate || 0,
-          commercialComplete: payrollProductionState.analytics.commercialCompletePercent || 0,
-          pricingComplete: payrollProductionState.analytics.pricingCompletePercent || 0,
-          lastProcessed: payrollProductionState.lastProcessed,
+          totalProperties: stats.totalRecords || 0,
+          propertiesInspected: stats.validInspections || 0,
+          entryRate: stats.jobEntryRate || 0,
+          refusalRate: stats.jobRefusalRate || 0,
+          commercialComplete: stats.commercialCompletePercent || 0,
+          pricingComplete: stats.pricingCompletePercent || 0,
+          lastProcessed: stats.lastProcessed,
           isProcessed: true
         };
       } else {
@@ -225,25 +176,28 @@ function App() {
     setActiveModule('jobs');
   };
 
-  // ENHANCED: Handle file processing completion with state invalidation
+  // ENHANCED: Handle file processing completion with analytics invalidation
   const handleFileProcessed = async (result) => {
     console.log(`📊 App.js: File processed for job ${selectedJob?.id}`, result);
     
     // If analytics were processed, invalidate them to force refresh
-    if (selectedJob?.id && jobModuleStates[selectedJob.id]?.payrollProductionUpdater?.isProcessed) {
+    if (selectedJob?.id && jobWorkflowStats[selectedJob.id]?.isProcessed) {
       console.log('📊 App.js: Invalidating PayrollProductionUpdater analytics due to file update');
       
-      await handleModuleStateUpdate(selectedJob.id, 'payrollProductionUpdater', {
-        analytics: null,
-        billingAnalytics: null,
-        validationReport: null,
+      await handleWorkflowStatsUpdate(selectedJob.id, {
+        totalRecords: 0,
+        validInspections: 0,
+        jobEntryRate: 0,
+        jobRefusalRate: 0,
+        commercialCompletePercent: 0,
+        pricingCompletePercent: 0,
         isProcessed: false,
         lastProcessed: null
       }, true);
     }
 
-    // Refresh all job module states to pick up any changes
-    await loadAllJobModuleStates();
+    // Refresh all job workflow stats to pick up any changes
+    await loadAllJobWorkflowStats();
   };
 
   return (
@@ -253,7 +207,7 @@ function App() {
         <div className="max-w-6xl mx-auto">
           <h1 className="text-2xl font-bold mb-4">
             Management OS
-            {isLoadingModuleStates && (
+            {isLoadingWorkflowStats && (
               <span className="ml-3 text-sm text-gray-300">
                 <div className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-gray-300 mr-2"></div>
                 Loading analytics...
@@ -310,19 +264,15 @@ function App() {
                   />
                 </div>
 
-                {/* ENHANCED: Show job module state indicators */}
+                {/* ENHANCED: Show job workflow state indicators */}
                 <div className="border-l border-gray-700 pl-6">
                   <div className="flex items-center space-x-2 text-sm">
-                    {getJobModuleState(selectedJob.id, 'payrollProductionUpdater').isProcessed && (
+                    {getJobWorkflowStats(selectedJob.id).isProcessed && (
                       <span className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-medium">
                         Analytics Ready
                       </span>
                     )}
-                    {getJobModuleState(selectedJob.id, 'managementChecklist').completedItems > 0 && (
-                      <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs font-medium">
-                        Checklist Active
-                      </span>
-                    )}
+                    {/* TODO: Add ManagementChecklist status indicator */}
                   </div>
                 </div>
               </div>
@@ -347,7 +297,7 @@ function App() {
             onJobSelect={handleJobSelect}
             // ENHANCED: Pass live metrics to AdminJobManagement
             jobMetrics={getAllJobMetrics()}
-            isLoadingMetrics={isLoadingModuleStates}
+            isLoadingMetrics={isLoadingWorkflowStats}
           />
         )}
         
@@ -355,12 +305,11 @@ function App() {
           <JobContainer 
             selectedJob={selectedJob} 
             onBackToJobs={handleBackToJobs}
-            // ENHANCED: Pass module state management to JobContainer
-            moduleState={getJobModuleState(selectedJob.id, 'payrollProductionUpdater')}
-            onUpdateModuleState={(moduleName, newState, persist = true) => 
-              handleModuleStateUpdate(selectedJob.id, moduleName, newState, persist)
+            // ENHANCED: Pass workflow stats management to JobContainer
+            workflowStats={getJobWorkflowStats(selectedJob.id)}
+            onUpdateWorkflowStats={(newStats, persist = true) => 
+              handleWorkflowStatsUpdate(selectedJob.id, newStats, persist)
             }
-            allModuleStates={jobModuleStates[selectedJob.id] || {}}
           />
         )}
       </div>
