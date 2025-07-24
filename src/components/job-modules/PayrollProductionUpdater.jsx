@@ -32,13 +32,7 @@ const PayrollProductionUpdater = ({
     invalid: [],
     priced: []
   });
-  const [originalCategoryConfig, setOriginalCategoryConfig] = useState({
-    entry: [],
-    refusal: [],
-    estimation: [],
-    invalid: [],
-    priced: []
-  });
+  const [originalCategoryConfig, setOriginalCategoryConfig] = useState({});
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [projectStartDate, setProjectStartDate] = useState('');
   const [isDateLocked, setIsDateLocked] = useState(false);
@@ -348,7 +342,7 @@ const PayrollProductionUpdater = ({
 
   // Set default InfoBy category configurations
   const setDefaultCategoryConfig = (vendor, codes) => {
-    const defaultConfig = { entry: [], refusal: [], estimation: [], invalid: [], priced: [], exempt: [] };
+    const defaultConfig = { entry: [], refusal: [], estimation: [], invalid: [], priced: [] };
 
     if (vendor === 'BRT') {
       codes.forEach(item => {
@@ -374,12 +368,10 @@ const PayrollProductionUpdater = ({
           defaultConfig.entry.push(storageCode);
         } else if (desc.includes('REFUSED')) {
           defaultConfig.refusal.push(storageCode);
-        } else if (desc.includes('ESTIMATED')) {
+        } else if (desc.includes('ESTIMATED') || desc.includes('VACANT')) {
           defaultConfig.estimation.push(storageCode);
         } else if (desc.includes('PRICED') || desc.includes('NARRATIVE') || desc.includes('ENCODED')) {
           defaultConfig.priced.push(storageCode);
-        } else if (desc.includes('VACANT')) {
-          defaultConfig.exempt.push(storageCode); // NEW: Put vacant land in exempt by default
         }
       });
     }
@@ -549,13 +541,12 @@ const PayrollProductionUpdater = ({
         detectedVendor: actualVendor
       });
 
-      // Get all valid InfoBy codes for validation (INCLUDING EXEMPT)
+      // Get all valid InfoBy codes for validation
       const allValidCodes = [
         ...infoByCategoryConfig.entry,
         ...infoByCategoryConfig.refusal,
         ...infoByCategoryConfig.estimation,
-        ...infoByCategoryConfig.priced,
-        ...infoByCategoryConfig.exempt // NEW: Exempt codes are valid, just don't affect rates
+        ...infoByCategoryConfig.priced
       ];
 
       // Load ALL records using pagination to bypass Supabase 1000 limit
@@ -724,7 +715,6 @@ const PayrollProductionUpdater = ({
         const isRefusalCode = infoByCategoryConfig.refusal.includes(normalizedInfoBy);
         const isEstimationCode = infoByCategoryConfig.estimation.includes(normalizedInfoBy);
         const isPricedCode = infoByCategoryConfig.priced.includes(normalizedInfoBy);
-        const isExemptCode = infoByCategoryConfig.exempt.includes(normalizedInfoBy); // NEW: Exempt codes
         const hasListingData = record.inspection_list_by && record.inspection_list_date;
 
         if (isRefusalCode && !hasListingData) {
@@ -1432,7 +1422,7 @@ const PayrollProductionUpdater = ({
             </div>
             
             {/* Quick Summary (Always Visible) */}
-            <div className="grid grid-cols-2 md:grid-cols-6 gap-2 text-sm mb-4">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-sm mb-4">
               <div className="bg-green-50 px-3 py-2 rounded border">
                 <span className="font-medium text-green-800">Entry:</span> {infoByCategoryConfig.entry.length}
               </div>
@@ -1448,15 +1438,12 @@ const PayrollProductionUpdater = ({
               <div className="bg-purple-50 px-3 py-2 rounded border">
                 <span className="font-medium text-purple-800">Priced:</span> {infoByCategoryConfig.priced.length}
               </div>
-              <div className="bg-yellow-50 px-3 py-2 rounded border">
-                <span className="font-medium text-yellow-800">Exempt:</span> {infoByCategoryConfig.exempt.length}
-              </div>
             </div>
             
             {/* Detailed Configuration (Collapsible) */}
             {showInfoByConfig && (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
-                {['entry', 'refusal', 'estimation', 'invalid', 'priced', 'exempt'].map(category => (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                {['entry', 'refusal', 'estimation', 'invalid', 'priced'].map(category => (
                   <div key={category} className="border border-gray-200 rounded-lg p-4">
                     <h5 className="font-medium text-gray-900 mb-3 capitalize">
                       {category} ({infoByCategoryConfig[category].length})
@@ -1508,8 +1495,7 @@ const PayrollProductionUpdater = ({
             onClick={startProcessingSession}
             disabled={processing || (!isDateLocked) || hasUnsavedChanges ||
               (infoByCategoryConfig.entry.length + infoByCategoryConfig.refusal.length + 
-               infoByCategoryConfig.estimation.length + infoByCategoryConfig.priced.length + 
-               infoByCategoryConfig.exempt.length) === 0}
+               infoByCategoryConfig.estimation.length + infoByCategoryConfig.priced.length) === 0}
             className={`px-6 py-2 rounded-lg flex items-center space-x-2 transition-all ${
               processed 
                 ? 'bg-green-600 text-white hover:bg-green-700'
