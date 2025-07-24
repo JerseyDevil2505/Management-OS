@@ -2,7 +2,17 @@ import React, { useState, useEffect } from 'react';
 import { Factory, Settings, Download, RefreshCw, AlertTriangle, CheckCircle, TrendingUp, DollarSign, Users, Calendar, X, ChevronDown, ChevronUp, Eye, FileText, Lock, Unlock, Save } from 'lucide-react';
 import { supabase, jobService } from '../../lib/supabaseClient';
 
-const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, propertyRecordsCount }) => {
+// 🔧 ENHANCED: Accept App.js state management props
+const PayrollProductionUpdater = ({ 
+  jobData, 
+  onBackToJobs, 
+  latestFileVersion, 
+  propertyRecordsCount,
+  // NEW: App.js integration props
+  currentWorkflowStats,
+  onAnalyticsUpdate,
+  onUpdateWorkflowStats
+}) => {
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [processed, setProcessed] = useState(false);
@@ -55,6 +65,35 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
   const debugLog = (section, message, data = null) => {
     console.log(`🔍 [${section}] ${message}`, data || '');
   };
+
+  // 🔧 NEW: Check for existing App.js analytics on component mount
+  useEffect(() => {
+    if (currentWorkflowStats?.isProcessed && currentWorkflowStats.totalRecords > 0) {
+      debugLog('APP_STATE', '📊 Loading existing analytics from App.js state');
+      
+      // Reconstruct analytics from App.js format
+      const existingAnalytics = {
+        totalRecords: currentWorkflowStats.totalRecords,
+        validInspections: currentWorkflowStats.validInspections,
+        jobEntryRate: currentWorkflowStats.jobEntryRate,
+        jobRefusalRate: currentWorkflowStats.jobRefusalRate,
+        commercialCompletePercent: currentWorkflowStats.commercialCompletePercent,
+        pricingCompletePercent: currentWorkflowStats.pricingCompletePercent,
+        classBreakdown: currentWorkflowStats.classBreakdown,
+        inspectorStats: currentWorkflowStats.inspectorStats,
+        lastProcessed: currentWorkflowStats.lastProcessed
+      };
+
+      setAnalytics(existingAnalytics);
+      setBillingAnalytics(currentWorkflowStats.billingAnalytics);
+      setValidationReport(currentWorkflowStats.validationReport);
+      setProcessed(true);
+      setSettingsLocked(true);
+      
+      addNotification('Analytics loaded from App.js state', 'info');
+      debugLog('APP_STATE', '✅ Analytics restored from App.js state');
+    }
+  }, [currentWorkflowStats]);
 
   // Load employee data for inspector details
   const loadEmployeeData = async () => {
@@ -942,7 +981,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
     setInfoByCategoryConfig(newConfig);
   };
 
-  // ENHANCED: Start processing session with persistence
+  // ENHANCED: Start processing session with App.js state integration
   const startProcessingSession = async () => {
     if (!isDateLocked) {
       addNotification('Please lock the project start date first', 'error');
@@ -986,6 +1025,16 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
 
       // ENHANCED: Persist to database for navigation survival
       await saveCategoriesToDatabase();
+
+      // 🔧 NEW: Update App.js state with analytics results
+      if (onAnalyticsUpdate && results.analyticsResult) {
+        debugLog('SESSION', '📊 Updating App.js state with analytics results');
+        onAnalyticsUpdate({
+          ...results.analyticsResult,
+          billingAnalytics: results.billingResult,
+          validationReport: results.validationReportData
+        });
+      }
 
       debugLog('SESSION', '✅ Processing session completed successfully');
       addNotification(`✅ Processing completed! Analytics saved and ready.`, 'success');
@@ -1099,7 +1148,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
           <div className="flex items-center">
             <Factory className="w-8 h-8 mr-3 text-blue-600" />
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Production Tracker</h1>
+              <h1 className="text-2xl font-bold text-gray-900">PayrollProductionUpdater</h1>
               <p className="text-gray-600">
                 {jobData.name} - Enhanced Analytics & Validation Engine
                 {detectedVendor && <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded font-medium">
@@ -1116,7 +1165,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
           </button>
         </div>
 
-        {/* ENHANCED: Quick Stats with Percentages and Details */}
+        {/* ENHANCED: Quick Stats with App.js Integration */}
         {analytics && (
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="bg-white p-4 rounded-lg border shadow-sm">
@@ -1124,6 +1173,9 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
                 <div>
                   <p className="text-sm text-gray-600">Total Properties</p>
                   <p className="text-2xl font-bold text-blue-600">{propertyRecordsCount?.toLocaleString() || analytics.totalRecords.toLocaleString()}</p>
+                  {currentWorkflowStats?.isProcessed && (
+                    <p className="text-xs text-green-600 mt-1">✅ Synced with App.js</p>
+                  )}
                 </div>
                 <TrendingUp className="w-8 h-8 text-blue-500" />
               </div>
@@ -1547,7 +1599,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
                             </div>
                             
                             {/* Metrics Grid */}
-                            <div className="grid grid-cols-2 md:grid-cols-7 gap-3 text-center">
+                            <div className="grid grid-cols-2 md:grid-cols-6 gap-3 text-center">
                               <div className="bg-blue-50 p-3 rounded">
                                 <div className="font-bold text-blue-700 text-lg">{stats.commercialInspected.toLocaleString()}</div>
                                 <div className="text-xs text-blue-600 font-medium">Commercial</div>
@@ -1572,11 +1624,6 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
                                 <div className="font-bold text-purple-700 text-lg">{stats.pricingAverage || 'N/A'}</div>
                                 <div className="text-xs text-purple-600 font-medium">Pricing Avg</div>
                                 <div className="text-xs text-gray-500">{jobData.vendor_type === 'BRT' ? 'Priced ÷ Days' : 'N/A'}</div>
-                              </div>
-                              <div className="bg-gray-50 p-3 rounded">
-                                <div className="font-bold text-gray-700 text-lg">75</div>
-                                <div className="text-xs text-gray-600 font-medium">Commercial Rate</div>
-                                <div className="text-xs text-gray-500">Standard rate</div>
                               </div>
                               <div className="bg-gray-50 p-3 rounded">
                                 <div className="font-bold text-gray-700 text-lg">{(stats.totalInspected - stats.commercialInspected).toLocaleString()}</div>
