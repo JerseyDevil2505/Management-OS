@@ -23,7 +23,7 @@ function App() {
         .from('jobs')
         .select('id, module_states, workflow_stats')
         .eq('job_status', 'active')
-        .not('module_states', 'is', null);
+        .order('created_at', { ascending: false });
 
       if (!error && jobs) {
         const loadedStates = {};
