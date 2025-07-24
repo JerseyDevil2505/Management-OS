@@ -833,7 +833,7 @@ const uploadPropertyAssignment = async (job) => {
         year_created: new Date().getFullYear(),
         assignedManagers: newJob.assignedManagers,
         totalProperties: fileAnalysis.propertyCount,
-        inspectedProperties: 0,
+        //Removed inspected_properties, now using live App.js analytics instead
         status: 'active',
         sourceFileStatus: 'processing',
         codeFileStatus: 'current',
