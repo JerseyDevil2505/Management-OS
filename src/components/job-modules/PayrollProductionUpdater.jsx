@@ -30,16 +30,14 @@ const PayrollProductionUpdater = ({
     refusal: [],
     estimation: [],
     invalid: [],
-    priced: [],
-    exempt: [] // NEW: For codes that are valid but don't fit standard analytics
+    priced: []
   });
   const [originalCategoryConfig, setOriginalCategoryConfig] = useState({
     entry: [],
     refusal: [],
     estimation: [],
     invalid: [],
-    priced: [],
-    exempt: [] // NEW: Include exempt in original config too
+    priced: []
   });
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [projectStartDate, setProjectStartDate] = useState('');
