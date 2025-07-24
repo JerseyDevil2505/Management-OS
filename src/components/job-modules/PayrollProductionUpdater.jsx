@@ -196,12 +196,7 @@ const PayrollProductionUpdater = ({
             const item = residentialSection['30'].MAP[key];
             if (item && item.DATA && item.DATA.VALUE) {
               const description = item.DATA.VALUE.toUpperCase();
-              if (description.includes('OWNER') || description.includes('SPOUSE') || 
-                  description.includes('TENANT') || description.includes('AGENT') ||
-                  description.includes('REFUSED') || description.includes('ESTIMATED') ||
-                  description.includes('DOOR') || description.includes('CONVERSION') ||
-                  description.includes('PRICED')) {
-                
+              //Remove the if function, just keep the inside part                
                 codes.push({
                   code: item.KEY || item.DATA.KEY,
                   description: item.DATA.VALUE,
