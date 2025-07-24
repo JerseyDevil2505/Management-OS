@@ -187,24 +187,22 @@ const PayrollProductionUpdater = ({
         
         debugLog('CODES', 'BRT sections available:', Object.keys(sections));
         
-        // Look for InfoBy codes in Residential section, key 30, MAP
+        // FIXED: Look for InfoBy codes in Residential section, key 30, MAP - LOAD ALL CODES
         const residentialSection = sections['Residential'];
         if (residentialSection && residentialSection['30'] && residentialSection['30'].MAP) {
-          debugLog('CODES', 'Found Residential[30].MAP, checking for InfoBy codes...');
+          debugLog('CODES', 'Found Residential[30].MAP, loading ALL InfoBy codes...');
           
           Object.keys(residentialSection['30'].MAP).forEach(key => {
             const item = residentialSection['30'].MAP[key];
             if (item && item.DATA && item.DATA.VALUE) {
-              const description = item.DATA.VALUE.toUpperCase();
-              //Remove the if function, just keep the inside part                
-                codes.push({
-                  code: item.KEY || item.DATA.KEY,
-                  description: item.DATA.VALUE,
-                  section: 'Residential[30]',
-                  vendor: 'BRT'
-                });
-                
-                debugLog('CODES', `Found InfoBy code: ${item.KEY} = ${item.DATA.VALUE}`);
+              codes.push({
+                code: item.KEY || item.DATA.KEY,
+                description: item.DATA.VALUE,
+                section: 'Residential[30]',
+                vendor: 'BRT'
+              });
+              
+              debugLog('CODES', `Found InfoBy code: ${item.KEY} = ${item.DATA.VALUE}`);
             }
           });
         } else {
@@ -297,7 +295,7 @@ const PayrollProductionUpdater = ({
     if (vendor === 'BRT') {
       codes.forEach(item => {
         const desc = item.description.toUpperCase();
-        if (desc.includes('OWNER') || desc.includes('SPOUSE') || desc.includes('TENANT') || desc.includes('AGENT')) {
+        if (desc.includes('OWNER') || desc.includes('SPOUSE') || desc.includes('TENANT') || desc.includes('AGENT') || desc.includes('EMPLOYEE')) {
           defaultConfig.entry.push(item.code);
         } else if (desc.includes('REFUSED')) {
           defaultConfig.refusal.push(item.code);
@@ -308,6 +306,7 @@ const PayrollProductionUpdater = ({
         } else if (desc.includes('CONVERSION') || desc.includes('PRICED')) {
           defaultConfig.priced.push(item.code);
         }
+        // NOTE: Codes that don't match any keywords will be left unassigned for manual configuration
       });
     } else if (vendor === 'Microsystems') {
       codes.forEach(item => {
@@ -576,6 +575,11 @@ const PayrollProductionUpdater = ({
 
         // Skip UNASSIGNED for inspector analytics but continue for totals
         if (inspector === 'UNASSIGNED') return;
+
+        // ENHANCED: Skip inspections before project start date (removes old inspector noise)
+        if (measuredDate && measuredDate < startDate) {
+          return; // Completely skip old inspections from analytics and validation
+        }
 
         // Initialize inspector stats
         if (!inspectorStats[inspector]) {
@@ -1924,4 +1928,3 @@ const PayrollProductionUpdater = ({
 };
 
 export default PayrollProductionUpdater;
-
