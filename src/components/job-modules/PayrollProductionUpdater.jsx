@@ -582,6 +582,11 @@ const PayrollProductionUpdater = ({
           return; // Completely skip old inspections from analytics and validation
         }
 
+        // ENHANCED: Skip inspectors with invalid initials (not in employee database)
+        if (!employeeData[inspector]) {
+          return; // Skip CM, MJ, X, PL, RH - invalid inspectors entirely
+        }
+
         // Initialize inspector stats
         if (!inspectorStats[inspector]) {
           const employeeInfo = employeeData[inspector] || {};
@@ -1646,9 +1651,89 @@ const PayrollProductionUpdater = ({
                       )}
                     </div>
 
+                    {/* MANAGEMENT INSPECTOR ANALYTICS */}
+                    <div className="bg-purple-50 rounded-lg border border-purple-200 p-6">
+                      <h4 className="text-lg font-semibold text-purple-800 mb-4 flex items-center">
+                        <Users className="w-5 h-5 mr-2" />
+                        Management Inspector Analytics  
+                      </h4>
+                      
+                      {Object.entries(analytics.inspectorStats)
+                        .filter(([_, stats]) => stats.inspector_type?.toLowerCase() === 'management')
+                        .sort(([aKey, aStats], [bKey, bStats]) => {
+                          switch (inspectorSort) {
+                            case 'alphabetical':
+                              return aStats.name.localeCompare(bStats.name);
+                            case 'dailyAverage':
+                              return (bStats.dailyAverage || 0) - (aStats.dailyAverage || 0);
+                            case 'totalInspected':
+                              return bStats.totalInspected - aStats.totalInspected;
+                            default:
+                              return 0;
+                          }
+                        })
+                        .map(([inspector, stats]) => (
+                          <div key={inspector} className="bg-white border border-purple-200 rounded-lg p-4 mb-3">
+                            {/* Header Row */}
+                            <div className="flex items-center justify-between mb-3">
+                              <div className="flex items-center space-x-3">
+                                <span className="font-semibold text-gray-900">{stats.name} ({inspector})</span>
+                                <span className="px-2 py-1 text-xs font-medium rounded bg-purple-100 text-purple-800">
+                                  Management Inspector
+                                </span>
+                                <span className="text-sm text-gray-600">{stats.fieldDays} field days</span>
+                              </div>
+                              <span className="text-lg font-bold text-purple-600">{stats.totalInspected.toLocaleString()} Total</span>
+                            </div>
+                            
+                            {/* Metrics Grid */}
+                            <div className="grid grid-cols-2 md:grid-cols-6 gap-3 text-center">
+                              <div className="bg-green-50 p-3 rounded">
+                                <div className="font-bold text-green-700 text-lg">{stats.residentialInspected.toLocaleString()}</div>
+                                <div className="text-xs text-green-600 font-medium">Residential</div>
+                                <div className="text-xs text-gray-500">(2, 3A)</div>
+                              </div>
+                              <div className="bg-blue-50 p-3 rounded">
+                                <div className="font-bold text-blue-700 text-lg">{stats.commercialInspected.toLocaleString()}</div>
+                                <div className="text-xs text-blue-600 font-medium">Commercial</div>
+                                <div className="text-xs text-gray-500">(4A, 4B, 4C)</div>
+                              </div>
+                              <div className="bg-purple-50 p-3 rounded">
+                                <div className="font-bold text-purple-700 text-lg">{stats.dailyAverage || 0}</div>
+                                <div className="text-xs text-purple-600 font-medium">Daily Average</div>
+                                <div className="text-xs text-gray-500">Total ÷ Field Days</div>
+                              </div>
+                              <div className="bg-green-50 p-3 rounded">
+                                <div className="font-bold text-green-700 text-lg">{stats.entryRate || 0}%</div>
+                                <div className="text-xs text-green-600 font-medium">Entry Rate</div>
+                                <div className="text-xs text-gray-500">On residential</div>
+                              </div>
+                              <div className="bg-red-50 p-3 rounded">
+                                <div className="font-bold text-red-700 text-lg">{stats.refusalRate || 0}%</div>
+                                <div className="text-xs text-red-600 font-medium">Refusal Rate</div>
+                                <div className="text-xs text-gray-500">On residential</div>
+                              </div>
+                              <div className="bg-gray-50 p-3 rounded">
+                                <div className="font-bold text-gray-700 text-lg">{(stats.totalInspected - stats.residentialInspected - stats.commercialInspected).toLocaleString()}</div>
+                                <div className="text-xs text-gray-600 font-medium">Other Properties</div>
+                                <div className="text-xs text-gray-500">Vacant, exempt, etc.</div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      
+                      {Object.entries(analytics.inspectorStats).filter(([_, stats]) => stats.inspector_type?.toLowerCase() === 'management').length === 0 && (
+                        <div className="text-center py-4 text-purple-600">
+                          <p>No management inspectors found</p>
+                        </div>
+                      )}
+                    </div>
                     {/* UNTYPED INSPECTORS (If Any) */}
                     {Object.entries(analytics.inspectorStats)
-                      .filter(([_, stats]) => !stats.inspector_type || (stats.inspector_type !== 'residential' && stats.inspector_type !== 'commercial'))
+                      .filter(([_, stats]) => !stats.inspector_type || 
+                        (stats.inspector_type.toLowerCase() !== 'residential' && 
+                         stats.inspector_type.toLowerCase() !== 'commercial' &&
+                         stats.inspector_type.toLowerCase() !== 'management'))
                       .length > 0 && (
                       <div className="bg-gray-50 rounded-lg border border-gray-200 p-6">
                         <h4 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
@@ -1659,7 +1744,8 @@ const PayrollProductionUpdater = ({
                         {Object.entries(analytics.inspectorStats)
                           .filter(([_, stats]) => !stats.inspector_type || 
                             (stats.inspector_type.toLowerCase() !== 'residential' && 
-                             stats.inspector_type.toLowerCase() !== 'commercial'))
+                             stats.inspector_type.toLowerCase() !== 'commercial' &&
+                             stats.inspector_type.toLowerCase() !== 'management'))
                           .sort(([aKey, aStats], [bKey, bStats]) => aStats.name.localeCompare(bStats.name))
                           .map(([inspector, stats]) => (
                             <div key={inspector} className="bg-white border border-gray-200 rounded-lg p-4 mb-3">
