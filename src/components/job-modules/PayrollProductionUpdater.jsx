@@ -652,233 +652,238 @@ const PayrollProductionUpdater = ({
           billingByClass[propertyClass].total++;
         }
 
+        // 🔧 NEW: Track this property's processing status
+        let wasAddedToInspectionData = false;
+        let reasonNotAdded = '';
+
         // Skip UNASSIGNED for inspector analytics but continue for totals
-        if (inspector === 'UNASSIGNED') return;
-
+        if (inspector === 'UNASSIGNED') {
+          reasonNotAdded = 'Inspector UNASSIGNED';
+        }
         // ENHANCED: Skip inspections before project start date (removes old inspector noise)
-        if (measuredDate && measuredDate < startDate) {
-          return; // Completely skip old inspections from analytics and validation
+        else if (measuredDate && measuredDate < startDate) {
+          reasonNotAdded = 'Inspection date before project start date';
         }
-
         // ENHANCED: Skip inspectors with invalid initials (not in employee database)
-        if (!employeeData[inspector]) {
-          return; // Skip CM, MJ, X, PL, RH - invalid inspectors entirely
+        else if (!employeeData[inspector]) {
+          reasonNotAdded = `Inspector ${inspector} not found in employee database`;
         }
-
-        // Initialize inspector stats
-        if (!inspectorStats[inspector]) {
-          const employeeInfo = employeeData[inspector] || {};
-          inspectorStats[inspector] = {
-            name: employeeInfo.name || inspector,
-            fullName: employeeInfo.fullName || inspector,
-            inspector_type: employeeInfo.inspector_type,
-            totalInspected: 0, // NEW: All valid inspections
-            residentialInspected: 0, // NEW: 2, 3A only
-            commercialInspected: 0, // NEW: 4A, 4B, 4C only
-            entry: 0,
-            refusal: 0,
-            priced: 0,
-            // NEW: Separate field day tracking
-            allWorkDays: new Set(),
-            residentialWorkDays: new Set(), // Days with 2/3A work
-            commercialWorkDays: new Set(), // Days with 4A/4B/4C work
-            pricingWorkDays: new Set()
-          };
-          inspectorIssuesMap[inspector] = [];
-        }
-
-        // Check for any inspection attempt
-        const hasAnyInspectionAttempt = (
-          (record.inspection_measure_by && record.inspection_measure_by.trim() !== '') ||
-          record.inspection_measure_date ||
-          record.inspection_info_by ||
-          record.inspection_list_by ||
-          record.inspection_price_by
-        );
-
-        if (!hasAnyInspectionAttempt) {
-          // Property not yet inspected - skip validation entirely
-          missingProperties.push({
-            composite_key: propertyKey,
-            block: record.property_block,
-            lot: record.property_lot,
-            qualifier: record.property_qualifier || '',
-            property_location: record.property_location || '',
-            property_class: propertyClass,
-            reason: 'No inspection attempt - completely uninspected',
-            inspector: 'UNASSIGNED',
-            info_by_code: null,
-            measure_date: null
-          });
-          return;
-        }
-
-        // Validate attempted inspections
-        let isValidInspection = true;
-        let hasValidMeasuredBy = inspector && inspector !== 'UNASSIGNED' && inspector.trim() !== '';
-        let hasValidMeasuredDate = measuredDate && measuredDate >= startDate;
-        
-        const normalizedInfoBy = infoByCode?.toString().padStart(2, '0');
-        const normalizedValidCodes = allValidCodes.map(code => code.toString().padStart(2, '0'));
-        let hasValidInfoBy = normalizedInfoBy && normalizedValidCodes.includes(normalizedInfoBy);
-        
-        // Compound validation messages per property
-        const addValidationIssue = (message) => {
-          if (!propertyIssues[propertyKey]) {
-            propertyIssues[propertyKey] = {
-              block: record.property_block,
-              lot: record.property_lot,
-              qualifier: record.property_qualifier || '',
-              property_location: record.property_location || '',
-              inspector: inspector,
-              issues: []
+        else {
+          // Continue with normal processing for valid records
+          
+          // Initialize inspector stats
+          if (!inspectorStats[inspector]) {
+            const employeeInfo = employeeData[inspector] || {};
+            inspectorStats[inspector] = {
+              name: employeeInfo.name || inspector,
+              fullName: employeeInfo.fullName || inspector,
+              inspector_type: employeeInfo.inspector_type,
+              totalInspected: 0, // NEW: All valid inspections
+              residentialInspected: 0, // NEW: 2, 3A only
+              commercialInspected: 0, // NEW: 4A, 4B, 4C only
+              entry: 0,
+              refusal: 0,
+              priced: 0,
+              // NEW: Separate field day tracking
+              allWorkDays: new Set(),
+              residentialWorkDays: new Set(), // Days with 2/3A work
+              commercialWorkDays: new Set(), // Days with 4A/4B/4C work
+              pricingWorkDays: new Set()
             };
-          }
-          propertyIssues[propertyKey].issues.push(message);
-          isValidInspection = false;
-        };
-
-        // Core validation rules
-        if (!hasValidInfoBy) {
-          addValidationIssue(`Invalid InfoBy code: ${infoByCode}`);
-        }
-        if (!hasValidMeasuredBy) {
-          addValidationIssue('Missing or invalid inspector');
-        }
-        if (!hasValidMeasuredDate) {
-          addValidationIssue('Missing or invalid measure date');
-        }
-
-        // Business logic validation
-        const isEntryCode = (infoByCategoryConfig.entry || []).includes(normalizedInfoBy);
-        const isRefusalCode = (infoByCategoryConfig.refusal || []).includes(normalizedInfoBy);
-        const isEstimationCode = (infoByCategoryConfig.estimation || []).includes(normalizedInfoBy);
-        const isPricedCode = (infoByCategoryConfig.priced || []).includes(normalizedInfoBy);
-        const isSpecialCode = (infoByCategoryConfig.special || []).includes(normalizedInfoBy);  // NEW: Special code check
-        const hasListingData = record.inspection_list_by && record.inspection_list_date;
-
-        if (isRefusalCode && !hasListingData) {
-          addValidationIssue(`Refusal code ${infoByCode} but missing listing data`);
-        }
-        if (isEntryCode && !hasListingData) {
-          addValidationIssue(`Entry code ${infoByCode} but missing listing data`);
-        }
-        if (isEstimationCode && hasListingData) {
-          addValidationIssue(`Estimation code ${infoByCode} but has listing data`);
-        }
-        // NOTE: Special codes (V, N) are allowed to have listing data - no validation needed
-
-        // NEW: Corrected inspector type validation
-        const isCommercialProperty = ['4A', '4B', '4C'].includes(propertyClass);
-        const isResidentialProperty = ['2', '3A'].includes(propertyClass);
-        const isResidentialInspector = employeeData[inspector]?.inspector_type === 'residential';
-        
-        // Residential inspectors CAN'T do commercial (4A, 4B, 4C) - everything else is OK
-        if (isCommercialProperty && isResidentialInspector) {
-          addValidationIssue(`Residential inspector on commercial property`);
-        }
-
-        if (record.values_mod_improvement === 0 && !hasListingData) {
-          addValidationIssue('Zero improvement property missing listing data');
-        }
-
-        // NEW: Process valid inspections with corrected counting
-        if (isValidInspection && hasValidInfoBy && hasValidMeasuredBy && hasValidMeasuredDate) {
-          
-          // Count for manager progress (valid inspections against total properties)
-          if (classBreakdown[propertyClass]) {
-            classBreakdown[propertyClass].inspected++;
-            billingByClass[propertyClass].inspected++;
-            billingByClass[propertyClass].billable++;
+            inspectorIssuesMap[inspector] = [];
           }
 
-          // Inspector analytics - count ALL valid inspections
-          inspectorStats[inspector].totalInspected++;
-          
-          const workDayString = measuredDate.toISOString().split('T')[0];
-          inspectorStats[inspector].allWorkDays.add(workDayString);
+          // Check for any inspection attempt
+          const hasAnyInspectionAttempt = (
+            (record.inspection_measure_by && record.inspection_measure_by.trim() !== '') ||
+            record.inspection_measure_date ||
+            record.inspection_info_by ||
+            record.inspection_list_by ||
+            record.inspection_price_by
+          );
 
-          // NEW: Separate residential and commercial counting for analytics
-          if (isResidentialProperty) {
-            inspectorStats[inspector].residentialInspected++;
-            inspectorStats[inspector].residentialWorkDays.add(workDayString);
+          if (!hasAnyInspectionAttempt) {
+            // Property not yet inspected - skip validation entirely
+            reasonNotAdded = 'No inspection attempt - completely uninspected';
+          }
+          else {
+            // Validate attempted inspections
+            let isValidInspection = true;
+            let hasValidMeasuredBy = inspector && inspector !== 'UNASSIGNED' && inspector.trim() !== '';
+            let hasValidMeasuredDate = measuredDate && measuredDate >= startDate;
             
-            // Entry/Refusal counting (only for residential properties 2, 3A)
-            if (isEntryCode) {
-              inspectorStats[inspector].entry++;
-              if (classBreakdown[propertyClass]) {
-                classBreakdown[propertyClass].entry++;
+            const normalizedInfoBy = infoByCode?.toString().padStart(2, '0');
+            const normalizedValidCodes = allValidCodes.map(code => code.toString().padStart(2, '0'));
+            let hasValidInfoBy = normalizedInfoBy && normalizedValidCodes.includes(normalizedInfoBy);
+            
+            // Compound validation messages per property
+            const addValidationIssue = (message) => {
+              if (!propertyIssues[propertyKey]) {
+                propertyIssues[propertyKey] = {
+                  block: record.property_block,
+                  lot: record.property_lot,
+                  qualifier: record.property_qualifier || '',
+                  property_location: record.property_location || '',
+                  inspector: inspector,
+                  issues: []
+                };
               }
-            } else if (isRefusalCode) {
-              inspectorStats[inspector].refusal++;
+              propertyIssues[propertyKey].issues.push(message);
+              isValidInspection = false;
+            };
+
+            // Core validation rules
+            if (!hasValidInfoBy) {
+              addValidationIssue(`Invalid InfoBy code: ${infoByCode}`);
+            }
+            if (!hasValidMeasuredBy) {
+              addValidationIssue('Missing or invalid inspector');
+            }
+            if (!hasValidMeasuredDate) {
+              addValidationIssue('Missing or invalid measure date');
+            }
+
+            // Business logic validation
+            const isEntryCode = (infoByCategoryConfig.entry || []).includes(normalizedInfoBy);
+            const isRefusalCode = (infoByCategoryConfig.refusal || []).includes(normalizedInfoBy);
+            const isEstimationCode = (infoByCategoryConfig.estimation || []).includes(normalizedInfoBy);
+            const isPricedCode = (infoByCategoryConfig.priced || []).includes(normalizedInfoBy);
+            const isSpecialCode = (infoByCategoryConfig.special || []).includes(normalizedInfoBy);  // NEW: Special code check
+            const hasListingData = record.inspection_list_by && record.inspection_list_date;
+
+            if (isRefusalCode && !hasListingData) {
+              addValidationIssue(`Refusal code ${infoByCode} but missing listing data`);
+            }
+            if (isEntryCode && !hasListingData) {
+              addValidationIssue(`Entry code ${infoByCode} but missing listing data`);
+            }
+            if (isEstimationCode && hasListingData) {
+              addValidationIssue(`Estimation code ${infoByCode} but has listing data`);
+            }
+            // NOTE: Special codes (V, N) are allowed to have listing data - no validation needed
+
+            // NEW: Corrected inspector type validation
+            const isCommercialProperty = ['4A', '4B', '4C'].includes(propertyClass);
+            const isResidentialProperty = ['2', '3A'].includes(propertyClass);
+            const isResidentialInspector = employeeData[inspector]?.inspector_type === 'residential';
+            
+            // Residential inspectors CAN'T do commercial (4A, 4B, 4C) - everything else is OK
+            if (isCommercialProperty && isResidentialInspector) {
+              addValidationIssue(`Residential inspector on commercial property`);
+            }
+
+            if (record.values_mod_improvement === 0 && !hasListingData) {
+              addValidationIssue('Zero improvement property missing listing data');
+            }
+
+            // 🔧 FIXED: Only add to inspection_data if ALL validation passes
+            if (isValidInspection && hasValidInfoBy && hasValidMeasuredBy && hasValidMeasuredDate) {
+              
+              // Count for manager progress (valid inspections against total properties)
               if (classBreakdown[propertyClass]) {
-                classBreakdown[propertyClass].refusal++;
+                classBreakdown[propertyClass].inspected++;
+                billingByClass[propertyClass].inspected++;
+                billingByClass[propertyClass].billable++;
               }
+
+              // Inspector analytics - count ALL valid inspections
+              inspectorStats[inspector].totalInspected++;
+              
+              const workDayString = measuredDate.toISOString().split('T')[0];
+              inspectorStats[inspector].allWorkDays.add(workDayString);
+
+              // NEW: Separate residential and commercial counting for analytics
+              if (isResidentialProperty) {
+                inspectorStats[inspector].residentialInspected++;
+                inspectorStats[inspector].residentialWorkDays.add(workDayString);
+                
+                // Entry/Refusal counting (only for residential properties 2, 3A)
+                if (isEntryCode) {
+                  inspectorStats[inspector].entry++;
+                  if (classBreakdown[propertyClass]) {
+                    classBreakdown[propertyClass].entry++;
+                  }
+                } else if (isRefusalCode) {
+                  inspectorStats[inspector].refusal++;
+                  if (classBreakdown[propertyClass]) {
+                    classBreakdown[propertyClass].refusal++;
+                  }
+                }
+              }
+              
+              if (isCommercialProperty) {
+                inspectorStats[inspector].commercialInspected++;
+                inspectorStats[inspector].commercialWorkDays.add(workDayString);
+              }
+
+              // FIXED: Pricing logic with vendor detection
+              if (isCommercialProperty) {
+                const currentVendor = actualVendor || jobData.vendor_type;
+
+                if (currentVendor === 'BRT' && 
+                    record.inspection_price_by && 
+                    record.inspection_price_by.trim() !== '' &&
+                    priceDate && 
+                    priceDate >= startDate) {
+                  
+                  inspectorStats[inspector].priced++;
+                  inspectorStats[inspector].pricingWorkDays.add(priceDate.toISOString().split('T')[0]);
+                  if (classBreakdown[propertyClass]) {
+                    classBreakdown[propertyClass].priced++;
+                  }
+                  
+                } else if (currentVendor === 'Microsystems' && isPricedCode) {
+                  inspectorStats[inspector].priced++;
+                  if (classBreakdown[propertyClass]) {
+                    classBreakdown[propertyClass].priced++;
+                  }
+                }
+              }
+
+              // NEW: Prepare for inspection_data UPSERT
+              inspectionDataBatch.push({
+                job_id: jobData.id,
+                file_version: latestFileVersion,
+                property_composite_key: propertyKey,
+                block: record.property_block,
+                lot: record.property_lot,
+                qualifier: record.property_qualifier || '',
+                card: '1',
+                property_location: record.property_location || '',
+                property_class: propertyClass,
+                measure_by: inspector,
+                measure_date: record.inspection_measure_date,
+                info_by_code: infoByCode,
+                list_by: record.inspection_list_by,
+                list_date: record.inspection_list_date,
+                price_by: record.inspection_price_by,
+                price_date: record.inspection_price_date,
+                project_start_date: projectStartDate,
+                source_file_name: record.source_file_name,
+                upload_date: new Date().toISOString(),
+                validation_report: propertyIssues[propertyKey] ? {
+                  issues: propertyIssues[propertyKey].issues,
+                  severity: propertyIssues[propertyKey].issues.length > 2 ? 'high' : 'medium'
+                } : null
+              });
+
+              wasAddedToInspectionData = true;
+              
+            } else {
+              // NEW: Track properties that didn't make it to inspection_data
+              const reasons = [];
+              if (!hasValidInfoBy) reasons.push(`Invalid InfoBy code: ${infoByCode}`);
+              if (!hasValidMeasuredBy) reasons.push('Missing/invalid inspector');
+              if (!hasValidMeasuredDate) reasons.push('Missing/invalid measure date');
+              if (propertyIssues[propertyKey]?.issues) reasons.push(...propertyIssues[propertyKey].issues);
+              
+              reasonNotAdded = `Failed validation: ${reasons.join(', ')}`;
             }
           }
-          
-          if (isCommercialProperty) {
-            inspectorStats[inspector].commercialInspected++;
-            inspectorStats[inspector].commercialWorkDays.add(workDayString);
-          }
+        }
 
-          // FIXED: Pricing logic with vendor detection
-          if (isCommercialProperty) {
-            const currentVendor = actualVendor || jobData.vendor_type;
-
-            if (currentVendor === 'BRT' && 
-                record.inspection_price_by && 
-                record.inspection_price_by.trim() !== '' &&
-                priceDate && 
-                priceDate >= startDate) {
-              
-              inspectorStats[inspector].priced++;
-              inspectorStats[inspector].pricingWorkDays.add(priceDate.toISOString().split('T')[0]);
-              if (classBreakdown[propertyClass]) {
-                classBreakdown[propertyClass].priced++;
-              }
-              
-            } else if (currentVendor === 'Microsystems' && isPricedCode) {
-              inspectorStats[inspector].priced++;
-              if (classBreakdown[propertyClass]) {
-                classBreakdown[propertyClass].priced++;
-              }
-            }
-          }
-
-          // NEW: Prepare for inspection_data UPSERT
-          inspectionDataBatch.push({
-            job_id: jobData.id,
-            file_version: latestFileVersion,
-            property_composite_key: propertyKey,
-            block: record.property_block,
-            lot: record.property_lot,
-            qualifier: record.property_qualifier || '',
-            card: '1',
-            property_location: record.property_location || '',
-            property_class: propertyClass,
-            measure_by: inspector,
-            measure_date: record.inspection_measure_date,
-            info_by_code: infoByCode,
-            list_by: record.inspection_list_by,
-            list_date: record.inspection_list_date,
-            price_by: record.inspection_price_by,
-            price_date: record.inspection_price_date,
-            project_start_date: projectStartDate,
-            source_file_name: record.source_file_name,
-            upload_date: new Date().toISOString(),
-            validation_report: propertyIssues[propertyKey] ? {
-              issues: propertyIssues[propertyKey].issues,
-              severity: propertyIssues[propertyKey].issues.length > 2 ? 'high' : 'medium'
-            } : null
-          });
-        } else {
-          // NEW: Track properties that didn't make it to inspection_data
-          const reasons = [];
-          if (!hasValidInfoBy) reasons.push(`Invalid InfoBy code: ${infoByCode}`);
-          if (!hasValidMeasuredBy) reasons.push('Missing/invalid inspector');
-          if (!hasValidMeasuredDate) reasons.push('Missing/invalid measure date');
-          
+        // 🔧 NEW: Track ALL properties that didn't make it to inspection_data
+        if (!wasAddedToInspectionData) {
           missingProperties.push({
             composite_key: propertyKey,
             block: record.property_block,
@@ -886,7 +891,7 @@ const PayrollProductionUpdater = ({
             qualifier: record.property_qualifier || '',
             property_location: record.property_location || '',
             property_class: propertyClass,
-            reason: `Failed validation: ${reasons.join(', ')}`,
+            reason: reasonNotAdded,
             inspector: inspector,
             info_by_code: infoByCode,
             measure_date: record.inspection_measure_date,
@@ -1090,6 +1095,8 @@ const PayrollProductionUpdater = ({
         validInspections: analyticsResult.validInspections,
         totalIssues: validationIssues.length,
         missingProperties: missingProperties.length,  // NEW: Log missing count
+        inspectionDataBatchSize: inspectionDataBatch.length,  // NEW: How many made it to inspection_data
+        mathCheck: `${rawData.length} total - ${inspectionDataBatch.length} processed - ${missingProperties.length} missing = ${rawData.length - inspectionDataBatch.length - missingProperties.length} unaccounted`,  // NEW: Math check
         inspectors: Object.keys(inspectorStats).length,
         commercialComplete: analyticsResult.commercialCompletePercent,
         pricingComplete: analyticsResult.pricingCompletePercent,
