@@ -1908,26 +1908,14 @@ const uploadPropertyAssignment = async (job) => {
               <span>{jobs.length + archivedJobs.length} Jobs</span>
               <div className="flex items-center gap-4">
                 <span className="font-medium text-blue-700">
-                  📊 {dbStats.properties?.toLocaleString() || 0} Properties:
+                  📊 {jobs.reduce((sum, job) => sum + (job.totalProperties || 0), 0).toLocaleString()} Properties:
                 </span>
-                {dbStats.propertiesBreakdown ? (
-                  <>
-                    <span className="text-green-600">
-                      🏠 {dbStats.propertiesBreakdown.residential?.toLocaleString() || 0} Residential
-                    </span>
-                    <span className="text-purple-600">
-                      🏢 {dbStats.propertiesBreakdown.commercial?.toLocaleString() || 0} Commercial
-                    </span>
-                    <span className="text-gray-500">
-                      📋 {dbStats.propertiesBreakdown.other?.toLocaleString() || 0} Other
-                    </span>
-                  </>
-                ) : (
-                  <span className="text-gray-500">Loading breakdown...</span>
-                )}
-              </div>
-            </div>
-          )}
+                <span className="text-green-600">
+                  🏠 Cached totals from jobs table (lightning fast!)
+                </span>    
+             </div>      
+          </div>      
+        )}
         </div>
       </div>
 
