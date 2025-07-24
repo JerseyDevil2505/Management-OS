@@ -1,1058 +1,2813 @@
 import React, { useState, useEffect } from 'react';
-import { jobService, planningJobService, employeeService, utilityService } from '../lib/supabaseClient';
+import { Plus, Edit, Trash2, Users, Calendar, MapPin, Building, TrendingUp, DollarSign, AlertTriangle, CheckCircle, Clock, Download, Upload, Settings, Eye, Filter, Search } from 'lucide-react';
+import { supabase, jobService } from '../lib/supabaseClient';
+import { Upload, Plus, Edit3, Users, FileText, Calendar, MapPin, Database, Settings, Eye, DollarSign, Trash2, CheckCircle, Archive, TrendingUp, Target, AlertTriangle, X } from 'lucide-react';
+import { employeeService, jobService, planningJobService, utilityService, authService, propertyService, supabase } from '../lib/supabaseClient';
 
-function AdminJobManagement({ onJobSelect, jobMetrics = {}, isLoadingMetrics = false }) {
-  const [activeTab, setActiveTab] = useState('active');
+const AdminJobManagement = ({ onJobSelect, jobMetrics = {}, isLoadingMetrics = false }) => {
+const AdminJobManagement = ({ onJobSelect }) => {
+  const [activeTab, setActiveTab] = useState('jobs');
+  const [currentUser, setCurrentUser] = useState({ role: 'admin', canAccessBilling: true });
+  
   const [jobs, setJobs] = useState([]);
-  const [planningJobs, setPlanningJobs] = useState([]);
   const [archivedJobs, setArchivedJobs] = useState([]);
+  const [planningJobs, setPlanningJobs] = useState([]);
   const [managers, setManagers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState({
-    employees: 0,
-    jobs: 0,
-    properties: 0,
-    propertiesBreakdown: { total: 0, residential: 0, commercial: 0, other: 0 }
-  });
-
+  const [showCreateJob, setShowCreateJob] = useState(false);
+  const [showCreatePlanning, setShowCreatePlanning] = useState(false);
+  const [showEditPlanning, setShowEditPlanning] = useState(false);
   const [editingJob, setEditingJob] = useState(null);
-  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [editingPlanning, setEditingPlanning] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [activeTab, setActiveTab] = useState('active');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
+  const [processing, setProcessing] = useState(false);
+
+  // Load jobs from database
+  const loadJobs = async () => {
+    setLoading(true);
+    setError(null);
+  // Processing and notification state
+  const [processingStatus, setProcessingStatus] = useState({
+    isProcessing: false,
+    currentStep: '',
+    progress: 0,
+    startTime: null,
+    recordsProcessed: 0,
+    totalRecords: 0,
+    errors: [],
+    warnings: [],
+    logs: []
+  });
+  const [showProcessingModal, setShowProcessingModal] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [processingResults, setProcessingResults] = useState(null);
+
+  // County HPI state
+  const [countyHpiData, setCountyHpiData] = useState({});
+  const [showHpiImport, setShowHpiImport] = useState(null);
+  const [hpiFile, setHpiFile] = useState(null);
+  const [importingHpi, setImportingHpi] = useState(false);
+
+  // ENHANCED: Assigned Properties state with better feedback
+  const [showAssignmentUpload, setShowAssignmentUpload] = useState(null);
+  const [assignmentFile, setAssignmentFile] = useState(null);
+  const [uploadingAssignment, setUploadingAssignment] = useState(false);
+  const [assignmentResults, setAssignmentResults] = useState(null);
+
   const [newJob, setNewJob] = useState({
     name: '',
+    ccddCode: '',
     municipality: '',
-    ccdd: '',
     county: '',
     state: 'NJ',
-    vendor: '',
     dueDate: '',
-    assignedManagers: []
+    assignedManagers: [],
+    sourceFile: null,
+    codeFile: null,
+    vendor: null,
+    vendorDetection: null,
+    percentBilled: ''
   });
-
-  const [showAssignmentModal, setShowAssignmentModal] = useState(false);
-  const [selectedJobForAssignment, setSelectedJobForAssignment] = useState(null);
-  const [assignmentFile, setAssignmentFile] = useState(null);
-  const [assignmentProgress, setAssignmentProgress] = useState(null);
-  const [forceQuit, setForceQuit] = useState(false);
-
-  const [hpiData, setHpiData] = useState({});
-  const [showHpiModal, setShowHpiModal] = useState(false);
-  const [selectedCounty, setSelectedCounty] = useState('');
-  const [hpiEntries, setHpiEntries] = useState([]);
 
   const [newPlanningJob, setNewPlanningJob] = useState({
     ccddCode: '',
     municipality: '',
-    end_date: '',
+    dueDate: '',
     comments: ''
   });
 
-  const [editingPlanningJob, setEditingPlanningJob] = useState(null);
+  const [fileAnalysis, setFileAnalysis] = useState({
+    sourceFile: null,
+    codeFile: null,
+    detectedVendor: null,
+    isValid: false,
+    propertyCount: 0,
+    codeCount: 0
+  });
 
-  // Load initial data
+  const [dbConnected, setDbConnected] = useState(false);
+  const [dbStats, setDbStats] = useState({ 
+    employees: 0, 
+    jobs: 0, 
+    properties: 0,
+    propertiesBreakdown: {
+      total: 0,
+      residential: 0,
+      commercial: 0,
+      other: 0
+    }
+  });
+
+  // Helper function for elapsed time formatting
+  const formatElapsedTime = (startTime) => {
+    if (!startTime) return '0:00';
+    const elapsed = Math.floor((new Date() - new Date(startTime)) / 1000);
+    const minutes = Math.floor(elapsed / 60);
+    const seconds = elapsed % 60;
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  // Helper function to capitalize county names
+  const capitalizeCounty = (county) => {
+    if (!county) return county;
+    return county.split(' ').map(word => 
+      word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+    ).join(' ');
+  };
+
+  // ENHANCED: Smart Metrics Display Logic with better assignment handling
+  const getMetricsDisplay = (job) => {
+    const baseMetrics = {
+      entryRate: job.workflowStats?.rates?.entryRate || 0,
+      refusalRate: job.workflowStats?.rates?.refusalRate || 0,
+      commercialRate: job.workflowStats?.rates?.commercialInspectionRate || 0,
+      pricingRate: job.workflowStats?.rates?.pricingRate || 0
+    };
+
+    // No assignments - show normal percentages
+    if (!job.has_property_assignments) {
+      return {
+        ...baseMetrics,
+        commercial: `${baseMetrics.commercialRate}%`,
+        pricing: `${baseMetrics.pricingRate}%`
+      };
+    }
+
+    // Has assignments - check if commercial properties included
+    if (job.assigned_has_commercial === false) {
+      return {
+        ...baseMetrics,
+        commercial: "Residential Only",
+        pricing: "Residential Only"
+      };
+    }
+
+    // Mixed assignment with commercial - show percentages
+    return {
+      ...baseMetrics,
+      commercial: `${baseMetrics.commercialRate}%`,
+      pricing: `${baseMetrics.pricingRate}%`
+    };
+  };
+
+  // FIXED: Get property count display with dynamic assigned count calculation
+  const getPropertyCountDisplay = (job) => {
+    if (!job.has_property_assignments) {
+      return {
+        inspected: job.inspectedProperties || 0,
+        total: job.totalProperties || 0,
+        label: "Properties Inspected",
+        isAssigned: false
+      };
+    }
+
+    // Use dynamically calculated assigned count instead of job field
+    return {
+      inspected: job.inspectedProperties || 0,
+      total: job.assignedPropertyCount || job.totalProperties || 0,
+      label: "Properties Inspected (Assigned Scope)",
+      isAssigned: true
+    };
+  };
+
+  // FIXED: Load HPI data from database on component mount
+  const loadCountyHpiData = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('county_hpi_data')
+        .select('*')
+        .order('county_name, observation_year');
+      
+      if (error) {
+        console.error('Error loading HPI data:', error);
+        return;
+      }
+      
+      // Group HPI data by county
+      const hpiByCounty = {};
+      data.forEach(record => {
+        if (!hpiByCounty[record.county_name]) {
+          hpiByCounty[record.county_name] = [];
+        }
+        hpiByCounty[record.county_name].push(record);
+      });
+      
+      setCountyHpiData(hpiByCounty);
+      console.log('✅ Loaded HPI data for counties:', Object.keys(hpiByCounty));
+    } catch (error) {
+      console.error('Failed to load HPI data:', error);
+    }
+  };
+
+  // Notification system
+  const addNotification = (message, type = 'info') => {
+    const id = Date.now();
+    const notification = { id, message, type, timestamp: new Date() };
+    setNotifications(prev => [...prev, notification]);
+    
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    }, 5000);
+  };
+
+  const updateProcessingStatus = (step, progress = 0, details = {}) => {
+    setProcessingStatus(prev => ({
+      ...prev,
+      currentStep: step,
+      progress,
+      ...details
+    }));
+  };
+
+  const resetProcessingStatus = () => {
+    setProcessingStatus({
+      isProcessing: false,
+      currentStep: '',
+      progress: 0,
+      startTime: null,
+      recordsProcessed: 0,
+      totalRecords: 0,
+      errors: [],
+      warnings: [],
+      logs: []
+    });
+  };
+
+// FIXED: Property Assignment Upload Handler with improved composite key matching
+const uploadPropertyAssignment = async (job) => {
+  if (!assignmentFile) {
+    addNotification('Please select an assignment file', 'error');
+    return;
+  }
+
+  try {
+    setUploadingAssignment(true);
+    const fileContent = await assignmentFile.text();
+    const lines = fileContent.split('\n').filter(line => line.trim());
+    
+    if (lines.length < 2) {
+      addNotification('Invalid CSV file format', 'error');
+      return;
+    }
+
+    const header = lines[0].toLowerCase().split(',').map(h => h.trim());
+    const requiredFields = ['block', 'lot'];
+    const missingFields = requiredFields.filter(field => 
+      !header.some(h => h.includes(field))
+    );
+
+    if (missingFields.length > 0) {
+      addNotification(`Missing required columns: ${missingFields.join(', ')}`, 'error');
+      return;
+    }
+
+    // Parse CSV and create composite keys
+    const assignments = [];
+    // FIXED: Use job's year_created instead of current year
+    const year = job.year_created || new Date().getFullYear();
+    const ccdd = job.ccdd || job.ccddCode;
+
+    console.log(`🔍 DEBUG - Building composite keys with year: ${year}, ccdd: ${ccdd}`);
+
+    for (let i = 1; i < lines.length; i++) {
+      const values = lines[i].split(',').map(v => v.trim());
+      if (values.length >= 2) {
+        const blockIdx = header.findIndex(h => h.includes('block'));
+        const lotIdx = header.findIndex(h => h.includes('lot'));
+        const qualIdx = header.findIndex(h => h.includes('qual'));
+        const cardIdx = header.findIndex(h => h.includes('card'));
+        const locationIdx = header.findIndex(h => h.includes('location'));
+
+        const block = values[blockIdx] || '';
+        const lot = values[lotIdx] || '';
+        const qual = values[qualIdx] || '';
+        const card = values[cardIdx] || '';
+        const location = values[locationIdx] || '';
+
+        // FIXED: Ensure consistent composite key format matching processors
+        const compositeKey = `${year}${ccdd}-${block}-${lot}_${qual || 'NONE'}-${card || 'NONE'}-${location || 'NONE'}`;
+        
+        // DEBUG: Log first few composite keys
+        if (i <= 3) {
+          console.log(`🔍 DEBUG - Assignment composite key ${i}: ${compositeKey}`);
+        }
+        
+        assignments.push({
+          property_composite_key: compositeKey,
+          property_block: block,
+          property_lot: lot,
+          property_qualifier: qual,
+          property_addl_card: card,
+          property_location: location
+        });
+      }
+    }
+
+    // Process assignments through Supabase
+    console.log(`Processing ${assignments.length} property assignments for job ${job.id}`);
+    
+    // First, clear existing assignments for this job
+    const { error: deleteError } = await supabase
+      .from('job_responsibilities')
+      .delete()
+      .eq('job_id', job.id);
+
+    if (deleteError) {
+      console.error('Error clearing existing assignments:', deleteError);
+    }
+
+    // Insert new assignments
+    const assignmentRecords = assignments.map(assignment => ({
+      job_id: job.id,
+      ...assignment,
+      responsibility_file_name: assignmentFile.name,
+      responsibility_file_uploaded_at: new Date().toISOString(),
+      uploaded_by: currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad'
+    }));
+
+    const { data: insertData, error: insertError } = await supabase
+      .from('job_responsibilities')
+      .insert(assignmentRecords);
+
+    if (insertError) {
+      throw new Error('Assignment insert failed: ' + insertError.message);
+    }
+
+    console.log(`✅ Inserted ${assignmentRecords.length} assignment records`);
+
+    // ENHANCED: Check how many properties were matched with better debugging
+    const assignmentKeys = assignments.map(a => a.property_composite_key);
+    console.log(`🔍 DEBUG - Looking for matches among ${assignmentKeys.length} composite keys`);
+    console.log(`🔍 DEBUG - Sample assignment keys:`, assignmentKeys.slice(0, 3));
+
+    const { data: matchedProperties, error: matchError } = await supabase
+      .from('property_records')
+      .select('property_composite_key, property_m4_class')
+      .eq('job_id', job.id)
+      .in('property_composite_key', assignmentKeys);
+
+    if (matchError) {
+      console.error('❌ Error checking matched properties:', matchError);
+      addNotification('Error checking property matches: ' + matchError.message, 'error');
+      return;
+    }
+
+    const matchedCount = matchedProperties?.length || 0;
+    console.log(`✅ Found ${matchedCount} matching properties in property_records`);
+    
+    if (matchedProperties && matchedProperties.length > 0) {
+      console.log(`🔍 DEBUG - Sample matched keys:`, matchedProperties.slice(0, 3).map(p => p.property_composite_key));
+    }
+
+    // Check for commercial properties (4A, 4B, 4C)
+    const hasCommercial = matchedProperties?.some(prop => 
+      ['4A', '4B', '4C'].includes(prop.property_m4_class)
+    ) || false;
+
+    // Update job flags
+    const { error: jobUpdateError } = await supabase
+      .from('jobs')
+      .update({
+        has_property_assignments: true,
+        assigned_has_commercial: hasCommercial
+      })
+      .eq('id', job.id);
+
+    if (jobUpdateError) {
+      console.error('❌ Error updating job flags:', jobUpdateError);
+      addNotification('Error updating job flags: ' + jobUpdateError.message, 'error');
+    }
+
+    // FIXED: Update property_records assignment flags with better error handling
+    if (matchedCount > 0) {
+      console.log(`🔄 Updating is_assigned_property = true for ${matchedCount} properties...`);
+      
+      const { error: propUpdateError } = await supabase
+        .from('property_records')
+        .update({ is_assigned_property: true })
+        .eq('job_id', job.id)
+        .in('property_composite_key', assignmentKeys);
+
+      if (propUpdateError) {
+        console.error('❌ Error updating property flags:', propUpdateError);
+        addNotification('Error updating property assignment flags: ' + propUpdateError.message, 'error');
+        // Don't return here - still show results
+      } else {
+        console.log(`✅ Successfully updated is_assigned_property for ${matchedCount} properties`);
+      }
+    } else {
+      console.log('⚠️ No matching properties found - no is_assigned_property updates made');
+      
+      // DEBUG: Show sample property_records keys for comparison
+      const { data: sampleProperties } = await supabase
+        .from('property_records')
+        .select('property_composite_key')
+        .eq('job_id', job.id)
+        .limit(3);
+        
+      if (sampleProperties && sampleProperties.length > 0) {
+        console.log(`🔍 DEBUG - Sample property_records keys for comparison:`, 
+          sampleProperties.map(p => p.property_composite_key));
+      }
+    }
+    
+    // ENHANCED: Better assignment feedback
+    setAssignmentResults({
+      success: true,
+      uploaded: assignments.length,
+      matched: matchedCount,
+      unmatched: assignments.length - matchedCount,
+      matchRate: assignments.length > 0 ? Math.round((matchedCount / assignments.length) * 100) : 0,
+      hasCommercial: hasCommercial,
+      jobName: job.name
+    });
+
+    // Refresh jobs data with updated assigned property counts
+    await refreshJobsWithAssignedCounts();
+
+    const matchPercentage = assignments.length > 0 ? Math.round((matchedCount / assignments.length) * 100) : 0;
+    addNotification(
+      `Successfully assigned ${matchedCount} of ${assignments.length} properties (${matchPercentage}% match rate)`, 
+      matchedCount > 0 ? 'success' : 'warning'
+    );
+    
+  } catch (error) {
+    console.error('Assignment upload error:', error);
+    addNotification('Error uploading assignments: ' + error.message, 'error');
+  } finally {
+    setUploadingAssignment(false);
+  }
+};
+
+  // NEW: Refresh jobs with dynamically calculated assigned property counts
+  const refreshJobsWithAssignedCounts = async () => {
+    try {
+      const { data: jobsData, error: jobsError } = await supabase
+        .from('jobs')
+        .select(`
+          *
+        `)
+        .order('created_at', { ascending: false });
+      const updatedJobs = await jobService.getAll();
+      const activeJobs = updatedJobs.filter(job => job.status !== 'archived');
+      const archived = updatedJobs.filter(job => job.status === 'archived');
+      
+      // Calculate assigned property counts for jobs with assignments
+      const jobsWithAssignedCounts = await Promise.all(
+        activeJobs.map(async (job) => {
+          if (job.has_property_assignments) {
+            // Dynamically count assigned properties
+            const { count, error } = await supabase
+              .from('property_records')
+              .select('id', { count: 'exact' })
+              .eq('job_id', job.id)
+              .eq('is_assigned_property', true);
+
+      if (jobsError) throw jobsError;
+            if (!error) {
+              job.assignedPropertyCount = count;
+            }
+          }
+          
+          return {
+            ...job,
+            status: job.status === 'active' ? 'Active' : (job.status || 'Active'),
+            county: capitalizeCounty(job.county),
+            percentBilled: job.percent_billed || 0.00
+          };
+        })
+      );
+
+      console.log('🔍 Raw jobs data:', jobsData);
+      console.log('🔍 Jobs length:', jobsData?.length);
+      console.log('🔍 First job:', jobsData?.[0]);
+      setJobs(jobsWithAssignedCounts);
+      setArchivedJobs(archived.map(job => ({
+        ...job,
+        county: capitalizeCounty(job.county)
+      })));
+
+      console.log('📊 AdminJobManagement: Loaded jobs from database', jobsData?.length);
+      setJobs(jobsData || []);
+      // Refresh property stats to show updated counts
+      const refreshedStats = await utilityService.getStats();
+      setDbStats(refreshedStats);
+
+    } catch (error) {
+      console.error('❌ Error loading jobs:', error);
+      setError(error.message);
+      console.error('Error refreshing jobs with assigned counts:', error);
+    }
+  };
+
+  // File removal handler
+  const removeFile = (fileType) => {
+    if (fileType === 'source') {
+      setNewJob(prev => ({ ...prev, sourceFile: null }));
+      setFileAnalysis(prev => ({ 
+        ...prev, 
+        sourceFile: null, 
+        propertyCount: 0,
+        detectedVendor: fileAnalysis.codeFile ? prev.detectedVendor : null,
+        isValid: !!fileAnalysis.codeFile 
+      }));
+    } else if (fileType === 'code') {
+      setNewJob(prev => ({ ...prev, codeFile: null }));
+      setFileAnalysis(prev => ({ 
+        ...prev, 
+        codeFile: null, 
+        codeCount: 0 
+      }));
+    }
+    // Reset file input
+    const inputId = fileType === 'source' ? 'sourceFile' : 'codeFile';
+    const fileInput = document.getElementById(inputId);
+    if (fileInput) fileInput.value = '';
+  };
+
+  // Get unique counties from jobs
+  const getUniqueCounties = () => {
+    const counties = [...jobs, ...archivedJobs]
+      .map(job => capitalizeCounty(job.county))
+      .filter(county => county && county.trim() !== '')
+      .filter((county, index, arr) => arr.indexOf(county) === index)
+      .sort();
+    return counties;
+  };
+
+  // County HPI import handler - FIXED WITH REAL DATABASE INTEGRATION
+  const importCountyHpi = async (county) => {
+    if (!hpiFile) {
+      addNotification('Please select an HPI data file', 'error');
+      return;
+    }
+
+    try {
+      setImportingHpi(true);
+      const fileContent = await hpiFile.text();
+      const lines = fileContent.split('\n').filter(line => line.trim());
+      
+      if (lines.length < 2) {
+        addNotification('Invalid CSV file format', 'error');
+        return;
+      }
+
+      const header = lines[0].split(',');
+      const dateColumnIndex = header.findIndex(col => col.toLowerCase().includes('observation_date') || col.toLowerCase().includes('date'));
+      const hpiColumnIndex = header.findIndex(col => col.includes('ATNHPIUS') || col.toLowerCase().includes('hpi'));
+
+      if (dateColumnIndex === -1 || hpiColumnIndex === -1) {
+        addNotification('Could not find required columns in CSV', 'error');
+        return;
+      }
+
+      const hpiRecords = [];
+      for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].split(',');
+        if (values.length >= 2) {
+          const dateStr = values[dateColumnIndex].trim();
+          const hpiValue = parseFloat(values[hpiColumnIndex]);
+          
+          if (dateStr && !isNaN(hpiValue)) {
+            const year = parseInt(dateStr.split('-')[0]);
+            hpiRecords.push({
+              county_name: county,
+              observation_year: year,
+              hpi_index: hpiValue,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            });
+          }
+        }
+      }
+
+      // REAL Supabase database integration
+      const { data, error } = await supabase
+        .from('county_hpi_data')
+        .delete()
+        .eq('county_name', county);
+
+      if (error) {
+        console.error('Error clearing existing HPI data:', error);
+      }
+
+      const { data: insertData, error: insertError } = await supabase
+        .from('county_hpi_data')
+        .insert(hpiRecords);
+
+      if (insertError) {
+        throw new Error('Database insert failed: ' + insertError.message);
+      }
+      
+      // Update local state - FIXED: Now persists data
+      setCountyHpiData(prev => ({
+        ...prev,
+        [county]: hpiRecords
+      }));
+
+      addNotification(`Successfully imported ${hpiRecords.length} HPI records for ${county} County`, 'success');
+      setShowHpiImport(null);
+      setHpiFile(null);
+      
+    } catch (error) {
+      console.error('HPI import error:', error);
+      addNotification('Error importing HPI data: ' + error.message, 'error');
+    } finally {
+      setLoading(false);
+      setImportingHpi(false);
+    }
+  };
+
+  // Load real data from database with assigned property counts
   useEffect(() => {
-    const loadData = async () => {
-      setLoading(true);
+    loadJobs();
+    const initializeData = async () => {
       try {
-        const [jobsData, planningData, managersData, statsData] = await Promise.all([
-          jobService.getAll(),
-          planningJobService.getAll(),
-          employeeService.getManagers(),
-          utilityService.getStats()
-        ]);
+        setLoading(true);
+        
+        const connectionTest = await utilityService.testConnection();
+        setDbConnected(connectionTest.success);
+        
+        if (connectionTest.success) {
+          const [jobsData, planningData, managersData, statsData, userData] = await Promise.all([
+            jobService.getAll(),
+            planningJobService.getAll(),
+            employeeService.getManagers(),
+            utilityService.getStats(),
+            authService.getCurrentUser()
+          ]);
+          
+          // Separate active and archived jobs
+          const activeJobs = jobsData.filter(job => job.status !== 'archived');
+          const archived = jobsData.filter(job => job.status === 'archived');
+          
+          // ENHANCED: Calculate assigned property counts for jobs with assignments
+          const jobsWithAssignedCounts = await Promise.all(
+            activeJobs.map(async (job) => {
+              if (job.has_property_assignments) {
+                // Dynamically count assigned properties
+                const { count, error } = await supabase
+                  .from('property_records')
+                  .select('id', { count: 'exact' })
+                  .eq('job_id', job.id)
+                  .eq('is_assigned_property', true);
 
-        // Separate jobs by status
-        const activeJobs = jobsData.filter(job => job.status === 'active');
-        const archived = jobsData.filter(job => job.status === 'archived');
+                if (!error) {
+                  job.assignedPropertyCount = count;
+                }
+              }
+              
+              return {
+                ...job,
+                status: job.status === 'active' ? 'Active' : (job.status || 'Active'),
+                county: capitalizeCounty(job.county),
+                percentBilled: job.percent_billed || 0.00
+              };
+            })
+          );
+          
+          const processedArchivedJobs = archived.map(job => ({
+            ...job,
+            county: capitalizeCounty(job.county)
+          }));
+          
+          setJobs(jobsWithAssignedCounts);
+          setArchivedJobs(processedArchivedJobs);
+          setPlanningJobs(planningData);
+          setManagers(managersData);
+          setDbStats(statsData);
+          setCurrentUser(userData || { role: 'admin', canAccessBilling: true });
 
-        setJobs(activeJobs);
-        setPlanningJobs(planningData);
-        setArchivedJobs(archived);
-        setManagers(managersData);
-        setStats(statsData);
-
-        console.log(`📊 Loaded ${activeJobs.length} active jobs, ${archived.length} archived jobs`);
+          // Load HPI data from database
+          await loadCountyHpiData();
+        }
       } catch (error) {
-        console.error('Error loading admin data:', error);
+        console.error('Data initialization error:', error);
+        setDbConnected(false);
       } finally {
         setLoading(false);
       }
     };
 
-    loadData();
+    initializeData();
   }, []);
 
-  // ENHANCED: Get job metrics with fallback to live data or defaults
-  const getJobMetricsForTile = (job) => {
-    // First, try to get metrics from App.js data hub (fast path)
-    if (jobMetrics[job.id] && jobMetrics[job.id].isProcessed) {
-      return jobMetrics[job.id];
+  // Helper function to get manager from job assignments - TEMPORARILY DISABLED
+  const getJobManager = (job) => {
+    // TODO: Re-enable once we fix the job_assignments query
+    return 'Manager (Loading...)';
+  // SIMPLIFIED FILE ANALYSIS
+  const analyzeFile = async (file, type) => {
+    if (!file) return;
+
+    const text = await file.text();
+    const lines = text.split('\n').filter(line => line.trim());
+    let vendor = null;
+    let count = 0;
+
+    if (type === 'source') {
+      if (file.name.endsWith('.txt') && text.includes('|')) {
+        vendor = 'Microsystems';
+        count = lines.length - 1; // Subtract header row
+      } else if (file.name.endsWith('.csv')) {
+        vendor = 'BRT';
+        count = lines.length - 1; // Subtract header row
+      }
+    } else if (type === 'code') {
+      if (file.name.endsWith('.txt') && text.includes('=')) {
+        vendor = 'Microsystems';
+        count = lines.length;
+      } else if (text.includes('{')) {
+        vendor = 'BRT';
+        count = (text.match(/"VALUE":/g) || []).length;
+      }
     }
 
-    // Fallback: Check if job has workflow_stats directly
-    if (job.workflowStats && job.workflowStats.totalRecords) {
-      return {
-        totalProperties: job.workflowStats.totalRecords || 0,
-        propertiesInspected: job.workflowStats.validInspections || 0,
-        entryRate: job.workflowStats.jobEntryRate || 0,
-        refusalRate: job.workflowStats.jobRefusalRate || 0,
-        commercialComplete: job.workflowStats.commercialCompletePercent || 0,
-        pricingComplete: job.workflowStats.pricingCompletePercent || 0,
-        lastProcessed: job.workflowStats.lastProcessed,
-        isProcessed: true
+    // Update file analysis state
+    setFileAnalysis(prev => {
+      const newState = {
+        ...prev,
+        [type === 'source' ? 'sourceFile' : 'codeFile']: file,
+        [type === 'source' ? 'propertyCount' : 'codeCount']: count,
+        detectedVendor: vendor,
+        isValid: !!vendor
       };
+      return newState;
+    });
+
+    if (vendor && type === 'source') {
+      setNewJob(prev => ({ ...prev, vendor }));
     }
-
-    // Final fallback: Use job properties and basic calculations
-    const totalProps = job.totalProperties || 0;
-    const inspectedProps = job.inspectedProperties || 0;
-    const entryRate = totalProps > 0 ? Math.round((inspectedProps / totalProps) * 100) : 0;
-
-    return {
-      totalProperties: totalProps,
-      propertiesInspected: inspectedProps,
-      entryRate: entryRate,
-      refusalRate: 0,
-      commercialComplete: 0,
-      pricingComplete: 0,
-      lastProcessed: null,
-      isProcessed: false
-    };
   };
 
-  // Handle job creation
-  const handleCreateJob = async (e) => {
-    e.preventDefault();
+  // ENHANCED: Display metrics with fallback to "-" for unprocessed jobs
+  const displayMetric = (jobId, metricName, isPercentage = false, defaultValue = null) => {
+    const metrics = jobMetrics[jobId];
+  const handleFileUpload = (e, type) => {
+    const file = e.target.files[0];
+    if (file) {
+      const fullTypeName = type === 'source' ? 'sourceFile' : 'codeFile';
+      setNewJob(prev => ({ ...prev, [fullTypeName]: file }));
+      analyzeFile(file, type);
+    }
+  };
+
+  const handleManagerToggle = (managerId) => {
+    const manager = managers.find(m => m.id === managerId);
+    const assignedManager = newJob.assignedManagers.find(m => m.id === managerId);
+
+    if (!metrics) {
+      return defaultValue !== null ? defaultValue : '-';
+    if (assignedManager) {
+      const currentRole = assignedManager.role;
+      
+      let newRole;
+      if (currentRole === 'Lead Manager') {
+        newRole = 'Assistant Manager';
+      } else if (currentRole === 'Assistant Manager') {
+        setNewJob(prev => ({
+          ...prev,
+          assignedManagers: prev.assignedManagers.filter(m => m.id !== managerId)
+        }));
+        return;
+      } else {
+        newRole = 'Lead Manager';
+      }
+      
+      setNewJob(prev => ({
+        ...prev,
+        assignedManagers: prev.assignedManagers.map(m => 
+          m.id === managerId ? { ...m, role: newRole } : m
+        )
+      }));
+    } else {
+      setNewJob(prev => ({
+        ...prev,
+        assignedManagers: [...prev.assignedManagers, { 
+          id: manager.id, 
+          name: `${manager.first_name} ${manager.last_name}`, 
+          role: 'Lead Manager'
+        }]
+      }));
+    }
+  };
+
+    // Total properties is always available (from property_records count)
+    if (metricName === 'totalProperties') {
+      return metrics.totalProperties?.toLocaleString() || '0';
+  // ENHANCED createJob with real-time batch processing logs and persistent modal
+  const createJob = async () => {
+    if (!newJob.ccddCode || !newJob.name || !newJob.municipality || !newJob.dueDate || 
+        newJob.assignedManagers.length === 0 || !newJob.sourceFile || !newJob.codeFile) {
+      addNotification('Please fill all required fields, upload both files, and assign at least one manager', 'error');
+      return;
+    }
+
+    // Properties inspected shows actual count when processed
+    if (metricName === 'propertiesInspected') {
+      return metrics.isProcessed ? 
+        (metrics.propertiesInspected?.toLocaleString() || '0') : 
+        '-';
     try {
+      // IMMEDIATELY hide create job modal and show processing modal
+      setShowCreateJob(false);
+      setShowProcessingModal(true);
+      setProcessing(true);
+      
+      setProcessingStatus({
+        isProcessing: true,
+        currentStep: 'Preparing job creation...',
+        progress: 5,
+        startTime: new Date(),
+        recordsProcessed: 0,
+        totalRecords: fileAnalysis.propertyCount,
+        errors: [],
+        warnings: [],
+        logs: []
+      });
+
+      // Let the UI render the modal first
+      await new Promise(resolve => setTimeout(resolve, 200));
+      
+      // THEN start the actual processing
+      updateProcessingStatus('Creating job record...', 10);
+      
       const jobData = {
-        ...newJob,
-        status: 'active'
+        name: newJob.name,
+        ccdd: newJob.ccddCode,
+        municipality: newJob.municipality,
+        county: capitalizeCounty(newJob.county),
+        state: newJob.state,
+        vendor: newJob.vendor,
+        dueDate: newJob.dueDate,
+        year_created: new Date().getFullYear(),
+        assignedManagers: newJob.assignedManagers,
+        totalProperties: fileAnalysis.propertyCount,
+        inspectedProperties: 0,
+        status: 'active',
+        sourceFileStatus: 'processing',
+        codeFileStatus: 'current',
+        vendorDetection: { vendor: newJob.vendor },
+        percent_billed: newJob.percentBilled,
+        source_file_version: 1,
+        code_file_version: 1,
+        source_file_name: newJob.sourceFile.name,
+        source_file_version_id: crypto.randomUUID(),
+        source_file_uploaded_at: new Date().toISOString(),
+        
+        workflowStats: {
+          inspectionPhases: { firstAttempt: 'PENDING', secondAttempt: 'PENDING', thirdAttempt: 'PENDING' },
+          rates: { entryRate: 0, refusalRate: 0, pricingRate: 0, commercialInspectionRate: 0 },
+          appeals: { totalCount: 0, percentOfWhole: 0, byClass: {} }
+        },
+        created_by: currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad'
       };
 
       const createdJob = await jobService.create(jobData);
       
-      setJobs(prev => [createdJob, ...prev]);
-      setShowCreateForm(false);
-      setNewJob({
-        name: '',
-        municipality: '',
-        ccdd: '',
-        county: '',
-        state: 'NJ',
-        vendor: '',
-        dueDate: '',
-        assignedManagers: []
+      updateProcessingStatus('Job created successfully. Reading files...', 25);
+      
+      if (newJob.sourceFile && newJob.codeFile) {
+        updateProcessingStatus('Reading source file...', 35);
+        const sourceFileContent = await newJob.sourceFile.text();
+        
+        updateProcessingStatus('Reading code file...', 40);
+        const codeFileContent = await newJob.codeFile.text();
+        
+        updateProcessingStatus(`Processing ${newJob.vendor} data (${fileAnalysis.propertyCount} records)...`, 50);
+        
+        // Capture console logs during processing for real-time feedback
+        const originalConsoleLog = console.log;
+        const logs = [];
+        
+        console.log = (...args) => {
+          const message = args.join(' ');
+          // Capture batch processing logs
+          if (message.includes('✅') || message.includes('Batch inserting') || message.includes('Processing')) {
+            logs.push({
+              timestamp: new Date().toLocaleTimeString(),
+              message: message
+            });
+            // Update processing status with latest logs
+            setProcessingStatus(prev => ({
+              ...prev,
+              logs: [...logs]
+            }));
+          }
+          originalConsoleLog(...args);
+        };
+        
+        const result = await propertyService.importCSVData(
+          sourceFileContent,
+          codeFileContent,
+          createdJob.id,
+          new Date().getFullYear(),
+          newJob.ccddCode,
+          newJob.vendor,
+          {
+            source_file_name: newJob.sourceFile.name,
+            source_file_version_id: createdJob.source_file_version_id,
+            source_file_uploaded_at: new Date().toISOString()
+          }
+        );
+        
+        // Restore original console.log
+        console.log = originalConsoleLog;
+        
+        updateProcessingStatus('Updating job status...', 90, {
+          recordsProcessed: result.processed || 0,
+          errors: result.warnings || [],
+          warnings: result.warnings || []
+        });
+        
+        const updateData = {
+          sourceFileStatus: result.errors > 0 ? 'error' : 'imported',
+          totalProperties: result.processed || 0
+        };
+        
+        await jobService.update(createdJob.id, updateData);
+        
+        updateProcessingStatus('Refreshing job list...', 95);
+        
+        // Refresh with assigned property counts
+        await refreshJobsWithAssignedCounts();
+        
+        updateProcessingStatus('Complete!', 100);
+        
+        setProcessingResults({
+          success: result.errors === 0,
+          processed: result.processed || 0,
+          errors: result.errors || 0,
+          warnings: result.warnings || [],
+          processingTime: new Date() - new Date(processingStatus.startTime),
+          jobName: newJob.name,
+          vendor: newJob.vendor
+        });
+        
+        if (result.errors > 0) {
+          addNotification(`Job created but ${result.errors} errors occurred during processing`, 'warning');
+        } else {
+          addNotification(`Job created successfully! Processed ${result.processed} properties.`, 'success');
+        }
+
+        closeJobModal();
+      }
+      
+    } catch (error) {
+      console.error('Job creation error:', error);
+      updateProcessingStatus('Error occurred', 0, {
+        errors: [error.message]
       });
-
-      console.log('✅ Job created successfully:', createdJob);
-    } catch (error) {
-      console.error('❌ Error creating job:', error);
-      alert('Failed to create job. Please try again.');
+      addNotification('Error creating job: ' + error.message, 'error');
+    } finally {
+      setProcessing(false);
     }
   };
 
-  // Handle job updates
-  const handleSaveJob = async () => {
-    if (!editingJob) return;
+    // Analytics metrics show "-" until processed
+    if (!metrics.isProcessed) {
+      return '-';
+  const createPlanningJob = async () => {
+    if (!newPlanningJob.ccddCode || !newPlanningJob.municipality || !newPlanningJob.dueDate) {
+      addNotification('Please fill all required fields', 'error');
+      return;
+    }
 
+    const value = metrics[metricName];
+    if (value === null || value === undefined) {
+      return '-';
     try {
-      const updatedJob = await jobService.update(editingJob.id, editingJob);
+      const planningData = {
+        ccddCode: newPlanningJob.ccddCode,
+        municipality: newPlanningJob.municipality,
+        end_date: newPlanningJob.dueDate,
+        comments: newPlanningJob.comments || '',
+        created_by: currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad'
+      };
+
+      await planningJobService.create(planningData);
       
-      setJobs(prev => prev.map(job => 
-        job.id === editingJob.id ? { ...job, ...editingJob } : job
-      ));
+      const updatedPlanningJobs = await planningJobService.getAll();
+      setPlanningJobs(updatedPlanningJobs);
       
-      setEditingJob(null);
-      console.log('✅ Job updated successfully');
+      closePlanningModal();
+      addNotification('Planning job created successfully!', 'success');
     } catch (error) {
-      console.error('❌ Error updating job:', error);
-      alert('Failed to update job. Please try again.');
+      console.error('Planning job creation error:', error);
+      addNotification('Error creating planning job: ' + error.message, 'error');
     }
   };
 
-  // Handle job deletion
-  const handleDeleteJob = async (jobId) => {
-    if (!window.confirm('Are you sure you want to delete this job? This action cannot be undone.')) {
+  const editJob = async () => {
+    if (!newJob.name || !newJob.municipality || !newJob.dueDate) {
+      addNotification('Please fill all required fields', 'error');
+      return;
+    }
+
+    return isPercentage ? `${value}%` : value.toLocaleString();
+    try {
+      const updateData = {
+        name: newJob.name,
+        municipality: newJob.municipality,
+        dueDate: newJob.dueDate,
+        percent_billed: newJob.percentBilled
+      };
+
+      console.log('DEBUG - Sending to database:', updateData);
+      console.log('DEBUG - newJob.percentBilled value:', newJob.percentBilled);
+      console.log('DEBUG - editingJob.id:', editingJob.id);
+
+      await jobService.update(editingJob.id, updateData);
+      
+      // Refresh with assigned property counts
+      await refreshJobsWithAssignedCounts();
+      
+      closeJobModal();
+      addNotification('Job updated successfully!', 'success');
+    } catch (error) {
+      console.error('Job update error:', error);
+      addNotification('Error updating job: ' + error.message, 'error');
+    }
+  };
+
+  // ENHANCED: Get completion display for properties inspected
+  const getCompletionDisplay = (jobId) => {
+    const metrics = jobMetrics[jobId];
+    
+    if (!metrics || !metrics.isProcessed) {
+      const totalProperties = metrics?.totalProperties || 0;
+      return {
+        current: '-',
+        total: totalProperties.toLocaleString(),
+        percentage: '-',
+        isComplete: false
+  const editPlanningJob = async () => {
+    if (!newPlanningJob.municipality || !newPlanningJob.dueDate) {
+      addNotification('Please fill all required fields', 'error');
       return;
     }
 
     try {
-      await jobService.delete(jobId);
-      setJobs(prev => prev.filter(job => job.id !== jobId));
-      setArchivedJobs(prev => prev.filter(job => job.id !== jobId));
-      console.log('✅ Job deleted successfully');
+      const updateData = {
+        municipality: newPlanningJob.municipality,
+        end_date: newPlanningJob.dueDate,
+        comments: newPlanningJob.comments || ''
+      };
+
+      await planningJobService.update(editingPlanning.id, updateData);
+      
+      const updatedPlanningJobs = await planningJobService.getAll();
+      setPlanningJobs(updatedPlanningJobs);
+      
+      closePlanningModal();
+      addNotification('Planning job updated successfully!', 'success');
     } catch (error) {
-      console.error('❌ Error deleting job:', error);
-      alert('Failed to delete job. Please try again.');
+      console.error('Planning job update error:', error);
+      addNotification('Error updating planning job: ' + error.message, 'error');
     }
   };
 
-  // Handle property assignment
-  const handleAssignProperties = async () => {
-    if (!assignmentFile || !selectedJobForAssignment) return;
+    const current = metrics.propertiesInspected || 0;
+    const total = metrics.totalProperties || 0;
+    const percentage = total > 0 ? Math.round((current / total) * 100) : 0;
+  const deleteJob = async (job) => {
+    try {
+      await jobService.delete(job.id);
+      await refreshJobsWithAssignedCounts();
+      setShowDeleteConfirm(null);
+      addNotification('Job deleted successfully', 'success');
+    } catch (error) {
+      console.error('Job deletion error:', error);
+      addNotification('Error deleting job: ' + error.message, 'error');
+    }
+  };
 
-    setAssignmentProgress({
-      step: 'Reading file...',
-      progress: 0,
-      logs: []
+    return {
+      current: current.toLocaleString(),
+      total: total.toLocaleString(),
+      percentage: `${percentage}%`,
+      isComplete: percentage === 100
+    };
+  // Reset form data after successful creation
+  const closeJobModal = () => {
+    setShowCreateJob(false);
+    setEditingJob(null);
+    setNewJob({
+      name: '',
+      ccddCode: '',
+      municipality: '',
+      county: '',
+      state: 'NJ',
+      dueDate: '',
+      assignedManagers: [],
+      sourceFile: null,
+      codeFile: null,
+      vendor: null,
+      vendorDetection: null,
+      percentBilled: 0.00
     });
+    setFileAnalysis({
+      sourceFile: null,
+      codeFile: null,
+      detectedVendor: null,
+      isValid: false,
+      propertyCount: 0,
+      codeCount: 0
+    });
+  };
 
-    try {
-      const text = await assignmentFile.text();
-      const rows = text.split('\n').filter(row => row.trim());
+  // Filter and search jobs
+  const filteredJobs = jobs.filter(job => {
+    const matchesSearch = job.job_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         job.ccdd_code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         job.municipality?.toLowerCase().includes(searchTerm.toLowerCase());
+  const closePlanningModal = () => {
+    setShowCreatePlanning(false);
+    setShowEditPlanning(false);
+    setEditingPlanning(null);
+    setNewPlanningJob({
+      ccddCode: '',
+      municipality: '',
+      dueDate: '',
+      comments: ''
+    });
+  };
+
+    const matchesFilter = filterStatus === 'all' || 
+                         (filterStatus === 'active' && job.status === 'active') ||
+                         (filterStatus === 'completed' && job.status === 'completed') ||
+                         (filterStatus === 'archived' && job.status === 'archived');
+  const convertPlanningToJob = (planningJob) => {
+    setNewJob({
+      name: `${planningJob.municipality} ${new Date(planningJob.end_date).getFullYear()}`,
+      ccddCode: planningJob.ccddCode,
+      municipality: planningJob.municipality,
+      county: '',
+      state: 'NJ',
+      dueDate: '',
+      assignedManagers: [],
+      sourceFile: null,
+      codeFile: null,
+      vendor: null,
+      vendorDetection: null,
+      percentBilled: 0.00
+    });
+    setShowCreateJob(true);
+  };
+
+    const matchesTab = activeTab === 'active' ? job.status === 'active' :
+                      activeTab === 'planning' ? job.status === 'planning' :
+                      activeTab === 'archived' ? job.status === 'archived' :
+                      true;
+  const getStatusColor = (status) => {
+    const actualStatus = status || 'Active';
+    switch (actualStatus) {
+      case 'Active': return 'text-green-600 bg-green-100';
+      case 'planned': return 'text-yellow-600 bg-yellow-100';
+      case 'archived': return 'text-purple-600 bg-purple-100';
+      default: return 'text-green-600 bg-green-100';
+    }
+  };
+
+    return matchesSearch && matchesFilter && matchesTab;
+  });
+  const goToJob = (job) => {
+    if (onJobSelect) {
+      onJobSelect(job);
+    } else {
+      alert(`Navigate to ${job.name} modules:\n- Production Tracker\n- Management Checklist\n- Market & Land Analytics\n- Final Valuation\n- Appeal Coverage`);
+    }
+  };
+
+  const handleCreateJob = () => {
+    console.log('Create new job clicked');
+    // TODO: Implement job creation modal
+  const sortJobsByBilling = (jobList) => {
+    return jobList.sort((a, b) => {
+      const aBilling = a.percentBilled || 0;
+      const bBilling = b.percentBilled || 0;
       
-      if (rows.length < 2) {
-        throw new Error('CSV file must have at least a header row and one data row');
+      // Primary sort: billing percentage (ascending - lower percentages first)
+      if (aBilling !== bBilling) {
+        return aBilling - bBilling;
       }
-
-      const headers = rows[0].split(',').map(h => h.trim().toLowerCase());
       
-      const requiredFields = ['property_block', 'property_lot', 'property_qualifier'];
-      const missingFields = requiredFields.filter(field => !headers.includes(field));
-      
-      if (missingFields.length > 0) {
-        throw new Error(`Missing required columns: ${missingFields.join(', ')}`);
-      }
-
-      setAssignmentProgress({
-        step: 'Processing assignments...',
-        progress: 25,
-        logs: [`📁 Found ${rows.length - 1} properties to assign`]
-      });
-
-      // Process assignments (simplified for display)
-      const assignments = [];
-      for (let i = 1; i < rows.length; i++) {
-        if (forceQuit) {
-          console.log('🛑 Force quit requested, stopping assignment process');
-          break;
-        }
-
-        const values = rows[i].split(',');
-        const assignment = {};
-        
-        headers.forEach((header, index) => {
-          assignment[header] = values[index]?.trim() || '';
-        });
-
-        assignments.push(assignment);
-
-        if (i % 100 === 0) {
-          setAssignmentProgress(prev => ({
-            ...prev,
-            progress: 25 + Math.round((i / (rows.length - 1)) * 50),
-            logs: [...prev.logs, `✅ Processed ${i} of ${rows.length - 1} assignments`]
-          }));
-        }
-      }
-
-      if (!forceQuit) {
-        setAssignmentProgress({
-          step: 'Finalizing...',
-          progress: 100,
-          logs: [`🎉 Successfully assigned ${assignments.length} properties`]
-        });
-
-        // Update job with assignment info
-        const updatedJob = await jobService.update(selectedJobForAssignment.id, {
-          has_property_assignments: true,
-          assigned_property_count: assignments.length,
-          assigned_has_commercial: assignments.some(a => ['4A', '4B', '4C'].includes(a.property_m4_class))
-        });
-
-        setJobs(prev => prev.map(job => 
-          job.id === selectedJobForAssignment.id ? { ...job, ...updatedJob } : job
-        ));
-      }
-
-    } catch (error) {
-      console.error('❌ Assignment error:', error);
-      setAssignmentProgress({
-        step: 'Error occurred',
-        progress: 0,
-        logs: [`❌ Error: ${error.message}`]
-      });
-    }
+      // Secondary sort: municipality name (alphabetical)
+      return (a.municipality || '').localeCompare(b.municipality || '');
+    });
   };
 
-  // Handle planning job operations
-  const handleCreatePlanningJob = async (e) => {
-    e.preventDefault();
-    try {
-      const created = await planningJobService.create(newPlanningJob);
-      setPlanningJobs(prev => [created, ...prev]);
-      setNewPlanningJob({ ccddCode: '', municipality: '', end_date: '', comments: '' });
-    } catch (error) {
-      console.error('❌ Error creating planning job:', error);
-    }
+  const handleEditJob = (job) => {
+    console.log('Edit job clicked:', job.job_name);
+    // TODO: Implement job editing modal
+  const handleStatusTileClick = (tab) => {
+    setActiveTab(tab);
   };
 
-  const handleUpdatePlanningJob = async (id, updates) => {
-    try {
-      await planningJobService.update(id, updates);
-      setPlanningJobs(prev => prev.map(pj => pj.id === id ? { ...pj, ...updates } : pj));
-      setEditingPlanningJob(null);
-    } catch (error) {
-      console.error('❌ Error updating planning job:', error);
-    }
-  };
-
-  const handleDeletePlanningJob = async (id) => {
-    if (!window.confirm('Delete this planning job?')) return;
-    
-    try {
-      await planningJobService.delete(id);
-      setPlanningJobs(prev => prev.filter(pj => pj.id !== id));
-    } catch (error) {
-      console.error('❌ Error deleting planning job:', error);
-    }
-  };
-
-  // County HPI Management
-  const handleHpiUpdate = (county, year, value) => {
-    setHpiData(prev => ({
-      ...prev,
-      [county]: {
-        ...prev[county],
-        [year]: value
-      }
-    }));
-  };
-
-  const renderJobTile = (job) => {
-    const metrics = getJobMetricsForTile(job);
-    const isAnalyticsReady = metrics.isProcessed;
-
-    return (
-      <div
-        key={job.id}
-        className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow border border-gray-200"
-      >
-        <div className="flex justify-between items-start mb-4">
-          <div className="flex-1">
-            <h3 className="text-lg font-semibold text-gray-900 mb-1">
-              {job.name}
-            </h3>
-            <p className="text-sm text-gray-600">
-              {job.municipality} • CCDD: {job.ccddCode}
-            </p>
-            <p className="text-xs text-gray-500 mt-1">
-              {job.vendor} • Due: {job.dueDate ? new Date(job.dueDate).toLocaleDateString() : 'Not set'}
-            </p>
-          </div>
-          
-          {isAnalyticsReady && (
-            <span className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-medium">
-              Analytics Ready
-            </span>
-          )}
-        </div>
-
-        {/* Job Metrics Grid */}
-        <div className="grid grid-cols-2 gap-4 mb-4">
-          <div className="bg-blue-50 p-3 rounded-lg">
-            <p className="text-xs text-blue-600 font-medium">Total Properties</p>
-            <p className="text-lg font-bold text-blue-800">
-              {metrics.totalProperties.toLocaleString()}
-            </p>
-          </div>
-          
-          <div className="bg-green-50 p-3 rounded-lg">
-            <p className="text-xs text-green-600 font-medium">Inspected</p>
-            <p className="text-lg font-bold text-green-800">
-              {metrics.propertiesInspected.toLocaleString()}
-            </p>
-          </div>
-          
-          <div className="bg-purple-50 p-3 rounded-lg">
-            <p className="text-xs text-purple-600 font-medium">Entry Rate</p>
-            <p className="text-lg font-bold text-purple-800">
-              {metrics.entryRate}%
-            </p>
-          </div>
-          
-          <div className="bg-orange-50 p-3 rounded-lg">
-            <p className="text-xs text-orange-600 font-medium">Commercial</p>
-            <p className="text-lg font-bold text-orange-800">
-              {metrics.commercialComplete}%
-            </p>
-          </div>
-        </div>
-
-        {/* Assignment Status */}
-        {job.has_property_assignments && (
-          <div className="bg-gray-50 p-2 rounded mb-4">
-            <p className="text-xs text-gray-600">
-              📋 {job.assignedPropertyCount?.toLocaleString() || 'Unknown'} properties assigned
-              {job.assigned_has_commercial && ' • Includes commercial properties'}
-            </p>
-          </div>
-        )}
-
-        {/* Manager Assignments */}
-        {job.assignedManagers && job.assignedManagers.length > 0 && (
-          <div className="mb-4">
-            <p className="text-xs text-gray-600 mb-1">Assigned Managers:</p>
-            <div className="flex flex-wrap gap-1">
-              {job.assignedManagers.map(manager => (
-                <span key={manager.id} className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs">
-                  {manager.name}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Action Buttons */}
-        <div className="flex space-x-2">
-          <button
-            onClick={() => onJobSelect(job)}
-            className="flex-1 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors text-sm font-medium"
-          >
-            Open Job
-          </button>
-          
-          <button
-            onClick={() => setEditingJob({ ...job })}
-            className="px-3 py-2 border border-gray-300 rounded hover:bg-gray-50 transition-colors text-sm"
-          >
-            ✏️
-          </button>
-          
-          <button
-            onClick={() => {
-              setSelectedJobForAssignment(job);
-              setShowAssignmentModal(true);
-            }}
-            className="px-3 py-2 border border-gray-300 rounded hover:bg-gray-50 transition-colors text-sm"
-          >
-            📋
-          </button>
-          
-          <button
-            onClick={() => handleDeleteJob(job.id)}
-            className="px-3 py-2 border border-red-300 text-red-600 rounded hover:bg-red-50 transition-colors text-sm"
-          >
-            🗑️
-          </button>
-        </div>
-      </div>
+  const handleDeleteJob = (job) => {
+    console.log('Delete job clicked:', job.job_name);
+    // TODO: Implement job deletion with confirmation
+  const getManagerWorkload = (manager) => {
+    const assignedJobs = jobs.filter(job => 
+      job.assignedManagers?.some(am => am.id === manager.id)
     );
+    
+    const totalProperties = assignedJobs.reduce((sum, job) => sum + (job.totalProperties || 0), 0);
+    const completedProperties = assignedJobs.reduce((sum, job) => sum + (job.inspectedProperties || 0), 0);
+    const completionRate = totalProperties > 0 ? Math.round((completedProperties / totalProperties) * 100) : 0;
+    
+    return {
+      jobCount: assignedJobs.length,
+      jobs: assignedJobs,
+      totalProperties,
+      completedProperties,
+      completionRate
+    };
+  };
+
+  const handleAssignProperties = (job) => {
+    console.log('Assign properties clicked:', job.job_name);
+    // TODO: Implement property assignment modal
+  const goToBillingPayroll = (job) => {
+    alert(`Navigate to ${job.name} Billing & Payroll in Production Tracker`);
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-        <span className="ml-2 text-gray-600">Loading jobs...</span>
+      <div className="max-w-7xl mx-auto p-6">
+        <div className="flex items-center justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mr-3"></div>
+          <span className="text-gray-600">Loading jobs...</span>
+      <div className="max-w-6xl mx-auto p-6 bg-white">
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading job data...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="max-w-7xl mx-auto p-6">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex items-center">
+            <AlertTriangle className="w-5 h-5 text-red-600 mr-2" />
+            <span className="text-red-800 font-medium">Error loading jobs: {error}</span>
+  return (
+    <div className="max-w-6xl mx-auto p-6 bg-white">
+      {/* Notifications */}
+      <div className="fixed top-4 right-4 z-50 space-y-2">
+        {notifications.map(notification => (
+          <div
+            key={notification.id}
+            className={`p-4 rounded-lg shadow-lg border-l-4 max-w-md transition-all duration-300 ${
+              notification.type === 'error' ? 'bg-red-50 border-red-400 text-red-800' :
+              notification.type === 'warning' ? 'bg-yellow-50 border-yellow-400 text-yellow-800' :
+              notification.type === 'success' ? 'bg-green-50 border-green-400 text-green-800' :
+              'bg-blue-50 border-blue-400 text-blue-800'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">{notification.message}</span>
+              <button
+                onClick={() => setNotifications(prev => prev.filter(n => n.id !== notification.id))}
+                className="ml-2 text-gray-400 hover:text-gray-600"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        </div>
+        ))}
       </div>
     );
   }
 
   return (
-    <div className="max-w-7xl mx-auto p-6">
-      {/* Header with Stats */}
-      <div className="mb-8">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-3xl font-bold text-gray-900">Job Management</h1>
+    <div className="max-w-7xl mx-auto p-6 space-y-6">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border-2 border-blue-200 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center">
+            <Settings className="w-8 h-8 mr-3 text-blue-600" />
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Active Job Management</h1>
+              <p className="text-gray-600">
+                Connected to database with {filteredJobs.length} active jobs tracked
+                {isLoadingMetrics && (
+                  <span className="ml-2 text-blue-600">
+                    <div className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-1"></div>
+                    Loading analytics...
+                  </span>
+      {/* ENHANCED Assignment Upload Modal with better feedback */}
+      {showAssignmentUpload && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-md w-full p-6 shadow-2xl">
+            <div className="text-center">
+              <Target className="w-12 h-12 mx-auto mb-4 text-green-600" />
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Assign Properties</h3>
+              <p className="text-gray-600 mb-4">
+                Upload CSV to set inspection scope for <strong>{showAssignmentUpload.name}</strong>
+              </p>
+              
+              <div className="mb-4">
+                <input
+                  type="file"
+                  accept=".csv"
+                  onChange={(e) => setAssignmentFile(e.target.files[0])}
+                  className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100"
+                />
+                <p className="text-xs text-gray-500 mt-2">
+                  CSV with Block, Lot, Qualifier, Card, Location columns
+                </p>
+              </div>
+
+              {/* ENHANCED: Better assignment results display */}
+              {assignmentResults && (
+                <div className="mb-4 p-4 bg-green-50 rounded-lg border border-green-200">
+                  <div className="text-sm text-green-800">
+                    <div className="font-bold text-lg mb-2">✅ Assignment Complete!</div>
+                    <div className="grid grid-cols-2 gap-2 text-left">
+                      <div>Uploaded:</div>
+                      <div className="font-medium">{assignmentResults.uploaded}</div>
+                      <div>Matched:</div>
+                      <div className="font-medium">{assignmentResults.matched}</div>
+                      <div>Unmatched:</div>
+                      <div className="font-medium text-orange-600">{assignmentResults.unmatched}</div>
+                      <div>Match Rate:</div>
+                      <div className="font-medium">{assignmentResults.matchRate}%</div>
+                      <div>Scope:</div>
+                      <div className="font-medium">{assignmentResults.hasCommercial ? 'Mixed (Res + Com)' : 'Residential Only'}</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-center space-x-3">
+                <button
+                  onClick={() => {
+                    setShowAssignmentUpload(null);
+                    setAssignmentFile(null);
+                    setAssignmentResults(null);
+                  }}
+                  className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
+                >
+                  {assignmentResults ? 'Close' : 'Cancel'}
+                </button>
+                {!assignmentResults && (
+                  <button
+                    onClick={() => uploadPropertyAssignment(showAssignmentUpload)}
+                    disabled={!assignmentFile || uploadingAssignment}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+                  >
+                    {uploadingAssignment ? 'Processing...' : 'Assign Properties'}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Processing Modal */}
+      {showProcessingModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-lg w-full p-6 shadow-2xl">
+            <div className="text-center">
+              <div className="mb-4">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+              </div>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Processing Job</h3>
+              <p className="text-sm text-gray-600 mb-4">{processingStatus.currentStep}</p>
+              
+              <div className="w-full bg-gray-200 rounded-full h-2 mb-4">
+                <div 
+                  className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${processingStatus.progress}%` }}
+                ></div>
+              </div>
+              
+              <div className="text-xs text-gray-500 space-y-1 mb-4">
+                {processingStatus.totalRecords > 0 && (
+                  <div>Records: {processingStatus.recordsProcessed} / {processingStatus.totalRecords}</div>
+                )}
+                {processingStatus.startTime && (
+                  <div>Elapsed: {formatElapsedTime(processingStatus.startTime)}</div>
+                )}
+                <div>{processingStatus.progress}% complete</div>
+              </div>
+
+              {/* Real-time batch processing logs */}
+              {processingStatus.logs && processingStatus.logs.length > 0 && (
+                <div className="mb-4 p-3 bg-blue-50 rounded-lg max-h-32 overflow-y-auto">
+                  <div className="text-sm font-medium text-blue-800 mb-2">Batch Processing:</div>
+                  <div className="text-xs text-blue-700 space-y-1 text-left">
+                    {processingStatus.logs.slice(-5).map((log, idx) => (
+                      <div key={idx} className="flex justify-between">
+                        <span>{log.message}</span>
+                        <span className="text-blue-500">{log.timestamp}</span>
+                      </div>
+                    ))}
+                    {processingStatus.logs.length > 5 && (
+                      <div className="text-center text-blue-600 font-medium">
+                        ...and {processingStatus.logs.length - 5} more steps
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+              
+              {/* Error Display */}
+              {processingStatus.errors && processingStatus.errors.length > 0 && (
+                <div className="mb-4 p-3 bg-red-50 rounded-lg">
+                  <div className="text-sm font-medium text-red-800 mb-1">Errors:</div>
+                  <div className="text-xs text-red-600 space-y-1">
+                    {processingStatus.errors.slice(0, 3).map((error, idx) => (
+                      <div key={idx}>{error}</div>
+                    ))}
+                    {processingStatus.errors.length > 3 && (
+                      <div>...and {processingStatus.errors.length - 3} more</div>
+                    )}
+                  </div>
+                </div>
+              )}
+              
+              {/* COMPLETION RESULTS */}
+              {processingResults && (
+                <div className="mb-4 p-4 bg-green-50 rounded-lg border-2 border-green-200">
+                  <div className="text-lg font-bold text-green-800 mb-3">🎉 Processing Complete!</div>
+                  <div className="text-sm text-green-700 space-y-2">
+                    <div className="flex justify-between">
+                      <span>✅ Properties Processed:</span>
+                      <span className="font-bold">{processingResults.processed.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>⏱️ Total Time:</span>
+                      <span className="font-bold">{formatElapsedTime(processingStatus.startTime)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>🏢 Job Created:</span>
+                      <span className="font-bold">{processingResults.jobName}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>📊 Vendor:</span>
+                      <span className="font-bold">{processingResults.vendor}</span>
+                    </div>
+                    {processingResults.errors > 0 && (
+                      <div className="flex justify-between text-red-600">
+                        <span>⚠️ Errors:</span>
+                        <span className="font-bold">{processingResults.errors}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* ACTION BUTTONS */}
+              <div className="flex justify-center space-x-3">
+                {/* FORCE QUIT - Only during processing */}
+                {!processingResults && processingStatus.isProcessing && (
+                  <button
+                    onClick={() => {
+                      setShowProcessingModal(false);
+                      setProcessing(false);
+                      resetProcessingStatus();
+                      addNotification('Job creation cancelled - import stopped', 'warning');
+                    }}
+                    className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 text-sm font-medium"
+                  >
+                    🛑 Force Quit Import
+                  </button>
+                )}
+
+                {/* CLOSE - Only when complete */}
+                {processingResults && (
+                  <button
+                    onClick={() => {
+                      setShowProcessingModal(false);
+                      setProcessingResults(null);
+                      resetProcessingStatus();
+                    }}
+                    className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium"
+                  >
+                    ✅ Close
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* County HPI Import Modal */}
+      {showHpiImport && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-md w-full p-6 shadow-2xl">
+            <div className="text-center">
+              <TrendingUp className="w-12 h-12 mx-auto mb-4 text-blue-600" />
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Import HPI Data</h3>
+              <p className="text-gray-600 mb-4">
+                Upload HPI data for <strong>{showHpiImport}</strong> County
+              </p>
+              
+              <div className="mb-4">
+                <input
+                  type="file"
+                  accept=".csv"
+                  onChange={(e) => setHpiFile(e.target.files[0])}
+                  className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                />
+                <p className="text-xs text-gray-500 mt-2">
+                  CSV file with observation_date and HPI index columns
+                </p>
+              </div>
+
+              <div className="flex justify-center space-x-3">
+                <button
+                  onClick={() => {
+                    setShowHpiImport(null);
+                    setHpiFile(null);
+                  }}
+                  className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => importCountyHpi(showHpiImport)}
+                  disabled={!hpiFile || importingHpi}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {importingHpi ? 'Importing...' : 'Import HPI Data'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create/Edit Job Modal */}
+      {showCreateJob && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-5xl w-full max-h-screen overflow-y-auto shadow-2xl">
+            <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-green-50">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <Plus className="w-8 h-8 mr-3 text-blue-600" />
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-900">
+                      {editingJob ? '✏️ Edit Job' : '🚀 Create New Appraisal Job'}
+                    </h2>
+                    <p className="text-gray-600 mt-1">Set up a job with source data and manager assignments</p>
+                  </div>
+                </div>
+                {/* % Billed field in top right - FIXED CSS */}
+                <div className="bg-white p-3 rounded-lg border shadow-sm">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    % Billed
+                  </label>
+                  <div className="flex items-center space-x-1">
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="100"
+                      value={newJob.percentBilled}
+                      onChange={(e) => setNewJob({...newJob, percentBilled: parseFloat(e.target.value) || 0})}
+                      className="w-20 px-2 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="0.00"
+                    />
+                    <span className="text-sm text-gray-600">%</span>
+                  </div>
+                  <style jsx>{`
+                    input[type="number"]::-webkit-outer-spin-button,
+                    input[type="number"]::-webkit-inner-spin-button {
+                      -webkit-appearance: none;
+                      margin: 0;
+                    }
+                    input[type="number"] {
+                      -moz-appearance: textfield;
+                    }
+                  `}</style>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Job Information */}
+              <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <h3 className="font-medium text-yellow-800 mb-4 flex items-center space-x-2">
+                  <Settings className="w-5 h-5" />
+                  <span>🏷️ Job Information</span>
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      CCDD Code *
+                    </label>
+                    <input
+                      type="text"
+                      value={newJob.ccddCode}
+                      onChange={(e) => setNewJob({...newJob, ccddCode: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="e.g., 1306"
+                      maxLength="4"
+                      disabled={editingJob}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">4-digit municipal code</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Job Name *
+                    </label>
+                    <input
+                      type="text"
+                      value={newJob.name}
+                      onChange={(e) => setNewJob({...newJob, name: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="e.g., Township of Middletown 2025"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Municipality *
+                    </label>
+                    <input
+                      type="text"
+                      value={newJob.municipality}
+                      onChange={(e) => setNewJob({...newJob, municipality: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="e.g., Middletown Township"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      County
+                    </label>
+                    <input
+                      type="text"
+                      value={newJob.county}
+                      onChange={(e) => setNewJob({...newJob, county: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="e.g., Monmouth"
+                      disabled={editingJob}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Due Date *
+                    </label>
+                    <input
+                      type="date"
+                      value={newJob.dueDate}
+                      onChange={(e) => setNewJob({...newJob, dueDate: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* File Upload Section with Remove Buttons */}
+              {!editingJob && (
+                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <h3 className="font-medium text-blue-800 mb-4 flex items-center space-x-2">
+                    <Upload className="w-5 h-5" />
+                    <span>📁 Setup Files</span>
+                    {fileAnalysis.detectedVendor && (
+                      <span className="px-3 py-1 bg-green-100 text-green-800 text-xs rounded-full font-medium">
+                        ✅ {fileAnalysis.detectedVendor} Detected
+                      </span>
+                    )}
+                  </h3>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-medium text-blue-700 mb-2">
+                        Property Data File *
+                      </label>
+                      <div className="border-2 border-dashed border-blue-300 rounded-lg p-4 text-center bg-white hover:bg-blue-50 transition-colors">
+                        <input
+                          type="file"
+                          accept=".txt,.csv,.xlsx"
+                          onChange={(e) => handleFileUpload(e, 'source')}
+                          className="hidden"
+                          id="sourceFile"
+                        />
+                        <label htmlFor="sourceFile" className="cursor-pointer">
+                          <Upload className="w-8 h-8 mx-auto mb-2 text-blue-500" />
+                          <div className="text-sm font-medium text-blue-600">Source Data File</div>
+                          <div className="text-xs text-blue-500 mt-1">
+                            .txt (Microsystems) or .csv (BRT)
+                          </div>
+                        </label>
+                      </div>
+                      {fileAnalysis.sourceFile && (
+                        <div className="mt-3 p-3 bg-white rounded border relative">
+                          <button
+                            onClick={() => removeFile('source')}
+                            className="absolute top-2 right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 text-xs"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                          <div className="flex items-center space-x-2 mb-2">
+                            <CheckCircle className="w-5 h-5 text-green-600" />
+                            <span className="font-medium text-green-800">
+                              {fileAnalysis.detectedVendor} Format Detected
+                            </span>
+                          </div>
+                          <div className="text-sm text-gray-600">
+                            <div className="font-medium text-gray-800">{fileAnalysis.sourceFile.name}</div>
+                            {fileAnalysis.propertyCount > 0 && (
+                              <div className="font-medium text-green-600">
+                                ✅ {fileAnalysis.propertyCount.toLocaleString()} properties
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-blue-700 mb-2">
+                        Code Definitions File *
+                      </label>
+                      <div className="border-2 border-dashed border-blue-300 rounded-lg p-4 text-center bg-white hover:bg-blue-50 transition-colors">
+                        <input
+                          type="file"
+                          accept=".txt,.json"
+                          onChange={(e) => handleFileUpload(e, 'code')}
+                          className="hidden"
+                          id="codeFile"
+                        />
+                        <label htmlFor="codeFile" className="cursor-pointer">
+                          <FileText className="w-8 h-8 mx-auto mb-2 text-blue-500" />
+                          <div className="text-sm font-medium text-blue-600">Code Definitions File</div>
+                          <div className="text-xs text-blue-500 mt-1">
+                            .txt (Microsystems) or .txt/.json (BRT)
+                          </div>
+                        </label>
+                      </div>
+                      {fileAnalysis.codeFile && (
+                        <div className="mt-3 p-3 bg-white rounded border relative">
+                          <button
+                            onClick={() => removeFile('code')}
+                            className="absolute top-2 right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 text-xs"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                          <div className="flex items-center space-x-2 mb-2">
+                            <CheckCircle className="w-5 h-5 text-green-600" />
+                            <span className="font-medium text-green-800">Code file validated</span>
+                          </div>
+                          <div className="text-sm text-gray-600">
+                            <div className="font-medium text-gray-800">{fileAnalysis.codeFile.name}</div>
+                            {fileAnalysis.codeCount > 0 && (
+                              <div className="font-medium text-green-600">
+                                ✅ {fileAnalysis.codeCount.toLocaleString()} code definitions
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Manager Assignment */}
+              <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                <h3 className="font-medium text-green-800 mb-4 flex items-center space-x-2">
+                  <Users className="w-5 h-5" />
+                  <span>👥 Assign Team Members *</span>
+                  <span className="text-sm text-green-600 font-normal">
+                    ({newJob.assignedManagers.length} selected)
+                  </span>
+                </h3>
+
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  {managers.map(manager => {
+                    const assignedManager = newJob.assignedManagers.find(m => m.id === manager.id);
+                    const isSelected = !!assignedManager;
+                    
+                    return (
+                      <div
+                        key={manager.id}
+                        onClick={() => handleManagerToggle(manager.id)}
+                        className={`p-3 border rounded-lg transition-colors cursor-pointer ${
+                          isSelected
+                            ? 'border-green-500 bg-green-100'
+                            : 'border-gray-200 hover:border-gray-300 hover:bg-green-50'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-2">
+                            <div className="w-8 h-8 rounded-full bg-green-100 text-green-800 flex items-center justify-center text-sm font-bold">
+                              {`${manager.first_name || ''} ${manager.last_name || ''}`.split(' ').map(n => n[0]).join('')}
+                            </div>
+                            <div>
+                              <div className="font-medium text-gray-900 text-sm flex items-center space-x-1">
+                                <span>{manager.first_name} {manager.last_name}</span>
+                                {manager.can_be_lead && (
+                                  <span className="px-1 py-0.5 bg-blue-100 text-blue-800 text-xs rounded">
+                                    Lead
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        {isSelected && (
+                          <div className="mt-2 text-xs">
+                            <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full font-medium">
+                              {assignedManager.role}
+                            </span>
+                            <div className="text-green-600 mt-1 text-xs">
+                              Click: Lead → Assistant → Remove
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-end space-x-3">
+              <button
+                onClick={closeJobModal}
+                className="px-6 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium shadow-md hover:shadow-lg transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={editingJob ? editJob : createJob}
+                disabled={processing}
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {processing ? 'Processing...' : editingJob ? '💾 Update Job' : '🚀 Create Job'}
+              </button>
+            </div>
+          </div>
           <button
-            onClick={() => setShowCreateForm(true)}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors font-medium"
+            onClick={handleCreateJob}
+            className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
           >
-            + Create New Job
+            <Plus className="w-4 h-4" />
+            <Edit className="w-4 h-4" />
+            <span className="font-medium">Create New Job</span>
           </button>
         </div>
+      )}
 
-        {/* Enhanced Stats Banner */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
-          <div className="bg-gradient-to-r from-blue-500 to-blue-600 p-6 rounded-lg text-white">
-            <h3 className="text-sm font-medium opacity-90">Active Jobs</h3>
-            <p className="text-3xl font-bold">{jobs.length}</p>
-            {isLoadingMetrics && (
-              <p className="text-xs opacity-75 mt-1">
-                <div className="inline-block animate-spin rounded-full h-3 w-3 border-b border-white mr-1"></div>
-                Loading analytics...
-              </p>
-            )}
-          </div>
-          
-          <div className="bg-gradient-to-r from-green-500 to-green-600 p-6 rounded-lg text-white">
-            <h3 className="text-sm font-medium opacity-90">Total Properties</h3>
-            <p className="text-3xl font-bold">{stats.propertiesBreakdown.total.toLocaleString()}</p>
-            <p className="text-xs opacity-75 mt-1">
-              {Object.values(jobMetrics).filter(m => m.isProcessed).length} jobs with analytics
-            </p>
-          </div>
-          
-          <div className="bg-gradient-to-r from-purple-500 to-purple-600 p-6 rounded-lg text-white">
-            <h3 className="text-sm font-medium opacity-90">Employees</h3>
-            <p className="text-3xl font-bold">{stats.employees}</p>
-            <p className="text-xs opacity-75 mt-1">{managers.length} managers</p>
-          </div>
-          
-          <div className="bg-gradient-to-r from-orange-500 to-orange-600 p-6 rounded-lg text-white">
-            <h3 className="text-sm font-medium opacity-90">Property Breakdown</h3>
-            <p className="text-xl font-bold">{stats.propertiesBreakdown.residential.toLocaleString()} Res</p>
-            <p className="text-sm opacity-75">{stats.propertiesBreakdown.commercial.toLocaleString()} Com • {stats.propertiesBreakdown.other.toLocaleString()} Other</p>
+      {/* Create/Edit Planning Job Modal */}
+      {(showCreatePlanning || showEditPlanning) && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-2xl w-full shadow-2xl">
+            <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-yellow-50 to-orange-50">
+              <div className="flex items-center">
+                <Calendar className="w-8 h-8 mr-3 text-yellow-600" />
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">
+                    {showEditPlanning ? '✏️ Edit Planning Job' : '📝 Add Planning Job'}
+                  </h2>
+                  <p className="text-gray-600 mt-1">Set up a potential future project</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    CCDD Code *
+                  </label>
+                  <input
+                    type="text"
+                    value={newPlanningJob.ccddCode}
+                    onChange={(e) => setNewPlanningJob({...newPlanningJob, ccddCode: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
+                    placeholder="e.g., 1306"
+                    maxLength="4"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Municipality *
+                  </label>
+                  <input
+                    type="text"
+                    value={newPlanningJob.municipality}
+                    onChange={(e) => setNewPlanningJob({...newPlanningJob, municipality: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
+                    placeholder="e.g., Middletown Township"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Target Date *
+                </label>
+                <input
+                  type="date"
+                  value={newPlanningJob.dueDate}
+                  onChange={(e) => setNewPlanningJob({...newPlanningJob, dueDate: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Comments
+                </label>
+                <textarea
+                  value={newPlanningJob.comments}
+                  onChange={(e) => setNewPlanningJob({...newPlanningJob, comments: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
+                  rows="3"
+                  placeholder="Notes about this potential project..."
+                />
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-end space-x-3">
+              <button
+                onClick={closePlanningModal}
+                className="px-6 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={showEditPlanning ? editPlanningJob : createPlanningJob}
+                className="px-6 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 font-medium"
+              >
+                {showEditPlanning ? '💾 Update Planning Job' : '📝 Add Planning Job'}
+              </button>
+            </div>
           </div>
         </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-md w-full p-6 shadow-2xl">
+            <div className="text-center">
+              <Trash2 className="w-12 h-12 mx-auto mb-4 text-red-600" />
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Delete Job</h3>
+              <p className="text-gray-600 mb-6">
+                Are you sure you want to delete "{showDeleteConfirm.name}"? This action cannot be undone.
+              </p>
+              <div className="flex justify-center space-x-3">
+                <button
+                  onClick={() => setShowDeleteConfirm(null)}
+                  className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium shadow-md hover:shadow-lg transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => deleteJob(showDeleteConfirm)}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium shadow-md hover:shadow-lg transition-all"
+                >
+                  Delete Job
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Header */}
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">
+          Management OS - Current Jobs List
+        </h1>
+        <p className="text-gray-600">
+          Manage appraisal jobs with source file integration and team assignments
+        </p>
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200 mb-6">
+      <div className="border-b border-gray-200">
         <nav className="-mb-px flex space-x-8">
           {[
-            { id: 'active', label: 'Active Jobs', count: jobs.length },
-            { id: 'planning', label: 'Planning Jobs', count: planningJobs.length },
-            { id: 'archived', label: 'Archived Jobs', count: archivedJobs.length },
-            { id: 'hpi', label: 'County HPI', count: Object.keys(hpiData).length },
-            { id: 'managers', label: 'Manager Assignments', count: managers.length }
-          ].map(tab => (
+            { id: 'active', name: 'Active Jobs', count: jobs.filter(j => j.status === 'active').length },
+            { id: 'planning', name: 'Planning Jobs', count: jobs.filter(j => j.status === 'planning').length },
+            { id: 'archived', name: 'Archived Jobs', count: jobs.filter(j => j.status === 'archived').length }
+          ].map((tab) => (
+      {/* Database Status with Enhanced Property Breakdown */}
+      <div className="mb-6 p-4 bg-gray-50 rounded-lg border">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Database className={`w-5 h-5 ${dbConnected ? 'text-green-600' : 'text-red-600'}`} />
+            <span className={`font-medium ${dbConnected ? 'text-green-800' : 'text-red-800'}`}>
+              Database: {dbConnected ? 'Connected' : 'Disconnected'}
+            </span>
+          </div>
+          {dbConnected && (
+            <div className="flex items-center gap-6 text-sm text-gray-600">
+              <span>{dbStats.employees} Employees</span>
+              <span>{jobs.length + archivedJobs.length} Jobs</span>
+              <div className="flex items-center gap-4">
+                <span className="font-medium text-blue-700">
+                  📊 {dbStats.properties?.toLocaleString() || 0} Properties:
+                </span>
+                {dbStats.propertiesBreakdown ? (
+                  <>
+                    <span className="text-green-600">
+                      🏠 {dbStats.propertiesBreakdown.residential?.toLocaleString() || 0} Residential
+                    </span>
+                    <span className="text-purple-600">
+                      🏢 {dbStats.propertiesBreakdown.commercial?.toLocaleString() || 0} Commercial
+                    </span>
+                    <span className="text-gray-500">
+                      📋 {dbStats.propertiesBreakdown.other?.toLocaleString() || 0} Other
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-gray-500">Loading breakdown...</span>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Tab Navigation */}
+      <div className="mb-6">
+        <div className="border-b border-gray-200">
+          <nav className="-mb-px flex space-x-8">
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`py-2 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
+              className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center space-x-2 ${
                 activeTab === tab.id
                   ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              onClick={() => setActiveTab('jobs')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'jobs' 
+                  ? 'border-blue-500 text-blue-600' 
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
-              {tab.label}
-              {tab.count > 0 && (
-                <span className={`ml-2 py-0.5 px-2 rounded-full text-xs ${
-                  activeTab === tab.id
-                    ? 'bg-blue-100 text-blue-600'
-                    : 'bg-gray-100 text-gray-600'
-                }`}>
-                  {tab.count}
-                </span>
-              )}
+              <span>{tab.name}</span>
+              <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded-full text-xs">
+                {tab.count}
+              </span>
+              📋 Active Jobs ({jobs.length})
             </button>
           ))}
         </nav>
       </div>
 
-      {/* Tab Content */}
-      {activeTab === 'active' && (
+      {/* Search and Filter */}
+      <div className="flex items-center space-x-4 bg-white p-4 rounded-lg border shadow-sm">
+        <div className="flex-1 relative">
+          <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Search jobs by name, CCDD, or municipality..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          />
+        </div>
+        <div className="flex items-center space-x-2">
+          <Filter className="w-4 h-4 text-gray-400" />
+          <select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="all">All Status</option>
+            <option value="active">Active</option>
+            <option value="completed">Completed</option>
+            <option value="archived">Archived</option>
+          </select>
+            <button
+              onClick={() => setActiveTab('planning')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'planning' 
+                  ? 'border-blue-500 text-blue-600' 
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              📅 Planning Jobs ({planningJobs.length})
+            </button>
+            <button
+              onClick={() => setActiveTab('archived')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'archived' 
+                  ? 'border-blue-500 text-blue-600' 
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              🗄️ Archived Jobs ({archivedJobs.length})
+            </button>
+            <button
+              onClick={() => setActiveTab('county-hpi')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'county-hpi' 
+                  ? 'border-blue-500 text-blue-600' 
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              📈 County HPI ({getUniqueCounties().length})
+            </button>
+            <button
+              onClick={() => setActiveTab('manager-assignments')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'manager-assignments' 
+                  ? 'border-blue-500 text-blue-600' 
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              👥 Manager Assignments ({managers.filter(m => !`${m.first_name} ${m.last_name}`.toLowerCase().includes('tom davis')).length})
+            </button>
+          </nav>
+        </div>
+      </div>
+
+      {/* Jobs List */}
+      <div className="space-y-4">
+        {filteredJobs.length === 0 ? (
+          <div className="text-center py-12 bg-white rounded-lg border">
+            <Building className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">No Jobs Found</h3>
+            <p className="text-gray-600">
+              {searchTerm || filterStatus !== 'all' ? 
+                'No jobs match your current filters.' : 
+                'No jobs available in this category.'
+              }
+            </p>
+          </div>
+        ) : (
+          filteredJobs.map((job) => {
+            const completion = getCompletionDisplay(job.id);
+            const metrics = jobMetrics[job.id];
+            const jobManager = getJobManager(job);
+            
+            return (
+              <div key={job.id} className="bg-white rounded-lg border shadow-sm p-6">
+                {/* Job Header */}
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex-1">
+                    <div className="flex items-center space-x-3 mb-2">
+                      <h2 className="text-xl font-bold text-gray-900">{job.job_name}</h2>
+                      <span className="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-800">
+                        {job.vendor_type || 'BRT'}
+                      </span>
+                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                        job.status === 'active' ? 'bg-green-100 text-green-800' :
+                        job.status === 'planning' ? 'bg-blue-100 text-blue-800' :
+                        'bg-gray-100 text-gray-800'
+                      }`}>
+                        {job.status === 'active' ? 'Active' : 
+                         job.status === 'planning' ? 'Planning' : 'Archived'}
+                      </span>
+                      <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
+                        {displayMetric(job.id, 'totalProperties') !== '-' ? 
+                          `${((parseFloat(job.percent_completed) || 0) * 100).toFixed(1)}% Billed` :
+                          '0.00% Billed'
+                        }
+                      </span>
+                    </div>
+                    <div className="flex items-center space-x-4 text-sm text-gray-600">
+                      <div className="flex items-center">
+                        <span className="font-medium">{job.ccdd_code || job.ccddCode}</span>
+                      </div>
+                      <div className="flex items-center">
+                        <MapPin className="w-4 h-4 mr-1" />
+                        <span>{job.municipality || 'Municipality'}</span>
+                      </div>
+                      <div className="flex items-center">
+                        <Calendar className="w-4 h-4 mr-1" />
+                        <span>Due: {job.end_date ? new Date(job.end_date).getFullYear() : 'TBD'}</span>
+      {/* Active Jobs Tab with FIXED Assigned Properties Button */}
+      {activeTab === 'jobs' && (
         <div className="space-y-6">
-          {jobs.length === 0 ? (
-            <div className="text-center py-12">
-              <p className="text-gray-500 text-lg">No active jobs found.</p>
+          <div className="bg-gradient-to-r from-blue-50 to-green-50 rounded-lg border-2 border-blue-200 p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center">
+                <Settings className="w-8 h-8 mr-3 text-blue-600" />
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-800">📋 Active Job Management</h2>
+                  <p className="text-gray-600 mt-1">
+                    {dbConnected 
+                      ? `Connected to database with ${jobs.length} active jobs tracked`
+                      : 'Manage appraisal jobs with source data and team assignments'
+                    }
+                  </p>
+                </div>
+              </div>
               <button
-                onClick={() => setShowCreateForm(true)}
-                className="mt-4 bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                onClick={() => setShowCreateJob(true)}
+                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 font-medium shadow-lg hover:shadow-xl transition-all transform hover:scale-105"
               >
-                Create Your First Job
+                <Plus className="w-5 h-5" />
+                <span>🚀 Create New Job</span>
               </button>
             </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {jobs.map(renderJobTile)}
+
+            {/* Enhanced Job Cards with Fixed Assigned Properties Display */}
+            <div className="space-y-3">
+              {jobs.length === 0 ? (
+                <div className="text-center text-gray-500 py-12">
+                  <div className="text-4xl mb-4">📋</div>
+                  <h4 className="text-lg font-medium mb-2">No Jobs Found</h4>
+                  <p className="text-sm">Create your first job to get started!</p>
+                </div>
+              ) : (
+                sortJobsByBilling(jobs).map(job => {
+                  const metrics = getMetricsDisplay(job);
+                  const propertyDisplay = getPropertyCountDisplay(job);
+                  
+                  return (
+                    <div key={job.id} className={`p-4 bg-white rounded-lg border-l-4 shadow-md hover:shadow-lg transition-all transform hover:scale-[1.01] ${
+                      job.vendor === 'Microsystems' ? 'border-blue-400 hover:bg-blue-50' : 'border-orange-300 hover:bg-orange-50'
+                    }`}>
+                      <div className="flex justify-between items-start mb-3">
+                        <div className="flex-1">
+                          <div className="flex justify-between items-center mb-2">
+                            <h4 className="text-lg font-bold text-gray-900">{job.name}</h4>
+                            <div className="flex items-center space-x-2">
+                              <span className={`px-3 py-1 rounded-full text-xs font-medium shadow-sm ${
+                                job.vendor === 'Microsystems' 
+                                  ? 'bg-blue-100 text-blue-800' 
+                                  : 'bg-orange-200 text-orange-800'
+                              }`}>
+                                {job.vendor}
+                              </span>
+                              <span className={`px-3 py-1 rounded-full text-xs font-medium shadow-sm ${getStatusColor(job.status)}`}>
+                                {job.status || 'Active'}
+                              </span>
+                              <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium shadow-sm">
+                                {(job.percentBilled || 0).toFixed(2)}% Billed
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex items-center space-x-4 text-sm text-gray-600 mb-3">
+                            <span className="flex items-center space-x-1">
+                              <span className="font-bold text-blue-600">{job.ccdd || job.ccddCode}</span>
+                              <span>•</span>
+                              <MapPin className="w-4 h-4" />
+                              <span>{job.municipality}</span>
+                            </span>
+                            <span className="flex items-center space-x-1">
+                              <Calendar className="w-4 h-4" />
+                              <span>Due: {job.dueDate ? job.dueDate.split('-')[0] : 'TBD'}</span>
+                            </span>
+                            {job.assignedManagers && job.assignedManagers.length > 0 && (
+                              <span className="flex items-center space-x-1">
+                                <Users className="w-4 h-4" />
+                                <span>{job.assignedManagers.map(m => `${m.name} (${m.role})`).join(', ')}</span>
+                              </span>
+                            )}
+                          </div>
+                          
+                          {/* FIXED: Enhanced Production Metrics with Smart Display */}
+                          <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-3 p-3 bg-gray-50 rounded-lg">
+                            <div className="text-center">
+                              <div className="text-lg font-bold text-blue-600">
+                                {propertyDisplay.inspected.toLocaleString()} of {propertyDisplay.total.toLocaleString()}
+                              </div>
+                              <div className="text-xs text-gray-600">{propertyDisplay.label}</div>
+                              <div className="text-sm font-medium text-blue-600">
+                                {propertyDisplay.total > 0 ? Math.round((propertyDisplay.inspected / propertyDisplay.total) * 100) : 0}% Complete
+                              </div>
+                              {propertyDisplay.isAssigned && (
+                                <div className="text-xs text-green-600 mt-1">✅ Assigned Scope ({propertyDisplay.total} properties)</div>
+                              )}
+                            </div>
+                            
+                            <div className="text-center">
+                              <div className="text-lg font-bold text-green-600">
+                                {metrics.entryRate}%
+                              </div>
+                              <div className="text-xs text-gray-600">Entry Rate</div>
+                            </div>
+                            
+                            <div className="text-center">
+                              <div className="text-lg font-bold text-red-600">
+                                {metrics.refusalRate}%
+                              </div>
+                              <div className="text-xs text-gray-600">Refusal Rate</div>
+                            </div>
+
+                            <div className="text-center">
+                              <div className={`text-lg font-bold ${
+                                metrics.commercial === 'Residential Only' ? 'text-gray-600' : 'text-purple-600'
+                              }`}>
+                                {metrics.commercial}
+                              </div>
+                              <div className="text-xs text-gray-600">Commercial Complete</div>
+                            </div>
+
+                            <div className="text-center">
+                              <div className={`text-lg font-bold ${
+                                metrics.pricing === 'Residential Only' ? 'text-gray-600' : 'text-indigo-600'
+                              }`}>
+                                {metrics.pricing}
+                              </div>
+                              <div className="text-xs text-gray-600">Pricing Complete</div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center">
+                        <Users className="w-4 h-4 mr-1" />
+                        <span>{jobManager} (Lead Manager)</span>
+
+                      {/* Action Buttons with FIXED Assigned Properties Button */}
+                      <div className="flex justify-between items-center pt-3 border-t border-gray-100">
+                        {/* Left Side: County Badge + Assigned Properties Button */}
+                        <div className="flex items-center space-x-3">
+                          <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded-full text-xs font-medium">
+                            📍 {job.county} County
+                          </span>
+                          
+                          {/* FIXED: Assigned Properties Button with better status */}
+                          <button
+                            onClick={() => setShowAssignmentUpload(job)}
+                            className={`px-3 py-2 rounded-lg flex items-center space-x-1 text-sm font-medium transition-all ${
+                              job.has_property_assignments
+                                ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            }`}
+                          >
+                            {job.has_property_assignments ? (
+                              <>
+                                <CheckCircle className="w-4 h-4" />
+                                <span>✅ {job.assignedPropertyCount || 0} Assigned</span>
+                              </>
+                            ) : (
+                              <>
+                                <Target className="w-4 h-4" />
+                                <span>🎯 Assign Properties</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                        
+                        {/* Right Side: Action Buttons */}
+                        <div className="flex space-x-2">
+                          <button 
+                            onClick={() => goToJob(job)}
+                            className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
+                          >
+                            <Eye className="w-4 h-4" />
+                            <span>Go to Job</span>
+                          </button>
+                          <button 
+                            onClick={() => {
+                              setEditingJob(job);
+                              setNewJob({
+                                name: job.name,
+                                ccddCode: job.ccdd || job.ccddCode,
+                                municipality: job.municipality,
+                                county: job.county,
+                                state: job.state,
+                                dueDate: job.dueDate,
+                                assignedManagers: job.assignedManagers || [],
+                                sourceFile: null,
+                                codeFile: null,
+                                vendor: job.vendor,
+                                vendorDetection: job.vendorDetection,
+                                percentBilled: job.percent_billed || ''
+                              });
+                              setShowCreateJob(true);
+                            }}
+                            className="px-3 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
+                          >
+                            <Edit3 className="w-4 h-4" />
+                            <span>Edit</span>
+                          </button>
+                          <button 
+                            onClick={() => setShowDeleteConfirm(job)}
+                            className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            <span>Delete</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  );
+                })
+              )}
             </div>
-          )}
+          </div>
         </div>
       )}
 
       {/* Planning Jobs Tab */}
       {activeTab === 'planning' && (
         <div className="space-y-6">
-          <div className="bg-white p-6 rounded-lg shadow-md">
-            <h2 className="text-xl font-semibold mb-4">Create Planning Job</h2>
-            <form onSubmit={handleCreatePlanningJob} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <input
-                type="text"
-                placeholder="CCDD Code"
-                value={newPlanningJob.ccddCode}
-                onChange={(e) => setNewPlanningJob(prev => ({ ...prev, ccddCode: e.target.value }))}
-                className="border border-gray-300 rounded-lg px-3 py-2"
-                required
-              />
-              <input
-                type="text"
-                placeholder="Municipality"
-                value={newPlanningJob.municipality}
-                onChange={(e) => setNewPlanningJob(prev => ({ ...prev, municipality: e.target.value }))}
-                className="border border-gray-300 rounded-lg px-3 py-2"
-                required
-              />
-              <input
-                type="date"
-                value={newPlanningJob.end_date}
-                onChange={(e) => setNewPlanningJob(prev => ({ ...prev, end_date: e.target.value }))}
-                className="border border-gray-300 rounded-lg px-3 py-2"
-                required
-              />
-              <button
-                type="submit"
-                className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
-              >
-                Add Planning Job
-              </button>
-            </form>
-            <textarea
-              placeholder="Comments (optional)"
-              value={newPlanningJob.comments}
-              onChange={(e) => setNewPlanningJob(prev => ({ ...prev, comments: e.target.value }))}
-              className="mt-4 w-full border border-gray-300 rounded-lg px-3 py-2"
-              rows="2"
-            />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {planningJobs.map(pj => (
-              <div key={pj.id} className="bg-white p-4 rounded-lg shadow-md">
-                {editingPlanningJob?.id === pj.id ? (
-                  <div className="space-y-3">
-                    <input
-                      type="text"
-                      value={editingPlanningJob.ccddCode}
-                      onChange={(e) => setEditingPlanningJob(prev => ({ ...prev, ccddCode: e.target.value }))}
-                      className="w-full border rounded px-2 py-1"
-                    />
-                    <input
-                      type="text"
-                      value={editingPlanningJob.municipality}
-                      onChange={(e) => setEditingPlanningJob(prev => ({ ...prev, municipality: e.target.value }))}
-                      className="w-full border rounded px-2 py-1"
-                    />
-                    <input
-                      type="date"
-                      value={editingPlanningJob.end_date}
-                      onChange={(e) => setEditingPlanningJob(prev => ({ ...prev, end_date: e.target.value }))}
-                      className="w-full border rounded px-2 py-1"
-                    />
-                    <textarea
-                      value={editingPlanningJob.comments || ''}
-                      onChange={(e) => setEditingPlanningJob(prev => ({ ...prev, comments: e.target.value }))}
-                      className="w-full border rounded px-2 py-1"
-                      rows="2"
-                    />
-                    <div className="flex space-x-2">
-                      <button
-                        onClick={() => handleUpdatePlanningJob(pj.id, editingPlanningJob)}
-                        className="bg-green-600 text-white px-3 py-1 rounded text-sm"
-                      >
-                        Save
-                      </button>
-                      <button
-                        onClick={() => setEditingPlanningJob(null)}
-                        className="bg-gray-600 text-white px-3 py-1 rounded text-sm"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div>
-                    <h3 className="font-semibold">{pj.ccddCode}</h3>
-                    <p className="text-sm text-gray-600">{pj.municipality}</p>
-                    <p className="text-xs text-gray-500">Due: {new Date(pj.end_date).toLocaleDateString()}</p>
-                    {pj.comments && <p className="text-xs text-gray-700 mt-2">{pj.comments}</p>}
-                    <div className="flex space-x-2 mt-3">
-                      <button
-                        onClick={() => setEditingPlanningJob({ ...pj })}
-                        className="text-blue-600 hover:text-blue-800 text-sm"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDeletePlanningJob(pj.id)}
-                        className="text-red-600 hover:text-red-800 text-sm"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                )}
+          <div className="bg-gradient-to-r from-yellow-50 to-orange-50 rounded-lg border-2 border-yellow-200 p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center">
+                <Calendar className="w-8 h-8 mr-3 text-yellow-600" />
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-800">📅 Planning Job Management</h2>
+                  <p className="text-gray-600 mt-1">Track potential future projects and pipeline planning</p>
+                </div>
               </div>
-            ))}
+              <button
+                onClick={() => setShowCreatePlanning(true)}
+                className="px-6 py-3 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 flex items-center space-x-2 font-medium shadow-lg hover:shadow-xl transition-all transform hover:scale-105"
+              >
+                <Plus className="w-5 h-5" />
+                <span>📝 Add Planning Job</span>
+              </button>
+            </div>
+
+                {/* ENHANCED: Metrics Display with Live Data */}
+                <div className="grid grid-cols-5 gap-4 mb-4">
+                  {/* Properties Inspected */}
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-blue-600">
+                      {completion.current} of {completion.total}
+            <div className="space-y-3">
+              {planningJobs.length === 0 ? (
+                <div className="text-center text-gray-500 py-12">
+                  <div className="text-4xl mb-4">📅</div>
+                  <h4 className="text-lg font-medium mb-2">No Planning Jobs</h4>
+                  <p className="text-sm">Add planning jobs to track your future project pipeline!</p>
+                </div>
+              ) : (
+                planningJobs.map(planningJob => (
+                  <div key={planningJob.id} className="p-4 bg-white rounded-lg border-l-4 border-yellow-400 shadow-md hover:shadow-lg transition-all transform hover:scale-[1.01] hover:bg-yellow-50">
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1">
+                        <div className="flex justify-between items-center mb-2">
+                          <h4 className="text-lg font-bold text-gray-900">{planningJob.municipality}</h4>
+                          <span className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs font-medium shadow-sm">
+                            Planning Phase
+                          </span>
+                        </div>
+                        <div className="flex items-center space-x-4 text-sm text-gray-600 mb-2">
+                          <span className="flex items-center space-x-1">
+                            <span className="font-bold text-yellow-600">{planningJob.ccddCode}</span>
+                            <span>•</span>
+                            <span>Target: {planningJob.end_date || 'TBD'}</span>
+                          </span>
+                        </div>
+                        {planningJob.comments && (
+                          <div className="text-sm text-gray-600 bg-gray-50 p-2 rounded">
+                            {planningJob.comments}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="text-sm text-gray-600">Properties Inspected</div>
+                    <div className={`text-sm font-medium ${completion.isComplete ? 'text-green-600' : 'text-blue-600'}`}>
+                      {completion.percentage} Complete
+                    <div className="flex justify-end space-x-2 mt-3 pt-3 border-t border-gray-100">
+                      <button
+                        onClick={() => convertPlanningToJob(planningJob)}
+                        className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span>Convert to Job</span>
+                      </button>
+                      <button 
+                        onClick={() => {
+                          setEditingPlanning(planningJob);
+                          setNewPlanningJob({
+                            ccddCode: planningJob.ccddCode,
+                            municipality: planningJob.municipality,
+                            dueDate: planningJob.end_date,
+                            comments: planningJob.comments || ''
+                          });
+                          setShowEditPlanning(true);
+                        }}
+                        className="px-3 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                        <span>Edit</span>
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
       )}
 
+                  {/* Entry Rate */}
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-green-600">
+                      {displayMetric(job.id, 'entryRate', true)}
+                    </div>
+                    <div className="text-sm text-gray-600">Entry Rate</div>
+                  </div>
       {/* Archived Jobs Tab */}
       {activeTab === 'archived' && (
         <div className="space-y-6">
-          {archivedJobs.length === 0 ? (
-            <div className="text-center py-12">
-              <p className="text-gray-500 text-lg">No archived jobs found.</p>
+          <div className="bg-gradient-to-r from-purple-50 to-gray-50 rounded-lg border-2 border-purple-200 p-6">
+            <div className="flex items-center mb-6">
+              <Archive className="w-8 h-8 mr-3 text-purple-600" />
+              <div>
+                <h2 className="text-2xl font-bold text-gray-800">🗄️ Archived Jobs</h2>
+                <p className="text-gray-600 mt-1">Completed and archived project history</p>
+              </div>
             </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {archivedJobs.map(job => (
-                <div
-                  key={job.id}
-                  className="bg-gray-50 rounded-lg shadow-md p-6 border border-gray-200 opacity-75"
-                >
-                  <div className="flex justify-between items-start mb-4">
-                    <div className="flex-1">
-                      <h3 className="text-lg font-semibold text-gray-700 mb-1">
-                        {job.name}
-                      </h3>
-                      <p className="text-sm text-gray-500">
-                        {job.municipality} • CCDD: {job.ccddCode}
-                      </p>
-                      <p className="text-xs text-gray-400 mt-1">
-                        Archived • {job.vendor}
-                      </p>
-                    </div>
-                    
-                    <span className="bg-gray-200 text-gray-600 px-2 py-1 rounded-full text-xs font-medium">
-                      Archived
-                    </span>
-                  </div>
 
-                  <div className="grid grid-cols-2 gap-4 mb-4">
-                    <div className="bg-gray-100 p-3 rounded-lg">
-                      <p className="text-xs text-gray-500 font-medium">Total Properties</p>
-                      <p className="text-lg font-bold text-gray-600">
-                        {(job.totalProperties || 0).toLocaleString()}
-                      </p>
-                    </div>
-                    
-                    <div className="bg-gray-100 p-3 rounded-lg">
-                      <p className="text-xs text-gray-500 font-medium">Completed</p>
-                      <p className="text-lg font-bold text-gray-600">
-                        {(job.inspectedProperties || 0).toLocaleString()}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex space-x-2">
-                    <button
-                      onClick={() => onJobSelect(job)}
-                      className="flex-1 bg-gray-400 text-white px-4 py-2 rounded hover:bg-gray-500 transition-colors text-sm font-medium"
-                    >
-                      View Archive
-                    </button>
-                    
-                    <button
-                      onClick={() => handleDeleteJob(job.id)}
-                      className="px-3 py-2 border border-red-300 text-red-600 rounded hover:bg-red-50 transition-colors text-sm"
-                    >
-                      🗑️
-                    </button>
-                  </div>
+                  {/* Refusal Rate */}
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-red-600">
+                      {displayMetric(job.id, 'refusalRate', true)}
+            <div className="space-y-3">
+              {archivedJobs.length === 0 ? (
+                <div className="text-center text-gray-500 py-12">
+                  <div className="text-4xl mb-4">🗄️</div>
+                  <h4 className="text-lg font-medium mb-2">No Archived Jobs</h4>
+                  <p className="text-sm">Completed jobs will appear here for historical reference</p>
                 </div>
-              ))}
+              ) : (
+                archivedJobs.map(job => (
+                  <div key={job.id} className="p-4 bg-white rounded-lg border-l-4 border-purple-400 shadow-md hover:shadow-lg transition-all transform hover:scale-[1.01] hover:bg-purple-50">
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1">
+                        <div className="flex justify-between items-center mb-2">
+                          <h4 className="text-lg font-bold text-gray-900">{job.name}</h4>
+                          <div className="flex items-center space-x-2">
+                            <span className={`px-3 py-1 rounded-full text-xs font-medium shadow-sm ${
+                              job.vendor === 'Microsystems' 
+                                ? 'bg-blue-100 text-blue-800' 
+                                : 'bg-orange-200 text-orange-800'
+                            }`}>
+                              {job.vendor}
+                            </span>
+                            <span className="px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-xs font-medium shadow-sm">
+                              Archived
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-4 text-sm text-gray-600">
+                          <span className="flex items-center space-x-1">
+                            <span className="font-bold text-purple-600">{job.ccdd || job.ccddCode}</span>
+                            <span>•</span>
+                            <MapPin className="w-4 h-4" />
+                            <span>{job.municipality}</span>
+                          </span>
+                          <span className="flex items-center space-x-1">
+                            <span>📍 {job.county} County</span>
+                          </span>
+                          <span className="flex items-center space-x-1">
+                            <span>🏠 {(job.totalProperties || 0).toLocaleString()} Properties</span>
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-sm text-gray-600">Refusal Rate</div>
+                  </div>
+                ))
+              )}
             </div>
-          )}
+          </div>
         </div>
       )}
 
+                  {/* Commercial Complete */}
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-purple-600">
+                      {displayMetric(job.id, 'commercialComplete', true)}
+                    </div>
+                    <div className="text-sm text-gray-600">Commercial Complete</div>
+                  </div>
       {/* County HPI Tab */}
-      {activeTab === 'hpi' && (
+      {activeTab === 'county-hpi' && (
         <div className="space-y-6">
-          <div className="bg-white p-6 rounded-lg shadow-md">
-            <h2 className="text-xl font-semibold mb-4">County HPI Management</h2>
-            <p className="text-gray-600 mb-4">
-              Manage Housing Price Index data for property valuation analysis.
-            </p>
-            <button
-              onClick={() => setShowHpiModal(true)}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              Manage HPI Data
-            </button>
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border-2 border-blue-200 p-6">
+            <div className="flex items-center mb-6">
+              <TrendingUp className="w-8 h-8 mr-3 text-blue-600" />
+              <div>
+                <h2 className="text-2xl font-bold text-gray-800">📈 County HPI Data Management</h2>
+                <p className="text-gray-600 mt-1">Import and manage Housing Price Index data by county</p>
+              </div>
+            </div>
+
+                  {/* Pricing Complete */}
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-orange-600">
+                      {displayMetric(job.id, 'pricingComplete', true)}
+                    </div>
+                    <div className="text-sm text-gray-600">Pricing Complete</div>
+                  </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {getUniqueCounties().length === 0 ? (
+                <div className="col-span-full text-center text-gray-500 py-12">
+                  <div className="text-4xl mb-4">📈</div>
+                  <h4 className="text-lg font-medium mb-2">No County Data</h4>
+                  <p className="text-sm">Create jobs to see available counties for HPI data import</p>
+                </div>
+              ) : (
+                getUniqueCounties().map(county => {
+                  const hpiData = countyHpiData[county] || [];
+                  const hasData = hpiData.length > 0;
+                  const latestYear = hasData ? Math.max(...hpiData.map(d => d.observation_year)) : null;
+                  const dataCount = hpiData.length;
+
+                {/* Analytics Status Indicator */}
+                {metrics && (
+                  <div className="mb-4 flex items-center justify-between text-sm">
+                    <div className="flex items-center space-x-2">
+                      {metrics.isProcessed ? (
+                        <>
+                          <CheckCircle className="w-4 h-4 text-green-500" />
+                          <span className="text-green-600">
+                            Analytics processed {metrics.lastProcessed ? 
+                              `on ${new Date(metrics.lastProcessed).toLocaleDateString()}` : ''
+                            }
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <Clock className="w-4 h-4 text-gray-400" />
+                          <span className="text-gray-500">Analytics not yet processed</span>
+                        </>
+                  return (
+                    <div key={county} className="p-4 bg-white rounded-lg border shadow-md hover:shadow-lg transition-all">
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-lg font-bold text-gray-900">{county} County</h3>
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                          hasData ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'
+                        }`}>
+                          {hasData ? `${dataCount} Records` : 'No Data'}
+                        </span>
+                      </div>
+                      
+                      {hasData && (
+                        <div className="text-sm text-gray-600 mb-3">
+                          <div>Latest: {latestYear}</div>
+                          <div>Years: {Math.min(...hpiData.map(d => d.observation_year))} - {latestYear}</div>
+                        </div>
+                      )}
+
+                      <button
+                        onClick={() => setShowHpiImport(county)}
+                        className={`w-full px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                          hasData 
+                            ? 'bg-blue-100 text-blue-800 hover:bg-blue-200' 
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                      >
+                        {hasData ? '🔄 Update HPI Data' : '📊 Import HPI Data'}
+                      </button>
+                    </div>
+                    {isLoadingMetrics && (
+                      <div className="flex items-center text-blue-600">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+                        <span>Updating...</span>
+                  );
+                })
+              )}
+            </div>
           </div>
         </div>
       )}
 
       {/* Manager Assignments Tab */}
-      {activeTab === 'managers' && (
+      {activeTab === 'manager-assignments' && (
         <div className="space-y-6">
-          <div className="bg-white p-6 rounded-lg shadow-md">
-            <h2 className="text-xl font-semibold mb-4">Manager Workload Overview</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {managers.map(manager => {
-                const assignedJobs = jobs.filter(job => 
-                  job.assignedManagers?.some(am => am.id === manager.id)
-                );
-                const totalProperties = assignedJobs.reduce((sum, job) => sum + (job.totalProperties || 0), 0);
-                const completedProperties = assignedJobs.reduce((sum, job) => sum + (job.inspectedProperties || 0), 0);
-                const completionRate = totalProperties > 0 ? Math.round((completedProperties / totalProperties) * 100) : 0;
+          <div className="bg-gradient-to-r from-green-50 to-blue-50 rounded-lg border-2 border-green-200 p-6">
+            <div className="flex items-center mb-6">
+              <Users className="w-8 h-8 mr-3 text-green-600" />
+              <div>
+                <h2 className="text-2xl font-bold text-gray-800">👥 Manager Assignment Overview</h2>
+                <p className="text-gray-600 mt-1">Current workload distribution across all managers</p>
+              </div>
+            </div>
 
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {managers.filter(manager => !`${manager.first_name} ${manager.last_name}`.toLowerCase().includes('tom davis')).map(manager => {
+                const workload = getManagerWorkload(manager);
+                
                 return (
-                  <div key={manager.id} className="border border-gray-200 rounded-lg p-4">
-                    <h3 className="font-semibold text-gray-900">{manager.first_name} {manager.last_name}</h3>
-                    <p className="text-sm text-gray-600">{manager.role} • {manager.region}</p>
-                    
-                    <div className="mt-3 space-y-2">
-                      <div className="flex justify-between text-sm">
-                        <span>Assigned Jobs:</span>
-                        <span className="font-medium">{assignedJobs.length}</span>
+                  <div key={manager.id} className="p-4 bg-white rounded-lg border shadow-md hover:shadow-lg transition-all">
+                    <div className="flex items-center mb-3">
+                      <div className="w-10 h-10 rounded-full bg-green-100 text-green-800 flex items-center justify-center text-sm font-bold mr-3">
+                        {`${manager.first_name || ''} ${manager.last_name || ''}`.split(' ').map(n => n[0]).join('')}
                       </div>
-                      <div className="flex justify-between text-sm">
-                        <span>Total Properties:</span>
-                        <span className="font-medium">{totalProperties.toLocaleString()}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span>Completion Rate:</span>
-                        <span className={`font-medium ${completionRate >= 80 ? 'text-green-600' : completionRate >= 60 ? 'text-yellow-600' : 'text-red-600'}`}>
-                          {completionRate}%
-                        </span>
+                    )}
+                  </div>
+                )}
+                      <div>
+                        <h3 className="text-lg font-bold text-gray-900">
+                          {manager.first_name} {manager.last_name}
+                        </h3>
+                        {manager.can_be_lead && (
+                          <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded font-medium">
+                            Lead Qualified
+                          </span>
+                        )}
                       </div>
                     </div>
 
-                    {assignedJobs.length > 0 && (
-                      <div className="mt-3 pt-3 border-t border-gray-100">
-                        <p className="text-xs text-gray-500 mb-1">Assigned Jobs:</p>
+                {/* Job Actions */}
+                <div className="flex items-center justify-between pt-4 border-t border-gray-200">
+                  <div className="flex items-center space-x-2 text-sm text-gray-600">
+                    <MapPin className="w-4 h-4" />
+                    <span>{job.county || 'Camden County'}</span>
+                    
+                    <div className="flex items-center ml-4">
+                      <Users className="w-4 h-4 mr-1" />
+                      <AlertTriangle className="w-4 h-4 text-red-500" />
+                      <span className="cursor-pointer hover:text-blue-600" onClick={() => handleAssignProperties(job)}>
+                        Assign Properties
+                      </span>
+                    <div className="space-y-2 mb-4">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Active Jobs:</span>
+                        <span className="font-medium text-blue-600">{workload.jobCount}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Total Properties:</span>
+                        <span className="font-medium text-gray-800">{workload.totalProperties.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Completed:</span>
+                        <span className="font-medium text-green-600">{workload.completedProperties.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Completion Rate:</span>
+                        <span className="font-medium text-purple-600">{workload.completionRate}%</span>
+                      </div>
+                    </div>
+
+                    {workload.jobs.length > 0 && (
+                      <div className="border-t pt-3">
+                        <div className="text-xs text-gray-600 mb-2">Assigned Jobs:</div>
                         <div className="space-y-1">
-                          {assignedJobs.map(job => (
-                            <p key={job.id} className="text-xs text-gray-700">
-                              • {job.name} ({(job.totalProperties || 0).toLocaleString()} props)
-                            </p>
+                          {workload.jobs.slice(0, 3).map(job => (
+                            <div key={job.id} className="text-xs text-gray-700 flex justify-between">
+                              <span className="truncate">{job.municipality}</span>
+                              <span className="text-gray-500">{(job.totalProperties || 0).toLocaleString()}</span>
+                            </div>
                           ))}
+                          {workload.jobs.length > 3 && (
+                            <div className="text-xs text-gray-500">
+                              ...and {workload.jobs.length - 3} more
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}
                   </div>
+                  
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={() => onJobSelect(job)}
+                      className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                      <Eye className="w-4 h-4" />
+                      <span>Go to Job</span>
+                    </button>
+                    
+                    <button
+                      onClick={() => handleEditJob(job)}
+                      className="flex items-center space-x-2 bg-orange-600 text-white px-3 py-2 rounded-lg hover:bg-orange-700 transition-colors"
+                    >
+                      <Edit className="w-4 h-4" />
+                      <span>Edit</span>
+                    </button>
+                    
+                    <button
+                      onClick={() => handleDeleteJob(job)}
+                      className="flex items-center space-x-2 bg-red-600 text-white px-3 py-2 rounded-lg hover:bg-red-700 transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      <span>Delete</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
                 );
               })}
             </div>
           </div>
         </div>
       )}
-
-      {/* Create Job Modal */}
-      {showCreateForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg max-w-md w-full mx-4">
-            <h2 className="text-xl font-semibold mb-4">Create New Job</h2>
-            <form onSubmit={handleCreateJob} className="space-y-4">
-              <input
-                type="text"
-                placeholder="Job Name"
-                value={newJob.name}
-                onChange={(e) => setNewJob(prev => ({ ...prev, name: e.target.value }))}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2"
-                required
-              />
-              <input
-                type="text"
-                placeholder="Municipality"
-                value={newJob.municipality}
-                onChange={(e) => setNewJob(prev => ({ ...prev, municipality: e.target.value }))}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2"
-                required
-              />
-              <input
-                type="text"
-                placeholder="CCDD Code"
-                value={newJob.ccdd}
-                onChange={(e) => setNewJob(prev => ({ ...prev, ccdd: e.target.value }))}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2"
-                required
-              />
-              <input
-                type="text"
-                placeholder="County"
-                value={newJob.county}
-                onChange={(e) => setNewJob(prev => ({ ...prev, county: e.target.value }))}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2"
-                required
-              />
-              <select
-                value={newJob.vendor}
-                onChange={(e) => setNewJob(prev => ({ ...prev, vendor: e.target.value }))}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2"
-                required
-              >
-                <option value="">Select Vendor</option>
-                <option value="BRT">BRT</option>
-                <option value="Microsystems">Microsystems</option>
-              </select>
-              <input
-                type="date"
-                value={newJob.dueDate}
-                onChange={(e) => setNewJob(prev => ({ ...prev, dueDate: e.target.value }))}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2"
-              />
-              
-              <div className="flex space-x-3">
-                <button
-                  type="submit"
-                  className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                  Create Job
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowCreateForm(false)}
-                  className="flex-1 bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Job Modal */}
-      {editingJob && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg max-w-md w-full mx-4">
-            <h2 className="text-xl font-semibold mb-4">Edit Job</h2>
-            <div className="space-y-4">
-              <input
-                type="text"
-                placeholder="Job Name"
-                value={editingJob.name}
-                onChange={(e) => setEditingJob(prev => ({ ...prev, name: e.target.value }))}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2"
-              />
-              <input
-                type="text"
-                placeholder="Municipality"
-                value={editingJob.municipality}
-                onChange={(e) => setEditingJob(prev => ({ ...prev, municipality: e.target.value }))}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2"
-              />
-              <input
-                type="text"
-                placeholder="CCDD Code"
-                value={editingJob.ccddCode}
-                onChange={(e) => setEditingJob(prev => ({ ...prev, ccddCode: e.target.value }))}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2"
-              />
-              <input
-                type="text"
-                placeholder="County"
-                value={editingJob.county}
-                onChange={(e) => setEditingJob(prev => ({ ...prev, county: e.target.value }))}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2"
-              />
-              <select
-                value={editingJob.vendor}
-                onChange={(e) => setEditingJob(prev => ({ ...prev, vendor: e.target.value }))}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2"
-              >
-                <option value="">Select Vendor</option>
-                <option value="BRT">BRT</option>
-                <option value="Microsystems">Microsystems</option>
-              </select>
-              <input
-                type="date"
-                value={editingJob.dueDate}
-                onChange={(e) => setEditingJob(prev => ({ ...prev, dueDate: e.target.value }))}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2"
-              />
-              
-              <div className="flex space-x-3">
-                <button
-                  onClick={handleSaveJob}
-                  className="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
-                >
-                  Save Changes
-                </button>
-                <button
-                  onClick={() => setEditingJob(null)}
-                  className="flex-1 bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Property Assignment Modal */}
-      {showAssignmentModal && selectedJobForAssignment && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg max-w-2xl w-full mx-4">
-            <h2 className="text-xl font-semibold mb-4">
-              Assign Properties - {selectedJobForAssignment.name}
-            </h2>
-            
-            {!assignmentProgress ? (
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Upload CSV File
-                  </label>
-                  <input
-                    type="file"
-                    accept=".csv"
-                    onChange={(e) => setAssignmentFile(e.target.files[0])}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    Required columns: property_block, property_lot, property_qualifier
-                  </p>
-                </div>
-                
-                <div className="flex space-x-3">
-                  <button
-                    onClick={handleAssignProperties}
-                    disabled={!assignmentFile}
-                    className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-400"
-                  >
-                    Process Assignments
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowAssignmentModal(false);
-                      setSelectedJobForAssignment(null);
-                      setAssignmentFile(null);
-                    }}
-                    className="flex-1 bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div>
-                  <h3 className="font-medium text-gray-900">{assignmentProgress.step}</h3>
-                  <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
-                    <div 
-                      className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                      style={{ width: `${assignmentProgress.progress}%` }}
-                    ></div>
-                  </div>
-                  <p className="text-sm text-gray-600 mt-1">{assignmentProgress.progress}% complete</p>
-                </div>
-
-                <div className="max-h-40 overflow-y-auto bg-gray-50 p-3 rounded border">
-                  {assignmentProgress.logs.map((log, index) => (
-                    <p key={index} className="text-sm text-gray-700 mb-1">{log}</p>
-                  ))}
-                </div>
-
-                <div className="flex space-x-3">
-                  {assignmentProgress.progress < 100 && (
-                    <button
-                      onClick={() => setForceQuit(true)}
-                      className="flex-1 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
-                    >
-                      Force Quit
-                    </button>
-                  )}
-                  
-                  {assignmentProgress.progress === 100 && (
-                    <button
-                      onClick={() => {
-                        setShowAssignmentModal(false);
-                        setSelectedJobForAssignment(null);
-                        setAssignmentFile(null);
-                        setAssignmentProgress(null);
-                        setForceQuit(false);
-                      }}
-                      className="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
-                    >
-                      Done
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
-}
-
-export default AdminJobManagement;
+};
