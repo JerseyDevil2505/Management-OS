@@ -8,11 +8,24 @@ const PayrollProductionUpdater = ({
   onBackToJobs, 
   latestFileVersion, 
   propertyRecordsCount,
-  // NEW: App.js integration props
-  currentWorkflowStats,
-  onAnalyticsUpdate,
-  onUpdateWorkflowStats
+  // NEW: App.js integration props with defaults
+  currentWorkflowStats = null,
+  onAnalyticsUpdate = () => {},
+  onUpdateWorkflowStats = () => {}
 }) => {
+  // 🔧 DEBUG: Log received props on component mount
+  useEffect(() => {
+    console.log('🔍 PayrollProductionUpdater Props Received:', {
+      hasJobData: !!jobData,
+      jobId: jobData?.id,
+      latestFileVersion,
+      propertyRecordsCount,
+      hasCurrentWorkflowStats: !!currentWorkflowStats,
+      currentWorkflowStatsKeys: currentWorkflowStats ? Object.keys(currentWorkflowStats) : null,
+      hasOnAnalyticsUpdate: typeof onAnalyticsUpdate === 'function',
+      hasOnUpdateWorkflowStats: typeof onUpdateWorkflowStats === 'function'
+    });
+  }, []);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [processed, setProcessed] = useState(false);
@@ -69,30 +82,35 @@ const PayrollProductionUpdater = ({
 
   // 🔧 NEW: Check for existing App.js analytics on component mount
   useEffect(() => {
-    if (currentWorkflowStats?.isProcessed && currentWorkflowStats.totalRecords > 0) {
-      debugLog('APP_STATE', '📊 Loading existing analytics from App.js state');
-      
-      // Reconstruct analytics from App.js format
-      const existingAnalytics = {
-        totalRecords: currentWorkflowStats.totalRecords,
-        validInspections: currentWorkflowStats.validInspections,
-        jobEntryRate: currentWorkflowStats.jobEntryRate,
-        jobRefusalRate: currentWorkflowStats.jobRefusalRate,
-        commercialCompletePercent: currentWorkflowStats.commercialCompletePercent,
-        pricingCompletePercent: currentWorkflowStats.pricingCompletePercent,
-        classBreakdown: currentWorkflowStats.classBreakdown,
-        inspectorStats: currentWorkflowStats.inspectorStats,
-        lastProcessed: currentWorkflowStats.lastProcessed
-      };
+    try {
+      if (currentWorkflowStats?.isProcessed && currentWorkflowStats.totalRecords > 0) {
+        debugLog('APP_STATE', '📊 Loading existing analytics from App.js state');
+        
+        // Reconstruct analytics from App.js format
+        const existingAnalytics = {
+          totalRecords: currentWorkflowStats.totalRecords,
+          validInspections: currentWorkflowStats.validInspections,
+          jobEntryRate: currentWorkflowStats.jobEntryRate,
+          jobRefusalRate: currentWorkflowStats.jobRefusalRate,
+          commercialCompletePercent: currentWorkflowStats.commercialCompletePercent,
+          pricingCompletePercent: currentWorkflowStats.pricingCompletePercent,
+          classBreakdown: currentWorkflowStats.classBreakdown,
+          inspectorStats: currentWorkflowStats.inspectorStats,
+          lastProcessed: currentWorkflowStats.lastProcessed
+        };
 
-      setAnalytics(existingAnalytics);
-      setBillingAnalytics(currentWorkflowStats.billingAnalytics);
-      setValidationReport(currentWorkflowStats.validationReport);
-      setProcessed(true);
-      setSettingsLocked(true);
-      
-      addNotification('Analytics loaded from App.js state', 'info');
-      debugLog('APP_STATE', '✅ Analytics restored from App.js state');
+        setAnalytics(existingAnalytics);
+        setBillingAnalytics(currentWorkflowStats.billingAnalytics);
+        setValidationReport(currentWorkflowStats.validationReport);
+        setProcessed(true);
+        setSettingsLocked(true);
+        
+        addNotification('Analytics loaded from App.js state', 'info');
+        debugLog('APP_STATE', '✅ Analytics restored from App.js state');
+      }
+    } catch (error) {
+      console.error('Error loading App.js state:', error);
+      addNotification('Warning: Could not load previous analytics state', 'warning');
     }
   }, [currentWorkflowStats]);
 
@@ -1052,18 +1070,22 @@ const PayrollProductionUpdater = ({
     setBillingAnalytics(null);
     setValidationReport(null);
     
-    // Clear App.js state as well
-    if (onUpdateWorkflowStats) {
-      onUpdateWorkflowStats({
-        totalRecords: 0,
-        validInspections: 0,
-        jobEntryRate: 0,
-        jobRefusalRate: 0,
-        commercialCompletePercent: 0,
-        pricingCompletePercent: 0,
-        isProcessed: false,
-        lastProcessed: null
-      }, true);
+    // Clear App.js state as well (with safety check)
+    try {
+      if (onUpdateWorkflowStats && typeof onUpdateWorkflowStats === 'function') {
+        onUpdateWorkflowStats({
+          totalRecords: 0,
+          validInspections: 0,
+          jobEntryRate: 0,
+          jobRefusalRate: 0,
+          commercialCompletePercent: 0,
+          pricingCompletePercent: 0,
+          isProcessed: false,
+          lastProcessed: null
+        }, true);
+      }
+    } catch (error) {
+      console.error('Error updating App.js state:', error);
     }
     
     addNotification('🔄 Session reset - Settings unlocked for editing', 'info');
@@ -1116,13 +1138,17 @@ const PayrollProductionUpdater = ({
       await saveCategoriesToDatabase();
 
       // 🔧 NEW: Update App.js state with analytics results
-      if (onAnalyticsUpdate && results.analyticsResult) {
-        debugLog('SESSION', '📊 Updating App.js state with analytics results');
-        onAnalyticsUpdate({
-          ...results.analyticsResult,
-          billingAnalytics: results.billingResult,
-          validationReport: results.validationReportData
-        });
+      try {
+        if (onAnalyticsUpdate && typeof onAnalyticsUpdate === 'function' && results.analyticsResult) {
+          debugLog('SESSION', '📊 Updating App.js state with analytics results');
+          onAnalyticsUpdate({
+            ...results.analyticsResult,
+            billingAnalytics: results.billingResult,
+            validationReport: results.validationReportData
+          });
+        }
+      } catch (error) {
+        console.error('Error updating App.js analytics:', error);
       }
 
       debugLog('SESSION', '✅ Processing session completed successfully');
@@ -1204,6 +1230,30 @@ const PayrollProductionUpdater = ({
     );
   }
 
+  // 🔧 NEW: Safety check for required props
+  if (!jobData?.id) {
+    return (
+      <div className="max-w-6xl mx-auto p-6">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+          <div className="flex items-center">
+            <AlertTriangle className="w-6 h-6 text-red-600 mr-3" />
+            <div>
+              <h3 className="text-lg font-semibold text-red-800">Missing Job Data</h3>
+              <p className="text-red-600 mt-1">PayrollProductionUpdater requires valid job data to function.</p>
+              <p className="text-sm text-red-500 mt-2">jobData: {JSON.stringify(jobData)}</p>
+            </div>
+          </div>
+          <button
+            onClick={onBackToJobs}
+            className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+          >
+            ← Back to Jobs
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6">
       {/* Notifications */}
@@ -1239,7 +1289,7 @@ const PayrollProductionUpdater = ({
             <div>
               <h1 className="text-2xl font-bold text-gray-900">PayrollProductionUpdater</h1>
               <p className="text-gray-600">
-                {jobData.name} - Enhanced Analytics & Validation Engine
+                {jobData?.name || 'Loading...'} - Enhanced Analytics & Validation Engine
                 {detectedVendor && <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded font-medium">
                   {detectedVendor} Format
                 </span>}
@@ -1507,7 +1557,8 @@ const PayrollProductionUpdater = ({
             onClick={startProcessingSession}
             disabled={processing || (!isDateLocked) || hasUnsavedChanges ||
               (infoByCategoryConfig.entry.length + infoByCategoryConfig.refusal.length + 
-               infoByCategoryConfig.estimation.length + infoByCategoryConfig.priced.length) === 0}
+               infoByCategoryConfig.estimation.length + infoByCategoryConfig.priced.length + 
+               infoByCategoryConfig.special.length) === 0}
             className={`px-6 py-2 rounded-lg flex items-center space-x-2 transition-all ${
               processed 
                 ? 'bg-green-600 text-white hover:bg-green-700'
