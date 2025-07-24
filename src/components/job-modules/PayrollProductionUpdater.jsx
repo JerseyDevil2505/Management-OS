@@ -581,16 +581,6 @@ const PayrollProductionUpdater = ({
         ...(infoByCategoryConfig.special || [])  // NEW: Include special codes in validation
       ];
 
-      // 🔧 DEBUG: Log validation setup
-      debugLog('VALIDATION_SETUP', 'InfoBy validation configuration:', {
-        vendor: actualVendor || jobData.vendor_type,
-        allValidCodes,
-        entryConfig: infoByCategoryConfig.entry,
-        refusalConfig: infoByCategoryConfig.refusal,
-        specialConfig: infoByCategoryConfig.special,
-        firstFewRecordsInfoBy: rawData.slice(0, 5).map(r => r.inspection_info_by)
-      });
-
       // Load ALL records using pagination to bypass Supabase 1000 limit
       let allRecords = [];
       let startIndex = 0;  // 🔧 RENAMED: 'start' might conflict with something
