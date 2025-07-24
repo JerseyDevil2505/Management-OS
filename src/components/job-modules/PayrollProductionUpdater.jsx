@@ -205,7 +205,6 @@ const PayrollProductionUpdater = ({
                 });
                 
                 debugLog('CODES', `Found InfoBy code: ${item.KEY} = ${item.DATA.VALUE}`);
-              }
             }
           });
         } else {
