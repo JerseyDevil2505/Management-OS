@@ -548,14 +548,8 @@ const PayrollProductionUpdater = ({
     }
 
     try {
-      // NEW: Get actual vendor from property_records - DECLARE FIRST
-      let actualVendor = null;
-      try {
-        actualVendor = await loadVendorSource();
-      } catch (error) {
-        console.error('Error loading vendor source:', error);
-        actualVendor = jobData.vendor_type;
-      }
+      // NEW: Get actual vendor from property_records
+      const actualVendor = await loadVendorSource();
       
       // VENDOR DETECTION DEBUG
       debugLog('VENDOR', 'Vendor detection check', { 
@@ -581,19 +575,9 @@ const PayrollProductionUpdater = ({
         ...(infoByCategoryConfig.special || [])  // NEW: Include special codes in validation
       ];
 
-      // 🔧 DEBUG: Log validation setup
-      debugLog('VALIDATION_SETUP', 'InfoBy validation configuration:', {
-        vendor: actualVendor || jobData.vendor_type,
-        allValidCodes,
-        entryConfig: infoByCategoryConfig.entry,
-        refusalConfig: infoByCategoryConfig.refusal,
-        specialConfig: infoByCategoryConfig.special,
-        firstFewRecordsInfoBy: rawData.slice(0, 5).map(r => r.inspection_info_by)
-      });
-
       // Load ALL records using pagination to bypass Supabase 1000 limit
       let allRecords = [];
-      let startIndex = 0;  // 🔧 RENAMED: 'start' might conflict with something
+      let start = 0;
       const batchSize = 1000;
       
       debugLog('ANALYTICS', 'Loading all property records using pagination...');
@@ -621,15 +605,15 @@ const PayrollProductionUpdater = ({
           .eq('file_version', latestFileVersion)
           .order('property_block', { ascending: true })
           .order('property_lot', { ascending: true })
-          .range(startIndex, startIndex + batchSize - 1);
+          .range(start, start + batchSize - 1);
         
         if (batchError) throw batchError;
         if (!batchData || batchData.length === 0) break;
         
         allRecords = [...allRecords, ...batchData];
-        debugLog('ANALYTICS', `Loaded batch ${Math.floor(startIndex/batchSize) + 1}: ${batchData.length} records (total: ${allRecords.length})`);
+        debugLog('ANALYTICS', `Loaded batch ${Math.floor(start/batchSize) + 1}: ${batchData.length} records (total: ${allRecords.length})`);
         
-        startIndex += batchSize;
+        start += batchSize;
         
         if (batchData.length < batchSize) break;
       }
@@ -637,14 +621,7 @@ const PayrollProductionUpdater = ({
       const rawData = allRecords;
       debugLog('ANALYTICS', `✅ Loaded ${rawData?.length || 0} property records for analysis`);
 
-      // 🔧 FIXED: Declare startDate safely 
-      let startDate;
-      try {
-        startDate = new Date(projectStartDate);
-      } catch (error) {
-        throw new Error(`Invalid project start date: ${projectStartDate}`);
-      }
-      
+      const startDate = new Date(projectStartDate);
       const inspectorStats = {};
       const classBreakdown = {};
       const billingByClass = {};
