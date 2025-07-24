@@ -76,11 +76,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
           initials: initials
         };
         
-        // DEBUG: Log each employee's inspector type
-        debugLog('EMPLOYEE_TYPES', `${initials}: ${emp.inspector_type}`, {
-          name: `${emp.first_name} ${emp.last_name}`,
-          type: emp.inspector_type
-        });
+
       });
 
       setEmployeeData(employeeMap);
@@ -691,18 +687,9 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
             inspectorStats[inspector].commercialWorkDays.add(workDayString);
           }
 
-          // FIXED: Pricing logic with vendor detection and targeted debugging
+          // FIXED: Pricing logic with vendor detection
           if (isCommercialProperty) {
             const currentVendor = actualVendor || jobData.vendor_type;
-            
-            debugLog('PRICING', `Commercial property ${propertyKey} pricing check`, {
-              vendor: currentVendor,
-              priceBy: record.inspection_price_by,
-              priceDate: priceDate,
-              isPricedCode: isPricedCode,
-              startDate: startDate,
-              propertyClass: propertyClass
-            });
 
             if (currentVendor === 'BRT' && 
                 record.inspection_price_by && 
@@ -715,20 +702,12 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
               if (classBreakdown[propertyClass]) {
                 classBreakdown[propertyClass].priced++;
               }
-              debugLog('PRICING', `✅ BRT pricing counted for ${propertyKey}`);
               
             } else if (currentVendor === 'Microsystems' && isPricedCode) {
               inspectorStats[inspector].priced++;
               if (classBreakdown[propertyClass]) {
                 classBreakdown[propertyClass].priced++;
               }
-              debugLog('PRICING', `✅ Microsystems pricing counted for ${propertyKey}`);
-            } else {
-              debugLog('PRICING', `❌ No pricing counted for ${propertyKey}`, {
-                reason: currentVendor === 'BRT' ? 
-                  'Missing price_by, price_date, or date before start' : 
-                  'Not a priced InfoBy code'
-              });
             }
           }
 
@@ -799,11 +778,11 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
         }
 
         // NEW: Type-specific daily averages
-        if (stats.inspector_type === 'residential') {
+        if (stats.inspector_type?.toLowerCase() === 'residential') {
           // Residential daily average: Residential work ÷ Residential field days
           stats.dailyAverage = stats.residentialFieldDays > 0 ? 
             Math.round(stats.residentialInspected / stats.residentialFieldDays) : 0;
-        } else if (stats.inspector_type === 'commercial') {
+        } else if (stats.inspector_type?.toLowerCase() === 'commercial') {
           // Commercial daily average: Commercial work ÷ Commercial field days
           stats.commercialAverage = stats.commercialFieldDays > 0 ? 
             Math.round(stats.commercialInspected / stats.commercialFieldDays) : 0;
@@ -1465,7 +1444,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
                       </h4>
                       
                       {Object.entries(analytics.inspectorStats)
-                        .filter(([_, stats]) => stats.inspector_type === 'residential')
+                        .filter(([_, stats]) => stats.inspector_type?.toLowerCase() === 'residential')
                         .sort(([aKey, aStats], [bKey, bStats]) => {
                           switch (inspectorSort) {
                             case 'alphabetical':
@@ -1540,7 +1519,7 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
                       </h4>
                       
                       {Object.entries(analytics.inspectorStats)
-                        .filter(([_, stats]) => stats.inspector_type === 'commercial')
+                        .filter(([_, stats]) => stats.inspector_type?.toLowerCase() === 'commercial')
                         .sort(([aKey, aStats], [bKey, bStats]) => {
                           switch (inspectorSort) {
                             case 'alphabetical':
@@ -1626,7 +1605,9 @@ const PayrollProductionUpdater = ({ jobData, onBackToJobs, latestFileVersion, pr
                         </h4>
                         
                         {Object.entries(analytics.inspectorStats)
-                          .filter(([_, stats]) => !stats.inspector_type || (stats.inspector_type !== 'residential' && stats.inspector_type !== 'commercial'))
+                          .filter(([_, stats]) => !stats.inspector_type || 
+                            (stats.inspector_type.toLowerCase() !== 'residential' && 
+                             stats.inspector_type.toLowerCase() !== 'commercial'))
                           .sort(([aKey, aStats], [bKey, bStats]) => aStats.name.localeCompare(bStats.name))
                           .map(([inspector, stats]) => (
                             <div key={inspector} className="bg-white border border-gray-200 rounded-lg p-4 mb-3">
