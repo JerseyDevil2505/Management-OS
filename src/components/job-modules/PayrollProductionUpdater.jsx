@@ -1165,14 +1165,16 @@ const PayrollProductionUpdater = ({
           </button>
         </div>
 
-        {/* ENHANCED: Quick Stats with App.js Integration */}
+        {/* ENHANCED: Quick Stats with App.js Integration - FIXED: Added safety checks */}
         {analytics && (
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="bg-white p-4 rounded-lg border shadow-sm">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-600">Total Properties</p>
-                  <p className="text-2xl font-bold text-blue-600">{propertyRecordsCount?.toLocaleString() || analytics.totalRecords.toLocaleString()}</p>
+                  <p className="text-2xl font-bold text-blue-600">
+                    {propertyRecordsCount?.toLocaleString() || (analytics.totalRecords || 0).toLocaleString()}
+                  </p>
                   {currentWorkflowStats?.isProcessed && (
                     <p className="text-xs text-green-600 mt-1">✅ Synced with App.js</p>
                   )}
@@ -1185,7 +1187,7 @@ const PayrollProductionUpdater = ({
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-600">Total Inspections</p>
-                  <p className="text-2xl font-bold text-green-600">{analytics.validInspections.toLocaleString()}</p>
+                  <p className="text-2xl font-bold text-green-600">{(analytics.validInspections || 0).toLocaleString()}</p>
                 </div>
                 <CheckCircle className="w-8 h-8 text-green-500" />
               </div>
@@ -1213,15 +1215,17 @@ const PayrollProductionUpdater = ({
           </div>
         )}
 
-        {/* ENHANCED: Commercial metrics with percentages and details */}
+        {/* ENHANCED: Commercial metrics with percentages and details - FIXED: Added safety checks */}
         {analytics && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
             <div className="bg-white p-4 rounded-lg border shadow-sm">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-600">Commercial Complete</p>
-                  <p className="text-2xl font-bold text-blue-600">{analytics.commercialCompletePercent}%</p>
-                  <p className="text-xs text-gray-500 mt-1">{analytics.commercialInspections.toLocaleString()} of {analytics.totalCommercialProperties.toLocaleString()} properties</p>
+                  <p className="text-2xl font-bold text-blue-600">{analytics.commercialCompletePercent || 0}%</p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {(analytics.commercialInspections || 0).toLocaleString()} of {(analytics.totalCommercialProperties || 0).toLocaleString()} properties
+                  </p>
                 </div>
                 <Factory className="w-8 h-8 text-blue-500" />
               </div>
@@ -1231,8 +1235,10 @@ const PayrollProductionUpdater = ({
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-600">Pricing Complete</p>
-                  <p className="text-2xl font-bold text-purple-600">{analytics.pricingCompletePercent}%</p>
-                  <p className="text-xs text-gray-500 mt-1">{analytics.commercialPricing.toLocaleString()} of {analytics.totalCommercialProperties.toLocaleString()} properties</p>
+                  <p className="text-2xl font-bold text-purple-600">{analytics.pricingCompletePercent || 0}%</p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {(analytics.commercialPricing || 0).toLocaleString()} of {(analytics.totalCommercialProperties || 0).toLocaleString()} properties
+                  </p>
                 </div>
                 <DollarSign className="w-8 h-8 text-purple-500" />
               </div>
