@@ -25,7 +25,7 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics = {}, isLoadingMetrics = f
             employee_id,
             role,
             assigned_date,
-            employees(first_name, last_name, initials)
+            employees!job_assignments_employee_id_fkey(first_name, last_name, initials)
           )
         `)
         .order('created_at', { ascending: false });
