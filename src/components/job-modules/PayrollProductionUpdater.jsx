@@ -252,11 +252,12 @@ const PayrollProductionUpdater = ({
           Object.keys(fieldCodes['140']).forEach(actualCode => {
             const codeData = fieldCodes['140'][actualCode];
             codes.push({
-              code: codeData.full_code || `140${actualCode}`, // Display full code like "140A   9999"
+              code: actualCode, // Display single letter like "A"
               description: codeData.description,
               section: 'InfoBy',
               vendor: 'Microsystems',
-              storageCode: actualCode // Store single letter like "A"
+              storageCode: actualCode, // Store single letter like "A"
+              fullCode: codeData.full_code || `140${actualCode}` // Keep full code for reference
             });
             
             debugLog('CODES', `Found InfoBy code: ${actualCode} = ${codeData.description}`);
