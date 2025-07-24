@@ -22,7 +22,7 @@ function App() {
       const { data: jobs, error } = await supabase
         .from('jobs')
         .select('id, module_states, workflow_stats')
-        .eq('job_status', 'active')
+        .eq('status', 'active')
         .order('created_at', { ascending: false });
 
       if (!error && jobs) {
