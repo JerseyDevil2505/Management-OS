@@ -1051,11 +1051,14 @@ const PayrollProductionUpdater = ({
   const handleCategoryAssignment = (category, code, isAssigned) => {
     if (settingsLocked) return;
     
+    // 🔧 FIXED: Safety check for undefined category arrays
+    const currentCategoryArray = infoByCategoryConfig[category] || [];
+    
     const newConfig = {
       ...infoByCategoryConfig,
       [category]: isAssigned 
-        ? infoByCategoryConfig[category].filter(c => c !== code)
-        : [...infoByCategoryConfig[category], code]
+        ? currentCategoryArray.filter(c => c !== code)
+        : [...currentCategoryArray, code]
     };
     
     setInfoByCategoryConfig(newConfig);
