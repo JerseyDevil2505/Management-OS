@@ -33,7 +33,14 @@ const PayrollProductionUpdater = ({
     priced: [],
     exempt: [] // NEW: For codes that are valid but don't fit standard analytics
   });
-  const [originalCategoryConfig, setOriginalCategoryConfig] = useState({});
+  const [originalCategoryConfig, setOriginalCategoryConfig] = useState({
+    entry: [],
+    refusal: [],
+    estimation: [],
+    invalid: [],
+    priced: [],
+    exempt: [] // NEW: Include exempt in original config too
+  });
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [projectStartDate, setProjectStartDate] = useState('');
   const [isDateLocked, setIsDateLocked] = useState(false);
@@ -373,6 +380,8 @@ const PayrollProductionUpdater = ({
           defaultConfig.estimation.push(storageCode);
         } else if (desc.includes('PRICED') || desc.includes('NARRATIVE') || desc.includes('ENCODED')) {
           defaultConfig.priced.push(storageCode);
+        } else if (desc.includes('VACANT')) {
+          defaultConfig.exempt.push(storageCode); // NEW: Put vacant land in exempt by default
         }
       });
     }
