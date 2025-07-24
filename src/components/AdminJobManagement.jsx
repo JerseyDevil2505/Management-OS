@@ -19,19 +19,15 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics = {}, isLoadingMetrics = f
       const { data: jobsData, error: jobsError } = await supabase
         .from('jobs')
         .select(`
-          *,
-          employees!jobs_assigned_manager_fkey(first_name, last_name),
-          job_assignments(
-            id,
-            employee_id,
-            role,
-            assigned_date,
-            employees(first_name, last_name, initials)
-          )
+          *
         `)
         .order('created_at', { ascending: false });
 
       if (jobsError) throw jobsError;
+
+      console.log('🔍 Raw jobs data:', jobsData);
+      console.log('🔍 Jobs length:', jobsData?.length);
+      console.log('🔍 First job:', jobsData?.[0]);
 
       console.log('📊 AdminJobManagement: Loaded jobs from database', jobsData?.length);
       setJobs(jobsData || []);
@@ -47,6 +43,12 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics = {}, isLoadingMetrics = f
   useEffect(() => {
     loadJobs();
   }, []);
+
+  // Helper function to get manager from job assignments - TEMPORARILY DISABLED
+  const getJobManager = (job) => {
+    // TODO: Re-enable once we fix the job_assignments query
+    return 'Manager (Loading...)';
+  };
 
   // ENHANCED: Display metrics with fallback to "-" for unprocessed jobs
   const displayMetric = (jobId, metricName, isPercentage = false, defaultValue = null) => {
@@ -271,6 +273,7 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics = {}, isLoadingMetrics = f
           filteredJobs.map((job) => {
             const completion = getCompletionDisplay(job.id);
             const metrics = jobMetrics[job.id];
+            const jobManager = getJobManager(job);
             
             return (
               <div key={job.id} className="bg-white rounded-lg border shadow-sm p-6">
@@ -311,7 +314,7 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics = {}, isLoadingMetrics = f
                       </div>
                       <div className="flex items-center">
                         <Users className="w-4 h-4 mr-1" />
-                        <span>{job.employees?.first_name} {job.employees?.last_name} (Lead Manager)</span>
+                        <span>{jobManager} (Lead Manager)</span>
                       </div>
                     </div>
                   </div>
