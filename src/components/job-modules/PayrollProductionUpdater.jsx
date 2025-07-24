@@ -44,7 +44,7 @@ const PayrollProductionUpdater = ({
   const [selectedInspectorIssues, setSelectedInspectorIssues] = useState(null);
   
   // NEW: Add collapsible InfoBy configuration state
-  const [showInfoByConfig, setShowInfoByConfig] = useState(true);
+  const [showInfoByConfig, setShowInfoByConfig] = useState(false);
   const [detectedVendor, setDetectedVendor] = useState(null);
   
   // Inspector filtering and sorting
