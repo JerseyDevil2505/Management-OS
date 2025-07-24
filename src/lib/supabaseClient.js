@@ -211,7 +211,7 @@ export const jobService = {
         createdDate: job.start_date,
         dueDate: job.end_date || job.target_completion_date,
         totalProperties: job.total_properties || 0,
-        inspectedProperties: job.inspected_properties || 0,
+        // inspectedProperties: job.inspected_properties || 0,  // ❌ REMOVED 2025-01-XX: Field deleted from jobs table, now using live analytics
         sourceFileStatus: job.source_file_status || 'pending',
         codeFileStatus: job.code_file_status || 'pending',
         vendorDetection: job.vendor_detection,
@@ -263,7 +263,7 @@ export const jobService = {
         end_date: componentFields.dueDate,
         target_completion_date: componentFields.dueDate,
         total_properties: componentFields.totalProperties || 0,
-        inspected_properties: componentFields.inspectedProperties || 0,
+        // inspected_properties: componentFields.inspectedProperties || 0,  // ❌ REMOVED 2025-01-XX: Field deleted from jobs table, now using live App.js analytics
         source_file_status: componentFields.sourceFileStatus || 'pending',
         code_file_status: componentFields.codeFileStatus || 'pending',
         vendor_detection: componentFields.vendorDetection,
@@ -338,7 +338,7 @@ export const jobService = {
         dbFields.target_completion_date = componentFields.dueDate;
       }
       if (componentFields.totalProperties !== undefined) dbFields.total_properties = componentFields.totalProperties;
-      if (componentFields.inspectedProperties !== undefined) dbFields.inspected_properties = componentFields.inspectedProperties;
+      // if (componentFields.inspectedProperties !== undefined) dbFields.inspected_properties = componentFields.inspectedProperties;  // ❌ REMOVED 2025-01-XX: Field deleted from jobs table
       if (componentFields.sourceFileStatus) dbFields.source_file_status = componentFields.sourceFileStatus;
       if (componentFields.codeFileStatus) dbFields.code_file_status = componentFields.codeFileStatus;
       if (componentFields.vendorDetection) dbFields.vendor_detection = componentFields.vendorDetection;
@@ -881,7 +881,7 @@ export const productionDataService = {
         .from('jobs')
         .update({
           total_properties: count || 0,
-          inspected_properties: inspectedCount || 0,
+          // inspected_properties: inspectedCount || 0,  // ❌ REMOVED 2025-01-XX: Field deleted from jobs table
           workflow_stats: {
             properties_processed: count || 0,
             properties_inspected: inspectedCount || 0,
