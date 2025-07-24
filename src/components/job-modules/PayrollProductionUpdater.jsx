@@ -985,7 +985,32 @@ const PayrollProductionUpdater = ({
     setInfoByCategoryConfig(newConfig);
   };
 
-  // ENHANCED: Start processing session with App.js state integration
+  // ENHANCED: Reset processing session - clears all locks and analytics
+  const resetProcessingSession = () => {
+    setSettingsLocked(false);
+    setProcessed(false);
+    setSessionId(null);
+    setAnalytics(null);
+    setBillingAnalytics(null);
+    setValidationReport(null);
+    
+    // Clear App.js state as well
+    if (onUpdateWorkflowStats) {
+      onUpdateWorkflowStats({
+        totalRecords: 0,
+        validInspections: 0,
+        jobEntryRate: 0,
+        jobRefusalRate: 0,
+        commercialCompletePercent: 0,
+        pricingCompletePercent: 0,
+        isProcessed: false,
+        lastProcessed: null
+      }, true);
+    }
+    
+    addNotification('🔄 Session reset - Settings unlocked for editing', 'info');
+    debugLog('SESSION', 'Processing session reset by user');
+  };
   const startProcessingSession = async () => {
     if (!isDateLocked) {
       addNotification('Please lock the project start date first', 'error');
@@ -1401,7 +1426,19 @@ const PayrollProductionUpdater = ({
           </div>
         )}
 
-        <div className="mt-6 flex justify-end">
+        <div className="mt-6 flex justify-end gap-3">
+          {/* Reset Session Button - Only show if session is active */}
+          {(settingsLocked || processed) && (
+            <button
+              onClick={resetProcessingSession}
+              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center space-x-2 transition-all"
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span>Reset Session</span>
+            </button>
+          )}
+          
+          {/* Main Processing Button */}
           <button
             onClick={startProcessingSession}
             disabled={processing || (!isDateLocked) || hasUnsavedChanges ||
