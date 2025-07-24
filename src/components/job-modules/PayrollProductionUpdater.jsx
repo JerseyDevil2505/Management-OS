@@ -932,6 +932,16 @@ const PayrollProductionUpdater = ({
         if (stats.residentialInspected > 0) {
           stats.entryRate = Math.round((stats.entry / stats.residentialInspected) * 100);
           stats.refusalRate = Math.round((stats.refusal / stats.residentialInspected) * 100);
+          
+          // 🔧 NEW: Debug individual inspector calculations
+          debugLog('INSPECTOR_RATES', `Inspector ${inspector} rates:`, {
+            residentialInspected: stats.residentialInspected,
+            entry: stats.entry,
+            refusal: stats.refusal,
+            entryRate: stats.entryRate,
+            refusalRate: stats.refusalRate,
+            calculation: `Entry: ${stats.entry}/${stats.residentialInspected} = ${stats.entryRate}%, Refusal: ${stats.refusal}/${stats.residentialInspected} = ${stats.refusalRate}%`
+          });
         } else {
           stats.entryRate = 0;
           stats.refusalRate = 0;
@@ -994,6 +1004,24 @@ const PayrollProductionUpdater = ({
       const totalEntry = Object.values(inspectorStats).reduce((sum, stats) => sum + stats.entry, 0);
       const totalRefusal = Object.values(inspectorStats).reduce((sum, stats) => sum + stats.refusal, 0);
       const totalPriced = Object.values(inspectorStats).reduce((sum, stats) => sum + stats.priced, 0);
+
+      // 🔧 NEW: Debug entry/refusal rate calculations
+      debugLog('ENTRY_RATES', '📊 Entry/Refusal Rate Calculation Debug:', {
+        totalInspected,
+        totalResidentialInspected,
+        totalEntry,
+        totalRefusal,
+        globalEntryRate: totalResidentialInspected > 0 ? Math.round((totalEntry / totalResidentialInspected) * 100) : 0,
+        globalRefusalRate: totalResidentialInspected > 0 ? Math.round((totalRefusal / totalResidentialInspected) * 100) : 0,
+        inspectorBreakdown: Object.entries(inspectorStats).map(([inspector, stats]) => ({
+          inspector,
+          residentialInspected: stats.residentialInspected,
+          entry: stats.entry,
+          refusal: stats.refusal,
+          entryRate: stats.entryRate,
+          refusalRate: stats.refusalRate
+        }))
+      });
 
       // FIXED: Commercial percentage calculations (valid ÷ total, not valid ÷ valid)
       const totalCommercialProperties = ['4A', '4B', '4C'].reduce((sum, cls) => sum + (classBreakdown[cls]?.total || 0), 0);
