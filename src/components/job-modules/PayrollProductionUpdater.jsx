@@ -100,7 +100,8 @@ const PayrollProductionUpdater = ({
     try {
       const { data: employees, error } = await supabase
         .from('employees')
-        .select('id, first_name, last_name, inspector_type, employment_status, initials');
+        .select('id, first_name, last_name, inspector_type, employment_status, initials')
+        .in('inspector_type', ['Residential', 'Commercial', 'Management']); // Only actual inspectors
 
       if (error) throw error;
 
@@ -119,7 +120,7 @@ const PayrollProductionUpdater = ({
       });
 
       setEmployeeData(employeeMap);
-      debugLog('EMPLOYEES', 'Loaded employee data with types', { 
+      debugLog('EMPLOYEES', 'Loaded inspector data with types', { 
         count: Object.keys(employeeMap).length,
         inspectorTypes: Object.values(employeeMap).reduce((acc, emp) => {
           const type = emp.inspector_type || 'untyped';
