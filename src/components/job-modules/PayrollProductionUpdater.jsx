@@ -376,7 +376,7 @@ const PayrollProductionUpdater = ({
           defaultConfig.entry.push(storageCode);
         } else if (desc.includes('REFUSED')) {
           defaultConfig.refusal.push(storageCode);
-        } else if (desc.includes('ESTIMATED') || desc.includes('VACANT')) {
+        } else if (desc.includes('ESTIMATED')) {
           defaultConfig.estimation.push(storageCode);
         } else if (desc.includes('PRICED') || desc.includes('NARRATIVE') || desc.includes('ENCODED')) {
           defaultConfig.priced.push(storageCode);
