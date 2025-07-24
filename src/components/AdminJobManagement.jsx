@@ -1,10 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, Users, Calendar, MapPin, Building, TrendingUp, DollarSign, AlertTriangle, CheckCircle, Clock, Download, Upload, Settings, Eye, Filter, Search } from 'lucide-react';
-import { supabase, jobService } from '../lib/supabaseClient';
 import { Upload, Plus, Edit3, Users, FileText, Calendar, MapPin, Database, Settings, Eye, DollarSign, Trash2, CheckCircle, Archive, TrendingUp, Target, AlertTriangle, X } from 'lucide-react';
 import { employeeService, jobService, planningJobService, utilityService, authService, propertyService, supabase } from '../lib/supabaseClient';
 
-const AdminJobManagement = ({ onJobSelect, jobMetrics = {}, isLoadingMetrics = false }) => {
 const AdminJobManagement = ({ onJobSelect }) => {
   const [activeTab, setActiveTab] = useState('jobs');
   const [currentUser, setCurrentUser] = useState({ role: 'admin', canAccessBilling: true });
@@ -19,17 +16,9 @@ const AdminJobManagement = ({ onJobSelect }) => {
   const [editingJob, setEditingJob] = useState(null);
   const [editingPlanning, setEditingPlanning] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [activeTab, setActiveTab] = useState('active');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState('all');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
   const [processing, setProcessing] = useState(false);
 
-  // Load jobs from database
-  const loadJobs = async () => {
-    setLoading(true);
-    setError(null);
   // Processing and notification state
   const [processingStatus, setProcessingStatus] = useState({
     isProcessing: false,
@@ -447,12 +436,6 @@ const uploadPropertyAssignment = async (job) => {
   // NEW: Refresh jobs with dynamically calculated assigned property counts
   const refreshJobsWithAssignedCounts = async () => {
     try {
-      const { data: jobsData, error: jobsError } = await supabase
-        .from('jobs')
-        .select(`
-          *
-        `)
-        .order('created_at', { ascending: false });
       const updatedJobs = await jobService.getAll();
       const activeJobs = updatedJobs.filter(job => job.status !== 'archived');
       const archived = updatedJobs.filter(job => job.status === 'archived');
@@ -468,7 +451,6 @@ const uploadPropertyAssignment = async (job) => {
               .eq('job_id', job.id)
               .eq('is_assigned_property', true);
 
-      if (jobsError) throw jobsError;
             if (!error) {
               job.assignedPropertyCount = count;
             }
@@ -483,24 +465,17 @@ const uploadPropertyAssignment = async (job) => {
         })
       );
 
-      console.log('🔍 Raw jobs data:', jobsData);
-      console.log('🔍 Jobs length:', jobsData?.length);
-      console.log('🔍 First job:', jobsData?.[0]);
       setJobs(jobsWithAssignedCounts);
       setArchivedJobs(archived.map(job => ({
         ...job,
         county: capitalizeCounty(job.county)
       })));
 
-      console.log('📊 AdminJobManagement: Loaded jobs from database', jobsData?.length);
-      setJobs(jobsData || []);
       // Refresh property stats to show updated counts
       const refreshedStats = await utilityService.getStats();
       setDbStats(refreshedStats);
 
     } catch (error) {
-      console.error('❌ Error loading jobs:', error);
-      setError(error.message);
       console.error('Error refreshing jobs with assigned counts:', error);
     }
   };
@@ -618,14 +593,12 @@ const uploadPropertyAssignment = async (job) => {
       console.error('HPI import error:', error);
       addNotification('Error importing HPI data: ' + error.message, 'error');
     } finally {
-      setLoading(false);
       setImportingHpi(false);
     }
   };
 
   // Load real data from database with assigned property counts
   useEffect(() => {
-    loadJobs();
     const initializeData = async () => {
       try {
         setLoading(true);
@@ -697,10 +670,6 @@ const uploadPropertyAssignment = async (job) => {
     initializeData();
   }, []);
 
-  // Helper function to get manager from job assignments - TEMPORARILY DISABLED
-  const getJobManager = (job) => {
-    // TODO: Re-enable once we fix the job_assignments query
-    return 'Manager (Loading...)';
   // SIMPLIFIED FILE ANALYSIS
   const analyzeFile = async (file, type) => {
     if (!file) return;
@@ -745,9 +714,6 @@ const uploadPropertyAssignment = async (job) => {
     }
   };
 
-  // ENHANCED: Display metrics with fallback to "-" for unprocessed jobs
-  const displayMetric = (jobId, metricName, isPercentage = false, defaultValue = null) => {
-    const metrics = jobMetrics[jobId];
   const handleFileUpload = (e, type) => {
     const file = e.target.files[0];
     if (file) {
@@ -760,9 +726,7 @@ const uploadPropertyAssignment = async (job) => {
   const handleManagerToggle = (managerId) => {
     const manager = managers.find(m => m.id === managerId);
     const assignedManager = newJob.assignedManagers.find(m => m.id === managerId);
-
-    if (!metrics) {
-      return defaultValue !== null ? defaultValue : '-';
+    
     if (assignedManager) {
       const currentRole = assignedManager.role;
       
@@ -797,9 +761,6 @@ const uploadPropertyAssignment = async (job) => {
     }
   };
 
-    // Total properties is always available (from property_records count)
-    if (metricName === 'totalProperties') {
-      return metrics.totalProperties?.toLocaleString() || '0';
   // ENHANCED createJob with real-time batch processing logs and persistent modal
   const createJob = async () => {
     if (!newJob.ccddCode || !newJob.name || !newJob.municipality || !newJob.dueDate || 
@@ -808,11 +769,6 @@ const uploadPropertyAssignment = async (job) => {
       return;
     }
 
-    // Properties inspected shows actual count when processed
-    if (metricName === 'propertiesInspected') {
-      return metrics.isProcessed ? 
-        (metrics.propertiesInspected?.toLocaleString() || '0') : 
-        '-';
     try {
       // IMMEDIATELY hide create job modal and show processing modal
       setShowCreateJob(false);
@@ -969,18 +925,12 @@ const uploadPropertyAssignment = async (job) => {
     }
   };
 
-    // Analytics metrics show "-" until processed
-    if (!metrics.isProcessed) {
-      return '-';
   const createPlanningJob = async () => {
     if (!newPlanningJob.ccddCode || !newPlanningJob.municipality || !newPlanningJob.dueDate) {
       addNotification('Please fill all required fields', 'error');
       return;
     }
 
-    const value = metrics[metricName];
-    if (value === null || value === undefined) {
-      return '-';
     try {
       const planningData = {
         ccddCode: newPlanningJob.ccddCode,
@@ -1009,7 +959,6 @@ const uploadPropertyAssignment = async (job) => {
       return;
     }
 
-    return isPercentage ? `${value}%` : value.toLocaleString();
     try {
       const updateData = {
         name: newJob.name,
@@ -1035,17 +984,6 @@ const uploadPropertyAssignment = async (job) => {
     }
   };
 
-  // ENHANCED: Get completion display for properties inspected
-  const getCompletionDisplay = (jobId) => {
-    const metrics = jobMetrics[jobId];
-    
-    if (!metrics || !metrics.isProcessed) {
-      const totalProperties = metrics?.totalProperties || 0;
-      return {
-        current: '-',
-        total: totalProperties.toLocaleString(),
-        percentage: '-',
-        isComplete: false
   const editPlanningJob = async () => {
     if (!newPlanningJob.municipality || !newPlanningJob.dueDate) {
       addNotification('Please fill all required fields', 'error');
@@ -1072,9 +1010,6 @@ const uploadPropertyAssignment = async (job) => {
     }
   };
 
-    const current = metrics.propertiesInspected || 0;
-    const total = metrics.totalProperties || 0;
-    const percentage = total > 0 ? Math.round((current / total) * 100) : 0;
   const deleteJob = async (job) => {
     try {
       await jobService.delete(job.id);
@@ -1087,12 +1022,6 @@ const uploadPropertyAssignment = async (job) => {
     }
   };
 
-    return {
-      current: current.toLocaleString(),
-      total: total.toLocaleString(),
-      percentage: `${percentage}%`,
-      isComplete: percentage === 100
-    };
   // Reset form data after successful creation
   const closeJobModal = () => {
     setShowCreateJob(false);
@@ -1121,11 +1050,6 @@ const uploadPropertyAssignment = async (job) => {
     });
   };
 
-  // Filter and search jobs
-  const filteredJobs = jobs.filter(job => {
-    const matchesSearch = job.job_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         job.ccdd_code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         job.municipality?.toLowerCase().includes(searchTerm.toLowerCase());
   const closePlanningModal = () => {
     setShowCreatePlanning(false);
     setShowEditPlanning(false);
@@ -1138,10 +1062,6 @@ const uploadPropertyAssignment = async (job) => {
     });
   };
 
-    const matchesFilter = filterStatus === 'all' || 
-                         (filterStatus === 'active' && job.status === 'active') ||
-                         (filterStatus === 'completed' && job.status === 'completed') ||
-                         (filterStatus === 'archived' && job.status === 'archived');
   const convertPlanningToJob = (planningJob) => {
     setNewJob({
       name: `${planningJob.municipality} ${new Date(planningJob.end_date).getFullYear()}`,
@@ -1160,10 +1080,6 @@ const uploadPropertyAssignment = async (job) => {
     setShowCreateJob(true);
   };
 
-    const matchesTab = activeTab === 'active' ? job.status === 'active' :
-                      activeTab === 'planning' ? job.status === 'planning' :
-                      activeTab === 'archived' ? job.status === 'archived' :
-                      true;
   const getStatusColor = (status) => {
     const actualStatus = status || 'Active';
     switch (actualStatus) {
@@ -1174,8 +1090,6 @@ const uploadPropertyAssignment = async (job) => {
     }
   };
 
-    return matchesSearch && matchesFilter && matchesTab;
-  });
   const goToJob = (job) => {
     if (onJobSelect) {
       onJobSelect(job);
@@ -1184,9 +1098,6 @@ const uploadPropertyAssignment = async (job) => {
     }
   };
 
-  const handleCreateJob = () => {
-    console.log('Create new job clicked');
-    // TODO: Implement job creation modal
   const sortJobsByBilling = (jobList) => {
     return jobList.sort((a, b) => {
       const aBilling = a.percentBilled || 0;
@@ -1202,16 +1113,10 @@ const uploadPropertyAssignment = async (job) => {
     });
   };
 
-  const handleEditJob = (job) => {
-    console.log('Edit job clicked:', job.job_name);
-    // TODO: Implement job editing modal
   const handleStatusTileClick = (tab) => {
     setActiveTab(tab);
   };
 
-  const handleDeleteJob = (job) => {
-    console.log('Delete job clicked:', job.job_name);
-    // TODO: Implement job deletion with confirmation
   const getManagerWorkload = (manager) => {
     const assignedJobs = jobs.filter(job => 
       job.assignedManagers?.some(am => am.id === manager.id)
@@ -1230,19 +1135,12 @@ const uploadPropertyAssignment = async (job) => {
     };
   };
 
-  const handleAssignProperties = (job) => {
-    console.log('Assign properties clicked:', job.job_name);
-    // TODO: Implement property assignment modal
   const goToBillingPayroll = (job) => {
     alert(`Navigate to ${job.name} Billing & Payroll in Production Tracker`);
   };
 
   if (loading) {
     return (
-      <div className="max-w-7xl mx-auto p-6">
-        <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mr-3"></div>
-          <span className="text-gray-600">Loading jobs...</span>
       <div className="max-w-6xl mx-auto p-6 bg-white">
         <div className="flex items-center justify-center min-h-screen">
           <div className="text-center">
@@ -1254,13 +1152,6 @@ const uploadPropertyAssignment = async (job) => {
     );
   }
 
-  if (error) {
-    return (
-      <div className="max-w-7xl mx-auto p-6">
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <div className="flex items-center">
-            <AlertTriangle className="w-5 h-5 text-red-600 mr-2" />
-            <span className="text-red-800 font-medium">Error loading jobs: {error}</span>
   return (
     <div className="max-w-6xl mx-auto p-6 bg-white">
       {/* Notifications */}
@@ -1285,28 +1176,9 @@ const uploadPropertyAssignment = async (job) => {
               </button>
             </div>
           </div>
-        </div>
         ))}
       </div>
-    );
-  }
 
-  return (
-    <div className="max-w-7xl mx-auto p-6 space-y-6">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border-2 border-blue-200 p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center">
-            <Settings className="w-8 h-8 mr-3 text-blue-600" />
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Active Job Management</h1>
-              <p className="text-gray-600">
-                Connected to database with {filteredJobs.length} active jobs tracked
-                {isLoadingMetrics && (
-                  <span className="ml-2 text-blue-600">
-                    <div className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-1"></div>
-                    Loading analytics...
-                  </span>
       {/* ENHANCED Assignment Upload Modal with better feedback */}
       {showAssignmentUpload && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -1860,14 +1732,6 @@ const uploadPropertyAssignment = async (job) => {
               </button>
             </div>
           </div>
-          <button
-            onClick={handleCreateJob}
-            className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            <Edit className="w-4 h-4" />
-            <span className="font-medium">Create New Job</span>
-          </button>
         </div>
       )}
 
@@ -2000,14 +1864,6 @@ const uploadPropertyAssignment = async (job) => {
         </p>
       </div>
 
-      {/* Tabs */}
-      <div className="border-b border-gray-200">
-        <nav className="-mb-px flex space-x-8">
-          {[
-            { id: 'active', name: 'Active Jobs', count: jobs.filter(j => j.status === 'active').length },
-            { id: 'planning', name: 'Planning Jobs', count: jobs.filter(j => j.status === 'planning').length },
-            { id: 'archived', name: 'Archived Jobs', count: jobs.filter(j => j.status === 'archived').length }
-          ].map((tab) => (
       {/* Database Status with Enhanced Property Breakdown */}
       <div className="mb-6 p-4 bg-gray-50 rounded-lg border">
         <div className="flex items-center justify-between">
@@ -2051,11 +1907,6 @@ const uploadPropertyAssignment = async (job) => {
         <div className="border-b border-gray-200">
           <nav className="-mb-px flex space-x-8">
             <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center space-x-2 ${
-                activeTab === tab.id
-                  ? 'border-blue-500 text-blue-600'
               onClick={() => setActiveTab('jobs')}
               className={`py-2 px-1 border-b-2 font-medium text-sm ${
                 activeTab === 'jobs' 
@@ -2063,40 +1914,8 @@ const uploadPropertyAssignment = async (job) => {
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
-              <span>{tab.name}</span>
-              <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded-full text-xs">
-                {tab.count}
-              </span>
               📋 Active Jobs ({jobs.length})
             </button>
-          ))}
-        </nav>
-      </div>
-
-      {/* Search and Filter */}
-      <div className="flex items-center space-x-4 bg-white p-4 rounded-lg border shadow-sm">
-        <div className="flex-1 relative">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Search jobs by name, CCDD, or municipality..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          />
-        </div>
-        <div className="flex items-center space-x-2">
-          <Filter className="w-4 h-4 text-gray-400" />
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="all">All Status</option>
-            <option value="active">Active</option>
-            <option value="completed">Completed</option>
-            <option value="archived">Archived</option>
-          </select>
             <button
               onClick={() => setActiveTab('planning')}
               className={`py-2 px-1 border-b-2 font-medium text-sm ${
@@ -2141,61 +1960,6 @@ const uploadPropertyAssignment = async (job) => {
         </div>
       </div>
 
-      {/* Jobs List */}
-      <div className="space-y-4">
-        {filteredJobs.length === 0 ? (
-          <div className="text-center py-12 bg-white rounded-lg border">
-            <Building className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">No Jobs Found</h3>
-            <p className="text-gray-600">
-              {searchTerm || filterStatus !== 'all' ? 
-                'No jobs match your current filters.' : 
-                'No jobs available in this category.'
-              }
-            </p>
-          </div>
-        ) : (
-          filteredJobs.map((job) => {
-            const completion = getCompletionDisplay(job.id);
-            const metrics = jobMetrics[job.id];
-            const jobManager = getJobManager(job);
-            
-            return (
-              <div key={job.id} className="bg-white rounded-lg border shadow-sm p-6">
-                {/* Job Header */}
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-3 mb-2">
-                      <h2 className="text-xl font-bold text-gray-900">{job.job_name}</h2>
-                      <span className="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-800">
-                        {job.vendor_type || 'BRT'}
-                      </span>
-                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                        job.status === 'active' ? 'bg-green-100 text-green-800' :
-                        job.status === 'planning' ? 'bg-blue-100 text-blue-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
-                        {job.status === 'active' ? 'Active' : 
-                         job.status === 'planning' ? 'Planning' : 'Archived'}
-                      </span>
-                      <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
-                        {displayMetric(job.id, 'totalProperties') !== '-' ? 
-                          `${((parseFloat(job.percent_completed) || 0) * 100).toFixed(1)}% Billed` :
-                          '0.00% Billed'
-                        }
-                      </span>
-                    </div>
-                    <div className="flex items-center space-x-4 text-sm text-gray-600">
-                      <div className="flex items-center">
-                        <span className="font-medium">{job.ccdd_code || job.ccddCode}</span>
-                      </div>
-                      <div className="flex items-center">
-                        <MapPin className="w-4 h-4 mr-1" />
-                        <span>{job.municipality || 'Municipality'}</span>
-                      </div>
-                      <div className="flex items-center">
-                        <Calendar className="w-4 h-4 mr-1" />
-                        <span>Due: {job.end_date ? new Date(job.end_date).getFullYear() : 'TBD'}</span>
       {/* Active Jobs Tab with FIXED Assigned Properties Button */}
       {activeTab === 'jobs' && (
         <div className="space-y-6">
@@ -2327,9 +2091,6 @@ const uploadPropertyAssignment = async (job) => {
                           </div>
                         </div>
                       </div>
-                      <div className="flex items-center">
-                        <Users className="w-4 h-4 mr-1" />
-                        <span>{jobManager} (Lead Manager)</span>
 
                       {/* Action Buttons with FIXED Assigned Properties Button */}
                       <div className="flex justify-between items-center pt-3 border-t border-gray-100">
@@ -2405,7 +2166,6 @@ const uploadPropertyAssignment = async (job) => {
                         </div>
                       </div>
                     </div>
-                  </div>
                   );
                 })
               )}
@@ -2435,12 +2195,6 @@ const uploadPropertyAssignment = async (job) => {
               </button>
             </div>
 
-                {/* ENHANCED: Metrics Display with Live Data */}
-                <div className="grid grid-cols-5 gap-4 mb-4">
-                  {/* Properties Inspected */}
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-blue-600">
-                      {completion.current} of {completion.total}
             <div className="space-y-3">
               {planningJobs.length === 0 ? (
                 <div className="text-center text-gray-500 py-12">
@@ -2473,9 +2227,6 @@ const uploadPropertyAssignment = async (job) => {
                         )}
                       </div>
                     </div>
-                    <div className="text-sm text-gray-600">Properties Inspected</div>
-                    <div className={`text-sm font-medium ${completion.isComplete ? 'text-green-600' : 'text-blue-600'}`}>
-                      {completion.percentage} Complete
                     <div className="flex justify-end space-x-2 mt-3 pt-3 border-t border-gray-100">
                       <button
                         onClick={() => convertPlanningToJob(planningJob)}
@@ -2509,13 +2260,6 @@ const uploadPropertyAssignment = async (job) => {
         </div>
       )}
 
-                  {/* Entry Rate */}
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-green-600">
-                      {displayMetric(job.id, 'entryRate', true)}
-                    </div>
-                    <div className="text-sm text-gray-600">Entry Rate</div>
-                  </div>
       {/* Archived Jobs Tab */}
       {activeTab === 'archived' && (
         <div className="space-y-6">
@@ -2528,10 +2272,6 @@ const uploadPropertyAssignment = async (job) => {
               </div>
             </div>
 
-                  {/* Refusal Rate */}
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-red-600">
-                      {displayMetric(job.id, 'refusalRate', true)}
             <div className="space-y-3">
               {archivedJobs.length === 0 ? (
                 <div className="text-center text-gray-500 py-12">
@@ -2575,7 +2315,6 @@ const uploadPropertyAssignment = async (job) => {
                         </div>
                       </div>
                     </div>
-                    <div className="text-sm text-gray-600">Refusal Rate</div>
                   </div>
                 ))
               )}
@@ -2584,13 +2323,6 @@ const uploadPropertyAssignment = async (job) => {
         </div>
       )}
 
-                  {/* Commercial Complete */}
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-purple-600">
-                      {displayMetric(job.id, 'commercialComplete', true)}
-                    </div>
-                    <div className="text-sm text-gray-600">Commercial Complete</div>
-                  </div>
       {/* County HPI Tab */}
       {activeTab === 'county-hpi' && (
         <div className="space-y-6">
@@ -2603,13 +2335,6 @@ const uploadPropertyAssignment = async (job) => {
               </div>
             </div>
 
-                  {/* Pricing Complete */}
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-orange-600">
-                      {displayMetric(job.id, 'pricingComplete', true)}
-                    </div>
-                    <div className="text-sm text-gray-600">Pricing Complete</div>
-                  </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {getUniqueCounties().length === 0 ? (
                 <div className="col-span-full text-center text-gray-500 py-12">
@@ -2624,24 +2349,6 @@ const uploadPropertyAssignment = async (job) => {
                   const latestYear = hasData ? Math.max(...hpiData.map(d => d.observation_year)) : null;
                   const dataCount = hpiData.length;
 
-                {/* Analytics Status Indicator */}
-                {metrics && (
-                  <div className="mb-4 flex items-center justify-between text-sm">
-                    <div className="flex items-center space-x-2">
-                      {metrics.isProcessed ? (
-                        <>
-                          <CheckCircle className="w-4 h-4 text-green-500" />
-                          <span className="text-green-600">
-                            Analytics processed {metrics.lastProcessed ? 
-                              `on ${new Date(metrics.lastProcessed).toLocaleDateString()}` : ''
-                            }
-                          </span>
-                        </>
-                      ) : (
-                        <>
-                          <Clock className="w-4 h-4 text-gray-400" />
-                          <span className="text-gray-500">Analytics not yet processed</span>
-                        </>
                   return (
                     <div key={county} className="p-4 bg-white rounded-lg border shadow-md hover:shadow-lg transition-all">
                       <div className="flex items-center justify-between mb-3">
@@ -2671,10 +2378,6 @@ const uploadPropertyAssignment = async (job) => {
                         {hasData ? '🔄 Update HPI Data' : '📊 Import HPI Data'}
                       </button>
                     </div>
-                    {isLoadingMetrics && (
-                      <div className="flex items-center text-blue-600">
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
-                        <span>Updating...</span>
                   );
                 })
               )}
@@ -2705,9 +2408,6 @@ const uploadPropertyAssignment = async (job) => {
                       <div className="w-10 h-10 rounded-full bg-green-100 text-green-800 flex items-center justify-center text-sm font-bold mr-3">
                         {`${manager.first_name || ''} ${manager.last_name || ''}`.split(' ').map(n => n[0]).join('')}
                       </div>
-                    )}
-                  </div>
-                )}
                       <div>
                         <h3 className="text-lg font-bold text-gray-900">
                           {manager.first_name} {manager.last_name}
@@ -2720,18 +2420,6 @@ const uploadPropertyAssignment = async (job) => {
                       </div>
                     </div>
 
-                {/* Job Actions */}
-                <div className="flex items-center justify-between pt-4 border-t border-gray-200">
-                  <div className="flex items-center space-x-2 text-sm text-gray-600">
-                    <MapPin className="w-4 h-4" />
-                    <span>{job.county || 'Camden County'}</span>
-                    
-                    <div className="flex items-center ml-4">
-                      <Users className="w-4 h-4 mr-1" />
-                      <AlertTriangle className="w-4 h-4 text-red-500" />
-                      <span className="cursor-pointer hover:text-blue-600" onClick={() => handleAssignProperties(job)}>
-                        Assign Properties
-                      </span>
                     <div className="space-y-2 mb-4">
                       <div className="flex justify-between text-sm">
                         <span className="text-gray-600">Active Jobs:</span>
@@ -2770,38 +2458,6 @@ const uploadPropertyAssignment = async (job) => {
                       </div>
                     )}
                   </div>
-                  
-                  <div className="flex items-center space-x-2">
-                    <button
-                      onClick={() => onJobSelect(job)}
-                      className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-                    >
-                      <Eye className="w-4 h-4" />
-                      <span>Go to Job</span>
-                    </button>
-                    
-                    <button
-                      onClick={() => handleEditJob(job)}
-                      className="flex items-center space-x-2 bg-orange-600 text-white px-3 py-2 rounded-lg hover:bg-orange-700 transition-colors"
-                    >
-                      <Edit className="w-4 h-4" />
-                      <span>Edit</span>
-                    </button>
-                    
-                    <button
-                      onClick={() => handleDeleteJob(job)}
-                      className="flex items-center space-x-2 bg-red-600 text-white px-3 py-2 rounded-lg hover:bg-red-700 transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                      <span>Delete</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            );
-          })
-        )}
-      </div>
                 );
               })}
             </div>
@@ -2811,3 +2467,5 @@ const uploadPropertyAssignment = async (job) => {
     </div>
   );
 };
+
+export default AdminJobManagement;
