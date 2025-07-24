@@ -565,11 +565,11 @@ const PayrollProductionUpdater = ({
 
       // Get all valid InfoBy codes for validation
       const allValidCodes = [
-        ...infoByCategoryConfig.entry,
-        ...infoByCategoryConfig.refusal,
-        ...infoByCategoryConfig.estimation,
-        ...infoByCategoryConfig.priced,
-        ...infoByCategoryConfig.special  // NEW: Include special codes in validation
+        ...(infoByCategoryConfig.entry || []),
+        ...(infoByCategoryConfig.refusal || []),
+        ...(infoByCategoryConfig.estimation || []),
+        ...(infoByCategoryConfig.priced || []),
+        ...(infoByCategoryConfig.special || [])  // NEW: Include special codes in validation
       ];
 
       // Load ALL records using pagination to bypass Supabase 1000 limit
@@ -734,11 +734,11 @@ const PayrollProductionUpdater = ({
         }
 
         // Business logic validation
-        const isEntryCode = infoByCategoryConfig.entry.includes(normalizedInfoBy);
-        const isRefusalCode = infoByCategoryConfig.refusal.includes(normalizedInfoBy);
-        const isEstimationCode = infoByCategoryConfig.estimation.includes(normalizedInfoBy);
-        const isPricedCode = infoByCategoryConfig.priced.includes(normalizedInfoBy);
-        const isSpecialCode = infoByCategoryConfig.special.includes(normalizedInfoBy);  // NEW: Special code check
+        const isEntryCode = (infoByCategoryConfig.entry || []).includes(normalizedInfoBy);
+        const isRefusalCode = (infoByCategoryConfig.refusal || []).includes(normalizedInfoBy);
+        const isEstimationCode = (infoByCategoryConfig.estimation || []).includes(normalizedInfoBy);
+        const isPricedCode = (infoByCategoryConfig.priced || []).includes(normalizedInfoBy);
+        const isSpecialCode = (infoByCategoryConfig.special || []).includes(normalizedInfoBy);  // NEW: Special code check
         const hasListingData = record.inspection_list_by && record.inspection_list_date;
 
         if (isRefusalCode && !hasListingData) {
@@ -1104,11 +1104,11 @@ const PayrollProductionUpdater = ({
     }
 
     const allValidCodes = [
-      ...infoByCategoryConfig.entry,
-      ...infoByCategoryConfig.refusal,
-      ...infoByCategoryConfig.estimation,
-      ...infoByCategoryConfig.priced,
-      ...infoByCategoryConfig.special  // NEW: Include special codes
+      ...(infoByCategoryConfig.entry || []),
+      ...(infoByCategoryConfig.refusal || []),
+      ...(infoByCategoryConfig.estimation || []),
+      ...(infoByCategoryConfig.priced || []),
+      ...(infoByCategoryConfig.special || [])  // NEW: Include special codes
     ];
 
     if (allValidCodes.length === 0) {
@@ -1433,15 +1433,15 @@ const PayrollProductionUpdater = ({
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              InfoBy Categories ({availableInfoByCodes.length} codes available)
+              InfoBy Categories ({(availableInfoByCodes || []).length} codes available)
             </label>
             <div className="space-y-2">
               <div className="grid grid-cols-2 gap-2 text-sm">
-                <span>Entry: {infoByCategoryConfig.entry.length} codes</span>
-                <span>Refusal: {infoByCategoryConfig.refusal.length} codes</span>
-                <span>Estimation: {infoByCategoryConfig.estimation.length} codes</span>
-                <span>Priced: {infoByCategoryConfig.priced.length} codes</span>
-                <span>Special: {infoByCategoryConfig.special.length} codes</span>
+                <span>Entry: {(infoByCategoryConfig.entry || []).length} codes</span>
+                <span>Refusal: {(infoByCategoryConfig.refusal || []).length} codes</span>
+                <span>Estimation: {(infoByCategoryConfig.estimation || []).length} codes</span>
+                <span>Priced: {(infoByCategoryConfig.priced || []).length} codes</span>
+                <span>Special: {(infoByCategoryConfig.special || []).length} codes</span>
               </div>
               
               {hasUnsavedChanges && (
@@ -1465,7 +1465,7 @@ const PayrollProductionUpdater = ({
         </div>
 
         {/* NEW: Collapsible InfoBy Category Configuration Panel */}
-        {availableInfoByCodes.length > 0 && (
+        {(availableInfoByCodes || []).length > 0 && (
           <div className="mt-6 pt-6 border-t border-gray-200">
             <div className="flex items-center justify-between mb-4">
               <h4 className="text-md font-semibold text-gray-800">
@@ -1483,22 +1483,22 @@ const PayrollProductionUpdater = ({
             {/* Quick Summary (Always Visible) */}
             <div className="grid grid-cols-2 md:grid-cols-6 gap-2 text-sm mb-4">
               <div className="bg-green-50 px-3 py-2 rounded border">
-                <span className="font-medium text-green-800">Entry:</span> {infoByCategoryConfig.entry.length}
+                <span className="font-medium text-green-800">Entry:</span> {(infoByCategoryConfig.entry || []).length}
               </div>
               <div className="bg-red-50 px-3 py-2 rounded border">
-                <span className="font-medium text-red-800">Refusal:</span> {infoByCategoryConfig.refusal.length}
+                <span className="font-medium text-red-800">Refusal:</span> {(infoByCategoryConfig.refusal || []).length}
               </div>
               <div className="bg-blue-50 px-3 py-2 rounded border">
-                <span className="font-medium text-blue-800">Estimation:</span> {infoByCategoryConfig.estimation.length}
+                <span className="font-medium text-blue-800">Estimation:</span> {(infoByCategoryConfig.estimation || []).length}
               </div>
               <div className="bg-gray-50 px-3 py-2 rounded border">
-                <span className="font-medium text-gray-800">Invalid:</span> {infoByCategoryConfig.invalid.length}
+                <span className="font-medium text-gray-800">Invalid:</span> {(infoByCategoryConfig.invalid || []).length}
               </div>
               <div className="bg-purple-50 px-3 py-2 rounded border">
-                <span className="font-medium text-purple-800">Priced:</span> {infoByCategoryConfig.priced.length}
+                <span className="font-medium text-purple-800">Priced:</span> {(infoByCategoryConfig.priced || []).length}
               </div>
               <div className="bg-yellow-50 px-3 py-2 rounded border">
-                <span className="font-medium text-yellow-800">Special:</span> {infoByCategoryConfig.special.length}
+                <span className="font-medium text-yellow-800">Special:</span> {(infoByCategoryConfig.special || []).length}
               </div>
             </div>
             
@@ -1508,13 +1508,13 @@ const PayrollProductionUpdater = ({
                 {['entry', 'refusal', 'estimation', 'invalid', 'priced', 'special'].map(category => (
                   <div key={category} className="border border-gray-200 rounded-lg p-4">
                     <h5 className="font-medium text-gray-900 mb-3 capitalize">
-                      {category} ({infoByCategoryConfig[category].length})
+                      {category} ({(infoByCategoryConfig[category] || []).length})
                     </h5>
                     <div className="space-y-2 max-h-40 overflow-y-auto">
-                      {availableInfoByCodes.map(codeItem => {
+                      {(availableInfoByCodes || []).map(codeItem => {
                         const storageCode = jobData.vendor_type === 'Microsystems' ? codeItem.storageCode : codeItem.code;
                         const displayCode = storageCode;
-                        const isAssigned = infoByCategoryConfig[category].includes(storageCode);
+                        const isAssigned = (infoByCategoryConfig[category] || []).includes(storageCode);
                         
                         return (
                           <div key={codeItem.code} className="flex items-start">
@@ -1556,9 +1556,9 @@ const PayrollProductionUpdater = ({
           <button
             onClick={startProcessingSession}
             disabled={processing || (!isDateLocked) || hasUnsavedChanges ||
-              (infoByCategoryConfig.entry.length + infoByCategoryConfig.refusal.length + 
-               infoByCategoryConfig.estimation.length + infoByCategoryConfig.priced.length + 
-               infoByCategoryConfig.special.length) === 0}
+              ((infoByCategoryConfig.entry || []).length + (infoByCategoryConfig.refusal || []).length + 
+               (infoByCategoryConfig.estimation || []).length + (infoByCategoryConfig.priced || []).length + 
+               (infoByCategoryConfig.special || []).length) === 0}
             className={`px-6 py-2 rounded-lg flex items-center space-x-2 transition-all ${
               processed 
                 ? 'bg-green-600 text-white hover:bg-green-700'
