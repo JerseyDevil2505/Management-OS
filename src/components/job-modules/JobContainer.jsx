@@ -7,7 +7,13 @@ import MarketAnalysis from './MarketAnalysis';
 import FinalValuation from './FinalValuation';
 import AppealCoverage from './AppealCoverage';
 
-const JobContainer = ({ selectedJob, onBackToJobs }) => {
+// 🔧 FIXED: Accept App.js workflow state management props
+const JobContainer = ({ 
+  selectedJob, 
+  onBackToJobs, 
+  workflowStats, 
+  onUpdateWorkflowStats 
+}) => {
   const [activeModule, setActiveModule] = useState('checklist');
   const [jobData, setJobData] = useState(null);
   const [latestFileVersion, setLatestFileVersion] = useState(1);
@@ -94,8 +100,54 @@ const JobContainer = ({ selectedJob, onBackToJobs }) => {
     // Refresh file version data when new files are uploaded
     await loadLatestFileVersion();
     
-    // Optionally notify modules of data refresh
-    // This could trigger data refresh in active modules
+    // 🔧 ENHANCED: Invalidate PayrollProductionUpdater analytics when files change
+    if (onUpdateWorkflowStats && selectedJob?.id) {
+      console.log('📊 JobContainer: Invalidating analytics due to file update');
+      onUpdateWorkflowStats({
+        totalRecords: 0,
+        validInspections: 0,
+        jobEntryRate: 0,
+        jobRefusalRate: 0,
+        commercialCompletePercent: 0,
+        pricingCompletePercent: 0,
+        isProcessed: false,
+        lastProcessed: null
+      }, true);
+    }
+  };
+
+  // 🔧 NEW: Handle PayrollProductionUpdater analytics completion
+  const handleAnalyticsUpdate = (analyticsData) => {
+    if (!onUpdateWorkflowStats || !selectedJob?.id) return;
+
+    console.log('📊 JobContainer: Received analytics from PayrollProductionUpdater', analyticsData);
+
+    // Transform PayrollProductionUpdater data to App.js format
+    const transformedStats = {
+      totalRecords: analyticsData.totalRecords || 0,
+      validInspections: analyticsData.validInspections || 0,
+      jobEntryRate: analyticsData.jobEntryRate || 0,
+      jobRefusalRate: analyticsData.jobRefusalRate || 0,
+      commercialCompletePercent: analyticsData.commercialCompletePercent || 0,
+      pricingCompletePercent: analyticsData.pricingCompletePercent || 0,
+      lastProcessed: new Date().toISOString(),
+      isProcessed: true,
+
+      // 🔧 ENHANCED: Include class breakdown for AdminJobManagement
+      classBreakdown: analyticsData.classBreakdown || {},
+      
+      // Include billing analytics for completeness
+      billingAnalytics: analyticsData.billingAnalytics || null,
+      validationReport: analyticsData.validationReport || null,
+      
+      // Inspector stats for detailed analytics
+      inspectorStats: analyticsData.inspectorStats || {}
+    };
+
+    // Update App.js state with both local and database persistence
+    onUpdateWorkflowStats(transformedStats, true);
+    
+    console.log('📊 JobContainer: Analytics forwarded to App.js state management');
   };
 
   if (!selectedJob) {
@@ -120,7 +172,7 @@ const JobContainer = ({ selectedJob, onBackToJobs }) => {
     },
     {
       id: 'production',
-      name: 'Production',
+      name: 'PayrollProductionUpdater', // 🔧 FIXED: Consistent naming
       icon: Factory,
       component: PayrollProductionUpdater,
       description: 'Analytics and validation engine'
@@ -151,6 +203,43 @@ const JobContainer = ({ selectedJob, onBackToJobs }) => {
   const activeModuleData = modules.find(m => m.id === activeModule);
   const ActiveComponent = activeModuleData?.component;
 
+  // 🔧 ENHANCED: Determine which props to pass based on active module
+  const getModuleProps = () => {
+    const baseProps = {
+      jobData,
+      onBackToJobs,
+      activeSubModule: activeModule,
+      onSubModuleChange: setActiveModule,
+      latestFileVersion,
+      propertyRecordsCount,
+      onFileProcessed: handleFileProcessed
+    };
+
+    // 🔧 CRITICAL: Pass App.js state management to PayrollProductionUpdater
+    if (activeModule === 'production' && onUpdateWorkflowStats) {
+      return {
+        ...baseProps,
+        // Pass current workflow stats from App.js
+        currentWorkflowStats: workflowStats,
+        // Pass update function for analytics completion
+        onAnalyticsUpdate: handleAnalyticsUpdate,
+        // Direct access to App.js state updater if needed
+        onUpdateWorkflowStats
+      };
+    }
+
+    // 🔧 Future modules can get their specific props here
+    if (activeModule === 'checklist') {
+      return {
+        ...baseProps,
+        // ManagementChecklist could also update workflow stats
+        onUpdateWorkflowStats
+      };
+    }
+
+    return baseProps;
+  };
+
   return (
     <div className="max-w-6xl mx-auto p-6 bg-white">
       {/* File Version Status Banner */}
@@ -177,9 +266,15 @@ const JobContainer = ({ selectedJob, onBackToJobs }) => {
               </span>
             </div>
             {!versionError && (
-              <span className="text-sm text-blue-600">
-                {propertyRecordsCount.toLocaleString()} properties available
-              </span>
+              <div className="text-sm text-blue-600 space-x-4">
+                <span>{propertyRecordsCount.toLocaleString()} properties available</span>
+                {/* 🔧 NEW: Show analytics status */}
+                {workflowStats?.isProcessed && (
+                  <span className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-medium">
+                    Analytics Ready
+                  </span>
+                )}
+              </div>
             )}
           </div>
           {versionError && (
@@ -238,6 +333,12 @@ const JobContainer = ({ selectedJob, onBackToJobs }) => {
                       Soon
                     </span>
                   )}
+                  {/* 🔧 NEW: Show analytics indicator for PayrollProductionUpdater */}
+                  {module.id === 'production' && workflowStats?.isProcessed && (
+                    <span className="text-xs bg-green-500 text-white px-2 py-1 rounded-full ml-1">
+                      ✓
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -249,13 +350,7 @@ const JobContainer = ({ selectedJob, onBackToJobs }) => {
       <div className="min-h-96">
         {ActiveComponent && jobData ? (
           <ActiveComponent
-            jobData={jobData}
-            onBackToJobs={onBackToJobs}
-            activeSubModule={activeModule}
-            onSubModuleChange={setActiveModule}
-            latestFileVersion={latestFileVersion}
-            propertyRecordsCount={propertyRecordsCount}
-            onFileProcessed={handleFileProcessed}
+            {...getModuleProps()}
           />
         ) : !isLoadingVersion ? (
           <div className="text-center text-gray-500 py-24">
