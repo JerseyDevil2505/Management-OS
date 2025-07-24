@@ -1205,6 +1205,15 @@ const uploadPropertyAssignment = async (job) => {
     );
   }
 
+  // DEBUG: Add console logs to see what's happening
+  console.log('🔍 DEBUG - AdminJobManagement state:', {
+    loading,
+    jobsCount: jobs.length,
+    dbConnected,
+    activeTab,
+    jobs: jobs.slice(0, 2) // First 2 jobs for debugging
+  });
+
   return (
     <div className="max-w-6xl mx-auto p-6 bg-white">
       {/* Notifications */}
@@ -1280,8 +1289,274 @@ const uploadPropertyAssignment = async (job) => {
         </div>
       </div>
 
-      {/* Rest of the component remains exactly the same... */}
-      {/* I'll include the rest in a follow-up since this is getting long */}
+      {/* Tab Navigation */}
+      <div className="mb-6">
+        <div className="border-b border-gray-200">
+          <nav className="-mb-px flex space-x-8">
+            <button
+              onClick={() => setActiveTab('jobs')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'jobs' 
+                  ? 'border-blue-500 text-blue-600' 
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              📋 Active Jobs ({jobs.length})
+            </button>
+            <button
+              onClick={() => setActiveTab('planning')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'planning' 
+                  ? 'border-blue-500 text-blue-600' 
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              📅 Planning Jobs ({planningJobs.length})
+            </button>
+            <button
+              onClick={() => setActiveTab('archived')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'archived' 
+                  ? 'border-blue-500 text-blue-600' 
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              🗄️ Archived Jobs ({archivedJobs.length})
+            </button>
+            <button
+              onClick={() => setActiveTab('county-hpi')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'county-hpi' 
+                  ? 'border-blue-500 text-blue-600' 
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              📈 County HPI ({getUniqueCounties().length})
+            </button>
+            <button
+              onClick={() => setActiveTab('manager-assignments')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'manager-assignments' 
+                  ? 'border-blue-500 text-blue-600' 
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              👥 Manager Assignments ({managers.filter(m => !`${m.first_name} ${m.last_name}`.toLowerCase().includes('tom davis')).length})
+            </button>
+          </nav>
+        </div>
+      </div>
+
+      {/* Active Jobs Tab */}
+      {activeTab === 'jobs' && (
+        <div className="space-y-6">
+          <div className="bg-gradient-to-r from-blue-50 to-green-50 rounded-lg border-2 border-blue-200 p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center">
+                <Settings className="w-8 h-8 mr-3 text-blue-600" />
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-800">📋 Active Job Management</h2>
+                  <p className="text-gray-600 mt-1">
+                    {dbConnected 
+                      ? `Connected to database with ${jobs.length} active jobs tracked`
+                      : 'Manage appraisal jobs with source data and team assignments'
+                    }
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowCreateJob(true)}
+                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 font-medium shadow-lg hover:shadow-xl transition-all transform hover:scale-105"
+              >
+                <Plus className="w-5 h-5" />
+                <span>🚀 Create New Job</span>
+              </button>
+            </div>
+
+            {/* Job Cards */}
+            <div className="space-y-3">
+              {jobs.length === 0 ? (
+                <div className="text-center text-gray-500 py-12">
+                  <div className="text-4xl mb-4">📋</div>
+                  <h4 className="text-lg font-medium mb-2">No Jobs Found</h4>
+                  <p className="text-sm">Create your first job to get started!</p>
+                </div>
+              ) : (
+                sortJobsByBilling(jobs).map(job => {
+                  const metrics = getMetricsDisplay(job);
+                  const propertyDisplay = getPropertyCountDisplay(job);
+                  
+                  return (
+                    <div key={job.id} className={`p-4 bg-white rounded-lg border-l-4 shadow-md hover:shadow-lg transition-all transform hover:scale-[1.01] ${
+                      job.vendor === 'Microsystems' ? 'border-blue-400 hover:bg-blue-50' : 'border-orange-300 hover:bg-orange-50'
+                    }`}>
+                      <div className="flex justify-between items-start mb-3">
+                        <div className="flex-1">
+                          <div className="flex justify-between items-center mb-2">
+                            <h4 className="text-lg font-bold text-gray-900">{job.name}</h4>
+                            <div className="flex items-center space-x-2">
+                              <span className={`px-3 py-1 rounded-full text-xs font-medium shadow-sm ${
+                                job.vendor === 'Microsystems' 
+                                  ? 'bg-blue-100 text-blue-800' 
+                                  : 'bg-orange-200 text-orange-800'
+                              }`}>
+                                {job.vendor}
+                              </span>
+                              <span className={`px-3 py-1 rounded-full text-xs font-medium shadow-sm ${getStatusColor(job.status)}`}>
+                                {job.status || 'Active'}
+                              </span>
+                              <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium shadow-sm">
+                                {(job.percentBilled || 0).toFixed(2)}% Billed
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex items-center space-x-4 text-sm text-gray-600 mb-3">
+                            <span className="flex items-center space-x-1">
+                              <span className="font-bold text-blue-600">{job.ccdd || job.ccddCode}</span>
+                              <span>•</span>
+                              <MapPin className="w-4 h-4" />
+                              <span>{job.municipality}</span>
+                            </span>
+                            <span className="flex items-center space-x-1">
+                              <Calendar className="w-4 h-4" />
+                              <span>Due: {job.dueDate ? job.dueDate.split('-')[0] : 'TBD'}</span>
+                            </span>
+                            {job.assignedManagers && job.assignedManagers.length > 0 && (
+                              <span className="flex items-center space-x-1">
+                                <Users className="w-4 h-4" />
+                                <span>{job.assignedManagers.map(m => `${m.name} (${m.role})`).join(', ')}</span>
+                              </span>
+                            )}
+                          </div>
+                          
+                          {/* Production Metrics */}
+                          <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-3 p-3 bg-gray-50 rounded-lg">
+                            <div className="text-center">
+                              <div className="text-lg font-bold text-blue-600">
+                                {propertyDisplay.inspected.toLocaleString()} of {propertyDisplay.total.toLocaleString()}
+                              </div>
+                              <div className="text-xs text-gray-600">{propertyDisplay.label}</div>
+                              <div className="text-sm font-medium text-blue-600">
+                                {propertyDisplay.total > 0 ? Math.round((propertyDisplay.inspected / propertyDisplay.total) * 100) : 0}% Complete
+                              </div>
+                              {propertyDisplay.isAssigned && (
+                                <div className="text-xs text-green-600 mt-1">✅ Assigned Scope ({propertyDisplay.total} properties)</div>
+                              )}
+                            </div>
+                            
+                            <div className="text-center">
+                              <div className="text-lg font-bold text-green-600">
+                                {metrics.entryRate}%
+                              </div>
+                              <div className="text-xs text-gray-600">Entry Rate</div>
+                            </div>
+                            
+                            <div className="text-center">
+                              <div className="text-lg font-bold text-red-600">
+                                {metrics.refusalRate}%
+                              </div>
+                              <div className="text-xs text-gray-600">Refusal Rate</div>
+                            </div>
+
+                            <div className="text-center">
+                              <div className={`text-lg font-bold ${
+                                metrics.commercial === 'Residential Only' ? 'text-gray-600' : 'text-purple-600'
+                              }`}>
+                                {metrics.commercial}
+                              </div>
+                              <div className="text-xs text-gray-600">Commercial Complete</div>
+                            </div>
+
+                            <div className="text-center">
+                              <div className={`text-lg font-bold ${
+                                metrics.pricing === 'Residential Only' ? 'text-gray-600' : 'text-indigo-600'
+                              }`}>
+                                {metrics.pricing}
+                              </div>
+                              <div className="text-xs text-gray-600">Pricing Complete</div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="flex justify-between items-center pt-3 border-t border-gray-100">
+                        <div className="flex items-center space-x-3">
+                          <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded-full text-xs font-medium">
+                            📍 {job.county} County
+                          </span>
+                          
+                          <button
+                            onClick={() => setShowAssignmentUpload(job)}
+                            className={`px-3 py-2 rounded-lg flex items-center space-x-1 text-sm font-medium transition-all ${
+                              job.has_property_assignments
+                                ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            }`}
+                          >
+                            {job.has_property_assignments ? (
+                              <>
+                                <CheckCircle className="w-4 h-4" />
+                                <span>✅ {job.assignedPropertyCount || 0} Assigned</span>
+                              </>
+                            ) : (
+                              <>
+                                <Target className="w-4 h-4" />
+                                <span>🎯 Assign Properties</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                        
+                        <div className="flex space-x-2">
+                          <button 
+                            onClick={() => goToJob(job)}
+                            className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
+                          >
+                            <Eye className="w-4 h-4" />
+                            <span>Go to Job</span>
+                          </button>
+                          <button 
+                            onClick={() => {
+                              setEditingJob(job);
+                              setNewJob({
+                                name: job.name,
+                                ccddCode: job.ccdd || job.ccddCode,
+                                municipality: job.municipality,
+                                county: job.county,
+                                state: job.state,
+                                dueDate: job.dueDate,
+                                assignedManagers: job.assignedManagers || [],
+                                sourceFile: null,
+                                codeFile: null,
+                                vendor: job.vendor,
+                                vendorDetection: job.vendorDetection,
+                                percentBilled: job.percent_billed || ''
+                              });
+                              setShowCreateJob(true);
+                            }}
+                            className="px-3 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
+                          >
+                            <Edit3 className="w-4 h-4" />
+                            <span>Edit</span>
+                          </button>
+                          <button 
+                            onClick={() => setShowDeleteConfirm(job)}
+                            className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            <span>Delete</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
