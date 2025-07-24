@@ -5,6 +5,7 @@
  * NEW: Proper code file storage in jobs table with pipe-delimited format support
  * FIXED: Added debugging for API key authentication issues
  * ADDED: Retry logic for connection issues and query cancellations
+ * ENHANCED: Dual-pattern parsing for standard (140A) and HVAC (8ED) codes
  */
 
 import { supabase } from '../supabaseClient.js';
@@ -88,9 +89,10 @@ export class MicrosystemsProcessor {
    * Handles pipe-delimited format: CODE|DESCRIPTION|RATE|CONSTANT|CATEGORY|TABLE|UPDATED
    * Examples: "120PV  9999|PAVED|0|0|ROAD|0|05/14/92|"
    *           "8FA16  0399|FORCED HOT AIR|4700|0|FORCED HOT AIR|E|06/24/02|"
+   * NEW: Dual-pattern parsing for standard (140A) and HVAC (8ED) codes
    */
   async processCodeFile(codeFileContent, jobId) {
-    console.log('Processing Microsystems code file with database storage...');
+    console.log('Processing Microsystems code file with dual-pattern parsing...');
     
     try {
       const lines = codeFileContent.split('\n').filter(line => line.trim());
@@ -118,15 +120,26 @@ export class MicrosystemsProcessor {
         
         if (!fullCode || !description) return;
         
-        // Extract prefix and suffix from full code
-        // Examples: "120PV  9999" -> prefix="120", suffix="PV"
-        //           "8FA16  0399" -> prefix="8", suffix="FA"
-        const codeMatch = fullCode.match(/^(\d+)([A-Z]+)/);
-        if (codeMatch) {
-          const prefix = codeMatch[1];
-          const suffix = codeMatch[2];
-          
-          // Store full code with description
+        // ENHANCED: Dual-pattern parsing logic
+        let prefix, suffix;
+        const firstChar = fullCode.substring(0, 1);
+        
+        if (firstChar === '8') {
+          // HVAC pattern: 8 + 2 character code + rest is ignored
+          // Example: "8ED16  0399" → prefix="8", suffix="ED"
+          prefix = '8';
+          suffix = fullCode.substring(1, 3); // Extract exactly 2 characters after '8'
+          console.log(`🔥 HVAC code parsed: "${fullCode}" → prefix="${prefix}", suffix="${suffix}"`);
+        } else {
+          // Standard pattern: 3 digit category + variable code + rest is ignored  
+          // Example: "140A   9999" → prefix="140", suffix="A"
+          prefix = fullCode.substring(0, 3);
+          suffix = fullCode.substring(3).trim().split(/\s+/)[0]; // Get code part before spaces
+          console.log(`📋 Standard code parsed: "${fullCode}" → prefix="${prefix}", suffix="${suffix}"`);
+        }
+        
+        if (prefix && suffix) {
+          // Store full code with description for lookup
           this.codeLookups.set(fullCode, description);
           
           // Store suffix for CSV lookup (this is what appears in source data)
@@ -151,7 +164,8 @@ export class MicrosystemsProcessor {
           this.categories[prefix] = category;
           
         } else {
-          // Handle codes that don't match the pattern (direct codes)
+          // Handle codes that don't match either pattern (direct codes)
+          console.log(`⚠️ Direct code (no pattern match): "${fullCode}"`);
           this.codeLookups.set(fullCode, description);
           
           if (!this.allCodes['direct']) {
@@ -170,9 +184,11 @@ export class MicrosystemsProcessor {
         }
       });
       
-      console.log(`Loaded ${this.codeLookups.size} code definitions`);
+      console.log(`Loaded ${this.codeLookups.size} code definitions with dual-pattern parsing`);
       console.log(`Organized into ${Object.keys(this.allCodes).length} field groups`);
       console.log(`Categories found: ${Object.keys(this.categories).join(', ')}`);
+      console.log(`InfoBy codes (140 prefix): ${Object.keys(this.allCodes['140'] || {}).join(', ')}`);
+      console.log(`HVAC codes (8 prefix): ${Object.keys(this.allCodes['8'] || {}).join(', ')}`);
       
       // NEW: Store code file in jobs table with debugging
       await this.storeCodeFileInDatabase(codeFileContent, jobId);
@@ -238,7 +254,8 @@ export class MicrosystemsProcessor {
             total_codes: this.codeLookups.size,
             field_groups: Object.keys(this.allCodes).length,
             categories: Object.keys(this.categories).length,
-            parsed_at: new Date().toISOString()
+            parsed_at: new Date().toISOString(),
+            parsing_method: 'dual_pattern' // NEW: Track parsing method used
           }
         }
       };
