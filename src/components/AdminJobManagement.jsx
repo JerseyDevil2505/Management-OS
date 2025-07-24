@@ -116,13 +116,13 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics = {}, isLoadingMetrics = f
                          job.municipality?.toLowerCase().includes(searchTerm.toLowerCase());
 
     const matchesFilter = filterStatus === 'all' || 
-                         (filterStatus === 'active' && job.job_status === 'active') ||
-                         (filterStatus === 'completed' && job.job_status === 'completed') ||
-                         (filterStatus === 'archived' && job.job_status === 'archived');
+                         (filterStatus === 'active' && job.status === 'active') ||
+                         (filterStatus === 'completed' && job.status === 'completed') ||
+                         (filterStatus === 'archived' && job.status === 'archived');
 
-    const matchesTab = activeTab === 'active' ? job.job_status === 'active' :
-                      activeTab === 'planning' ? job.job_status === 'planning' :
-                      activeTab === 'archived' ? job.job_status === 'archived' :
+    const matchesTab = activeTab === 'active' ? job.status === 'active' :
+                      activeTab === 'planning' ? job.status === 'planning' :
+                      activeTab === 'archived' ? job.status === 'archived' :
                       true;
 
     return matchesSearch && matchesFilter && matchesTab;
@@ -207,9 +207,9 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics = {}, isLoadingMetrics = f
       <div className="border-b border-gray-200">
         <nav className="-mb-px flex space-x-8">
           {[
-            { id: 'active', name: 'Active Jobs', count: jobs.filter(j => j.job_status === 'active').length },
-            { id: 'planning', name: 'Planning Jobs', count: jobs.filter(j => j.job_status === 'planning').length },
-            { id: 'archived', name: 'Archived Jobs', count: jobs.filter(j => j.job_status === 'archived').length }
+            { id: 'active', name: 'Active Jobs', count: jobs.filter(j => j.status === 'active').length },
+            { id: 'planning', name: 'Planning Jobs', count: jobs.filter(j => j.status === 'planning').length },
+            { id: 'archived', name: 'Archived Jobs', count: jobs.filter(j => j.status === 'archived').length }
           ].map((tab) => (
             <button
               key={tab.id}
@@ -286,12 +286,12 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics = {}, isLoadingMetrics = f
                         {job.vendor_type || 'BRT'}
                       </span>
                       <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                        job.job_status === 'active' ? 'bg-green-100 text-green-800' :
-                        job.job_status === 'planning' ? 'bg-blue-100 text-blue-800' :
+                        job.status === 'active' ? 'bg-green-100 text-green-800' :
+                        job.status === 'planning' ? 'bg-blue-100 text-blue-800' :
                         'bg-gray-100 text-gray-800'
                       }`}>
-                        {job.job_status === 'active' ? 'Active' : 
-                         job.job_status === 'planning' ? 'Planning' : 'Archived'}
+                        {job.status === 'active' ? 'Active' : 
+                         job.status === 'planning' ? 'Planning' : 'Archived'}
                       </span>
                       <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
                         {displayMetric(job.id, 'totalProperties') !== '-' ? 
