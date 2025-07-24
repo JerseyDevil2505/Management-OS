@@ -30,7 +30,8 @@ const PayrollProductionUpdater = ({
     refusal: [],
     estimation: [],
     invalid: [],
-    priced: []
+    priced: [],
+    special: []  // NEW: For V (Vacant Land), N (Special Appraisal), etc.
   });
   const [originalCategoryConfig, setOriginalCategoryConfig] = useState({});
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -342,7 +343,7 @@ const PayrollProductionUpdater = ({
 
   // Set default InfoBy category configurations
   const setDefaultCategoryConfig = (vendor, codes) => {
-    const defaultConfig = { entry: [], refusal: [], estimation: [], invalid: [], priced: [] };
+    const defaultConfig = { entry: [], refusal: [], estimation: [], invalid: [], priced: [], special: [] };
 
     if (vendor === 'BRT') {
       codes.forEach(item => {
@@ -368,10 +369,13 @@ const PayrollProductionUpdater = ({
           defaultConfig.entry.push(storageCode);
         } else if (desc.includes('REFUSED')) {
           defaultConfig.refusal.push(storageCode);
-        } else if (desc.includes('ESTIMATED') || desc.includes('VACANT')) {
+        } else if (desc.includes('ESTIMATED')) {
           defaultConfig.estimation.push(storageCode);
         } else if (desc.includes('PRICED') || desc.includes('NARRATIVE') || desc.includes('ENCODED')) {
           defaultConfig.priced.push(storageCode);
+        } else if (desc.includes('VACANT') || desc.includes('SPECIAL') || desc.includes('APPRAISAL')) {
+          // NEW: Auto-assign V (Vacant Land) and N (Special Appraisal) to special category
+          defaultConfig.special.push(storageCode);
         }
       });
     }
@@ -546,7 +550,8 @@ const PayrollProductionUpdater = ({
         ...infoByCategoryConfig.entry,
         ...infoByCategoryConfig.refusal,
         ...infoByCategoryConfig.estimation,
-        ...infoByCategoryConfig.priced
+        ...infoByCategoryConfig.priced,
+        ...infoByCategoryConfig.special  // NEW: Include special codes in validation
       ];
 
       // Load ALL records using pagination to bypass Supabase 1000 limit
@@ -715,6 +720,7 @@ const PayrollProductionUpdater = ({
         const isRefusalCode = infoByCategoryConfig.refusal.includes(normalizedInfoBy);
         const isEstimationCode = infoByCategoryConfig.estimation.includes(normalizedInfoBy);
         const isPricedCode = infoByCategoryConfig.priced.includes(normalizedInfoBy);
+        const isSpecialCode = infoByCategoryConfig.special.includes(normalizedInfoBy);  // NEW: Special code check
         const hasListingData = record.inspection_list_by && record.inspection_list_date;
 
         if (isRefusalCode && !hasListingData) {
@@ -726,6 +732,7 @@ const PayrollProductionUpdater = ({
         if (isEstimationCode && hasListingData) {
           addValidationIssue(`Estimation code ${infoByCode} but has listing data`);
         }
+        // NOTE: Special codes (V, N) are allowed to have listing data - no validation needed
 
         // NEW: Corrected inspector type validation
         const isCommercialProperty = ['4A', '4B', '4C'].includes(propertyClass);
@@ -1078,7 +1085,8 @@ const PayrollProductionUpdater = ({
       ...infoByCategoryConfig.entry,
       ...infoByCategoryConfig.refusal,
       ...infoByCategoryConfig.estimation,
-      ...infoByCategoryConfig.priced
+      ...infoByCategoryConfig.priced,
+      ...infoByCategoryConfig.special  // NEW: Include special codes
     ];
 
     if (allValidCodes.length === 0) {
@@ -1383,6 +1391,7 @@ const PayrollProductionUpdater = ({
                 <span>Refusal: {infoByCategoryConfig.refusal.length} codes</span>
                 <span>Estimation: {infoByCategoryConfig.estimation.length} codes</span>
                 <span>Priced: {infoByCategoryConfig.priced.length} codes</span>
+                <span>Special: {infoByCategoryConfig.special.length} codes</span>
               </div>
               
               {hasUnsavedChanges && (
@@ -1422,7 +1431,7 @@ const PayrollProductionUpdater = ({
             </div>
             
             {/* Quick Summary (Always Visible) */}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-sm mb-4">
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-2 text-sm mb-4">
               <div className="bg-green-50 px-3 py-2 rounded border">
                 <span className="font-medium text-green-800">Entry:</span> {infoByCategoryConfig.entry.length}
               </div>
@@ -1438,12 +1447,15 @@ const PayrollProductionUpdater = ({
               <div className="bg-purple-50 px-3 py-2 rounded border">
                 <span className="font-medium text-purple-800">Priced:</span> {infoByCategoryConfig.priced.length}
               </div>
+              <div className="bg-yellow-50 px-3 py-2 rounded border">
+                <span className="font-medium text-yellow-800">Special:</span> {infoByCategoryConfig.special.length}
+              </div>
             </div>
             
             {/* Detailed Configuration (Collapsible) */}
             {showInfoByConfig && (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-                {['entry', 'refusal', 'estimation', 'invalid', 'priced'].map(category => (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+                {['entry', 'refusal', 'estimation', 'invalid', 'priced', 'special'].map(category => (
                   <div key={category} className="border border-gray-200 rounded-lg p-4">
                     <h5 className="font-medium text-gray-900 mb-3 capitalize">
                       {category} ({infoByCategoryConfig[category].length})
