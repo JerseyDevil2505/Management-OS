@@ -2,6 +2,7 @@
  * Microsystems Updater (UPSERT Version)
  * Based on MicrosystemsProcessor but uses UPSERT instead of INSERT
  * For updating existing jobs with new file versions
+ * ENHANCED: Dual-pattern parsing for standard (140A) and HVAC (8ED) codes
  */
 
 import { supabase } from '../supabaseClient.js';
@@ -85,10 +86,11 @@ export class MicrosystemsUpdater {
   }
 
   /**
-   * Process Microsystems code file and store in jobs table
+   * ENHANCED: Process Microsystems code file and store in jobs table
+   * NEW: Dual-pattern parsing for standard (140A) and HVAC (8ED) codes
    */
   async processCodeFile(codeFileContent, jobId) {
-    console.log('Processing Microsystems code file with database storage...');
+    console.log('Processing Microsystems code file with dual-pattern parsing (UPDATER)...');
     
     try {
       const lines = codeFileContent.split('\n').filter(line => line.trim());
@@ -116,16 +118,29 @@ export class MicrosystemsUpdater {
         
         if (!fullCode || !description) return;
         
-        // Extract prefix and suffix from full code
-        const codeMatch = fullCode.match(/^(\d+)([A-Z]+)/);
-        if (codeMatch) {
-          const prefix = codeMatch[1];
-          const suffix = codeMatch[2];
-          
-          // Store full code with description
+        // ENHANCED: Dual-pattern parsing logic (SAME AS PROCESSOR)
+        let prefix, suffix;
+        const firstChar = fullCode.substring(0, 1);
+        
+        if (firstChar === '8') {
+          // HVAC pattern: 8 + 2 character code + rest is ignored
+          // Example: "8ED16  0399" → prefix="8", suffix="ED"
+          prefix = '8';
+          suffix = fullCode.substring(1, 3); // Extract exactly 2 characters after '8'
+          console.log(`🔥 HVAC code parsed (UPDATER): "${fullCode}" → prefix="${prefix}", suffix="${suffix}"`);
+        } else {
+          // Standard pattern: 3 digit category + variable code + rest is ignored  
+          // Example: "140A   9999" → prefix="140", suffix="A"
+          prefix = fullCode.substring(0, 3);
+          suffix = fullCode.substring(3).trim().split(/\s+/)[0]; // Get code part before spaces
+          console.log(`📋 Standard code parsed (UPDATER): "${fullCode}" → prefix="${prefix}", suffix="${suffix}"`);
+        }
+        
+        if (prefix && suffix) {
+          // Store full code with description for lookup
           this.codeLookups.set(fullCode, description);
           
-          // Store suffix for CSV lookup
+          // Store suffix for CSV lookup (this is what appears in source data)
           this.codeLookups.set(suffix, description);
           
           // Organize by prefix for database storage
@@ -147,7 +162,8 @@ export class MicrosystemsUpdater {
           this.categories[prefix] = category;
           
         } else {
-          // Handle codes that don't match the pattern
+          // Handle codes that don't match either pattern (direct codes)
+          console.log(`⚠️ Direct code (no pattern match) (UPDATER): "${fullCode}"`);
           this.codeLookups.set(fullCode, description);
           
           if (!this.allCodes['direct']) {
@@ -166,13 +182,17 @@ export class MicrosystemsUpdater {
         }
       });
       
-      console.log(`Loaded ${this.codeLookups.size} code definitions`);
+      console.log(`Loaded ${this.codeLookups.size} code definitions with dual-pattern parsing (UPDATER)`);
+      console.log(`Organized into ${Object.keys(this.allCodes).length} field groups`);
+      console.log(`Categories found: ${Object.keys(this.categories).join(', ')}`);
+      console.log(`InfoBy codes (140 prefix): ${Object.keys(this.allCodes['140'] || {}).join(', ')}`);
+      console.log(`HVAC codes (8 prefix): ${Object.keys(this.allCodes['8'] || {}).join(', ')}`);
       
       // Store code file in jobs table
       await this.storeCodeFileInDatabase(codeFileContent, jobId);
       
     } catch (error) {
-      console.error('Error parsing Microsystems code file:', error);
+      console.error('Error parsing Microsystems code file (UPDATER):', error);
       throw error;
     }
   }
@@ -182,7 +202,7 @@ export class MicrosystemsUpdater {
    */
   async storeCodeFileInDatabase(codeFileContent, jobId) {
     try {
-      console.log('💾 Storing Microsystems code file in jobs table...');
+      console.log('💾 Storing Microsystems code file in jobs table (UPDATER)...');
       
       // Clean Unicode null characters
       const cleanedCodeContent = codeFileContent
@@ -203,7 +223,8 @@ export class MicrosystemsUpdater {
             total_codes: this.codeLookups.size,
             field_groups: Object.keys(this.allCodes).length,
             categories: Object.keys(this.categories).length,
-            parsed_at: new Date().toISOString()
+            parsed_at: new Date().toISOString(),
+            parsing_method: 'dual_pattern_updater' // NEW: Track parsing method used
           }
         }
       };
@@ -215,14 +236,14 @@ export class MicrosystemsUpdater {
         .select('id, code_file_name, code_file_uploaded_at');
 
       if (updateError) {
-        console.error('❌ Code file storage update failed:', updateError);
+        console.error('❌ Code file storage update failed (UPDATER):', updateError);
         throw updateError;
       }
       
-      console.log('✅ Microsystems code file stored successfully in jobs table');
+      console.log('✅ Microsystems code file stored successfully in jobs table (UPDATER)');
       
     } catch (error) {
-      console.error('❌ Failed to store Microsystems code file:', error);
+      console.error('❌ Failed to store Microsystems code file (UPDATER):', error);
       console.log('⚠️ Continuing with processing despite code storage failure...');
     }
   }
@@ -402,11 +423,11 @@ export class MicrosystemsUpdater {
    */
   async processFile(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, versionInfo = {}) {
     try {
-      console.log('Starting Microsystems UPDATER (UPSERT) processing...');
+      console.log('Starting Microsystems UPDATER (UPSERT) processing with dual-pattern parsing...');
       
       // Process and store code file if provided
       if (codeFileContent) {
-        console.log('🔍 Processing code file...');
+        console.log('🔍 Processing code file (UPDATER)...');
         await this.processCodeFile(codeFileContent, jobId);
       }
       
@@ -454,7 +475,7 @@ export class MicrosystemsUpdater {
         }
       }
       
-      console.log('🚀 MICROSYSTEMS UPDATER (UPSERT) COMPLETE:', results);
+      console.log('🚀 MICROSYSTEMS UPDATER (UPSERT) COMPLETE WITH DUAL-PATTERN PARSING:', results);
       return results;
       
     } catch (error) {
