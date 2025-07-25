@@ -1850,7 +1850,7 @@ const uploadPropertyAssignment = async (job) => {
               <span>{jobs.length + archivedJobs.length} Jobs</span>
               <div className="flex items-center gap-4">
                 <span className="font-medium text-blue-700">
-                  📊 Properties: {jobs.reduce((sum, job) => sum + (job.total_properties || 0), 0).toLocaleString()}
+                  📊 Properties: {jobs.reduce((sum, job) => sum + (job.totalProperties || 0), 0).toLocaleString()}
                 </span>
                 <span className="text-green-600">
                   🏠 {jobs.reduce((sum, job) => sum + (job.totalresidential || 0), 0).toLocaleString()} Residential
