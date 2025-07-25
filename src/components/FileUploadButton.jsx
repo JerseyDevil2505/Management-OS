@@ -899,6 +899,35 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     }
   };
 
+  // CRITICAL FIX: Refresh banner state immediately after processing
+  const refreshBannerState = async () => {
+    try {
+      console.log('🔄 REFRESH - Starting banner state refresh...');
+      
+      // Refresh source file version from property_records
+      const { data: sourceVersionData, error: sourceVersionError } = await supabase
+        .from('property_records')
+        .select('file_version')
+        .eq('job_id', job.id)
+        .limit(1)
+        .single();
+        
+      if (sourceVersionData && !sourceVersionError) {
+        console.log('🔄 REFRESH - Updated sourceFileVersion to:', sourceVersionData.file_version);
+        setSourceFileVersion(sourceVersionData.file_version || 1);
+      } else {
+        console.log('🔄 REFRESH - No property_records found, keeping version 1');
+        setSourceFileVersion(1);
+      }
+      
+      // Force a re-render of the component to update banner display
+      console.log('🔄 REFRESH - Banner state refresh completed');
+      
+    } catch (error) {
+      console.error('🔄 REFRESH - Error refreshing banner state:', error);
+    }
+  };
+
   // NEW: Process changes after review and approval
   const handleProcessChanges = async () => {
     if (!sourceFile || !sourceFileContent) {
@@ -998,32 +1027,18 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         }
       }
       
+      // CRITICAL FIX: Refresh banner state immediately
+      await refreshBannerState();
+      
       // Close modal and clean up
       setShowResultsModal(false);
       setSourceFile(null);
       setSourceFileContent(null);
       setSalesDecisions(new Map());
       
-      // Refresh source file version after source file processing
+      // Notify parent component
       if (onFileProcessed) {
         onFileProcessed(result);
-        
-        // Refresh source file version from property_records
-        try {
-          const { data, error } = await supabase
-            .from('property_records')
-            .select('file_version')
-            .eq('job_id', job.id)
-            .limit(1)
-            .single();
-            
-          if (data && !error) {
-            console.log('🔍 DEBUG - Refreshed source file_version after processing:', data.file_version);
-            setSourceFileVersion(data.file_version || 1);
-          }
-        } catch (error) {
-          console.error('🔍 DEBUG - Error refreshing source file version:', error);
-        }
       }
       
     } catch (error) {
@@ -1380,6 +1395,9 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                     } else {
                       addNotification(`✅ Successfully updated ${totalProcessed} records with latest data via ${detectedVendor} processor`, 'success');
                     }
+                    
+                    // CRITICAL FIX: Refresh banner state immediately
+                    await refreshBannerState();
                     
                     // Close modal and clean up
                     setShowResultsModal(false);
