@@ -655,17 +655,20 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         
         // FIXED: Vendor-specific validation logic - no padding for Microsystems!
         let hasValidInfoBy;
+        let normalizedInfoBy; // Define for all vendors
+        
         if (actualVendor === 'BRT') {
           // BRT: Use padding for numeric codes (01, 02, 06, etc.)
-          const normalizedInfoBy = infoByCode?.toString().padStart(2, '0');
+          normalizedInfoBy = infoByCode?.toString().padStart(2, '0');
           const normalizedValidCodes = allValidCodes.map(code => code.toString().padStart(2, '0'));
           hasValidInfoBy = normalizedInfoBy && normalizedValidCodes.includes(normalizedInfoBy);
         } else if (actualVendor === 'Microsystems') {
           // Microsystems: Direct string comparison for alphabetical codes (A, O, R, V, N, etc.)
+          normalizedInfoBy = infoByCode; // No padding for Microsystems
           hasValidInfoBy = infoByCode && allValidCodes.includes(infoByCode);
         } else {
           // Fallback: try both approaches
-          const normalizedInfoBy = infoByCode?.toString().padStart(2, '0');
+          normalizedInfoBy = infoByCode?.toString().padStart(2, '0');
           const normalizedValidCodes = allValidCodes.map(code => code.toString().padStart(2, '0'));
           hasValidInfoBy = (infoByCode && allValidCodes.includes(infoByCode)) || 
                           (normalizedInfoBy && normalizedValidCodes.includes(normalizedInfoBy));
