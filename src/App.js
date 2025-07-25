@@ -171,11 +171,17 @@ function App() {
     setActiveModule('jobs');
   };
 
+  // NEW: File refresh trigger for JobContainer
+  const [fileRefreshTrigger, setFileRefreshTrigger] = useState(0);
+
   // Handle file processing completion - FileUploadButton handles versioning
   const handleFileProcessed = async (result) => {
     // FileUploadButton already handles file versioning and tracking
     // Just refresh job metadata without touching ProductionTracker analytics
     await loadAllJobWorkflowStats();
+    
+    // CRITICAL: Trigger JobContainer to refresh file version
+    setFileRefreshTrigger(prev => prev + 1);
   };
 
   return (
@@ -298,6 +304,7 @@ function App() {
             onUpdateWorkflowStats={(newStats, persist = true) => 
               handleWorkflowStatsUpdate(selectedJob.id, newStats, persist)
             }
+            fileRefreshTrigger={fileRefreshTrigger}
           />
         )}
       </div>
