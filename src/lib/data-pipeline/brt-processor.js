@@ -131,8 +131,6 @@ export class BRTProcessor {
       this.codeLookups.clear();
       this.vcsLookups.clear();
       
-      console.log(`📄 Processing ${lines.length} lines...`);
-      
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
         
@@ -143,14 +141,12 @@ export class BRTProcessor {
         if (!line.startsWith('{') && !line.startsWith('"') && !inJsonBlock) {
           // Process previous section if exists
           if (jsonBuffer && currentSection) {
-            console.log(`📦 Processing section: ${currentSection}`);
             this.parseJsonSection(jsonBuffer, currentSection);
           }
           
           currentSection = line.replace(/\r/g, ''); // Remove carriage returns
           jsonBuffer = '';
           inJsonBlock = false;
-          console.log(`🏷️ Found section header: "${currentSection}"`);
           continue;
         }
         
@@ -162,7 +158,6 @@ export class BRTProcessor {
           const closeBrackets = (jsonBuffer.match(/\}/g) || []).length;
           
           if (openBrackets === closeBrackets && openBrackets > 0) {
-            console.log(`✅ Complete JSON block found for section: ${currentSection}`);
             if (currentSection) {
               this.parseJsonSection(jsonBuffer, currentSection);
             }
@@ -174,7 +169,6 @@ export class BRTProcessor {
       
       // Process final section
       if (jsonBuffer && currentSection) {
-        console.log(`📦 Processing final section: ${currentSection}`);
         this.parseJsonSection(jsonBuffer, currentSection);
       }
       
@@ -226,7 +220,6 @@ export class BRTProcessor {
       }
       
       console.log('✅ Complete code file stored successfully in jobs table');
-      console.log(`📊 Sections stored: ${Object.keys(this.allCodeSections).join(', ')}`);
     } catch (error) {
       console.error('❌ Failed to store code file:', error);
       // Don't throw - continue with processing even if code storage fails
@@ -239,12 +232,10 @@ export class BRTProcessor {
    */
   parseJsonSection(jsonString, sectionName) {
     try {
-      console.log(`🔧 Parsing JSON for section: ${sectionName}`);
       const codeData = JSON.parse(jsonString);
       
       // Store complete section data for database storage
       this.allCodeSections[sectionName] = codeData;
-      console.log(`💾 Stored section "${sectionName}" with ${Object.keys(codeData).length} top-level keys`);
       
       if (sectionName === 'VCS') {
         // Process VCS section for land value calculations
@@ -308,8 +299,6 @@ export class BRTProcessor {
       const infoBySection = data['30'];
       
       if (infoBySection.MAP) {
-        console.log(`📂 Key "30" has MAP section with ${Object.keys(infoBySection.MAP).length} items`);
-        
         Object.keys(infoBySection.MAP).forEach(mapKey => {
           const mapItem = infoBySection.MAP[mapKey];
           if (mapItem.DATA && mapItem.DATA.VALUE) {
@@ -436,7 +425,7 @@ export class BRTProcessor {
       records.push(record);
     }
     
-    console.log(`Parsed ${records.length} records using ${this.isTabSeparated ? 'TAB' : 'COMMA'} separation`);
+    console.log(`📊 Processing ${records.length} records in batches...`);
     return records;
   }
 
@@ -568,16 +557,9 @@ export class BRTProcessor {
     let totalresidential = 0;
     let totalcommercial = 0;
     
-    console.log(`🔍 DEBUG: Starting calculation with ${records.length} records`);
-    
     for (let i = 0; i < records.length; i++) {
       const record = records[i];
       const propertyClass = record.PROPERTY_CLASS;
-      
-      // Debug first 5 records
-      if (i < 5) {
-        console.log(`🔍 DEBUG: Record ${i + 1} PROPERTY_CLASS = "${propertyClass}" (type: ${typeof propertyClass})`);
-      }
       
       if (propertyClass === '2' || propertyClass === '3A') {
         totalresidential++;
@@ -596,8 +578,6 @@ export class BRTProcessor {
    */
   async updateJobTotals(jobId, totalresidential, totalcommercial) {
     try {
-      console.log(`🔧 DEBUG: About to update job ${jobId} with totals: ${totalresidential} residential, ${totalcommercial} commercial`);
-      
       const { data, error } = await supabase
         .from('jobs')
         .update({
@@ -607,18 +587,15 @@ export class BRTProcessor {
         })
         .eq('id', jobId);
 
-      console.log(`🔧 DEBUG: Supabase response - data:`, data);
-      console.log(`🔧 DEBUG: Supabase response - error:`, error);
-
       if (error) {
-        console.error('❌ DEBUG: Failed to update job totals:', error);
+        console.error('❌ Failed to update job totals:', error);
         throw error;
       }
 
-      console.log('✅ DEBUG: Job totals updated successfully in database');
+      console.log('✅ Job totals updated successfully in database');
       
     } catch (error) {
-      console.error('❌ DEBUG: Error in updateJobTotals:', error);
+      console.error('❌ Error in updateJobTotals:', error);
       // Don't throw - continue processing even if update fails
     }
   }
@@ -637,7 +614,6 @@ export class BRTProcessor {
       }
       
       const records = this.parseSourceFile(sourceFileContent);
-      console.log(`Processing ${records.length} records in batches...`);
       
       // Calculate property totals BEFORE processing
       const { totalresidential, totalcommercial } = this.calculatePropertyTotals(records);
