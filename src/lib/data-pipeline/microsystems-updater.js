@@ -1,12 +1,8 @@
-/**
- * Enhanced Microsystems Updater 
- * Handles pipe-delimited source files and field_id+code lookup files
- * UPDATED: Single table UPSERT to property_records with all 82 fields
- * NEW: Proper code file storage in jobs table with pipe-delimited format support
+-delimited format support
  * ADDED: Retry logic for connection issues and query cancellations
  * ENHANCED: Dual-pattern parsing for standard (140A) and HVAC (8ED) codes
+ * FIXED: Proper AAACCCCSSSS parsing - InfoBy single char, Design multi-char, HVAC preserved
  * CLEANED: Removed redundant surgical fix totals (handled by AdminJobManagement/FileUploadButton)
- * FIXED: Correct constraint name for UPSERT operations
  */
 
 import { supabase } from '../supabaseClient.js';
@@ -35,50 +31,50 @@ export class MicrosystemsUpdater {
   }
 
   /**
-   * FIXED: Upsert batch with retry logic and correct constraint name
+   * Upsert batch with retry logic for connection issues
    */
   async upsertBatchWithRetry(batch, batchNumber, retries = 50) {
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
-        console.log(`Batch ${batchNumber}, attempt ${attempt}...`);
+        console.log(`🔄 UPSERT Batch ${batchNumber}, attempt ${attempt}...`);
         
         const { data, error } = await supabase
           .from('property_records')
           .upsert(batch, {
-            onConflict: 'property_composite_key',  // ← FIXED: Use actual column name
+            onConflict: 'property_composite_key,job_id',
             ignoreDuplicates: false
           });
         
         if (!error) {
-          console.log(`Batch ${batchNumber} successful on attempt ${attempt}`);
+          console.log(`✅ UPSERT Batch ${batchNumber} successful on attempt ${attempt}`);
           return { success: true, data };
         }
         
         // Handle specific error codes
         if (error.code === '57014') {
-          console.log(`Query canceled (57014) for batch ${batchNumber}, attempt ${attempt}. Retrying...`);
+          console.log(`🔄 Query canceled (57014) for batch ${batchNumber}, attempt ${attempt}. Retrying...`);
           if (attempt < retries) {
             await new Promise(resolve => setTimeout(resolve, 3000)); // Wait 3 seconds
             continue;
           }
         } else if (error.code === '08003' || error.code === '08006') {
-          console.log(`Connection error for batch ${batchNumber}, attempt ${attempt}. Retrying...`);
+          console.log(`🔄 Connection error for batch ${batchNumber}, attempt ${attempt}. Retrying...`);
           if (attempt < retries) {
             await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
             continue;
           }
         } else {
           // For other errors, don't retry
-          console.error(`Batch ${batchNumber} failed with non-retryable error:`, error);
+          console.error(`❌ UPSERT Batch ${batchNumber} failed with non-retryable error:`, error);
           return { error };
         }
         
         // If we get here, it's the final attempt for a retryable error
-        console.error(`Batch ${batchNumber} failed after ${retries} attempts:`, error);
+        console.error(`❌ UPSERT Batch ${batchNumber} failed after ${retries} attempts:`, error);
         return { error };
         
       } catch (networkError) {
-        console.log(`Network error for batch ${batchNumber}, attempt ${attempt}:`, networkError.message);
+        console.log(`🌐 Network error for UPSERT batch ${batchNumber}, attempt ${attempt}:`, networkError.message);
         if (attempt < retries) {
           await new Promise(resolve => setTimeout(resolve, 2000));
           continue;
@@ -89,14 +85,15 @@ export class MicrosystemsUpdater {
   }
 
   /**
-   * ENHANCED: Process Microsystems code file and store in jobs table
+   * FIXED: Process Microsystems code file with proper AAACCCCSSSS parsing
    * Handles pipe-delimited format: CODE|DESCRIPTION|RATE|CONSTANT|CATEGORY|TABLE|UPDATED
-   * Examples: "120PV  9999|PAVED|0|0|ROAD|0|05/14/92|"
+   * Examples: "140R   9999|REFUSED INT|0|0|INFORMATION|0|07/05/18|"
+   *           "520CL  9999|COLONIAL|0|0|DESIGN|0|05/14/92|"
    *           "8FA16  0399|FORCED HOT AIR|4700|0|FORCED HOT AIR|E|06/24/02|"
-   * NEW: Dual-pattern parsing for standard (140A) and HVAC (8ED) codes
+   * FIXED: Proper parsing for InfoBy (single char) vs Design (multi-char) vs HVAC (preserved)
    */
   async processCodeFile(codeFileContent, jobId) {
-    console.log('Processing Microsystems code file with dual-pattern parsing...');
+    console.log('🔧 Processing Microsystems code file with FIXED AAACCCCSSSS parsing...');
     
     try {
       const lines = codeFileContent.split('\n').filter(line => line.trim());
@@ -124,27 +121,37 @@ export class MicrosystemsUpdater {
         
         if (!fullCode || !description) return;
         
-        // ENHANCED: Dual-pattern parsing logic
+        // FIXED: AAACCCCSSSS parsing logic
         let prefix, suffix;
         const firstChar = fullCode.substring(0, 1);
         
         if (firstChar === '8') {
-          // HVAC pattern: 8 + 2 character code + rest is ignored
+          // HVAC pattern: 8 + 2 character code + rest is ignored (PRESERVED)
           // Example: "8ED16  0399" → prefix="8", suffix="ED"
           prefix = '8';
           suffix = fullCode.substring(1, 3); // Extract exactly 2 characters after '8'
         } else {
-          // Standard pattern: 3 digit category + variable code + rest is ignored  
-          // Example: "140A   9999" → prefix="140", suffix="A"
-          prefix = fullCode.substring(0, 3);
-          suffix = fullCode.substring(3).trim().split(/\s+/)[0]; // Get code part before spaces
+          // Standard pattern: AAACCCCSSSS format
+          prefix = fullCode.substring(0, 3); // First 3 characters (category)
+          const afterPrefix = fullCode.substring(3); // Everything after category
+          
+          if (prefix === '140') {
+            // InfoBy codes: single character only (old system limitation)
+            // Example: "140R   9999" → suffix="R"
+            suffix = afterPrefix.charAt(0);
+          } else {
+            // Other codes: extract letters until space or number
+            // Example: "520CL  9999" → suffix="CL"
+            const match = afterPrefix.match(/^[A-Z]+/);
+            suffix = match ? match[0] : afterPrefix.charAt(0);
+          }
         }
         
         if (prefix && suffix) {
           // Store full code with description for lookup
           this.codeLookups.set(fullCode, description);
           
-          // Store suffix for CSV lookup (this is what appears in source data)
+          // Store clean suffix for CSV lookup (this is what appears in source data)
           this.codeLookups.set(suffix, description);
           
           // Organize by prefix for database storage
@@ -185,16 +192,17 @@ export class MicrosystemsUpdater {
         }
       });
       
-      console.log(`Loaded ${this.codeLookups.size} code definitions with dual-pattern parsing`);
-      console.log(`Organized into ${Object.keys(this.allCodes).length} field groups`);
-      console.log(`InfoBy codes (140 prefix): ${Object.keys(this.allCodes['140'] || {}).join(', ')}`);
-      console.log(`HVAC codes (8 prefix): ${Object.keys(this.allCodes['8'] || {}).join(', ')}`);
+      console.log(`✅ Loaded ${this.codeLookups.size} code definitions with FIXED AAACCCCSSSS parsing`);
+      console.log(`📂 Organized into ${Object.keys(this.allCodes).length} field groups`);
+      console.log(`🎯 InfoBy codes (140 prefix): ${Object.keys(this.allCodes['140'] || {}).join(', ')}`);
+      console.log(`🏠 HVAC codes (8 prefix): ${Object.keys(this.allCodes['8'] || {}).join(', ')}`);
+      console.log(`🏗️ Design codes (520 prefix): ${Object.keys(this.allCodes['520'] || {}).join(', ')}`);
       
       // Store code file in jobs table
       await this.storeCodeFileInDatabase(codeFileContent, jobId);
       
     } catch (error) {
-      console.error('Error parsing Microsystems code file:', error);
+      console.error('❌ Error parsing Microsystems code file:', error);
       throw error;
     }
   }
@@ -204,7 +212,7 @@ export class MicrosystemsUpdater {
    */
   async storeCodeFileInDatabase(codeFileContent, jobId) {
     try {
-      console.log('Storing Microsystems code file in jobs table...');
+      console.log('💾 Storing Microsystems code file in jobs table...');
       
       // Clean Unicode null characters that PostgreSQL can't handle
       const cleanedCodeContent = codeFileContent
@@ -226,7 +234,7 @@ export class MicrosystemsUpdater {
             field_groups: Object.keys(this.allCodes).length,
             categories: Object.keys(this.categories).length,
             parsed_at: new Date().toISOString(),
-            parsing_method: 'dual_pattern'
+            parsing_method: 'fixed_aaaccccssss'
           }
         }
       };
@@ -238,14 +246,14 @@ export class MicrosystemsUpdater {
         .select('id, code_file_name, code_file_uploaded_at');
 
       if (updateError) {
-        console.error('Code file storage failed:', updateError);
+        console.error('❌ Code file storage failed:', updateError);
         throw updateError;
       }
       
-      console.log('Microsystems code file stored successfully');
+      console.log('✅ Microsystems code file stored successfully');
       
     } catch (error) {
-      console.error('Failed to store Microsystems code file:', error);
+      console.error('❌ Failed to store Microsystems code file:', error);
       console.log('Continuing with job update despite code storage failure...');
     }
   }
@@ -286,7 +294,7 @@ export class MicrosystemsUpdater {
       records.push(record);
     }
     
-    console.log(`Parsed ${records.length} records`);
+    console.log(`📊 Processing ${records.length} records in UPSERT batches...`);
     return records;
   }
 
@@ -430,7 +438,7 @@ export class MicrosystemsUpdater {
    */
   async processFile(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, versionInfo = {}) {
     try {
-      console.log('Starting Enhanced Microsystems file update...');
+      console.log('🚀 Starting Enhanced Microsystems UPDATER (UPSERT)...');
       
       // Process and store code file if provided
       if (codeFileContent) {
@@ -439,7 +447,6 @@ export class MicrosystemsUpdater {
       
       // Parse source file
       const records = this.parseSourceFile(sourceFileContent);
-      console.log(`Processing ${records.length} records in batches...`);
       
       // Prepare all property records for batch upsert
       const propertyRecords = [];
@@ -462,32 +469,32 @@ export class MicrosystemsUpdater {
       };
       
       // Batch upsert all property records (1000 at a time)
-      console.log(`Batch upserting ${propertyRecords.length} property records...`);
+      console.log(`Batch UPSERTING ${propertyRecords.length} property records...`);
       const batchSize = 1000;
       
       for (let i = 0; i < propertyRecords.length; i += batchSize) {
         const batch = propertyRecords.slice(i, i + batchSize);
         const batchNumber = Math.floor(i / batchSize) + 1;
         
-        console.log(`Processing batch ${batchNumber}: records ${i + 1} to ${Math.min(i + batchSize, propertyRecords.length)}`);
+        console.log(`🚀 UPSERT batch ${batchNumber}: records ${i + 1} to ${Math.min(i + batchSize, propertyRecords.length)}`);
         
         const result = await this.upsertBatchWithRetry(batch, batchNumber);
         
         if (result.error) {
-          console.error(`Batch ${batchNumber} failed after retries:`, result.error);
+          console.error(`❌ UPSERT Batch ${batchNumber} failed:`, result.error);
           results.errors += batch.length;
           results.warnings.push(`Batch ${batchNumber} failed: ${result.error.message}`);
         } else {
           results.processed += batch.length;
-          console.log(`Batch ${batchNumber} completed successfully`);
+          console.log(`✅ UPSERT Batch ${batchNumber} completed successfully`);
         }
       }
       
-      console.log('Enhanced Microsystems update complete:', results);
+      console.log('🚀 Enhanced Microsystems UPDATER (UPSERT) complete:', results);
       return results;
       
     } catch (error) {
-      console.error('Enhanced Microsystems file update failed:', error);
+      console.error('❌ Enhanced Microsystems updater failed:', error);
       throw error;
     }
   }
