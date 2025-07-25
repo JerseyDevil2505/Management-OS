@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Building, Factory, TrendingUp, DollarSign, Scale, Database, AlertCircle } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import ManagementChecklist from './ManagementChecklist';
-import PayrollProductionUpdater from './PayrollProductionUpdater';
+import ProductionTracker from './ProductionTracker';
 import MarketAnalysis from './MarketAnalysis';
 import FinalValuation from './FinalValuation';
 import AppealCoverage from './AppealCoverage';
@@ -100,7 +100,7 @@ const JobContainer = ({
     // Refresh file version data when new files are uploaded
     await loadLatestFileVersion();
     
-    // 🔧 ENHANCED: Invalidate PayrollProductionUpdater analytics when files change
+    // 🔧 ENHANCED: Invalidate ProductionTracker analytics when files change
     if (onUpdateWorkflowStats && selectedJob?.id) {
       console.log('📊 JobContainer: Invalidating analytics due to file update');
       onUpdateWorkflowStats({
@@ -116,13 +116,13 @@ const JobContainer = ({
     }
   };
 
-  // 🔧 NEW: Handle PayrollProductionUpdater analytics completion
+  // 🔧 NEW: Handle ProductionTracker analytics completion
   const handleAnalyticsUpdate = (analyticsData) => {
     if (!onUpdateWorkflowStats || !selectedJob?.id) return;
 
-    console.log('📊 JobContainer: Received analytics from PayrollProductionUpdater', analyticsData);
+    console.log('📊 JobContainer: Received analytics from ProductionTracker', analyticsData);
 
-    // Transform PayrollProductionUpdater data to App.js format
+    // Transform ProductionTracker data to App.js format
     const transformedStats = {
       totalRecords: analyticsData.totalRecords || 0,
       validInspections: analyticsData.validInspections || 0,
@@ -172,9 +172,9 @@ const JobContainer = ({
     },
     {
       id: 'production',
-      name: 'PayrollProductionUpdater', // 🔧 FIXED: Consistent naming
+      name: 'ProductionTracker',
       icon: Factory,
-      component: PayrollProductionUpdater,
+      component: ProductionTracker,
       description: 'Analytics and validation engine'
     },
     {
@@ -215,7 +215,7 @@ const JobContainer = ({
       onFileProcessed: handleFileProcessed
     };
 
-    // 🔧 CRITICAL: Pass App.js state management to PayrollProductionUpdater
+    // 🔧 CRITICAL: Pass App.js state management to ProductionTracker
     if (activeModule === 'production' && onUpdateWorkflowStats) {
       return {
         ...baseProps,
@@ -333,7 +333,7 @@ const JobContainer = ({
                       Soon
                     </span>
                   )}
-                  {/* 🔧 NEW: Show analytics indicator for PayrollProductionUpdater */}
+                  {/* 🔧 NEW: Show analytics indicator for ProductionTracker */}
                   {module.id === 'production' && workflowStats?.isProcessed && (
                     <span className="text-xs bg-green-500 text-white px-2 py-1 rounded-full ml-1">
                       ✓
