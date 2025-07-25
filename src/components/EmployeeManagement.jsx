@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Upload, Search, Mail, Phone, MapPin, Clock, AlertTriangle, Settings, Database, CheckCircle, Loader, Edit, X, Copy, FileText, Download } from 'lucide-react';
+import { Users, Upload, Search, Mail, Phone, MapPin, Clock, AlertTriangle, Settings, Database, CheckCircle, Loader, Edit, X, Copy, FileText, Download, Filter } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { employeeService, signInAsDev } from '../lib/supabaseClient';
+import { employeeService, signInAsDev, supabase } from '../lib/supabaseClient';
 
 const EmployeeManagement = () => {
   const [employees, setEmployees] = useState([]);
@@ -18,6 +18,15 @@ const EmployeeManagement = () => {
   const [editingEmployee, setEditingEmployee] = useState(null);
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [emailModalData, setEmailModalData] = useState({ emails: [], title: '' });
+
+  // Global Analytics State
+  const [globalAnalytics, setGlobalAnalytics] = useState(null);
+  const [isLoadingAnalytics, setIsLoadingAnalytics] = useState(false);
+  const [analyticsFilter, setAnalyticsFilter] = useState({
+    inspectorType: 'all',
+    region: 'all',
+    dateRange: 'all'
+  });
 
   // Load employees from database on component mount
   useEffect(() => {
@@ -63,6 +72,171 @@ const EmployeeManagement = () => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Global Analytics Functions
+  const loadGlobalAnalytics = async () => {
+    setIsLoadingAnalytics(true);
+    try {
+      // Get all inspection data across all jobs with employee info
+      const { data: inspectionData, error } = await supabase
+        .from('inspection_data')
+        .select(`
+          *,
+          job:jobs!inner(id, job_name, vendor_type, parsed_code_definitions),
+          employee:employees!inner(id, first_name, last_name, initials, inspector_type, region, employment_status)
+        `)
+        .eq('employee.employment_status', 'active');
+
+      if (error) throw error;
+
+      if (!inspectionData || inspectionData.length === 0) {
+        setGlobalAnalytics({
+          summary: { totalInspections: 0, overallEntryRate: 0, overallRefusalRate: 0, avgInspectionsPerDay: 0 },
+          inspectors: [],
+          regional: {}
+        });
+        return;
+      }
+
+      // Process the data similar to ProductionTracker
+      const processedAnalytics = processGlobalInspectionData(inspectionData, analyticsFilter);
+      setGlobalAnalytics(processedAnalytics);
+
+    } catch (error) {
+      console.error('Error loading global analytics:', error);
+      setGlobalAnalytics({
+        summary: { totalInspections: 0, overallEntryRate: 0, overallRefusalRate: 0, avgInspectionsPerDay: 0 },
+        inspectors: [],
+        regional: {}
+      });
+    } finally {
+      setIsLoadingAnalytics(false);
+    }
+  };
+
+  const processGlobalInspectionData = (data, filter) => {
+    // Filter data based on current filters
+    let filteredData = data.filter(record => {
+      const matchesType = filter.inspectorType === 'all' || record.employee.inspector_type === filter.inspectorType;
+      const matchesRegion = filter.region === 'all' || record.employee.region === filter.region;
+      
+      // Date filtering would go here if needed
+      return matchesType && matchesRegion;
+    });
+
+    // Calculate summary metrics
+    const totalInspections = filteredData.length;
+    const validInspections = filteredData.filter(r => r.inspection_initials && r.inspection_date).length;
+    
+    // Calculate entry/refusal rates using ProductionTracker logic
+    let entryCount = 0;
+    let refusalCount = 0;
+    let totalEligible = 0;
+
+    const inspectorStats = {};
+
+    filteredData.forEach(record => {
+      const inspector = record.employee;
+      const initials = inspector.initials || 'Unknown';
+      
+      if (!inspectorStats[initials]) {
+        inspectorStats[initials] = {
+          name: `${inspector.first_name} ${inspector.last_name}`,
+          initials: initials,
+          inspectorType: inspector.inspector_type,
+          region: inspector.region,
+          totalInspections: 0,
+          entryInspections: 0,
+          refusalInspections: 0,
+          entryRate: 0,
+          refusalRate: 0,
+          dailyAvg: 0
+        };
+      }
+
+      inspectorStats[initials].totalInspections++;
+
+      // Determine if this is entry/refusal based on InfoBy codes (simplified)
+      if (record.inspection_info_by && record.property_m4_class && ['2', '3A'].includes(record.property_m4_class)) {
+        totalEligible++;
+        inspectorStats[initials].totalEligible = (inspectorStats[initials].totalEligible || 0) + 1;
+
+        // Simple InfoBy logic - you'd want to use actual job code definitions here
+        const infoBy = record.inspection_info_by.toString().toLowerCase();
+        if (['01', '02', '03', '04', 'a', 'o', 's', 't'].includes(infoBy)) {
+          entryCount++;
+          inspectorStats[initials].entryInspections++;
+        } else if (['06', 'r'].includes(infoBy)) {
+          refusalCount++;
+          inspectorStats[initials].refusalInspections++;
+        }
+      }
+    });
+
+    // Calculate rates for each inspector
+    Object.keys(inspectorStats).forEach(initials => {
+      const stats = inspectorStats[initials];
+      const eligible = stats.totalEligible || 0;
+      stats.entryRate = eligible > 0 ? Math.round((stats.entryInspections / eligible) * 100) : 0;
+      stats.refusalRate = eligible > 0 ? Math.round((stats.refusalInspections / eligible) * 100) : 0;
+      stats.dailyAvg = stats.totalInspections > 0 ? Math.round((stats.totalInspections / 30) * 10) / 10 : 0; // Rough daily avg
+    });
+
+    // Convert to array and sort by total inspections
+    const inspectorArray = Object.values(inspectorStats)
+      .filter(inspector => inspector.totalInspections > 0)
+      .sort((a, b) => b.totalInspections - a.totalInspections);
+
+    // Calculate regional breakdown
+    const regionalStats = {};
+    inspectorArray.forEach(inspector => {
+      if (!regionalStats[inspector.region]) {
+        regionalStats[inspector.region] = {
+          totalInspections: 0,
+          inspectors: 0,
+          avgEntryRate: 0,
+          avgRefusalRate: 0
+        };
+      }
+      regionalStats[inspector.region].totalInspections += inspector.totalInspections;
+      regionalStats[inspector.region].inspectors++;
+    });
+
+    // Calculate regional averages
+    Object.keys(regionalStats).forEach(region => {
+      const regionInspectors = inspectorArray.filter(i => i.region === region);
+      const avgEntry = regionInspectors.reduce((sum, i) => sum + i.entryRate, 0) / regionInspectors.length;
+      const avgRefusal = regionInspectors.reduce((sum, i) => sum + i.refusalRate, 0) / regionInspectors.length;
+      
+      regionalStats[region].avgEntryRate = Math.round(avgEntry) || 0;
+      regionalStats[region].avgRefusalRate = Math.round(avgRefusal) || 0;
+    });
+
+    return {
+      summary: {
+        totalInspections: validInspections,
+        overallEntryRate: totalEligible > 0 ? Math.round((entryCount / totalEligible) * 100) : 0,
+        overallRefusalRate: totalEligible > 0 ? Math.round((refusalCount / totalEligible) * 100) : 0,
+        avgInspectionsPerDay: validInspections > 0 ? Math.round((validInspections / 30) * 10) / 10 : 0
+      },
+      inspectors: inspectorArray,
+      regional: regionalStats
+    };
+  };
+
+  // Load analytics when component mounts or filters change
+  useEffect(() => {
+    if (employees.length > 0) {
+      loadGlobalAnalytics();
+    }
+  }, [employees.length, analyticsFilter]);
+
+  const handleFilterChange = (filterType, value) => {
+    setAnalyticsFilter(prev => ({
+      ...prev,
+      [filterType]: value
+    }));
   };
 
   // Import Excel file function with proper variable declarations and UPSERT logic
@@ -772,23 +946,221 @@ const EmployeeManagement = () => {
             </div>
           )}
 
-          {/* Regional Distribution - only show if we have data */}
+          {/* Regional Distribution and Global Analytics */}
           {employees.length > 0 && (
-            <div className="p-6 bg-white rounded-lg border shadow-sm">
-              <h3 className="text-lg font-semibold text-gray-700 mb-4">📍 Regional Distribution</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {getUniqueValues('location').map(location => {
-                  const count = employees.filter(emp => emp.location === location && emp.status === 'active').length;
-                  const percentage = count > 0 ? Math.round((count / stats.active) * 100) : 0;
-                  return (
-                    <div key={location} className="p-4 bg-gray-50 rounded-lg text-center">
-                      <div className="text-2xl font-bold text-blue-600">{count}</div>
-                      <div className="text-sm text-gray-600">{location} ({percentage}%)</div>
-                    </div>
-                  );
-                })}
+            <>
+              <div className="p-6 bg-white rounded-lg border shadow-sm">
+                <h3 className="text-lg font-semibold text-gray-700 mb-4">📍 Regional Distribution</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {getUniqueValues('location').map(location => {
+                    const count = employees.filter(emp => emp.location === location && emp.status === 'active').length;
+                    const percentage = count > 0 ? Math.round((count / stats.active) * 100) : 0;
+                    return (
+                      <div key={location} className="p-4 bg-gray-50 rounded-lg text-center">
+                        <div className="text-2xl font-bold text-blue-600">{count}</div>
+                        <div className="text-sm text-gray-600">{location} ({percentage}%)</div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
+
+              {/* Global Inspector Analytics */}
+              <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg border-2 border-indigo-200 p-6">
+                <div className="flex items-center mb-6">
+                  <Users className="w-8 h-8 mr-3 text-indigo-600" />
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-800">📊 Global Inspector Performance Analytics</h2>
+                    <p className="text-gray-600 mt-1">
+                      Cross-job performance metrics for all inspectors across the entire company
+                    </p>
+                  </div>
+                </div>
+
+                {isLoadingAnalytics ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader className="w-8 h-8 animate-spin text-indigo-600 mr-3" />
+                    <span className="text-gray-600">Loading global analytics...</span>
+                  </div>
+                ) : globalAnalytics ? (
+                  <>
+                    {/* Filter Controls */}
+                    <div className="mb-6 p-4 bg-white rounded-lg border shadow-sm">
+                      <div className="flex items-center gap-4 flex-wrap">
+                        <div className="flex items-center gap-2">
+                          <Filter className="w-4 h-4 text-gray-500" />
+                          <span className="text-sm font-medium text-gray-700">Filters:</span>
+                        </div>
+                        
+                        <select
+                          value={analyticsFilter.inspectorType}
+                          onChange={(e) => handleFilterChange('inspectorType', e.target.value)}
+                          className="px-3 py-1 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
+                        >
+                          <option value="all">All Inspector Types</option>
+                          <option value="Residential">Residential Only</option>
+                          <option value="Commercial">Commercial Only</option>
+                          <option value="Management">Management Only</option>
+                        </select>
+
+                        <select
+                          value={analyticsFilter.region}
+                          onChange={(e) => handleFilterChange('region', e.target.value)}
+                          className="px-3 py-1 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
+                        >
+                          <option value="all">All Regions</option>
+                          {getUniqueValues('location').map(location => (
+                            <option key={location} value={location}>{location}</option>
+                          ))}
+                        </select>
+
+                        <button
+                          onClick={loadGlobalAnalytics}
+                          className="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-lg text-sm hover:bg-indigo-200 transition-colors"
+                        >
+                          🔄 Refresh
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Summary Metrics */}
+                    <div className="mb-6 grid grid-cols-1 md:grid-cols-4 gap-4">
+                      <div className="p-4 bg-white rounded-lg border shadow-sm text-center">
+                        <div className="text-3xl font-bold text-indigo-600">{globalAnalytics.summary.totalInspections.toLocaleString()}</div>
+                        <div className="text-sm text-gray-600 font-medium">Total Inspections</div>
+                        <div className="text-xs text-gray-500 mt-1">Across all active jobs</div>
+                      </div>
+                      
+                      <div className="p-4 bg-white rounded-lg border shadow-sm text-center">
+                        <div className="text-3xl font-bold text-green-600">{globalAnalytics.summary.overallEntryRate}%</div>
+                        <div className="text-sm text-gray-600 font-medium">Overall Entry Rate</div>
+                        <div className="text-xs text-gray-500 mt-1">Company-wide average</div>
+                      </div>
+                      
+                      <div className="p-4 bg-white rounded-lg border shadow-sm text-center">
+                        <div className="text-3xl font-bold text-orange-600">{globalAnalytics.summary.overallRefusalRate}%</div>
+                        <div className="text-sm text-gray-600 font-medium">Overall Refusal Rate</div>
+                        <div className="text-xs text-gray-500 mt-1">Company-wide average</div>
+                      </div>
+                      
+                      <div className="p-4 bg-white rounded-lg border shadow-sm text-center">
+                        <div className="text-3xl font-bold text-purple-600">{globalAnalytics.summary.avgInspectionsPerDay}</div>
+                        <div className="text-sm text-gray-600 font-medium">Avg Daily Output</div>
+                        <div className="text-xs text-gray-500 mt-1">Inspections per day</div>
+                      </div>
+                    </div>
+
+                    {/* Regional Performance */}
+                    {Object.keys(globalAnalytics.regional).length > 0 && (
+                      <div className="mb-6 p-4 bg-white rounded-lg border shadow-sm">
+                        <h3 className="text-lg font-semibold text-gray-700 mb-4">🗺️ Regional Performance Breakdown</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          {Object.entries(globalAnalytics.regional).map(([region, stats]) => (
+                            <div key={region} className="p-3 bg-gray-50 rounded-lg">
+                              <div className="font-medium text-gray-800 mb-2">{region}</div>
+                              <div className="text-sm space-y-1">
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Inspections:</span>
+                                  <span className="font-medium">{stats.totalInspections.toLocaleString()}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Inspectors:</span>
+                                  <span className="font-medium">{stats.inspectors}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Avg Entry Rate:</span>
+                                  <span className="font-medium text-green-600">{stats.avgEntryRate}%</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Avg Refusal Rate:</span>
+                                  <span className="font-medium text-orange-600">{stats.avgRefusalRate}%</span>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Inspector Performance Cards */}
+                    <div className="p-4 bg-white rounded-lg border shadow-sm">
+                      <h3 className="text-lg font-semibold text-gray-700 mb-4">👥 Inspector Performance Rankings</h3>
+                      
+                      {globalAnalytics.inspectors.length === 0 ? (
+                        <div className="text-center py-8 text-gray-500">
+                          <Users className="w-12 h-12 mx-auto mb-3 text-gray-400" />
+                          <p>No inspection data found matching current filters</p>
+                          <p className="text-sm mt-1">Try adjusting filters or ensure inspection data is available</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-3 max-h-96 overflow-y-auto">
+                          {globalAnalytics.inspectors.map((inspector, index) => (
+                            <div
+                              key={inspector.initials}
+                              className={`p-4 rounded-lg border-l-4 ${
+                                inspector.inspectorType === 'Residential' ? 'border-green-400 bg-green-50' :
+                                inspector.inspectorType === 'Commercial' ? 'border-blue-400 bg-blue-50' :
+                                inspector.inspectorType === 'Management' ? 'border-purple-400 bg-purple-50' :
+                                'border-gray-400 bg-gray-50'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center space-x-3">
+                                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm ${
+                                    inspector.inspectorType === 'Residential' ? 'bg-green-500' :
+                                    inspector.inspectorType === 'Commercial' ? 'bg-blue-500' :
+                                    inspector.inspectorType === 'Management' ? 'bg-purple-500' :
+                                    'bg-gray-500'
+                                  }`}>
+                                    {index + 1}
+                                  </div>
+                                  <div>
+                                    <div className="font-medium text-gray-800">
+                                      {inspector.name} ({inspector.initials})
+                                    </div>
+                                    <div className="text-sm text-gray-600">
+                                      {inspector.inspectorType} • {inspector.region}
+                                    </div>
+                                  </div>
+                                </div>
+                                
+                                <div className="text-right">
+                                  <div className="text-2xl font-bold text-gray-800">
+                                    {inspector.totalInspections.toLocaleString()}
+                                  </div>
+                                  <div className="text-xs text-gray-500">Total Inspections</div>
+                                </div>
+                              </div>
+                              
+                              <div className="mt-3 grid grid-cols-3 gap-4 text-center">
+                                <div>
+                                  <div className="text-lg font-bold text-green-600">{inspector.entryRate}%</div>
+                                  <div className="text-xs text-gray-500">Entry Rate</div>
+                                </div>
+                                <div>
+                                  <div className="text-lg font-bold text-orange-600">{inspector.refusalRate}%</div>
+                                  <div className="text-xs text-gray-500">Refusal Rate</div>
+                                </div>
+                                <div>
+                                  <div className="text-lg font-bold text-purple-600">{inspector.dailyAvg}</div>
+                                  <div className="text-xs text-gray-500">Daily Avg</div>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-center py-12 text-gray-500">
+                    <Database className="w-12 h-12 mx-auto mb-3 text-gray-400" />
+                    <p>No inspection data available</p>
+                    <p className="text-sm mt-1">Analytics will appear once inspection data is processed</p>
+                  </div>
+                )}
+              </div>
+            </>
           )}
         </div>
       )}
