@@ -135,8 +135,6 @@ export class BRTUpdater {
       this.codeLookups.clear();
       this.vcsLookups.clear();
       
-      console.log(`📄 Processing ${lines.length} lines...`);
-      
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
         
@@ -147,14 +145,12 @@ export class BRTUpdater {
         if (!line.startsWith('{') && !line.startsWith('"') && !inJsonBlock) {
           // Process previous section if exists
           if (jsonBuffer && currentSection) {
-            console.log(`📦 Processing section: ${currentSection}`);
             this.parseJsonSection(jsonBuffer, currentSection);
           }
           
           currentSection = line.replace(/\r/g, ''); // Remove carriage returns
           jsonBuffer = '';
           inJsonBlock = false;
-          console.log(`🏷️ Found section header: "${currentSection}"`);
           continue;
         }
         
@@ -166,7 +162,6 @@ export class BRTUpdater {
           const closeBrackets = (jsonBuffer.match(/\}/g) || []).length;
           
           if (openBrackets === closeBrackets && openBrackets > 0) {
-            console.log(`✅ Complete JSON block found for section: ${currentSection}`);
             if (currentSection) {
               this.parseJsonSection(jsonBuffer, currentSection);
             }
@@ -178,7 +173,6 @@ export class BRTUpdater {
       
       // Process final section
       if (jsonBuffer && currentSection) {
-        console.log(`📦 Processing final section: ${currentSection}`);
         this.parseJsonSection(jsonBuffer, currentSection);
       }
       
@@ -230,7 +224,6 @@ export class BRTUpdater {
       }
       
       console.log('✅ Complete code file stored successfully in jobs table (UPDATER)');
-      console.log(`📊 Sections stored: ${Object.keys(this.allCodeSections).join(', ')}`);
     } catch (error) {
       console.error('❌ Failed to store code file:', error);
       // Don't throw - continue with processing even if code storage fails
@@ -243,12 +236,10 @@ export class BRTUpdater {
    */
   parseJsonSection(jsonString, sectionName) {
     try {
-      console.log(`🔧 Parsing JSON for section: ${sectionName}`);
       const codeData = JSON.parse(jsonString);
       
       // Store complete section data for database storage
       this.allCodeSections[sectionName] = codeData;
-      console.log(`💾 Stored section "${sectionName}" with ${Object.keys(codeData).length} top-level keys`);
       
       if (sectionName === 'VCS') {
         // Process VCS section for land value calculations
@@ -312,8 +303,6 @@ export class BRTUpdater {
       const infoBySection = data['30'];
       
       if (infoBySection.MAP) {
-        console.log(`📂 Key "30" has MAP section with ${Object.keys(infoBySection.MAP).length} items`);
-        
         Object.keys(infoBySection.MAP).forEach(mapKey => {
           const mapItem = infoBySection.MAP[mapKey];
           if (mapItem.DATA && mapItem.DATA.VALUE) {
@@ -440,7 +429,7 @@ export class BRTUpdater {
       records.push(record);
     }
     
-    console.log(`Parsed ${records.length} records using ${this.isTabSeparated ? 'TAB' : 'COMMA'} separation`);
+    console.log(`📊 Processing ${records.length} records in UPSERT batches...`);
     return records;
   }
 
@@ -578,7 +567,6 @@ export class BRTUpdater {
       }
       
       const records = this.parseSourceFile(sourceFileContent);
-      console.log(`Processing ${records.length} records in UPSERT batches...`);
       
       const propertyRecords = [];
       
