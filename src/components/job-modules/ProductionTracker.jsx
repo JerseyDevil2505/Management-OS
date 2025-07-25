@@ -1,416 +1,8 @@
-{/* Missing Properties Tab */}
-            {activeTab === 'missing' && (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-bold text-gray-900">
-                    Missing Properties Report - Not Added to Inspection Data
-                  </h3>
-                  {missingPropertiesReport && missingPropertiesReport.summary.total_missing > 0 && (
-                    <button
-                      onClick={() => exportMissingPropertiesReport()}
-                      className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 flex items-center space-x-2"
-                    >
-                      <Download className="w-4 h-4" />
-                      <span>Export Missing Report</span>
-                    </button>
-                  )}
-                </div>
-
-                {!missingPropertiesReport ? (
-                  <div className="text-center py-8">
-                    <AlertTriangle className="w-12 h-12 mx-auto mb-4 text-orange-500" />
-                    <h4 className="text-lg font-semibold text-gray-900 mb-2">No Missing Properties Report</h4>
-                    <p className="text-gray-600">Run analytics processing to generate missing properties report</p>
-                  </div>
-                ) : missingPropertiesReport.summary.total_missing === 0 ? (
-                  <div className="text-center py-8">
-                    <CheckCircle className="w-12 h-12 mx-auto mb-4 text-green-500" />
-                    <h4 className="text-lg font-semibold text-gray-900 mb-2">All Properties Accounted For</h4>
-                    <p className="text-gray-600">Every property record was successfully processed to inspection_data</p>
-                    <p className="text-sm text-gray-500 mt-2">Total Records: {analytics?.totalRecords || 0} | Valid Inspections: {analytics?.validInspections || 0}</p>
-                  </div>
-                ) : (
-                  <>
-                    {/* Summary Cards */}
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                      <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-sm text-orange-600 font-medium">Total Missing</p>
-                            <p className="text-2xl font-bold text-orange-800">{missingPropertiesReport.summary.total_missing}</p>
-                          </div>
-                          <AlertTriangle className="w-8 h-8 text-orange-500" />
-                        </div>
-                      </div>
-
-                      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-sm text-gray-600 font-medium">Uninspected</p>
-                            <p className="text-2xl font-bold text-gray-800">{missingPropertiesReport.summary.uninspected_count}</p>
-                            <p className="text-xs text-gray-500">No inspection attempt</p>
-                          </div>
-                          <Eye className="w-8 h-8 text-gray-500" />
-                        </div>
-                      </div>
-
-                      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-sm text-red-600 font-medium">Validation Failed</p>
-                            <p className="text-2xl font-bold text-red-800">{missingPropertiesReport.summary.validation_failed_count}</p>
-                            <p className="text-xs text-red-500">Attempted but invalid</p>
-                          </div>
-                          <X className="w-8 h-8 text-red-500" />
-                        </div>
-                      </div>
-
-                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-sm text-blue-600 font-medium">Success Rate</p>
-                            <p className="text-2xl font-bold text-blue-800">
-                              {analytics?.totalRecords > 0 ? 
-                                Math.round(((analytics.totalRecords - missingPropertiesReport.summary.total_missing) / analytics.totalRecords) * 100) : 0}%
-                            </p>
-                            <p className="text-xs text-blue-500">Properties processed</p>
-                          </div>
-                          <CheckCircle className="w-8 h-8 text-blue-500" />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Breakdown by Reason */}
-                    <div className="bg-white border border-gray-200 rounded-lg p-6 mb-6">
-                      <h4 className="font-semibold text-gray-900 mb-4">Breakdown by Reason</h4>
-                      <div className="space-y-3">
-                        {Object.entries(missingPropertiesReport.summary.by_reason || {}).map(([reason, count]) => (
-                          <div key={reason} className="flex justify-between items-center p-3 bg-gray-50 rounded">
-                            <span className="text-sm text-gray-700">{reason}</span>
-                            <span className="font-bold text-gray-900">{count} properties</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Breakdown by Inspector */}
-                    <div className="bg-white border border-gray-200 rounded-lg p-6 mb-6">
-                      <h4 className="font-semibold text-gray-900 mb-4">Breakdown by Inspector</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        {Object.entries(missingPropertiesReport.summary.by_inspector || {}).map(([inspector, count]) => (
-                          <div key={inspector} className="p-3 bg-gray-50 rounded border">
-                            <div className="font-medium text-gray-900">{inspector}</div>
-                            <div className="text-sm text-gray-600">{count} missing properties</div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Detailed Missing Properties Table */}
-                    <div className="bg-white border border-gray-200 rounded-lg p-6">
-                      <h4 className="font-semibold text-gray-900 mb-4">Detailed Missing Properties</h4>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
-                          <thead className="bg-gray-50">
-                            <tr>
-                              <th className="px-3 py-2 text-left font-medium text-gray-700">Block</th>
-                              <th className="px-3 py-2 text-left font-medium text-gray-700">Lot</th>
-                              <th className="px-3 py-2 text-left font-medium text-gray-700">Qualifier</th>
-                              <th className="px-3 py-2 text-left font-medium text-gray-700">Property Location</th>
-                              <th className="px-3 py-2 text-left font-medium text-gray-700">Class</th>
-                              <th className="px-3 py-2 text-left font-medium text-gray-700">Inspector</th>
-                              <th className="px-3 py-2 text-left font-medium text-gray-700">InfoBy Code</th>
-                              <th className="px-3 py-2 text-left font-medium text-gray-700">Reason</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {(missingPropertiesReport.detailed_missing || []).map((property, idx) => (
-                              <tr key={idx} className={`border-t border-gray-200 ${
-                                property.reason.includes('No inspection attempt') ? 'bg-gray-50' : 'bg-red-50'
-                              }`}>
-                                <td className="px-3 py-2 font-medium">{property.block}</td>
-                                <td className="px-3 py-2 font-medium">{property.lot}</td>
-                                <td className="px-3 py-2">{property.qualifier || '-'}</td>
-                                <td className="px-3 py-2">{property.property_location}</td>
-                                <td className="px-3 py-2">
-                                  <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded font-medium">
-                                    {property.property_class}
-                                  </span>
-                                </td>
-                                <td className="px-3 py-2">{property.inspector}</td>
-                                <td className="px-3 py-2">{property.info_by_code || '-'}</td>
-                                <td className="px-3 py-2 text-xs">{property.reason}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
-
-            {/* Summary for Billing Tab */}
-            {activeTab === 'billing' && billingAnalytics && (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-bold text-gray-900">Summary for Billing</h3>
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                  <div>
-                    <h4 className="text-md font-semibold text-gray-800 mb-4">Individual Classes</h4>
-                    <div className="space-y-3">
-                      {Object.entries(billingAnalytics.byClass)
-                        .filter(([cls, data]) => data.total > 0)
-                        .map(([cls, data]) => {
-                          const isResidential = ['2', '3A'].includes(cls);
-                          const isCommercial = ['4A', '4B', '4C'].includes(cls);
-                          const colorClass = isResidential 
-                            ? 'bg-green-50 border-green-200' 
-                            : isCommercial 
-                            ? 'bg-blue-50 border-blue-200'
-                            : 'bg-gray-50 border-gray-200';
-                          const textColor = isResidential 
-                            ? 'text-green-600' 
-                            : isCommercial 
-                            ? 'text-blue-600' 
-                            : 'text-gray-600';
-                          const progressColor = isResidential ? 'green' : isCommercial ? 'blue' : 'gray';
-                          
-                          return (
-                            <div key={cls} className={`p-4 rounded-lg border ${colorClass}`}>
-                              <div className="flex justify-between items-center mb-2">
-                                <div>
-                                  <span className="font-medium text-gray-900">Class {cls}</span>
-                                  {isResidential && <span className="ml-2 text-xs text-green-600 font-medium">Residential</span>}
-                                  {isCommercial && <span className="ml-2 text-xs text-blue-600 font-medium">Commercial</span>}
-                                </div>
-                                <div className="text-right">
-                                  <div className={`font-bold ${textColor}`}>{data.billable.toLocaleString()}</div>
-                                  <div className="text-xs text-gray-500">of {data.total.toLocaleString()}</div>
-                                </div>
-                              </div>
-                              <ProgressBar current={data.billable} total={data.total} color={progressColor} />
-                            </div>
-                          );
-                        })}
-                    </div>
-                  </div>
-
-                  <div>
-                    <h4 className="text-md font-semibold text-gray-800 mb-4">Grouped Categories</h4>
-                    <div className="space-y-4">
-                      <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-                        <div className="flex justify-between items-center mb-2">
-                          <div>
-                            <span className="font-medium text-gray-900">Commercial (4A, 4B, 4C)</span>
-                            <div className="text-xs text-gray-600">Commercial properties</div>
-                          </div>
-                          <div className="text-right">
-                            <div className="font-bold text-blue-600 text-xl">{billingAnalytics.grouped.commercial.toLocaleString()}</div>
-                            <div className="text-xs text-blue-600">of {billingAnalytics.progressData.commercial.total.toLocaleString()}</div>
-                          </div>
-                        </div>
-                        <ProgressBar 
-                          current={billingAnalytics.progressData.commercial.billable} 
-                          total={billingAnalytics.progressData.commercial.total} 
-                          color="blue" 
-                        />
-                      </div>
-
-                      <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
-                        <div className="flex justify-between items-center mb-2">
-                          <div>
-                            <span className="font-medium text-gray-900">Exempt (15A-15F)</span>
-                            <div className="text-xs text-gray-600">Tax-exempt properties</div>
-                          </div>
-                          <div className="text-right">
-                            <div className="font-bold text-purple-600 text-xl">{billingAnalytics.grouped.exempt.toLocaleString()}</div>
-                            <div className="text-xs text-purple-600">of {billingAnalytics.progressData.exempt.total.toLocaleString()}</div>
-                          </div>
-                        </div>
-                        <ProgressBar 
-                          current={billingAnalytics.progressData.exempt.billable} 
-                          total={billingAnalytics.progressData.exempt.total} 
-                          color="purple" 
-                        />
-                      </div>
-
-                      <div className="p-4 bg-green-50 rounded-lg border border-green-200">
-                        <div className="flex justify-between items-center mb-2">
-                          <div>
-                            <span className="font-medium text-gray-900">Railroad (5A, 5B)</span>
-                            <div className="text-xs text-gray-600">Railroad properties</div>
-                          </div>
-                          <div className="text-right">
-                            <div className="font-bold text-green-600 text-xl">{billingAnalytics.grouped.railroad.toLocaleString()}</div>
-                            <div className="text-xs text-green-600">of {billingAnalytics.progressData.railroad.total.toLocaleString()}</div>
-                          </div>
-                        </div>
-                        <ProgressBar 
-                          current={billingAnalytics.progressData.railroad.billable} 
-                          total={billingAnalytics.progressData.railroad.total} 
-                          color="green" 
-                        />
-                      </div>
-
-                      <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-                        <div className="flex justify-between items-center mb-2">
-                          <div>
-                            <span className="font-medium text-gray-900">Personal Property (6A, 6B)</span>
-                            <div className="text-xs text-gray-600">Personal property</div>
-                          </div>
-                          <div className="text-right">
-                            <div className="font-bold text-gray-600 text-xl">{billingAnalytics.grouped.personalProperty.toLocaleString()}</div>
-                            <div className="text-xs text-gray-600">of {billingAnalytics.progressData.personalProperty.total.toLocaleString()}</div>
-                          </div>
-                        </div>
-                        <ProgressBar 
-                          current={billingAnalytics.progressData.personalProperty.billable} 
-                          total={billingAnalytics.progressData.personalProperty.total} 
-                          color="gray" 
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Validation Report Tab */}
-            {activeTab === 'validation' && validationReport && (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-bold text-gray-900">
-                    Enhanced Validation Report - Smart Validation
-                  </h3>
-                  {validationReport.summary.total_issues > 0 && (
-                    <button
-                      onClick={exportValidationReport}
-                      className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center space-x-2"
-                    >
-                      <Download className="w-4 h-4" />
-                      <span>Export Report</span>
-                    </button>
-                  )}
-                </div>
-
-                {validationReport.summary.total_issues === 0 ? (
-                  <div className="text-center py-8">
-                    <CheckCircle className="w-12 h-12 mx-auto mb-4 text-green-500" />
-                    <h4 className="text-lg font-semibold text-gray-900 mb-2">No Validation Issues</h4>
-                    <p className="text-gray-600">All attempted inspections passed validation checks</p>
-                    <p className="text-sm text-gray-500 mt-2">Properties not yet inspected are excluded from validation</p>
-                  </div>
-                ) : (
-                  <>
-                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
-                      <h4 className="font-semibold text-yellow-800 mb-3">Inspector Summary - Issues with Attempted Inspections Only</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        {validationReport.summary.inspector_breakdown.map((inspector, idx) => (
-                          <div 
-                            key={idx}
-                            onClick={() => setSelectedInspectorIssues(
-                              selectedInspectorIssues === inspector.inspector_code ? null : inspector.inspector_code
-                            )}
-                            className="p-3 bg-white rounded border cursor-pointer hover:bg-yellow-50 transition-colors"
-                          >
-                            <div className="flex justify-between items-center">
-                              <div>
-                                <div className="font-medium text-gray-900">{inspector.inspector_code}</div>
-                                <div className="text-sm text-gray-600">{inspector.inspector_name}</div>
-                              </div>
-                              <div className="text-right">
-                                <div className="font-bold text-red-600">{inspector.total_issues}</div>
-                                <div className="text-xs text-gray-500">issues</div>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {selectedInspectorIssues && validationReport.detailed_issues[selectedInspectorIssues] && (
-                      <div className="bg-white border border-gray-200 rounded-lg p-4">
-                        <h4 className="font-semibold text-gray-900 mb-4">
-                          Issues for {selectedInspectorIssues} - {validationReport.summary.inspector_breakdown.find(i => i.inspector_code === selectedInspectorIssues)?.inspector_name}
-                        </h4>
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-sm">
-                            <thead className="bg-gray-50">
-                              <tr>
-                                <th className="px-3 py-2 text-left font-medium text-gray-700">Block</th>
-                                <th className="px-3 py-2 text-left font-medium text-gray-700">Lot</th>
-                                <th className="px-3 py-2 text-left font-medium text-gray-700">Qualifier</th>
-                                <th className="px-3 py-2 text-left font-medium text-gray-700">Property Location</th>
-                                <th className="px-3 py-2 text-left font-medium text-gray-700">Compound Issues</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {validationReport.detailed_issues[selectedInspectorIssues].map((issue, idx) => (
-                                <tr key={idx} className="border-t border-gray-200">
-                                  <td className="px-3 py-2">{issue.block}</td>
-                                  <td className="px-3 py-2">{issue.lot}</td>
-                                  <td className="px-3 py-2">{issue.qualifier || '-'}</td>
-                                  <td className="px-3 py-2">{issue.property_location}</td>
-                                  <td className="px-3 py-2 text-red-600">{issue.warning_message}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    )}
-
-                    {!selectedInspectorIssues && (
-                      <div className="text-center py-8 text-gray-500">
-                        <FileText className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-                        <p>Click on an inspector above to view detailed issues</p>
-                        <p className="text-sm mt-2">Only properties with inspection attempts are validated</p>
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
-export default ProductionTracker;import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Factory, Settings, Download, RefreshCw, AlertTriangle, CheckCircle, TrendingUp, DollarSign, Users, Calendar, X, ChevronDown, ChevronUp, Eye, FileText, Lock, Unlock, Save } from 'lucide-react';
 import { supabase, jobService } from '../../lib/supabaseClient';
 
-// 🔧 ENHANCED: Accept App.js state management props
-const ProductionTracker = ({ 
-  jobData, 
-  onBackToJobs, 
-  latestFileVersion, 
-  propertyRecordsCount,
-  // NEW: App.js integration props with defaults
-  currentWorkflowStats = null,
-  onAnalyticsUpdate = () => {},
-  onUpdateWorkflowStats = () => {}
-}) => {
-  // 🔧 DEBUG: Log received props on component mount
-  useEffect(() => {
-    console.log('🔍 ProductionTracker Props Received:', {
-      hasJobData: !!jobData,
-      jobId: jobData?.id,
-      latestFileVersion,
-      propertyRecordsCount,
-      hasCurrentWorkflowStats: !!currentWorkflowStats,
-      currentWorkflowStatsKeys: currentWorkflowStats ? Object.keys(currentWorkflowStats) : null,
-      hasOnAnalyticsUpdate: typeof onAnalyticsUpdate === 'function',
-      hasOnUpdateWorkflowStats: typeof onUpdateWorkflowStats === 'function'
-    });
-  }, []);
-  
+const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyRecordsCount }) => {
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [processed, setProcessed] = useState(false);
@@ -418,9 +10,14 @@ const ProductionTracker = ({
   const [analytics, setAnalytics] = useState(null);
   const [billingAnalytics, setBillingAnalytics] = useState(null);
   const [validationReport, setValidationReport] = useState(null);
-  const [missingPropertiesReport, setMissingPropertiesReport] = useState(null);  // NEW: Missing properties tracking
   const [sessionHistory, setSessionHistory] = useState([]);
   const [notifications, setNotifications] = useState([]);
+  
+  // NEW: Commercial inspection counts from inspection_data
+  const [commercialCounts, setCommercialCounts] = useState({
+    inspected: 0,
+    priced: 0
+  });
   
   // Settings state - Enhanced InfoBy category configuration
   const [availableInfoByCodes, setAvailableInfoByCodes] = useState([]);
@@ -429,8 +26,7 @@ const ProductionTracker = ({
     refusal: [],
     estimation: [],
     invalid: [],
-    priced: [],
-    special: []  // NEW: For V (Vacant Land), N (Special Appraisal), etc.
+    priced: []
   });
   const [originalCategoryConfig, setOriginalCategoryConfig] = useState({});
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -444,7 +40,7 @@ const ProductionTracker = ({
   const [selectedInspectorIssues, setSelectedInspectorIssues] = useState(null);
   
   // NEW: Add collapsible InfoBy configuration state
-  const [showInfoByConfig, setShowInfoByConfig] = useState(false);
+  const [showInfoByConfig, setShowInfoByConfig] = useState(true);
   const [detectedVendor, setDetectedVendor] = useState(null);
   
   // Inspector filtering and sorting
@@ -466,47 +62,58 @@ const ProductionTracker = ({
     console.log(`🔍 [${section}] ${message}`, data || '');
   };
 
-  // 🔧 NEW: Check for existing App.js analytics on component mount
-  useEffect(() => {
-    try {
-      if (currentWorkflowStats?.isProcessed && currentWorkflowStats.totalRecords > 0) {
-        debugLog('APP_STATE', '📊 Loading existing analytics from App.js state');
-        
-        // Reconstruct analytics from App.js format
-        const existingAnalytics = {
-          totalRecords: currentWorkflowStats.totalRecords,
-          validInspections: currentWorkflowStats.validInspections,
-          jobEntryRate: currentWorkflowStats.jobEntryRate,
-          jobRefusalRate: currentWorkflowStats.jobRefusalRate,
-          commercialCompletePercent: currentWorkflowStats.commercialCompletePercent,
-          pricingCompletePercent: currentWorkflowStats.pricingCompletePercent,
-          classBreakdown: currentWorkflowStats.classBreakdown,
-          inspectorStats: currentWorkflowStats.inspectorStats,
-          lastProcessed: currentWorkflowStats.lastProcessed
-        };
+  // NEW: Load commercial inspection counts from inspection_data
+  const loadCommercialCounts = async () => {
+    if (!jobData?.id || !latestFileVersion) return;
 
-        setAnalytics(existingAnalytics);
-        setBillingAnalytics(currentWorkflowStats.billingAnalytics);
-        setValidationReport(currentWorkflowStats.validationReport);
-        setProcessed(true);
-        setSettingsLocked(true);
-        
-        addNotification('✅ Analytics ready - showing existing results', 'info');
-        debugLog('APP_STATE', '✅ Analytics restored from App.js state');
-      }
+    try {
+      // Count inspected commercial properties (4A, 4B, 4C)
+      const { data: inspectedData, error: inspectedError } = await supabase
+        .from('inspection_data')
+        .select('property_composite_key')
+        .eq('job_id', jobData.id)
+        .eq('file_version', latestFileVersion)
+        .in('property_class', ['4A', '4B', '4C'])
+        .not('measure_by', 'is', null)
+        .not('measure_date', 'is', null);
+
+      if (inspectedError) throw inspectedError;
+
+      // Count priced commercial properties
+      const { data: pricedData, error: pricedError } = await supabase
+        .from('inspection_data')
+        .select('property_composite_key')
+        .eq('job_id', jobData.id)
+        .eq('file_version', latestFileVersion)
+        .in('property_class', ['4A', '4B', '4C'])
+        .not('price_by', 'is', null)
+        .not('price_date', 'is', null);
+
+      if (pricedError) throw pricedError;
+
+      setCommercialCounts({
+        inspected: inspectedData?.length || 0,
+        priced: pricedData?.length || 0
+      });
+
+      debugLog('COMMERCIAL_COUNTS', 'Loaded commercial counts from inspection_data', {
+        inspected: inspectedData?.length || 0,
+        priced: pricedData?.length || 0,
+        totalCommercial: jobData.totalCommercial
+      });
+
     } catch (error) {
-      console.error('Error loading App.js state:', error);
-      addNotification('Warning: Could not load previous analytics state', 'warning');
+      console.error('Error loading commercial counts:', error);
+      debugLog('COMMERCIAL_COUNTS', 'Error loading commercial counts');
     }
-  }, [currentWorkflowStats]);
+  };
 
   // Load employee data for inspector details
   const loadEmployeeData = async () => {
     try {
       const { data: employees, error } = await supabase
         .from('employees')
-        .select('id, first_name, last_name, inspector_type, employment_status, initials')
-        .in('inspector_type', ['Residential', 'Commercial', 'Management']); // Only actual inspectors
+        .select('id, first_name, last_name, inspector_type, employment_status, initials');
 
       if (error) throw error;
 
@@ -523,7 +130,7 @@ const ProductionTracker = ({
       });
 
       setEmployeeData(employeeMap);
-      debugLog('EMPLOYEES', 'Loaded inspector data with types', { 
+      debugLog('EMPLOYEES', 'Loaded employee data with types', { 
         count: Object.keys(employeeMap).length,
         inspectorTypes: Object.values(employeeMap).reduce((acc, emp) => {
           const type = emp.inspector_type || 'untyped';
@@ -591,22 +198,30 @@ const ProductionTracker = ({
         
         debugLog('CODES', 'BRT sections available:', Object.keys(sections));
         
-        // FIXED: Look for InfoBy codes in Residential section, key 30, MAP - LOAD ALL CODES
+        // Look for InfoBy codes in Residential section, key 30, MAP
         const residentialSection = sections['Residential'];
         if (residentialSection && residentialSection['30'] && residentialSection['30'].MAP) {
-          debugLog('CODES', 'Found Residential[30].MAP, loading ALL InfoBy codes...');
+          debugLog('CODES', 'Found Residential[30].MAP, checking for InfoBy codes...');
           
           Object.keys(residentialSection['30'].MAP).forEach(key => {
             const item = residentialSection['30'].MAP[key];
             if (item && item.DATA && item.DATA.VALUE) {
-              codes.push({
-                code: item.KEY || item.DATA.KEY,
-                description: item.DATA.VALUE,
-                section: 'Residential[30]',
-                vendor: 'BRT'
-              });
-              
-              debugLog('CODES', `Found InfoBy code: ${item.KEY} = ${item.DATA.VALUE}`);
+              const description = item.DATA.VALUE.toUpperCase();
+              if (description.includes('OWNER') || description.includes('SPOUSE') || 
+                  description.includes('TENANT') || description.includes('AGENT') ||
+                  description.includes('REFUSED') || description.includes('ESTIMATED') ||
+                  description.includes('DOOR') || description.includes('CONVERSION') ||
+                  description.includes('PRICED')) {
+                
+                codes.push({
+                  code: item.KEY || item.DATA.KEY,
+                  description: item.DATA.VALUE,
+                  section: 'Residential[30]',
+                  vendor: 'BRT'
+                });
+                
+                debugLog('CODES', `Found InfoBy code: ${item.KEY} = ${item.DATA.VALUE}`);
+              }
             }
           });
         } else {
@@ -637,69 +252,18 @@ const ProductionTracker = ({
         }
 
       } else if (vendor === 'Microsystems') {
-        // NEW: Read from dual-pattern parsing structure
-        const fieldCodes = job.parsed_code_definitions.field_codes;
-        const flatLookup = job.parsed_code_definitions.flat_lookup;
-        
-        debugLog('CODES', 'Microsystems parsed structure:', {
-          hasFieldCodes: !!fieldCodes,
-          hasFlatLookup: !!flatLookup,
-          fieldCodesKeys: fieldCodes ? Object.keys(fieldCodes) : [],
-          has140Category: !!(fieldCodes && fieldCodes['140'])
-        });
-
-        if (fieldCodes && fieldCodes['140']) {
-          // NEW: Read from structured field_codes['140']
-          debugLog('CODES', 'Found 140 category in field_codes, loading InfoBy codes...');
-          
-          Object.keys(fieldCodes['140']).forEach(actualCode => {
-            const codeData = fieldCodes['140'][actualCode];
+        Object.keys(job.parsed_code_definitions).forEach(code => {
+          if (code.startsWith('140')) {
+            const description = job.parsed_code_definitions[code];
             codes.push({
-              code: actualCode, // Display single letter like "A"
-              description: codeData.description,
+              code: code,
+              description: description,
               section: 'InfoBy',
               vendor: 'Microsystems',
-              storageCode: actualCode, // Store single letter like "A"
-              fullCode: codeData.full_code || `140${actualCode}` // Keep full code for reference
+              storageCode: code.substring(3) // Strip 140 prefix for storage (140A -> A)
             });
-            
-            debugLog('CODES', `Found InfoBy code: ${actualCode} = ${codeData.description}`);
-          });
-          
-        } else if (flatLookup) {
-          // FALLBACK: Read from flat_lookup for backward compatibility
-          debugLog('CODES', 'No field_codes[140], trying flat_lookup fallback...');
-          
-          Object.keys(flatLookup).forEach(code => {
-            if (code.startsWith('140')) {
-              const description = flatLookup[code];
-              codes.push({
-                code: code,
-                description: description,
-                section: 'InfoBy',
-                vendor: 'Microsystems',
-                storageCode: code.substring(3) // Strip 140 prefix for storage (140A -> A)
-              });
-            }
-          });
-          
-        } else {
-          // LEGACY: Old format fallback
-          debugLog('CODES', 'No structured format found, trying legacy format...');
-          
-          Object.keys(job.parsed_code_definitions).forEach(code => {
-            if (code.startsWith('140')) {
-              const description = job.parsed_code_definitions[code];
-              codes.push({
-                code: code,
-                description: description,
-                section: 'InfoBy',
-                vendor: 'Microsystems',
-                storageCode: code.substring(3) // Strip 140 prefix for storage (140A -> A)
-              });
-            }
-          });
-        }
+          }
+        });
       }
 
       setAvailableInfoByCodes(codes);
@@ -745,12 +309,12 @@ const ProductionTracker = ({
 
   // Set default InfoBy category configurations
   const setDefaultCategoryConfig = (vendor, codes) => {
-    const defaultConfig = { entry: [], refusal: [], estimation: [], invalid: [], priced: [], special: [] };
+    const defaultConfig = { entry: [], refusal: [], estimation: [], invalid: [], priced: [] };
 
     if (vendor === 'BRT') {
       codes.forEach(item => {
         const desc = item.description.toUpperCase();
-        if (desc.includes('OWNER') || desc.includes('SPOUSE') || desc.includes('TENANT') || desc.includes('AGENT') || desc.includes('EMPLOYEE')) {
+        if (desc.includes('OWNER') || desc.includes('SPOUSE') || desc.includes('TENANT') || desc.includes('AGENT')) {
           defaultConfig.entry.push(item.code);
         } else if (desc.includes('REFUSED')) {
           defaultConfig.refusal.push(item.code);
@@ -761,7 +325,6 @@ const ProductionTracker = ({
         } else if (desc.includes('CONVERSION') || desc.includes('PRICED')) {
           defaultConfig.priced.push(item.code);
         }
-        // NOTE: Codes that don't match any keywords will be left unassigned for manual configuration
       });
     } else if (vendor === 'Microsystems') {
       codes.forEach(item => {
@@ -771,13 +334,10 @@ const ProductionTracker = ({
           defaultConfig.entry.push(storageCode);
         } else if (desc.includes('REFUSED')) {
           defaultConfig.refusal.push(storageCode);
-        } else if (desc.includes('ESTIMATED')) {
+        } else if (desc.includes('ESTIMATED') || desc.includes('VACANT')) {
           defaultConfig.estimation.push(storageCode);
         } else if (desc.includes('PRICED') || desc.includes('NARRATIVE') || desc.includes('ENCODED')) {
           defaultConfig.priced.push(storageCode);
-        } else if (desc.includes('VACANT') || desc.includes('SPECIAL') || desc.includes('APPRAISAL')) {
-          // NEW: Auto-assign V (Vacant Land) and N (Special Appraisal) to special category
-          defaultConfig.special.push(storageCode);
         }
       });
     }
@@ -808,7 +368,6 @@ const ProductionTracker = ({
             ...analytics,
             billingAnalytics,
             validationReport,
-            missingPropertiesReport,  // NEW: Persist missing properties report
             lastProcessed: new Date().toISOString()
           } : undefined
         })
@@ -838,17 +397,13 @@ const ProductionTracker = ({
         .single();
 
       if (!error && job?.workflow_stats && job.workflow_stats.totalRecords) {
-        // Only load if we don't already have analytics from App.js
-        if (!analytics) {
-          setAnalytics(job.workflow_stats);
-          setBillingAnalytics(job.workflow_stats.billingAnalytics);
-          setValidationReport(job.workflow_stats.validationReport);
-          setMissingPropertiesReport(job.workflow_stats.missingPropertiesReport);
-          setProcessed(true);
-          setSettingsLocked(true);
-          debugLog('PERSISTENCE', '✅ Loaded persisted analytics from job record (fallback)');
-          addNotification('✅ Analytics ready - loaded from database', 'info');
-        }
+        setAnalytics(job.workflow_stats);
+        setBillingAnalytics(job.workflow_stats.billingAnalytics);
+        setValidationReport(job.workflow_stats.validationReport);
+        setProcessed(true);
+        setSettingsLocked(true);
+        debugLog('PERSISTENCE', '✅ Loaded persisted analytics from job record');
+        addNotification('Previously processed analytics loaded', 'info');
       }
     } catch (error) {
       console.error('Error loading persisted analytics:', error);
@@ -908,6 +463,18 @@ const ProductionTracker = ({
     addNotification('Project start date unlocked for editing', 'info');
   };
 
+  // Reset session functionality
+  const resetSession = () => {
+    setSessionId(null);
+    setSettingsLocked(false);
+    setProcessed(false);
+    setAnalytics(null);
+    setBillingAnalytics(null);
+    setValidationReport(null);
+    setCommercialCounts({ inspected: 0, priced: 0 });
+    addNotification('🔄 Session reset - settings unlocked', 'info');
+  };
+
   // Initialize data loading
   useEffect(() => {
     if (jobData?.id && latestFileVersion) {
@@ -916,6 +483,7 @@ const ProductionTracker = ({
       loadProjectStartDate();
       loadPersistedAnalytics(); // ENHANCED: Load persisted analytics
       loadVendorSource(); // NEW: Load vendor source for display
+      loadCommercialCounts(); // NEW: Load commercial counts from inspection_data
       setLoading(false);
     }
   }, [jobData?.id, latestFileVersion]);
@@ -934,14 +502,8 @@ const ProductionTracker = ({
     }
 
     try {
-      // NEW: Get actual vendor from property_records - DECLARE FIRST
-      let actualVendor = null;
-      try {
-        actualVendor = await loadVendorSource();
-      } catch (error) {
-        console.error('Error loading vendor source:', error);
-        actualVendor = jobData.vendor_type;
-      }
+      // NEW: Get actual vendor from property_records
+      const actualVendor = await loadVendorSource();
       
       // VENDOR DETECTION DEBUG
       debugLog('VENDOR', 'Vendor detection check', { 
@@ -960,16 +522,15 @@ const ProductionTracker = ({
 
       // Get all valid InfoBy codes for validation
       const allValidCodes = [
-        ...(infoByCategoryConfig.entry || []),
-        ...(infoByCategoryConfig.refusal || []),
-        ...(infoByCategoryConfig.estimation || []),
-        ...(infoByCategoryConfig.priced || []),
-        ...(infoByCategoryConfig.special || [])  // NEW: Include special codes in validation
+        ...infoByCategoryConfig.entry,
+        ...infoByCategoryConfig.refusal,
+        ...infoByCategoryConfig.estimation,
+        ...infoByCategoryConfig.priced
       ];
 
       // Load ALL records using pagination to bypass Supabase 1000 limit
       let allRecords = [];
-      let startIndex = 0;  // 🔧 RENAMED: 'start' might conflict with something
+      let start = 0;
       const batchSize = 1000;
       
       debugLog('ANALYTICS', 'Loading all property records using pagination...');
@@ -997,15 +558,15 @@ const ProductionTracker = ({
           .eq('file_version', latestFileVersion)
           .order('property_block', { ascending: true })
           .order('property_lot', { ascending: true })
-          .range(startIndex, startIndex + batchSize - 1);
+          .range(start, start + batchSize - 1);
         
         if (batchError) throw batchError;
         if (!batchData || batchData.length === 0) break;
         
         allRecords = [...allRecords, ...batchData];
-        debugLog('ANALYTICS', `Loaded batch ${Math.floor(startIndex/batchSize) + 1}: ${batchData.length} records (total: ${allRecords.length})`);
+        debugLog('ANALYTICS', `Loaded batch ${Math.floor(start/batchSize) + 1}: ${batchData.length} records (total: ${allRecords.length})`);
         
-        startIndex += batchSize;
+        start += batchSize;
         
         if (batchData.length < batchSize) break;
       }
@@ -1013,21 +574,13 @@ const ProductionTracker = ({
       const rawData = allRecords;
       debugLog('ANALYTICS', `✅ Loaded ${rawData?.length || 0} property records for analysis`);
 
-      // 🔧 FIXED: Declare startDate safely 
-      let startDate;
-      try {
-        startDate = new Date(projectStartDate);
-      } catch (error) {
-        throw new Error(`Invalid project start date: ${projectStartDate}`);
-      }
-      
+      const startDate = new Date(projectStartDate);
       const inspectorStats = {};
       const classBreakdown = {};
       const billingByClass = {};
       const propertyIssues = {};
       const inspectorIssuesMap = {};
       const inspectionDataBatch = []; // NEW: For inspection_data UPSERT
-      const missingProperties = []; // NEW: Track properties not added to inspection_data
 
       // Initialize class counters - FIXED: Count ALL properties for denominators
       const allClasses = ['1', '2', '3A', '3B', '4A', '4B', '4C', '15A', '15B', '15C', '15D', '15E', '15F', '5A', '5B', '6A', '6B'];
@@ -1051,262 +604,201 @@ const ProductionTracker = ({
           billingByClass[propertyClass].total++;
         }
 
-        // 🔧 NEW: Track this property's processing status
-        let wasAddedToInspectionData = false;
-        let reasonNotAdded = '';
-
         // Skip UNASSIGNED for inspector analytics but continue for totals
-        if (inspector === 'UNASSIGNED') {
-          reasonNotAdded = 'Inspector UNASSIGNED';
+        if (inspector === 'UNASSIGNED') return;
+
+        // Initialize inspector stats
+        if (!inspectorStats[inspector]) {
+          const employeeInfo = employeeData[inspector] || {};
+          inspectorStats[inspector] = {
+            name: employeeInfo.name || inspector,
+            fullName: employeeInfo.fullName || inspector,
+            inspector_type: employeeInfo.inspector_type,
+            totalInspected: 0, // NEW: All valid inspections
+            residentialInspected: 0, // NEW: 2, 3A only
+            commercialInspected: 0, // NEW: 4A, 4B, 4C only
+            entry: 0,
+            refusal: 0,
+            priced: 0,
+            // NEW: Separate field day tracking
+            allWorkDays: new Set(),
+            residentialWorkDays: new Set(), // Days with 2/3A work
+            commercialWorkDays: new Set(), // Days with 4A/4B/4C work
+            pricingWorkDays: new Set()
+          };
+          inspectorIssuesMap[inspector] = [];
         }
-        // ENHANCED: Skip inspections before project start date (removes old inspector noise)
-        else if (measuredDate && measuredDate < startDate) {
-          reasonNotAdded = 'Inspection date before project start date';
+
+        // Check for any inspection attempt
+        const hasAnyInspectionAttempt = (
+          (record.inspection_measure_by && record.inspection_measure_by.trim() !== '') ||
+          record.inspection_measure_date ||
+          record.inspection_info_by ||
+          record.inspection_list_by ||
+          record.inspection_price_by
+        );
+
+        if (!hasAnyInspectionAttempt) {
+          // Property not yet inspected - skip validation entirely
+          return;
         }
-        // ENHANCED: Skip inspectors with invalid initials (not in employee database)
-        else if (!employeeData[inspector]) {
-          reasonNotAdded = `Inspector ${inspector} not found in employee database`;
+
+        // Validate attempted inspections
+        let isValidInspection = true;
+        let hasValidMeasuredBy = inspector && inspector !== 'UNASSIGNED' && inspector.trim() !== '';
+        let hasValidMeasuredDate = measuredDate && measuredDate >= startDate;
+        
+        const normalizedInfoBy = infoByCode?.toString().padStart(2, '0');
+        const normalizedValidCodes = allValidCodes.map(code => code.toString().padStart(2, '0'));
+        let hasValidInfoBy = normalizedInfoBy && normalizedValidCodes.includes(normalizedInfoBy);
+        
+        // Compound validation messages per property
+        const addValidationIssue = (message) => {
+          if (!propertyIssues[propertyKey]) {
+            propertyIssues[propertyKey] = {
+              block: record.property_block,
+              lot: record.property_lot,
+              qualifier: record.property_qualifier || '',
+              property_location: record.property_location || '',
+              inspector: inspector,
+              issues: []
+            };
+          }
+          propertyIssues[propertyKey].issues.push(message);
+          isValidInspection = false;
+        };
+
+        // Core validation rules
+        if (!hasValidInfoBy) {
+          addValidationIssue(`Invalid InfoBy code: ${infoByCode}`);
         }
-        else {
-          // Continue with normal processing for valid records
+        if (!hasValidMeasuredBy) {
+          addValidationIssue('Missing or invalid inspector');
+        }
+        if (!hasValidMeasuredDate) {
+          addValidationIssue('Missing or invalid measure date');
+        }
+
+        // Business logic validation
+        const isEntryCode = infoByCategoryConfig.entry.includes(normalizedInfoBy);
+        const isRefusalCode = infoByCategoryConfig.refusal.includes(normalizedInfoBy);
+        const isEstimationCode = infoByCategoryConfig.estimation.includes(normalizedInfoBy);
+        const isPricedCode = infoByCategoryConfig.priced.includes(normalizedInfoBy);
+        const hasListingData = record.inspection_list_by && record.inspection_list_date;
+
+        if (isRefusalCode && !hasListingData) {
+          addValidationIssue(`Refusal code ${infoByCode} but missing listing data`);
+        }
+        if (isEntryCode && !hasListingData) {
+          addValidationIssue(`Entry code ${infoByCode} but missing listing data`);
+        }
+        if (isEstimationCode && hasListingData) {
+          addValidationIssue(`Estimation code ${infoByCode} but has listing data`);
+        }
+
+        // NEW: Corrected inspector type validation
+        const isCommercialProperty = ['4A', '4B', '4C'].includes(propertyClass);
+        const isResidentialProperty = ['2', '3A'].includes(propertyClass);
+        const isResidentialInspector = employeeData[inspector]?.inspector_type === 'residential';
+        
+        // Residential inspectors CAN'T do commercial (4A, 4B, 4C) - everything else is OK
+        if (isCommercialProperty && isResidentialInspector) {
+          addValidationIssue(`Residential inspector on commercial property`);
+        }
+
+        if (record.values_mod_improvement === 0 && !hasListingData) {
+          addValidationIssue('Zero improvement property missing listing data');
+        }
+
+        // NEW: Process valid inspections with corrected counting
+        if (isValidInspection && hasValidInfoBy && hasValidMeasuredBy && hasValidMeasuredDate) {
           
-          // Initialize inspector stats
-          if (!inspectorStats[inspector]) {
-            const employeeInfo = employeeData[inspector] || {};
-            inspectorStats[inspector] = {
-              name: employeeInfo.name || inspector,
-              fullName: employeeInfo.fullName || inspector,
-              inspector_type: employeeInfo.inspector_type,
-              totalInspected: 0, // NEW: All valid inspections
-              residentialInspected: 0, // NEW: 2, 3A only
-              commercialInspected: 0, // NEW: 4A, 4B, 4C only
-              entry: 0,
-              refusal: 0,
-              priced: 0,
-              // NEW: Separate field day tracking
-              allWorkDays: new Set(),
-              residentialWorkDays: new Set(), // Days with 2/3A work
-              commercialWorkDays: new Set(), // Days with 4A/4B/4C work
-              pricingWorkDays: new Set()
-            };
-            inspectorIssuesMap[inspector] = [];
+          // Count for manager progress (valid inspections against total properties)
+          if (classBreakdown[propertyClass]) {
+            classBreakdown[propertyClass].inspected++;
+            billingByClass[propertyClass].inspected++;
+            billingByClass[propertyClass].billable++;
           }
 
-          // Check for any inspection attempt
-          const hasAnyInspectionAttempt = (
-            (record.inspection_measure_by && record.inspection_measure_by.trim() !== '') ||
-            record.inspection_measure_date ||
-            record.inspection_info_by ||
-            record.inspection_list_by ||
-            record.inspection_price_by
-          );
+          // Inspector analytics - count ALL valid inspections
+          inspectorStats[inspector].totalInspected++;
+          
+          const workDayString = measuredDate.toISOString().split('T')[0];
+          inspectorStats[inspector].allWorkDays.add(workDayString);
 
-          if (!hasAnyInspectionAttempt) {
-            // Property not yet inspected - skip validation entirely
-            reasonNotAdded = 'No inspection attempt - completely uninspected';
-          }
-          else {
-            // Validate attempted inspections
-            let isValidInspection = true;
-            let hasValidMeasuredBy = inspector && inspector !== 'UNASSIGNED' && inspector.trim() !== '';
-            let hasValidMeasuredDate = measuredDate && measuredDate >= startDate;
+          // NEW: Separate residential and commercial counting for analytics
+          if (isResidentialProperty) {
+            inspectorStats[inspector].residentialInspected++;
+            inspectorStats[inspector].residentialWorkDays.add(workDayString);
             
-            // 🔧 FIXED: Vendor-specific InfoBy validation
-            let hasValidInfoBy;
-            let normalizedInfoBy; // Declare at top for use in business logic below
-            const currentVendor = actualVendor || jobData.vendor_type;
-            
-            if (currentVendor === 'Microsystems') {
-              // Direct comparison for Microsystems (no padding) - codes are single letters
-              normalizedInfoBy = infoByCode; // Keep original for Microsystems
-              hasValidInfoBy = infoByCode && allValidCodes.includes(infoByCode);
-            } else {
-              // BRT logic with zero padding (keep existing working logic)
-              normalizedInfoBy = infoByCode?.toString().padStart(2, '0');
-              const normalizedValidCodes = allValidCodes.map(code => code.toString().padStart(2, '0'));
-              hasValidInfoBy = normalizedInfoBy && normalizedValidCodes.includes(normalizedInfoBy);
-            }
-            
-            // Compound validation messages per property
-            const addValidationIssue = (message) => {
-              if (!propertyIssues[propertyKey]) {
-                propertyIssues[propertyKey] = {
-                  block: record.property_block,
-                  lot: record.property_lot,
-                  qualifier: record.property_qualifier || '',
-                  property_location: record.property_location || '',
-                  inspector: inspector,
-                  issues: []
-                };
-              }
-              propertyIssues[propertyKey].issues.push(message);
-              isValidInspection = false;
-            };
-
-            // Core validation rules
-            if (!hasValidInfoBy) {
-              addValidationIssue(`Invalid InfoBy code: ${infoByCode}`);
-            }
-            if (!hasValidMeasuredBy) {
-              addValidationIssue('Missing or invalid inspector');
-            }
-            if (!hasValidMeasuredDate) {
-              addValidationIssue('Missing or invalid measure date');
-            }
-
-            // Business logic validation
-            const isEntryCode = (infoByCategoryConfig.entry || []).includes(normalizedInfoBy);
-            const isRefusalCode = (infoByCategoryConfig.refusal || []).includes(normalizedInfoBy);
-            const isEstimationCode = (infoByCategoryConfig.estimation || []).includes(normalizedInfoBy);
-            const isPricedCode = (infoByCategoryConfig.priced || []).includes(normalizedInfoBy);
-            const isSpecialCode = (infoByCategoryConfig.special || []).includes(normalizedInfoBy);  // NEW: Special code check
-            const hasListingData = record.inspection_list_by && record.inspection_list_date;
-
-            if (isRefusalCode && !hasListingData) {
-              addValidationIssue(`Refusal code ${infoByCode} but missing listing data`);
-            }
-            if (isEntryCode && !hasListingData) {
-              addValidationIssue(`Entry code ${infoByCode} but missing listing data`);
-            }
-            if (isEstimationCode && hasListingData) {
-              addValidationIssue(`Estimation code ${infoByCode} but has listing data`);
-            }
-            // NOTE: Special codes (V, N) are allowed to have listing data - no validation needed
-
-            // NEW: Corrected inspector type validation
-            const isCommercialProperty = ['4A', '4B', '4C'].includes(propertyClass);
-            const isResidentialProperty = ['2', '3A'].includes(propertyClass);
-            const isResidentialInspector = employeeData[inspector]?.inspector_type === 'Residential';
-            
-            // Residential inspectors CAN'T do commercial (4A, 4B, 4C) - everything else is OK
-            if (isCommercialProperty && isResidentialInspector) {
-              addValidationIssue(`Residential inspector on commercial property`);
-            }
-
-            if (record.values_mod_improvement === 0 && !hasListingData) {
-              addValidationIssue('Zero improvement property missing listing data');
-            }
-
-            // 🔧 FIXED: Only add to inspection_data if ALL validation passes
-            if (isValidInspection && hasValidInfoBy && hasValidMeasuredBy && hasValidMeasuredDate) {
-              
-              // Count for manager progress (valid inspections against total properties)
+            // Entry/Refusal counting (only for residential properties 2, 3A)
+            if (isEntryCode) {
+              inspectorStats[inspector].entry++;
               if (classBreakdown[propertyClass]) {
-                classBreakdown[propertyClass].inspected++;
-                billingByClass[propertyClass].inspected++;
-                billingByClass[propertyClass].billable++;
+                classBreakdown[propertyClass].entry++;
               }
-
-              // Inspector analytics - count ALL valid inspections
-              inspectorStats[inspector].totalInspected++;
-              
-              const workDayString = measuredDate.toISOString().split('T')[0];
-              inspectorStats[inspector].allWorkDays.add(workDayString);
-
-              // NEW: Separate residential and commercial counting for analytics
-              if (isResidentialProperty) {
-                inspectorStats[inspector].residentialInspected++;
-                inspectorStats[inspector].residentialWorkDays.add(workDayString);
-                
-                // Entry/Refusal counting (only for residential properties 2, 3A)
-                if (isEntryCode) {
-                  inspectorStats[inspector].entry++;
-                  if (classBreakdown[propertyClass]) {
-                    classBreakdown[propertyClass].entry++;
-                  }
-                } else if (isRefusalCode) {
-                  inspectorStats[inspector].refusal++;
-                  if (classBreakdown[propertyClass]) {
-                    classBreakdown[propertyClass].refusal++;
-                  }
-                }
+            } else if (isRefusalCode) {
+              inspectorStats[inspector].refusal++;
+              if (classBreakdown[propertyClass]) {
+                classBreakdown[propertyClass].refusal++;
               }
-              
-              if (isCommercialProperty) {
-                inspectorStats[inspector].commercialInspected++;
-                inspectorStats[inspector].commercialWorkDays.add(workDayString);
-              }
-
-              // FIXED: Pricing logic with vendor detection
-              if (isCommercialProperty) {
-                const currentVendor = actualVendor || jobData.vendor_type;
-
-                if (currentVendor === 'BRT' && 
-                    record.inspection_price_by && 
-                    record.inspection_price_by.trim() !== '' &&
-                    priceDate && 
-                    priceDate >= startDate) {
-                  
-                  inspectorStats[inspector].priced++;
-                  inspectorStats[inspector].pricingWorkDays.add(priceDate.toISOString().split('T')[0]);
-                  if (classBreakdown[propertyClass]) {
-                    classBreakdown[propertyClass].priced++;
-                  }
-                  
-                } else if (currentVendor === 'Microsystems' && isPricedCode) {
-                  inspectorStats[inspector].priced++;
-                  if (classBreakdown[propertyClass]) {
-                    classBreakdown[propertyClass].priced++;
-                  }
-                }
-              }
-
-              // NEW: Prepare for inspection_data UPSERT
-              inspectionDataBatch.push({
-                job_id: jobData.id,
-                file_version: latestFileVersion,
-                property_composite_key: propertyKey,
-                block: record.property_block,
-                lot: record.property_lot,
-                qualifier: record.property_qualifier || '',
-                card: '1',
-                property_location: record.property_location || '',
-                property_class: propertyClass,
-                measure_by: inspector,
-                measure_date: record.inspection_measure_date,
-                info_by_code: infoByCode,
-                list_by: record.inspection_list_by,
-                list_date: record.inspection_list_date,
-                price_by: record.inspection_price_by,
-                price_date: record.inspection_price_date,
-                project_start_date: projectStartDate,
-                source_file_name: record.source_file_name,
-                upload_date: new Date().toISOString(),
-                validation_report: propertyIssues[propertyKey] ? {
-                  issues: propertyIssues[propertyKey].issues,
-                  severity: propertyIssues[propertyKey].issues.length > 2 ? 'high' : 'medium'
-                } : null
-              });
-
-              wasAddedToInspectionData = true;
-              
-            } else {
-              // NEW: Track properties that didn't make it to inspection_data
-              const reasons = [];
-              if (!hasValidInfoBy) reasons.push(`Invalid InfoBy code: ${infoByCode}`);
-              if (!hasValidMeasuredBy) reasons.push('Missing/invalid inspector');
-              if (!hasValidMeasuredDate) reasons.push('Missing/invalid measure date');
-              if (propertyIssues[propertyKey]?.issues) reasons.push(...propertyIssues[propertyKey].issues);
-              
-              reasonNotAdded = `Failed validation: ${reasons.join(', ')}`;
             }
           }
-        }
+          
+          if (isCommercialProperty) {
+            inspectorStats[inspector].commercialInspected++;
+            inspectorStats[inspector].commercialWorkDays.add(workDayString);
+          }
 
-        // 🔧 NEW: Track ALL properties that didn't make it to inspection_data
-        if (!wasAddedToInspectionData) {
-          missingProperties.push({
-            composite_key: propertyKey,
+          // FIXED: Pricing logic with vendor detection
+          if (isCommercialProperty) {
+            const currentVendor = actualVendor || jobData.vendor_type;
+
+            if (currentVendor === 'BRT' && 
+                record.inspection_price_by && 
+                record.inspection_price_by.trim() !== '' &&
+                priceDate && 
+                priceDate >= startDate) {
+              
+              inspectorStats[inspector].priced++;
+              inspectorStats[inspector].pricingWorkDays.add(priceDate.toISOString().split('T')[0]);
+              if (classBreakdown[propertyClass]) {
+                classBreakdown[propertyClass].priced++;
+              }
+              
+            } else if (currentVendor === 'Microsystems' && isPricedCode) {
+              inspectorStats[inspector].priced++;
+              if (classBreakdown[propertyClass]) {
+                classBreakdown[propertyClass].priced++;
+              }
+            }
+          }
+
+          // NEW: Prepare for inspection_data UPSERT
+          inspectionDataBatch.push({
+            job_id: jobData.id,
+            file_version: latestFileVersion,
+            property_composite_key: propertyKey,
             block: record.property_block,
             lot: record.property_lot,
             qualifier: record.property_qualifier || '',
+            card: '1',
             property_location: record.property_location || '',
             property_class: propertyClass,
-            reason: reasonNotAdded,
-            inspector: inspector,
-            info_by_code: infoByCode,
+            measure_by: inspector,
             measure_date: record.inspection_measure_date,
-            validation_issues: propertyIssues[propertyKey]?.issues || []
+            info_by_code: infoByCode,
+            list_by: record.inspection_list_by,
+            list_date: record.inspection_list_date,
+            price_by: record.inspection_price_by,
+            price_date: record.inspection_price_date,
+            project_start_date: projectStartDate,
+            source_file_name: record.source_file_name,
+            upload_date: new Date().toISOString(),
+            validation_report: propertyIssues[propertyKey] ? {
+              issues: propertyIssues[propertyKey].issues,
+              severity: propertyIssues[propertyKey].issues.length > 2 ? 'high' : 'medium'
+            } : null
           });
         }
       });
@@ -1326,6 +818,8 @@ const ProductionTracker = ({
           addNotification('Warning: Could not save to inspection_data table', 'warning');
         } else {
           debugLog('PERSISTENCE', '✅ Successfully upserted to inspection_data');
+          // Reload commercial counts after successful processing
+          await loadCommercialCounts();
         }
       }
 
@@ -1343,16 +837,6 @@ const ProductionTracker = ({
         if (stats.residentialInspected > 0) {
           stats.entryRate = Math.round((stats.entry / stats.residentialInspected) * 100);
           stats.refusalRate = Math.round((stats.refusal / stats.residentialInspected) * 100);
-          
-          // 🔧 NEW: Debug individual inspector calculations
-          debugLog('INSPECTOR_RATES', `Inspector ${inspector} rates:`, {
-            residentialInspected: stats.residentialInspected,
-            entry: stats.entry,
-            refusal: stats.refusal,
-            entryRate: stats.entryRate,
-            refusalRate: stats.refusalRate,
-            calculation: `Entry: ${stats.entry}/${stats.residentialInspected} = ${stats.entryRate}%, Refusal: ${stats.refusal}/${stats.residentialInspected} = ${stats.refusalRate}%`
-          });
         } else {
           stats.entryRate = 0;
           stats.refusalRate = 0;
@@ -1375,6 +859,10 @@ const ProductionTracker = ({
           } else {
             stats.pricingAverage = null;
           }
+        } else if (stats.inspector_type?.toLowerCase() === 'management') {
+          // Management inspector - general daily average using all work
+          stats.dailyAverage = stats.fieldDays > 0 ? 
+            Math.round(stats.totalInspected / stats.fieldDays) : 0;
         }
 
         // Clean up Sets
@@ -1416,24 +904,6 @@ const ProductionTracker = ({
       const totalRefusal = Object.values(inspectorStats).reduce((sum, stats) => sum + stats.refusal, 0);
       const totalPriced = Object.values(inspectorStats).reduce((sum, stats) => sum + stats.priced, 0);
 
-      // 🔧 NEW: Debug entry/refusal rate calculations
-      debugLog('ENTRY_RATES', '📊 Entry/Refusal Rate Calculation Debug:', {
-        totalInspected,
-        totalResidentialInspected,
-        totalEntry,
-        totalRefusal,
-        globalEntryRate: totalResidentialInspected > 0 ? Math.round((totalEntry / totalResidentialInspected) * 100) : 0,
-        globalRefusalRate: totalResidentialInspected > 0 ? Math.round((totalRefusal / totalResidentialInspected) * 100) : 0,
-        inspectorBreakdown: Object.entries(inspectorStats).map(([inspector, stats]) => ({
-          inspector,
-          residentialInspected: stats.residentialInspected,
-          entry: stats.entry,
-          refusal: stats.refusal,
-          entryRate: stats.entryRate,
-          refusalRate: stats.refusalRate
-        }))
-      });
-
       // FIXED: Commercial percentage calculations (valid ÷ total, not valid ÷ valid)
       const totalCommercialProperties = ['4A', '4B', '4C'].reduce((sum, cls) => sum + (classBreakdown[cls]?.total || 0), 0);
       const totalCommercialInspected = ['4A', '4B', '4C'].reduce((sum, cls) => sum + (classBreakdown[cls]?.inspected || 0), 0);
@@ -1452,26 +922,6 @@ const ProductionTracker = ({
             }))
         },
         detailed_issues: inspectorIssuesMap
-      };
-
-      // NEW: Create missing properties report
-      const missingPropertiesReportData = {
-        summary: {
-          total_missing: missingProperties.length,
-          uninspected_count: missingProperties.filter(p => p.reason.includes('No inspection attempt')).length,
-          validation_failed_count: missingProperties.filter(p => p.reason.includes('Failed validation')).length,
-          by_reason: missingProperties.reduce((acc, prop) => {
-            const reason = prop.reason;
-            acc[reason] = (acc[reason] || 0) + 1;
-            return acc;
-          }, {}),
-          by_inspector: missingProperties.reduce((acc, prop) => {
-            const inspector = prop.inspector || 'UNASSIGNED';
-            acc[inspector] = (acc[inspector] || 0) + 1;
-            return acc;
-          }, {})
-        },
-        detailed_missing: missingProperties
       };
 
       const analyticsResult = {
@@ -1527,22 +977,18 @@ const ProductionTracker = ({
       setAnalytics(analyticsResult);
       setBillingAnalytics(billingResult);
       setValidationReport(validationReportData);
-      setMissingPropertiesReport(missingPropertiesReportData);  // NEW: Set missing properties report
 
       debugLog('ANALYTICS', '✅ Manager-focused analytics processing complete', {
         totalRecords: rawData.length,
         validInspections: analyticsResult.validInspections,
         totalIssues: validationIssues.length,
-        missingProperties: missingProperties.length,  // NEW: Log missing count
-        inspectionDataBatchSize: inspectionDataBatch.length,  // NEW: How many made it to inspection_data
-        mathCheck: `${rawData.length} total - ${inspectionDataBatch.length} processed - ${missingProperties.length} missing = ${rawData.length - inspectionDataBatch.length - missingProperties.length} unaccounted`,  // NEW: Math check
         inspectors: Object.keys(inspectorStats).length,
         commercialComplete: analyticsResult.commercialCompletePercent,
         pricingComplete: analyticsResult.pricingCompletePercent,
         persistedRecords: inspectionDataBatch.length
       });
 
-      return { analyticsResult, billingResult, validationReportData, missingPropertiesReportData };
+      return { analyticsResult, billingResult, validationReportData };
 
     } catch (error) {
       console.error('Error processing analytics:', error);
@@ -1555,51 +1001,17 @@ const ProductionTracker = ({
   const handleCategoryAssignment = (category, code, isAssigned) => {
     if (settingsLocked) return;
     
-    // 🔧 FIXED: Safety check for undefined category arrays
-    const currentCategoryArray = infoByCategoryConfig[category] || [];
-    
     const newConfig = {
       ...infoByCategoryConfig,
       [category]: isAssigned 
-        ? currentCategoryArray.filter(c => c !== code)
-        : [...currentCategoryArray, code]
+        ? infoByCategoryConfig[category].filter(c => c !== code)
+        : [...infoByCategoryConfig[category], code]
     };
     
     setInfoByCategoryConfig(newConfig);
   };
 
-  // ENHANCED: Reset processing session - clears all locks and analytics
-  const resetProcessingSession = () => {
-    setSettingsLocked(false);
-    setProcessed(false);
-    setSessionId(null);
-    setAnalytics(null);
-    setBillingAnalytics(null);
-    setValidationReport(null);
-    setMissingPropertiesReport(null);  // NEW: Clear missing properties report
-    
-    // Clear App.js state as well (with safety check)
-    try {
-      if (onUpdateWorkflowStats && typeof onUpdateWorkflowStats === 'function') {
-        onUpdateWorkflowStats({
-          totalRecords: 0,
-          validInspections: 0,
-          jobEntryRate: 0,
-          jobRefusalRate: 0,
-          commercialCompletePercent: 0,
-          pricingCompletePercent: 0,
-          isProcessed: false,
-          lastProcessed: null
-        }, true);
-      }
-    } catch (error) {
-      console.error('Error updating App.js state:', error);
-    }
-    
-    addNotification('🔄 Session reset - Settings unlocked for editing', 'info');
-    debugLog('SESSION', 'Processing session reset by user');
-  };
-
+  // ENHANCED: Start processing session with persistence
   const startProcessingSession = async () => {
     if (!isDateLocked) {
       addNotification('Please lock the project start date first', 'error');
@@ -1612,11 +1024,10 @@ const ProductionTracker = ({
     }
 
     const allValidCodes = [
-      ...(infoByCategoryConfig.entry || []),
-      ...(infoByCategoryConfig.refusal || []),
-      ...(infoByCategoryConfig.estimation || []),
-      ...(infoByCategoryConfig.priced || []),
-      ...(infoByCategoryConfig.special || [])  // NEW: Include special codes
+      ...infoByCategoryConfig.entry,
+      ...infoByCategoryConfig.refusal,
+      ...infoByCategoryConfig.estimation,
+      ...infoByCategoryConfig.priced
     ];
 
     if (allValidCodes.length === 0) {
@@ -1644,20 +1055,6 @@ const ProductionTracker = ({
 
       // ENHANCED: Persist to database for navigation survival
       await saveCategoriesToDatabase();
-
-      // 🔧 NEW: Update App.js state with analytics results
-      try {
-        if (onAnalyticsUpdate && typeof onAnalyticsUpdate === 'function' && results.analyticsResult) {
-          debugLog('SESSION', '📊 Updating App.js state with analytics results');
-          onAnalyticsUpdate({
-            ...results.analyticsResult,
-            billingAnalytics: results.billingResult,
-            validationReport: results.validationReportData
-          });
-        }
-      } catch (error) {
-        console.error('Error updating App.js analytics:', error);
-      }
 
       debugLog('SESSION', '✅ Processing session completed successfully');
       addNotification(`✅ Processing completed! Analytics saved and ready.`, 'success');
@@ -1706,47 +1103,6 @@ const ProductionTracker = ({
     addNotification('📊 Validation report exported', 'success');
   };
 
-  // NEW: Export missing properties report
-  const exportMissingPropertiesReport = () => {
-    if (!missingPropertiesReport || !missingPropertiesReport.detailed_missing) return;
-
-    let csvContent = "Summary\n";
-    csvContent += `Total Missing Properties,${missingPropertiesReport.summary.total_missing}\n`;
-    csvContent += `Uninspected Count,${missingPropertiesReport.summary.uninspected_count}\n`;
-    csvContent += `Validation Failed Count,${missingPropertiesReport.summary.validation_failed_count}\n\n`;
-
-    csvContent += "Breakdown by Reason\n";
-    csvContent += "Reason,Count\n";
-    Object.entries(missingPropertiesReport.summary.by_reason).forEach(([reason, count]) => {
-      csvContent += `"${reason}","${count}"\n`;
-    });
-
-    csvContent += "\nBreakdown by Inspector\n";
-    csvContent += "Inspector,Count\n";
-    Object.entries(missingPropertiesReport.summary.by_inspector).forEach(([inspector, count]) => {
-      csvContent += `"${inspector}","${count}"\n`;
-    });
-
-    csvContent += "\nDetailed Missing Properties\n";
-    csvContent += "Block,Lot,Qualifier,Property Location,Class,Inspector,InfoBy Code,Measure Date,Reason\n";
-    
-    missingPropertiesReport.detailed_missing.forEach(property => {
-      csvContent += `"${property.block}","${property.lot}","${property.qualifier}","${property.property_location}","${property.property_class}","${property.inspector}","${property.info_by_code || ''}","${property.measure_date || ''}","${property.reason}"\n`;
-    });
-
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Missing_Properties_Report_${jobData.ccdd || jobData.ccddCode}_${new Date().toISOString().split('T')[0].replace(/-/g, '')}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
-
-    addNotification('📊 Missing properties report exported', 'success');
-  };
-
   // ENHANCED: Progress bar component
   const ProgressBar = ({ current, total, color = 'blue' }) => {
     const percentage = total > 0 ? Math.round((current / total) * 100) : 0;
@@ -1764,6 +1120,163 @@ const ProductionTracker = ({
           style={{ width: `${percentage}%` }}
         ></div>
         <div className="text-xs text-gray-500 mt-1 text-right">{percentage}%</div>
+      </div>
+    );
+  };
+
+  if (loading) {
+    return (
+      <div className="max-w-6xl mx-auto p-6">
+        <div className="flex items-center justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mr-3"></div>
+          <span className="text-gray-600">Loading production data...</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-6xl mx-auto p-6 space-y-6">
+      {/* Notifications */}
+      <div className="fixed top-4 right-4 z-50 space-y-2">
+        {notifications.map(notification => (
+          <div
+            key={notification.id}
+            className={`p-4 rounded-lg shadow-lg border-l-4 max-w-md transition-all duration-300 ${
+              notification.type === 'error' ? 'bg-red-50 border-red-400 text-red-800' :
+              notification.type === 'warning' ? 'bg-yellow-50 border-yellow-400 text-yellow-800' :
+              notification.type === 'success' ? 'bg-green-50 border-green-400 text-green-800' :
+              'bg-blue-50 border-blue-400 text-blue-800'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">{notification.message}</span>
+              <button
+                onClick={() => setNotifications(prev => prev.filter(n => n.id !== notification.id))}
+                className="ml-2 text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Header */}
+      <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border-2 border-blue-200 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center">
+            <Factory className="w-8 h-8 mr-3 text-blue-600" />
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Production Tracker</h1>
+              <p className="text-gray-600">
+                {jobData.name} - Enhanced Analytics & Validation Engine
+                {detectedVendor && <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded font-medium">
+                  {detectedVendor} Format
+                </span>}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-3">
+            {sessionId && (
+              <button
+                onClick={resetSession}
+                className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-all text-sm flex items-center space-x-1"
+              >
+                <RefreshCw className="w-4 h-4" />
+                <span>Reset Session</span>
+              </button>
+            )}
+            <button
+              onClick={onBackToJobs}
+              className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-all"
+            >
+              ← Back to Jobs
+            </button>
+          </div>
+        </div>
+
+        {/* ENHANCED: Quick Stats with Percentages and Details - FIXED "0 of 0" issue */}
+        {analytics && (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="bg-white p-4 rounded-lg border shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Total Properties</p>
+                  <p className="text-2xl font-bold text-blue-600">{propertyRecordsCount?.toLocaleString() || analytics.totalRecords.toLocaleString()}</p>
+                </div>
+                <TrendingUp className="w-8 h-8 text-blue-500" />
+              </div>
+            </div>
+            
+            <div className="bg-white p-4 rounded-lg border shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Total Inspections</p>
+                  <p className="text-2xl font-bold text-green-600">{analytics.validInspections.toLocaleString()}</p>
+                </div>
+                <CheckCircle className="w-8 h-8 text-green-500" />
+              </div>
+            </div>
+
+            <div className="bg-white p-4 rounded-lg border shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Job Entry Rate</p>
+                  <p className="text-2xl font-bold text-green-600">{analytics.jobEntryRate || 0}%</p>
+                </div>
+                <Users className="w-8 h-8 text-green-500" />
+              </div>
+            </div>
+
+            <div className="bg-white p-4 rounded-lg border shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Job Refusal Rate</p>
+                  <p className="text-2xl font-bold text-red-600">{analytics.jobRefusalRate || 0}%</p>
+                </div>
+                <AlertTriangle className="w-8 h-8 text-red-500" />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ENHANCED: Commercial metrics with FIXED "0 of 0" display using proper fields */}
+        {(analytics || commercialCounts.inspected > 0) && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+            <div className="bg-white p-4 rounded-lg border shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Commercial Complete</p>
+                  <p className="text-2xl font-bold text-blue-600">
+                    {jobData.totalCommercial > 0 ? Math.round((commercialCounts.inspected / jobData.totalCommercial) * 100) : 0}%
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {commercialCounts.inspected.toLocaleString()} of {(jobData.totalCommercial || 0).toLocaleString()} properties
+                  </p>
+                </div>
+                <Factory className="w-8 h-8 text-blue-500" />
+              </div>
+            </div>
+            
+            <div className="bg-white p-4 rounded-lg border shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Pricing Complete</p>
+                  <p className="text-2xl font-bold text-purple-600">
+                    {jobData.totalCommercial > 0 ? Math.round((commercialCounts.priced / jobData.totalCommercial) * 100) : 0}%
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {commercialCounts.priced.toLocaleString()} of {(jobData.totalCommercial || 0).toLocaleString()} properties
+                  </p>
+                </div>
+                <DollarSign className="w-8 h-8 text-purple-500" />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Settings Panel */}
       <div className="bg-white rounded-lg border shadow-sm p-6">
         <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
@@ -1801,7 +1314,148 @@ const ProductionTracker = ({
                 {isDateLocked ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
                 {isDateLocked ? 'Unlock' : 'Lock'}
               </button>
-            {/* Main Content Tabs */}
+            </div>
+            {isDateLocked && (
+              <p className="text-sm text-green-600 mt-1">
+                ✅ Date locked and saved to property records
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              InfoBy Categories ({availableInfoByCodes.length} codes available)
+            </label>
+            <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <span>Entry: {infoByCategoryConfig.entry.length} codes</span>
+                <span>Refusal: {infoByCategoryConfig.refusal.length} codes</span>
+                <span>Estimation: {infoByCategoryConfig.estimation.length} codes</span>
+                <span>Priced: {infoByCategoryConfig.priced.length} codes</span>
+              </div>
+              
+              {hasUnsavedChanges && (
+                <div className="text-sm text-orange-600 font-medium">
+                  ⚠️ Unsaved changes
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => saveCategoriesToDatabase()}
+                  disabled={!hasUnsavedChanges || settingsLocked}
+                  className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                >
+                  <Save className="w-4 h-4" />
+                  Save Config
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* NEW: Collapsible InfoBy Category Configuration Panel */}
+        {availableInfoByCodes.length > 0 && (
+          <div className="mt-6 pt-6 border-t border-gray-200">
+            <div className="flex items-center justify-between mb-4">
+              <h4 className="text-md font-semibold text-gray-800">
+                InfoBy Category Assignment ({jobData.vendor_type} Format)
+              </h4>
+              <button
+                onClick={() => setShowInfoByConfig(!showInfoByConfig)}
+                className="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg flex items-center gap-1"
+              >
+                {showInfoByConfig ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                {showInfoByConfig ? 'Hide' : 'Show'} Configuration
+              </button>
+            </div>
+            
+            {/* Quick Summary (Always Visible) */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-sm mb-4">
+              <div className="bg-green-50 px-3 py-2 rounded border">
+                <span className="font-medium text-green-800">Entry:</span> {infoByCategoryConfig.entry.length}
+              </div>
+              <div className="bg-red-50 px-3 py-2 rounded border">
+                <span className="font-medium text-red-800">Refusal:</span> {infoByCategoryConfig.refusal.length}
+              </div>
+              <div className="bg-blue-50 px-3 py-2 rounded border">
+                <span className="font-medium text-blue-800">Estimation:</span> {infoByCategoryConfig.estimation.length}
+              </div>
+              <div className="bg-gray-50 px-3 py-2 rounded border">
+                <span className="font-medium text-gray-800">Invalid:</span> {infoByCategoryConfig.invalid.length}
+              </div>
+              <div className="bg-purple-50 px-3 py-2 rounded border">
+                <span className="font-medium text-purple-800">Priced:</span> {infoByCategoryConfig.priced.length}
+              </div>
+            </div>
+            
+            {/* Detailed Configuration (Collapsible) */}
+            {showInfoByConfig && (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                {['entry', 'refusal', 'estimation', 'invalid', 'priced'].map(category => (
+                  <div key={category} className="border border-gray-200 rounded-lg p-4">
+                    <h5 className="font-medium text-gray-900 mb-3 capitalize">
+                      {category} ({infoByCategoryConfig[category].length})
+                    </h5>
+                    <div className="space-y-2 max-h-40 overflow-y-auto">
+                      {availableInfoByCodes.map(codeItem => {
+                        const storageCode = jobData.vendor_type === 'Microsystems' ? codeItem.storageCode : codeItem.code;
+                        const displayCode = storageCode;
+                        const isAssigned = infoByCategoryConfig[category].includes(storageCode);
+                        
+                        return (
+                          <div key={codeItem.code} className="flex items-start">
+                            <input
+                              type="checkbox"
+                              checked={isAssigned}
+                              onChange={() => handleCategoryAssignment(category, storageCode, isAssigned)}
+                              disabled={settingsLocked}
+                              className="mr-2 mt-1"
+                            />
+                            <div className="text-sm">
+                              <span className="font-medium">{displayCode}</span>
+                              <div className="text-gray-600 text-xs leading-tight">{codeItem.description}</div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="mt-6 flex justify-end">
+          <button
+            onClick={startProcessingSession}
+            disabled={processing || (!isDateLocked) || hasUnsavedChanges ||
+              (infoByCategoryConfig.entry.length + infoByCategoryConfig.refusal.length + 
+               infoByCategoryConfig.estimation.length + infoByCategoryConfig.priced.length) === 0}
+            className={`px-6 py-2 rounded-lg flex items-center space-x-2 transition-all ${
+              processed 
+                ? 'bg-green-600 text-white hover:bg-green-700'
+                : processing
+                ? 'bg-yellow-600 text-white'
+                : 'bg-blue-600 text-white hover:bg-blue-700'
+            } disabled:opacity-50 disabled:cursor-not-allowed`}
+          >
+            {processing ? (
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+            ) : processed ? (
+              <CheckCircle className="w-4 h-4" />
+            ) : (
+              <RefreshCw className="w-4 h-4" />
+            )}
+            <span>
+              {processing ? 'Processing...' : processed ? 'Processed ✓' : 'Start Processing Session'}
+            </span>
+          </button>
+        </div>
+      </div>
+
+      {/* Main Content Tabs */}
       {analytics && (
         <div className="bg-white rounded-lg border shadow-sm">
           <div className="border-b border-gray-200">
@@ -1835,16 +1489,6 @@ const ProductionTracker = ({
                 }`}
               >
                 ⚠️ Validation Report ({validationReport?.summary.total_issues || 0})
-              </button>
-              <button
-                onClick={() => setActiveTab('missing')}
-                className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === 'missing'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                🔍 Missing Properties ({missingPropertiesReport?.summary.total_missing || 0})
               </button>
             </nav>
           </div>
@@ -2034,89 +1678,62 @@ const ProductionTracker = ({
                     </div>
 
                     {/* MANAGEMENT INSPECTOR ANALYTICS */}
-                    <div className="bg-purple-50 rounded-lg border border-purple-200 p-6">
-                      <h4 className="text-lg font-semibold text-purple-800 mb-4 flex items-center">
-                        <Users className="w-5 h-5 mr-2" />
-                        Management Inspector Analytics  
-                      </h4>
-                      
-                      {Object.entries(analytics.inspectorStats)
-                        .filter(([_, stats]) => stats.inspector_type?.toLowerCase() === 'management')
-                        .sort(([aKey, aStats], [bKey, bStats]) => {
-                          switch (inspectorSort) {
-                            case 'alphabetical':
-                              return aStats.name.localeCompare(bStats.name);
-                            case 'dailyAverage':
-                              return (bStats.dailyAverage || 0) - (aStats.dailyAverage || 0);
-                            case 'totalInspected':
-                              return bStats.totalInspected - aStats.totalInspected;
-                            default:
-                              return 0;
-                          }
-                        })
-                        .map(([inspector, stats]) => (
-                          <div key={inspector} className="bg-white border border-purple-200 rounded-lg p-4 mb-3">
-                            {/* Header Row */}
-                            <div className="flex items-center justify-between mb-3">
-                              <div className="flex items-center space-x-3">
-                                <span className="font-semibold text-gray-900">{stats.name} ({inspector})</span>
-                                <span className="px-2 py-1 text-xs font-medium rounded bg-purple-100 text-purple-800">
-                                  Management Inspector
-                                </span>
-                                <span className="text-sm text-gray-600">{stats.fieldDays} field days</span>
+                    {Object.entries(analytics.inspectorStats)
+                      .filter(([_, stats]) => stats.inspector_type?.toLowerCase() === 'management')
+                      .length > 0 && (
+                      <div className="bg-purple-50 rounded-lg border border-purple-200 p-6">
+                        <h4 className="text-lg font-semibold text-purple-800 mb-4 flex items-center">
+                          <Settings className="w-5 h-5 mr-2" />
+                          Management Inspector Analytics
+                        </h4>
+                        
+                        {Object.entries(analytics.inspectorStats)
+                          .filter(([_, stats]) => stats.inspector_type?.toLowerCase() === 'management')
+                          .sort(([aKey, aStats], [bKey, bStats]) => aStats.name.localeCompare(bStats.name))
+                          .map(([inspector, stats]) => (
+                            <div key={inspector} className="bg-white border border-purple-200 rounded-lg p-4 mb-3">
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center space-x-3">
+                                  <span className="font-semibold text-gray-900">{stats.name} ({inspector})</span>
+                                  <span className="px-2 py-1 text-xs font-medium rounded bg-purple-100 text-purple-800">
+                                    Management Inspector
+                                  </span>
+                                  <span className="text-sm text-gray-600">{stats.fieldDays} field days</span>
+                                </div>
+                                <span className="text-lg font-bold text-purple-600">{stats.totalInspected.toLocaleString()} Total</span>
                               </div>
-                              <span className="text-lg font-bold text-purple-600">{stats.totalInspected.toLocaleString()} Total</span>
-                            </div>
-                            
-                            {/* Metrics Grid */}
-                            <div className="grid grid-cols-2 md:grid-cols-6 gap-3 text-center">
-                              <div className="bg-green-50 p-3 rounded">
-                                <div className="font-bold text-green-700 text-lg">{stats.residentialInspected.toLocaleString()}</div>
-                                <div className="text-xs text-green-600 font-medium">Residential</div>
-                                <div className="text-xs text-gray-500">(2, 3A)</div>
-                              </div>
-                              <div className="bg-blue-50 p-3 rounded">
-                                <div className="font-bold text-blue-700 text-lg">{stats.commercialInspected.toLocaleString()}</div>
-                                <div className="text-xs text-blue-600 font-medium">Commercial</div>
-                                <div className="text-xs text-gray-500">(4A, 4B, 4C)</div>
-                              </div>
-                              <div className="bg-purple-50 p-3 rounded">
-                                <div className="font-bold text-purple-700 text-lg">{stats.dailyAverage || 0}</div>
-                                <div className="text-xs text-purple-600 font-medium">Daily Average</div>
-                                <div className="text-xs text-gray-500">Total ÷ Field Days</div>
-                              </div>
-                              <div className="bg-green-50 p-3 rounded">
-                                <div className="font-bold text-green-700 text-lg">{stats.entryRate || 0}%</div>
-                                <div className="text-xs text-green-600 font-medium">Entry Rate</div>
-                                <div className="text-xs text-gray-500">On residential</div>
-                              </div>
-                              <div className="bg-red-50 p-3 rounded">
-                                <div className="font-bold text-red-700 text-lg">{stats.refusalRate || 0}%</div>
-                                <div className="text-xs text-red-600 font-medium">Refusal Rate</div>
-                                <div className="text-xs text-gray-500">On residential</div>
-                              </div>
-                              <div className="bg-gray-50 p-3 rounded">
-                                <div className="font-bold text-gray-700 text-lg">{(stats.totalInspected - stats.residentialInspected - stats.commercialInspected).toLocaleString()}</div>
-                                <div className="text-xs text-gray-600 font-medium">Other Properties</div>
-                                <div className="text-xs text-gray-500">Vacant, exempt, etc.</div>
+                              
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                                <div className="bg-purple-50 p-3 rounded">
+                                  <div className="font-bold text-purple-700 text-lg">{stats.dailyAverage || 0}</div>
+                                  <div className="text-xs text-purple-600 font-medium">Daily Average</div>
+                                  <div className="text-xs text-gray-500">All work ÷ Field days</div>
+                                </div>
+                                <div className="bg-green-50 p-3 rounded">
+                                  <div className="font-bold text-green-700 text-lg">{stats.residentialInspected.toLocaleString()}</div>
+                                  <div className="text-xs text-green-600 font-medium">Residential</div>
+                                  <div className="text-xs text-gray-500">(2, 3A)</div>
+                                </div>
+                                <div className="bg-blue-50 p-3 rounded">
+                                  <div className="font-bold text-blue-700 text-lg">{stats.commercialInspected.toLocaleString()}</div>
+                                  <div className="text-xs text-blue-600 font-medium">Commercial</div>
+                                  <div className="text-xs text-gray-500">(4A, 4B, 4C)</div>
+                                </div>
+                                <div className="bg-gray-50 p-3 rounded">
+                                  <div className="font-bold text-gray-700 text-lg">{(stats.totalInspected - stats.residentialInspected - stats.commercialInspected).toLocaleString()}</div>
+                                  <div className="text-xs text-gray-600 font-medium">Other</div>
+                                  <div className="text-xs text-gray-500">Vacant, exempt, etc.</div>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        ))}
-                      
-                      {Object.entries(analytics.inspectorStats).filter(([_, stats]) => stats.inspector_type?.toLowerCase() === 'management').length === 0 && (
-                        <div className="text-center py-4 text-purple-600">
-                          <p>No management inspectors found</p>
-                        </div>
-                      )}
-                    </div>
+                          ))}
+                      </div>
+                    )}
 
                     {/* UNTYPED INSPECTORS (If Any) */}
                     {Object.entries(analytics.inspectorStats)
                       .filter(([_, stats]) => !stats.inspector_type || 
-                        (stats.inspector_type.toLowerCase() !== 'residential' && 
-                         stats.inspector_type.toLowerCase() !== 'commercial' &&
-                         stats.inspector_type.toLowerCase() !== 'management'))
+                        !['residential', 'commercial', 'management'].includes(stats.inspector_type.toLowerCase()))
                       .length > 0 && (
                       <div className="bg-gray-50 rounded-lg border border-gray-200 p-6">
                         <h4 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
@@ -2126,9 +1743,7 @@ const ProductionTracker = ({
                         
                         {Object.entries(analytics.inspectorStats)
                           .filter(([_, stats]) => !stats.inspector_type || 
-                            (stats.inspector_type.toLowerCase() !== 'residential' && 
-                             stats.inspector_type.toLowerCase() !== 'commercial' &&
-                             stats.inspector_type.toLowerCase() !== 'management'))
+                            !['residential', 'commercial', 'management'].includes(stats.inspector_type.toLowerCase()))
                           .sort(([aKey, aStats], [bKey, bStats]) => aStats.name.localeCompare(bStats.name))
                           .map(([inspector, stats]) => (
                             <div key={inspector} className="bg-white border border-gray-200 rounded-lg p-4 mb-3">
@@ -2165,530 +1780,234 @@ const ProductionTracker = ({
                 )}
               </div>
             )}
-            {isDateLocked && (
-              <p className="text-sm text-green-600 mt-1">
-                ✅ Date locked and saved to property records
-              </p>
-            )}
-          </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              InfoBy Categories ({(availableInfoByCodes || []).length} codes available)
-            </label>
-            <div className="space-y-2">
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <span>Entry: {(infoByCategoryConfig.entry || []).length} codes</span>
-                <span>Refusal: {(infoByCategoryConfig.refusal || []).length} codes</span>
-                <span>Estimation: {(infoByCategoryConfig.estimation || []).length} codes</span>
-                <span>Priced: {(infoByCategoryConfig.priced || []).length} codes</span>
-                <span>Special: {(infoByCategoryConfig.special || []).length} codes</span>
-              </div>
-              
-              {hasUnsavedChanges && (
-                <div className="text-sm text-orange-600 font-medium">
-                  ⚠️ Unsaved changes
+            {/* ENHANCED: Summary for Billing with Progress Bars */}
+            {activeTab === 'billing' && billingAnalytics && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-bold text-gray-900">Summary for Billing</h3>
                 </div>
-              )}
 
-              <div className="flex gap-2">
-                <button
-                  onClick={() => saveCategoriesToDatabase()}
-                  disabled={!hasUnsavedChanges || settingsLocked}
-                  className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-                >
-                  <Save className="w-4 h-4" />
-                  Save Config
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* NEW: Collapsible InfoBy Category Configuration Panel */}
-        {(availableInfoByCodes || []).length > 0 && (
-          <div className="mt-6 pt-6 border-t border-gray-200">
-            <div className="flex items-center justify-between mb-4">
-              <h4 className="text-md font-semibold text-gray-800">
-                InfoBy Category Assignment ({jobData.vendor_type} Format)
-              </h4>
-              <button
-                onClick={() => setShowInfoByConfig(!showInfoByConfig)}
-                className="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg flex items-center gap-1"
-              >
-                {showInfoByConfig ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                {showInfoByConfig ? 'Hide' : 'Show'} Configuration
-              </button>
-            </div>
-            
-            {/* Quick Summary (Always Visible) */}
-            <div className="grid grid-cols-2 md:grid-cols-6 gap-2 text-sm mb-4">
-              <div className="bg-green-50 px-3 py-2 rounded border">
-                <span className="font-medium text-green-800">Entry:</span> {(infoByCategoryConfig.entry || []).length}
-              </div>
-              <div className="bg-red-50 px-3 py-2 rounded border">
-                <span className="font-medium text-red-800">Refusal:</span> {(infoByCategoryConfig.refusal || []).length}
-              </div>
-              <div className="bg-blue-50 px-3 py-2 rounded border">
-                <span className="font-medium text-blue-800">Estimation:</span> {(infoByCategoryConfig.estimation || []).length}
-              </div>
-              <div className="bg-gray-50 px-3 py-2 rounded border">
-                <span className="font-medium text-gray-800">Invalid:</span> {(infoByCategoryConfig.invalid || []).length}
-              </div>
-              <div className="bg-purple-50 px-3 py-2 rounded border">
-                <span className="font-medium text-purple-800">Priced:</span> {(infoByCategoryConfig.priced || []).length}
-              </div>
-              <div className="bg-yellow-50 px-3 py-2 rounded border">
-                <span className="font-medium text-yellow-800">Special:</span> {(infoByCategoryConfig.special || []).length}
-              </div>
-            </div>
-            
-            {/* Detailed Configuration (Collapsible) */}
-            {showInfoByConfig && (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
-                {['entry', 'refusal', 'estimation', 'invalid', 'priced', 'special'].map(category => (
-                  <div key={category} className="border border-gray-200 rounded-lg p-4">
-                    <h5 className="font-medium text-gray-900 mb-3 capitalize">
-                      {category} ({(infoByCategoryConfig[category] || []).length})
-                    </h5>
-                    <div className="space-y-2 max-h-40 overflow-y-auto">
-                      {(availableInfoByCodes || []).map(codeItem => {
-                        const storageCode = jobData.vendor_type === 'Microsystems' ? codeItem.storageCode : codeItem.code;
-                        const displayCode = storageCode;
-                        const isAssigned = (infoByCategoryConfig[category] || []).includes(storageCode);
-                        
-                        return (
-                          <div key={codeItem.code} className="flex items-start">
-                            <input
-                              type="checkbox"
-                              checked={isAssigned}
-                              onChange={() => handleCategoryAssignment(category, storageCode, isAssigned)}
-                              disabled={settingsLocked}
-                              className="mr-2 mt-1"
-                            />
-                            <div className="text-sm">
-                              <span className="font-medium">{displayCode}</span>
-                              <div className="text-gray-600 text-xs leading-tight">{codeItem.description}</div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                  <div>
+                    <h4 className="text-md font-semibold text-gray-800 mb-4">Individual Classes</h4>
+                    <div className="space-y-3">
+                      {Object.entries(billingAnalytics.byClass)
+                        .filter(([cls, data]) => data.total > 0)
+                        .map(([cls, data]) => {
+                          const isResidential = ['2', '3A'].includes(cls);
+                          const isCommercial = ['4A', '4B', '4C'].includes(cls);
+                          const colorClass = isResidential 
+                            ? 'bg-green-50 border-green-200' 
+                            : isCommercial 
+                            ? 'bg-blue-50 border-blue-200'
+                            : 'bg-gray-50 border-gray-200';
+                          const textColor = isResidential 
+                            ? 'text-green-600' 
+                            : isCommercial 
+                            ? 'text-blue-600' 
+                            : 'text-gray-600';
+                          const progressColor = isResidential ? 'green' : isCommercial ? 'blue' : 'gray';
+                          
+                          return (
+                            <div key={cls} className={`p-4 rounded-lg border ${colorClass}`}>
+                              <div className="flex justify-between items-center mb-2">
+                                <div>
+                                  <span className="font-medium text-gray-900">Class {cls}</span>
+                                  {isResidential && <span className="ml-2 text-xs text-green-600 font-medium">Residential</span>}
+                                  {isCommercial && <span className="ml-2 text-xs text-blue-600 font-medium">Commercial</span>}
+                                </div>
+                                <div className="text-right">
+                                  <div className={`font-bold ${textColor}`}>{data.billable.toLocaleString()}</div>
+                                  <div className="text-xs text-gray-500">of {data.total.toLocaleString()}</div>
+                                </div>
+                              </div>
+                              <ProgressBar current={data.billable} total={data.total} color={progressColor} />
                             </div>
-                          </div>
-                        );
-                      })}
+                          );
+                        })}
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
 
-        <div className="mt-6 flex justify-end gap-3">
-          {/* Reset Session Button - Only show if session is active */}
-          {(settingsLocked || processed) && (
-            <button
-              onClick={resetProcessingSession}
-              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center space-x-2 transition-all"
-            >
-              <RefreshCw className="w-4 h-4" />
-              <span>Reset Session</span>
-            </button>
-          )}
-          
-          {/* Main Processing Button */}
-          <button
-            onClick={startProcessingSession}
-            disabled={processing || (!isDateLocked) || hasUnsavedChanges ||
-              ((infoByCategoryConfig.entry || []).length + (infoByCategoryConfig.refusal || []).length + 
-               (infoByCategoryConfig.estimation || []).length + (infoByCategoryConfig.priced || []).length + 
-               (infoByCategoryConfig.special || []).length) === 0}
-            className={`px-6 py-2 rounded-lg flex items-center space-x-2 transition-all ${
-              processed 
-                ? 'bg-green-600 text-white hover:bg-green-700'
-                : processing
-                ? 'bg-yellow-600 text-white'
-                : 'bg-blue-600 text-white hover:bg-blue-700'
-            } disabled:opacity-50 disabled:cursor-not-allowed`}
-          >
-            {processing ? (
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-            ) : processed ? (
-              <CheckCircle className="w-4 h-4" />
-            ) : (
-              <RefreshCw className="w-4 h-4" />
-            )}
-            <span>
-              {processing ? 'Processing...' : processed ? 'Processed ✓' : 'Start Processing Session'}
-            </span>
-          </button>
-        </div>
-      </div>
-    );
-  };
-
-  if (loading) {
-    return (
-      <div className="max-w-6xl mx-auto p-6">
-        <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mr-3"></div>
-          <span className="text-gray-600">Loading production data...</span>
-        </div>
-      </div>
-    );
-  }
-
-  // 🔧 NEW: Safety check for required props
-  if (!jobData?.id) {
-    return (
-      <div className="max-w-6xl mx-auto p-6">
-        <div className="bg-red-50 border border-red-200 rounded-lg p-6">
-          <div className="flex items-center">
-            <AlertTriangle className="w-6 h-6 text-red-600 mr-3" />
-            <div>
-              <h3 className="text-lg font-semibold text-red-800">Missing Job Data</h3>
-              <p className="text-red-600 mt-1">ProductionTracker requires valid job data to function.</p>
-              <p className="text-sm text-red-500 mt-2">jobData: {JSON.stringify(jobData)}</p>
-            </div>
-          </div>
-          <button
-            onClick={onBackToJobs}
-            className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
-          >
-            ← Back to Jobs
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="max-w-6xl mx-auto p-6 space-y-6">
-      {/* Notifications */}
-      <div className="fixed top-4 right-4 z-50 space-y-2">
-        {notifications.map(notification => (
-          <div
-            key={notification.id}
-            className={`p-4 rounded-lg shadow-lg border-l-4 max-w-md transition-all duration-300 ${
-              notification.type === 'error' ? 'bg-red-50 border-red-400 text-red-800' :
-              notification.type === 'warning' ? 'bg-yellow-50 border-yellow-400 text-yellow-800' :
-              notification.type === 'success' ? 'bg-green-50 border-green-400 text-green-800' :
-              'bg-blue-50 border-blue-400 text-blue-800'
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium">{notification.message}</span>
-              <button
-                onClick={() => setNotifications(prev => prev.filter(n => n.id !== notification.id))}
-                className="ml-2 text-gray-400 hover:text-gray-600"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Header - Simplified to avoid double banner */}
-      <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border-2 border-blue-200 p-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center">
-            <Factory className="w-8 h-8 mr-3 text-blue-600" />
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">ProductionTracker</h1>
-              <p className="text-gray-600">
-                {jobData?.name || 'Loading...'} - Enhanced Analytics & Validation Engine
-                {detectedVendor && <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded font-medium">
-                  {detectedVendor} Format
-                </span>}
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={onBackToJobs}
-            className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-all"
-          >
-            ← Back to Jobs
-          </button>
-        </div>
-      </div>
-
-      {/* Key Analytics Summary */}
-      <div className="bg-white rounded-lg border shadow-sm p-6">
-        <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
-          <TrendingUp className="w-5 h-5 mr-2" />
-          Manager Overview - Key Metrics
-        </h3>
-
-        {/* Enhanced: Quick metrics with progress overview */}
-        {analytics && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="bg-white p-4 rounded-lg border shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Properties Inspected</p>
-                  <p className="text-2xl font-bold text-blue-600">{(analytics.validInspections || 0).toLocaleString()}</p>
-                  <p className="text-xs text-gray-500 mt-1">of {(analytics.totalRecords || 0).toLocaleString()}</p>
-                </div>
-                <CheckCircle className="w-8 h-8 text-green-500" />
-              </div>
-            </div>
-
-            <div className="bg-white p-4 rounded-lg border shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Job Entry Rate</p>
-                  <p className="text-2xl font-bold text-green-600">{analytics.jobEntryRate || 0}%</p>
-                </div>
-                <Users className="w-8 h-8 text-green-500" />
-              </div>
-            </div>
-
-            <div className="bg-white p-4 rounded-lg border shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Job Refusal Rate</p>
-                  <p className="text-2xl font-bold text-red-600">{analytics.jobRefusalRate || 0}%</p>
-                </div>
-                <AlertTriangle className="w-8 h-8 text-red-500" />
-              </div>
-            </div>
-
-            <div className="bg-white p-4 rounded-lg border shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Validation Issues</p>
-                  <p className="text-2xl font-bold text-orange-600">{analytics.validationIssues || 0}</p>
-                </div>
-                <FileText className="w-8 h-8 text-orange-500" />
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ENHANCED: Commercial metrics with percentages and details - FIXED: Added safety checks */}
-        {analytics && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-            <div className="bg-white p-4 rounded-lg border shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Commercial Complete</p>
-                  <p className="text-2xl font-bold text-blue-600">{analytics.commercialCompletePercent || 0}%</p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {(analytics.commercialInspections || 0).toLocaleString()} of {(analytics.totalCommercialProperties || 0).toLocaleString()} properties
-                  </p>
-                </div>
-                <Factory className="w-8 h-8 text-blue-500" />
-              </div>
-            </div>
-            
-            <div className="bg-white p-4 rounded-lg border shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Pricing Complete</p>
-                  <p className="text-2xl font-bold text-purple-600">{analytics.pricingCompletePercent || 0}%</p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {(analytics.commercialPricing || 0).toLocaleString()} of {(analytics.totalCommercialProperties || 0).toLocaleString()} properties
-                  </p>
-                </div>
-                <DollarSign className="w-8 h-8 text-purple-500" />
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Settings Panel */}
-      <div className="bg-white rounded-lg border shadow-sm p-6">
-        <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
-          <Settings className="w-5 h-5 mr-2" />
-          Processing Settings - Enhanced Configuration
-          {settingsLocked && (
-            <span className="ml-3 px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
-              Session Active: {sessionId?.slice(-8)}
-            </span>
-          )}
-        </h3>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Project Start Date *
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="date"
-                value={projectStartDate}
-                onChange={(e) => setProjectStartDate(e.target.value)}
-                disabled={isDateLocked || settingsLocked}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"
-              />
-              <button
-                onClick={isDateLocked ? unlockStartDate : lockStartDate}
-                disabled={settingsLocked || (!projectStartDate && !isDateLocked)}
-                className={`px-3 py-2 rounded-lg flex items-center gap-1 ${
-                  isDateLocked 
-                    ? 'bg-green-100 text-green-700 hover:bg-green-200' 
-                    : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
-                } disabled:opacity-50 disabled:cursor-not-allowed`}
-              >
-                {isDateLocked ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
-                {isDateLocked ? 'Unlock' : 'Lock'}
-              </button>
-            </div>
-            {isDateLocked && (
-              <p className="text-sm text-green-600 mt-1">
-                ✅ Date locked and saved to property records
-              </p>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              InfoBy Categories ({(availableInfoByCodes || []).length} codes available)
-            </label>
-            <div className="space-y-2">
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <span>Entry: {(infoByCategoryConfig.entry || []).length} codes</span>
-                <span>Refusal: {(infoByCategoryConfig.refusal || []).length} codes</span>
-                <span>Estimation: {(infoByCategoryConfig.estimation || []).length} codes</span>
-                <span>Priced: {(infoByCategoryConfig.priced || []).length} codes</span>
-                <span>Special: {(infoByCategoryConfig.special || []).length} codes</span>
-              </div>
-              
-              {hasUnsavedChanges && (
-                <div className="text-sm text-orange-600 font-medium">
-                  ⚠️ Unsaved changes
-                </div>
-              )}
-
-              <div className="flex gap-2">
-                <button
-                  onClick={() => saveCategoriesToDatabase()}
-                  disabled={!hasUnsavedChanges || settingsLocked}
-                  className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-                >
-                  <Save className="w-4 h-4" />
-                  Save Config
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* NEW: Collapsible InfoBy Category Configuration Panel */}
-        {(availableInfoByCodes || []).length > 0 && (
-          <div className="mt-6 pt-6 border-t border-gray-200">
-            <div className="flex items-center justify-between mb-4">
-              <h4 className="text-md font-semibold text-gray-800">
-                InfoBy Category Assignment ({jobData.vendor_type} Format)
-              </h4>
-              <button
-                onClick={() => setShowInfoByConfig(!showInfoByConfig)}
-                className="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg flex items-center gap-1"
-              >
-                {showInfoByConfig ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                {showInfoByConfig ? 'Hide' : 'Show'} Configuration
-              </button>
-            </div>
-            
-            {/* Quick Summary (Always Visible) */}
-            <div className="grid grid-cols-2 md:grid-cols-6 gap-2 text-sm mb-4">
-              <div className="bg-green-50 px-3 py-2 rounded border">
-                <span className="font-medium text-green-800">Entry:</span> {(infoByCategoryConfig.entry || []).length}
-              </div>
-              <div className="bg-red-50 px-3 py-2 rounded border">
-                <span className="font-medium text-red-800">Refusal:</span> {(infoByCategoryConfig.refusal || []).length}
-              </div>
-              <div className="bg-blue-50 px-3 py-2 rounded border">
-                <span className="font-medium text-blue-800">Estimation:</span> {(infoByCategoryConfig.estimation || []).length}
-              </div>
-              <div className="bg-gray-50 px-3 py-2 rounded border">
-                <span className="font-medium text-gray-800">Invalid:</span> {(infoByCategoryConfig.invalid || []).length}
-              </div>
-              <div className="bg-purple-50 px-3 py-2 rounded border">
-                <span className="font-medium text-purple-800">Priced:</span> {(infoByCategoryConfig.priced || []).length}
-              </div>
-              <div className="bg-yellow-50 px-3 py-2 rounded border">
-                <span className="font-medium text-yellow-800">Special:</span> {(infoByCategoryConfig.special || []).length}
-              </div>
-            </div>
-            
-            {/* Detailed Configuration (Collapsible) */}
-            {showInfoByConfig && (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
-                {['entry', 'refusal', 'estimation', 'invalid', 'priced', 'special'].map(category => (
-                  <div key={category} className="border border-gray-200 rounded-lg p-4">
-                    <h5 className="font-medium text-gray-900 mb-3 capitalize">
-                      {category} ({(infoByCategoryConfig[category] || []).length})
-                    </h5>
-                    <div className="space-y-2 max-h-40 overflow-y-auto">
-                      {(availableInfoByCodes || []).map(codeItem => {
-                        const storageCode = jobData.vendor_type === 'Microsystems' ? codeItem.storageCode : codeItem.code;
-                        const displayCode = storageCode;
-                        const isAssigned = (infoByCategoryConfig[category] || []).includes(storageCode);
-                        
-                        return (
-                          <div key={codeItem.code} className="flex items-start">
-                            <input
-                              type="checkbox"
-                              checked={isAssigned}
-                              onChange={() => handleCategoryAssignment(category, storageCode, isAssigned)}
-                              disabled={settingsLocked}
-                              className="mr-2 mt-1"
-                            />
-                            <div className="text-sm">
-                              <span className="font-medium">{displayCode}</span>
-                              <div className="text-gray-600 text-xs leading-tight">{codeItem.description}</div>
-                            </div>
+                  <div>
+                    <h4 className="text-md font-semibold text-gray-800 mb-4">Grouped Categories</h4>
+                    <div className="space-y-4">
+                      <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                        <div className="flex justify-between items-center mb-2">
+                          <div>
+                            <span className="font-medium text-gray-900">Commercial (4A, 4B, 4C)</span>
+                            <div className="text-xs text-gray-600">Commercial properties</div>
                           </div>
-                        );
-                      })}
+                          <div className="text-right">
+                            <div className="font-bold text-blue-600 text-xl">{billingAnalytics.grouped.commercial.toLocaleString()}</div>
+                            <div className="text-xs text-blue-600">of {billingAnalytics.progressData.commercial.total.toLocaleString()}</div>
+                          </div>
+                        </div>
+                        <ProgressBar 
+                          current={billingAnalytics.progressData.commercial.billable} 
+                          total={billingAnalytics.progressData.commercial.total} 
+                          color="blue" 
+                        />
+                      </div>
+
+                      <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
+                        <div className="flex items-center justify-between mb-2">
+                          <div>
+                            <span className="font-medium text-gray-900">Exempt (15A-15F)</span>
+                            <div className="text-xs text-gray-600">Tax-exempt properties</div>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-bold text-purple-600 text-xl">{billingAnalytics.grouped.exempt.toLocaleString()}</div>
+                            <div className="text-xs text-purple-600">of {billingAnalytics.progressData.exempt.total.toLocaleString()}</div>
+                          </div>
+                        </div>
+                        <ProgressBar 
+                          current={billingAnalytics.progressData.exempt.billable} 
+                          total={billingAnalytics.progressData.exempt.total} 
+                          color="purple" 
+                        />
+                      </div>
+
+                      <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                        <div className="flex justify-between items-center mb-2">
+                          <div>
+                            <span className="font-medium text-gray-900">Railroad (5A, 5B)</span>
+                            <div className="text-xs text-gray-600">Railroad properties</div>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-bold text-green-600 text-xl">{billingAnalytics.grouped.railroad.toLocaleString()}</div>
+                            <div className="text-xs text-green-600">of {billingAnalytics.progressData.railroad.total.toLocaleString()}</div>
+                          </div>
+                        </div>
+                        <ProgressBar 
+                          current={billingAnalytics.progressData.railroad.billable} 
+                          total={billingAnalytics.progressData.railroad.total} 
+                          color="green" 
+                        />
+                      </div>
+
+                      <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                        <div className="flex justify-between items-center mb-2">
+                          <div>
+                            <span className="font-medium text-gray-900">Personal Property (6A, 6B)</span>
+                            <div className="text-xs text-gray-600">Personal property</div>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-bold text-gray-600 text-xl">{billingAnalytics.grouped.personalProperty.toLocaleString()}</div>
+                            <div className="text-xs text-gray-600">of {billingAnalytics.progressData.personalProperty.total.toLocaleString()}</div>
+                          </div>
+                        </div>
+                        <ProgressBar 
+                          current={billingAnalytics.progressData.personalProperty.billable} 
+                          total={billingAnalytics.progressData.personalProperty.total} 
+                          color="gray" 
+                        />
+                      </div>
                     </div>
                   </div>
-                ))}
+                </div>
+              </div>
+            )}
+
+            {/* ENHANCED: Validation Report with Compound Messages */}
+            {activeTab === 'validation' && validationReport && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-bold text-gray-900">
+                    Enhanced Validation Report - Smart Validation
+                  </h3>
+                  {validationReport.summary.total_issues > 0 && (
+                    <button
+                      onClick={exportValidationReport}
+                      className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center space-x-2"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span>Export Report</span>
+                    </button>
+                  )}
+                </div>
+
+                {validationReport.summary.total_issues === 0 ? (
+                  <div className="text-center py-8">
+                    <CheckCircle className="w-12 h-12 mx-auto mb-4 text-green-500" />
+                    <h4 className="text-lg font-semibold text-gray-900 mb-2">No Validation Issues</h4>
+                    <p className="text-gray-600">All attempted inspections passed validation checks</p>
+                    <p className="text-sm text-gray-500 mt-2">Properties not yet inspected are excluded from validation</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+                      <h4 className="font-semibold text-yellow-800 mb-3">Inspector Summary - Issues with Attempted Inspections Only</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {validationReport.summary.inspector_breakdown.map((inspector, idx) => (
+                          <div 
+                            key={idx}
+                            onClick={() => setSelectedInspectorIssues(
+                              selectedInspectorIssues === inspector.inspector_code ? null : inspector.inspector_code
+                            )}
+                            className="p-3 bg-white rounded border cursor-pointer hover:bg-yellow-50 transition-colors"
+                          >
+                            <div className="flex justify-between items-center">
+                              <div>
+                                <div className="font-medium text-gray-900">{inspector.inspector_code}</div>
+                                <div className="text-sm text-gray-600">{inspector.inspector_name}</div>
+                              </div>
+                              <div className="text-right">
+                                <div className="font-bold text-red-600">{inspector.total_issues}</div>
+                                <div className="text-xs text-gray-500">issues</div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {selectedInspectorIssues && validationReport.detailed_issues[selectedInspectorIssues] && (
+                      <div className="bg-white border border-gray-200 rounded-lg p-4">
+                        <h4 className="font-semibold text-gray-900 mb-4">
+                          Issues for {selectedInspectorIssues} - {validationReport.summary.inspector_breakdown.find(i => i.inspector_code === selectedInspectorIssues)?.inspector_name}
+                        </h4>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead className="bg-gray-50">
+                              <tr>
+                                <th className="px-3 py-2 text-left font-medium text-gray-700">Block</th>
+                                <th className="px-3 py-2 text-left font-medium text-gray-700">Lot</th>
+                                <th className="px-3 py-2 text-left font-medium text-gray-700">Qualifier</th>
+                                <th className="px-3 py-2 text-left font-medium text-gray-700">Property Location</th>
+                                <th className="px-3 py-2 text-left font-medium text-gray-700">Compound Issues</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {validationReport.detailed_issues[selectedInspectorIssues].map((issue, idx) => (
+                                <tr key={idx} className="border-t border-gray-200">
+                                  <td className="px-3 py-2">{issue.block}</td>
+                                  <td className="px-3 py-2">{issue.lot}</td>
+                                  <td className="px-3 py-2">{issue.qualifier || '-'}</td>
+                                  <td className="px-3 py-2">{issue.property_location}</td>
+                                  <td className="px-3 py-2 text-red-600">{issue.warning_message}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {!selectedInspectorIssues && (
+                      <div className="text-center py-8 text-gray-500">
+                        <FileText className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+                        <p>Click on an inspector above to view detailed issues</p>
+                        <p className="text-sm mt-2">Only properties with inspection attempts are validated</p>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             )}
           </div>
-        )}
-
-        <div className="mt-6 flex justify-end gap-3">
-          {/* Reset Session Button - Only show if session is active */}
-          {(settingsLocked || processed) && (
-            <button
-              onClick={resetProcessingSession}
-              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center space-x-2 transition-all"
-            >
-              <RefreshCw className="w-4 h-4" />
-              <span>Reset Session</span>
-            </button>
-          )}
-          
-          {/* Main Processing Button */}
-          <button
-            onClick={startProcessingSession}
-            disabled={processing || (!isDateLocked) || hasUnsavedChanges ||
-              ((infoByCategoryConfig.entry || []).length + (infoByCategoryConfig.refusal || []).length + 
-               (infoByCategoryConfig.estimation || []).length + (infoByCategoryConfig.priced || []).length + 
-               (infoByCategoryConfig.special || []).length) === 0}
-            className={`px-6 py-2 rounded-lg flex items-center space-x-2 transition-all ${
-              processed 
-                ? 'bg-green-600 text-white hover:bg-green-700'
-                : processing
-                ? 'bg-yellow-600 text-white'
-                : 'bg-blue-600 text-white hover:bg-blue-700'
-            } disabled:opacity-50 disabled:cursor-not-allowed`}
-          >
-            {processing ? (
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-            ) : processed ? (
-              <CheckCircle className="w-4 h-4" />
-            ) : (
-              <RefreshCw className="w-4 h-4" />
-            )}
-            <span>
-              {processing ? 'Processing...' : processed ? 'Processed ✓' : 'Start Processing Session'}
-            </span>
-          </button>
         </div>
-      </div>
+      )}
     </div>
   );
 };
