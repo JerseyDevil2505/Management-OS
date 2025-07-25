@@ -568,8 +568,16 @@ export class BRTProcessor {
     let totalresidential = 0;
     let totalcommercial = 0;
     
-    for (const record of records) {
+    console.log(`🔍 DEBUG: Starting calculation with ${records.length} records`);
+    
+    for (let i = 0; i < records.length; i++) {
+      const record = records[i];
       const propertyClass = record.PROPERTY_CLASS;
+      
+      // Debug first 5 records
+      if (i < 5) {
+        console.log(`🔍 DEBUG: Record ${i + 1} PROPERTY_CLASS = "${propertyClass}" (type: ${typeof propertyClass})`);
+      }
       
       if (propertyClass === '2' || propertyClass === '3A') {
         totalresidential++;
@@ -584,8 +592,40 @@ export class BRTProcessor {
   }
 
   /**
+   * Update jobs table with property class totals (NOT total_properties)
+   */
+  async updateJobTotals(jobId, totalresidential, totalcommercial) {
+    try {
+      console.log(`🔧 DEBUG: About to update job ${jobId} with totals: ${totalresidential} residential, ${totalcommercial} commercial`);
+      
+      const { data, error } = await supabase
+        .from('jobs')
+        .update({
+          totalresidential: totalresidential,
+          totalcommercial: totalcommercial
+          // NOTE: total_properties handled by AdminJobManagement/FileUploadButton
+        })
+        .eq('id', jobId);
+
+      console.log(`🔧 DEBUG: Supabase response - data:`, data);
+      console.log(`🔧 DEBUG: Supabase response - error:`, error);
+
+      if (error) {
+        console.error('❌ DEBUG: Failed to update job totals:', error);
+        throw error;
+      }
+
+      console.log('✅ DEBUG: Job totals updated successfully in database');
+      
+    } catch (error) {
+      console.error('❌ DEBUG: Error in updateJobTotals:', error);
+      // Don't throw - continue processing even if update fails
+    }
+  }
+
+  /**
    * Process complete file and store in database with enhanced code file integration
-   * CLEANED: Removed surgical fix functions - totals passed to AdminJobManagement
+   * RESTORED: totalresidential and totalcommercial calculations (total_properties handled by AdminJobManagement/FileUploadButton)
    */
   async processFile(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, versionInfo = {}) {
     try {
@@ -599,7 +639,7 @@ export class BRTProcessor {
       const records = this.parseSourceFile(sourceFileContent);
       console.log(`Processing ${records.length} records in batches...`);
       
-      // Calculate property totals for AdminJobManagement
+      // Calculate property totals BEFORE processing
       const { totalresidential, totalcommercial } = this.calculatePropertyTotals(records);
       
       const propertyRecords = [];
@@ -616,9 +656,7 @@ export class BRTProcessor {
       const results = {
         processed: 0,
         errors: 0,
-        warnings: [],
-        totalresidential: totalresidential,
-        totalcommercial: totalcommercial
+        warnings: []
       };
       
       console.log(`Batch inserting ${propertyRecords.length} property records...`);
@@ -640,6 +678,11 @@ export class BRTProcessor {
           results.processed += batch.length;
           console.log(`✅ Batch ${batchNumber} completed successfully`);
         }
+      }
+      
+      // Update jobs table with property totals AFTER successful processing
+      if (results.processed > 0) {
+        await this.updateJobTotals(jobId, totalresidential, totalcommercial);
       }
       
       console.log('🚀 ENHANCED BRT PROCESSING COMPLETE WITH ALL SECTIONS:', results);
