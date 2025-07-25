@@ -1276,10 +1276,10 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                 <div>
                   <p className="text-sm text-gray-600">Commercial Complete</p>
                   <p className="text-2xl font-bold text-blue-600">
-                    {jobData.totalCommercial > 0 ? Math.round((commercialCounts.inspected / jobData.totalCommercial) * 100) : 0}%
+                    {jobData.totalcommercial > 0 ? Math.round((commercialCounts.inspected / jobData.totalcommercial) * 100) : 0}%
                   </p>
                   <p className="text-xs text-gray-500 mt-1">
-                    {commercialCounts.inspected.toLocaleString()} of {(jobData.totalCommercial || 0).toLocaleString()} properties
+                    {commercialCounts.inspected.toLocaleString()} of {(jobData.totalcommercial || 0).toLocaleString()} properties
                   </p>
                 </div>
                 <Factory className="w-8 h-8 text-blue-500" />
@@ -1291,10 +1291,10 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                 <div>
                   <p className="text-sm text-gray-600">Pricing Complete</p>
                   <p className="text-2xl font-bold text-purple-600">
-                    {jobData.totalCommercial > 0 ? Math.round((commercialCounts.priced / jobData.totalCommercial) * 100) : 0}%
+                    {jobData.totalcommercial > 0 ? Math.round((commercialCounts.priced / jobData.totalcommercial) * 100) : 0}%
                   </p>
                   <p className="text-xs text-gray-500 mt-1">
-                    {commercialCounts.priced.toLocaleString()} of {(jobData.totalCommercial || 0).toLocaleString()} properties
+                    {commercialCounts.priced.toLocaleString()} of {(jobData.totalcommercial || 0).toLocaleString()} properties
                   </p>
                 </div>
                 <DollarSign className="w-8 h-8 text-purple-500" />
