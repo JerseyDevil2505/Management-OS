@@ -2,6 +2,7 @@
  * Enhanced BRT Processor with COMPLETE Section Parsing
  * FIXED: Now properly extracts ALL sections and InfoBy codes from nested MAP structures
  * Uses the proven parsing logic from the artifact tester
+ * 🔪 SURGICAL FIX: Added totalResidential and totalCommercial calculations
  */
 
 import { supabase } from '../supabaseClient.js';
@@ -564,11 +565,64 @@ export class BRTProcessor {
   }
 
   /**
+   * 🔪 SURGICAL FIX: Calculate property class totals for jobs table
+   * BRT property classes: 2=Residential, 3A=Residential, 4A/4B/4C=Commercial
+   */
+  calculatePropertyTotals(records) {
+    let totalResidential = 0;
+    let totalCommercial = 0;
+    
+    for (const record of records) {
+      const propertyClass = record.PROPERTY_CLASS;
+      
+      if (propertyClass === '2' || propertyClass === '3A') {
+        totalResidential++;
+      } else if (propertyClass === '4A' || propertyClass === '4B' || propertyClass === '4C') {
+        totalCommercial++;
+      }
+      // Other classes (1, 3B, 5A, 5B, etc.) not counted in either category
+    }
+    
+    console.log(`🔪 SURGICAL FIX - Property totals calculated: ${totalResidential} residential, ${totalCommercial} commercial`);
+    return { totalResidential, totalCommercial };
+  }
+
+  /**
+   * 🔪 SURGICAL FIX: Update jobs table with property class totals
+   */
+  async updateJobTotals(jobId, totalResidential, totalCommercial) {
+    try {
+      console.log(`🔪 SURGICAL FIX - Updating job ${jobId} with totals: ${totalResidential} residential, ${totalCommercial} commercial`);
+      
+      const { data, error } = await supabase
+        .from('jobs')
+        .update({
+          totalResidential: totalResidential,
+          totalCommercial: totalCommercial,
+          totalProperties: totalResidential + totalCommercial
+        })
+        .eq('id', jobId);
+
+      if (error) {
+        console.error('❌ SURGICAL FIX - Failed to update job totals:', error);
+        throw error;
+      }
+
+      console.log('✅ SURGICAL FIX - Job totals updated successfully');
+      
+    } catch (error) {
+      console.error('❌ SURGICAL FIX - Error updating job totals:', error);
+      // Don't throw - continue processing even if update fails
+    }
+  }
+
+  /**
    * Process complete file and store in database with enhanced code file integration
+   * 🔪 SURGICAL FIX: Added property totals calculation and jobs table update
    */
   async processFile(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, versionInfo = {}) {
     try {
-      console.log('🚀 Starting ENHANCED BRT file processing with COMPLETE section parsing...');
+      console.log('🚀 Starting ENHANCED BRT file processing with COMPLETE section parsing + PROPERTY TOTALS...');
       
       // Process and store code file if provided
       if (codeFileContent) {
@@ -577,6 +631,9 @@ export class BRTProcessor {
       
       const records = this.parseSourceFile(sourceFileContent);
       console.log(`Processing ${records.length} records in batches...`);
+      
+      // 🔪 SURGICAL FIX: Calculate property totals BEFORE processing
+      const { totalResidential, totalCommercial } = this.calculatePropertyTotals(records);
       
       const propertyRecords = [];
       
@@ -616,7 +673,12 @@ export class BRTProcessor {
         }
       }
       
-      console.log('🚀 ENHANCED BRT PROCESSING COMPLETE WITH ALL SECTIONS:', results);
+      // 🔪 SURGICAL FIX: Update jobs table with property totals AFTER successful processing
+      if (results.processed > 0) {
+        await this.updateJobTotals(jobId, totalResidential, totalCommercial);
+      }
+      
+      console.log('🚀 ENHANCED BRT PROCESSING COMPLETE WITH ALL SECTIONS + PROPERTY TOTALS:', results);
       return results;
       
     } catch (error) {
