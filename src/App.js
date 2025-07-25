@@ -2,7 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from './lib/supabaseClient';
 import EmployeeManagement from './components/EmployeeManagement';
 import AdminJobManagement from './components/AdminJobManagement';
-import BillingManagement from './components/BillingManagement'; // ADD THIS LINE
+import BillingManagement from './components/BillingManagement';
+import PayrollManagement from './components/PayrollManagement'; // ADD THIS LINE
 import JobContainer from './components/job-modules/JobContainer';
 import FileUploadButton from './components/FileUploadButton';
 import './App.css';
@@ -245,7 +246,7 @@ function App() {
                   </span>
                 )}
               </button>
-              {/* ADD BILLING MANAGEMENT BUTTON */}
+              {/* BILLING MANAGEMENT BUTTON */}
               <button
                 onClick={() => setActiveModule('billing')}
                 className={`px-4 py-2 rounded-lg font-medium transition-colors ${
@@ -255,6 +256,17 @@ function App() {
                 }`}
               >
                 💰 Billing Management
+              </button>
+              {/* ADD PAYROLL MANAGEMENT BUTTON */}
+              <button
+                onClick={() => setActiveModule('payroll')}
+                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                  activeModule === 'payroll'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+              >
+                📊 Payroll Management
               </button>
             </nav>
           )}
@@ -313,8 +325,11 @@ function App() {
           />
         )}
 
-        {/* ADD BILLING MANAGEMENT MODULE */}
+        {/* BILLING MANAGEMENT MODULE */}
         {activeModule === 'billing' && <BillingManagement />}
+
+        {/* ADD PAYROLL MANAGEMENT MODULE */}
+        {activeModule === 'payroll' && <PayrollManagement />}
         
         {activeModule === 'job-modules' && selectedJob && (
           <JobContainer 
