@@ -26,7 +26,8 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
     refusal: [],
     estimation: [],
     invalid: [],
-    priced: []
+    priced: [],
+    special: [] // NEW: For Microsystems V, N codes - valid but no validation reports
   });
   const [originalCategoryConfig, setOriginalCategoryConfig] = useState({});
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -309,7 +310,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
 
   // Set default InfoBy category configurations
   const setDefaultCategoryConfig = (vendor, codes) => {
-    const defaultConfig = { entry: [], refusal: [], estimation: [], invalid: [], priced: [] };
+    const defaultConfig = { entry: [], refusal: [], estimation: [], invalid: [], priced: [], special: [] };
 
     if (vendor === 'BRT') {
       codes.forEach(item => {
@@ -338,6 +339,9 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
           defaultConfig.estimation.push(storageCode);
         } else if (desc.includes('PRICED') || desc.includes('NARRATIVE') || desc.includes('ENCODED')) {
           defaultConfig.priced.push(storageCode);
+        } else if (desc.includes('VACANT LAND') || desc.includes('NARRATIVE')) {
+          // NEW: Special category for V (VACANT LAND) and N (NARRATIVE) - valid but no validation
+          defaultConfig.special.push(storageCode);
         }
       });
     }
@@ -525,7 +529,8 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         ...infoByCategoryConfig.entry,
         ...infoByCategoryConfig.refusal,
         ...infoByCategoryConfig.estimation,
-        ...infoByCategoryConfig.priced
+        ...infoByCategoryConfig.priced,
+        ...infoByCategoryConfig.special // NEW: Include special codes as valid
       ];
 
       // Load ALL records using pagination to bypass Supabase 1000 limit
@@ -648,9 +653,23 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         let hasValidMeasuredBy = inspector && inspector !== 'UNASSIGNED' && inspector.trim() !== '';
         let hasValidMeasuredDate = measuredDate && measuredDate >= startDate;
         
-        const normalizedInfoBy = infoByCode?.toString().padStart(2, '0');
-        const normalizedValidCodes = allValidCodes.map(code => code.toString().padStart(2, '0'));
-        let hasValidInfoBy = normalizedInfoBy && normalizedValidCodes.includes(normalizedInfoBy);
+        // FIXED: Vendor-specific validation logic - no padding for Microsystems!
+        let hasValidInfoBy;
+        if (actualVendor === 'BRT') {
+          // BRT: Use padding for numeric codes (01, 02, 06, etc.)
+          const normalizedInfoBy = infoByCode?.toString().padStart(2, '0');
+          const normalizedValidCodes = allValidCodes.map(code => code.toString().padStart(2, '0'));
+          hasValidInfoBy = normalizedInfoBy && normalizedValidCodes.includes(normalizedInfoBy);
+        } else if (actualVendor === 'Microsystems') {
+          // Microsystems: Direct string comparison for alphabetical codes (A, O, R, V, N, etc.)
+          hasValidInfoBy = infoByCode && allValidCodes.includes(infoByCode);
+        } else {
+          // Fallback: try both approaches
+          const normalizedInfoBy = infoByCode?.toString().padStart(2, '0');
+          const normalizedValidCodes = allValidCodes.map(code => code.toString().padStart(2, '0'));
+          hasValidInfoBy = (infoByCode && allValidCodes.includes(infoByCode)) || 
+                          (normalizedInfoBy && normalizedValidCodes.includes(normalizedInfoBy));
+        }
         
         // Compound validation messages per property
         const addValidationIssue = (message) => {
@@ -679,21 +698,29 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
           addValidationIssue('Missing or invalid measure date');
         }
 
-        // Business logic validation
-        const isEntryCode = infoByCategoryConfig.entry.includes(normalizedInfoBy);
-        const isRefusalCode = infoByCategoryConfig.refusal.includes(normalizedInfoBy);
-        const isEstimationCode = infoByCategoryConfig.estimation.includes(normalizedInfoBy);
-        const isPricedCode = infoByCategoryConfig.priced.includes(normalizedInfoBy);
+        // Business logic validation - ENHANCED for special codes
+        const isEntryCode = infoByCategoryConfig.entry.includes(actualVendor === 'BRT' ? normalizedInfoBy || infoByCode : infoByCode);
+        const isRefusalCode = infoByCategoryConfig.refusal.includes(actualVendor === 'BRT' ? normalizedInfoBy || infoByCode : infoByCode);
+        const isEstimationCode = infoByCategoryConfig.estimation.includes(actualVendor === 'BRT' ? normalizedInfoBy || infoByCode : infoByCode);
+        const isPricedCode = infoByCategoryConfig.priced.includes(actualVendor === 'BRT' ? normalizedInfoBy || infoByCode : infoByCode);
+        const isSpecialCode = infoByCategoryConfig.special.includes(actualVendor === 'BRT' ? normalizedInfoBy || infoByCode : infoByCode); // NEW
         const hasListingData = record.inspection_list_by && record.inspection_list_date;
 
-        if (isRefusalCode && !hasListingData) {
-          addValidationIssue(`Refusal code ${infoByCode} but missing listing data`);
-        }
-        if (isEntryCode && !hasListingData) {
-          addValidationIssue(`Entry code ${infoByCode} but missing listing data`);
-        }
-        if (isEstimationCode && hasListingData) {
-          addValidationIssue(`Estimation code ${infoByCode} but has listing data`);
+        // Skip validation for special codes (V, N) - they're valid but don't need validation reports
+        if (isSpecialCode) {
+          // Special codes are valid inspections but bypass all validation rules
+          debugLog('VALIDATION', `Special code ${infoByCode} found - skipping validation rules`);
+        } else {
+          // Regular validation rules for non-special codes
+          if (isRefusalCode && !hasListingData) {
+            addValidationIssue(`Refusal code ${infoByCode} but missing listing data`);
+          }
+          if (isEntryCode && !hasListingData) {
+            addValidationIssue(`Entry code ${infoByCode} but missing listing data`);
+          }
+          if (isEstimationCode && hasListingData) {
+            addValidationIssue(`Estimation code ${infoByCode} but has listing data`);
+          }
         }
 
         // NEW: Corrected inspector type validation
@@ -1332,6 +1359,8 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                 <span>Refusal: {infoByCategoryConfig.refusal.length} codes</span>
                 <span>Estimation: {infoByCategoryConfig.estimation.length} codes</span>
                 <span>Priced: {infoByCategoryConfig.priced.length} codes</span>
+                <span>Invalid: {infoByCategoryConfig.invalid.length} codes</span>
+                <span>Special: {infoByCategoryConfig.special.length} codes</span>
               </div>
               
               {hasUnsavedChanges && (
@@ -1371,7 +1400,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
             </div>
             
             {/* Quick Summary (Always Visible) */}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-sm mb-4">
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-2 text-sm mb-4">
               <div className="bg-green-50 px-3 py-2 rounded border">
                 <span className="font-medium text-green-800">Entry:</span> {infoByCategoryConfig.entry.length}
               </div>
@@ -1387,12 +1416,15 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
               <div className="bg-purple-50 px-3 py-2 rounded border">
                 <span className="font-medium text-purple-800">Priced:</span> {infoByCategoryConfig.priced.length}
               </div>
+              <div className="bg-yellow-50 px-3 py-2 rounded border">
+                <span className="font-medium text-yellow-800">Special:</span> {infoByCategoryConfig.special.length}
+              </div>
             </div>
             
             {/* Detailed Configuration (Collapsible) */}
             {showInfoByConfig && (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-                {['entry', 'refusal', 'estimation', 'invalid', 'priced'].map(category => (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+                {['entry', 'refusal', 'estimation', 'invalid', 'priced', 'special'].map(category => (
                   <div key={category} className="border border-gray-200 rounded-lg p-4">
                     <h5 className="font-medium text-gray-900 mb-3 capitalize">
                       {category} ({infoByCategoryConfig[category].length})
@@ -1432,7 +1464,8 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
             onClick={startProcessingSession}
             disabled={processing || (!isDateLocked) || hasUnsavedChanges ||
               (infoByCategoryConfig.entry.length + infoByCategoryConfig.refusal.length + 
-               infoByCategoryConfig.estimation.length + infoByCategoryConfig.priced.length) === 0}
+               infoByCategoryConfig.estimation.length + infoByCategoryConfig.priced.length + 
+               infoByCategoryConfig.special.length) === 0}
             className={`px-6 py-2 rounded-lg flex items-center space-x-2 transition-all ${
               processed 
                 ? 'bg-green-600 text-white hover:bg-green-700'
