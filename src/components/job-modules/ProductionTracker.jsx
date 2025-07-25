@@ -1,4 +1,4 @@
-{Objimport React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Factory, Settings, Download, RefreshCw, AlertTriangle, CheckCircle, TrendingUp, DollarSign, Users, Calendar, X, ChevronDown, ChevronUp, Eye, FileText, Lock, Unlock, Save } from 'lucide-react';
 import { supabase, jobService } from '../../lib/supabaseClient';
 
@@ -1553,7 +1553,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                   </div>
                 </div>
                 
-                {Object.keys(analytics.inspectorStats).length === 0 ? (
+                {Object.keys(analytics.inspectorStats || {}).length === 0 ? (
                   <div className="text-center py-8 text-gray-500">
                     <Users className="w-12 h-12 mx-auto mb-4 text-gray-400" />
                     <p>No inspector data available yet</p>
