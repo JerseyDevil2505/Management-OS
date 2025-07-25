@@ -16,6 +16,12 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
   const [comparisonResults, setComparisonResults] = useState(null);
   const [salesDecisions, setSalesDecisions] = useState(new Map());
   const [sourceFileVersion, setSourceFileVersion] = useState(1);
+  
+  // NEW: Batch processing modal state
+  const [showBatchModal, setShowBatchModal] = useState(false);
+  const [batchLogs, setBatchLogs] = useState([]);
+  const [currentBatch, setCurrentBatch] = useState(null);
+  const [batchComplete, setBatchComplete] = useState(false);
 
   const addNotification = (message, type = 'info') => {
     const id = Date.now();
@@ -29,6 +35,30 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
 
   const removeNotification = (id) => {
     setNotifications(prev => prev.filter(n => n.id !== id));
+  };
+
+  // NEW: Add log entry to batch processing
+  const addBatchLog = (message, type = 'info', details = null) => {
+    const logEntry = {
+      id: Date.now(),
+      timestamp: new Date().toISOString(),
+      message,
+      type,
+      details
+    };
+    setBatchLogs(prev => [...prev, logEntry]);
+    
+    // Also update current batch info for summary display
+    if (type === 'batch_start') {
+      setCurrentBatch(details);
+    }
+  };
+
+  // NEW: Clear batch logs for new processing session
+  const clearBatchLogs = () => {
+    setBatchLogs([]);
+    setCurrentBatch(null);
+    setBatchComplete(false);
   };
 
   // FIXED: Use exact same date parsing method as processors
@@ -928,7 +958,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     }
   };
 
-  // NEW: Process changes after review and approval
+  // ENHANCED: Process changes with batch logging modal
   const handleProcessChanges = async () => {
     if (!sourceFile || !sourceFileContent) {
       addNotification('No source file to process', 'error');
@@ -936,12 +966,24 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     }
     
     try {
+      // Initialize batch logging
+      clearBatchLogs();
+      setShowBatchModal(true);
       setProcessing(true);
       setProcessingStatus(`Processing ${detectedVendor} data via processor...`);
+      
+      addBatchLog('🚀 Starting file processing workflow', 'batch_start', {
+        vendor: detectedVendor,
+        fileName: sourceFile.name,
+        changesDetected: comparisonResults.summary.missing + comparisonResults.summary.changes + comparisonResults.summary.deletions + comparisonResults.summary.salesChanges + comparisonResults.summary.classChanges,
+        salesDecisions: salesDecisions.size
+      });
       
       console.log('🚀 Processing approved changes...');
       
       // Call the processor to update the database
+      addBatchLog(`📊 Calling ${detectedVendor} processor/updater...`, 'info');
+      
       const result = await propertyService.importCSVData(
         sourceFileContent,
         codeFileContent,
@@ -958,14 +1000,23 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       );
       
       console.log('📊 Processor completed with result:', result);
+      addBatchLog('✅ Property data processing completed', 'success', {
+        processed: result.processed,
+        errors: result.errors,
+        newVersion: (job.source_file_version || 1) + 1
+      });
       
       // Save comparison report with sales decisions
+      addBatchLog('💾 Saving comparison report to database...', 'info');
       await saveComparisonReport(comparisonResults, salesDecisions);
+      addBatchLog('✅ Comparison report saved successfully', 'success');
       
       // Store sales decisions as JSON in property records
       if (salesDecisions.size > 0) {
         setProcessingStatus('Saving sales decisions...');
+        addBatchLog(`💰 Processing ${salesDecisions.size} sales decisions...`, 'info');
         
+        let salesProcessed = 0;
         for (const [compositeKey, decision] of salesDecisions.entries()) {
           const salesChange = comparisonResults.details.salesChanges.find(sc => sc.property_composite_key === compositeKey);
           
@@ -991,16 +1042,22 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
             
             if (error) {
               console.error('Error updating sales history:', error);
+              addBatchLog(`❌ Error saving sales decision for ${compositeKey}`, 'error', { error: error.message });
+            } else {
+              salesProcessed++;
             }
           } catch (updateError) {
             console.error('Failed to update sales history for property:', compositeKey, updateError);
+            addBatchLog(`❌ Failed to update sales history for ${compositeKey}`, 'error', { error: updateError.message });
           }
         }
         
+        addBatchLog(`✅ Saved ${salesProcessed}/${salesDecisions.size} sales decisions`, 'success');
         console.log(`✅ Saved ${salesDecisions.size} sales decisions to property records`);
       }
       
       // Update job with new file version info
+      addBatchLog('🔄 Updating job metadata...', 'info');
       try {
         await jobService.update(job.id, {
           sourceFileStatus: result.errors > 0 ? 'error' : 'imported',
@@ -1008,9 +1065,11 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
           source_file_version: (job.source_file_version || 1) + 1,
           source_file_uploaded_at: new Date().toISOString()
         });
+        addBatchLog('✅ Job metadata updated successfully', 'success');
         console.log('✅ Job updated with new version info');
       } catch (updateError) {
         console.error('❌ Failed to update job:', updateError);
+        addBatchLog('⚠️ Job metadata update failed', 'warning', { error: updateError.message });
         addNotification('Data processed but job update failed', 'warning');
       }
       
@@ -1018,8 +1077,17 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       const errorCount = result.errors || 0;
       
       if (errorCount > 0) {
+        addBatchLog(`⚠️ Processing completed with ${errorCount} errors`, 'warning', {
+          totalProcessed,
+          errorCount
+        });
         addNotification(`❌ Processing completed with ${errorCount} errors. ${totalProcessed} records processed.`, 'warning');
       } else {
+        addBatchLog('🎉 All processing completed successfully!', 'success', {
+          totalProcessed,
+          vendor: detectedVendor,
+          salesDecisions: salesDecisions.size
+        });
         addNotification(`✅ Successfully processed ${totalProcessed} records via ${detectedVendor} processor`, 'success');
         
         if (salesDecisions.size > 0) {
@@ -1028,13 +1096,22 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       }
       
       // CRITICAL FIX: Refresh banner state immediately
+      addBatchLog('🔄 Refreshing UI state...', 'info');
       await refreshBannerState();
+      addBatchLog('✅ UI state refreshed successfully', 'success');
       
-      // Close modal and clean up
-      setShowResultsModal(false);
-      setSourceFile(null);
-      setSourceFileContent(null);
-      setSalesDecisions(new Map());
+      setBatchComplete(true);
+      
+      // Auto-close modal after 3 seconds if successful
+      if (errorCount === 0) {
+        setTimeout(() => {
+          setShowBatchModal(false);
+          setShowResultsModal(false);
+          setSourceFile(null);
+          setSourceFileContent(null);
+          setSalesDecisions(new Map());
+        }, 3000);
+      }
       
       // Notify parent component
       if (onFileProcessed) {
@@ -1043,6 +1120,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       
     } catch (error) {
       console.error('❌ Processing failed:', error);
+      addBatchLog('❌ Processing workflow failed', 'error', { error: error.message });
       addNotification(`Processing failed: ${error.message}`, 'error');
     } finally {
       setProcessing(false);
@@ -1095,6 +1173,144 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     }
   };
 
+  // NEW: Batch Processing Modal
+  const BatchProcessingModal = () => {
+    if (!showBatchModal) return null;
+    
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="bg-white rounded-lg max-w-4xl w-full max-h-[80vh] overflow-hidden shadow-2xl flex flex-col">
+          {/* Header */}
+          <div className="p-4 border-b border-gray-200 bg-gray-50 shrink-0">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <Database className="w-5 h-5 text-blue-600" />
+                <h2 className="text-lg font-bold text-gray-900">
+                  {processing ? 'Processing File Update...' : 'Processing Complete'}
+                </h2>
+              </div>
+              {batchComplete && (
+                <button
+                  onClick={() => {
+                    setShowBatchModal(false);
+                    setShowResultsModal(false);
+                    setSourceFile(null);
+                    setSourceFileContent(null);
+                    setSalesDecisions(new Map());
+                  }}
+                  className="text-gray-400 hover:text-gray-600 p-1"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto p-6">
+            {/* Summary Info */}
+            {currentBatch && (
+              <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <h3 className="font-bold text-blue-900 mb-2">Processing Summary:</h3>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="font-medium text-blue-800">Vendor:</span> {currentBatch.vendor}
+                  </div>
+                  <div>
+                    <span className="font-medium text-blue-800">File:</span> {currentBatch.fileName}
+                  </div>
+                  <div>
+                    <span className="font-medium text-blue-800">Changes Detected:</span> {currentBatch.changesDetected}
+                  </div>
+                  <div>
+                    <span className="font-medium text-blue-800">Sales Decisions:</span> {currentBatch.salesDecisions}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Processing Logs */}
+            <div className="space-y-3">
+              <h3 className="font-bold text-gray-900 mb-4">Processing Log:</h3>
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {batchLogs.map((log, index) => (
+                  <div
+                    key={log.id}
+                    className={`p-3 rounded-lg border-l-4 ${
+                      log.type === 'error' ? 'border-red-400 bg-red-50' :
+                      log.type === 'warning' ? 'border-yellow-400 bg-yellow-50' :
+                      log.type === 'success' ? 'border-green-400 bg-green-50' :
+                      log.type === 'batch_start' ? 'border-blue-400 bg-blue-50' :
+                      'border-gray-400 bg-gray-50'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className={`font-medium ${
+                          log.type === 'error' ? 'text-red-800' :
+                          log.type === 'warning' ? 'text-yellow-800' :
+                          log.type === 'success' ? 'text-green-800' :
+                          log.type === 'batch_start' ? 'text-blue-800' :
+                          'text-gray-800'
+                        }`}>
+                          {log.message}
+                        </div>
+                        {log.details && (
+                          <div className="mt-1 text-xs text-gray-600">
+                            <pre className="whitespace-pre-wrap">
+                              {JSON.stringify(log.details, null, 2)}
+                            </pre>
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-xs text-gray-500 ml-4">
+                        {new Date(log.timestamp).toLocaleTimeString()}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                
+                {/* Show current status if processing */}
+                {processing && processingStatus && (
+                  <div className="p-3 border-l-4 border-blue-400 bg-blue-50 rounded-lg">
+                    <div className="flex items-center space-x-2">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                      <span className="font-medium text-blue-800">{processingStatus}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-between items-center shrink-0">
+            <div className="text-sm text-gray-600">
+              {processing ? 'Processing in progress...' : `Completed ${batchLogs.length} operations`}
+            </div>
+            
+            {batchComplete && (
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => {
+                    setShowBatchModal(false);
+                    setShowResultsModal(false);
+                    setSourceFile(null);
+                    setSourceFileContent(null);
+                    setSalesDecisions(new Map());
+                  }}
+                  className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 font-medium"
+                >
+                  ✅ Close & Continue
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // SINGLE RESULTS MODAL - Clean and properly sized with comparison first workflow
   const ResultsModal = () => {
     if (!comparisonResults || !showResultsModal) return null;
@@ -1108,7 +1324,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     const hasAnyChanges = hasNewRecords || hasChanges || hasDeletions || hasSalesChanges || hasClassChanges;
     
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-40">
         <div className="bg-white rounded-lg max-w-5xl w-full max-h-[70vh] overflow-hidden shadow-2xl flex flex-col">
           {/* Header */}
           <div className="p-4 border-b border-gray-200 bg-gray-50 shrink-0">
@@ -1260,16 +1476,6 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
               </div>
             )}
 
-            {/* Processing Status */}
-            {processing && (
-              <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                <div className="flex items-center space-x-2">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-                  <span className="text-blue-800 font-medium">{processingStatus}</span>
-                </div>
-              </div>
-            )}
-
             {/* Debug Info - ENHANCED: Show composite keys for debugging */}
             <div className="mt-6 p-4 bg-gray-100 rounded-lg">
               <h3 className="font-bold text-gray-900 mb-2">🔍 Debug Info:</h3>
@@ -1353,12 +1559,24 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                   }
                   
                   try {
+                    // Initialize batch logging for no-changes workflow too
+                    clearBatchLogs();
+                    setShowBatchModal(true);
                     setProcessing(true);
                     setProcessingStatus(`Processing ${detectedVendor} data via processor...`);
+                    
+                    addBatchLog('🚀 Processing file with no changes detected', 'batch_start', {
+                      vendor: detectedVendor,
+                      fileName: sourceFile.name,
+                      changesDetected: 0,
+                      salesDecisions: 0
+                    });
                     
                     console.log('🚀 Processing acknowledged file (no changes detected)...');
                     
                     // Call the updater to UPSERT the database with latest data
+                    addBatchLog(`📊 Calling ${detectedVendor} updater for version refresh...`, 'info');
+                    
                     const result = await propertyService.updateCSVData(
                       sourceFileContent,
                       codeFileContent,
@@ -1375,35 +1593,55 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                     );
                     
                     console.log('📊 Processor completed with result:', result);
+                    addBatchLog('✅ Data refresh completed', 'success', {
+                      processed: result.processed,
+                      errors: result.errors,
+                      newVersion: (job.source_file_version || 1) + 1
+                    });
                     
                     // Save comparison report (showing no changes)
+                    addBatchLog('💾 Saving comparison report...', 'info');
                     await saveComparisonReport(comparisonResults, salesDecisions);
+                    addBatchLog('✅ Comparison report saved', 'success');
                     
                     // Update job with new file version info
+                    addBatchLog('🔄 Updating job metadata...', 'info');
                     await jobService.update(job.id, {
                       sourceFileStatus: result.errors > 0 ? 'error' : 'imported',
                       totalProperties: result.processed,
                       source_file_version: (job.source_file_version || 1) + 1,
                       source_file_uploaded_at: new Date().toISOString()
                     });
+                    addBatchLog('✅ Job metadata updated', 'success');
                     
                     const totalProcessed = result.processed || 0;
                     const errorCount = result.errors || 0;
                     
                     if (errorCount > 0) {
+                      addBatchLog(`⚠️ Refresh completed with ${errorCount} errors`, 'warning');
                       addNotification(`⚠️ Processing completed with ${errorCount} errors. ${totalProcessed} records updated.`, 'warning');
                     } else {
+                      addBatchLog('🎉 File version refresh completed successfully!', 'success');
                       addNotification(`✅ Successfully updated ${totalProcessed} records with latest data via ${detectedVendor} processor`, 'success');
                     }
                     
                     // CRITICAL FIX: Refresh banner state immediately
+                    addBatchLog('🔄 Refreshing UI state...', 'info');
                     await refreshBannerState();
+                    addBatchLog('✅ UI state refreshed', 'success');
                     
-                    // Close modal and clean up
-                    setShowResultsModal(false);
-                    setSourceFile(null);
-                    setSourceFileContent(null);
-                    setSalesDecisions(new Map());
+                    setBatchComplete(true);
+                    
+                    // Auto-close modal after 3 seconds if successful
+                    if (errorCount === 0) {
+                      setTimeout(() => {
+                        setShowBatchModal(false);
+                        setShowResultsModal(false);
+                        setSourceFile(null);
+                        setSourceFileContent(null);
+                        setSalesDecisions(new Map());
+                      }, 3000);
+                    }
                     
                     // Notify parent
                     if (onFileProcessed) {
@@ -1412,6 +1650,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                     
                   } catch (error) {
                     console.error('❌ Processing failed:', error);
+                    addBatchLog('❌ File refresh failed', 'error', { error: error.message });
                     addNotification(`Processing failed: ${error.message}`, 'error');
                   } finally {
                     setProcessing(false);
@@ -1640,6 +1879,9 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
           </>
         )}
       </div>
+
+      {/* Batch Processing Modal */}
+      <BatchProcessingModal />
 
       {/* Results Modal */}
       <ResultsModal />
