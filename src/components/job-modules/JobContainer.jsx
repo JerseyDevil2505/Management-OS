@@ -51,6 +51,11 @@ const JobContainer = ({
         .eq('id', selectedJob.id)
         .single();
 
+      // 🔍 DEBUG: Check what we're actually getting from the database
+      console.log('🔍 DEBUG JobContainer - selectedJob.id:', selectedJob.id);
+      console.log('🔍 DEBUG JobContainer - jobData:', jobData);
+      console.log('🔍 DEBUG JobContainer - file_version from query:', jobData?.file_version);
+
       if (jobError) throw jobError;
 
       const currentVersion = jobData?.file_version || 1;
