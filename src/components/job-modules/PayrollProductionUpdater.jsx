@@ -106,7 +106,7 @@ const PayrollProductionUpdater = ({
         setProcessed(true);
         setSettingsLocked(true);
         
-        addNotification('Analytics loaded from App.js state', 'info');
+        addNotification('✅ Analytics ready - showing existing results', 'info');
         debugLog('APP_STATE', '✅ Analytics restored from App.js state');
       }
     } catch (error) {
@@ -455,14 +455,17 @@ const PayrollProductionUpdater = ({
         .single();
 
       if (!error && job?.workflow_stats && job.workflow_stats.totalRecords) {
-        setAnalytics(job.workflow_stats);
-        setBillingAnalytics(job.workflow_stats.billingAnalytics);
-        setValidationReport(job.workflow_stats.validationReport);
-        setMissingPropertiesReport(job.workflow_stats.missingPropertiesReport);  // NEW: Load persisted missing properties
-        setProcessed(true);
-        setSettingsLocked(true);
-        debugLog('PERSISTENCE', '✅ Loaded persisted analytics from job record');
-        addNotification('Previously processed analytics loaded', 'info');
+        // Only load if we don't already have analytics from App.js
+        if (!analytics) {
+          setAnalytics(job.workflow_stats);
+          setBillingAnalytics(job.workflow_stats.billingAnalytics);
+          setValidationReport(job.workflow_stats.validationReport);
+          setMissingPropertiesReport(job.workflow_stats.missingPropertiesReport);
+          setProcessed(true);
+          setSettingsLocked(true);
+          debugLog('PERSISTENCE', '✅ Loaded persisted analytics from job record (fallback)');
+          addNotification('✅ Analytics ready - loaded from database', 'info');
+        }
       }
     } catch (error) {
       console.error('Error loading persisted analytics:', error);
@@ -1444,9 +1447,9 @@ const PayrollProductionUpdater = ({
         ))}
       </div>
 
-      {/* Header */}
+      {/* Header - Simplified to avoid double banner */}
       <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border-2 border-blue-200 p-6">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between">
           <div className="flex items-center">
             <Factory className="w-8 h-8 mr-3 text-blue-600" />
             <div>
@@ -1466,30 +1469,7 @@ const PayrollProductionUpdater = ({
             ← Back to Jobs
           </button>
         </div>
-
-        {/* ENHANCED: Quick Stats with App.js Integration - FIXED: Added safety checks */}
-        {analytics && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="bg-white p-4 rounded-lg border shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Total Properties</p>
-                  <p className="text-2xl font-bold text-blue-600">
-                    {propertyRecordsCount?.toLocaleString() || (analytics.totalRecords || 0).toLocaleString()}
-                  </p>
-                  {currentWorkflowStats?.isProcessed && (
-                    <p className="text-xs text-green-600 mt-1">✅ Synced with App.js</p>
-                  )}
-                </div>
-                <TrendingUp className="w-8 h-8 text-blue-500" />
-              </div>
-            </div>
-            
-            <div className="bg-white p-4 rounded-lg border shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Total Inspections</p>
-                  <p className="text-2xl font-bold text-green-600">{(analytics.validInspections || 0).toLocaleString()}</p>
+      </div>).toLocaleString()}</p>
                 </div>
                 <CheckCircle className="w-8 h-8 text-green-500" />
               </div>
