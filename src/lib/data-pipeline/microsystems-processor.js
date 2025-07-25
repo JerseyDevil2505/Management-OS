@@ -418,11 +418,63 @@ export class MicrosystemsProcessor {
   }
 
   /**
+   * Calculate property class totals for jobs table
+   * Microsystems property classes: 2=Residential, 3A=Residential, 4A/4B/4C=Commercial
+   */
+  calculatePropertyTotals(records) {
+    let totalresidential = 0;
+    let totalcommercial = 0;
+    
+    for (const record of records) {
+      const propertyClass = record['Class'];
+      
+      if (propertyClass === '2' || propertyClass === '3A') {
+        totalresidential++;
+      } else if (propertyClass === '4A' || propertyClass === '4B' || propertyClass === '4C') {
+        totalcommercial++;
+      }
+      // Other classes (1, 3B, 5A, 5B, etc.) not counted in either category
+    }
+    
+    console.log(`Property totals calculated: ${totalresidential} residential, ${totalcommercial} commercial`);
+    return { totalresidential, totalcommercial };
+  }
+
+  /**
+   * Update jobs table with property class totals (NOT total_properties)
+   */
+  async updateJobTotals(jobId, totalresidential, totalcommercial) {
+    try {
+      console.log(`Updating job ${jobId} with totals: ${totalresidential} residential, ${totalcommercial} commercial`);
+      
+      const { data, error } = await supabase
+        .from('jobs')
+        .update({
+          totalresidential: totalresidential,
+          totalcommercial: totalcommercial
+          // NOTE: total_properties handled by AdminJobManagement/FileUploadButton
+        })
+        .eq('id', jobId);
+
+      if (error) {
+        console.error('Failed to update job totals:', error);
+        throw error;
+      }
+
+      console.log('Job totals updated successfully');
+      
+    } catch (error) {
+      console.error('Error updating job totals:', error);
+      // Don't throw - continue processing even if update fails
+    }
+  }
+
+  /**
    * ENHANCED: Process complete file and store in database with code file integration
    * UPDATED: Single table insertion only - no more dual-table complexity
    * NEW: Integrates code file storage in jobs table
    * ADDED: Retry logic for connection issues and query cancellations
-   * CLEANED: Removed redundant surgical fix (total_properties handled by AdminJobManagement/FileUploadButton)
+   * RESTORED: totalresidential and totalcommercial calculations (total_properties handled by AdminJobManagement/FileUploadButton)
    */
   async processFile(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, versionInfo = {}) {
     try {
@@ -436,6 +488,9 @@ export class MicrosystemsProcessor {
       // Parse source file
       const records = this.parseSourceFile(sourceFileContent);
       console.log(`Processing ${records.length} records in batches...`);
+      
+      // Calculate property totals BEFORE processing
+      const { totalresidential, totalcommercial } = this.calculatePropertyTotals(records);
       
       // Prepare all property records for batch insert
       const propertyRecords = [];
@@ -477,6 +532,11 @@ export class MicrosystemsProcessor {
           results.processed += batch.length;
           console.log(`Batch ${batchNumber} completed successfully`);
         }
+      }
+      
+      // Update jobs table with property totals AFTER successful processing
+      if (results.processed > 0) {
+        await this.updateJobTotals(jobId, totalresidential, totalcommercial);
       }
       
       console.log('Enhanced Microsystems processing complete:', results);
