@@ -245,18 +245,73 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         }
 
       } else if (vendor === 'Microsystems') {
-        Object.keys(job.parsed_code_definitions).forEach(code => {
-          if (code.startsWith('140')) {
-            const description = job.parsed_code_definitions[code];
+        // FIXED: Read from updated parsing structure like in processors/updaters
+        const fieldCodes = job.parsed_code_definitions.field_codes;
+        const flatLookup = job.parsed_code_definitions.flat_lookup;
+        
+        debugLog('CODES', 'Microsystems parsed structure:', {
+          hasFieldCodes: !!fieldCodes,
+          hasFlatLookup: !!flatLookup,
+          fieldCodesKeys: fieldCodes ? Object.keys(fieldCodes) : [],
+          has140Category: !!(fieldCodes && fieldCodes['140'])
+        });
+
+        if (fieldCodes && fieldCodes['140']) {
+          // NEW: Read from structured field_codes['140']
+          debugLog('CODES', 'Found 140 category in field_codes, loading InfoBy codes...');
+          
+          Object.keys(fieldCodes['140']).forEach(actualCode => {
+            const codeData = fieldCodes['140'][actualCode];
             codes.push({
-              code: code,
-              description: description,
+              code: actualCode, // Display single letter like "A"
+              description: codeData.description,
               section: 'InfoBy',
               vendor: 'Microsystems',
-              storageCode: code.substring(3) // Strip 140 prefix for storage (140A -> A)
+              storageCode: actualCode, // Store single letter like "A"
+              fullCode: codeData.full_code || `140${actualCode}` // Keep full code for reference
             });
-          }
-        });
+            
+            debugLog('CODES', `Found InfoBy code: ${actualCode} = ${codeData.description}`);
+          });
+          
+        } else if (flatLookup) {
+          // FALLBACK: Read from flat_lookup for backward compatibility
+          debugLog('CODES', 'No field_codes[140], trying flat_lookup fallback...');
+          
+          Object.keys(flatLookup).forEach(code => {
+            if (code.startsWith('140')) {
+              const description = flatLookup[code];
+              codes.push({
+                code: code.substring(3), // Display single letter (140A -> A)
+                description: description,
+                section: 'InfoBy',
+                vendor: 'Microsystems',
+                storageCode: code.substring(3) // Store single letter (140A -> A)
+              });
+              
+              debugLog('CODES', `Found InfoBy code: ${code.substring(3)} = ${description}`);
+            }
+          });
+          
+        } else {
+          // LEGACY: Old format fallback
+          debugLog('CODES', 'No structured format found, trying legacy format...');
+          
+          Object.keys(job.parsed_code_definitions).forEach(code => {
+            if (code.startsWith('140')) {
+              const description = job.parsed_code_definitions[code];
+              codes.push({
+                code: code.substring(3), // Display single letter (140A -> A)
+                description: description,
+                section: 'InfoBy',
+                vendor: 'Microsystems',
+                storageCode: code.substring(3) // Store single letter (140A -> A)
+              });
+              
+              debugLog('CODES', `Found InfoBy code: ${code.substring(3)} = ${description}`);
+            }
+          });
+        }
       }
 
       setAvailableInfoByCodes(codes);
