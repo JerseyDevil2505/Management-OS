@@ -261,17 +261,6 @@ function App() {
                     onFileProcessed={handleFileProcessed} 
                   />
                 </div>
-
-                {/* Show job workflow state indicators */}
-                <div className="border-l border-gray-700 pl-6">
-                  <div className="flex items-center space-x-2 text-sm">
-                    {getJobWorkflowStats(selectedJob.id).isProcessed && (
-                      <span className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-medium">
-                        Analytics Ready
-                      </span>
-                    )}
-                  </div>
-                </div>
               </div>
               
               <button
