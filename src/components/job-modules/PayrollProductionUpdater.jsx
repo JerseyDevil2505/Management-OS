@@ -2110,13 +2110,13 @@ const PayrollProductionUpdater = ({
             )}
 
             {/* Missing Properties Tab */}
-            {activeTab === 'missing' && missingPropertiesReport && (
+            {activeTab === 'missing' && (
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
                   <h3 className="text-lg font-bold text-gray-900">
                     Missing Properties Report - Not Added to Inspection Data
                   </h3>
-                  {missingPropertiesReport.summary.total_missing > 0 && (
+                  {missingPropertiesReport && missingPropertiesReport.summary.total_missing > 0 && (
                     <button
                       onClick={() => exportMissingPropertiesReport()}
                       className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 flex items-center space-x-2"
@@ -2127,7 +2127,13 @@ const PayrollProductionUpdater = ({
                   )}
                 </div>
 
-                {missingPropertiesReport.summary.total_missing === 0 ? (
+                {!missingPropertiesReport ? (
+                  <div className="text-center py-8">
+                    <AlertTriangle className="w-12 h-12 mx-auto mb-4 text-orange-500" />
+                    <h4 className="text-lg font-semibold text-gray-900 mb-2">No Missing Properties Report</h4>
+                    <p className="text-gray-600">Run analytics processing to generate missing properties report</p>
+                  </div>
+                ) : missingPropertiesReport.summary.total_missing === 0 ? (
                   <div className="text-center py-8">
                     <CheckCircle className="w-12 h-12 mx-auto mb-4 text-green-500" />
                     <h4 className="text-lg font-semibold text-gray-900 mb-2">All Properties Accounted For</h4>
@@ -2189,7 +2195,7 @@ const PayrollProductionUpdater = ({
                     <div className="bg-white border border-gray-200 rounded-lg p-6 mb-6">
                       <h4 className="font-semibold text-gray-900 mb-4">Breakdown by Reason</h4>
                       <div className="space-y-3">
-                        {Object.entries(missingPropertiesReport.summary.by_reason).map(([reason, count]) => (
+                        {Object.entries(missingPropertiesReport.summary.by_reason || {}).map(([reason, count]) => (
                           <div key={reason} className="flex justify-between items-center p-3 bg-gray-50 rounded">
                             <span className="text-sm text-gray-700">{reason}</span>
                             <span className="font-bold text-gray-900">{count} properties</span>
@@ -2202,7 +2208,7 @@ const PayrollProductionUpdater = ({
                     <div className="bg-white border border-gray-200 rounded-lg p-6 mb-6">
                       <h4 className="font-semibold text-gray-900 mb-4">Breakdown by Inspector</h4>
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        {Object.entries(missingPropertiesReport.summary.by_inspector).map(([inspector, count]) => (
+                        {Object.entries(missingPropertiesReport.summary.by_inspector || {}).map(([inspector, count]) => (
                           <div key={inspector} className="p-3 bg-gray-50 rounded border">
                             <div className="font-medium text-gray-900">{inspector}</div>
                             <div className="text-sm text-gray-600">{count} missing properties</div>
@@ -2229,7 +2235,7 @@ const PayrollProductionUpdater = ({
                             </tr>
                           </thead>
                           <tbody>
-                            {missingPropertiesReport.detailed_missing.map((property, idx) => (
+                            {(missingPropertiesReport.detailed_missing || []).map((property, idx) => (
                               <tr key={idx} className={`border-t border-gray-200 ${
                                 property.reason.includes('No inspection attempt') ? 'bg-gray-50' : 'bg-red-50'
                               }`}>
