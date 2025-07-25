@@ -1,9 +1,393 @@
-import React, { useState, useEffect } from 'react';
+{/* Missing Properties Tab */}
+            {activeTab === 'missing' && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-bold text-gray-900">
+                    Missing Properties Report - Not Added to Inspection Data
+                  </h3>
+                  {missingPropertiesReport && missingPropertiesReport.summary.total_missing > 0 && (
+                    <button
+                      onClick={() => exportMissingPropertiesReport()}
+                      className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 flex items-center space-x-2"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span>Export Missing Report</span>
+                    </button>
+                  )}
+                </div>
+
+                {!missingPropertiesReport ? (
+                  <div className="text-center py-8">
+                    <AlertTriangle className="w-12 h-12 mx-auto mb-4 text-orange-500" />
+                    <h4 className="text-lg font-semibold text-gray-900 mb-2">No Missing Properties Report</h4>
+                    <p className="text-gray-600">Run analytics processing to generate missing properties report</p>
+                  </div>
+                ) : missingPropertiesReport.summary.total_missing === 0 ? (
+                  <div className="text-center py-8">
+                    <CheckCircle className="w-12 h-12 mx-auto mb-4 text-green-500" />
+                    <h4 className="text-lg font-semibold text-gray-900 mb-2">All Properties Accounted For</h4>
+                    <p className="text-gray-600">Every property record was successfully processed to inspection_data</p>
+                    <p className="text-sm text-gray-500 mt-2">Total Records: {analytics?.totalRecords || 0} | Valid Inspections: {analytics?.validInspections || 0}</p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Summary Cards */}
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                      <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-orange-600 font-medium">Total Missing</p>
+                            <p className="text-2xl font-bold text-orange-800">{missingPropertiesReport.summary.total_missing}</p>
+                          </div>
+                          <AlertTriangle className="w-8 h-8 text-orange-500" />
+                        </div>
+                      </div>
+
+                      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-gray-600 font-medium">Uninspected</p>
+                            <p className="text-2xl font-bold text-gray-800">{missingPropertiesReport.summary.uninspected_count}</p>
+                            <p className="text-xs text-gray-500">No inspection attempt</p>
+                          </div>
+                          <Eye className="w-8 h-8 text-gray-500" />
+                        </div>
+                      </div>
+
+                      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-red-600 font-medium">Validation Failed</p>
+                            <p className="text-2xl font-bold text-red-800">{missingPropertiesReport.summary.validation_failed_count}</p>
+                            <p className="text-xs text-red-500">Attempted but invalid</p>
+                          </div>
+                          <X className="w-8 h-8 text-red-500" />
+                        </div>
+                      </div>
+
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-blue-600 font-medium">Success Rate</p>
+                            <p className="text-2xl font-bold text-blue-800">
+                              {analytics?.totalRecords > 0 ? 
+                                Math.round(((analytics.totalRecords - missingPropertiesReport.summary.total_missing) / analytics.totalRecords) * 100) : 0}%
+                            </p>
+                            <p className="text-xs text-blue-500">Properties processed</p>
+                          </div>
+                          <CheckCircle className="w-8 h-8 text-blue-500" />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Breakdown by Reason */}
+                    <div className="bg-white border border-gray-200 rounded-lg p-6 mb-6">
+                      <h4 className="font-semibold text-gray-900 mb-4">Breakdown by Reason</h4>
+                      <div className="space-y-3">
+                        {Object.entries(missingPropertiesReport.summary.by_reason || {}).map(([reason, count]) => (
+                          <div key={reason} className="flex justify-between items-center p-3 bg-gray-50 rounded">
+                            <span className="text-sm text-gray-700">{reason}</span>
+                            <span className="font-bold text-gray-900">{count} properties</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Breakdown by Inspector */}
+                    <div className="bg-white border border-gray-200 rounded-lg p-6 mb-6">
+                      <h4 className="font-semibold text-gray-900 mb-4">Breakdown by Inspector</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {Object.entries(missingPropertiesReport.summary.by_inspector || {}).map(([inspector, count]) => (
+                          <div key={inspector} className="p-3 bg-gray-50 rounded border">
+                            <div className="font-medium text-gray-900">{inspector}</div>
+                            <div className="text-sm text-gray-600">{count} missing properties</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Detailed Missing Properties Table */}
+                    <div className="bg-white border border-gray-200 rounded-lg p-6">
+                      <h4 className="font-semibold text-gray-900 mb-4">Detailed Missing Properties</h4>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Block</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Lot</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Qualifier</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Property Location</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Class</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Inspector</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">InfoBy Code</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Reason</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(missingPropertiesReport.detailed_missing || []).map((property, idx) => (
+                              <tr key={idx} className={`border-t border-gray-200 ${
+                                property.reason.includes('No inspection attempt') ? 'bg-gray-50' : 'bg-red-50'
+                              }`}>
+                                <td className="px-3 py-2 font-medium">{property.block}</td>
+                                <td className="px-3 py-2 font-medium">{property.lot}</td>
+                                <td className="px-3 py-2">{property.qualifier || '-'}</td>
+                                <td className="px-3 py-2">{property.property_location}</td>
+                                <td className="px-3 py-2">
+                                  <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded font-medium">
+                                    {property.property_class}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-2">{property.inspector}</td>
+                                <td className="px-3 py-2">{property.info_by_code || '-'}</td>
+                                <td className="px-3 py-2 text-xs">{property.reason}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Summary for Billing Tab */}
+            {activeTab === 'billing' && billingAnalytics && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-bold text-gray-900">Summary for Billing</h3>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                  <div>
+                    <h4 className="text-md font-semibold text-gray-800 mb-4">Individual Classes</h4>
+                    <div className="space-y-3">
+                      {Object.entries(billingAnalytics.byClass)
+                        .filter(([cls, data]) => data.total > 0)
+                        .map(([cls, data]) => {
+                          const isResidential = ['2', '3A'].includes(cls);
+                          const isCommercial = ['4A', '4B', '4C'].includes(cls);
+                          const colorClass = isResidential 
+                            ? 'bg-green-50 border-green-200' 
+                            : isCommercial 
+                            ? 'bg-blue-50 border-blue-200'
+                            : 'bg-gray-50 border-gray-200';
+                          const textColor = isResidential 
+                            ? 'text-green-600' 
+                            : isCommercial 
+                            ? 'text-blue-600' 
+                            : 'text-gray-600';
+                          const progressColor = isResidential ? 'green' : isCommercial ? 'blue' : 'gray';
+                          
+                          return (
+                            <div key={cls} className={`p-4 rounded-lg border ${colorClass}`}>
+                              <div className="flex justify-between items-center mb-2">
+                                <div>
+                                  <span className="font-medium text-gray-900">Class {cls}</span>
+                                  {isResidential && <span className="ml-2 text-xs text-green-600 font-medium">Residential</span>}
+                                  {isCommercial && <span className="ml-2 text-xs text-blue-600 font-medium">Commercial</span>}
+                                </div>
+                                <div className="text-right">
+                                  <div className={`font-bold ${textColor}`}>{data.billable.toLocaleString()}</div>
+                                  <div className="text-xs text-gray-500">of {data.total.toLocaleString()}</div>
+                                </div>
+                              </div>
+                              <ProgressBar current={data.billable} total={data.total} color={progressColor} />
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="text-md font-semibold text-gray-800 mb-4">Grouped Categories</h4>
+                    <div className="space-y-4">
+                      <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                        <div className="flex justify-between items-center mb-2">
+                          <div>
+                            <span className="font-medium text-gray-900">Commercial (4A, 4B, 4C)</span>
+                            <div className="text-xs text-gray-600">Commercial properties</div>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-bold text-blue-600 text-xl">{billingAnalytics.grouped.commercial.toLocaleString()}</div>
+                            <div className="text-xs text-blue-600">of {billingAnalytics.progressData.commercial.total.toLocaleString()}</div>
+                          </div>
+                        </div>
+                        <ProgressBar 
+                          current={billingAnalytics.progressData.commercial.billable} 
+                          total={billingAnalytics.progressData.commercial.total} 
+                          color="blue" 
+                        />
+                      </div>
+
+                      <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
+                        <div className="flex justify-between items-center mb-2">
+                          <div>
+                            <span className="font-medium text-gray-900">Exempt (15A-15F)</span>
+                            <div className="text-xs text-gray-600">Tax-exempt properties</div>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-bold text-purple-600 text-xl">{billingAnalytics.grouped.exempt.toLocaleString()}</div>
+                            <div className="text-xs text-purple-600">of {billingAnalytics.progressData.exempt.total.toLocaleString()}</div>
+                          </div>
+                        </div>
+                        <ProgressBar 
+                          current={billingAnalytics.progressData.exempt.billable} 
+                          total={billingAnalytics.progressData.exempt.total} 
+                          color="purple" 
+                        />
+                      </div>
+
+                      <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                        <div className="flex justify-between items-center mb-2">
+                          <div>
+                            <span className="font-medium text-gray-900">Railroad (5A, 5B)</span>
+                            <div className="text-xs text-gray-600">Railroad properties</div>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-bold text-green-600 text-xl">{billingAnalytics.grouped.railroad.toLocaleString()}</div>
+                            <div className="text-xs text-green-600">of {billingAnalytics.progressData.railroad.total.toLocaleString()}</div>
+                          </div>
+                        </div>
+                        <ProgressBar 
+                          current={billingAnalytics.progressData.railroad.billable} 
+                          total={billingAnalytics.progressData.railroad.total} 
+                          color="green" 
+                        />
+                      </div>
+
+                      <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                        <div className="flex justify-between items-center mb-2">
+                          <div>
+                            <span className="font-medium text-gray-900">Personal Property (6A, 6B)</span>
+                            <div className="text-xs text-gray-600">Personal property</div>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-bold text-gray-600 text-xl">{billingAnalytics.grouped.personalProperty.toLocaleString()}</div>
+                            <div className="text-xs text-gray-600">of {billingAnalytics.progressData.personalProperty.total.toLocaleString()}</div>
+                          </div>
+                        </div>
+                        <ProgressBar 
+                          current={billingAnalytics.progressData.personalProperty.billable} 
+                          total={billingAnalytics.progressData.personalProperty.total} 
+                          color="gray" 
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Validation Report Tab */}
+            {activeTab === 'validation' && validationReport && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-bold text-gray-900">
+                    Enhanced Validation Report - Smart Validation
+                  </h3>
+                  {validationReport.summary.total_issues > 0 && (
+                    <button
+                      onClick={exportValidationReport}
+                      className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center space-x-2"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span>Export Report</span>
+                    </button>
+                  )}
+                </div>
+
+                {validationReport.summary.total_issues === 0 ? (
+                  <div className="text-center py-8">
+                    <CheckCircle className="w-12 h-12 mx-auto mb-4 text-green-500" />
+                    <h4 className="text-lg font-semibold text-gray-900 mb-2">No Validation Issues</h4>
+                    <p className="text-gray-600">All attempted inspections passed validation checks</p>
+                    <p className="text-sm text-gray-500 mt-2">Properties not yet inspected are excluded from validation</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+                      <h4 className="font-semibold text-yellow-800 mb-3">Inspector Summary - Issues with Attempted Inspections Only</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {validationReport.summary.inspector_breakdown.map((inspector, idx) => (
+                          <div 
+                            key={idx}
+                            onClick={() => setSelectedInspectorIssues(
+                              selectedInspectorIssues === inspector.inspector_code ? null : inspector.inspector_code
+                            )}
+                            className="p-3 bg-white rounded border cursor-pointer hover:bg-yellow-50 transition-colors"
+                          >
+                            <div className="flex justify-between items-center">
+                              <div>
+                                <div className="font-medium text-gray-900">{inspector.inspector_code}</div>
+                                <div className="text-sm text-gray-600">{inspector.inspector_name}</div>
+                              </div>
+                              <div className="text-right">
+                                <div className="font-bold text-red-600">{inspector.total_issues}</div>
+                                <div className="text-xs text-gray-500">issues</div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {selectedInspectorIssues && validationReport.detailed_issues[selectedInspectorIssues] && (
+                      <div className="bg-white border border-gray-200 rounded-lg p-4">
+                        <h4 className="font-semibold text-gray-900 mb-4">
+                          Issues for {selectedInspectorIssues} - {validationReport.summary.inspector_breakdown.find(i => i.inspector_code === selectedInspectorIssues)?.inspector_name}
+                        </h4>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead className="bg-gray-50">
+                              <tr>
+                                <th className="px-3 py-2 text-left font-medium text-gray-700">Block</th>
+                                <th className="px-3 py-2 text-left font-medium text-gray-700">Lot</th>
+                                <th className="px-3 py-2 text-left font-medium text-gray-700">Qualifier</th>
+                                <th className="px-3 py-2 text-left font-medium text-gray-700">Property Location</th>
+                                <th className="px-3 py-2 text-left font-medium text-gray-700">Compound Issues</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {validationReport.detailed_issues[selectedInspectorIssues].map((issue, idx) => (
+                                <tr key={idx} className="border-t border-gray-200">
+                                  <td className="px-3 py-2">{issue.block}</td>
+                                  <td className="px-3 py-2">{issue.lot}</td>
+                                  <td className="px-3 py-2">{issue.qualifier || '-'}</td>
+                                  <td className="px-3 py-2">{issue.property_location}</td>
+                                  <td className="px-3 py-2 text-red-600">{issue.warning_message}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {!selectedInspectorIssues && (
+                      <div className="text-center py-8 text-gray-500">
+                        <FileText className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+                        <p>Click on an inspector above to view detailed issues</p>
+                        <p className="text-sm mt-2">Only properties with inspection attempts are validated</p>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default ProductionTracker;import React, { useState, useEffect } from 'react';
 import { Factory, Settings, Download, RefreshCw, AlertTriangle, CheckCircle, TrendingUp, DollarSign, Users, Calendar, X, ChevronDown, ChevronUp, Eye, FileText, Lock, Unlock, Save } from 'lucide-react';
 import { supabase, jobService } from '../../lib/supabaseClient';
 
 // 🔧 ENHANCED: Accept App.js state management props
-const PayrollProductionUpdater = ({ 
+const ProductionTracker = ({ 
   jobData, 
   onBackToJobs, 
   latestFileVersion, 
@@ -15,7 +399,7 @@ const PayrollProductionUpdater = ({
 }) => {
   // 🔧 DEBUG: Log received props on component mount
   useEffect(() => {
-    console.log('🔍 PayrollProductionUpdater Props Received:', {
+    console.log('🔍 ProductionTracker Props Received:', {
       hasJobData: !!jobData,
       jobId: jobData?.id,
       latestFileVersion,
@@ -26,6 +410,7 @@ const PayrollProductionUpdater = ({
       hasOnUpdateWorkflowStats: typeof onUpdateWorkflowStats === 'function'
     });
   }, []);
+  
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [processed, setProcessed] = useState(false);
@@ -135,8 +520,6 @@ const PayrollProductionUpdater = ({
           inspector_type: emp.inspector_type,
           initials: initials
         };
-        
-
       });
 
       setEmployeeData(employeeMap);
@@ -793,7 +1176,7 @@ const PayrollProductionUpdater = ({
             // NEW: Corrected inspector type validation
             const isCommercialProperty = ['4A', '4B', '4C'].includes(propertyClass);
             const isResidentialProperty = ['2', '3A'].includes(propertyClass);
-            const isResidentialInspector = employeeData[inspector]?.inspector_type === 'residential';
+            const isResidentialInspector = employeeData[inspector]?.inspector_type === 'Residential';
             
             // Residential inspectors CAN'T do commercial (4A, 4B, 4C) - everything else is OK
             if (isCommercialProperty && isResidentialInspector) {
@@ -1381,6 +1764,562 @@ const PayrollProductionUpdater = ({
           style={{ width: `${percentage}%` }}
         ></div>
         <div className="text-xs text-gray-500 mt-1 text-right">{percentage}%</div>
+      {/* Settings Panel */}
+      <div className="bg-white rounded-lg border shadow-sm p-6">
+        <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
+          <Settings className="w-5 h-5 mr-2" />
+          Processing Settings - Enhanced Configuration
+          {settingsLocked && (
+            <span className="ml-3 px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
+              Session Active: {sessionId?.slice(-8)}
+            </span>
+          )}
+        </h3>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Project Start Date *
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="date"
+                value={projectStartDate}
+                onChange={(e) => setProjectStartDate(e.target.value)}
+                disabled={isDateLocked || settingsLocked}
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"
+              />
+              <button
+                onClick={isDateLocked ? unlockStartDate : lockStartDate}
+                disabled={settingsLocked || (!projectStartDate && !isDateLocked)}
+                className={`px-3 py-2 rounded-lg flex items-center gap-1 ${
+                  isDateLocked 
+                    ? 'bg-green-100 text-green-700 hover:bg-green-200' 
+                    : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                } disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                {isDateLocked ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
+                {isDateLocked ? 'Unlock' : 'Lock'}
+              </button>
+            {/* Main Content Tabs */}
+      {analytics && (
+        <div className="bg-white rounded-lg border shadow-sm">
+          <div className="border-b border-gray-200">
+            <nav className="-mb-px flex space-x-8 px-6">
+              <button
+                onClick={() => setActiveTab('analytics')}
+                className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'analytics'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                📊 Inspector Analytics
+              </button>
+              <button
+                onClick={() => setActiveTab('billing')}
+                className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'billing'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                💰 Summary for Billing
+              </button>
+              <button
+                onClick={() => setActiveTab('validation')}
+                className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'validation'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                ⚠️ Validation Report ({validationReport?.summary.total_issues || 0})
+              </button>
+              <button
+                onClick={() => setActiveTab('missing')}
+                className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'missing'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                🔍 Missing Properties ({missingPropertiesReport?.summary.total_missing || 0})
+              </button>
+            </nav>
+          </div>
+
+          <div className="p-6">
+            {/* NEW: Separate Residential and Commercial Inspector Analytics */}
+            {activeTab === 'analytics' && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-bold text-gray-900">Inspector Performance Analytics</h3>
+                  
+                  <div className="flex items-center space-x-4">
+                    <div className="flex items-center space-x-2">
+                      <label className="text-sm font-medium text-gray-700">Sort:</label>
+                      <select 
+                        value={inspectorSort}
+                        onChange={(e) => setInspectorSort(e.target.value)}
+                        className="px-3 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="alphabetical">Alphabetical</option>
+                        <option value="dailyAverage">Daily Average</option>
+                        <option value="entryRate">Entry Rate</option>
+                        <option value="totalInspected">Total Inspected</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+                
+                {Object.keys(analytics.inspectorStats).length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <Users className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+                    <p>No inspector data available yet</p>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    {/* RESIDENTIAL INSPECTOR ANALYTICS */}
+                    <div className="bg-green-50 rounded-lg border border-green-200 p-6">
+                      <h4 className="text-lg font-semibold text-green-800 mb-4 flex items-center">
+                        <Users className="w-5 h-5 mr-2" />
+                        Residential Inspector Analytics
+                      </h4>
+                      
+                      {Object.entries(analytics.inspectorStats)
+                        .filter(([_, stats]) => stats.inspector_type?.toLowerCase() === 'residential')
+                        .sort(([aKey, aStats], [bKey, bStats]) => {
+                          switch (inspectorSort) {
+                            case 'alphabetical':
+                              return aStats.name.localeCompare(bStats.name);
+                            case 'dailyAverage':
+                              return (bStats.dailyAverage || 0) - (aStats.dailyAverage || 0);
+                            case 'entryRate':
+                              return (bStats.entryRate || 0) - (aStats.entryRate || 0);
+                            case 'totalInspected':
+                              return bStats.totalInspected - aStats.totalInspected;
+                            default:
+                              return 0;
+                          }
+                        })
+                        .map(([inspector, stats]) => (
+                          <div key={inspector} className="bg-white border border-green-200 rounded-lg p-4 mb-3">
+                            {/* Header Row */}
+                            <div className="flex items-center justify-between mb-3">
+                              <div className="flex items-center space-x-3">
+                                <span className="font-semibold text-gray-900">{stats.name} ({inspector})</span>
+                                <span className="px-2 py-1 text-xs font-medium rounded bg-green-100 text-green-800">
+                                  Residential Inspector
+                                </span>
+                                <span className="text-sm text-gray-600">{stats.residentialFieldDays} residential field days</span>
+                              </div>
+                              <span className="text-lg font-bold text-green-600">{stats.totalInspected.toLocaleString()} Total</span>
+                            </div>
+                            
+                            {/* Metrics Grid */}
+                            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
+                              <div className="bg-green-50 p-3 rounded">
+                                <div className="font-bold text-green-700 text-xl">{stats.residentialInspected.toLocaleString()}</div>
+                                <div className="text-xs text-green-600 font-medium">Residential Inspected</div>
+                                <div className="text-xs text-gray-500">(Classes 2, 3A)</div>
+                              </div>
+                              <div className="bg-blue-50 p-3 rounded">
+                                <div className="font-bold text-blue-700 text-xl">{stats.dailyAverage || 0}</div>
+                                <div className="text-xs text-blue-600 font-medium">Daily Average</div>
+                                <div className="text-xs text-gray-500">Residential ÷ Field Days</div>
+                              </div>
+                              <div className="bg-green-50 p-3 rounded">
+                                <div className="font-bold text-green-700 text-xl">{stats.entryRate || 0}%</div>
+                                <div className="text-xs text-green-600 font-medium">Entry Rate</div>
+                                <div className="text-xs text-gray-500">On residential properties</div>
+                              </div>
+                              <div className="bg-red-50 p-3 rounded">
+                                <div className="font-bold text-red-700 text-xl">{stats.refusalRate || 0}%</div>
+                                <div className="text-xs text-red-600 font-medium">Refusal Rate</div>
+                                <div className="text-xs text-gray-500">On residential properties</div>
+                              </div>
+                              <div className="bg-gray-50 p-3 rounded">
+                                <div className="font-bold text-gray-700 text-xl">{(stats.totalInspected - stats.residentialInspected).toLocaleString()}</div>
+                                <div className="text-xs text-gray-600 font-medium">Other Properties</div>
+                                <div className="text-xs text-gray-500">Vacant, exempt, etc.</div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      
+                      {Object.entries(analytics.inspectorStats).filter(([_, stats]) => stats.inspector_type?.toLowerCase() === 'residential').length === 0 && (
+                        <div className="text-center py-4 text-green-600">
+                          <p>No residential inspectors found</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* COMMERCIAL INSPECTOR ANALYTICS */}
+                    <div className="bg-blue-50 rounded-lg border border-blue-200 p-6">
+                      <h4 className="text-lg font-semibold text-blue-800 mb-4 flex items-center">
+                        <Factory className="w-5 h-5 mr-2" />
+                        Commercial Inspector Analytics
+                      </h4>
+                      
+                      {Object.entries(analytics.inspectorStats)
+                        .filter(([_, stats]) => stats.inspector_type?.toLowerCase() === 'commercial')
+                        .sort(([aKey, aStats], [bKey, bStats]) => {
+                          switch (inspectorSort) {
+                            case 'alphabetical':
+                              return aStats.name.localeCompare(bStats.name);
+                            case 'dailyAverage':
+                              return (bStats.commercialAverage || 0) - (aStats.commercialAverage || 0);
+                            case 'totalInspected':
+                              return bStats.totalInspected - aStats.totalInspected;
+                            default:
+                              return 0;
+                          }
+                        })
+                        .map(([inspector, stats]) => (
+                          <div key={inspector} className="bg-white border border-blue-200 rounded-lg p-4 mb-3">
+                            {/* Header Row */}
+                            <div className="flex items-center justify-between mb-3">
+                              <div className="flex items-center space-x-3">
+                                <span className="font-semibold text-gray-900">{stats.name} ({inspector})</span>
+                                <span className="px-2 py-1 text-xs font-medium rounded bg-blue-100 text-blue-800">
+                                  Commercial Inspector
+                                </span>
+                                <span className="text-sm text-gray-600">{stats.commercialFieldDays} commercial field days</span>
+                              </div>
+                              <span className="text-lg font-bold text-blue-600">{stats.totalInspected.toLocaleString()} Total</span>
+                            </div>
+                            
+                            {/* Metrics Grid */}
+                            <div className="grid grid-cols-2 md:grid-cols-6 gap-3 text-center">
+                              <div className="bg-blue-50 p-3 rounded">
+                                <div className="font-bold text-blue-700 text-lg">{stats.commercialInspected.toLocaleString()}</div>
+                                <div className="text-xs text-blue-600 font-medium">Commercial</div>
+                                <div className="text-xs text-gray-500">(4A, 4B, 4C)</div>
+                              </div>
+                              <div className="bg-blue-50 p-3 rounded">
+                                <div className="font-bold text-blue-700 text-lg">{stats.commercialAverage || 0}</div>
+                                <div className="text-xs text-blue-600 font-medium">Commercial Avg</div>
+                                <div className="text-xs text-gray-500">Commercial ÷ Days</div>
+                              </div>
+                              <div className="bg-purple-50 p-3 rounded">
+                                <div className="font-bold text-purple-700 text-lg">{stats.priced.toLocaleString()}</div>
+                                <div className="text-xs text-purple-600 font-medium">Priced</div>
+                                <div className="text-xs text-gray-500">Commercial only</div>
+                              </div>
+                              <div className="bg-purple-50 p-3 rounded">
+                                <div className="font-bold text-purple-700 text-lg">{stats.pricingDays || 0}</div>
+                                <div className="text-xs text-purple-600 font-medium">Pricing Days</div>
+                                <div className="text-xs text-gray-500">{jobData.vendor_type === 'BRT' ? 'BRT only' : 'N/A'}</div>
+                              </div>
+                              <div className="bg-purple-50 p-3 rounded">
+                                <div className="font-bold text-purple-700 text-lg">{stats.pricingAverage || 'N/A'}</div>
+                                <div className="text-xs text-purple-600 font-medium">Pricing Avg</div>
+                                <div className="text-xs text-gray-500">{jobData.vendor_type === 'BRT' ? 'Priced ÷ Days' : 'N/A'}</div>
+                              </div>
+                              <div className="bg-gray-50 p-3 rounded">
+                                <div className="font-bold text-gray-700 text-lg">{(stats.totalInspected - stats.commercialInspected).toLocaleString()}</div>
+                                <div className="text-xs text-gray-600 font-medium">Other Properties</div>
+                                <div className="text-xs text-gray-500">Non-commercial</div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      
+                      {Object.entries(analytics.inspectorStats).filter(([_, stats]) => stats.inspector_type?.toLowerCase() === 'commercial').length === 0 && (
+                        <div className="text-center py-4 text-blue-600">
+                          <p>No commercial inspectors found</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* MANAGEMENT INSPECTOR ANALYTICS */}
+                    <div className="bg-purple-50 rounded-lg border border-purple-200 p-6">
+                      <h4 className="text-lg font-semibold text-purple-800 mb-4 flex items-center">
+                        <Users className="w-5 h-5 mr-2" />
+                        Management Inspector Analytics  
+                      </h4>
+                      
+                      {Object.entries(analytics.inspectorStats)
+                        .filter(([_, stats]) => stats.inspector_type?.toLowerCase() === 'management')
+                        .sort(([aKey, aStats], [bKey, bStats]) => {
+                          switch (inspectorSort) {
+                            case 'alphabetical':
+                              return aStats.name.localeCompare(bStats.name);
+                            case 'dailyAverage':
+                              return (bStats.dailyAverage || 0) - (aStats.dailyAverage || 0);
+                            case 'totalInspected':
+                              return bStats.totalInspected - aStats.totalInspected;
+                            default:
+                              return 0;
+                          }
+                        })
+                        .map(([inspector, stats]) => (
+                          <div key={inspector} className="bg-white border border-purple-200 rounded-lg p-4 mb-3">
+                            {/* Header Row */}
+                            <div className="flex items-center justify-between mb-3">
+                              <div className="flex items-center space-x-3">
+                                <span className="font-semibold text-gray-900">{stats.name} ({inspector})</span>
+                                <span className="px-2 py-1 text-xs font-medium rounded bg-purple-100 text-purple-800">
+                                  Management Inspector
+                                </span>
+                                <span className="text-sm text-gray-600">{stats.fieldDays} field days</span>
+                              </div>
+                              <span className="text-lg font-bold text-purple-600">{stats.totalInspected.toLocaleString()} Total</span>
+                            </div>
+                            
+                            {/* Metrics Grid */}
+                            <div className="grid grid-cols-2 md:grid-cols-6 gap-3 text-center">
+                              <div className="bg-green-50 p-3 rounded">
+                                <div className="font-bold text-green-700 text-lg">{stats.residentialInspected.toLocaleString()}</div>
+                                <div className="text-xs text-green-600 font-medium">Residential</div>
+                                <div className="text-xs text-gray-500">(2, 3A)</div>
+                              </div>
+                              <div className="bg-blue-50 p-3 rounded">
+                                <div className="font-bold text-blue-700 text-lg">{stats.commercialInspected.toLocaleString()}</div>
+                                <div className="text-xs text-blue-600 font-medium">Commercial</div>
+                                <div className="text-xs text-gray-500">(4A, 4B, 4C)</div>
+                              </div>
+                              <div className="bg-purple-50 p-3 rounded">
+                                <div className="font-bold text-purple-700 text-lg">{stats.dailyAverage || 0}</div>
+                                <div className="text-xs text-purple-600 font-medium">Daily Average</div>
+                                <div className="text-xs text-gray-500">Total ÷ Field Days</div>
+                              </div>
+                              <div className="bg-green-50 p-3 rounded">
+                                <div className="font-bold text-green-700 text-lg">{stats.entryRate || 0}%</div>
+                                <div className="text-xs text-green-600 font-medium">Entry Rate</div>
+                                <div className="text-xs text-gray-500">On residential</div>
+                              </div>
+                              <div className="bg-red-50 p-3 rounded">
+                                <div className="font-bold text-red-700 text-lg">{stats.refusalRate || 0}%</div>
+                                <div className="text-xs text-red-600 font-medium">Refusal Rate</div>
+                                <div className="text-xs text-gray-500">On residential</div>
+                              </div>
+                              <div className="bg-gray-50 p-3 rounded">
+                                <div className="font-bold text-gray-700 text-lg">{(stats.totalInspected - stats.residentialInspected - stats.commercialInspected).toLocaleString()}</div>
+                                <div className="text-xs text-gray-600 font-medium">Other Properties</div>
+                                <div className="text-xs text-gray-500">Vacant, exempt, etc.</div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      
+                      {Object.entries(analytics.inspectorStats).filter(([_, stats]) => stats.inspector_type?.toLowerCase() === 'management').length === 0 && (
+                        <div className="text-center py-4 text-purple-600">
+                          <p>No management inspectors found</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* UNTYPED INSPECTORS (If Any) */}
+                    {Object.entries(analytics.inspectorStats)
+                      .filter(([_, stats]) => !stats.inspector_type || 
+                        (stats.inspector_type.toLowerCase() !== 'residential' && 
+                         stats.inspector_type.toLowerCase() !== 'commercial' &&
+                         stats.inspector_type.toLowerCase() !== 'management'))
+                      .length > 0 && (
+                      <div className="bg-gray-50 rounded-lg border border-gray-200 p-6">
+                        <h4 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                          <AlertTriangle className="w-5 h-5 mr-2" />
+                          Other Inspectors (No Type Assigned)
+                        </h4>
+                        
+                        {Object.entries(analytics.inspectorStats)
+                          .filter(([_, stats]) => !stats.inspector_type || 
+                            (stats.inspector_type.toLowerCase() !== 'residential' && 
+                             stats.inspector_type.toLowerCase() !== 'commercial' &&
+                             stats.inspector_type.toLowerCase() !== 'management'))
+                          .sort(([aKey, aStats], [bKey, bStats]) => aStats.name.localeCompare(bStats.name))
+                          .map(([inspector, stats]) => (
+                            <div key={inspector} className="bg-white border border-gray-200 rounded-lg p-4 mb-3">
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center space-x-3">
+                                  <span className="font-semibold text-gray-900">{stats.name} ({inspector})</span>
+                                  <span className="px-2 py-1 text-xs font-medium rounded bg-yellow-100 text-yellow-800">
+                                    No Inspector Type
+                                  </span>
+                                  <span className="text-sm text-gray-600">{stats.fieldDays} field days</span>
+                                </div>
+                                <span className="text-lg font-bold text-gray-600">{stats.totalInspected.toLocaleString()} Total</span>
+                              </div>
+                              
+                              <div className="grid grid-cols-3 gap-4 text-center">
+                                <div className="bg-gray-50 p-3 rounded">
+                                  <div className="font-bold text-gray-700 text-lg">{stats.residentialInspected.toLocaleString()}</div>
+                                  <div className="text-xs text-gray-600 font-medium">Residential</div>
+                                </div>
+                                <div className="bg-gray-50 p-3 rounded">
+                                  <div className="font-bold text-gray-700 text-lg">{stats.commercialInspected.toLocaleString()}</div>
+                                  <div className="text-xs text-gray-600 font-medium">Commercial</div>
+                                </div>
+                                <div className="bg-gray-50 p-3 rounded">
+                                  <div className="font-bold text-gray-700 text-lg">{(stats.totalInspected - stats.residentialInspected - stats.commercialInspected).toLocaleString()}</div>
+                                  <div className="text-xs text-gray-600 font-medium">Other</div>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+            {isDateLocked && (
+              <p className="text-sm text-green-600 mt-1">
+                ✅ Date locked and saved to property records
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              InfoBy Categories ({(availableInfoByCodes || []).length} codes available)
+            </label>
+            <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <span>Entry: {(infoByCategoryConfig.entry || []).length} codes</span>
+                <span>Refusal: {(infoByCategoryConfig.refusal || []).length} codes</span>
+                <span>Estimation: {(infoByCategoryConfig.estimation || []).length} codes</span>
+                <span>Priced: {(infoByCategoryConfig.priced || []).length} codes</span>
+                <span>Special: {(infoByCategoryConfig.special || []).length} codes</span>
+              </div>
+              
+              {hasUnsavedChanges && (
+                <div className="text-sm text-orange-600 font-medium">
+                  ⚠️ Unsaved changes
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => saveCategoriesToDatabase()}
+                  disabled={!hasUnsavedChanges || settingsLocked}
+                  className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                >
+                  <Save className="w-4 h-4" />
+                  Save Config
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* NEW: Collapsible InfoBy Category Configuration Panel */}
+        {(availableInfoByCodes || []).length > 0 && (
+          <div className="mt-6 pt-6 border-t border-gray-200">
+            <div className="flex items-center justify-between mb-4">
+              <h4 className="text-md font-semibold text-gray-800">
+                InfoBy Category Assignment ({jobData.vendor_type} Format)
+              </h4>
+              <button
+                onClick={() => setShowInfoByConfig(!showInfoByConfig)}
+                className="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg flex items-center gap-1"
+              >
+                {showInfoByConfig ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                {showInfoByConfig ? 'Hide' : 'Show'} Configuration
+              </button>
+            </div>
+            
+            {/* Quick Summary (Always Visible) */}
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-2 text-sm mb-4">
+              <div className="bg-green-50 px-3 py-2 rounded border">
+                <span className="font-medium text-green-800">Entry:</span> {(infoByCategoryConfig.entry || []).length}
+              </div>
+              <div className="bg-red-50 px-3 py-2 rounded border">
+                <span className="font-medium text-red-800">Refusal:</span> {(infoByCategoryConfig.refusal || []).length}
+              </div>
+              <div className="bg-blue-50 px-3 py-2 rounded border">
+                <span className="font-medium text-blue-800">Estimation:</span> {(infoByCategoryConfig.estimation || []).length}
+              </div>
+              <div className="bg-gray-50 px-3 py-2 rounded border">
+                <span className="font-medium text-gray-800">Invalid:</span> {(infoByCategoryConfig.invalid || []).length}
+              </div>
+              <div className="bg-purple-50 px-3 py-2 rounded border">
+                <span className="font-medium text-purple-800">Priced:</span> {(infoByCategoryConfig.priced || []).length}
+              </div>
+              <div className="bg-yellow-50 px-3 py-2 rounded border">
+                <span className="font-medium text-yellow-800">Special:</span> {(infoByCategoryConfig.special || []).length}
+              </div>
+            </div>
+            
+            {/* Detailed Configuration (Collapsible) */}
+            {showInfoByConfig && (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+                {['entry', 'refusal', 'estimation', 'invalid', 'priced', 'special'].map(category => (
+                  <div key={category} className="border border-gray-200 rounded-lg p-4">
+                    <h5 className="font-medium text-gray-900 mb-3 capitalize">
+                      {category} ({(infoByCategoryConfig[category] || []).length})
+                    </h5>
+                    <div className="space-y-2 max-h-40 overflow-y-auto">
+                      {(availableInfoByCodes || []).map(codeItem => {
+                        const storageCode = jobData.vendor_type === 'Microsystems' ? codeItem.storageCode : codeItem.code;
+                        const displayCode = storageCode;
+                        const isAssigned = (infoByCategoryConfig[category] || []).includes(storageCode);
+                        
+                        return (
+                          <div key={codeItem.code} className="flex items-start">
+                            <input
+                              type="checkbox"
+                              checked={isAssigned}
+                              onChange={() => handleCategoryAssignment(category, storageCode, isAssigned)}
+                              disabled={settingsLocked}
+                              className="mr-2 mt-1"
+                            />
+                            <div className="text-sm">
+                              <span className="font-medium">{displayCode}</span>
+                              <div className="text-gray-600 text-xs leading-tight">{codeItem.description}</div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="mt-6 flex justify-end gap-3">
+          {/* Reset Session Button - Only show if session is active */}
+          {(settingsLocked || processed) && (
+            <button
+              onClick={resetProcessingSession}
+              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center space-x-2 transition-all"
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span>Reset Session</span>
+            </button>
+          )}
+          
+          {/* Main Processing Button */}
+          <button
+            onClick={startProcessingSession}
+            disabled={processing || (!isDateLocked) || hasUnsavedChanges ||
+              ((infoByCategoryConfig.entry || []).length + (infoByCategoryConfig.refusal || []).length + 
+               (infoByCategoryConfig.estimation || []).length + (infoByCategoryConfig.priced || []).length + 
+               (infoByCategoryConfig.special || []).length) === 0}
+            className={`px-6 py-2 rounded-lg flex items-center space-x-2 transition-all ${
+              processed 
+                ? 'bg-green-600 text-white hover:bg-green-700'
+                : processing
+                ? 'bg-yellow-600 text-white'
+                : 'bg-blue-600 text-white hover:bg-blue-700'
+            } disabled:opacity-50 disabled:cursor-not-allowed`}
+          >
+            {processing ? (
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+            ) : processed ? (
+              <CheckCircle className="w-4 h-4" />
+            ) : (
+              <RefreshCw className="w-4 h-4" />
+            )}
+            <span>
+              {processing ? 'Processing...' : processed ? 'Processed ✓' : 'Start Processing Session'}
+            </span>
+          </button>
+        </div>
       </div>
     );
   };
@@ -1405,7 +2344,7 @@ const PayrollProductionUpdater = ({
             <AlertTriangle className="w-6 h-6 text-red-600 mr-3" />
             <div>
               <h3 className="text-lg font-semibold text-red-800">Missing Job Data</h3>
-              <p className="text-red-600 mt-1">PayrollProductionUpdater requires valid job data to function.</p>
+              <p className="text-red-600 mt-1">ProductionTracker requires valid job data to function.</p>
               <p className="text-sm text-red-500 mt-2">jobData: {JSON.stringify(jobData)}</p>
             </div>
           </div>
@@ -1453,7 +2392,7 @@ const PayrollProductionUpdater = ({
           <div className="flex items-center">
             <Factory className="w-8 h-8 mr-3 text-blue-600" />
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">PayrollProductionUpdater</h1>
+              <h1 className="text-2xl font-bold text-gray-900">ProductionTracker</h1>
               <p className="text-gray-600">
                 {jobData?.name || 'Loading...'} - Enhanced Analytics & Validation Engine
                 {detectedVendor && <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded font-medium">
@@ -1469,7 +2408,24 @@ const PayrollProductionUpdater = ({
             ← Back to Jobs
           </button>
         </div>
-      </div>).toLocaleString()}</p>
+      </div>
+
+      {/* Key Analytics Summary */}
+      <div className="bg-white rounded-lg border shadow-sm p-6">
+        <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
+          <TrendingUp className="w-5 h-5 mr-2" />
+          Manager Overview - Key Metrics
+        </h3>
+
+        {/* Enhanced: Quick metrics with progress overview */}
+        {analytics && (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="bg-white p-4 rounded-lg border shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Properties Inspected</p>
+                  <p className="text-2xl font-bold text-blue-600">{(analytics.validInspections || 0).toLocaleString()}</p>
+                  <p className="text-xs text-gray-500 mt-1">of {(analytics.totalRecords || 0).toLocaleString()}</p>
                 </div>
                 <CheckCircle className="w-8 h-8 text-green-500" />
               </div>
@@ -1492,6 +2448,16 @@ const PayrollProductionUpdater = ({
                   <p className="text-2xl font-bold text-red-600">{analytics.jobRefusalRate || 0}%</p>
                 </div>
                 <AlertTriangle className="w-8 h-8 text-red-500" />
+              </div>
+            </div>
+
+            <div className="bg-white p-4 rounded-lg border shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Validation Issues</p>
+                  <p className="text-2xl font-bold text-orange-600">{analytics.validationIssues || 0}</p>
+                </div>
+                <FileText className="w-8 h-8 text-orange-500" />
               </div>
             </div>
           </div>
@@ -1723,754 +2689,8 @@ const PayrollProductionUpdater = ({
           </button>
         </div>
       </div>
-
-      {/* Main Content Tabs */}
-      {analytics && (
-        <div className="bg-white rounded-lg border shadow-sm">
-          <div className="border-b border-gray-200">
-            <nav className="-mb-px flex space-x-8 px-6">
-              <button
-                onClick={() => setActiveTab('analytics')}
-                className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === 'analytics'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                📊 Inspector Analytics
-              </button>
-              <button
-                onClick={() => setActiveTab('billing')}
-                className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === 'billing'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                💰 Summary for Billing
-              </button>
-              <button
-                onClick={() => setActiveTab('validation')}
-                className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === 'validation'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                ⚠️ Validation Report ({validationReport?.summary.total_issues || 0})
-              </button>
-              <button
-                onClick={() => setActiveTab('missing')}
-                className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === 'missing'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                🔍 Missing Properties ({missingPropertiesReport?.summary.total_missing || 0})
-              </button>
-            </nav>
-          </div>
-
-          <div className="p-6">
-            {/* NEW: Separate Residential and Commercial Inspector Analytics */}
-            {activeTab === 'analytics' && (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-bold text-gray-900">Inspector Performance Analytics</h3>
-                  
-                  <div className="flex items-center space-x-4">
-                    <div className="flex items-center space-x-2">
-                      <label className="text-sm font-medium text-gray-700">Sort:</label>
-                      <select 
-                        value={inspectorSort}
-                        onChange={(e) => setInspectorSort(e.target.value)}
-                        className="px-3 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="alphabetical">Alphabetical</option>
-                        <option value="dailyAverage">Daily Average</option>
-                        <option value="entryRate">Entry Rate</option>
-                        <option value="totalInspected">Total Inspected</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-                
-                {Object.keys(analytics.inspectorStats).length === 0 ? (
-                  <div className="text-center py-8 text-gray-500">
-                    <Users className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-                    <p>No inspector data available yet</p>
-                  </div>
-                ) : (
-                  <div className="space-y-6">
-                    {/* RESIDENTIAL INSPECTOR ANALYTICS */}
-                    <div className="bg-green-50 rounded-lg border border-green-200 p-6">
-                      <h4 className="text-lg font-semibold text-green-800 mb-4 flex items-center">
-                        <Users className="w-5 h-5 mr-2" />
-                        Residential Inspector Analytics
-                      </h4>
-                      
-                      {Object.entries(analytics.inspectorStats)
-                        .filter(([_, stats]) => stats.inspector_type?.toLowerCase() === 'residential')
-                        .sort(([aKey, aStats], [bKey, bStats]) => {
-                          switch (inspectorSort) {
-                            case 'alphabetical':
-                              return aStats.name.localeCompare(bStats.name);
-                            case 'dailyAverage':
-                              return (bStats.dailyAverage || 0) - (aStats.dailyAverage || 0);
-                            case 'entryRate':
-                              return (bStats.entryRate || 0) - (aStats.entryRate || 0);
-                            case 'totalInspected':
-                              return bStats.totalInspected - aStats.totalInspected;
-                            default:
-                              return 0;
-                          }
-                        })
-                        .map(([inspector, stats]) => (
-                          <div key={inspector} className="bg-white border border-green-200 rounded-lg p-4 mb-3">
-                            {/* Header Row */}
-                            <div className="flex items-center justify-between mb-3">
-                              <div className="flex items-center space-x-3">
-                                <span className="font-semibold text-gray-900">{stats.name} ({inspector})</span>
-                                <span className="px-2 py-1 text-xs font-medium rounded bg-green-100 text-green-800">
-                                  Residential Inspector
-                                </span>
-                                <span className="text-sm text-gray-600">{stats.residentialFieldDays} residential field days</span>
-                              </div>
-                              <span className="text-lg font-bold text-green-600">{stats.totalInspected.toLocaleString()} Total</span>
-                            </div>
-                            
-                            {/* Metrics Grid */}
-                            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
-                              <div className="bg-green-50 p-3 rounded">
-                                <div className="font-bold text-green-700 text-xl">{stats.residentialInspected.toLocaleString()}</div>
-                                <div className="text-xs text-green-600 font-medium">Residential Inspected</div>
-                                <div className="text-xs text-gray-500">(Classes 2, 3A)</div>
-                              </div>
-                              <div className="bg-blue-50 p-3 rounded">
-                                <div className="font-bold text-blue-700 text-xl">{stats.dailyAverage || 0}</div>
-                                <div className="text-xs text-blue-600 font-medium">Daily Average</div>
-                                <div className="text-xs text-gray-500">Residential ÷ Field Days</div>
-                              </div>
-                              <div className="bg-green-50 p-3 rounded">
-                                <div className="font-bold text-green-700 text-xl">{stats.entryRate || 0}%</div>
-                                <div className="text-xs text-green-600 font-medium">Entry Rate</div>
-                                <div className="text-xs text-gray-500">On residential properties</div>
-                              </div>
-                              <div className="bg-red-50 p-3 rounded">
-                                <div className="font-bold text-red-700 text-xl">{stats.refusalRate || 0}%</div>
-                                <div className="text-xs text-red-600 font-medium">Refusal Rate</div>
-                                <div className="text-xs text-gray-500">On residential properties</div>
-                              </div>
-                              <div className="bg-gray-50 p-3 rounded">
-                                <div className="font-bold text-gray-700 text-xl">{(stats.totalInspected - stats.residentialInspected).toLocaleString()}</div>
-                                <div className="text-xs text-gray-600 font-medium">Other Properties</div>
-                                <div className="text-xs text-gray-500">Vacant, exempt, etc.</div>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      
-                      {Object.entries(analytics.inspectorStats).filter(([_, stats]) => stats.inspector_type === 'residential').length === 0 && (
-                        <div className="text-center py-4 text-green-600">
-                          <p>No residential inspectors found</p>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* COMMERCIAL INSPECTOR ANALYTICS */}
-                    <div className="bg-blue-50 rounded-lg border border-blue-200 p-6">
-                      <h4 className="text-lg font-semibold text-blue-800 mb-4 flex items-center">
-                        <Factory className="w-5 h-5 mr-2" />
-                        Commercial Inspector Analytics
-                      </h4>
-                      
-                      {Object.entries(analytics.inspectorStats)
-                        .filter(([_, stats]) => stats.inspector_type?.toLowerCase() === 'commercial')
-                        .sort(([aKey, aStats], [bKey, bStats]) => {
-                          switch (inspectorSort) {
-                            case 'alphabetical':
-                              return aStats.name.localeCompare(bStats.name);
-                            case 'dailyAverage':
-                              return (bStats.commercialAverage || 0) - (aStats.commercialAverage || 0);
-                            case 'totalInspected':
-                              return bStats.totalInspected - aStats.totalInspected;
-                            default:
-                              return 0;
-                          }
-                        })
-                        .map(([inspector, stats]) => (
-                          <div key={inspector} className="bg-white border border-blue-200 rounded-lg p-4 mb-3">
-                            {/* Header Row */}
-                            <div className="flex items-center justify-between mb-3">
-                              <div className="flex items-center space-x-3">
-                                <span className="font-semibold text-gray-900">{stats.name} ({inspector})</span>
-                                <span className="px-2 py-1 text-xs font-medium rounded bg-blue-100 text-blue-800">
-                                  Commercial Inspector
-                                </span>
-                                <span className="text-sm text-gray-600">{stats.commercialFieldDays} commercial field days</span>
-                              </div>
-                              <span className="text-lg font-bold text-blue-600">{stats.totalInspected.toLocaleString()} Total</span>
-                            </div>
-                            
-                            {/* Metrics Grid */}
-                            <div className="grid grid-cols-2 md:grid-cols-6 gap-3 text-center">
-                              <div className="bg-blue-50 p-3 rounded">
-                                <div className="font-bold text-blue-700 text-lg">{stats.commercialInspected.toLocaleString()}</div>
-                                <div className="text-xs text-blue-600 font-medium">Commercial</div>
-                                <div className="text-xs text-gray-500">(4A, 4B, 4C)</div>
-                              </div>
-                              <div className="bg-blue-50 p-3 rounded">
-                                <div className="font-bold text-blue-700 text-lg">{stats.commercialAverage || 0}</div>
-                                <div className="text-xs text-blue-600 font-medium">Commercial Avg</div>
-                                <div className="text-xs text-gray-500">Commercial ÷ Days</div>
-                              </div>
-                              <div className="bg-purple-50 p-3 rounded">
-                                <div className="font-bold text-purple-700 text-lg">{stats.priced.toLocaleString()}</div>
-                                <div className="text-xs text-purple-600 font-medium">Priced</div>
-                                <div className="text-xs text-gray-500">Commercial only</div>
-                              </div>
-                              <div className="bg-purple-50 p-3 rounded">
-                                <div className="font-bold text-purple-700 text-lg">{stats.pricingDays || 0}</div>
-                                <div className="text-xs text-purple-600 font-medium">Pricing Days</div>
-                                <div className="text-xs text-gray-500">{jobData.vendor_type === 'BRT' ? 'BRT only' : 'N/A'}</div>
-                              </div>
-                              <div className="bg-purple-50 p-3 rounded">
-                                <div className="font-bold text-purple-700 text-lg">{stats.pricingAverage || 'N/A'}</div>
-                                <div className="text-xs text-purple-600 font-medium">Pricing Avg</div>
-                                <div className="text-xs text-gray-500">{jobData.vendor_type === 'BRT' ? 'Priced ÷ Days' : 'N/A'}</div>
-                              </div>
-                              <div className="bg-gray-50 p-3 rounded">
-                                <div className="font-bold text-gray-700 text-lg">{(stats.totalInspected - stats.commercialInspected).toLocaleString()}</div>
-                                <div className="text-xs text-gray-600 font-medium">Other Properties</div>
-                                <div className="text-xs text-gray-500">Non-commercial</div>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      
-                      {Object.entries(analytics.inspectorStats).filter(([_, stats]) => stats.inspector_type === 'commercial').length === 0 && (
-                        <div className="text-center py-4 text-blue-600">
-                          <p>No commercial inspectors found</p>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* MANAGEMENT INSPECTOR ANALYTICS */}
-                    <div className="bg-purple-50 rounded-lg border border-purple-200 p-6">
-                      <h4 className="text-lg font-semibold text-purple-800 mb-4 flex items-center">
-                        <Users className="w-5 h-5 mr-2" />
-                        Management Inspector Analytics  
-                      </h4>
-                      
-                      {Object.entries(analytics.inspectorStats)
-                        .filter(([_, stats]) => stats.inspector_type?.toLowerCase() === 'management')
-                        .sort(([aKey, aStats], [bKey, bStats]) => {
-                          switch (inspectorSort) {
-                            case 'alphabetical':
-                              return aStats.name.localeCompare(bStats.name);
-                            case 'dailyAverage':
-                              return (bStats.dailyAverage || 0) - (aStats.dailyAverage || 0);
-                            case 'totalInspected':
-                              return bStats.totalInspected - aStats.totalInspected;
-                            default:
-                              return 0;
-                          }
-                        })
-                        .map(([inspector, stats]) => (
-                          <div key={inspector} className="bg-white border border-purple-200 rounded-lg p-4 mb-3">
-                            {/* Header Row */}
-                            <div className="flex items-center justify-between mb-3">
-                              <div className="flex items-center space-x-3">
-                                <span className="font-semibold text-gray-900">{stats.name} ({inspector})</span>
-                                <span className="px-2 py-1 text-xs font-medium rounded bg-purple-100 text-purple-800">
-                                  Management Inspector
-                                </span>
-                                <span className="text-sm text-gray-600">{stats.fieldDays} field days</span>
-                              </div>
-                              <span className="text-lg font-bold text-purple-600">{stats.totalInspected.toLocaleString()} Total</span>
-                            </div>
-                            
-                            {/* Metrics Grid */}
-                            <div className="grid grid-cols-2 md:grid-cols-6 gap-3 text-center">
-                              <div className="bg-green-50 p-3 rounded">
-                                <div className="font-bold text-green-700 text-lg">{stats.residentialInspected.toLocaleString()}</div>
-                                <div className="text-xs text-green-600 font-medium">Residential</div>
-                                <div className="text-xs text-gray-500">(2, 3A)</div>
-                              </div>
-                              <div className="bg-blue-50 p-3 rounded">
-                                <div className="font-bold text-blue-700 text-lg">{stats.commercialInspected.toLocaleString()}</div>
-                                <div className="text-xs text-blue-600 font-medium">Commercial</div>
-                                <div className="text-xs text-gray-500">(4A, 4B, 4C)</div>
-                              </div>
-                              <div className="bg-purple-50 p-3 rounded">
-                                <div className="font-bold text-purple-700 text-lg">{stats.dailyAverage || 0}</div>
-                                <div className="text-xs text-purple-600 font-medium">Daily Average</div>
-                                <div className="text-xs text-gray-500">Total ÷ Field Days</div>
-                              </div>
-                              <div className="bg-green-50 p-3 rounded">
-                                <div className="font-bold text-green-700 text-lg">{stats.entryRate || 0}%</div>
-                                <div className="text-xs text-green-600 font-medium">Entry Rate</div>
-                                <div className="text-xs text-gray-500">On residential</div>
-                              </div>
-                              <div className="bg-red-50 p-3 rounded">
-                                <div className="font-bold text-red-700 text-lg">{stats.refusalRate || 0}%</div>
-                                <div className="text-xs text-red-600 font-medium">Refusal Rate</div>
-                                <div className="text-xs text-gray-500">On residential</div>
-                              </div>
-                              <div className="bg-gray-50 p-3 rounded">
-                                <div className="font-bold text-gray-700 text-lg">{(stats.totalInspected - stats.residentialInspected - stats.commercialInspected).toLocaleString()}</div>
-                                <div className="text-xs text-gray-600 font-medium">Other Properties</div>
-                                <div className="text-xs text-gray-500">Vacant, exempt, etc.</div>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      
-                      {Object.entries(analytics.inspectorStats).filter(([_, stats]) => stats.inspector_type?.toLowerCase() === 'management').length === 0 && (
-                        <div className="text-center py-4 text-purple-600">
-                          <p>No management inspectors found</p>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* UNTYPED INSPECTORS (If Any) */}
-                    {Object.entries(analytics.inspectorStats)
-                      .filter(([_, stats]) => !stats.inspector_type || 
-                        (stats.inspector_type.toLowerCase() !== 'residential' && 
-                         stats.inspector_type.toLowerCase() !== 'commercial' &&
-                         stats.inspector_type.toLowerCase() !== 'management'))
-                      .length > 0 && (
-                      <div className="bg-gray-50 rounded-lg border border-gray-200 p-6">
-                        <h4 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
-                          <AlertTriangle className="w-5 h-5 mr-2" />
-                          Other Inspectors (No Type Assigned)
-                        </h4>
-                        
-                        {Object.entries(analytics.inspectorStats)
-                          .filter(([_, stats]) => !stats.inspector_type || 
-                            (stats.inspector_type.toLowerCase() !== 'residential' && 
-                             stats.inspector_type.toLowerCase() !== 'commercial' &&
-                             stats.inspector_type.toLowerCase() !== 'management'))
-                          .sort(([aKey, aStats], [bKey, bStats]) => aStats.name.localeCompare(bStats.name))
-                          .map(([inspector, stats]) => (
-                            <div key={inspector} className="bg-white border border-gray-200 rounded-lg p-4 mb-3">
-                              <div className="flex items-center justify-between mb-2">
-                                <div className="flex items-center space-x-3">
-                                  <span className="font-semibold text-gray-900">{stats.name} ({inspector})</span>
-                                  <span className="px-2 py-1 text-xs font-medium rounded bg-yellow-100 text-yellow-800">
-                                    No Inspector Type
-                                  </span>
-                                  <span className="text-sm text-gray-600">{stats.fieldDays} field days</span>
-                                </div>
-                                <span className="text-lg font-bold text-gray-600">{stats.totalInspected.toLocaleString()} Total</span>
-                              </div>
-                              
-                              <div className="grid grid-cols-3 gap-4 text-center">
-                                <div className="bg-gray-50 p-3 rounded">
-                                  <div className="font-bold text-gray-700 text-lg">{stats.residentialInspected.toLocaleString()}</div>
-                                  <div className="text-xs text-gray-600 font-medium">Residential</div>
-                                </div>
-                                <div className="bg-gray-50 p-3 rounded">
-                                  <div className="font-bold text-gray-700 text-lg">{stats.commercialInspected.toLocaleString()}</div>
-                                  <div className="text-xs text-gray-600 font-medium">Commercial</div>
-                                </div>
-                                <div className="bg-gray-50 p-3 rounded">
-                                  <div className="font-bold text-gray-700 text-lg">{(stats.totalInspected - stats.residentialInspected - stats.commercialInspected).toLocaleString()}</div>
-                                  <div className="text-xs text-gray-600 font-medium">Other</div>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Missing Properties Tab */}
-            {activeTab === 'missing' && (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-bold text-gray-900">
-                    Missing Properties Report - Not Added to Inspection Data
-                  </h3>
-                  {missingPropertiesReport && missingPropertiesReport.summary.total_missing > 0 && (
-                    <button
-                      onClick={() => exportMissingPropertiesReport()}
-                      className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 flex items-center space-x-2"
-                    >
-                      <Download className="w-4 h-4" />
-                      <span>Export Missing Report</span>
-                    </button>
-                  )}
-                </div>
-
-                {!missingPropertiesReport ? (
-                  <div className="text-center py-8">
-                    <AlertTriangle className="w-12 h-12 mx-auto mb-4 text-orange-500" />
-                    <h4 className="text-lg font-semibold text-gray-900 mb-2">No Missing Properties Report</h4>
-                    <p className="text-gray-600">Run analytics processing to generate missing properties report</p>
-                  </div>
-                ) : missingPropertiesReport.summary.total_missing === 0 ? (
-                  <div className="text-center py-8">
-                    <CheckCircle className="w-12 h-12 mx-auto mb-4 text-green-500" />
-                    <h4 className="text-lg font-semibold text-gray-900 mb-2">All Properties Accounted For</h4>
-                    <p className="text-gray-600">Every property record was successfully processed to inspection_data</p>
-                    <p className="text-sm text-gray-500 mt-2">Total Records: {analytics?.totalRecords || 0} | Valid Inspections: {analytics?.validInspections || 0}</p>
-                  </div>
-                ) : (
-                  <>
-                    {/* Summary Cards */}
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                      <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-sm text-orange-600 font-medium">Total Missing</p>
-                            <p className="text-2xl font-bold text-orange-800">{missingPropertiesReport.summary.total_missing}</p>
-                          </div>
-                          <AlertTriangle className="w-8 h-8 text-orange-500" />
-                        </div>
-                      </div>
-
-                      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-sm text-gray-600 font-medium">Uninspected</p>
-                            <p className="text-2xl font-bold text-gray-800">{missingPropertiesReport.summary.uninspected_count}</p>
-                            <p className="text-xs text-gray-500">No inspection attempt</p>
-                          </div>
-                          <Eye className="w-8 h-8 text-gray-500" />
-                        </div>
-                      </div>
-
-                      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-sm text-red-600 font-medium">Validation Failed</p>
-                            <p className="text-2xl font-bold text-red-800">{missingPropertiesReport.summary.validation_failed_count}</p>
-                            <p className="text-xs text-red-500">Attempted but invalid</p>
-                          </div>
-                          <X className="w-8 h-8 text-red-500" />
-                        </div>
-                      </div>
-
-                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-sm text-blue-600 font-medium">Success Rate</p>
-                            <p className="text-2xl font-bold text-blue-800">
-                              {analytics?.totalRecords > 0 ? 
-                                Math.round(((analytics.totalRecords - missingPropertiesReport.summary.total_missing) / analytics.totalRecords) * 100) : 0}%
-                            </p>
-                            <p className="text-xs text-blue-500">Properties processed</p>
-                          </div>
-                          <CheckCircle className="w-8 h-8 text-blue-500" />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Breakdown by Reason */}
-                    <div className="bg-white border border-gray-200 rounded-lg p-6 mb-6">
-                      <h4 className="font-semibold text-gray-900 mb-4">Breakdown by Reason</h4>
-                      <div className="space-y-3">
-                        {Object.entries(missingPropertiesReport.summary.by_reason || {}).map(([reason, count]) => (
-                          <div key={reason} className="flex justify-between items-center p-3 bg-gray-50 rounded">
-                            <span className="text-sm text-gray-700">{reason}</span>
-                            <span className="font-bold text-gray-900">{count} properties</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Breakdown by Inspector */}
-                    <div className="bg-white border border-gray-200 rounded-lg p-6 mb-6">
-                      <h4 className="font-semibold text-gray-900 mb-4">Breakdown by Inspector</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        {Object.entries(missingPropertiesReport.summary.by_inspector || {}).map(([inspector, count]) => (
-                          <div key={inspector} className="p-3 bg-gray-50 rounded border">
-                            <div className="font-medium text-gray-900">{inspector}</div>
-                            <div className="text-sm text-gray-600">{count} missing properties</div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Detailed Missing Properties Table */}
-                    <div className="bg-white border border-gray-200 rounded-lg p-6">
-                      <h4 className="font-semibold text-gray-900 mb-4">Detailed Missing Properties</h4>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
-                          <thead className="bg-gray-50">
-                            <tr>
-                              <th className="px-3 py-2 text-left font-medium text-gray-700">Block</th>
-                              <th className="px-3 py-2 text-left font-medium text-gray-700">Lot</th>
-                              <th className="px-3 py-2 text-left font-medium text-gray-700">Qualifier</th>
-                              <th className="px-3 py-2 text-left font-medium text-gray-700">Property Location</th>
-                              <th className="px-3 py-2 text-left font-medium text-gray-700">Class</th>
-                              <th className="px-3 py-2 text-left font-medium text-gray-700">Inspector</th>
-                              <th className="px-3 py-2 text-left font-medium text-gray-700">InfoBy Code</th>
-                              <th className="px-3 py-2 text-left font-medium text-gray-700">Reason</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {(missingPropertiesReport.detailed_missing || []).map((property, idx) => (
-                              <tr key={idx} className={`border-t border-gray-200 ${
-                                property.reason.includes('No inspection attempt') ? 'bg-gray-50' : 'bg-red-50'
-                              }`}>
-                                <td className="px-3 py-2 font-medium">{property.block}</td>
-                                <td className="px-3 py-2 font-medium">{property.lot}</td>
-                                <td className="px-3 py-2">{property.qualifier || '-'}</td>
-                                <td className="px-3 py-2">{property.property_location}</td>
-                                <td className="px-3 py-2">
-                                  <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded font-medium">
-                                    {property.property_class}
-                                  </span>
-                                </td>
-                                <td className="px-3 py-2">{property.inspector}</td>
-                                <td className="px-3 py-2">{property.info_by_code || '-'}</td>
-                                <td className="px-3 py-2 text-xs">{property.reason}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
-
-            {/* Summary for Billing Tab */}
-            {activeTab === 'billing' && billingAnalytics && (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-bold text-gray-900">Summary for Billing</h3>
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                  <div>
-                    <h4 className="text-md font-semibold text-gray-800 mb-4">Individual Classes</h4>
-                    <div className="space-y-3">
-                      {Object.entries(billingAnalytics.byClass)
-                        .filter(([cls, data]) => data.total > 0)
-                        .map(([cls, data]) => {
-                          const isResidential = ['2', '3A'].includes(cls);
-                          const isCommercial = ['4A', '4B', '4C'].includes(cls);
-                          const colorClass = isResidential 
-                            ? 'bg-green-50 border-green-200' 
-                            : isCommercial 
-                            ? 'bg-blue-50 border-blue-200'
-                            : 'bg-gray-50 border-gray-200';
-                          const textColor = isResidential 
-                            ? 'text-green-600' 
-                            : isCommercial 
-                            ? 'text-blue-600' 
-                            : 'text-gray-600';
-                          const progressColor = isResidential ? 'green' : isCommercial ? 'blue' : 'gray';
-                          
-                          return (
-                            <div key={cls} className={`p-4 rounded-lg border ${colorClass}`}>
-                              <div className="flex justify-between items-center mb-2">
-                                <div>
-                                  <span className="font-medium text-gray-900">Class {cls}</span>
-                                  {isResidential && <span className="ml-2 text-xs text-green-600 font-medium">Residential</span>}
-                                  {isCommercial && <span className="ml-2 text-xs text-blue-600 font-medium">Commercial</span>}
-                                </div>
-                                <div className="text-right">
-                                  <div className={`font-bold ${textColor}`}>{data.billable.toLocaleString()}</div>
-                                  <div className="text-xs text-gray-500">of {data.total.toLocaleString()}</div>
-                                </div>
-                              </div>
-                              <ProgressBar current={data.billable} total={data.total} color={progressColor} />
-                            </div>
-                          );
-                        })}
-                    </div>
-                  </div>
-
-                  <div>
-                    <h4 className="text-md font-semibold text-gray-800 mb-4">Grouped Categories</h4>
-                    <div className="space-y-4">
-                      <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-                        <div className="flex justify-between items-center mb-2">
-                          <div>
-                            <span className="font-medium text-gray-900">Commercial (4A, 4B, 4C)</span>
-                            <div className="text-xs text-gray-600">Commercial properties</div>
-                          </div>
-                          <div className="text-right">
-                            <div className="font-bold text-blue-600 text-xl">{billingAnalytics.grouped.commercial.toLocaleString()}</div>
-                            <div className="text-xs text-blue-600">of {billingAnalytics.progressData.commercial.total.toLocaleString()}</div>
-                          </div>
-                        </div>
-                        <ProgressBar 
-                          current={billingAnalytics.progressData.commercial.billable} 
-                          total={billingAnalytics.progressData.commercial.total} 
-                          color="blue" 
-                        />
-                      </div>
-
-                      <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
-                        <div className="flex justify-between items-center mb-2">
-                          <div>
-                            <span className="font-medium text-gray-900">Exempt (15A-15F)</span>
-                            <div className="text-xs text-gray-600">Tax-exempt properties</div>
-                          </div>
-                          <div className="text-right">
-                            <div className="font-bold text-purple-600 text-xl">{billingAnalytics.grouped.exempt.toLocaleString()}</div>
-                            <div className="text-xs text-purple-600">of {billingAnalytics.progressData.exempt.total.toLocaleString()}</div>
-                          </div>
-                        </div>
-                        <ProgressBar 
-                          current={billingAnalytics.progressData.exempt.billable} 
-                          total={billingAnalytics.progressData.exempt.total} 
-                          color="purple" 
-                        />
-                      </div>
-
-                      <div className="p-4 bg-green-50 rounded-lg border border-green-200">
-                        <div className="flex justify-between items-center mb-2">
-                          <div>
-                            <span className="font-medium text-gray-900">Railroad (5A, 5B)</span>
-                            <div className="text-xs text-gray-600">Railroad properties</div>
-                          </div>
-                          <div className="text-right">
-                            <div className="font-bold text-green-600 text-xl">{billingAnalytics.grouped.railroad.toLocaleString()}</div>
-                            <div className="text-xs text-green-600">of {billingAnalytics.progressData.railroad.total.toLocaleString()}</div>
-                          </div>
-                        </div>
-                        <ProgressBar 
-                          current={billingAnalytics.progressData.railroad.billable} 
-                          total={billingAnalytics.progressData.railroad.total} 
-                          color="green" 
-                        />
-                      </div>
-
-                      <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-                        <div className="flex justify-between items-center mb-2">
-                          <div>
-                            <span className="font-medium text-gray-900">Personal Property (6A, 6B)</span>
-                            <div className="text-xs text-gray-600">Personal property</div>
-                          </div>
-                          <div className="text-right">
-                            <div className="font-bold text-gray-600 text-xl">{billingAnalytics.grouped.personalProperty.toLocaleString()}</div>
-                            <div className="text-xs text-gray-600">of {billingAnalytics.progressData.personalProperty.total.toLocaleString()}</div>
-                          </div>
-                        </div>
-                        <ProgressBar 
-                          current={billingAnalytics.progressData.personalProperty.billable} 
-                          total={billingAnalytics.progressData.personalProperty.total} 
-                          color="gray" 
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Validation Report Tab */}
-            {activeTab === 'validation' && validationReport && (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-bold text-gray-900">
-                    Enhanced Validation Report - Smart Validation
-                  </h3>
-                  {validationReport.summary.total_issues > 0 && (
-                    <button
-                      onClick={exportValidationReport}
-                      className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center space-x-2"
-                    >
-                      <Download className="w-4 h-4" />
-                      <span>Export Report</span>
-                    </button>
-                  )}
-                </div>
-
-                {validationReport.summary.total_issues === 0 ? (
-                  <div className="text-center py-8">
-                    <CheckCircle className="w-12 h-12 mx-auto mb-4 text-green-500" />
-                    <h4 className="text-lg font-semibold text-gray-900 mb-2">No Validation Issues</h4>
-                    <p className="text-gray-600">All attempted inspections passed validation checks</p>
-                    <p className="text-sm text-gray-500 mt-2">Properties not yet inspected are excluded from validation</p>
-                  </div>
-                ) : (
-                  <>
-                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
-                      <h4 className="font-semibold text-yellow-800 mb-3">Inspector Summary - Issues with Attempted Inspections Only</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        {validationReport.summary.inspector_breakdown.map((inspector, idx) => (
-                          <div 
-                            key={idx}
-                            onClick={() => setSelectedInspectorIssues(
-                              selectedInspectorIssues === inspector.inspector_code ? null : inspector.inspector_code
-                            )}
-                            className="p-3 bg-white rounded border cursor-pointer hover:bg-yellow-50 transition-colors"
-                          >
-                            <div className="flex justify-between items-center">
-                              <div>
-                                <div className="font-medium text-gray-900">{inspector.inspector_code}</div>
-                                <div className="text-sm text-gray-600">{inspector.inspector_name}</div>
-                              </div>
-                              <div className="text-right">
-                                <div className="font-bold text-red-600">{inspector.total_issues}</div>
-                                <div className="text-xs text-gray-500">issues</div>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {selectedInspectorIssues && validationReport.detailed_issues[selectedInspectorIssues] && (
-                      <div className="bg-white border border-gray-200 rounded-lg p-4">
-                        <h4 className="font-semibold text-gray-900 mb-4">
-                          Issues for {selectedInspectorIssues} - {validationReport.summary.inspector_breakdown.find(i => i.inspector_code === selectedInspectorIssues)?.inspector_name}
-                        </h4>
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-sm">
-                            <thead className="bg-gray-50">
-                              <tr>
-                                <th className="px-3 py-2 text-left font-medium text-gray-700">Block</th>
-                                <th className="px-3 py-2 text-left font-medium text-gray-700">Lot</th>
-                                <th className="px-3 py-2 text-left font-medium text-gray-700">Qualifier</th>
-                                <th className="px-3 py-2 text-left font-medium text-gray-700">Property Location</th>
-                                <th className="px-3 py-2 text-left font-medium text-gray-700">Compound Issues</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {validationReport.detailed_issues[selectedInspectorIssues].map((issue, idx) => (
-                                <tr key={idx} className="border-t border-gray-200">
-                                  <td className="px-3 py-2">{issue.block}</td>
-                                  <td className="px-3 py-2">{issue.lot}</td>
-                                  <td className="px-3 py-2">{issue.qualifier || '-'}</td>
-                                  <td className="px-3 py-2">{issue.property_location}</td>
-                                  <td className="px-3 py-2 text-red-600">{issue.warning_message}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    )}
-
-                    {!selectedInspectorIssues && (
-                      <div className="text-center py-8 text-gray-500">
-                        <FileText className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-                        <p>Click on an inspector above to view detailed issues</p>
-                        <p className="text-sm mt-2">Only properties with inspection attempts are validated</p>
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 };
 
-export default PayrollProductionUpdater;
+export default ProductionTracker;
