@@ -3,10 +3,9 @@
  * Handles pipe-delimited source files and field_id+code lookup files
  * UPDATED: Single table insertion to property_records with all 82 fields
  * NEW: Proper code file storage in jobs table with pipe-delimited format support
- * FIXED: Added debugging for API key authentication issues
  * ADDED: Retry logic for connection issues and query cancellations
  * ENHANCED: Dual-pattern parsing for standard (140A) and HVAC (8ED) codes
- * 🔪 SURGICAL FIX: Added totalresidential and totalcommercial calculations
+ * CLEANED: Removed redundant surgical fix totals (handled by AdminJobManagement/FileUploadButton)
  */
 
 import { supabase } from '../supabaseClient.js';
@@ -16,7 +15,7 @@ export class MicrosystemsProcessor {
     this.codeLookups = new Map();
     this.headers = [];
     
-    // NEW: Store all parsed codes for database storage
+    // Store all parsed codes for database storage
     this.allCodes = {};
     this.categories = {};
   }
@@ -35,47 +34,47 @@ export class MicrosystemsProcessor {
   }
 
   /**
-   * Insert batch with retry logic for connection issues (COPIED FROM BRT PROCESSOR)
+   * Insert batch with retry logic for connection issues
    */
   async insertBatchWithRetry(batch, batchNumber, retries = 50) {
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
-        console.log(`🔄 Batch ${batchNumber}, attempt ${attempt}...`);
+        console.log(`Batch ${batchNumber}, attempt ${attempt}...`);
         
         const { data, error } = await supabase
           .from('property_records')
           .insert(batch);
         
         if (!error) {
-          console.log(`✅ Batch ${batchNumber} successful on attempt ${attempt}`);
+          console.log(`Batch ${batchNumber} successful on attempt ${attempt}`);
           return { success: true, data };
         }
         
         // Handle specific error codes
         if (error.code === '57014') {
-          console.log(`🔄 Query canceled (57014) for batch ${batchNumber}, attempt ${attempt}. Retrying...`);
+          console.log(`Query canceled (57014) for batch ${batchNumber}, attempt ${attempt}. Retrying...`);
           if (attempt < retries) {
             await new Promise(resolve => setTimeout(resolve, 3000)); // Wait 3 seconds
             continue;
           }
         } else if (error.code === '08003' || error.code === '08006') {
-          console.log(`🔄 Connection error for batch ${batchNumber}, attempt ${attempt}. Retrying...`);
+          console.log(`Connection error for batch ${batchNumber}, attempt ${attempt}. Retrying...`);
           if (attempt < retries) {
             await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
             continue;
           }
         } else {
           // For other errors, don't retry
-          console.error(`❌ Batch ${batchNumber} failed with non-retryable error:`, error);
+          console.error(`Batch ${batchNumber} failed with non-retryable error:`, error);
           return { error };
         }
         
         // If we get here, it's the final attempt for a retryable error
-        console.error(`❌ Batch ${batchNumber} failed after ${retries} attempts:`, error);
+        console.error(`Batch ${batchNumber} failed after ${retries} attempts:`, error);
         return { error };
         
       } catch (networkError) {
-        console.log(`🌐 Network error for batch ${batchNumber}, attempt ${attempt}:`, networkError.message);
+        console.log(`Network error for batch ${batchNumber}, attempt ${attempt}:`, networkError.message);
         if (attempt < retries) {
           await new Promise(resolve => setTimeout(resolve, 2000));
           continue;
@@ -130,13 +129,11 @@ export class MicrosystemsProcessor {
           // Example: "8ED16  0399" → prefix="8", suffix="ED"
           prefix = '8';
           suffix = fullCode.substring(1, 3); // Extract exactly 2 characters after '8'
-          console.log(`🔥 HVAC code parsed: "${fullCode}" → prefix="${prefix}", suffix="${suffix}"`);
         } else {
           // Standard pattern: 3 digit category + variable code + rest is ignored  
           // Example: "140A   9999" → prefix="140", suffix="A"
           prefix = fullCode.substring(0, 3);
           suffix = fullCode.substring(3).trim().split(/\s+/)[0]; // Get code part before spaces
-          console.log(`📋 Standard code parsed: "${fullCode}" → prefix="${prefix}", suffix="${suffix}"`);
         }
         
         if (prefix && suffix) {
@@ -166,7 +163,6 @@ export class MicrosystemsProcessor {
           
         } else {
           // Handle codes that don't match either pattern (direct codes)
-          console.log(`⚠️ Direct code (no pattern match): "${fullCode}"`);
           this.codeLookups.set(fullCode, description);
           
           if (!this.allCodes['direct']) {
@@ -187,11 +183,10 @@ export class MicrosystemsProcessor {
       
       console.log(`Loaded ${this.codeLookups.size} code definitions with dual-pattern parsing`);
       console.log(`Organized into ${Object.keys(this.allCodes).length} field groups`);
-      console.log(`Categories found: ${Object.keys(this.categories).join(', ')}`);
       console.log(`InfoBy codes (140 prefix): ${Object.keys(this.allCodes['140'] || {}).join(', ')}`);
       console.log(`HVAC codes (8 prefix): ${Object.keys(this.allCodes['8'] || {}).join(', ')}`);
       
-      // NEW: Store code file in jobs table with debugging
+      // Store code file in jobs table
       await this.storeCodeFileInDatabase(codeFileContent, jobId);
       
     } catch (error) {
@@ -201,49 +196,20 @@ export class MicrosystemsProcessor {
   }
 
   /**
-   * NEW: Store code file content and parsed definitions in jobs table
-   * FIXED: Added comprehensive debugging and Unicode null character cleaning
+   * Store code file content and parsed definitions in jobs table
    */
   async storeCodeFileInDatabase(codeFileContent, jobId) {
     try {
-      console.log('💾 Storing Microsystems code file in jobs table...');
-      console.log('🔍 DEBUG - jobId:', jobId);
-      console.log('🔍 DEBUG - supabase client exists:', !!supabase);
-      console.log('🔍 DEBUG - code content length:', codeFileContent?.length);
-      console.log('🔍 DEBUG - allCodes keys:', Object.keys(this.allCodes));
-      console.log('🔍 DEBUG - categories keys:', Object.keys(this.categories));
-      console.log('🔍 DEBUG - codeLookups size:', this.codeLookups.size);
+      console.log('Storing Microsystems code file in jobs table...');
       
-      // FIXED: Clean Unicode null characters that PostgreSQL can't handle
-      console.log('🧹 DEBUG - Cleaning Unicode null characters from code file...');
+      // Clean Unicode null characters that PostgreSQL can't handle
       const cleanedCodeContent = codeFileContent
         .replace(/\u0000/g, '') // Remove null characters
         .replace(/\x00/g, '')   // Remove hex null characters
         .trim();
       
-      console.log('🔍 DEBUG - Original length:', codeFileContent.length);
-      console.log('🔍 DEBUG - Cleaned length:', cleanedCodeContent.length);
-      console.log('🔍 DEBUG - Null chars removed:', codeFileContent.length - cleanedCodeContent.length);
-      
-      // Test basic Supabase connectivity first
-      console.log('🔍 DEBUG - Testing Supabase connection...');
-      const { data: testData, error: testError } = await supabase
-        .from('jobs')
-        .select('id, job_name')
-        .eq('id', jobId)
-        .single();
-      
-      if (testError) {
-        console.error('❌ DEBUG - Supabase connection test failed:', testError);
-        throw new Error(`Supabase connection failed: ${testError.message}`);
-      }
-      
-      console.log('✅ DEBUG - Supabase connection successful, job found:', testData?.job_name);
-      
-      // Now attempt the actual update with cleaned content
-      console.log('🔍 DEBUG - Attempting code file storage update with cleaned content...');
       const updatePayload = {
-        code_file_content: cleanedCodeContent, // Use cleaned content
+        code_file_content: cleanedCodeContent,
         code_file_name: 'Microsystems_Code_File.txt',
         code_file_uploaded_at: new Date().toISOString(),
         parsed_code_definitions: {
@@ -256,13 +222,10 @@ export class MicrosystemsProcessor {
             field_groups: Object.keys(this.allCodes).length,
             categories: Object.keys(this.categories).length,
             parsed_at: new Date().toISOString(),
-            parsing_method: 'dual_pattern' // NEW: Track parsing method used
+            parsing_method: 'dual_pattern'
           }
         }
       };
-      
-      console.log('🔍 DEBUG - Update payload keys:', Object.keys(updatePayload));
-      console.log('🔍 DEBUG - Parsed definitions summary:', updatePayload.parsed_code_definitions.summary);
       
       const { data: updateData, error: updateError } = await supabase
         .from('jobs')
@@ -271,35 +234,15 @@ export class MicrosystemsProcessor {
         .select('id, code_file_name, code_file_uploaded_at');
 
       if (updateError) {
-        console.error('❌ DEBUG - Code file storage update failed:', updateError);
-        console.error('❌ DEBUG - Error details:', {
-          message: updateError.message,
-          details: updateError.details,
-          hint: updateError.hint,
-          code: updateError.code
-        });
+        console.error('Code file storage failed:', updateError);
         throw updateError;
       }
       
-      console.log('✅ DEBUG - Code file storage update successful!');
-      console.log('✅ DEBUG - Updated job data:', updateData);
-      console.log('✅ Microsystems code file stored successfully in jobs table');
+      console.log('Microsystems code file stored successfully');
       
     } catch (error) {
-      console.error('❌ Failed to store Microsystems code file:', error);
-      console.error('❌ Error stack:', error.stack);
-      
-      // Log additional debugging info
-      console.log('🔍 DEBUG - Error context:', {
-        jobId,
-        contentLength: codeFileContent?.length,
-        allCodesCount: Object.keys(this.allCodes || {}).length,
-        categoriesCount: Object.keys(this.categories || {}).length,
-        lookupSize: this.codeLookups?.size || 0
-      });
-      
-      // Don't throw - continue with processing even if code storage fails
-      console.log('⚠️ Continuing with job creation despite code storage failure...');
+      console.error('Failed to store Microsystems code file:', error);
+      console.log('Continuing with job creation despite code storage failure...');
     }
   }
 
@@ -319,15 +262,6 @@ export class MicrosystemsProcessor {
     this.headers = this.renameDuplicateHeaders(originalHeaders);
     
     console.log(`Found ${this.headers.length} headers with duplicates renamed`);
-    console.log('Duplicate mapping created:', {
-      'Location': this.headers.indexOf('Location'),
-      'Land Value': this.headers.indexOf('Land Value'),
-      'Land Value2': this.headers.indexOf('Land Value2'),
-      'Impr Value': this.headers.indexOf('Impr Value'),
-      'Impr Value2': this.headers.indexOf('Impr Value2'),
-      'Totl Value': this.headers.indexOf('Totl Value'),
-      'Totl Value2': this.headers.indexOf('Totl Value2')
-    });
     
     // Parse data rows
     const records = [];
@@ -335,7 +269,7 @@ export class MicrosystemsProcessor {
       const values = lines[i].split('|');
       
       if (values.length !== this.headers.length) {
-        console.warn(`Row ${i} has ${values.length} values but ${this.headers.length} headers - possibly broken pipes. Row data:`, lines[i].substring(0, 200));
+        console.warn(`Row ${i} has ${values.length} values but ${this.headers.length} headers - possibly broken pipes`);
         continue;
       }
       
@@ -484,84 +418,26 @@ export class MicrosystemsProcessor {
   }
 
   /**
-   * 🔪 SURGICAL FIX: Calculate property class totals for jobs table
-   * Microsystems property classes: 2=Residential, 3A=Residential, 4A/4B/4C=Commercial
-   */
-  calculatePropertyTotals(records) {
-    let totalresidential = 0;
-    let totalcommercial = 0;
-    
-    for (const record of records) {
-      const propertyClass = record['Class'];
-      
-      if (propertyClass === '2' || propertyClass === '3A') {
-        totalresidential++;
-      } else if (propertyClass === '4A' || propertyClass === '4B' || propertyClass === '4C') {
-        totalcommercial++;
-      }
-      // Other classes (1, 3B, 5A, 5B, etc.) not counted in either category
-    }
-    
-    console.log(`🔪 SURGICAL FIX - Property totals calculated: ${totalresidential} residential, ${totalcommercial} commercial`);
-    return { totalresidential, totalcommercial };
-  }
-
-  /**
-   * 🔪 SURGICAL FIX: Update jobs table with property class totals
-   */
-  async updateJobTotals(jobId, totalresidential, totalcommercial) {
-    try {
-      console.log(`🔪 SURGICAL FIX - Updating job ${jobId} with totals: ${totalresidential} residential, ${totalcommercial} commercial`);
-      
-      const { data, error } = await supabase
-        .from('jobs')
-        .update({
-          totalresidential: totalresidential,
-          totalcommercial: totalcommercial,
-          totalproperties: totalresidential + totalcommercial
-        })
-        .eq('id', jobId);
-
-      if (error) {
-        console.error('❌ SURGICAL FIX - Failed to update job totals:', error);
-        throw error;
-      }
-
-      console.log('✅ SURGICAL FIX - Job totals updated successfully');
-      
-    } catch (error) {
-      console.error('❌ SURGICAL FIX - Error updating job totals:', error);
-      // Don't throw - continue processing even if update fails
-    }
-  }
-
-  /**
    * ENHANCED: Process complete file and store in database with code file integration
    * UPDATED: Single table insertion only - no more dual-table complexity
    * NEW: Integrates code file storage in jobs table
    * ADDED: Retry logic for connection issues and query cancellations
-   * 🔪 SURGICAL FIX: Added property totals calculation and jobs table update
+   * CLEANED: Removed redundant surgical fix (total_properties handled by AdminJobManagement/FileUploadButton)
    */
   async processFile(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, versionInfo = {}) {
     try {
-      console.log('Starting Enhanced Microsystems file processing (SINGLE TABLE WITH CODE STORAGE + RETRY LOGIC + PROPERTY TOTALS)...');
+      console.log('Starting Enhanced Microsystems file processing...');
       
-      // NEW: Process and store code file if provided
+      // Process and store code file if provided
       if (codeFileContent) {
-        console.log('🔍 DEBUG - Processing code file, length:', codeFileContent.length);
         await this.processCodeFile(codeFileContent, jobId);
-      } else {
-        console.log('⚠️ DEBUG - No code file content provided');
       }
       
       // Parse source file
       const records = this.parseSourceFile(sourceFileContent);
       console.log(`Processing ${records.length} records in batches...`);
       
-      // 🔪 SURGICAL FIX: Calculate property totals BEFORE processing
-      const { totalresidential, totalcommercial } = this.calculatePropertyTotals(records);
-      
-      // Prepare all property records for batch insert (SINGLE TABLE)
+      // Prepare all property records for batch insert
       const propertyRecords = [];
       
       for (const rawRecord of records) {
@@ -581,34 +457,29 @@ export class MicrosystemsProcessor {
         warnings: []
       };
       
-      // SINGLE BATCH INSERT: Insert all property records to unified table with retry logic (1000 at a time)
-      console.log(`Batch inserting ${propertyRecords.length} property records to unified table with retry logic...`);
+      // Batch insert all property records (1000 at a time)
+      console.log(`Batch inserting ${propertyRecords.length} property records...`);
       const batchSize = 1000;
       
       for (let i = 0; i < propertyRecords.length; i += batchSize) {
         const batch = propertyRecords.slice(i, i + batchSize);
         const batchNumber = Math.floor(i / batchSize) + 1;
         
-        console.log(`🚀 Processing batch ${batchNumber}: records ${i + 1} to ${Math.min(i + batchSize, propertyRecords.length)}`);
+        console.log(`Processing batch ${batchNumber}: records ${i + 1} to ${Math.min(i + batchSize, propertyRecords.length)}`);
         
         const result = await this.insertBatchWithRetry(batch, batchNumber);
         
         if (result.error) {
-          console.error(`❌ Batch ${batchNumber} failed after retries:`, result.error);
+          console.error(`Batch ${batchNumber} failed after retries:`, result.error);
           results.errors += batch.length;
           results.warnings.push(`Batch ${batchNumber} failed: ${result.error.message}`);
         } else {
           results.processed += batch.length;
-          console.log(`✅ Batch ${batchNumber} completed successfully`);
+          console.log(`Batch ${batchNumber} completed successfully`);
         }
       }
       
-      // 🔪 SURGICAL FIX: Update jobs table with property totals AFTER successful processing
-      if (results.processed > 0) {
-        await this.updateJobTotals(jobId, totalresidential, totalcommercial);
-      }
-      
-      console.log('🚀 ENHANCED SINGLE TABLE PROCESSING COMPLETE WITH CODE STORAGE + RETRY LOGIC + PROPERTY TOTALS:', results);
+      console.log('Enhanced Microsystems processing complete:', results);
       return results;
       
     } catch (error) {
@@ -779,7 +650,7 @@ export class MicrosystemsProcessor {
   }
 
   /**
-   * NEW: Get code details including rate and category
+   * Get code details including rate and category
    */
   getCodeDetails(code) {
     // Search through field codes for detailed information
@@ -806,7 +677,7 @@ export class MicrosystemsProcessor {
   }
 
   /**
-   * NEW: Get all parsed code sections (for module access)
+   * Get all parsed code sections (for module access)
    */
   getAllCodeSections() {
     return {
@@ -817,7 +688,7 @@ export class MicrosystemsProcessor {
   }
 
   /**
-   * NEW: Get codes by category
+   * Get codes by category
    */
   getCodesByCategory(category) {
     const result = {};
