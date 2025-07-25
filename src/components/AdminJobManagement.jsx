@@ -2367,7 +2367,7 @@ const uploadPropertyAssignment = async (job) => {
   );
 };
 
-export default AdminJobManagement; rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+export default AdminJobManagement;; rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       placeholder="e.g., 1306"
                       maxLength="4"
                       disabled={editingJob}
