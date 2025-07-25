@@ -17,7 +17,7 @@ const JobContainer = ({
 }) => {
   const [activeModule, setActiveModule] = useState('checklist');
   const [jobData, setJobData] = useState(null);
-  const [latestDataVersion, setLatestDataVersion] = useState(1);
+  const [latestFileVersion, setLatestFileVersion] = useState(1);
   const [latestCodeVersion, setLatestCodeVersion] = useState(1);
   const [propertyRecordsCount, setPropertyRecordsCount] = useState(0);
   const [isLoadingVersion, setIsLoadingVersion] = useState(true);
@@ -71,10 +71,10 @@ const JobContainer = ({
       if (dataVersionError && dataVersionError.code !== 'PGRST116') throw dataVersionError;
       if (jobError) throw jobError;
 
-      const currentDataVersion = dataVersionData?.file_version || 1;
+      const currentFileVersion = dataVersionData?.file_version || 1;
       const currentCodeVersion = jobData?.code_file_version || 1;
       
-      setLatestDataVersion(currentDataVersion);
+      setLatestFileVersion(currentFileVersion);
       setLatestCodeVersion(currentCodeVersion);
 
       // Get count of records from property_records for this job
@@ -92,14 +92,14 @@ const JobContainer = ({
         ...selectedJob,
         manager_name: 'Manager Name Here', // TODO: Resolve from employees table using assigned_manager UUID
         due_year: selectedJob.end_date ? new Date(selectedJob.end_date).getFullYear() : 'TBD',
-        latest_data_version: currentDataVersion,
+        latest_data_version: currentFileVersion,
         latest_code_version: currentCodeVersion,
         property_count: count || 0
       };
       
       setJobData(enrichedJobData);
 
-      console.log(`📊 JobContainer: Loaded data version ${currentDataVersion}, code version ${currentCodeVersion} with ${count} property records`);
+      console.log(`📊 JobContainer: Loaded data version ${currentFileVersion}, code version ${currentCodeVersion} with ${count} property records`);
 
     } catch (error) {
       console.error('Error loading file versions:', error);
@@ -237,7 +237,7 @@ const JobContainer = ({
       onBackToJobs,
       activeSubModule: activeModule,
       onSubModuleChange: setActiveModule,
-      latestDataVersion,
+      latestFileVersion,
       latestCodeVersion,
       propertyRecordsCount,
       onFileProcessed: handleFileProcessed
@@ -289,7 +289,7 @@ const JobContainer = ({
               }`}>
                 {versionError 
                   ? 'Data Loading Error' 
-                  : `Current Data Version: ${latestDataVersion} | Current Code Version: ${latestCodeVersion}`
+                  : `Current Data Version: ${latestFileVersion} | Current Code Version: ${latestCodeVersion}`
                 }
               </span>
             </div>
