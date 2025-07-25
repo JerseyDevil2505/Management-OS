@@ -1466,9 +1466,9 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
           <button
             onClick={startProcessingSession}
             disabled={processing || (!isDateLocked) || hasUnsavedChanges ||
-              ((infoByCategoryConfig?.entry?.length || 0) + (infoByCategoryConfig?.refusal?.length || 0) + 
-               (infoByCategoryConfig?.estimation?.length || 0) + (infoByCategoryConfig?.priced?.length || 0) + 
-               (infoByCategoryConfig?.special?.length || 0)) === 0}
+              ((infoByCategoryConfig.entry || []).length + (infoByCategoryConfig.refusal || []).length + 
+               (infoByCategoryConfig.estimation || []).length + (infoByCategoryConfig.priced || []).length + 
+               (infoByCategoryConfig.special || []).length) === 0}
             className={`px-6 py-2 rounded-lg flex items-center space-x-2 transition-all ${
               processed 
                 ? 'bg-green-600 text-white hover:bg-green-700'
