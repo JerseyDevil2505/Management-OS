@@ -981,10 +981,10 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       
       console.log('🚀 Processing approved changes...');
       
-      // Call the processor to update the database
-      addBatchLog(`📊 Calling ${detectedVendor} processor/updater...`, 'info');
+      // Call the updater to UPSERT the database
+      addBatchLog(`📊 Calling ${detectedVendor} updater (UPSERT mode)...`, 'info');
       
-      const result = await propertyService.importCSVData(
+      const result = await propertyService.updateCSVData(
         sourceFileContent,
         codeFileContent,
         job.id,
