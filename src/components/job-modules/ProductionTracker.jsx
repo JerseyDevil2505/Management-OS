@@ -1402,25 +1402,25 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
               </button>
             </div>
             
-            {/* Quick Summary (Always Visible) */}
+            {/* Quick Summary (Always Visible) - FIXED: Added safety checks */}
             <div className="grid grid-cols-2 md:grid-cols-6 gap-2 text-sm mb-4">
               <div className="bg-green-50 px-3 py-2 rounded border">
-                <span className="font-medium text-green-800">Entry:</span> {infoByCategoryConfig.entry.length}
+                <span className="font-medium text-green-800">Entry:</span> {(infoByCategoryConfig.entry || []).length}
               </div>
               <div className="bg-red-50 px-3 py-2 rounded border">
-                <span className="font-medium text-red-800">Refusal:</span> {infoByCategoryConfig.refusal.length}
+                <span className="font-medium text-red-800">Refusal:</span> {(infoByCategoryConfig.refusal || []).length}
               </div>
               <div className="bg-blue-50 px-3 py-2 rounded border">
-                <span className="font-medium text-blue-800">Estimation:</span> {infoByCategoryConfig.estimation.length}
+                <span className="font-medium text-blue-800">Estimation:</span> {(infoByCategoryConfig.estimation || []).length}
               </div>
               <div className="bg-gray-50 px-3 py-2 rounded border">
-                <span className="font-medium text-gray-800">Invalid:</span> {infoByCategoryConfig.invalid.length}
+                <span className="font-medium text-gray-800">Invalid:</span> {(infoByCategoryConfig.invalid || []).length}
               </div>
               <div className="bg-purple-50 px-3 py-2 rounded border">
-                <span className="font-medium text-purple-800">Priced:</span> {infoByCategoryConfig.priced.length}
+                <span className="font-medium text-purple-800">Priced:</span> {(infoByCategoryConfig.priced || []).length}
               </div>
               <div className="bg-yellow-50 px-3 py-2 rounded border">
-                <span className="font-medium text-yellow-800">Special:</span> {infoByCategoryConfig.special.length}
+                <span className="font-medium text-yellow-800">Special:</span> {(infoByCategoryConfig.special || []).length}
               </div>
             </div>
             
@@ -1433,7 +1433,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                       {category} ({(infoByCategoryConfig[category] || []).length})
                     </h5>
                     <div className="space-y-2 max-h-40 overflow-y-auto">
-                      {availableInfoByCodes.map(codeItem => {
+                      {(availableInfoByCodes || []).map(codeItem => {
                         const storageCode = jobData.vendor_type === 'Microsystems' ? codeItem.storageCode : codeItem.code;
                         const displayCode = storageCode;
                         const isAssigned = (infoByCategoryConfig[category] || []).includes(storageCode);
