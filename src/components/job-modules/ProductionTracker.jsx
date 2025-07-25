@@ -1358,12 +1358,12 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
             </label>
             <div className="space-y-2">
               <div className="grid grid-cols-2 gap-2 text-sm">
-                <span>Entry: {infoByCategoryConfig.entry.length} codes</span>
-                <span>Refusal: {infoByCategoryConfig.refusal.length} codes</span>
-                <span>Estimation: {infoByCategoryConfig.estimation.length} codes</span>
-                <span>Priced: {infoByCategoryConfig.priced.length} codes</span>
-                <span>Invalid: {infoByCategoryConfig.invalid.length} codes</span>
-                <span>Special: {infoByCategoryConfig.special.length} codes</span>
+                <span>Entry: {(infoByCategoryConfig.entry || []).length} codes</span>
+                <span>Refusal: {(infoByCategoryConfig.refusal || []).length} codes</span>
+                <span>Estimation: {(infoByCategoryConfig.estimation || []).length} codes</span>
+                <span>Priced: {(infoByCategoryConfig.priced || []).length} codes</span>
+                <span>Invalid: {(infoByCategoryConfig.invalid || []).length} codes</span>
+                <span>Special: {(infoByCategoryConfig.special || []).length} codes</span>
               </div>
               
               {hasUnsavedChanges && (
