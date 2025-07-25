@@ -3,7 +3,7 @@
  * FIXED: Now properly extracts ALL sections and InfoBy codes from nested MAP structures
  * Uses UPSERT instead of INSERT for updating existing jobs
  * Identical parsing logic to the enhanced BRT Processor
- * 🔪 SURGICAL FIX: Added totalResidential and totalCommercial calculations
+ * 🔪 SURGICAL FIX: Added totalresidential and totalcommercial calculations
  */
 
 import { supabase } from '../supabaseClient.js';
@@ -573,37 +573,37 @@ export class BRTUpdater {
    * BRT property classes: 2=Residential, 3A=Residential, 4A/4B/4C=Commercial
    */
   calculatePropertyTotals(records) {
-    let totalResidential = 0;
-    let totalCommercial = 0;
+    let totalresidential = 0;
+    let totalcommercial = 0;
     
     for (const record of records) {
       const propertyClass = record.PROPERTY_CLASS;
       
       if (propertyClass === '2' || propertyClass === '3A') {
-        totalResidential++;
+        totalresidential++;
       } else if (propertyClass === '4A' || propertyClass === '4B' || propertyClass === '4C') {
-        totalCommercial++;
+        totalcommercial++;
       }
       // Other classes (1, 3B, 5A, 5B, etc.) not counted in either category
     }
     
-    console.log(`🔪 SURGICAL FIX (UPDATER) - Property totals calculated: ${totalResidential} residential, ${totalCommercial} commercial`);
-    return { totalResidential, totalCommercial };
+    console.log(`🔪 SURGICAL FIX (UPDATER) - Property totals calculated: ${totalresidential} residential, ${totalcommercial} commercial`);
+    return { totalresidential, totalcommercial };
   }
 
   /**
    * 🔪 SURGICAL FIX: Update jobs table with property class totals
    */
-  async updateJobTotals(jobId, totalResidential, totalCommercial) {
+  async updateJobTotals(jobId, totalresidential, totalcommercial) {
     try {
-      console.log(`🔪 SURGICAL FIX (UPDATER) - Updating job ${jobId} with totals: ${totalResidential} residential, ${totalCommercial} commercial`);
+      console.log(`🔪 SURGICAL FIX (UPDATER) - Updating job ${jobId} with totals: ${totalresidential} residential, ${totalcommercial} commercial`);
       
       const { data, error } = await supabase
         .from('jobs')
         .update({
-          totalResidential: totalResidential,
-          totalCommercial: totalCommercial,
-          totalProperties: totalResidential + totalCommercial
+          totalresidential: totalresidential,
+          totalcommercial: totalcommercial,
+          totalProperties: totalresidential + totalcommercial
         })
         .eq('id', jobId);
 
@@ -637,7 +637,7 @@ export class BRTUpdater {
       console.log(`Processing ${records.length} records in UPSERT batches...`);
       
       // 🔪 SURGICAL FIX: Calculate property totals BEFORE processing
-      const { totalResidential, totalCommercial } = this.calculatePropertyTotals(records);
+      const { totalresidential, totalcommercial } = this.calculatePropertyTotals(records);
       
       const propertyRecords = [];
       
@@ -679,7 +679,7 @@ export class BRTUpdater {
       
       // 🔪 SURGICAL FIX: Update jobs table with property totals AFTER successful processing
       if (results.processed > 0) {
-        await this.updateJobTotals(jobId, totalResidential, totalCommercial);
+        await this.updateJobTotals(jobId, totalresidential, totalcommercial);
       }
       
       console.log('🚀 ENHANCED BRT UPDATER (UPSERT) COMPLETE WITH ALL SECTIONS + PROPERTY TOTALS:', results);
