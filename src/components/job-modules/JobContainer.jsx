@@ -44,16 +44,16 @@ const JobContainer = ({
     setVersionError(null);
 
     try {
-      // FIXED: Get file version from jobs table (where FileUploadButton updates it)
+      // FIXED: Get file version from jobs table (correct field name)
       const { data: jobData, error: jobError } = await supabase
         .from('jobs')
-        .select('source_file_version')
+        .select('file_version')
         .eq('id', selectedJob.id)
         .single();
 
       if (jobError) throw jobError;
 
-      const currentVersion = jobData?.source_file_version || 1;
+      const currentVersion = jobData?.file_version || 1;
       setLatestFileVersion(currentVersion);
 
       // Get count of records from property_records for this job
