@@ -2,12 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Upload, Plus, Edit3, Users, FileText, Calendar, MapPin, Database, Settings, Eye, DollarSign, Trash2, CheckCircle, Archive, TrendingUp, Target, AlertTriangle, X } from 'lucide-react';
 import { employeeService, jobService, planningJobService, utilityService, authService, propertyService, supabase } from '../lib/supabaseClient';
 
-// 🔪 SURGICAL FIX 1: Accept jobMetrics props
 const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics }) => {
-  // 🔪 SURGICAL FIX 2: Add debug logging
-  console.log('🔍 AdminJobManagement DEBUG: Received jobMetrics prop:', jobMetrics);
-  console.log('🔍 AdminJobManagement DEBUG: jobMetrics keys:', jobMetrics ? Object.keys(jobMetrics) : 'null');
-
   const [activeTab, setActiveTab] = useState('jobs');
   const [currentUser, setCurrentUser] = useState({ role: 'admin', canAccessBilling: true });
   
@@ -46,7 +41,7 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics }) => {
   const [hpiFile, setHpiFile] = useState(null);
   const [importingHpi, setImportingHpi] = useState(false);
 
-  // ENHANCED: Assigned Properties state with better feedback
+  // Assigned Properties state
   const [showAssignmentUpload, setShowAssignmentUpload] = useState(null);
   const [assignmentFile, setAssignmentFile] = useState(null);
   const [uploadingAssignment, setUploadingAssignment] = useState(false);
@@ -113,7 +108,7 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics }) => {
     ).join(' ');
   };
 
-  // 🔪 SURGICAL FIX 3: Enhanced Metrics Display Logic with live metrics first
+  // Enhanced Metrics Display Logic with live metrics first
   const getMetricsDisplay = (job) => {
     // Check for live metrics first
     const liveMetrics = jobMetrics?.[job.id];
@@ -160,7 +155,7 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics }) => {
     };
   };
 
-  // 🔪 SURGICAL FIX 4: Get property count display with live metrics first
+  // Get property count display with live metrics first
   const getPropertyCountDisplay = (job) => {
     // Check for live metrics first
     const liveMetrics = jobMetrics?.[job.id];
@@ -192,7 +187,7 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics }) => {
     };
   };
 
-  // FIXED: Load HPI data from database on component mount
+  // Load HPI data from database on component mount
   const loadCountyHpiData = async () => {
     try {
       const { data, error } = await supabase
@@ -256,7 +251,7 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics }) => {
     });
   };
 
-// FIXED: Property Assignment Upload Handler with improved composite key matching
+// Property Assignment Upload Handler with improved composite key matching
 const uploadPropertyAssignment = async (job) => {
   if (!assignmentFile) {
     addNotification('Please select an assignment file', 'error');
@@ -286,11 +281,8 @@ const uploadPropertyAssignment = async (job) => {
 
     // Parse CSV and create composite keys
     const assignments = [];
-    // FIXED: Use job's year_created instead of current year
     const year = job.year_created || new Date().getFullYear();
     const ccdd = job.ccdd || job.ccddCode;
-
-    console.log(`🔍 DEBUG - Building composite keys with year: ${year}, ccdd: ${ccdd}`);
 
     for (let i = 1; i < lines.length; i++) {
       const values = lines[i].split(',').map(v => v.trim());
@@ -307,13 +299,7 @@ const uploadPropertyAssignment = async (job) => {
         const card = values[cardIdx] || '';
         const location = values[locationIdx] || '';
 
-        // FIXED: Ensure consistent composite key format matching processors
         const compositeKey = `${year}${ccdd}-${block}-${lot}_${qual || 'NONE'}-${card || 'NONE'}-${location || 'NONE'}`;
-        
-        // DEBUG: Log first few composite keys
-        if (i <= 3) {
-          console.log(`🔍 DEBUG - Assignment composite key ${i}: ${compositeKey}`);
-        }
         
         assignments.push({
           property_composite_key: compositeKey,
@@ -327,8 +313,6 @@ const uploadPropertyAssignment = async (job) => {
     }
 
     // Process assignments through Supabase
-    console.log(`Processing ${assignments.length} property assignments for job ${job.id}`);
-    
     // First, clear existing assignments for this job
     const { error: deleteError } = await supabase
       .from('job_responsibilities')
@@ -356,12 +340,8 @@ const uploadPropertyAssignment = async (job) => {
       throw new Error('Assignment insert failed: ' + insertError.message);
     }
 
-    console.log(`✅ Inserted ${assignmentRecords.length} assignment records`);
-
-    // ENHANCED: Check how many properties were matched with better debugging
+    // Check how many properties were matched
     const assignmentKeys = assignments.map(a => a.property_composite_key);
-    console.log(`🔍 DEBUG - Looking for matches among ${assignmentKeys.length} composite keys`);
-    console.log(`🔍 DEBUG - Sample assignment keys:`, assignmentKeys.slice(0, 3));
 
     const { data: matchedProperties, error: matchError } = await supabase
       .from('property_records')
@@ -376,12 +356,7 @@ const uploadPropertyAssignment = async (job) => {
     }
 
     const matchedCount = matchedProperties?.length || 0;
-    console.log(`✅ Found ${matchedCount} matching properties in property_records`);
     
-    if (matchedProperties && matchedProperties.length > 0) {
-      console.log(`🔍 DEBUG - Sample matched keys:`, matchedProperties.slice(0, 3).map(p => p.property_composite_key));
-    }
-
     // Check for commercial properties (4A, 4B, 4C)
     const hasCommercial = matchedProperties?.some(prop => 
       ['4A', '4B', '4C'].includes(prop.property_m4_class)
@@ -401,10 +376,8 @@ const uploadPropertyAssignment = async (job) => {
       addNotification('Error updating job flags: ' + jobUpdateError.message, 'error');
     }
 
-    // FIXED: Update property_records assignment flags with better error handling
+    // Update property_records assignment flags
     if (matchedCount > 0) {
-      console.log(`🔄 Updating is_assigned_property = true for ${matchedCount} properties...`);
-      
       const { error: propUpdateError } = await supabase
         .from('property_records')
         .update({ is_assigned_property: true })
@@ -414,27 +387,9 @@ const uploadPropertyAssignment = async (job) => {
       if (propUpdateError) {
         console.error('❌ Error updating property flags:', propUpdateError);
         addNotification('Error updating property assignment flags: ' + propUpdateError.message, 'error');
-        // Don't return here - still show results
-      } else {
-        console.log(`✅ Successfully updated is_assigned_property for ${matchedCount} properties`);
-      }
-    } else {
-      console.log('⚠️ No matching properties found - no is_assigned_property updates made');
-      
-      // DEBUG: Show sample property_records keys for comparison
-      const { data: sampleProperties } = await supabase
-        .from('property_records')
-        .select('property_composite_key')
-        .eq('job_id', job.id)
-        .limit(3);
-        
-      if (sampleProperties && sampleProperties.length > 0) {
-        console.log(`🔍 DEBUG - Sample property_records keys for comparison:`, 
-          sampleProperties.map(p => p.property_composite_key));
       }
     }
     
-    // ENHANCED: Better assignment feedback
     setAssignmentResults({
       success: true,
       uploaded: assignments.length,
@@ -462,7 +417,7 @@ const uploadPropertyAssignment = async (job) => {
   }
 };
 
-  // NEW: Refresh jobs with dynamically calculated assigned property counts
+  // Refresh jobs with dynamically calculated assigned property counts
   const refreshJobsWithAssignedCounts = async () => {
     try {
       const updatedJobs = await jobService.getAll();
@@ -544,7 +499,7 @@ const uploadPropertyAssignment = async (job) => {
     return counties;
   };
 
-  // County HPI import handler - FIXED WITH REAL DATABASE INTEGRATION
+  // County HPI import handler
   const importCountyHpi = async (county) => {
     if (!hpiFile) {
       addNotification('Please select an HPI data file', 'error');
@@ -590,7 +545,7 @@ const uploadPropertyAssignment = async (job) => {
         }
       }
 
-      // REAL Supabase database integration
+      // Clear existing HPI data for county
       const { data, error } = await supabase
         .from('county_hpi_data')
         .delete()
@@ -608,7 +563,7 @@ const uploadPropertyAssignment = async (job) => {
         throw new Error('Database insert failed: ' + insertError.message);
       }
       
-      // Update local state - FIXED: Now persists data
+      // Update local state
       setCountyHpiData(prev => ({
         ...prev,
         [county]: hpiRecords
@@ -648,7 +603,7 @@ const uploadPropertyAssignment = async (job) => {
           const activeJobs = jobsData.filter(job => job.status !== 'archived');
           const archived = jobsData.filter(job => job.status === 'archived');
           
-          // ENHANCED: Calculate assigned property counts for jobs with assignments
+          // Calculate assigned property counts for jobs with assignments
           const jobsWithAssignedCounts = await Promise.all(
             activeJobs.map(async (job) => {
               if (job.has_property_assignments) {
@@ -699,7 +654,7 @@ const uploadPropertyAssignment = async (job) => {
     initializeData();
   }, []);
 
-  // SIMPLIFIED FILE ANALYSIS
+  // File analysis
   const analyzeFile = async (file, type) => {
     if (!file) return;
 
@@ -790,7 +745,7 @@ const uploadPropertyAssignment = async (job) => {
     }
   };
 
-  // ENHANCED createJob with real-time batch processing logs and persistent modal
+  // Create job with real-time batch processing logs
   const createJob = async () => {
     if (!newJob.ccddCode || !newJob.name || !newJob.municipality || !newJob.dueDate || 
         newJob.assignedManagers.length === 0 || !newJob.sourceFile || !newJob.codeFile) {
@@ -799,7 +754,6 @@ const uploadPropertyAssignment = async (job) => {
     }
 
     try {
-      // IMMEDIATELY hide create job modal and show processing modal
       setShowCreateJob(false);
       setShowProcessingModal(true);
       setProcessing(true);
@@ -819,7 +773,6 @@ const uploadPropertyAssignment = async (job) => {
       // Let the UI render the modal first
       await new Promise(resolve => setTimeout(resolve, 200));
       
-      // THEN start the actual processing
       updateProcessingStatus('Creating job record...', 10);
       
       const jobData = {
@@ -833,7 +786,6 @@ const uploadPropertyAssignment = async (job) => {
         year_created: new Date().getFullYear(),
         assignedManagers: newJob.assignedManagers,
         totalProperties: fileAnalysis.propertyCount,
-        //Removed inspected_properties, now using live App.js analytics instead
         status: 'active',
         sourceFileStatus: 'processing',
         codeFileStatus: 'current',
@@ -996,10 +948,6 @@ const uploadPropertyAssignment = async (job) => {
         percent_billed: newJob.percentBilled
       };
 
-      console.log('DEBUG - Sending to database:', updateData);
-      console.log('DEBUG - newJob.percentBilled value:', newJob.percentBilled);
-      console.log('DEBUG - editingJob.id:', editingJob.id);
-
       await jobService.update(editingJob.id, updateData);
       
       // Refresh with assigned property counts
@@ -1123,7 +1071,7 @@ const uploadPropertyAssignment = async (job) => {
     if (onJobSelect) {
       onJobSelect(job);
     } else {
-      alert(`Navigate to ${job.name} modules:\n- Production Tracker\n- Management Checklist\n- Market & Land Analytics\n- Final Valuation\n- Appeal Coverage`);
+      alert(`Navigate to ${job.name} modules:\n- ProductionTracker\n- Management Checklist\n- Market & Land Analytics\n- Final Valuation\n- Appeal Coverage`);
     }
   };
 
@@ -1165,7 +1113,7 @@ const uploadPropertyAssignment = async (job) => {
   };
 
   const goToBillingPayroll = (job) => {
-    alert(`Navigate to ${job.name} Billing & Payroll in Production Tracker`);
+    alert(`Navigate to ${job.name} Billing & Payroll in ProductionTracker`);
   };
 
   if (loading) {
@@ -1208,7 +1156,7 @@ const uploadPropertyAssignment = async (job) => {
         ))}
       </div>
 
-      {/* ENHANCED Assignment Upload Modal with better feedback */}
+      {/* Assignment Upload Modal */}
       {showAssignmentUpload && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg max-w-md w-full p-6 shadow-2xl">
@@ -1231,7 +1179,6 @@ const uploadPropertyAssignment = async (job) => {
                 </p>
               </div>
 
-              {/* ENHANCED: Better assignment results display */}
               {assignmentResults && (
                 <div className="mb-4 p-4 bg-green-50 rounded-lg border border-green-200">
                   <div className="text-sm text-green-800">
@@ -1469,7 +1416,7 @@ const uploadPropertyAssignment = async (job) => {
                     <p className="text-gray-600 mt-1">Set up a job with source data and manager assignments</p>
                   </div>
                 </div>
-                {/* % Billed field in top right - FIXED CSS */}
+                {/* % Billed field in top right */}
                 <div className="bg-white p-3 rounded-lg border shadow-sm">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     % Billed
@@ -1517,62 +1464,6 @@ const uploadPropertyAssignment = async (job) => {
                       type="text"
                       value={newJob.ccddCode}
                       onChange={(e) => setNewJob({...newJob, ccddCode: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="e.g., 1306"
-                      maxLength="4"
-                      disabled={editingJob}
-                    />
-                    <p className="text-xs text-gray-500 mt-1">4-digit municipal code</p>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Job Name *
-                    </label>
-                    <input
-                      type="text"
-                      value={newJob.name}
-                      onChange={(e) => setNewJob({...newJob, name: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="e.g., Township of Middletown 2025"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Municipality *
-                    </label>
-                    <input
-                      type="text"
-                      value={newJob.municipality}
-                      onChange={(e) => setNewJob({...newJob, municipality: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="e.g., Middletown Township"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      County
-                    </label>
-                    <input
-                      type="text"
-                      value={newJob.county}
-                      onChange={(e) => setNewJob({...newJob, county: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="e.g., Monmouth"
-                      disabled={editingJob}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Due Date *
-                    </label>
-                    <input
-                      type="date"
-                      value={newJob.dueDate}
-                      onChange={(e) => setNewJob({...newJob, dueDate: e.target.value})}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
@@ -2006,7 +1897,7 @@ const uploadPropertyAssignment = async (job) => {
               </button>
             </div>
 
-            {/* Enhanced Job Cards with LIVE METRICS */}
+            {/* Job Cards with LIVE METRICS */}
             <div className="space-y-3">
               {jobs.length === 0 ? (
                 <div className="text-center text-gray-500 py-12">
@@ -2056,7 +1947,7 @@ const uploadPropertyAssignment = async (job) => {
                             </span>
                           </div>
                           
-                          {/* Production Metrics with LIVE DATA DISPLAY - FIXED: % prominent, counts smaller */}
+                          {/* Production Metrics with LIVE DATA DISPLAY */}
                           <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-3 p-3 bg-gray-50 rounded-lg">
                             <div className="text-center">
                               <div className="text-lg font-bold text-blue-600">
@@ -2476,4 +2367,4 @@ const uploadPropertyAssignment = async (job) => {
   );
 };
 
-export default AdminJobManagement;
+export default AdminJobManagement; r
