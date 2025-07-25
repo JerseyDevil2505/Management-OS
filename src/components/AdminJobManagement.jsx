@@ -604,6 +604,8 @@ const uploadPropertyAssignment = async (job) => {
             authService.getCurrentUser()
           ]);
           
+          console.log('🔍 FIRST JOB DATA:', jobsData[0]); // Debug what fields we get from jobService.getAll()
+          
           // Separate active and archived jobs
           const activeJobs = jobsData.filter(job => job.status !== 'archived');
           const archived = jobsData.filter(job => job.status === 'archived');
