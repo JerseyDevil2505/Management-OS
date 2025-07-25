@@ -1908,13 +1908,13 @@ const uploadPropertyAssignment = async (job) => {
               <span>{jobs.length + archivedJobs.length} Jobs</span>
               <div className="flex items-center gap-4">
                 <span className="font-medium text-blue-700">
-                  📊 Properties: {jobs.reduce((sum, job) => sum + ((job.totalResidential || 0) + (job.totalCommercial || 0)), 0).toLocaleString()}
+                  📊 Properties: {jobs.reduce((sum, job) => sum + ((job.totalresidential || 0) + (job.totalcommercial || 0)), 0).toLocaleString()}
                 </span>
                 <span className="text-green-600">
-                  🏠 {jobs.reduce((sum, job) => sum + (job.totalResidential || 0), 0).toLocaleString()} Residential
+                  🏠 {jobs.reduce((sum, job) => sum + (job.totalresidential || 0), 0).toLocaleString()} Residential
                 </span>
                 <span className="text-purple-600">
-                  🏢 {jobs.reduce((sum, job) => sum + (job.totalCommercial || 0), 0).toLocaleString()} Commercial
+                  🏢 {jobs.reduce((sum, job) => sum + (job.totalcommercial || 0), 0).toLocaleString()} Commercial
                 </span>
              </div>      
           </div>      
