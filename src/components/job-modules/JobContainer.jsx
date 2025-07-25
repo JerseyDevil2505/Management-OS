@@ -17,15 +17,16 @@ const JobContainer = ({
 }) => {
   const [activeModule, setActiveModule] = useState('checklist');
   const [jobData, setJobData] = useState(null);
-  const [latestFileVersion, setLatestFileVersion] = useState(1);
+  const [latestDataVersion, setLatestDataVersion] = useState(1);
+  const [latestCodeVersion, setLatestCodeVersion] = useState(1);
   const [propertyRecordsCount, setPropertyRecordsCount] = useState(0);
   const [isLoadingVersion, setIsLoadingVersion] = useState(true);
   const [versionError, setVersionError] = useState(null);
 
-  // Load latest file version and property count
+  // Load latest file versions and property count
   useEffect(() => {
     if (selectedJob) {
-      loadLatestFileVersion();
+      loadLatestFileVersions();
     }
   }, [selectedJob]);
 
@@ -33,33 +34,48 @@ const JobContainer = ({
   useEffect(() => {
     if (fileRefreshTrigger > 0 && selectedJob) {
       console.log('🔄 JobContainer: File refresh triggered, reloading version data...');
-      loadLatestFileVersion();
+      loadLatestFileVersions();
     }
   }, [fileRefreshTrigger, selectedJob]);
 
-  const loadLatestFileVersion = async () => {
+  const loadLatestFileVersions = async () => {
     if (!selectedJob?.id) return;
 
     setIsLoadingVersion(true);
     setVersionError(null);
 
     try {
-      // FIXED: Get file version from jobs table (correct field name)
+      // Get data version from property_records table (latest file_version)
+      const { data: dataVersionData, error: dataVersionError } = await supabase
+        .from('property_records')
+        .select('file_version')
+        .eq('job_id', selectedJob.id)
+        .order('file_version', { ascending: false })
+        .limit(1)
+        .single();
+
+      // Get code version from jobs table 
       const { data: jobData, error: jobError } = await supabase
         .from('jobs')
-        .select('file_version')
+        .select('code_file_version')
         .eq('id', selectedJob.id)
         .single();
 
-      // 🔍 DEBUG: Check what we're actually getting from the database
+      // 🔍 DEBUG: Check what we're actually getting from both tables
       console.log('🔍 DEBUG JobContainer - selectedJob.id:', selectedJob.id);
+      console.log('🔍 DEBUG JobContainer - dataVersionData:', dataVersionData);
+      console.log('🔍 DEBUG JobContainer - data file_version:', dataVersionData?.file_version);
       console.log('🔍 DEBUG JobContainer - jobData:', jobData);
-      console.log('🔍 DEBUG JobContainer - file_version from query:', jobData?.file_version);
+      console.log('🔍 DEBUG JobContainer - code_file_version:', jobData?.code_file_version);
 
+      if (dataVersionError && dataVersionError.code !== 'PGRST116') throw dataVersionError;
       if (jobError) throw jobError;
 
-      const currentVersion = jobData?.file_version || 1;
-      setLatestFileVersion(currentVersion);
+      const currentDataVersion = dataVersionData?.file_version || 1;
+      const currentCodeVersion = jobData?.code_file_version || 1;
+      
+      setLatestDataVersion(currentDataVersion);
+      setLatestCodeVersion(currentCodeVersion);
 
       // Get count of records from property_records for this job
       const { count, error: countError } = await supabase
@@ -76,16 +92,17 @@ const JobContainer = ({
         ...selectedJob,
         manager_name: 'Manager Name Here', // TODO: Resolve from employees table using assigned_manager UUID
         due_year: selectedJob.end_date ? new Date(selectedJob.end_date).getFullYear() : 'TBD',
-        latest_file_version: currentVersion,
+        latest_data_version: currentDataVersion,
+        latest_code_version: currentCodeVersion,
         property_count: count || 0
       };
       
       setJobData(enrichedJobData);
 
-      console.log(`📊 JobContainer: Loaded version ${currentVersion} with ${count} property records`);
+      console.log(`📊 JobContainer: Loaded data version ${currentDataVersion}, code version ${currentCodeVersion} with ${count} property records`);
 
     } catch (error) {
-      console.error('Error loading file version:', error);
+      console.error('Error loading file versions:', error);
       setVersionError(error.message);
       
       // Fallback to basic job data
@@ -93,7 +110,8 @@ const JobContainer = ({
         ...selectedJob,
         manager_name: 'Manager Name Here',
         due_year: selectedJob.end_date ? new Date(selectedJob.end_date).getFullYear() : 'TBD',
-        latest_file_version: 1,
+        latest_data_version: 1,
+        latest_code_version: 1,
         property_count: 0
       };
       setJobData(fallbackJobData);
@@ -107,7 +125,7 @@ const JobContainer = ({
     console.log(`File processed: ${fileType} - ${fileName}`);
     
     // Refresh file version data when new files are uploaded
-    await loadLatestFileVersion();
+    await loadLatestFileVersions();
     
     // 🔧 ENHANCED: Invalidate ProductionTracker analytics when files change
     if (onUpdateWorkflowStats && selectedJob?.id) {
@@ -219,7 +237,8 @@ const JobContainer = ({
       onBackToJobs,
       activeSubModule: activeModule,
       onSubModuleChange: setActiveModule,
-      latestFileVersion,
+      latestDataVersion,
+      latestCodeVersion,
       propertyRecordsCount,
       onFileProcessed: handleFileProcessed
     };
@@ -270,7 +289,7 @@ const JobContainer = ({
               }`}>
                 {versionError 
                   ? 'Data Loading Error' 
-                  : `Current Data Version: ${latestFileVersion}`
+                  : `Current Data Version: ${latestDataVersion} | Current Code Version: ${latestCodeVersion}`
                 }
               </span>
             </div>
@@ -286,7 +305,7 @@ const JobContainer = ({
                 {versionError}
               </p>
               <button
-                onClick={loadLatestFileVersion}
+                onClick={loadLatestFileVersions}
                 className="mt-2 text-sm text-red-600 hover:text-red-800 underline"
               >
                 Retry Loading
