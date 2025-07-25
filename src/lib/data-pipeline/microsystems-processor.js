@@ -518,7 +518,7 @@ export class MicrosystemsProcessor {
         .update({
           totalresidential: totalresidential,
           totalcommercial: totalcommercial,
-          totalProperties: totalresidential + totalcommercial
+          totalproperties: totalresidential + totalcommercial
         })
         .eq('id', jobId);
 
