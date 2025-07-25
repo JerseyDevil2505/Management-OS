@@ -727,14 +727,16 @@ const PayrollProductionUpdater = ({
             
             // 🔧 FIXED: Vendor-specific InfoBy validation
             let hasValidInfoBy;
+            let normalizedInfoBy; // Declare at top for use in business logic below
             const currentVendor = actualVendor || jobData.vendor_type;
             
             if (currentVendor === 'Microsystems') {
               // Direct comparison for Microsystems (no padding) - codes are single letters
+              normalizedInfoBy = infoByCode; // Keep original for Microsystems
               hasValidInfoBy = infoByCode && allValidCodes.includes(infoByCode);
             } else {
               // BRT logic with zero padding (keep existing working logic)
-              const normalizedInfoBy = infoByCode?.toString().padStart(2, '0');
+              normalizedInfoBy = infoByCode?.toString().padStart(2, '0');
               const normalizedValidCodes = allValidCodes.map(code => code.toString().padStart(2, '0'));
               hasValidInfoBy = normalizedInfoBy && normalizedValidCodes.includes(normalizedInfoBy);
             }
