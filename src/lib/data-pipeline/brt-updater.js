@@ -3,7 +3,7 @@
  * FIXED: Now properly extracts ALL sections and InfoBy codes from nested MAP structures
  * Uses UPSERT instead of INSERT for updating existing jobs
  * Identical parsing logic to the enhanced BRT Processor
- * 🔪 SURGICAL FIX: Added totalresidential and totalcommercial calculations
+ * CLEANED: Removed surgical fix functions - job totals handled by AdminJobManagement/FileUploadButton
  */
 
 import { supabase } from '../supabaseClient.js';
@@ -141,7 +141,6 @@ export class BRTUpdater {
         const line = lines[i].trim();
         
         if (!line) {
-          console.log(`Line ${i + 1}: Empty line, skipping`);
           continue;
         }
         
@@ -149,7 +148,6 @@ export class BRTUpdater {
           // Process previous section if exists
           if (jsonBuffer && currentSection) {
             console.log(`📦 Processing section: ${currentSection}`);
-            console.log(`📄 JSON buffer length: ${jsonBuffer.length} characters`);
             this.parseJsonSection(jsonBuffer, currentSection);
           }
           
@@ -285,7 +283,6 @@ export class BRTUpdater {
             const lookupKey = `${sectionName}_${key}`;
             this.codeLookups.set(lookupKey, item.DATA.VALUE);
             this.codeLookups.set(key, item.DATA.VALUE);
-            console.log(`🏷️ Added code: ${key} = "${item.DATA.VALUE}"`);
           }
         });
         
@@ -299,7 +296,6 @@ export class BRTUpdater {
       
     } catch (error) {
       console.error(`❌ Error parsing JSON section ${sectionName}:`, error);
-      console.error(`📄 JSON content preview: ${jsonString.substring(0, 200)}...`);
     }
   }
 
@@ -569,64 +565,12 @@ export class BRTUpdater {
   }
 
   /**
-   * 🔪 SURGICAL FIX: Calculate property class totals for jobs table
-   * BRT property classes: 2=Residential, 3A=Residential, 4A/4B/4C=Commercial
-   */
-  calculatePropertyTotals(records) {
-    let totalresidential = 0;
-    let totalcommercial = 0;
-    
-    for (const record of records) {
-      const propertyClass = record.PROPERTY_CLASS;
-      
-      if (propertyClass === '2' || propertyClass === '3A') {
-        totalresidential++;
-      } else if (propertyClass === '4A' || propertyClass === '4B' || propertyClass === '4C') {
-        totalcommercial++;
-      }
-      // Other classes (1, 3B, 5A, 5B, etc.) not counted in either category
-    }
-    
-    console.log(`🔪 SURGICAL FIX (UPDATER) - Property totals calculated: ${totalresidential} residential, ${totalcommercial} commercial`);
-    return { totalresidential, totalcommercial };
-  }
-
-  /**
-   * 🔪 SURGICAL FIX: Update jobs table with property class totals
-   */
-  async updateJobTotals(jobId, totalresidential, totalcommercial) {
-    try {
-      console.log(`🔪 SURGICAL FIX (UPDATER) - Updating job ${jobId} with totals: ${totalresidential} residential, ${totalcommercial} commercial`);
-      
-      const { data, error } = await supabase
-        .from('jobs')
-        .update({
-          totalresidential: totalresidential,
-          totalcommercial: totalcommercial,
-          totalProperties: totalresidential + totalcommercial
-        })
-        .eq('id', jobId);
-
-      if (error) {
-        console.error('❌ SURGICAL FIX (UPDATER) - Failed to update job totals:', error);
-        throw error;
-      }
-
-      console.log('✅ SURGICAL FIX (UPDATER) - Job totals updated successfully');
-      
-    } catch (error) {
-      console.error('❌ SURGICAL FIX (UPDATER) - Error updating job totals:', error);
-      // Don't throw - continue processing even if update fails
-    }
-  }
-
-  /**
    * MAIN PROCESS METHOD - ENHANCED UPSERT VERSION
-   * 🔪 SURGICAL FIX: Added property totals calculation and jobs table update
+   * CLEANED: Removed surgical fix functions - job totals handled by AdminJobManagement/FileUploadButton
    */
   async processFile(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, versionInfo = {}) {
     try {
-      console.log('🚀 Starting ENHANCED BRT UPDATER (UPSERT) with COMPLETE section parsing + PROPERTY TOTALS...');
+      console.log('🚀 Starting ENHANCED BRT UPDATER (UPSERT) with COMPLETE section parsing...');
       
       // Process and store code file if provided
       if (codeFileContent) {
@@ -635,9 +579,6 @@ export class BRTUpdater {
       
       const records = this.parseSourceFile(sourceFileContent);
       console.log(`Processing ${records.length} records in UPSERT batches...`);
-      
-      // 🔪 SURGICAL FIX: Calculate property totals BEFORE processing
-      const { totalresidential, totalcommercial } = this.calculatePropertyTotals(records);
       
       const propertyRecords = [];
       
@@ -677,12 +618,7 @@ export class BRTUpdater {
         }
       }
       
-      // 🔪 SURGICAL FIX: Update jobs table with property totals AFTER successful processing
-      if (results.processed > 0) {
-        await this.updateJobTotals(jobId, totalresidential, totalcommercial);
-      }
-      
-      console.log('🚀 ENHANCED BRT UPDATER (UPSERT) COMPLETE WITH ALL SECTIONS + PROPERTY TOTALS:', results);
+      console.log('🚀 ENHANCED BRT UPDATER (UPSERT) COMPLETE WITH ALL SECTIONS:', results);
       return results;
       
     } catch (error) {
@@ -787,7 +723,7 @@ export class BRTUpdater {
   parseNumeric(value, decimals = null) {
     if (!value || value === '') return null;
     const num = parseFloat(String(value).replace(/[,$]/g, ''));
-    if (isNaN(num)) return null; // FIXED: Added missing closing parenthesis
+    if (isNaN(num)) return null;
     return decimals !== null ? parseFloat(num.toFixed(decimals)) : num;
   }
 
