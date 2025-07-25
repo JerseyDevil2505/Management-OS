@@ -45,7 +45,7 @@ export class MicrosystemsUpdater {
         const { data, error } = await supabase
           .from('property_records')
           .upsert(batch, {
-            onConflict: 'property_records_composite_key_unique',  // ← FIXED: Use actual index name
+            onConflict: 'property_composite_key',  // ← FIXED: Use actual column name
             ignoreDuplicates: false
           });
         
