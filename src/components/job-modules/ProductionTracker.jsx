@@ -694,11 +694,11 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         }
 
         // Business logic validation - ENHANCED for special codes
-        const isEntryCode = infoByCategoryConfig.entry.includes(actualVendor === 'BRT' ? normalizedInfoBy || infoByCode : infoByCode);
-        const isRefusalCode = infoByCategoryConfig.refusal.includes(actualVendor === 'BRT' ? normalizedInfoBy || infoByCode : infoByCode);
-        const isEstimationCode = infoByCategoryConfig.estimation.includes(actualVendor === 'BRT' ? normalizedInfoBy || infoByCode : infoByCode);
-        const isPricedCode = infoByCategoryConfig.priced.includes(actualVendor === 'BRT' ? normalizedInfoBy || infoByCode : infoByCode);
-        const isSpecialCode = infoByCategoryConfig.special.includes(actualVendor === 'BRT' ? normalizedInfoBy || infoByCode : infoByCode); // NEW
+        const isEntryCode = (infoByCategoryConfig.entry || []).includes(actualVendor === 'BRT' ? normalizedInfoBy || infoByCode : infoByCode);
+        const isRefusalCode = (infoByCategoryConfig.refusal || []).includes(actualVendor === 'BRT' ? normalizedInfoBy || infoByCode : infoByCode);
+        const isEstimationCode = (infoByCategoryConfig.estimation || []).includes(actualVendor === 'BRT' ? normalizedInfoBy || infoByCode : infoByCode);
+        const isPricedCode = (infoByCategoryConfig.priced || []).includes(actualVendor === 'BRT' ? normalizedInfoBy || infoByCode : infoByCode);
+        const isSpecialCode = (infoByCategoryConfig.special || []).includes(actualVendor === 'BRT' ? normalizedInfoBy || infoByCode : infoByCode); // NEW
         const hasListingData = record.inspection_list_by && record.inspection_list_date;
 
         // Skip validation for special codes (V, N) - they're valid but don't need validation reports
