@@ -787,7 +787,7 @@ export class BRTUpdater {
   parseNumeric(value, decimals = null) {
     if (!value || value === '') return null;
     const num = parseFloat(String(value).replace(/[,$]/g, ''));
-    if (isNaN(num) return null;
+    if (isNaN(num)) return null; // FIXED: Added missing closing parenthesis
     return decimals !== null ? parseFloat(num.toFixed(decimals)) : num;
   }
 
