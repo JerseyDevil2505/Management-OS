@@ -6,6 +6,7 @@
  * ADDED: Retry logic for connection issues and query cancellations
  * ENHANCED: Dual-pattern parsing for standard (140A) and HVAC (8ED) codes
  * CLEANED: Removed redundant surgical fix totals (handled by AdminJobManagement/FileUploadButton)
+ * FIXED: Correct constraint name for UPSERT operations
  */
 
 import { supabase } from '../supabaseClient.js';
@@ -34,7 +35,7 @@ export class MicrosystemsUpdater {
   }
 
   /**
-   * Upsert batch with retry logic for connection issues
+   * FIXED: Upsert batch with retry logic and correct constraint name
    */
   async upsertBatchWithRetry(batch, batchNumber, retries = 50) {
     for (let attempt = 1; attempt <= retries; attempt++) {
@@ -44,7 +45,7 @@ export class MicrosystemsUpdater {
         const { data, error } = await supabase
           .from('property_records')
           .upsert(batch, {
-            onConflict: 'property_composite_key,job_id',
+            onConflict: 'property_records_composite_key_unique',  // ← FIXED: Use actual index name
             ignoreDuplicates: false
           });
         
