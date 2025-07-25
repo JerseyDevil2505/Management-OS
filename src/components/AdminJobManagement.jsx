@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Upload, Plus, Edit3, Users, FileText, Calendar, MapPin, Database, Settings, Eye, DollarSign, Trash2, CheckCircle, Archive, TrendingUp, Target, AlertTriangle, X } from 'lucide-react';
 import { employeeService, jobService, planningJobService, utilityService, authService, propertyService, supabase } from '../lib/supabaseClient';
 
+// Accept jobMetrics props for live metrics integration
 const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics }) => {
   const [activeTab, setActiveTab] = useState('jobs');
   const [currentUser, setCurrentUser] = useState({ role: 'admin', canAccessBilling: true });
@@ -41,7 +42,7 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics }) => {
   const [hpiFile, setHpiFile] = useState(null);
   const [importingHpi, setImportingHpi] = useState(false);
 
-  // Assigned Properties state
+  // ENHANCED: Assigned Properties state with better feedback
   const [showAssignmentUpload, setShowAssignmentUpload] = useState(null);
   const [assignmentFile, setAssignmentFile] = useState(null);
   const [uploadingAssignment, setUploadingAssignment] = useState(false);
@@ -281,6 +282,7 @@ const uploadPropertyAssignment = async (job) => {
 
     // Parse CSV and create composite keys
     const assignments = [];
+    // Use job's year_created instead of current year
     const year = job.year_created || new Date().getFullYear();
     const ccdd = job.ccdd || job.ccddCode;
 
@@ -299,6 +301,7 @@ const uploadPropertyAssignment = async (job) => {
         const card = values[cardIdx] || '';
         const location = values[locationIdx] || '';
 
+        // Ensure consistent composite key format matching processors
         const compositeKey = `${year}${ccdd}-${block}-${lot}_${qual || 'NONE'}-${card || 'NONE'}-${location || 'NONE'}`;
         
         assignments.push({
@@ -313,6 +316,7 @@ const uploadPropertyAssignment = async (job) => {
     }
 
     // Process assignments through Supabase
+    
     // First, clear existing assignments for this job
     const { error: deleteError } = await supabase
       .from('job_responsibilities')
@@ -390,6 +394,7 @@ const uploadPropertyAssignment = async (job) => {
       }
     }
     
+    // Set assignment results
     setAssignmentResults({
       success: true,
       uploaded: assignments.length,
@@ -545,7 +550,7 @@ const uploadPropertyAssignment = async (job) => {
         }
       }
 
-      // Clear existing HPI data for county
+      // Database integration
       const { data, error } = await supabase
         .from('county_hpi_data')
         .delete()
@@ -754,6 +759,7 @@ const uploadPropertyAssignment = async (job) => {
     }
 
     try {
+      // Hide create job modal and show processing modal
       setShowCreateJob(false);
       setShowProcessingModal(true);
       setProcessing(true);
@@ -773,6 +779,7 @@ const uploadPropertyAssignment = async (job) => {
       // Let the UI render the modal first
       await new Promise(resolve => setTimeout(resolve, 200));
       
+      // Start processing
       updateProcessingStatus('Creating job record...', 10);
       
       const jobData = {
@@ -1112,10 +1119,6 @@ const uploadPropertyAssignment = async (job) => {
     };
   };
 
-  const goToBillingPayroll = (job) => {
-    alert(`Navigate to ${job.name} Billing & Payroll in ProductionTracker`);
-  };
-
   if (loading) {
     return (
       <div className="max-w-6xl mx-auto p-6 bg-white">
@@ -1288,7 +1291,7 @@ const uploadPropertyAssignment = async (job) => {
                 </div>
               )}
               
-              {/* COMPLETION RESULTS */}
+              {/* Completion Results */}
               {processingResults && (
                 <div className="mb-4 p-4 bg-green-50 rounded-lg border-2 border-green-200">
                   <div className="text-lg font-bold text-green-800 mb-3">🎉 Processing Complete!</div>
@@ -1319,9 +1322,9 @@ const uploadPropertyAssignment = async (job) => {
                 </div>
               )}
 
-              {/* ACTION BUTTONS */}
+              {/* Action Buttons */}
               <div className="flex justify-center space-x-3">
-                {/* FORCE QUIT - Only during processing */}
+                {/* Force Quit - Only during processing */}
                 {!processingResults && processingStatus.isProcessing && (
                   <button
                     onClick={() => {
@@ -1336,7 +1339,7 @@ const uploadPropertyAssignment = async (job) => {
                   </button>
                 )}
 
-                {/* CLOSE - Only when complete */}
+                {/* Close - Only when complete */}
                 {processingResults && (
                   <button
                     onClick={() => {
@@ -1434,16 +1437,6 @@ const uploadPropertyAssignment = async (job) => {
                     />
                     <span className="text-sm text-gray-600">%</span>
                   </div>
-                  <style jsx>{`
-                    input[type="number"]::-webkit-outer-spin-button,
-                    input[type="number"]::-webkit-inner-spin-button {
-                      -webkit-appearance: none;
-                      margin: 0;
-                    }
-                    input[type="number"] {
-                      -moz-appearance: textfield;
-                    }
-                  `}</style>
                 </div>
               </div>
             </div>
@@ -1465,12 +1458,68 @@ const uploadPropertyAssignment = async (job) => {
                       value={newJob.ccddCode}
                       onChange={(e) => setNewJob({...newJob, ccddCode: e.target.value})}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="e.g., 1306"
+                      maxLength="4"
+                      disabled={editingJob}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">4-digit municipal code</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Job Name *
+                    </label>
+                    <input
+                      type="text"
+                      value={newJob.name}
+                      onChange={(e) => setNewJob({...newJob, name: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="e.g., Township of Middletown 2025"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Municipality *
+                    </label>
+                    <input
+                      type="text"
+                      value={newJob.municipality}
+                      onChange={(e) => setNewJob({...newJob, municipality: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="e.g., Middletown Township"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      County
+                    </label>
+                    <input
+                      type="text"
+                      value={newJob.county}
+                      onChange={(e) => setNewJob({...newJob, county: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="e.g., Monmouth"
+                      disabled={editingJob}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Due Date *
+                    </label>
+                    <input
+                      type="date"
+                      value={newJob.dueDate}
+                      onChange={(e) => setNewJob({...newJob, dueDate: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
                 </div>
               </div>
 
-              {/* File Upload Section with Remove Buttons */}
+              {/* File Upload Section */}
               {!editingJob && (
                 <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
                   <h3 className="font-medium text-blue-800 mb-4 flex items-center space-x-2">
@@ -1784,7 +1833,7 @@ const uploadPropertyAssignment = async (job) => {
         </p>
       </div>
 
-      {/* Database Status with Enhanced Property Breakdown */}
+      {/* Database Status */}
       <div className="mb-6 p-4 bg-gray-50 rounded-lg border">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -1947,7 +1996,7 @@ const uploadPropertyAssignment = async (job) => {
                             </span>
                           </div>
                           
-                          {/* Production Metrics with LIVE DATA DISPLAY */}
+                          {/* Production Metrics with LIVE DATA */}
                           <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-3 p-3 bg-gray-50 rounded-lg">
                             <div className="text-center">
                               <div className="text-lg font-bold text-blue-600">
@@ -2367,4 +2416,4 @@ const uploadPropertyAssignment = async (job) => {
   );
 };
 
-export default AdminJobManagement
+export default AdminJobManagement;
