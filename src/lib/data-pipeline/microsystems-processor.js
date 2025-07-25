@@ -1,7 +1,7 @@
 /**
- * Enhanced Microsystems Processor 
+ * Enhanced Microsystems Updater 
  * Handles pipe-delimited source files and field_id+code lookup files
- * UPDATED: Single table insertion to property_records with all 82 fields
+ * UPDATED: Single table UPSERT to property_records with all 82 fields
  * NEW: Proper code file storage in jobs table with pipe-delimited format support
  * ADDED: Retry logic for connection issues and query cancellations
  * ENHANCED: Dual-pattern parsing for standard (140A) and HVAC (8ED) codes
@@ -10,7 +10,7 @@
 
 import { supabase } from '../supabaseClient.js';
 
-export class MicrosystemsProcessor {
+export class MicrosystemsUpdater {
   constructor() {
     this.codeLookups = new Map();
     this.headers = [];
@@ -34,47 +34,50 @@ export class MicrosystemsProcessor {
   }
 
   /**
-   * Insert batch with retry logic for connection issues
+   * Upsert batch with retry logic for connection issues
    */
-  async insertBatchWithRetry(batch, batchNumber, retries = 50) {
+  async upsertBatchWithRetry(batch, batchNumber, retries = 50) {
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
-        console.log(`Batch ${batchNumber}, attempt ${attempt}...`);
+        console.log(`🔄 UPSERT Batch ${batchNumber}, attempt ${attempt}...`);
         
         const { data, error } = await supabase
           .from('property_records')
-          .insert(batch);
+          .upsert(batch, {
+            onConflict: 'property_composite_key,job_id',
+            ignoreDuplicates: false
+          });
         
         if (!error) {
-          console.log(`Batch ${batchNumber} successful on attempt ${attempt}`);
+          console.log(`✅ UPSERT Batch ${batchNumber} successful on attempt ${attempt}`);
           return { success: true, data };
         }
         
         // Handle specific error codes
         if (error.code === '57014') {
-          console.log(`Query canceled (57014) for batch ${batchNumber}, attempt ${attempt}. Retrying...`);
+          console.log(`🔄 Query canceled (57014) for batch ${batchNumber}, attempt ${attempt}. Retrying...`);
           if (attempt < retries) {
             await new Promise(resolve => setTimeout(resolve, 3000)); // Wait 3 seconds
             continue;
           }
         } else if (error.code === '08003' || error.code === '08006') {
-          console.log(`Connection error for batch ${batchNumber}, attempt ${attempt}. Retrying...`);
+          console.log(`🔄 Connection error for batch ${batchNumber}, attempt ${attempt}. Retrying...`);
           if (attempt < retries) {
             await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
             continue;
           }
         } else {
           // For other errors, don't retry
-          console.error(`Batch ${batchNumber} failed with non-retryable error:`, error);
+          console.error(`❌ UPSERT Batch ${batchNumber} failed with non-retryable error:`, error);
           return { error };
         }
         
         // If we get here, it's the final attempt for a retryable error
-        console.error(`Batch ${batchNumber} failed after ${retries} attempts:`, error);
+        console.error(`❌ UPSERT Batch ${batchNumber} failed after ${retries} attempts:`, error);
         return { error };
         
       } catch (networkError) {
-        console.log(`Network error for batch ${batchNumber}, attempt ${attempt}:`, networkError.message);
+        console.log(`🌐 Network error for UPSERT batch ${batchNumber}, attempt ${attempt}:`, networkError.message);
         if (attempt < retries) {
           await new Promise(resolve => setTimeout(resolve, 2000));
           continue;
@@ -92,7 +95,7 @@ export class MicrosystemsProcessor {
    * NEW: Dual-pattern parsing for standard (140A) and HVAC (8ED) codes
    */
   async processCodeFile(codeFileContent, jobId) {
-    console.log('Processing Microsystems code file with dual-pattern parsing...');
+    console.log('🔧 Processing Microsystems code file with dual-pattern parsing...');
     
     try {
       const lines = codeFileContent.split('\n').filter(line => line.trim());
@@ -181,16 +184,16 @@ export class MicrosystemsProcessor {
         }
       });
       
-      console.log(`Loaded ${this.codeLookups.size} code definitions with dual-pattern parsing`);
-      console.log(`Organized into ${Object.keys(this.allCodes).length} field groups`);
-      console.log(`InfoBy codes (140 prefix): ${Object.keys(this.allCodes['140'] || {}).join(', ')}`);
-      console.log(`HVAC codes (8 prefix): ${Object.keys(this.allCodes['8'] || {}).join(', ')}`);
+      console.log(`✅ Loaded ${this.codeLookups.size} code definitions with dual-pattern parsing`);
+      console.log(`📂 Organized into ${Object.keys(this.allCodes).length} field groups`);
+      console.log(`🎯 InfoBy codes (140 prefix): ${Object.keys(this.allCodes['140'] || {}).join(', ')}`);
+      console.log(`🏠 HVAC codes (8 prefix): ${Object.keys(this.allCodes['8'] || {}).join(', ')}`);
       
       // Store code file in jobs table
       await this.storeCodeFileInDatabase(codeFileContent, jobId);
       
     } catch (error) {
-      console.error('Error parsing Microsystems code file:', error);
+      console.error('❌ Error parsing Microsystems code file:', error);
       throw error;
     }
   }
@@ -200,7 +203,7 @@ export class MicrosystemsProcessor {
    */
   async storeCodeFileInDatabase(codeFileContent, jobId) {
     try {
-      console.log('Storing Microsystems code file in jobs table...');
+      console.log('💾 Storing Microsystems code file in jobs table...');
       
       // Clean Unicode null characters that PostgreSQL can't handle
       const cleanedCodeContent = codeFileContent
@@ -234,15 +237,15 @@ export class MicrosystemsProcessor {
         .select('id, code_file_name, code_file_uploaded_at');
 
       if (updateError) {
-        console.error('Code file storage failed:', updateError);
+        console.error('❌ Code file storage failed:', updateError);
         throw updateError;
       }
       
-      console.log('Microsystems code file stored successfully');
+      console.log('✅ Microsystems code file stored successfully');
       
     } catch (error) {
-      console.error('Failed to store Microsystems code file:', error);
-      console.log('Continuing with job creation despite code storage failure...');
+      console.error('❌ Failed to store Microsystems code file:', error);
+      console.log('Continuing with job update despite code storage failure...');
     }
   }
 
@@ -282,7 +285,7 @@ export class MicrosystemsProcessor {
       records.push(record);
     }
     
-    console.log(`Parsed ${records.length} records`);
+    console.log(`📊 Processing ${records.length} records in UPSERT batches...`);
     return records;
   }
 
@@ -388,8 +391,8 @@ export class MicrosystemsProcessor {
       // Processing metadata
       processed_at: new Date().toISOString(),
       processing_notes: null,
-      validation_status: 'imported',
-      is_new_since_last_upload: true,
+      validation_status: 'updated',
+      is_new_since_last_upload: false, // UPSERT operation
       is_retroactive_credit: false,
       
       // File tracking with version info
@@ -418,67 +421,15 @@ export class MicrosystemsProcessor {
   }
 
   /**
-   * Calculate property class totals for jobs table
-   * Microsystems property classes: 2=Residential, 3A=Residential, 4A/4B/4C=Commercial
-   */
-  calculatePropertyTotals(records) {
-    let totalresidential = 0;
-    let totalcommercial = 0;
-    
-    for (const record of records) {
-      const propertyClass = record['Class'];
-      
-      if (propertyClass === '2' || propertyClass === '3A') {
-        totalresidential++;
-      } else if (propertyClass === '4A' || propertyClass === '4B' || propertyClass === '4C') {
-        totalcommercial++;
-      }
-      // Other classes (1, 3B, 5A, 5B, etc.) not counted in either category
-    }
-    
-    console.log(`Property totals calculated: ${totalresidential} residential, ${totalcommercial} commercial`);
-    return { totalresidential, totalcommercial };
-  }
-
-  /**
-   * Update jobs table with property class totals (NOT total_properties)
-   */
-  async updateJobTotals(jobId, totalresidential, totalcommercial) {
-    try {
-      console.log(`Updating job ${jobId} with totals: ${totalresidential} residential, ${totalcommercial} commercial`);
-      
-      const { data, error } = await supabase
-        .from('jobs')
-        .update({
-          totalresidential: totalresidential,
-          totalcommercial: totalcommercial
-          // NOTE: total_properties handled by AdminJobManagement/FileUploadButton
-        })
-        .eq('id', jobId);
-
-      if (error) {
-        console.error('Failed to update job totals:', error);
-        throw error;
-      }
-
-      console.log('Job totals updated successfully');
-      
-    } catch (error) {
-      console.error('Error updating job totals:', error);
-      // Don't throw - continue processing even if update fails
-    }
-  }
-
-  /**
-   * ENHANCED: Process complete file and store in database with code file integration
-   * UPDATED: Single table insertion only - no more dual-table complexity
+   * ENHANCED: Process complete file and update database with code file integration
+   * UPDATED: Single table UPSERT only - no more dual-table complexity
    * NEW: Integrates code file storage in jobs table
    * ADDED: Retry logic for connection issues and query cancellations
-   * RESTORED: totalresidential and totalcommercial calculations (total_properties handled by AdminJobManagement/FileUploadButton)
+   * CLEANED: Removed redundant surgical fix (total_properties handled by AdminJobManagement/FileUploadButton)
    */
   async processFile(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, versionInfo = {}) {
     try {
-      console.log('Starting Enhanced Microsystems file processing...');
+      console.log('🚀 Starting Enhanced Microsystems UPDATER (UPSERT)...');
       
       // Process and store code file if provided
       if (codeFileContent) {
@@ -487,12 +438,8 @@ export class MicrosystemsProcessor {
       
       // Parse source file
       const records = this.parseSourceFile(sourceFileContent);
-      console.log(`Processing ${records.length} records in batches...`);
       
-      // Calculate property totals BEFORE processing
-      const { totalresidential, totalcommercial } = this.calculatePropertyTotals(records);
-      
-      // Prepare all property records for batch insert
+      // Prepare all property records for batch upsert
       const propertyRecords = [];
       
       for (const rawRecord of records) {
@@ -512,38 +459,33 @@ export class MicrosystemsProcessor {
         warnings: []
       };
       
-      // Batch insert all property records (1000 at a time)
-      console.log(`Batch inserting ${propertyRecords.length} property records...`);
+      // Batch upsert all property records (1000 at a time)
+      console.log(`Batch UPSERTING ${propertyRecords.length} property records...`);
       const batchSize = 1000;
       
       for (let i = 0; i < propertyRecords.length; i += batchSize) {
         const batch = propertyRecords.slice(i, i + batchSize);
         const batchNumber = Math.floor(i / batchSize) + 1;
         
-        console.log(`Processing batch ${batchNumber}: records ${i + 1} to ${Math.min(i + batchSize, propertyRecords.length)}`);
+        console.log(`🚀 UPSERT batch ${batchNumber}: records ${i + 1} to ${Math.min(i + batchSize, propertyRecords.length)}`);
         
-        const result = await this.insertBatchWithRetry(batch, batchNumber);
+        const result = await this.upsertBatchWithRetry(batch, batchNumber);
         
         if (result.error) {
-          console.error(`Batch ${batchNumber} failed after retries:`, result.error);
+          console.error(`❌ UPSERT Batch ${batchNumber} failed:`, result.error);
           results.errors += batch.length;
           results.warnings.push(`Batch ${batchNumber} failed: ${result.error.message}`);
         } else {
           results.processed += batch.length;
-          console.log(`Batch ${batchNumber} completed successfully`);
+          console.log(`✅ UPSERT Batch ${batchNumber} completed successfully`);
         }
       }
       
-      // Update jobs table with property totals AFTER successful processing
-      if (results.processed > 0) {
-        await this.updateJobTotals(jobId, totalresidential, totalcommercial);
-      }
-      
-      console.log('Enhanced Microsystems processing complete:', results);
+      console.log('🚀 Enhanced Microsystems UPDATER (UPSERT) complete:', results);
       return results;
       
     } catch (error) {
-      console.error('Enhanced Microsystems file processing failed:', error);
+      console.error('❌ Enhanced Microsystems updater failed:', error);
       throw error;
     }
   }
@@ -768,4 +710,4 @@ export class MicrosystemsProcessor {
 }
 
 // Export singleton instance
-export const microsystemsProcessor = new MicrosystemsProcessor();
+export const microsystemsUpdater = new MicrosystemsUpdater();
