@@ -199,30 +199,22 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         
         debugLog('CODES', 'BRT sections available:', Object.keys(sections));
         
-        // Look for InfoBy codes in Residential section, key 30, MAP
+        // Look for InfoBy codes in Residential section, key 30, MAP - LOAD ALL CODES
         const residentialSection = sections['Residential'];
         if (residentialSection && residentialSection['30'] && residentialSection['30'].MAP) {
-          debugLog('CODES', 'Found Residential[30].MAP, checking for InfoBy codes...');
+          debugLog('CODES', 'Found Residential[30].MAP, loading ALL InfoBy codes...');
           
           Object.keys(residentialSection['30'].MAP).forEach(key => {
             const item = residentialSection['30'].MAP[key];
             if (item && item.DATA && item.DATA.VALUE) {
-              const description = item.DATA.VALUE.toUpperCase();
-              if (description.includes('OWNER') || description.includes('SPOUSE') || 
-                  description.includes('TENANT') || description.includes('AGENT') ||
-                  description.includes('REFUSED') || description.includes('ESTIMATED') ||
-                  description.includes('DOOR') || description.includes('CONVERSION') ||
-                  description.includes('PRICED')) {
-                
-                codes.push({
-                  code: item.KEY || item.DATA.KEY,
-                  description: item.DATA.VALUE,
-                  section: 'Residential[30]',
-                  vendor: 'BRT'
-                });
-                
-                debugLog('CODES', `Found InfoBy code: ${item.KEY} = ${item.DATA.VALUE}`);
-              }
+              codes.push({
+                code: item.KEY || item.DATA.KEY,
+                description: item.DATA.VALUE,
+                section: 'Residential[30]',
+                vendor: 'BRT'
+              });
+              
+              debugLog('CODES', `Found InfoBy code: ${item.KEY} = ${item.DATA.VALUE}`);
             }
           });
         } else {
