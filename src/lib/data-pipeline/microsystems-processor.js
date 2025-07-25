@@ -1,7 +1,7 @@
 /**
- * Enhanced Microsystems Updater 
+ * Enhanced Microsystems Processor 
  * Handles pipe-delimited source files and field_id+code lookup files
- * UPDATED: Single table UPSERT to property_records with all 82 fields
+ * UPDATED: Single table insertion to property_records with all 82 fields
  * NEW: Proper code file storage in jobs table with pipe-delimited format support
  * ADDED: Retry logic for connection issues and query cancellations
  * ENHANCED: Dual-pattern parsing for standard (140A) and HVAC (8ED) codes
@@ -10,7 +10,7 @@
 
 import { supabase } from '../supabaseClient.js';
 
-export class MicrosystemsUpdater {
+export class MicrosystemsProcessor {
   constructor() {
     this.codeLookups = new Map();
     this.headers = [];
@@ -34,19 +34,16 @@ export class MicrosystemsUpdater {
   }
 
   /**
-   * Upsert batch with retry logic for connection issues
+   * Insert batch with retry logic for connection issues
    */
-  async upsertBatchWithRetry(batch, batchNumber, retries = 50) {
+  async insertBatchWithRetry(batch, batchNumber, retries = 50) {
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
         console.log(`Batch ${batchNumber}, attempt ${attempt}...`);
         
         const { data, error } = await supabase
           .from('property_records')
-          .upsert(batch, {
-            onConflict: 'property_composite_key,job_id',
-            ignoreDuplicates: false
-          });
+          .insert(batch);
         
         if (!error) {
           console.log(`Batch ${batchNumber} successful on attempt ${attempt}`);
@@ -245,7 +242,7 @@ export class MicrosystemsUpdater {
       
     } catch (error) {
       console.error('Failed to store Microsystems code file:', error);
-      console.log('Continuing with job update despite code storage failure...');
+      console.log('Continuing with job creation despite code storage failure...');
     }
   }
 
@@ -391,8 +388,8 @@ export class MicrosystemsUpdater {
       // Processing metadata
       processed_at: new Date().toISOString(),
       processing_notes: null,
-      validation_status: 'updated',
-      is_new_since_last_upload: false, // UPSERT operation
+      validation_status: 'imported',
+      is_new_since_last_upload: true,
       is_retroactive_credit: false,
       
       // File tracking with version info
@@ -421,15 +418,67 @@ export class MicrosystemsUpdater {
   }
 
   /**
-   * ENHANCED: Process complete file and update database with code file integration
-   * UPDATED: Single table UPSERT only - no more dual-table complexity
+   * Calculate property class totals for jobs table
+   * Microsystems property classes: 2=Residential, 3A=Residential, 4A/4B/4C=Commercial
+   */
+  calculatePropertyTotals(records) {
+    let totalresidential = 0;
+    let totalcommercial = 0;
+    
+    for (const record of records) {
+      const propertyClass = record['Class'];
+      
+      if (propertyClass === '2' || propertyClass === '3A') {
+        totalresidential++;
+      } else if (propertyClass === '4A' || propertyClass === '4B' || propertyClass === '4C') {
+        totalcommercial++;
+      }
+      // Other classes (1, 3B, 5A, 5B, etc.) not counted in either category
+    }
+    
+    console.log(`Property totals calculated: ${totalresidential} residential, ${totalcommercial} commercial`);
+    return { totalresidential, totalcommercial };
+  }
+
+  /**
+   * Update jobs table with property class totals (NOT total_properties)
+   */
+  async updateJobTotals(jobId, totalresidential, totalcommercial) {
+    try {
+      console.log(`Updating job ${jobId} with totals: ${totalresidential} residential, ${totalcommercial} commercial`);
+      
+      const { data, error } = await supabase
+        .from('jobs')
+        .update({
+          totalresidential: totalresidential,
+          totalcommercial: totalcommercial
+          // NOTE: total_properties handled by AdminJobManagement/FileUploadButton
+        })
+        .eq('id', jobId);
+
+      if (error) {
+        console.error('Failed to update job totals:', error);
+        throw error;
+      }
+
+      console.log('Job totals updated successfully');
+      
+    } catch (error) {
+      console.error('Error updating job totals:', error);
+      // Don't throw - continue processing even if update fails
+    }
+  }
+
+  /**
+   * ENHANCED: Process complete file and store in database with code file integration
+   * UPDATED: Single table insertion only - no more dual-table complexity
    * NEW: Integrates code file storage in jobs table
    * ADDED: Retry logic for connection issues and query cancellations
-   * CLEANED: Removed redundant surgical fix (total_properties handled by AdminJobManagement/FileUploadButton)
+   * RESTORED: totalresidential and totalcommercial calculations (total_properties handled by AdminJobManagement/FileUploadButton)
    */
   async processFile(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, versionInfo = {}) {
     try {
-      console.log('Starting Enhanced Microsystems file update...');
+      console.log('Starting Enhanced Microsystems file processing...');
       
       // Process and store code file if provided
       if (codeFileContent) {
@@ -440,7 +489,10 @@ export class MicrosystemsUpdater {
       const records = this.parseSourceFile(sourceFileContent);
       console.log(`Processing ${records.length} records in batches...`);
       
-      // Prepare all property records for batch upsert
+      // Calculate property totals BEFORE processing
+      const { totalresidential, totalcommercial } = this.calculatePropertyTotals(records);
+      
+      // Prepare all property records for batch insert
       const propertyRecords = [];
       
       for (const rawRecord of records) {
@@ -460,8 +512,8 @@ export class MicrosystemsUpdater {
         warnings: []
       };
       
-      // Batch upsert all property records (1000 at a time)
-      console.log(`Batch upserting ${propertyRecords.length} property records...`);
+      // Batch insert all property records (1000 at a time)
+      console.log(`Batch inserting ${propertyRecords.length} property records...`);
       const batchSize = 1000;
       
       for (let i = 0; i < propertyRecords.length; i += batchSize) {
@@ -470,7 +522,7 @@ export class MicrosystemsUpdater {
         
         console.log(`Processing batch ${batchNumber}: records ${i + 1} to ${Math.min(i + batchSize, propertyRecords.length)}`);
         
-        const result = await this.upsertBatchWithRetry(batch, batchNumber);
+        const result = await this.insertBatchWithRetry(batch, batchNumber);
         
         if (result.error) {
           console.error(`Batch ${batchNumber} failed after retries:`, result.error);
@@ -482,11 +534,16 @@ export class MicrosystemsUpdater {
         }
       }
       
-      console.log('Enhanced Microsystems update complete:', results);
+      // Update jobs table with property totals AFTER successful processing
+      if (results.processed > 0) {
+        await this.updateJobTotals(jobId, totalresidential, totalcommercial);
+      }
+      
+      console.log('Enhanced Microsystems processing complete:', results);
       return results;
       
     } catch (error) {
-      console.error('Enhanced Microsystems file update failed:', error);
+      console.error('Enhanced Microsystems file processing failed:', error);
       throw error;
     }
   }
@@ -711,4 +768,4 @@ export class MicrosystemsUpdater {
 }
 
 // Export singleton instance
-export const microsystemsUpdater = new MicrosystemsUpdater();
+export const microsystemsProcessor = new MicrosystemsProcessor();
