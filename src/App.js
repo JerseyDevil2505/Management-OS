@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from './lib/supabaseClient';
 import EmployeeManagement from './components/EmployeeManagement';
 import AdminJobManagement from './components/AdminJobManagement';
+import BillingManagement from './components/BillingManagement'; // ADD THIS LINE
 import JobContainer from './components/job-modules/JobContainer';
 import FileUploadButton from './components/FileUploadButton';
 import './App.css';
@@ -244,6 +245,17 @@ function App() {
                   </span>
                 )}
               </button>
+              {/* ADD BILLING MANAGEMENT BUTTON */}
+              <button
+                onClick={() => setActiveModule('billing')}
+                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                  activeModule === 'billing'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+              >
+                💰 Billing Management
+              </button>
             </nav>
           )}
           
@@ -300,6 +312,9 @@ function App() {
             isLoadingMetrics={isLoadingWorkflowStats}
           />
         )}
+
+        {/* ADD BILLING MANAGEMENT MODULE */}
+        {activeModule === 'billing' && <BillingManagement />}
         
         {activeModule === 'job-modules' && selectedJob && (
           <JobContainer 
