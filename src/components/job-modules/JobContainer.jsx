@@ -7,12 +7,13 @@ import MarketAnalysis from './MarketAnalysis';
 import FinalValuation from './FinalValuation';
 import AppealCoverage from './AppealCoverage';
 
-// 🔧 FIXED: Accept App.js workflow state management props
+// 🔧 FIXED: Accept App.js workflow state management props + file refresh trigger
 const JobContainer = ({ 
   selectedJob, 
   onBackToJobs, 
   workflowStats, 
-  onUpdateWorkflowStats 
+  onUpdateWorkflowStats,
+  fileRefreshTrigger 
 }) => {
   const [activeModule, setActiveModule] = useState('checklist');
   const [jobData, setJobData] = useState(null);
@@ -28,6 +29,14 @@ const JobContainer = ({
     }
   }, [selectedJob]);
 
+  // NEW: Refresh when App.js signals file processing completion
+  useEffect(() => {
+    if (fileRefreshTrigger > 0 && selectedJob) {
+      console.log('🔄 JobContainer: File refresh triggered, reloading version data...');
+      loadLatestFileVersion();
+    }
+  }, [fileRefreshTrigger, selectedJob]);
+
   const loadLatestFileVersion = async () => {
     if (!selectedJob?.id) return;
 
@@ -35,28 +44,23 @@ const JobContainer = ({
     setVersionError(null);
 
     try {
-      // Get latest file version for this job
-      const { data: versionData, error: versionError } = await supabase
-        .from('property_records')
-        .select('file_version')
-        .eq('job_id', selectedJob.id)
-        .order('file_version', { ascending: false })
-        .limit(1)
+      // FIXED: Get file version from jobs table (where FileUploadButton updates it)
+      const { data: jobData, error: jobError } = await supabase
+        .from('jobs')
+        .select('source_file_version')
+        .eq('id', selectedJob.id)
         .single();
 
-      if (versionError && versionError.code !== 'PGRST116') {
-        throw versionError;
-      }
+      if (jobError) throw jobError;
 
-      const maxVersion = versionData?.file_version || 1;
-      setLatestFileVersion(maxVersion);
+      const currentVersion = jobData?.source_file_version || 1;
+      setLatestFileVersion(currentVersion);
 
-      // Get count of records on latest version
+      // Get count of records from property_records for this job
       const { count, error: countError } = await supabase
         .from('property_records')
         .select('*', { count: 'exact', head: true })
-        .eq('job_id', selectedJob.id)
-        .eq('file_version', maxVersion);
+        .eq('job_id', selectedJob.id);
 
       if (countError) throw countError;
 
@@ -67,13 +71,13 @@ const JobContainer = ({
         ...selectedJob,
         manager_name: 'Manager Name Here', // TODO: Resolve from employees table using assigned_manager UUID
         due_year: selectedJob.end_date ? new Date(selectedJob.end_date).getFullYear() : 'TBD',
-        latest_file_version: maxVersion,
+        latest_file_version: currentVersion,
         property_count: count || 0
       };
       
       setJobData(enrichedJobData);
 
-      console.log(`📊 JobContainer: Loaded version ${maxVersion} with ${count} property records`);
+      console.log(`📊 JobContainer: Loaded version ${currentVersion} with ${count} property records`);
 
     } catch (error) {
       console.error('Error loading file version:', error);
@@ -266,14 +270,8 @@ const JobContainer = ({
               </span>
             </div>
             {!versionError && (
-              <div className="text-sm text-blue-600 space-x-4">
+              <div className="text-sm text-blue-600">
                 <span>{propertyRecordsCount.toLocaleString()} properties available</span>
-                {/* 🔧 NEW: Show analytics status */}
-                {workflowStats?.isProcessed && (
-                  <span className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-medium">
-                    Analytics Ready
-                  </span>
-                )}
               </div>
             )}
           </div>
