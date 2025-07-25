@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+{Objimport React, { useState, useEffect } from 'react';
 import { Factory, Settings, Download, RefreshCw, AlertTriangle, CheckCircle, TrendingUp, DollarSign, Users, Calendar, X, ChevronDown, ChevronUp, Eye, FileText, Lock, Unlock, Save } from 'lucide-react';
 import { supabase, jobService } from '../../lib/supabaseClient';
 
@@ -526,11 +526,11 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
 
       // Get all valid InfoBy codes for validation
       const allValidCodes = [
-        ...infoByCategoryConfig.entry,
-        ...infoByCategoryConfig.refusal,
-        ...infoByCategoryConfig.estimation,
-        ...infoByCategoryConfig.priced,
-        ...infoByCategoryConfig.special // NEW: Include special codes as valid
+        ...(infoByCategoryConfig.entry || []),
+        ...(infoByCategoryConfig.refusal || []),
+        ...(infoByCategoryConfig.estimation || []),
+        ...(infoByCategoryConfig.priced || []),
+        ...(infoByCategoryConfig.special || []) // NEW: Include special codes as valid
       ];
 
       // Load ALL records using pagination to bypass Supabase 1000 limit
@@ -1354,7 +1354,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              InfoBy Categories ({availableInfoByCodes.length} codes available)
+              InfoBy Categories ({(availableInfoByCodes || []).length} codes available)
             </label>
             <div className="space-y-2">
               <div className="grid grid-cols-2 gap-2 text-sm">
@@ -1387,7 +1387,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         </div>
 
         {/* NEW: Collapsible InfoBy Category Configuration Panel */}
-        {availableInfoByCodes.length > 0 && (
+        {(availableInfoByCodes || []).length > 0 && (
           <div className="mt-6 pt-6 border-t border-gray-200">
             <div className="flex items-center justify-between mb-4">
               <h4 className="text-md font-semibold text-gray-800">
@@ -1430,13 +1430,13 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                 {['entry', 'refusal', 'estimation', 'invalid', 'priced', 'special'].map(category => (
                   <div key={category} className="border border-gray-200 rounded-lg p-4">
                     <h5 className="font-medium text-gray-900 mb-3 capitalize">
-                      {category} ({infoByCategoryConfig[category].length})
+                      {category} ({(infoByCategoryConfig[category] || []).length})
                     </h5>
                     <div className="space-y-2 max-h-40 overflow-y-auto">
                       {availableInfoByCodes.map(codeItem => {
                         const storageCode = jobData.vendor_type === 'Microsystems' ? codeItem.storageCode : codeItem.code;
                         const displayCode = storageCode;
-                        const isAssigned = infoByCategoryConfig[category].includes(storageCode);
+                        const isAssigned = (infoByCategoryConfig[category] || []).includes(storageCode);
                         
                         return (
                           <div key={codeItem.code} className="flex items-start">
