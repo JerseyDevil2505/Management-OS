@@ -90,13 +90,21 @@ const EmployeeManagement = () => {
       console.log('🔍 Sample inspection record:', inspectionData?.[0]);
 
       // Get ONLY inspector employees (Residential, Commercial, Management)
+      // DEBUG: First check what inspector types exist
+      const { data: allEmployees } = await supabase.from('employees').select('inspector_type, role, initials, first_name, last_name');
+      console.log('🔍 ALL EMPLOYEES inspector_type values:', [...new Set(allEmployees?.map(e => e.inspector_type))]);
+      console.log('🔍 ALL EMPLOYEES role values:', [...new Set(allEmployees?.map(e => e.role))]);
+      
       let employeesQuery = supabase
         .from('employees')
         .select('*')
         .in('inspector_type', ['Residential', 'Commercial', 'Management']);
 
       // Apply employment status filter
-      if (analyticsFilter.employmentStatus !== 'all') {
+      if (analyticsFilter.employmentStatus === 'active') {
+        // 'active' means NOT inactive (full_time, part_time, contractor)
+        employeesQuery = employeesQuery.neq('employment_status', 'inactive');
+      } else if (analyticsFilter.employmentStatus !== 'all') {
         employeesQuery = employeesQuery.eq('employment_status', analyticsFilter.employmentStatus);
       }
 
