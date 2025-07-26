@@ -448,6 +448,7 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
                 status: job.status === 'active' ? 'Active' : (job.status || 'Active'),
                 county: capitalizeCounty(job.county),
                 percentBilled: job.percent_billed || 0.00
+              };
               // Create job with real-time batch processing logs
   const createJob = async () => {
     if (!newJob.ccddCode || !newJob.name || !newJob.municipality || !newJob.dueDate || 
