@@ -79,7 +79,7 @@ const EmployeeManagement = () => {
   const loadGlobalAnalytics = async () => {
     setIsLoadingAnalytics(true);
     try {
-      // Get inspection data separately (no JOIN)
+      // Get inspection data separately (no JOIN) 
       const { data: inspectionData, error: inspectionError } = await supabase
         .from('inspection_data')
         .select('*');
@@ -87,15 +87,17 @@ const EmployeeManagement = () => {
       if (inspectionError) throw inspectionError;
 
       // Get ONLY inspector employees (Residential, Commercial, Management)
-      const { data: employeesData, error: employeesError } = await supabase
+      let employeesQuery = supabase
         .from('employees')
         .select('*')
-        .in('inspector_type', ['Residential', 'Commercial', 'Management'])
-        .modify((query) => {
-          if (analyticsFilter.employmentStatus !== 'all') {
-            query.eq('employment_status', analyticsFilter.employmentStatus);
-          }
-        });
+        .in('inspector_type', ['Residential', 'Commercial', 'Management']);
+
+      // Apply employment status filter
+      if (analyticsFilter.employmentStatus !== 'all') {
+        employeesQuery = employeesQuery.eq('employment_status', analyticsFilter.employmentStatus);
+      }
+
+      const { data: employeesData, error: employeesError } = await employeesQuery;
 
       if (employeesError) throw employeesError;
 
