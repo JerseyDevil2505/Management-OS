@@ -984,74 +984,76 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         // NEW: Process valid inspections OR overridden properties
         if ((isValidInspection && hasValidInfoBy && hasValidMeasuredBy && hasValidMeasuredDate) || hasValidationOverride) {
           
-          // Count for manager progress (valid inspections against total properties)
+          // Count for manager progress (valid inspections OR overrides against total properties)
           if (classBreakdown[propertyClass]) {
             classBreakdown[propertyClass].inspected++;
             billingByClass[propertyClass].inspected++;
             billingByClass[propertyClass].billable++;
           }
 
-          // Inspector analytics - count ALL valid inspections
-          inspectorStats[inspector].totalInspected++;
-          
-          const workDayString = measuredDate.toISOString().split('T')[0];
-          inspectorStats[inspector].allWorkDays.add(workDayString);
+          // Inspector analytics - count valid inspections (NOT overrides for individual inspector credit)
+          if (!hasValidationOverride && isValidInspection) {
+            inspectorStats[inspector].totalInspected++;
+            
+            const workDayString = measuredDate.toISOString().split('T')[0];
+            inspectorStats[inspector].allWorkDays.add(workDayString);
 
-          // NEW: Separate residential and commercial counting for analytics
-          if (isResidentialProperty) {
-            inspectorStats[inspector].residentialInspected++;
-            inspectorStats[inspector].residentialWorkDays.add(workDayString);
-            
-            // FIXED: Entry/Refusal counting - separate individual vs global logic
-            
-            // Individual inspector credit: measure_by must equal list_by for personal achievement
-            if (isEntryCode && record.inspection_list_by === inspector) {
-              inspectorStats[inspector].entry++;
-            } else if (isRefusalCode && record.inspection_list_by === inspector) {
-              inspectorStats[inspector].refusal++;
+            // NEW: Separate residential and commercial counting for analytics
+            if (isResidentialProperty) {
+              inspectorStats[inspector].residentialInspected++;
+              inspectorStats[inspector].residentialWorkDays.add(workDayString);
+              
+              // FIXED: Entry/Refusal counting - separate individual vs global logic
+              
+              // Individual inspector credit: measure_by must equal list_by for personal achievement
+              if (isEntryCode && record.inspection_list_by === inspector) {
+                inspectorStats[inspector].entry++;
+              } else if (isRefusalCode && record.inspection_list_by === inspector) {
+                inspectorStats[inspector].refusal++;
+              }
+              
+              // Global metrics: count ALL valid entries/refusals regardless of who did list work
+              if (isEntryCode && classBreakdown[propertyClass]) {
+                classBreakdown[propertyClass].entry++;
+              } else if (isRefusalCode && classBreakdown[propertyClass]) {
+                classBreakdown[propertyClass].refusal++;
+              }
             }
             
-            // Global metrics: count ALL valid entries/refusals regardless of who did list work
-            if (isEntryCode && classBreakdown[propertyClass]) {
-              classBreakdown[propertyClass].entry++;
-            } else if (isRefusalCode && classBreakdown[propertyClass]) {
-              classBreakdown[propertyClass].refusal++;
+            if (isCommercialProperty) {
+              inspectorStats[inspector].commercialInspected++;
+              inspectorStats[inspector].commercialWorkDays.add(workDayString);
             }
-          }
-          
-          if (isCommercialProperty) {
-            inspectorStats[inspector].commercialInspected++;
-            inspectorStats[inspector].commercialWorkDays.add(workDayString);
-          }
 
-          // FIXED: Pricing logic with vendor detection
-          if (isCommercialProperty) {
-            const currentVendor = actualVendor || jobData.vendor_type;
+            // FIXED: Pricing logic with vendor detection
+            if (isCommercialProperty) {
+              const currentVendor = actualVendor || jobData.vendor_type;
 
-            debugLog('PRICING', `Commercial property ${propertyKey} - Class: ${propertyClass}, InfoBy: ${infoByCode}, Vendor: ${currentVendor}`);
-            debugLog('PRICING', `isPricedCode: ${isPricedCode}, Priced category: [${(infoByCategoryConfig.priced || []).join(', ')}]`);
+              debugLog('PRICING', `Commercial property ${propertyKey} - Class: ${propertyClass}, InfoBy: ${infoByCode}, Vendor: ${currentVendor}`);
+              debugLog('PRICING', `isPricedCode: ${isPricedCode}, Priced category: [${(infoByCategoryConfig.priced || []).join(', ')}]`);
 
-            if (currentVendor === 'BRT' && 
-                record.inspection_price_by && 
-                record.inspection_price_by.trim() !== '' &&
-                priceDate && 
-                priceDate >= startDate) {
-              
-              inspectorStats[inspector].priced++;
-              inspectorStats[inspector].pricingWorkDays.add(priceDate.toISOString().split('T')[0]);
-              if (classBreakdown[propertyClass]) {
-                classBreakdown[propertyClass].priced++;
+              if (currentVendor === 'BRT' && 
+                  record.inspection_price_by && 
+                  record.inspection_price_by.trim() !== '' &&
+                  priceDate && 
+                  priceDate >= startDate) {
+                
+                inspectorStats[inspector].priced++;
+                inspectorStats[inspector].pricingWorkDays.add(priceDate.toISOString().split('T')[0]);
+                if (classBreakdown[propertyClass]) {
+                  classBreakdown[propertyClass].priced++;
+                }
+                debugLog('PRICING', `✅ BRT pricing counted for ${inspector} on ${propertyKey}`);
+                
+              } else if (currentVendor === 'Microsystems' && isPricedCode) {
+                inspectorStats[inspector].priced++;
+                if (classBreakdown[propertyClass]) {
+                  classBreakdown[propertyClass].priced++;
+                }
+                debugLog('PRICING', `✅ Microsystems pricing counted for ${inspector} on ${propertyKey}`);
+              } else {
+                debugLog('PRICING', `❌ No pricing counted for ${inspector} on ${propertyKey} - Vendor: ${currentVendor}, isPricedCode: ${isPricedCode}`);
               }
-              debugLog('PRICING', `✅ BRT pricing counted for ${inspector} on ${propertyKey}`);
-              
-            } else if (currentVendor === 'Microsystems' && isPricedCode) {
-              inspectorStats[inspector].priced++;
-              if (classBreakdown[propertyClass]) {
-                classBreakdown[propertyClass].priced++;
-              }
-              debugLog('PRICING', `✅ Microsystems pricing counted for ${inspector} on ${propertyKey}`);
-            } else {
-              debugLog('PRICING', `❌ No pricing counted for ${inspector} on ${propertyKey} - Vendor: ${currentVendor}, isPricedCode: ${isPricedCode}`);
             }
           }
 
@@ -2455,36 +2457,59 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                               </tr>
                             </thead>
                             <tbody>
-                              {validationReport.detailed_issues[selectedInspectorIssues].map((issue, idx) => (
-                                <tr key={idx} className="border-t border-gray-200">
-                                  <td className="px-3 py-2">{issue.block}</td>
-                                  <td className="px-3 py-2">{issue.lot}</td>
-                                  <td className="px-3 py-2">{issue.qualifier || '-'}</td>
-                                  <td className="px-3 py-2">{issue.card}</td>
-                                  <td className="px-3 py-2">{issue.property_location}</td>
-                                  <td className="px-3 py-2 text-red-600">{issue.warning_message}</td>
-                                  <td className="px-3 py-2">
-                                    <button
-                                      onClick={() => {
-                                        setSelectedOverrideProperty({
-                                          composite_key: `${issue.block}-${issue.lot}-${issue.qualifier || ''}`,
-                                          block: issue.block,
-                                          lot: issue.lot,
-                                          qualifier: issue.qualifier,
-                                          card: issue.card,
-                                          property_location: issue.property_location,
-                                          inspector: issue.inspector,
-                                          warning_message: issue.warning_message
-                                        });
-                                        setShowOverrideModal(true);
-                                      }}
-                                      className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
-                                    >
-                                      Override
-                                    </button>
-                                  </td>
-                                </tr>
-                              ))}
+                              {validationReport.detailed_issues[selectedInspectorIssues].map((issue, idx) => {
+                                // Check if this issue has been overridden
+                                const propertyKey = `${issue.block}-${issue.lot}-${issue.qualifier || ''}`;
+                                const isOverridden = overrideMap && overrideMap[propertyKey]?.override_applied;
+                                
+                                return (
+                                  <tr key={idx} className={`border-t border-gray-200 ${isOverridden ? 'bg-green-50' : ''}`}>
+                                    <td className="px-3 py-2">{issue.block}</td>
+                                    <td className="px-3 py-2">{issue.lot}</td>
+                                    <td className="px-3 py-2">{issue.qualifier || '-'}</td>
+                                    <td className="px-3 py-2">{issue.card}</td>
+                                    <td className="px-3 py-2">{issue.property_location}</td>
+                                    <td className={`px-3 py-2 ${isOverridden ? 'line-through text-gray-500' : 'text-red-600'}`}>
+                                      {isOverridden ? (
+                                        <div>
+                                          <span className="line-through">{issue.warning_message}</span>
+                                          <div className="text-green-600 text-xs font-medium mt-1">
+                                            ✅ Overridden: {overrideMap[propertyKey]?.override_reason}
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        issue.warning_message
+                                      )}
+                                    </td>
+                                    <td className="px-3 py-2">
+                                      {isOverridden ? (
+                                        <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded font-medium">
+                                          Overridden
+                                        </span>
+                                      ) : (
+                                        <button
+                                          onClick={() => {
+                                            setSelectedOverrideProperty({
+                                              composite_key: propertyKey,
+                                              block: issue.block,
+                                              lot: issue.lot,
+                                              qualifier: issue.qualifier,
+                                              card: issue.card,
+                                              property_location: issue.property_location,
+                                              inspector: issue.inspector,
+                                              warning_message: issue.warning_message
+                                            });
+                                            setShowOverrideModal(true);
+                                          }}
+                                          className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
+                                        >
+                                          Override
+                                        </button>
+                                      )}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
                             </tbody>
                           </table>
                         </div>
