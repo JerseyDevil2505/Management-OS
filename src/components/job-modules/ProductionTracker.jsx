@@ -48,6 +48,11 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
   // Inspector filtering and sorting
   const [inspectorFilter, setInspectorFilter] = useState('all');
   const [inspectorSort, setInspectorSort] = useState('alphabetical');
+  
+  // NEW: Override modal state
+  const [showOverrideModal, setShowOverrideModal] = useState(false);
+  const [selectedOverrideProperty, setSelectedOverrideProperty] = useState(null);
+  const [overrideReason, setOverrideReason] = useState('New Construction');
 
   // NEW: Smart data staleness detection
   const currentWorkflowStats = jobData?.appData;
@@ -536,7 +541,56 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
     addNotification('Project start date unlocked for editing', 'info');
   };
 
-  // Reset session functionality
+  // NEW: Override validation issue
+  const handleOverrideValidation = async (property) => {
+    if (!overrideReason || !property) return;
+
+    try {
+      // Upsert to inspection_data with override flag
+      const overrideRecord = {
+        job_id: jobData.id,
+        file_version: latestFileVersion,
+        property_composite_key: property.composite_key,
+        block: property.block,
+        lot: property.lot,
+        qualifier: property.qualifier || '',
+        card: property.card || '1',
+        property_location: property.property_location || '',
+        property_class: property.property_class,
+        override_applied: true,
+        override_reason: overrideReason,
+        override_by: 'Manager', // Could be dynamic based on user
+        override_date: new Date().toISOString(),
+        project_start_date: projectStartDate,
+        upload_date: new Date().toISOString()
+      };
+
+      const { error } = await supabase
+        .from('inspection_data')
+        .upsert(overrideRecord, {
+          onConflict: 'job_id,property_composite_key,file_version'
+        });
+
+      if (error) throw error;
+
+      // Close modal
+      setShowOverrideModal(false);
+      setSelectedOverrideProperty(null);
+      setOverrideReason('New Construction');
+      
+      addNotification(`✅ Override applied: ${overrideReason}`, 'success');
+      addNotification('🔄 Reprocessing analytics with override...', 'info');
+
+      // Trigger analytics reprocessing
+      setTimeout(() => {
+        startProcessingSession();
+      }, 1000);
+
+    } catch (error) {
+      console.error('Error applying override:', error);
+      addNotification('Error applying override: ' + error.message, 'error');
+    }
+  };
   const resetSession = () => {
     setSessionId(null);
     setSettingsLocked(false);
@@ -724,9 +778,23 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
           billingByClass[propertyClass].total++;
         }
 
-        // Skip UNASSIGNED for inspector analytics but continue for totals
+        // Skip UNASSIGNED for inspector analytics but track for missing properties
         if (inspector === 'UNASSIGNED') {
           reasonNotAdded = 'Inspector UNASSIGNED';
+          missingProperties.push({
+            composite_key: propertyKey,
+            block: record.property_block,
+            lot: record.property_lot,
+            qualifier: record.property_qualifier || '',
+            card: record.property_addl_card || '1',
+            property_location: record.property_location || '',
+            property_class: propertyClass,
+            reason: reasonNotAdded,
+            inspector: inspector,
+            info_by_code: infoByCode,
+            measure_date: record.inspection_measure_date,
+            validation_issues: []
+          });
           return;
         }
 
@@ -1888,6 +1956,16 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
               >
                 🔍 Missing Properties ({missingPropertiesReport?.summary.total_missing || 0})
               </button>
+              <button
+                onClick={() => setActiveTab('overrides')}
+                className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'overrides'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                🚫 Validation Overrides
+              </button>
             </nav>
           </div>
 
@@ -2385,6 +2463,26 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                                   <td className="px-3 py-2">{issue.card}</td>
                                   <td className="px-3 py-2">{issue.property_location}</td>
                                   <td className="px-3 py-2 text-red-600">{issue.warning_message}</td>
+                                  <td className="px-3 py-2">
+                                    <button
+                                      onClick={() => {
+                                        setSelectedOverrideProperty({
+                                          composite_key: `${issue.block}-${issue.lot}-${issue.qualifier || ''}`,
+                                          block: issue.block,
+                                          lot: issue.lot,
+                                          qualifier: issue.qualifier,
+                                          card: issue.card,
+                                          property_location: issue.property_location,
+                                          inspector: issue.inspector,
+                                          warning_message: issue.warning_message
+                                        });
+                                        setShowOverrideModal(true);
+                                      }}
+                                      className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
+                                    >
+                                      Override
+                                    </button>
+                                  </td>
                                 </tr>
                               ))}
                             </tbody>
@@ -2552,6 +2650,77 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                 )}
               </div>
             )}
+            
+            {/* Validation Overrides Tab */}
+            {activeTab === 'overrides' && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-bold text-gray-900">
+                    Validation Overrides - Manager Approved Exceptions
+                  </h3>
+                </div>
+
+                <div className="text-center py-8">
+                  <CheckCircle className="w-12 h-12 mx-auto mb-4 text-blue-500" />
+                  <h4 className="text-lg font-semibold text-gray-900 mb-2">Override Functionality Active</h4>
+                  <p className="text-gray-600">Use the Override button in validation details to approve exceptions.</p>
+                  <p className="text-sm text-gray-500 mt-2">Overridden properties will appear here for tracking.</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Override Modal */}
+      {showOverrideModal && selectedOverrideProperty && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-bold text-gray-900 mb-4">Override Validation Issue</h3>
+            
+            <div className="mb-4">
+              <p className="text-sm text-gray-600 mb-2">Property:</p>
+              <p className="font-medium">{selectedOverrideProperty.block}-{selectedOverrideProperty.lot}{selectedOverrideProperty.qualifier ? `-${selectedOverrideProperty.qualifier}` : ''}</p>
+              <p className="text-sm text-gray-500">{selectedOverrideProperty.property_location}</p>
+            </div>
+            
+            <div className="mb-4">
+              <p className="text-sm text-gray-600 mb-2">Current Issue:</p>
+              <p className="text-sm text-red-600 bg-red-50 p-2 rounded">{selectedOverrideProperty.warning_message}</p>
+            </div>
+            
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Reason for Override:
+              </label>
+              <select
+                value={overrideReason}
+                onChange={(e) => setOverrideReason(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="New Construction">New Construction</option>
+                <option value="Additional Card">Additional Card</option>
+              </select>
+            </div>
+            
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => {
+                  setShowOverrideModal(false);
+                  setSelectedOverrideProperty(null);
+                  setOverrideReason('New Construction');
+                }}
+                className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleOverrideValidation(selectedOverrideProperty)}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                Save Override
+              </button>
+            </div>
           </div>
         </div>
       )}
