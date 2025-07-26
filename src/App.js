@@ -13,13 +13,9 @@ function App() {
   const [employees, setEmployees] = useState([]);
   const [jobs, setJobs] = useState([]);
   
-  // 🔧 ENHANCED: Central workflow state management with smart invalidation
+  // 🔧 BACKEND ONLY: Central workflow state management
   const [jobWorkflowStats, setJobWorkflowStats] = useState({});
   const [fileRefreshTrigger, setFileRefreshTrigger] = useState(0);
-  
-  // 🔧 NEW: Job metrics state for AdminJobManagement tiles
-  const [jobMetrics, setJobMetrics] = useState({});
-  const [isLoadingMetrics, setIsLoadingMetrics] = useState(false);
   const [metricsRefreshTrigger, setMetricsRefreshTrigger] = useState(0);
 
   // Handle job selection
@@ -34,7 +30,7 @@ function App() {
     setActiveModule('jobs');
   };
 
-  // 🔧 ENHANCED: Smart workflow stats update with preservation logic
+  // 🔧 BACKEND ONLY: Smart workflow stats update with metrics refresh trigger
   const updateJobWorkflowStats = (jobId, stats, saveToDatabase = false) => {
     setJobWorkflowStats(prev => ({
       ...prev,
@@ -45,7 +41,7 @@ function App() {
       }
     }));
 
-    // 🔧 NEW: Trigger metrics refresh when analytics complete
+    // 🔧 BACKEND: Trigger metrics refresh when analytics complete
     if (stats.isProcessed && stats.isProcessed !== jobWorkflowStats[jobId]?.isProcessed) {
       console.log('📊 App.js: Analytics completed, triggering metrics refresh');
       refreshJobMetrics();
@@ -57,22 +53,7 @@ function App() {
     }
   };
 
-  // 🔧 NEW: Refresh job metrics for AdminJobManagement tiles
-  const refreshJobMetrics = async () => {
-    console.log('🔄 App.js: Refreshing job metrics...');
-    setMetricsRefreshTrigger(prev => prev + 1);
-    
-    // Note: The actual metric fetching happens in AdminJobManagement
-    // This trigger causes AdminJobManagement to re-fetch its data
-  };
-
-  // 🔧 NEW: Handle job processing completion from AdminJobManagement
-  const handleJobProcessingComplete = () => {
-    console.log('🔄 App.js: Job processing completed, refreshing metrics');
-    refreshJobMetrics();
-  };
-
-  // 🔧 FIXED: Smart file processing handler with preservation
+  // 🔧 BACKEND ONLY: Smart file processing handler with preservation
   const handleFileProcessed = (result) => {
     console.log('🔄 App.js: File processed, triggering smart invalidation');
     
@@ -87,7 +68,6 @@ function App() {
           ...prev[selectedJob.id], // PRESERVE existing settings & analytics
           needsRefresh: true,       // Flag for ProductionTracker warning
           lastFileUpdate: new Date().toISOString(), // Track when files changed
-          // Keep existing: isProcessed, projectStartDate, infoByCategoryConfig, etc.
         }
       }));
       
@@ -95,6 +75,18 @@ function App() {
     } else {
       console.log('📊 App.js: No existing workflow stats to preserve');
     }
+  };
+
+  // 🔧 BACKEND ONLY: Refresh job metrics for AdminJobManagement
+  const refreshJobMetrics = async () => {
+    console.log('🔄 App.js: Refreshing job metrics...');
+    setMetricsRefreshTrigger(prev => prev + 1);
+  };
+
+  // 🔧 BACKEND ONLY: Handle job processing completion from AdminJobManagement
+  const handleJobProcessingComplete = () => {
+    console.log('🔄 App.js: Job processing completed, refreshing metrics');
+    refreshJobMetrics();
   };
 
   // Get current workflow stats for selected job
@@ -155,13 +147,12 @@ function App() {
       setJobs
     };
 
-    // Enhanced props for job management
+    // 🔧 BACKEND ONLY: Enhanced props for AdminJobManagement
     if (activeModule === 'jobs') {
       return (
         <Component
           {...baseProps}
           onJobSelect={handleJobSelect}
-          onFileProcessed={handleFileProcessed}
           jobWorkflowStats={jobWorkflowStats}
           metricsRefreshTrigger={metricsRefreshTrigger}
           onJobProcessingComplete={handleJobProcessingComplete}
@@ -213,7 +204,7 @@ function App() {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-        {/* Job Selection Breadcrumb */}
+        {/* Simple Job Selection Breadcrumb - NO UI ENHANCEMENTS */}
         {selectedJob && (
           <div className="mb-6 flex items-center space-x-2 text-sm text-gray-600">
             <button
@@ -224,18 +215,6 @@ function App() {
             </button>
             <span>→</span>
             <span className="font-medium text-gray-900">{selectedJob.name}</span>
-            
-            {/* 🔧 NEW: Show workflow status in breadcrumb */}
-            {getCurrentWorkflowStats()?.isProcessed && (
-              <span className="ml-2 px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
-                Analytics Ready
-              </span>
-            )}
-            {getCurrentWorkflowStats()?.needsRefresh && (
-              <span className="ml-2 px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full">
-                Data Updated
-              </span>
-            )}
           </div>
         )}
         
