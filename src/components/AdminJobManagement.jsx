@@ -938,9 +938,6 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
       }));
     }
   };
-        })
-      );
-
       setJobs(jobsWithAssignedCounts);
       setArchivedJobs(archived.map(job => ({
         ...job,
