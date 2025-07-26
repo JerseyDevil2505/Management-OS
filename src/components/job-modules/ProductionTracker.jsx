@@ -49,6 +49,11 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
   const [inspectorFilter, setInspectorFilter] = useState('all');
   const [inspectorSort, setInspectorSort] = useState('alphabetical');
 
+  // NEW: Smart data staleness detection
+  const currentWorkflowStats = jobData?.appData;
+  const isDataStale = currentWorkflowStats?.needsRefresh && 
+                     currentWorkflowStats?.lastFileUpdate > currentWorkflowStats?.lastProcessed;
+
   const addNotification = (message, type = 'info') => {
     const id = Date.now();
     const notification = { id, message, type, timestamp: new Date() };
@@ -733,6 +738,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
             block: record.property_block,
             lot: record.property_lot,
             qualifier: record.property_qualifier || '',
+            card: record.property_addl_card || '1',
             property_location: record.property_location || '',
             property_class: propertyClass,
             reason: reasonNotAdded,
@@ -989,7 +995,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
             block: record.property_block,
             lot: record.property_lot,
             qualifier: record.property_qualifier || '',
-            card: '1',
+            card: record.property_addl_card || '1',
             property_location: record.property_location || '',
             property_class: propertyClass,
             measure_by: inspector,
@@ -1414,10 +1420,10 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
     });
 
     csvContent += "\nDetailed Missing Properties\n";
-    csvContent += "Block,Lot,Qualifier,Property Location,Class,Inspector,InfoBy Code,Measure Date,Reason\n";
+    csvContent += "Block,Lot,Qualifier,Card,Property Location,Class,Inspector,InfoBy Code,Measure Date,Reason\n";
     
     missingPropertiesReport.detailed_missing.forEach(property => {
-      csvContent += `"${property.block}","${property.lot}","${property.qualifier}","${property.property_location}","${property.property_class}","${property.inspector}","${property.info_by_code || ''}","${property.measure_date || ''}","${property.reason}"\n`;
+      csvContent += `"${property.block}","${property.lot}","${property.qualifier}","${property.card || '1'}","${property.property_location}","${property.property_class}","${property.inspector}","${property.info_by_code || ''}","${property.measure_date || ''}","${property.reason}"\n`;
     });
 
     const blob = new Blob([csvContent], { type: 'text/csv' });
@@ -1600,6 +1606,44 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         )}
       </div>
 
+      {/* NEW: Smart Data Staleness Banner */}
+      {isDataStale && (
+        <div className="mb-4 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+          <div className="flex items-center">
+            <AlertTriangle className="w-5 h-5 text-yellow-600 mr-2" />
+            <div className="flex-1">
+              <h3 className="font-medium text-yellow-800">New Data Available to Process</h3>
+              <p className="text-sm text-yellow-700">
+                Files were updated after your last analytics processing. Current results may be outdated.
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                // Clear the stale flag and trigger reprocessing
+                if (onDataUpdate) {
+                  onDataUpdate({
+                    ...currentWorkflowStats,
+                    needsRefresh: false,
+                    isProcessed: false
+                  });
+                }
+                // Reset local state to allow fresh processing
+                setProcessed(false);
+                setAnalytics(null);
+                setBillingAnalytics(null);
+                setValidationReport(null);
+                setMissingPropertiesReport(null);
+                setSettingsLocked(false);
+                addNotification('📊 Ready for fresh analytics processing', 'info');
+              }}
+              className="ml-4 bg-yellow-600 text-white px-3 py-2 rounded hover:bg-yellow-700 text-sm font-medium"
+            >
+              Reprocess Analytics
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Settings Panel */}
       <div className="bg-white rounded-lg border shadow-sm p-6">
         <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
@@ -1758,8 +1802,8 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
 
         <div className="mt-6 flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            {/* Reset button - visible when there's processed data */}
-            {(processed || analytics) && (
+            {/* Reset button - visible when there's processed data and not stale */}
+            {(processed || analytics) && !isDataStale && (
               <button
                 onClick={resetSession}
                 className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-all text-sm flex items-center space-x-1"
@@ -2337,6 +2381,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                                   <td className="px-3 py-2">{issue.block}</td>
                                   <td className="px-3 py-2">{issue.lot}</td>
                                   <td className="px-3 py-2">{issue.qualifier || '-'}</td>
+                                  <td className="px-3 py-2">{issue.card}</td>
                                   <td className="px-3 py-2">{issue.property_location}</td>
                                   <td className="px-3 py-2 text-red-600">{issue.warning_message}</td>
                                 </tr>
@@ -2470,6 +2515,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                               <th className="px-3 py-2 text-left font-medium text-gray-700">Block</th>
                               <th className="px-3 py-2 text-left font-medium text-gray-700">Lot</th>
                               <th className="px-3 py-2 text-left font-medium text-gray-700">Qualifier</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Card</th>
                               <th className="px-3 py-2 text-left font-medium text-gray-700">Property Location</th>
                               <th className="px-3 py-2 text-left font-medium text-gray-700">Class</th>
                               <th className="px-3 py-2 text-left font-medium text-gray-700">Inspector</th>
@@ -2485,6 +2531,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                                 <td className="px-3 py-2 font-medium">{property.block}</td>
                                 <td className="px-3 py-2 font-medium">{property.lot}</td>
                                 <td className="px-3 py-2">{property.qualifier || '-'}</td>
+                                <td className="px-3 py-2">{property.card || '1'}</td>
                                 <td className="px-3 py-2">{property.property_location}</td>
                                 <td className="px-3 py-2">
                                   <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded font-medium">
