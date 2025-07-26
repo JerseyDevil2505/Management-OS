@@ -1,65 +1,201 @@
-import React, { useState, useEffect } from 'react';
-import { Users, FileText, DollarSign, Calculator, Building } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { supabase } from './lib/supabaseClient';
 import EmployeeManagement from './components/EmployeeManagement';
 import AdminJobManagement from './components/AdminJobManagement';
 import BillingManagement from './components/BillingManagement';
 import PayrollManagement from './components/PayrollManagement';
 import JobContainer from './components/job-modules/JobContainer';
+import FileUploadButton from './components/FileUploadButton';
 import './App.css';
 
 function App() {
   const [activeModule, setActiveModule] = useState('jobs');
   const [selectedJob, setSelectedJob] = useState(null);
-  const [employees, setEmployees] = useState([]);
-  const [jobs, setJobs] = useState([]);
-  
-  // 🔧 BACKEND ONLY: Central workflow state management
+
+  // Central module state management for ALL jobs using workflow_stats
   const [jobWorkflowStats, setJobWorkflowStats] = useState({});
-  const [fileRefreshTrigger, setFileRefreshTrigger] = useState(0);
+  const [isLoadingWorkflowStats, setIsLoadingWorkflowStats] = useState(false);
+
+  // 🔧 BACKEND ENHANCEMENT: Add metrics refresh trigger for AdminJobManagement
   const [metricsRefreshTrigger, setMetricsRefreshTrigger] = useState(0);
 
-  // Handle job selection
+  // Load persisted workflow stats for all active jobs
+  const loadAllJobWorkflowStats = useCallback(async () => {
+    setIsLoadingWorkflowStats(true);
+    try {
+      // Get all active jobs with their workflow stats
+      const { data: jobs, error } = await supabase
+        .from('jobs')
+        .select('id, workflow_stats')
+        .eq('status', 'active')
+        .order('created_at', { ascending: false });
+
+      if (!error && jobs) {
+        const loadedStats = {};
+        
+        jobs.forEach(job => {
+          if (job.workflow_stats && Object.keys(job.workflow_stats).length > 0) {
+            // Load existing workflow stats
+            loadedStats[job.id] = {
+              ...job.workflow_stats,
+              isProcessed: true,
+              lastLoaded: new Date().toISOString()
+            };
+          } else {
+            // Initialize empty state for jobs without workflow stats
+            loadedStats[job.id] = {
+              totalRecords: 0,
+              validInspections: 0,
+              jobEntryRate: 0,
+              jobRefusalRate: 0,
+              commercialCompletePercent: 0,
+              pricingCompletePercent: 0,
+              lastProcessed: null,
+              isProcessed: false
+            };
+          }
+        });
+
+        setJobWorkflowStats(loadedStats);
+      }
+    } catch (error) {
+      console.error('❌ Error loading job workflow stats:', error);
+    } finally {
+      setIsLoadingWorkflowStats(false);
+    }
+  }, []);
+
+  // Load workflow stats on app startup
+  useEffect(() => {
+    loadAllJobWorkflowStats();
+  }, [loadAllJobWorkflowStats]);
+
+  // 🔧 BACKEND ENHANCEMENT: Enhanced workflow stats update with metrics refresh trigger
+  const handleWorkflowStatsUpdate = async (jobId, newStats, persistToDatabase = true) => {
+    // Check if analytics just completed (isProcessed changed from false to true)
+    const previousStats = jobWorkflowStats[jobId];
+    const analyticsJustCompleted = newStats.isProcessed && !previousStats?.isProcessed;
+
+    // Update local state immediately for real-time UI
+    setJobWorkflowStats(prev => ({
+      ...prev,
+      [jobId]: {
+        ...prev[jobId],
+        ...newStats,
+        isProcessed: true,
+        lastUpdated: new Date().toISOString()
+      }
+    }));
+
+    // 🔧 BACKEND ENHANCEMENT: Trigger metrics refresh when analytics complete
+    if (analyticsJustCompleted) {
+      console.log('📊 App.js: Analytics completed, triggering AdminJobManagement metrics refresh');
+      setMetricsRefreshTrigger(prev => prev + 1);
+    }
+
+    // Persist to database for navigation survival
+    if (persistToDatabase) {
+      try {
+        const updatedStats = {
+          ...jobWorkflowStats[jobId],
+          ...newStats,
+          isProcessed: true,
+          lastUpdated: new Date().toISOString()
+        };
+
+        const { error } = await supabase
+          .from('jobs')
+          .update({ 
+            workflow_stats: updatedStats,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', jobId);
+
+        if (error) {
+          console.error('❌ Error persisting workflow stats:', error);
+        }
+      } catch (error) {
+        console.error('❌ Failed to persist workflow stats:', error);
+      }
+    }
+  };
+
+  // Get workflow stats for a specific job (with defaults)
+  const getJobWorkflowStats = (jobId) => {
+    const defaultStats = {
+      totalRecords: 0,
+      validInspections: 0,
+      jobEntryRate: 0,
+      jobRefusalRate: 0,
+      commercialCompletePercent: 0,
+      pricingCompletePercent: 0,
+      lastProcessed: null,
+      isProcessed: false
+    };
+
+    return jobWorkflowStats[jobId] || defaultStats;
+  };
+
+  // Get all job metrics for AdminJobManagement
+  const getAllJobMetrics = () => {
+    const metrics = {};
+    
+    Object.keys(jobWorkflowStats).forEach(jobId => {
+      const stats = jobWorkflowStats[jobId];
+      
+      if (stats && stats.isProcessed && stats.totalRecords) {
+        metrics[jobId] = {
+          totalProperties: stats.totalRecords || 0,
+          propertiesInspected: stats.validInspections || 0,
+          entryRate: stats.jobEntryRate || 0,
+          refusalRate: stats.jobRefusalRate || 0,
+          commercialComplete: stats.commercialCompletePercent || 0,
+          pricingComplete: stats.pricingCompletePercent || 0,
+          lastProcessed: stats.lastProcessed,
+          isProcessed: true
+        };
+      } else {
+        // Default metrics for unprocessed jobs
+        metrics[jobId] = {
+          totalProperties: 0,
+          propertiesInspected: 0,
+          entryRate: 0,
+          refusalRate: 0,
+          commercialComplete: 0,
+          pricingComplete: 0,
+          lastProcessed: null,
+          isProcessed: false
+        };
+      }
+    });
+
+    return metrics;
+  };
+
+  // Handle job selection from AdminJobManagement
   const handleJobSelect = (job) => {
     setSelectedJob(job);
     setActiveModule('job-modules');
   };
 
-  // Handle back to jobs
+  // Handle returning to jobs list
   const handleBackToJobs = () => {
     setSelectedJob(null);
     setActiveModule('jobs');
   };
 
-  // 🔧 BACKEND ONLY: Smart workflow stats update with metrics refresh trigger
-  const updateJobWorkflowStats = (jobId, stats, saveToDatabase = false) => {
-    setJobWorkflowStats(prev => ({
-      ...prev,
-      [jobId]: {
-        ...prev[jobId], // Preserve existing data
-        ...stats,       // Apply new stats
-        lastUpdated: new Date().toISOString()
-      }
-    }));
+  // File refresh trigger for JobContainer
+  const [fileRefreshTrigger, setFileRefreshTrigger] = useState(0);
 
-    // 🔧 BACKEND: Trigger metrics refresh when analytics complete
-    if (stats.isProcessed && stats.isProcessed !== jobWorkflowStats[jobId]?.isProcessed) {
-      console.log('📊 App.js: Analytics completed, triggering metrics refresh');
-      refreshJobMetrics();
-    }
-
-    // TODO: Optional database persistence
-    if (saveToDatabase) {
-      console.log('📊 App.js: Would save to database:', stats);
-    }
-  };
-
-  // 🔧 BACKEND ONLY: Smart file processing handler with preservation
-  const handleFileProcessed = (result) => {
-    console.log('🔄 App.js: File processed, triggering smart invalidation');
+  // 🔧 BACKEND ENHANCEMENT: Smart file processing with preservation
+  const handleFileProcessed = async (result) => {
+    // FileUploadButton already handles file versioning and tracking
+    // Just refresh job metadata without touching ProductionTracker analytics
+    await loadAllJobWorkflowStats();
     
-    // Increment refresh trigger for JobContainer
+    // CRITICAL: Trigger JobContainer to refresh file version
     setFileRefreshTrigger(prev => prev + 1);
-    
+
     // 🔧 SMART INVALIDATION: Preserve settings, just flag as stale
     if (selectedJob?.id && jobWorkflowStats[selectedJob.id]) {
       setJobWorkflowStats(prev => ({
@@ -72,154 +208,141 @@ function App() {
       }));
       
       console.log('📊 App.js: Marked analytics as stale, preserved user settings');
-    } else {
-      console.log('📊 App.js: No existing workflow stats to preserve');
     }
   };
 
-  // 🔧 BACKEND ONLY: Refresh job metrics for AdminJobManagement
-  const refreshJobMetrics = async () => {
-    console.log('🔄 App.js: Refreshing job metrics...');
+  // 🔧 BACKEND ENHANCEMENT: Handle job processing completion from AdminJobManagement
+  const handleJobProcessingComplete = () => {
+    console.log('🔄 App.js: Job processing completed, refreshing metrics');
     setMetricsRefreshTrigger(prev => prev + 1);
   };
 
-  // 🔧 BACKEND ONLY: Handle job processing completion from AdminJobManagement
-  const handleJobProcessingComplete = () => {
-    console.log('🔄 App.js: Job processing completed, refreshing metrics');
-    refreshJobMetrics();
-  };
-
-  // Get current workflow stats for selected job
-  const getCurrentWorkflowStats = () => {
-    return selectedJob?.id ? jobWorkflowStats[selectedJob.id] : null;
-  };
-
-  // Main navigation items
-  const navigationItems = [
-    {
-      id: 'employees',
-      name: 'Employee Management',
-      icon: Users,
-      component: EmployeeManagement
-    },
-    {
-      id: 'jobs', 
-      name: 'Current Jobs',
-      icon: FileText,
-      component: AdminJobManagement
-    },
-    {
-      id: 'billing',
-      name: 'Billing Management', 
-      icon: DollarSign,
-      component: BillingManagement
-    },
-    {
-      id: 'payroll',
-      name: 'Payroll Management',
-      icon: Calculator, 
-      component: PayrollManagement
-    }
-  ];
-
-  // Render active module
-  const renderActiveModule = () => {
-    if (activeModule === 'job-modules' && selectedJob) {
-      return (
-        <JobContainer
-          selectedJob={selectedJob}
-          onBackToJobs={handleBackToJobs}
-          workflowStats={getCurrentWorkflowStats()}
-          onUpdateWorkflowStats={(stats) => updateJobWorkflowStats(selectedJob.id, stats, true)}
-          fileRefreshTrigger={fileRefreshTrigger}
-        />
-      );
-    }
-
-    const activeNav = navigationItems.find(item => item.id === activeModule);
-    if (!activeNav) return null;
-
-    const Component = activeNav.component;
-    const baseProps = {
-      employees,
-      setEmployees,
-      jobs,
-      setJobs
-    };
-
-    // 🔧 BACKEND ONLY: Enhanced props for AdminJobManagement
-    if (activeModule === 'jobs') {
-      return (
-        <Component
-          {...baseProps}
-          onJobSelect={handleJobSelect}
-          jobWorkflowStats={jobWorkflowStats}
-          metricsRefreshTrigger={metricsRefreshTrigger}
-          onJobProcessingComplete={handleJobProcessingComplete}
-        />
-      );
-    }
-
-    return <Component {...baseProps} />;
-  };
-
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center">
-              <Building className="w-8 h-8 text-blue-600 mr-3" />
-              <div>
-                <h1 className="text-xl font-bold text-gray-900">LOJIK Management OS</h1>
-                <p className="text-xs text-gray-500">Professional Property Appraisers Inc</p>
-              </div>
-            </div>
-            
-            {/* Navigation */}
-            <nav className="flex space-x-1">
-              {navigationItems.map((item) => {
-                const Icon = item.icon;
-                const isActive = activeModule === item.id;
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => setActiveModule(item.id)}
-                    className={`px-3 py-2 rounded-md text-sm font-medium flex items-center space-x-2 transition-colors ${
-                      isActive
-                        ? 'bg-blue-100 text-blue-700'
-                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                    }`}
-                  >
-                    <Icon className="w-4 h-4" />
-                    <span className="hidden sm:block">{item.name}</span>
-                  </button>
-                );
-              })}
+    <div className="App">
+      {/* Top Navigation */}
+      <div className="bg-gray-900 text-white p-4 mb-6">
+        <div className="max-w-6xl mx-auto">
+          <h1 className="text-2xl font-bold mb-4">
+            Management OS
+            {isLoadingWorkflowStats && (
+              <span className="ml-3 text-sm text-gray-300">
+                <div className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-gray-300 mr-2"></div>
+                Loading analytics...
+              </span>
+            )}
+          </h1>
+          
+          {/* Only show main navigation when NOT in job-specific modules */}
+          {activeModule !== 'job-modules' && (
+            <nav className="flex space-x-6">
+              <button
+                onClick={() => setActiveModule('employees')}
+                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                  activeModule === 'employees'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+              >
+                👥 Employee Management
+              </button>
+              <button
+                onClick={() => setActiveModule('jobs')}
+                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                  activeModule === 'jobs'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+              >
+                📋 Current Jobs
+                {/* Show analytics ready indicator */}
+                {Object.values(getAllJobMetrics()).filter(m => m.isProcessed).length > 0 && (
+                  <span className="ml-2 text-xs bg-green-500 text-white px-2 py-1 rounded-full">
+                    {Object.values(getAllJobMetrics()).filter(m => m.isProcessed).length}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => setActiveModule('billing')}
+                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                  activeModule === 'billing'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+              >
+                💰 Billing Management
+              </button>
+              <button
+                onClick={() => setActiveModule('payroll')}
+                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                  activeModule === 'payroll'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+              >
+                📊 Payroll Management
+              </button>
             </nav>
-          </div>
+          )}
+          
+          {/* Show job context when in job-specific modules */}
+          {activeModule === 'job-modules' && selectedJob && (
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-6">
+                <div>
+                  <p className="text-sm text-gray-300">Working on:</p>
+                  <p className="text-lg font-semibold">{selectedJob.job_name}</p>
+                </div>
+                
+                {/* File Upload Controls */}
+                <div className="border-l border-gray-700 pl-6">
+                  <FileUploadButton 
+                    job={selectedJob} 
+                    onFileProcessed={handleFileProcessed} 
+                  />
+                </div>
+              </div>
+              
+              <button
+                onClick={handleBackToJobs}
+                className="px-4 py-2 bg-gray-700 text-gray-300 hover:bg-gray-600 rounded-lg font-medium transition-colors"
+              >
+                ← Back to Jobs
+              </button>
+            </div>
+          )}
         </div>
-      </header>
+      </div>
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-        {/* Simple Job Selection Breadcrumb - NO UI ENHANCEMENTS */}
-        {selectedJob && (
-          <div className="mb-6 flex items-center space-x-2 text-sm text-gray-600">
-            <button
-              onClick={handleBackToJobs}
-              className="hover:text-blue-600 underline"
-            >
-              Current Jobs
-            </button>
-            <span>→</span>
-            <span className="font-medium text-gray-900">{selectedJob.name}</span>
-          </div>
-        )}
+      {/* Module Content */}
+      <div className="min-h-screen bg-gray-50">
+        {activeModule === 'employees' && <EmployeeManagement />}
         
-        {renderActiveModule()}
-      </main>
+        {activeModule === 'jobs' && (
+          <AdminJobManagement 
+            onJobSelect={handleJobSelect}
+            jobMetrics={getAllJobMetrics()}
+            isLoadingMetrics={isLoadingWorkflowStats}
+            metricsRefreshTrigger={metricsRefreshTrigger}
+            onJobProcessingComplete={handleJobProcessingComplete}
+          />
+        )}
+
+        {activeModule === 'billing' && <BillingManagement />}
+
+        {activeModule === 'payroll' && <PayrollManagement />}
+        
+        {activeModule === 'job-modules' && selectedJob && (
+          <JobContainer 
+            selectedJob={selectedJob} 
+            onBackToJobs={handleBackToJobs}
+            workflowStats={getJobWorkflowStats(selectedJob.id)}
+            onUpdateWorkflowStats={(newStats, persist = true) => 
+              handleWorkflowStatsUpdate(selectedJob.id, newStats, persist)
+            }
+            fileRefreshTrigger={fileRefreshTrigger}
+          />
+        )}
+      </div>
     </div>
   );
 }
