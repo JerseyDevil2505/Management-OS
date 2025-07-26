@@ -132,12 +132,12 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics }) => {
 
     console.log('⚠️ Falling back to database for', job.name);
     
-    // Fallback to existing logic
+    // FIXED: Fallback to NEW field structure from ProductionTracker
     const baseMetrics = {
-      entryRate: job.workflowStats?.rates?.entryRate || 0,
-      refusalRate: job.workflowStats?.rates?.refusalRate || 0,
-      commercialRate: job.workflowStats?.rates?.commercialInspectionRate || 0,
-      pricingRate: job.workflowStats?.rates?.pricingRate || 0
+      entryRate: job.workflowStats?.jobEntryRate || 0,              // ✅ NEW FORMAT
+      refusalRate: job.workflowStats?.jobRefusalRate || 0,          // ✅ NEW FORMAT  
+      commercialRate: job.workflowStats?.commercialCompletePercent || 0, // ✅ NEW FORMAT
+      pricingRate: job.workflowStats?.pricingCompletePercent || 0   // ✅ NEW FORMAT
     };
 
     // No assignments - show normal percentages
