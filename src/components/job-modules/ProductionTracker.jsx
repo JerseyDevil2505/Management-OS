@@ -53,6 +53,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
   const [showOverrideModal, setShowOverrideModal] = useState(false);
   const [selectedOverrideProperty, setSelectedOverrideProperty] = useState(null);
   const [overrideReason, setOverrideReason] = useState('New Construction');
+  const [overrideMap, setOverrideMap] = useState({});
 
   // NEW: Smart data staleness detection
   const currentWorkflowStats = jobData?.appData;
@@ -727,13 +728,16 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
       }
 
       // Create override lookup map for fast checking
-      const overrideMap = {};
+      const overrideMapData = {};
       (existingOverrides || []).forEach(override => {
-        overrideMap[override.property_composite_key] = {
+        overrideMapData[override.property_composite_key] = {
           override_applied: override.override_applied,
           override_reason: override.override_reason
         };
       });
+      
+      // Set override map in component state for UI access
+      setOverrideMap(overrideMapData);
       
       debugLog('ANALYTICS', `Loaded ${existingOverrides?.length || 0} existing validation overrides`);
       
@@ -766,7 +770,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         const propertyKey = record.property_composite_key || `${record.property_block}-${record.property_lot}-${record.property_qualifier || ''}`;
 
         // Check for existing validation override
-        const hasValidationOverride = overrideMap[propertyKey]?.override_applied;
+        const hasValidationOverride = overrideMapData[propertyKey]?.override_applied;
 
         // Track this property's processing status
         let wasAddedToInspectionData = false;
@@ -1087,7 +1091,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
           // Add override information if exists
           if (hasValidationOverride) {
             inspectionRecord.override_applied = true;
-            inspectionRecord.override_reason = overrideMap[propertyKey].override_reason;
+            inspectionRecord.override_reason = overrideMapData[propertyKey].override_reason;
             // Keep existing override metadata (don't overwrite override_by, override_date)
           }
 
