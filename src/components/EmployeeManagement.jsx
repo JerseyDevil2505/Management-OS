@@ -3,11 +3,6 @@ import { Users, Upload, Search, Mail, Phone, MapPin, Clock, AlertTriangle, Setti
 import * as XLSX from 'xlsx';
 import { employeeService, signInAsDev, supabase } from '../lib/supabaseClient';
 
-import React, { useState, useEffect } from 'react';
-import { Users, Upload, Search, Mail, Phone, MapPin, Clock, AlertTriangle, Settings, Database, CheckCircle, Loader, Edit, X, Copy, FileText, Download, Filter } from 'lucide-react';
-import * as XLSX from 'xlsx';
-import { employeeService, signInAsDev, supabase } from '../lib/supabaseClient';
-
 const EmployeeManagement = () => {
   const [employees, setEmployees] = useState([]);
   const [filteredEmployees, setFilteredEmployees] = useState([]);
