@@ -109,11 +109,19 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics }) => {
     ).join(' ');
   };
 
-  // Enhanced Metrics Display Logic with live metrics first
+  // FIXED: Enhanced Metrics Display Logic with live metrics first
   const getMetricsDisplay = (job) => {
-    // Check for live metrics first
+    // Check for live metrics first - REMOVED problematic isProcessed condition
     const liveMetrics = jobMetrics?.[job.id];
-    if (liveMetrics && liveMetrics.isProcessed) {
+    
+    // Debug log to see what we're getting
+    if (liveMetrics) {
+      console.log('🔍 Live metrics available for', job.name, ':', liveMetrics);
+    }
+    
+    // Use live metrics if available (any live data is better than stale database)
+    if (liveMetrics && (liveMetrics.entryRate !== undefined || liveMetrics.totalProperties !== undefined)) {
+      console.log('✅ Using live metrics for', job.name);
       return {
         entryRate: liveMetrics.entryRate || 0,
         refusalRate: liveMetrics.refusalRate || 0,
@@ -122,6 +130,8 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics }) => {
       };
     }
 
+    console.log('⚠️ Falling back to database for', job.name);
+    
     // Fallback to existing logic
     const baseMetrics = {
       entryRate: job.workflowStats?.rates?.entryRate || 0,
@@ -160,7 +170,8 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics }) => {
   const getPropertyCountDisplay = (job) => {
     // Check for live metrics first
     const liveMetrics = jobMetrics?.[job.id];
-    if (liveMetrics && liveMetrics.isProcessed) {
+    if (liveMetrics && liveMetrics.totalProperties !== undefined) {
+      console.log('✅ Using live property counts for', job.name);
       return {
         inspected: liveMetrics.propertiesInspected || 0,
         total: liveMetrics.totalProperties || 0,
@@ -169,6 +180,8 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics }) => {
       };
     }
 
+    console.log('⚠️ Using database property counts for', job.name);
+    
     // Fallback to existing logic
     if (!job.has_property_assignments) {
       return {
