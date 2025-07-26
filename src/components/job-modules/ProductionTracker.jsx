@@ -410,10 +410,16 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
   };
 
   // Save category configuration to database and persist analytics
-  const saveCategoriesToDatabase = async (config = null) => {
+  const saveCategoriesToDatabase = async (config = null, freshAnalytics = null) => {
     if (!jobData?.id) return;
 
     const configToSave = config || infoByCategoryConfig;
+    const analyticsToSave = freshAnalytics || {
+      analytics,
+      billingAnalytics,
+      validationReport,
+      missingPropertiesReport
+    };
 
     try {
       const { error } = await supabase
@@ -424,11 +430,12 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
             vendor_type: jobData.vendor_type,
             last_updated: new Date().toISOString()
           },
-          // ENHANCED: Persist analytics data for navigation survival
-          workflow_stats: analytics ? {
-            ...analytics,
-            billingAnalytics,
-            validationReport,
+          // FIXED: Persist fresh analytics data for navigation survival
+          workflow_stats: analyticsToSave.analytics ? {
+            ...analyticsToSave.analytics,
+            billingAnalytics: analyticsToSave.billingAnalytics,
+            validationReport: analyticsToSave.validationReport,
+            missingPropertiesReport: analyticsToSave.missingPropertiesReport,
             lastProcessed: new Date().toISOString()
           } : undefined
         })
@@ -439,7 +446,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
       setOriginalCategoryConfig(configToSave);
       setHasUnsavedChanges(false);
       addNotification('✅ Configuration and analytics saved', 'success');
-      debugLog('PERSISTENCE', '✅ Saved config and analytics to job record');
+      debugLog('PERSISTENCE', '✅ Saved config and FRESH analytics to job record', analyticsToSave.analytics);
     } catch (error) {
       console.error('Error saving configuration:', error);
       addNotification('Error saving configuration', 'error');
@@ -1275,8 +1282,13 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
       
       // Note: missingPropertiesReportData is set directly in state during processAnalytics
 
-      // ENHANCED: Persist to database for navigation survival
-      await saveCategoriesToDatabase();
+      // ENHANCED: Persist to database for navigation survival with FRESH data
+      await saveCategoriesToDatabase(infoByCategoryConfig, {
+        analytics: analyticsResult,
+        billingAnalytics: billingResult,
+        validationReport: validationReportData,
+        missingPropertiesReport: missingPropertiesReport
+      });
 
       // NEW: Update App.js central data hub
       if (onDataUpdate) {
