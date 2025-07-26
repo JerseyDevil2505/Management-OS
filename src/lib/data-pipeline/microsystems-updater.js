@@ -1,4 +1,8 @@
--delimited format support
+/**
+ * Enhanced Microsystems Updater 
+ * Handles pipe-delimited source files and field_id+code lookup files
+ * UPDATED: Single table UPSERT to property_records with all 82 fields
+ * NEW: Proper code file storage in jobs table with pipe-delimited format support
  * ADDED: Retry logic for connection issues and query cancellations
  * ENHANCED: Dual-pattern parsing for standard (140A) and HVAC (8ED) codes
  * FIXED: Proper AAACCCCSSSS parsing - InfoBy single char, Design multi-char, HVAC preserved
@@ -41,7 +45,7 @@ export class MicrosystemsUpdater {
         const { data, error } = await supabase
           .from('property_records')
           .upsert(batch, {
-            onConflict: 'property_composite_key,job_id',
+            onConflict: 'property_composite_key',
             ignoreDuplicates: false
           });
         
