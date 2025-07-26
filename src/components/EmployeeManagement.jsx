@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+// Determineimport React, { useState, useEffect } from 'react';
 import { Users, Upload, Search, Mail, Phone, MapPin, Clock, AlertTriangle, Settings, Database, CheckCircle, Loader, Edit, X, Copy, FileText, Download, Filter } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { employeeService, signInAsDev, supabase } from '../lib/supabaseClient';
@@ -183,8 +183,20 @@ const EmployeeManagement = () => {
       const matchesType = filter.inspectorType === 'all' || record.employee.inspector_type === filter.inspectorType;
       const matchesRegion = filter.region === 'all' || record.employee.region === filter.region;
       
-      // Date filtering would go here if needed
-      return matchesType && matchesRegion;
+      // IMPORTANT: Only count residential inspectors on residential properties (2, 3A)
+      // and commercial inspectors on commercial properties (5)
+      const isResidentialInspector = record.employee.inspector_type === 'Residential';
+      const isCommercialInspector = record.employee.inspector_type === 'Commercial';
+      const isResidentialProperty = ['2', '3A'].includes(record.property_class);
+      const isCommercialProperty = record.property_class === '5';
+      
+      // Only include if inspector type matches property type
+      const propertyTypeMatch = 
+        (isResidentialInspector && isResidentialProperty) ||
+        (isCommercialInspector && isCommercialProperty) ||
+        record.employee.inspector_type === 'Management'; // Management can inspect anything
+      
+      return matchesType && matchesRegion && propertyTypeMatch;
     });
 
     // Calculate summary metrics
@@ -219,12 +231,12 @@ const EmployeeManagement = () => {
 
       inspectorStats[initials].totalInspections++;
 
-      // Determine if this is entry/refusal based on InfoBy codes (simplified)
+      // Determine if this is entry/refusal based on InfoBy codes (copying ProductionTracker logic)
       if (record.info_by_code && record.property_class && ['2', '3A'].includes(record.property_class)) {
         totalEligible++;
         inspectorStats[initials].totalEligible = (inspectorStats[initials].totalEligible || 0) + 1;
 
-        // Simple InfoBy logic - you'd want to use actual job code definitions here
+        // Simple InfoBy logic - matches ProductionTracker's current implementation
         const infoBy = record.info_by_code.toString().toLowerCase();
         if (['01', '02', '03', '04', 'a', 'o', 's', 't'].includes(infoBy)) {
           entryCount++;
