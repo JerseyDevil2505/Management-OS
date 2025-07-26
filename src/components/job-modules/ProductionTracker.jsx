@@ -625,6 +625,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
             property_block,
             property_lot,
             property_qualifier,
+            property_addl_card,
             property_location,
             property_m4_class,
             inspection_info_by,
@@ -653,6 +654,30 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         if (batchData.length < batchSize) break;
       }
       
+      // NEW: Load existing validation overrides from inspection_data
+      debugLog('ANALYTICS', 'Loading existing validation overrides...');
+      const { data: existingOverrides, error: overrideError } = await supabase
+        .from('inspection_data')
+        .select('property_composite_key, override_applied, override_reason')
+        .eq('job_id', jobData.id)
+        .eq('file_version', latestFileVersion)
+        .eq('override_applied', true);
+
+      if (overrideError) {
+        console.warn('Could not load existing overrides:', overrideError);
+      }
+
+      // Create override lookup map for fast checking
+      const overrideMap = {};
+      (existingOverrides || []).forEach(override => {
+        overrideMap[override.property_composite_key] = {
+          override_applied: override.override_applied,
+          override_reason: override.override_reason
+        };
+      });
+      
+      debugLog('ANALYTICS', `Loaded ${existingOverrides?.length || 0} existing validation overrides`);
+      
       const rawData = allRecords;
       debugLog('ANALYTICS', `✅ Loaded ${rawData?.length || 0} property records for analysis`);
 
@@ -680,6 +705,9 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         const listDate = record.inspection_list_date ? new Date(record.inspection_list_date) : null;
         const priceDate = record.inspection_price_date ? new Date(record.inspection_price_date) : null;
         const propertyKey = record.property_composite_key || `${record.property_block}-${record.property_lot}-${record.property_qualifier || ''}`;
+
+        // Check for existing validation override
+        const hasValidationOverride = overrideMap[propertyKey]?.override_applied;
 
         // Track this property's processing status
         let wasAddedToInspectionData = false;
@@ -818,6 +846,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
               block: record.property_block,
               lot: record.property_lot,
               qualifier: record.property_qualifier || '',
+              card: record.property_addl_card || '1',
               property_location: record.property_location || '',
               inspector: inspector,
               issues: []
@@ -873,12 +902,13 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
           addValidationIssue(`Residential inspector on commercial property`);
         }
 
-        if (record.values_mod_improvement === 0 && !hasListingData) {
+        // NEW: Zero improvement validation with override protection
+        if (record.values_mod_improvement === 0 && !hasListingData && !hasValidationOverride) {
           addValidationIssue('Zero improvement property missing listing data');
         }
 
-        // NEW: Process valid inspections with corrected counting
-        if (isValidInspection && hasValidInfoBy && hasValidMeasuredBy && hasValidMeasuredDate) {
+        // NEW: Process valid inspections OR overridden properties
+        if ((isValidInspection && hasValidInfoBy && hasValidMeasuredBy && hasValidMeasuredDate) || hasValidationOverride) {
           
           // Count for manager progress (valid inspections against total properties)
           if (classBreakdown[propertyClass]) {
@@ -951,8 +981,8 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
             }
           }
 
-          // NEW: Prepare for inspection_data UPSERT
-          inspectionDataBatch.push({
+          // NEW: Prepare for inspection_data UPSERT (include override info)
+          const inspectionRecord = {
             job_id: jobData.id,
             file_version: latestFileVersion,
             property_composite_key: propertyKey,
@@ -976,7 +1006,16 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
               issues: propertyIssues[propertyKey].issues,
               severity: propertyIssues[propertyKey].issues.length > 2 ? 'high' : 'medium'
             } : null
-          });
+          };
+
+          // Add override information if exists
+          if (hasValidationOverride) {
+            inspectionRecord.override_applied = true;
+            inspectionRecord.override_reason = overrideMap[propertyKey].override_reason;
+            // Keep existing override metadata (don't overwrite override_by, override_date)
+          }
+
+          inspectionDataBatch.push(inspectionRecord);
           wasAddedToInspectionData = true;
         } else {
           // Track properties that didn't make it to inspection_data
@@ -1086,7 +1125,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
           block: property.block,
           lot: property.lot,
           qualifier: property.qualifier,
-          card: '1',
+          card: property.card,
           property_location: property.property_location,
           warning_message: compoundMessage,
           inspector: property.inspector,
