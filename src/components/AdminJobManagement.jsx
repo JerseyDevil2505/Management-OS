@@ -509,6 +509,7 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
           appeals: { totalCount: 0, percentOfWhole: 0, byClass: {} }
         },
         created_by: currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad'
+      };
       const createPlanningJob = async () => {
     if (!newPlanningJob.ccddCode || !newPlanningJob.municipality || !newPlanningJob.dueDate) {
       addNotification('Please fill all required fields', 'error');
