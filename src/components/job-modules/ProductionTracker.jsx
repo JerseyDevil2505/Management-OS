@@ -1272,6 +1272,8 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
 
       // 🔧 FIX: Use the actual results data
       const { analyticsResult, billingResult, validationReportData } = results;
+      
+      // Note: missingPropertiesReportData is set directly in state during processAnalytics
 
       // ENHANCED: Persist to database for navigation survival
       await saveCategoriesToDatabase();
@@ -1283,7 +1285,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
           analytics: analyticsResult,     // ✅ NOW DEFINED!
           billingAnalytics: billingResult, // ✅ NOW DEFINED!
           validationReport: validationReportData, // ✅ NOW DEFINED!
-          missingPropertiesReport: missingPropertiesReportData,
+          missingPropertiesReport: missingPropertiesReport, // ✅ Use state value
           lastProcessed: new Date().toISOString()
         });
         debugLog('APP_INTEGRATION', '✅ Data sent to App.js central hub');
