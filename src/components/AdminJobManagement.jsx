@@ -99,6 +99,108 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
     const minutes = Math.floor(elapsed / 60);
     const seconds = elapsed % 60;
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  // Helper function to capitalize county names
+  const capitalizeCounty = (county) => {
+    if (!county) return county;
+    return county.split(' ').map(word => 
+      word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+    ).join(' ');
+  };
+
+  // FIXED: Enhanced Metrics Display Logic with live metrics first
+  const getMetricsDisplay = (job) => {
+    // Check for live metrics first - REMOVED problematic isProcessed condition
+    const liveMetrics = jobMetrics?.[job.id];
+    
+    // Debug log to see what we're getting
+    if (liveMetrics) {
+      console.log('🔍 Live metrics available for', job.name, ':', liveMetrics);
+    }
+    
+    // Use live metrics if available (any live data is better than stale database)
+    if (liveMetrics && (liveMetrics.entryRate !== undefined || liveMetrics.totalProperties !== undefined)) {
+      console.log('✅ Using live metrics for', job.name);
+      return {
+        entryRate: liveMetrics.entryRate || 0,
+        refusalRate: liveMetrics.refusalRate || 0,
+        commercial: `${liveMetrics.commercialComplete || 0}%`,
+        pricing: `${liveMetrics.pricingComplete || 0}%`
+      };
+    }
+
+    console.log('⚠️ Falling back to database for', job.name);
+    
+    // FIXED: Fallback to NEW field structure from ProductionTracker
+    const baseMetrics = {
+      entryRate: job.workflowStats?.jobEntryRate || 0,              // ✅ NEW FORMAT
+      refusalRate: job.workflowStats?.jobRefusalRate || 0,          // ✅ NEW FORMAT  
+      commercialRate: job.workflowStats?.commercialCompletePercent || 0, // ✅ NEW FORMAT
+      pricingRate: job.workflowStats?.pricingCompletePercent || 0   // ✅ NEW FORMAT
+    };
+
+    // No assignments - show normal percentages
+    if (!job.has_property_assignments) {
+      return {
+        ...baseMetrics,
+        commercial: `${baseMetrics.commercialRate}%`,
+        pricing: `${baseMetrics.pricingRate}%`
+      };
+    }
+
+    // Has assignments - check if commercial properties included
+    if (job.assigned_has_commercial === false) {
+      return {
+        ...baseMetrics,
+        commercial: "Residential Only",
+        pricing: "Residential Only"
+      };
+    }
+
+    // Mixed assignment with commercial - show percentages
+    return {
+      ...baseMetrics,
+      commercial: `${baseMetrics.commercialRate}%`,
+      pricing: `${baseMetrics.pricingRate}%`
+    };
+  };
+
+  // Get property count display with live metrics first
+  const getPropertyCountDisplay = (job) => {
+    // Check for live metrics first
+    const liveMetrics = jobMetrics?.[job.id];
+    if (liveMetrics && liveMetrics.totalProperties !== undefined) {
+      console.log('✅ Using live property counts for', job.name);
+      return {
+        inspected: liveMetrics.propertiesInspected || 0,
+        total: liveMetrics.totalProperties || 0,
+        label: "Properties Inspected",
+        isAssigned: false
+      };
+    }
+
+    console.log('⚠️ Using database property counts for', job.name);
+    
+    // Fallback to existing logic
+    if (!job.has_property_assignments) {
+      return {
+        inspected: job.inspectedProperties || 0,
+        total: job.totalProperties || 0,
+        label: "Properties Inspected",
+        isAssigned: false
+      };
+    }
+
+    // Use dynamically calculated assigned count instead of job field
+    return {
+      inspected: job.inspectedProperties || 0,
+      total: job.assignedPropertyCount || job.totalProperties || 0,
+      label: "Properties Inspected (Assigned Scope)",
+      isAssigned: true
+    };
+  };
+
   // Load HPI data from database on component mount
   const loadCountyHpiData = async () => {
     try {
@@ -126,6 +228,43 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
     } catch (error) {
       console.error('Failed to load HPI data:', error);
     }
+  };
+
+  // Notification system
+  const addNotification = (message, type = 'info') => {
+    const id = Date.now();
+    const notification = { id, message, type, timestamp: new Date() };
+    setNotifications(prev => [...prev, notification]);
+    
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    }, 5000);
+  };
+
+  const updateProcessingStatus = (step, progress = 0, details = {}) => {
+    setProcessingStatus(prev => ({
+      ...prev,
+      currentStep: step,
+      progress,
+      ...details
+    }));
+  };
+
+  const resetProcessingStatus = () => {
+    setProcessingStatus({
+      isProcessing: false,
+      currentStep: '',
+      progress: 0,
+      startTime: null,
+      recordsProcessed: 0,
+      totalRecords: 0,
+      errors: [],
+      warnings: [],
+      logs: []
+    });
+  };
+
   // Property Assignment Upload Handler with improved composite key matching
   const uploadPropertyAssignment = async (job) => {
     if (!assignmentFile) {
@@ -294,6 +433,8 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
     } finally {
       setUploadingAssignment(false);
     }
+  };
+
   // Refresh jobs with dynamically calculated assigned property counts
   const refreshJobsWithAssignedCounts = async () => {
     try {
@@ -323,7 +464,60 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
             county: capitalizeCounty(job.county),
             percentBilled: job.percent_billed || 0.00
           };
-          // County HPI import handler
+        })
+      );
+
+      setJobs(jobsWithAssignedCounts);
+      setArchivedJobs(archived.map(job => ({
+        ...job,
+        county: capitalizeCounty(job.county)
+      })));
+
+      // Refresh property stats to show updated counts
+      const refreshedStats = await utilityService.getStats();
+      setDbStats(refreshedStats);
+
+    } catch (error) {
+      console.error('Error refreshing jobs with assigned counts:', error);
+    }
+  };
+
+  // File removal handler
+  const removeFile = (fileType) => {
+    if (fileType === 'source') {
+      setNewJob(prev => ({ ...prev, sourceFile: null }));
+      setFileAnalysis(prev => ({ 
+        ...prev, 
+        sourceFile: null, 
+        propertyCount: 0,
+        detectedVendor: fileAnalysis.codeFile ? prev.detectedVendor : null,
+        isValid: !!fileAnalysis.codeFile 
+      }));
+    } else if (fileType === 'code') {
+      setNewJob(prev => ({ ...prev, codeFile: null }));
+      setFileAnalysis(prev => ({ 
+        ...prev, 
+        codeFile: null, 
+        codeCount: 0 
+      }));
+    }
+    // Reset file input
+    const inputId = fileType === 'source' ? 'sourceFile' : 'codeFile';
+    const fileInput = document.getElementById(inputId);
+    if (fileInput) fileInput.value = '';
+  };
+
+  // Get unique counties from jobs
+  const getUniqueCounties = () => {
+    const counties = [...jobs, ...archivedJobs]
+      .map(job => capitalizeCounty(job.county))
+      .filter(county => county && county.trim() !== '')
+      .filter((county, index, arr) => arr.indexOf(county) === index)
+      .sort();
+    return counties;
+  };
+
+  // County HPI import handler
   const importCountyHpi = async (county) => {
     if (!hpiFile) {
       addNotification('Please select an HPI data file', 'error');
@@ -403,6 +597,8 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
     } finally {
       setImportingHpi(false);
     }
+  };
+
   // Load real data from database with assigned property counts
   useEffect(() => {
     const initializeData = async () => {
@@ -449,7 +645,127 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
                 county: capitalizeCounty(job.county),
                 percentBilled: job.percent_billed || 0.00
               };
-              // Create job with real-time batch processing logs
+            })
+          );
+          
+          const processedArchivedJobs = archived.map(job => ({
+            ...job,
+            county: capitalizeCounty(job.county)
+          }));
+          
+          setJobs(jobsWithAssignedCounts);
+          setArchivedJobs(processedArchivedJobs);
+          setPlanningJobs(planningData);
+          setManagers(managersData);
+          setDbStats(statsData);
+          setCurrentUser(userData || { role: 'admin', canAccessBilling: true });
+
+          // Load HPI data from database
+          await loadCountyHpiData();
+        }
+      } catch (error) {
+        console.error('Data initialization error:', error);
+        setDbConnected(false);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    initializeData();
+  }, []);
+
+  // File analysis
+  const analyzeFile = async (file, type) => {
+    if (!file) return;
+
+    const text = await file.text();
+    const lines = text.split('\n').filter(line => line.trim());
+    let vendor = null;
+    let count = 0;
+
+    if (type === 'source') {
+      if (file.name.endsWith('.txt') && text.includes('|')) {
+        vendor = 'Microsystems';
+        count = lines.length - 1; // Subtract header row
+      } else if (file.name.endsWith('.csv')) {
+        vendor = 'BRT';
+        count = lines.length - 1; // Subtract header row
+      }
+    } else if (type === 'code') {
+      if (file.name.endsWith('.txt') && text.includes('=')) {
+        vendor = 'Microsystems';
+        count = lines.length;
+      } else if (text.includes('{')) {
+        vendor = 'BRT';
+        count = (text.match(/"VALUE":/g) || []).length;
+      }
+    }
+
+    // Update file analysis state
+    setFileAnalysis(prev => {
+      const newState = {
+        ...prev,
+        [type === 'source' ? 'sourceFile' : 'codeFile']: file,
+        [type === 'source' ? 'propertyCount' : 'codeCount']: count,
+        detectedVendor: vendor,
+        isValid: !!vendor
+      };
+      return newState;
+    });
+
+    if (vendor && type === 'source') {
+      setNewJob(prev => ({ ...prev, vendor }));
+    }
+  };
+
+  const handleFileUpload = (e, type) => {
+    const file = e.target.files[0];
+    if (file) {
+      const fullTypeName = type === 'source' ? 'sourceFile' : 'codeFile';
+      setNewJob(prev => ({ ...prev, [fullTypeName]: file }));
+      analyzeFile(file, type);
+    }
+  };
+
+  const handleManagerToggle = (managerId) => {
+    const manager = managers.find(m => m.id === managerId);
+    const assignedManager = newJob.assignedManagers.find(m => m.id === managerId);
+    
+    if (assignedManager) {
+      const currentRole = assignedManager.role;
+      
+      let newRole;
+      if (currentRole === 'Lead Manager') {
+        newRole = 'Assistant Manager';
+      } else if (currentRole === 'Assistant Manager') {
+        setNewJob(prev => ({
+          ...prev,
+          assignedManagers: prev.assignedManagers.filter(m => m.id !== managerId)
+        }));
+        return;
+      } else {
+        newRole = 'Lead Manager';
+      }
+      
+      setNewJob(prev => ({
+        ...prev,
+        assignedManagers: prev.assignedManagers.map(m => 
+          m.id === managerId ? { ...m, role: newRole } : m
+        )
+      }));
+    } else {
+      setNewJob(prev => ({
+        ...prev,
+        assignedManagers: [...prev.assignedManagers, { 
+          id: manager.id, 
+          name: `${manager.first_name} ${manager.last_name}`, 
+          role: 'Lead Manager'
+        }]
+      }));
+    }
+  };
+
+  // Create job with real-time batch processing logs
   const createJob = async () => {
     if (!newJob.ccddCode || !newJob.name || !newJob.municipality || !newJob.dueDate || 
         newJob.assignedManagers.length === 0 || !newJob.sourceFile || !newJob.codeFile) {
@@ -510,7 +826,114 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
         },
         created_by: currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad'
       };
-      const createPlanningJob = async () => {
+
+      const createdJob = await jobService.create(jobData);
+      
+      updateProcessingStatus('Job created successfully. Reading files...', 25);
+      
+      if (newJob.sourceFile && newJob.codeFile) {
+        updateProcessingStatus('Reading source file...', 35);
+        const sourceFileContent = await newJob.sourceFile.text();
+        
+        updateProcessingStatus('Reading code file...', 40);
+        const codeFileContent = await newJob.codeFile.text();
+        
+        updateProcessingStatus(`Processing ${newJob.vendor} data (${fileAnalysis.propertyCount} records)...`, 50);
+        
+        // Capture console logs during processing for real-time feedback
+        const originalConsoleLog = console.log;
+        const logs = [];
+        
+        console.log = (...args) => {
+          const message = args.join(' ');
+          // Capture batch processing logs
+          if (message.includes('✅') || message.includes('Batch inserting') || message.includes('Processing')) {
+            logs.push({
+              timestamp: new Date().toLocaleTimeString(),
+              message: message
+            });
+            // Update processing status with latest logs
+            setProcessingStatus(prev => ({
+              ...prev,
+              logs: [...logs]
+            }));
+          }
+          originalConsoleLog(...args);
+        };
+        
+        const result = await propertyService.importCSVData(
+          sourceFileContent,
+          codeFileContent,
+          createdJob.id,
+          new Date().getFullYear(),
+          newJob.ccddCode,
+          newJob.vendor,
+          {
+            source_file_name: newJob.sourceFile.name,
+            source_file_version_id: createdJob.source_file_version_id,
+            source_file_uploaded_at: new Date().toISOString()
+          }
+        );
+        
+        // Restore original console.log
+        console.log = originalConsoleLog;
+        
+        updateProcessingStatus('Updating job status...', 90, {
+          recordsProcessed: result.processed || 0,
+          errors: result.warnings || [],
+          warnings: result.warnings || []
+        });
+        
+        const updateData = {
+          sourceFileStatus: result.errors > 0 ? 'error' : 'imported',
+          totalProperties: result.processed || 0
+        };
+        
+        await jobService.update(createdJob.id, updateData);
+        
+        updateProcessingStatus('Refreshing job list...', 95);
+        
+        // Refresh with assigned property counts
+        await refreshJobsWithAssignedCounts();
+        
+        // Trigger metrics refresh in parent component
+        if (onJobProcessingComplete) {
+          onJobProcessingComplete();
+        }
+        
+        updateProcessingStatus('Complete!', 100);
+        
+        setProcessingResults({
+          success: result.errors === 0,
+          processed: result.processed || 0,
+          errors: result.errors || 0,
+          warnings: result.warnings || [],
+          processingTime: new Date() - new Date(processingStatus.startTime),
+          jobName: newJob.name,
+          vendor: newJob.vendor
+        });
+        
+        if (result.errors > 0) {
+          addNotification(`Job created but ${result.errors} errors occurred during processing`, 'warning');
+        } else {
+          addNotification(`Job created successfully! Processed ${result.processed} properties.`, 'success');
+        }
+
+        closeJobModal();
+      }
+      
+    } catch (error) {
+      console.error('Job creation error:', error);
+      updateProcessingStatus('Error occurred', 0, {
+        errors: [error.message]
+      });
+      addNotification('Error creating job: ' + error.message, 'error');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const createPlanningJob = async () => {
     if (!newPlanningJob.ccddCode || !newPlanningJob.municipality || !newPlanningJob.dueDate) {
       addNotification('Please fill all required fields', 'error');
       return;
@@ -716,414 +1139,6 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
     };
   };
 
-      const createdJob = await jobService.create(jobData);
-      
-      updateProcessingStatus('Job created successfully. Reading files...', 25);
-      
-      if (newJob.sourceFile && newJob.codeFile) {
-        updateProcessingStatus('Reading source file...', 35);
-        const sourceFileContent = await newJob.sourceFile.text();
-        
-        updateProcessingStatus('Reading code file...', 40);
-        const codeFileContent = await newJob.codeFile.text();
-        
-        updateProcessingStatus(`Processing ${newJob.vendor} data (${fileAnalysis.propertyCount} records)...`, 50);
-        
-        // Capture console logs during processing for real-time feedback
-        const originalConsoleLog = console.log;
-        const logs = [];
-        
-        console.log = (...args) => {
-          const message = args.join(' ');
-          // Capture batch processing logs
-          if (message.includes('✅') || message.includes('Batch inserting') || message.includes('Processing')) {
-            logs.push({
-              timestamp: new Date().toLocaleTimeString(),
-              message: message
-            });
-            // Update processing status with latest logs
-            setProcessingStatus(prev => ({
-              ...prev,
-              logs: [...logs]
-            }));
-          }
-          originalConsoleLog(...args);
-        };
-        
-        const result = await propertyService.importCSVData(
-          sourceFileContent,
-          codeFileContent,
-          createdJob.id,
-          new Date().getFullYear(),
-          newJob.ccddCode,
-          newJob.vendor,
-          {
-            source_file_name: newJob.sourceFile.name,
-            source_file_version_id: createdJob.source_file_version_id,
-            source_file_uploaded_at: new Date().toISOString()
-          }
-        );
-        
-        // Restore original console.log
-        console.log = originalConsoleLog;
-        
-        updateProcessingStatus('Updating job status...', 90, {
-          recordsProcessed: result.processed || 0,
-          errors: result.warnings || [],
-          warnings: result.warnings || []
-        });
-        
-        const updateData = {
-          sourceFileStatus: result.errors > 0 ? 'error' : 'imported',
-          totalProperties: result.processed || 0
-        };
-        
-        await jobService.update(createdJob.id, updateData);
-        
-        updateProcessingStatus('Refreshing job list...', 95);
-        
-        // Refresh with assigned property counts
-        await refreshJobsWithAssignedCounts();
-        
-        // Trigger metrics refresh in parent component
-        if (onJobProcessingComplete) {
-          onJobProcessingComplete();
-        }
-        
-        updateProcessingStatus('Complete!', 100);
-        
-        setProcessingResults({
-          success: result.errors === 0,
-          processed: result.processed || 0,
-          errors: result.errors || 0,
-          warnings: result.warnings || [],
-          processingTime: new Date() - new Date(processingStatus.startTime),
-          jobName: newJob.name,
-          vendor: newJob.vendor
-        });
-        
-        if (result.errors > 0) {
-          addNotification(`Job created but ${result.errors} errors occurred during processing`, 'warning');
-        } else {
-          addNotification(`Job created successfully! Processed ${result.processed} properties.`, 'success');
-        }
-
-        closeJobModal();
-      }
-      
-    } catch (error) {
-      console.error('Job creation error:', error);
-      updateProcessingStatus('Error occurred', 0, {
-        errors: [error.message]
-      });
-      addNotification('Error creating job: ' + error.message, 'error');
-    } finally {
-      setProcessing(false);
-    }
-  };
-            })
-          );
-          
-          const processedArchivedJobs = archived.map(job => ({
-            ...job,
-            county: capitalizeCounty(job.county)
-          }));
-          
-          setJobs(jobsWithAssignedCounts);
-          setArchivedJobs(processedArchivedJobs);
-          setPlanningJobs(planningData);
-          setManagers(managersData);
-          setDbStats(statsData);
-          setCurrentUser(userData || { role: 'admin', canAccessBilling: true });
-
-          // Load HPI data from database
-          await loadCountyHpiData();
-        }
-      } catch (error) {
-        console.error('Data initialization error:', error);
-        setDbConnected(false);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    initializeData();
-  // File analysis
-  const analyzeFile = async (file, type) => {
-    if (!file) return;
-
-    const text = await file.text();
-    const lines = text.split('\n').filter(line => line.trim());
-    let vendor = null;
-    let count = 0;
-
-    if (type === 'source') {
-      if (file.name.endsWith('.txt') && text.includes('|')) {
-        vendor = 'Microsystems';
-        count = lines.length - 1; // Subtract header row
-      } else if (file.name.endsWith('.csv')) {
-        vendor = 'BRT';
-        count = lines.length - 1; // Subtract header row
-      }
-    } else if (type === 'code') {
-      if (file.name.endsWith('.txt') && text.includes('=')) {
-        vendor = 'Microsystems';
-        count = lines.length;
-      } else if (text.includes('{')) {
-        vendor = 'BRT';
-        count = (text.match(/"VALUE":/g) || []).length;
-      }
-    }
-
-    // Update file analysis state
-    setFileAnalysis(prev => {
-      const newState = {
-        ...prev,
-        [type === 'source' ? 'sourceFile' : 'codeFile']: file,
-        [type === 'source' ? 'propertyCount' : 'codeCount']: count,
-        detectedVendor: vendor,
-        isValid: !!vendor
-      };
-      return newState;
-    });
-
-    if (vendor && type === 'source') {
-      setNewJob(prev => ({ ...prev, vendor }));
-    }
-  };
-
-  const handleFileUpload = (e, type) => {
-    const file = e.target.files[0];
-    if (file) {
-      const fullTypeName = type === 'source' ? 'sourceFile' : 'codeFile';
-      setNewJob(prev => ({ ...prev, [fullTypeName]: file }));
-      analyzeFile(file, type);
-    }
-  };
-
-  const handleManagerToggle = (managerId) => {
-    const manager = managers.find(m => m.id === managerId);
-    const assignedManager = newJob.assignedManagers.find(m => m.id === managerId);
-    
-    if (assignedManager) {
-      const currentRole = assignedManager.role;
-      
-      let newRole;
-      if (currentRole === 'Lead Manager') {
-        newRole = 'Assistant Manager';
-      } else if (currentRole === 'Assistant Manager') {
-        setNewJob(prev => ({
-          ...prev,
-          assignedManagers: prev.assignedManagers.filter(m => m.id !== managerId)
-        }));
-        return;
-      } else {
-        newRole = 'Lead Manager';
-      }
-      
-      setNewJob(prev => ({
-        ...prev,
-        assignedManagers: prev.assignedManagers.map(m => 
-          m.id === managerId ? { ...m, role: newRole } : m
-        )
-      }));
-    } else {
-      setNewJob(prev => ({
-        ...prev,
-        assignedManagers: [...prev.assignedManagers, { 
-          id: manager.id, 
-          name: `${manager.first_name} ${manager.last_name}`, 
-          role: 'Lead Manager'
-        }]
-      }));
-    }
-  };
-
-      setJobs(jobsWithAssignedCounts);
-      setArchivedJobs(archived.map(job => ({
-        ...job,
-        county: capitalizeCounty(job.county)
-      })));
-
-      // Refresh property stats to show updated counts
-      const refreshedStats = await utilityService.getStats();
-      setDbStats(refreshedStats);
-
-    } catch (error) {
-      console.error('Error refreshing jobs with assigned counts:', error);
-    }
-  };
-
-  // File removal handler
-  const removeFile = (fileType) => {
-    if (fileType === 'source') {
-      setNewJob(prev => ({ ...prev, sourceFile: null }));
-      setFileAnalysis(prev => ({ 
-        ...prev, 
-        sourceFile: null, 
-        propertyCount: 0,
-        detectedVendor: fileAnalysis.codeFile ? prev.detectedVendor : null,
-        isValid: !!fileAnalysis.codeFile 
-      }));
-    } else if (fileType === 'code') {
-      setNewJob(prev => ({ ...prev, codeFile: null }));
-      setFileAnalysis(prev => ({ 
-        ...prev, 
-        codeFile: null, 
-        codeCount: 0 
-      }));
-    }
-    // Reset file input
-    const inputId = fileType === 'source' ? 'sourceFile' : 'codeFile';
-    const fileInput = document.getElementById(inputId);
-    if (fileInput) fileInput.value = '';
-  };
-
-  // Get unique counties from jobs
-  const getUniqueCounties = () => {
-    const counties = [...jobs, ...archivedJobs]
-      .map(job => capitalizeCounty(job.county))
-      .filter(county => county && county.trim() !== '')
-      .filter((county, index, arr) => arr.indexOf(county) === index)
-      .sort();
-    return counties;
-  };
-
-  // Notification system
-  const addNotification = (message, type = 'info') => {
-    const id = Date.now();
-    const notification = { id, message, type, timestamp: new Date() };
-    setNotifications(prev => [...prev, notification]);
-    
-    // Auto-remove after 5 seconds
-    setTimeout(() => {
-      setNotifications(prev => prev.filter(n => n.id !== id));
-    }, 5000);
-  };
-
-  const updateProcessingStatus = (step, progress = 0, details = {}) => {
-    setProcessingStatus(prev => ({
-      ...prev,
-      currentStep: step,
-      progress,
-      ...details
-    }));
-  };
-
-  const resetProcessingStatus = () => {
-    setProcessingStatus({
-      isProcessing: false,
-      currentStep: '',
-      progress: 0,
-      startTime: null,
-      recordsProcessed: 0,
-      totalRecords: 0,
-      errors: [],
-      warnings: [],
-      logs: []
-    });
-  };
-
-  // Helper function to capitalize county names
-  const capitalizeCounty = (county) => {
-    if (!county) return county;
-    return county.split(' ').map(word => 
-      word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
-    ).join(' ');
-  };
-
-  // FIXED: Enhanced Metrics Display Logic with live metrics first
-  const getMetricsDisplay = (job) => {
-    // Check for live metrics first - REMOVED problematic isProcessed condition
-    const liveMetrics = jobMetrics?.[job.id];
-    
-    // Debug log to see what we're getting
-    if (liveMetrics) {
-      console.log('🔍 Live metrics available for', job.name, ':', liveMetrics);
-    }
-    
-    // Use live metrics if available (any live data is better than stale database)
-    if (liveMetrics && (liveMetrics.entryRate !== undefined || liveMetrics.totalProperties !== undefined)) {
-      console.log('✅ Using live metrics for', job.name);
-      return {
-        entryRate: liveMetrics.entryRate || 0,
-        refusalRate: liveMetrics.refusalRate || 0,
-        commercial: `${liveMetrics.commercialComplete || 0}%`,
-        pricing: `${liveMetrics.pricingComplete || 0}%`
-      };
-    }
-
-    console.log('⚠️ Falling back to database for', job.name);
-    
-    // FIXED: Fallback to NEW field structure from ProductionTracker
-    const baseMetrics = {
-      entryRate: job.workflowStats?.jobEntryRate || 0,              // ✅ NEW FORMAT
-      refusalRate: job.workflowStats?.jobRefusalRate || 0,          // ✅ NEW FORMAT  
-      commercialRate: job.workflowStats?.commercialCompletePercent || 0, // ✅ NEW FORMAT
-      pricingRate: job.workflowStats?.pricingCompletePercent || 0   // ✅ NEW FORMAT
-    };
-
-    // No assignments - show normal percentages
-    if (!job.has_property_assignments) {
-      return {
-        ...baseMetrics,
-        commercial: `${baseMetrics.commercialRate}%`,
-        pricing: `${baseMetrics.pricingRate}%`
-      };
-    }
-
-    // Has assignments - check if commercial properties included
-    if (job.assigned_has_commercial === false) {
-      return {
-        ...baseMetrics,
-        commercial: "Residential Only",
-        pricing: "Residential Only"
-      };
-    }
-
-    // Mixed assignment with commercial - show percentages
-    return {
-      ...baseMetrics,
-      commercial: `${baseMetrics.commercialRate}%`,
-      pricing: `${baseMetrics.pricingRate}%`
-    };
-  };
-
-  // Get property count display with live metrics first
-  const getPropertyCountDisplay = (job) => {
-    // Check for live metrics first
-    const liveMetrics = jobMetrics?.[job.id];
-    if (liveMetrics && liveMetrics.totalProperties !== undefined) {
-      console.log('✅ Using live property counts for', job.name);
-      return {
-        inspected: liveMetrics.propertiesInspected || 0,
-        total: liveMetrics.totalProperties || 0,
-        label: "Properties Inspected",
-        isAssigned: false
-      };
-    }
-
-    console.log('⚠️ Using database property counts for', job.name);
-    
-    // Fallback to existing logic
-    if (!job.has_property_assignments) {
-      return {
-        inspected: job.inspectedProperties || 0,
-        total: job.totalProperties || 0,
-        label: "Properties Inspected",
-        isAssigned: false
-      };
-    }
-
-    // Use dynamically calculated assigned count instead of job field
-    return {
-      inspected: job.inspectedProperties || 0,
-      total: job.assignedPropertyCount || job.totalProperties || 0,
-      label: "Properties Inspected (Assigned Scope)",
-      isAssigned: true
-    };
-  };
-
   if (loading) {
     return (
       <div className="max-w-6xl mx-auto p-6 bg-white">
@@ -1205,7 +1220,211 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
                     </div>
                   </div>
                 </div>
-              {/* Create/Edit Job Modal */}
+              )}
+
+              <div className="flex justify-center space-x-3">
+                <button
+                  onClick={() => {
+                    setShowAssignmentUpload(null);
+                    setAssignmentFile(null);
+                    setAssignmentResults(null);
+                  }}
+                  className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
+                >
+                  {assignmentResults ? 'Close' : 'Cancel'}
+                </button>
+                {!assignmentResults && (
+                  <button
+                    onClick={() => uploadPropertyAssignment(showAssignmentUpload)}
+                    disabled={!assignmentFile || uploadingAssignment}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+                  >
+                    {uploadingAssignment ? 'Processing...' : 'Assign Properties'}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Processing Modal */}
+      {showProcessingModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-lg w-full p-6 shadow-2xl">
+            <div className="text-center">
+              <div className="mb-4">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+              </div>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Processing Job</h3>
+              <p className="text-sm text-gray-600 mb-4">{processingStatus.currentStep}</p>
+              
+              <div className="w-full bg-gray-200 rounded-full h-2 mb-4">
+                <div 
+                  className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${processingStatus.progress}%` }}
+                ></div>
+              </div>
+              
+              <div className="text-xs text-gray-500 space-y-1 mb-4">
+                {processingStatus.totalRecords > 0 && (
+                  <div>Records: {processingStatus.recordsProcessed} / {processingStatus.totalRecords}</div>
+                )}
+                {processingStatus.startTime && (
+                  <div>Elapsed: {formatElapsedTime(processingStatus.startTime)}</div>
+                )}
+                <div>{processingStatus.progress}% complete</div>
+              </div>
+
+              {/* Real-time batch processing logs */}
+              {processingStatus.logs && processingStatus.logs.length > 0 && (
+                <div className="mb-4 p-3 bg-blue-50 rounded-lg max-h-32 overflow-y-auto">
+                  <div className="text-sm font-medium text-blue-800 mb-2">Batch Processing:</div>
+                  <div className="text-xs text-blue-700 space-y-1 text-left">
+                    {processingStatus.logs.slice(-5).map((log, idx) => (
+                      <div key={idx} className="flex justify-between">
+                        <span>{log.message}</span>
+                        <span className="text-blue-500">{log.timestamp}</span>
+                      </div>
+                    ))}
+                    {processingStatus.logs.length > 5 && (
+                      <div className="text-center text-blue-600 font-medium">
+                        ...and {processingStatus.logs.length - 5} more steps
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+              
+              {/* Error Display */}
+              {processingStatus.errors && processingStatus.errors.length > 0 && (
+                <div className="mb-4 p-3 bg-red-50 rounded-lg">
+                  <div className="text-sm font-medium text-red-800 mb-1">Errors:</div>
+                  <div className="text-xs text-red-600 space-y-1">
+                    {processingStatus.errors.slice(0, 3).map((error, idx) => (
+                      <div key={idx}>{error}</div>
+                    ))}
+                    {processingStatus.errors.length > 3 && (
+                      <div>...and {processingStatus.errors.length - 3} more</div>
+                    )}
+                  </div>
+                </div>
+              )}
+              
+              {/* Completion Results */}
+              {processingResults && (
+                <div className="mb-4 p-4 bg-green-50 rounded-lg border-2 border-green-200">
+                  <div className="text-lg font-bold text-green-800 mb-3">🎉 Processing Complete!</div>
+                  <div className="text-sm text-green-700 space-y-2">
+                    <div className="flex justify-between">
+                      <span>✅ Properties Processed:</span>
+                      <span className="font-bold">{processingResults.processed.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>⏱️ Total Time:</span>
+                      <span className="font-bold">{formatElapsedTime(processingStatus.startTime)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>🏢 Job Created:</span>
+                      <span className="font-bold">{processingResults.jobName}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>📊 Vendor:</span>
+                      <span className="font-bold">{processingResults.vendor}</span>
+                    </div>
+                    {processingResults.errors > 0 && (
+                      <div className="flex justify-between text-red-600">
+                        <span>⚠️ Errors:</span>
+                        <span className="font-bold">{processingResults.errors}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex justify-center space-x-3">
+                {/* Force Quit - Only during processing */}
+                {!processingResults && processingStatus.isProcessing && (
+                  <button
+                    onClick={() => {
+                      setShowProcessingModal(false);
+                      setProcessing(false);
+                      resetProcessingStatus();
+                      addNotification('Job creation cancelled - import stopped', 'warning');
+                    }}
+                    className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 text-sm font-medium"
+                  >
+                    🛑 Force Quit Import
+                  </button>
+                )}
+
+                {/* Close - Only when complete */}
+                {processingResults && (
+                  <button
+                    onClick={() => {
+                      setShowProcessingModal(false);
+                      setProcessingResults(null);
+                      resetProcessingStatus();
+                    }}
+                    className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium"
+                  >
+                    ✅ Close
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* County HPI Import Modal */}
+      {showHpiImport && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-md w-full p-6 shadow-2xl">
+            <div className="text-center">
+              <TrendingUp className="w-12 h-12 mx-auto mb-4 text-blue-600" />
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Import HPI Data</h3>
+              <p className="text-gray-600 mb-4">
+                Upload HPI data for <strong>{showHpiImport}</strong> County
+              </p>
+              
+              <div className="mb-4">
+                <input
+                  type="file"
+                  accept=".csv"
+                  onChange={(e) => setHpiFile(e.target.files[0])}
+                  className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                />
+                <p className="text-xs text-gray-500 mt-2">
+                  CSV file with observation_date and HPI index columns
+                </p>
+              </div>
+
+              <div className="flex justify-center space-x-3">
+                <button
+                  onClick={() => {
+                    setShowHpiImport(null);
+                    setHpiFile(null);
+                  }}
+                  className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => importCountyHpi(showHpiImport)}
+                  disabled={!hpiFile || importingHpi}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {importingHpi ? 'Importing...' : 'Import HPI Data'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create/Edit Job Modal */}
       {showCreateJob && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg max-w-5xl w-full max-h-screen overflow-y-auto shadow-2xl">
@@ -1299,7 +1518,6 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
                     <input
                       type="text"
                       value={newJob.county}
-                      onChange={(e) => setNewJob({...newJob, county: e.target.value})}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       placeholder="e.g., Monmouth"
                       disabled={editingJob}
@@ -1617,208 +1835,6 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
                   className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium shadow-md hover:shadow-lg transition-all"
                 >
                   Delete Job
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-              <div className="flex justify-center space-x-3">
-                <button
-                  onClick={() => {
-                    setShowAssignmentUpload(null);
-                    setAssignmentFile(null);
-                    setAssignmentResults(null);
-                  }}
-                  className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
-                >
-                  {assignmentResults ? 'Close' : 'Cancel'}
-                </button>
-                {!assignmentResults && (
-                  <button
-                    onClick={() => uploadPropertyAssignment(showAssignmentUpload)}
-                    disabled={!assignmentFile || uploadingAssignment}
-                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
-                  >
-                    {uploadingAssignment ? 'Processing...' : 'Assign Properties'}
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Processing Modal */}
-      {showProcessingModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-lg w-full p-6 shadow-2xl">
-            <div className="text-center">
-              <div className="mb-4">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-              </div>
-              <h3 className="text-lg font-bold text-gray-900 mb-2">Processing Job</h3>
-              <p className="text-sm text-gray-600 mb-4">{processingStatus.currentStep}</p>
-              
-              <div className="w-full bg-gray-200 rounded-full h-2 mb-4">
-                <div 
-                  className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                  style={{ width: `${processingStatus.progress}%` }}
-                ></div>
-              </div>
-              
-              <div className="text-xs text-gray-500 space-y-1 mb-4">
-                {processingStatus.totalRecords > 0 && (
-                  <div>Records: {processingStatus.recordsProcessed} / {processingStatus.totalRecords}</div>
-                )}
-                {processingStatus.startTime && (
-                  <div>Elapsed: {formatElapsedTime(processingStatus.startTime)}</div>
-                )}
-                <div>{processingStatus.progress}% complete</div>
-              </div>
-
-              {/* Real-time batch processing logs */}
-              {processingStatus.logs && processingStatus.logs.length > 0 && (
-                <div className="mb-4 p-3 bg-blue-50 rounded-lg max-h-32 overflow-y-auto">
-                  <div className="text-sm font-medium text-blue-800 mb-2">Batch Processing:</div>
-                  <div className="text-xs text-blue-700 space-y-1 text-left">
-                    {processingStatus.logs.slice(-5).map((log, idx) => (
-                      <div key={idx} className="flex justify-between">
-                        <span>{log.message}</span>
-                        <span className="text-blue-500">{log.timestamp}</span>
-                      </div>
-                    ))}
-                    {processingStatus.logs.length > 5 && (
-                      <div className="text-center text-blue-600 font-medium">
-                        ...and {processingStatus.logs.length - 5} more steps
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-              
-              {/* Error Display */}
-              {processingStatus.errors && processingStatus.errors.length > 0 && (
-                <div className="mb-4 p-3 bg-red-50 rounded-lg">
-                  <div className="text-sm font-medium text-red-800 mb-1">Errors:</div>
-                  <div className="text-xs text-red-600 space-y-1">
-                    {processingStatus.errors.slice(0, 3).map((error, idx) => (
-                      <div key={idx}>{error}</div>
-                    ))}
-                    {processingStatus.errors.length > 3 && (
-                      <div>...and {processingStatus.errors.length - 3} more</div>
-                    )}
-                  </div>
-                </div>
-              )}
-              
-              {/* Completion Results */}
-              {processingResults && (
-                <div className="mb-4 p-4 bg-green-50 rounded-lg border-2 border-green-200">
-                  <div className="text-lg font-bold text-green-800 mb-3">🎉 Processing Complete!</div>
-                  <div className="text-sm text-green-700 space-y-2">
-                    <div className="flex justify-between">
-                      <span>✅ Properties Processed:</span>
-                      <span className="font-bold">{processingResults.processed.toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>⏱️ Total Time:</span>
-                      <span className="font-bold">{formatElapsedTime(processingStatus.startTime)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>🏢 Job Created:</span>
-                      <span className="font-bold">{processingResults.jobName}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>📊 Vendor:</span>
-                      <span className="font-bold">{processingResults.vendor}</span>
-                    </div>
-                    {processingResults.errors > 0 && (
-                      <div className="flex justify-between text-red-600">
-                        <span>⚠️ Errors:</span>
-                        <span className="font-bold">{processingResults.errors}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Action Buttons */}
-              <div className="flex justify-center space-x-3">
-                {/* Force Quit - Only during processing */}
-                {!processingResults && processingStatus.isProcessing && (
-                  <button
-                    onClick={() => {
-                      setShowProcessingModal(false);
-                      setProcessing(false);
-                      resetProcessingStatus();
-                      addNotification('Job creation cancelled - import stopped', 'warning');
-                    }}
-                    className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 text-sm font-medium"
-                  >
-                    🛑 Force Quit Import
-                  </button>
-                )}
-
-                {/* Close - Only when complete */}
-                {processingResults && (
-                  <button
-                    onClick={() => {
-                      setShowProcessingModal(false);
-                      setProcessingResults(null);
-                      resetProcessingStatus();
-                    }}
-                    className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium"
-                  >
-                    ✅ Close
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* County HPI Import Modal */}
-      {showHpiImport && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-md w-full p-6 shadow-2xl">
-            <div className="text-center">
-              <TrendingUp className="w-12 h-12 mx-auto mb-4 text-blue-600" />
-              <h3 className="text-lg font-bold text-gray-900 mb-2">Import HPI Data</h3>
-              <p className="text-gray-600 mb-4">
-                Upload HPI data for <strong>{showHpiImport}</strong> County
-              </p>
-              
-              <div className="mb-4">
-                <input
-                  type="file"
-                  accept=".csv"
-                  onChange={(e) => setHpiFile(e.target.files[0])}
-                  className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                />
-                <p className="text-xs text-gray-500 mt-2">
-                  CSV file with observation_date and HPI index columns
-                </p>
-              </div>
-
-              <div className="flex justify-center space-x-3">
-                <button
-                  onClick={() => {
-                    setShowHpiImport(null);
-                    setHpiFile(null);
-                  }}
-                  className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => importCountyHpi(showHpiImport)}
-                  disabled={!hpiFile || importingHpi}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {importingHpi ? 'Importing...' : 'Import HPI Data'}
                 </button>
               </div>
             </div>
