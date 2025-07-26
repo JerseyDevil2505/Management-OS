@@ -7,7 +7,7 @@ import MarketAnalysis from './MarketAnalysis';
 import FinalValuation from './FinalValuation';
 import AppealCoverage from './AppealCoverage';
 
-// 🔧 FIXED: Accept App.js workflow state management props + file refresh trigger
+// 🔧 ENHANCED: Accept App.js workflow state management props + file refresh trigger
 const JobContainer = ({ 
   selectedJob, 
   onBackToJobs, 
@@ -143,7 +143,7 @@ const JobContainer = ({
     }
   };
 
-  // 🔧 NEW: Handle ProductionTracker analytics completion
+  // 🔧 ENHANCED: Handle ProductionTracker analytics completion with App.js notification
   const handleAnalyticsUpdate = (analyticsData) => {
     if (!onUpdateWorkflowStats || !selectedJob?.id) return;
 
@@ -168,13 +168,17 @@ const JobContainer = ({
       validationReport: analyticsData.validationReport || null,
       
       // Inspector stats for detailed analytics
-      inspectorStats: analyticsData.inspectorStats || {}
+      inspectorStats: analyticsData.inspectorStats || {},
+
+      // 🔧 NEW: Clear any stale data flags since we just processed
+      needsRefresh: false,
+      lastAnalyticsUpdate: new Date().toISOString()
     };
 
-    // Update App.js state with both local and database persistence
+    // 🔧 ENHANCED: Update App.js state with database persistence flag
     onUpdateWorkflowStats(transformedStats, true);
     
-    console.log('📊 JobContainer: Analytics forwarded to App.js state management');
+    console.log('📊 JobContainer: Analytics forwarded to App.js state management with refresh trigger');
   };
 
   if (!selectedJob) {
@@ -355,10 +359,16 @@ const JobContainer = ({
                       Soon
                     </span>
                   )}
-                  {/* 🔧 NEW: Show analytics indicator for ProductionTracker */}
+                  {/* 🔧 ENHANCED: Show analytics indicator for ProductionTracker */}
                   {module.id === 'production' && workflowStats?.isProcessed && (
                     <span className="text-xs bg-green-500 text-white px-2 py-1 rounded-full ml-1">
                       ✓
+                    </span>
+                  )}
+                  {/* 🔧 NEW: Show stale data indicator */}
+                  {module.id === 'production' && workflowStats?.needsRefresh && (
+                    <span className="text-xs bg-yellow-500 text-white px-2 py-1 rounded-full ml-1">
+                      !
                     </span>
                   )}
                 </button>
