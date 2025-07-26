@@ -1088,6 +1088,8 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
       const totalCommercialProperties = ['4A', '4B', '4C'].reduce((sum, cls) => sum + (classBreakdown[cls]?.total || 0), 0);
       const totalCommercialInspected = ['4A', '4B', '4C'].reduce((sum, cls) => sum + (classBreakdown[cls]?.inspected || 0), 0);
       const totalPriced = Object.values(inspectorStats).reduce((sum, stats) => sum + stats.priced, 0);
+
+      debugLog('TOTALS', `Total priced calculation: ${totalPriced}, Inspector stats:`, Object.values(inspectorStats).map(s => ({name: s.name, priced: s.priced})));
       const totalCommercialPriced = ['4A', '4B', '4C'].reduce((sum, cls) => sum + (classBreakdown[cls]?.priced || 0), 0);
 
       const validationReportData = {
