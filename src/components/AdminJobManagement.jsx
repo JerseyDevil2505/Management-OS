@@ -322,6 +322,7 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
             status: job.status === 'active' ? 'Active' : (job.status || 'Active'),
             county: capitalizeCounty(job.county),
             percentBilled: job.percent_billed || 0.00
+          };
           // County HPI import handler
   const importCountyHpi = async (county) => {
     if (!hpiFile) {
