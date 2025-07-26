@@ -86,6 +86,9 @@ const EmployeeManagement = () => {
 
       if (inspectionError) throw inspectionError;
 
+      console.log('🔍 INSPECTION DATA:', inspectionData?.length, 'records found');
+      console.log('🔍 Sample inspection record:', inspectionData?.[0]);
+
       // Get ONLY inspector employees (Residential, Commercial, Management)
       let employeesQuery = supabase
         .from('employees')
@@ -100,6 +103,10 @@ const EmployeeManagement = () => {
       const { data: employeesData, error: employeesError } = await employeesQuery;
 
       if (employeesError) throw employeesError;
+
+      console.log('🔍 EMPLOYEES DATA:', employeesData?.length, 'inspector employees found');
+      console.log('🔍 Sample employee:', employeesData?.[0]);
+      console.log('🔍 Employee initials:', employeesData?.map(e => e.initials).filter(Boolean));
 
       if (!inspectionData || inspectionData.length === 0) {
         setGlobalAnalytics({
@@ -118,6 +125,8 @@ const EmployeeManagement = () => {
         }
       });
 
+      console.log('🔍 EMPLOYEE MAP:', Object.keys(employeeMap));
+
       // Process inspection data and match with employees
       const enrichedData = [];
       inspectionData.forEach(record => {
@@ -131,6 +140,18 @@ const EmployeeManagement = () => {
           });
         }
       });
+
+      console.log('🔍 ENRICHED DATA:', enrichedData?.length, 'matched records');
+      console.log('🔍 Sample enriched record:', enrichedData?.[0]);
+
+      // Sample of inspection initials for debugging
+      const inspectionInitials = inspectionData?.slice(0, 10).map(r => ({
+        list_by: r.list_by,
+        measure_by: r.measure_by, 
+        price_by: r.price_by,
+        chosen: r.list_by || r.measure_by || r.price_by
+      }));
+      console.log('🔍 INSPECTION INITIALS (first 10):', inspectionInitials);
 
       // Process the enriched data similar to ProductionTracker
       const processedAnalytics = processGlobalInspectionData(enrichedData, analyticsFilter);
