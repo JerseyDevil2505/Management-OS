@@ -898,17 +898,22 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
             inspectorStats[inspector].residentialInspected++;
             inspectorStats[inspector].residentialWorkDays.add(workDayString);
             
-            // Entry/Refusal counting (only for residential properties 2, 3A)
-            if (isEntryCode) {
+            // FIXED: Entry/Refusal counting for individual inspectors (only for residential properties 2, 3A)
+            // Individual inspector credit: measure_by must equal list_by
+            const individualInspectorEntry = isEntryCode && record.inspection_list_by === inspector;
+            const individualInspectorRefusal = isRefusalCode && record.inspection_list_by === inspector;
+            
+            if (individualInspectorEntry) {
               inspectorStats[inspector].entry++;
-              if (classBreakdown[propertyClass]) {
-                classBreakdown[propertyClass].entry++;
-              }
-            } else if (isRefusalCode) {
+            } else if (individualInspectorRefusal) {
               inspectorStats[inspector].refusal++;
-              if (classBreakdown[propertyClass]) {
-                classBreakdown[propertyClass].refusal++;
-              }
+            }
+            
+            // Global metrics: count all valid entries/refusals regardless of who did list work
+            if (isEntryCode && classBreakdown[propertyClass]) {
+              classBreakdown[propertyClass].entry++;
+            } else if (isRefusalCode && classBreakdown[propertyClass]) {
+              classBreakdown[propertyClass].refusal++;
             }
           }
           
