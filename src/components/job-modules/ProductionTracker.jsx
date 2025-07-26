@@ -1627,14 +1627,15 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                     isProcessed: false
                   });
                 }
-                // Reset local state to allow fresh processing
+                // Reset ONLY analytics data, preserve settings (start date, InfoBy config)
                 setProcessed(false);
                 setAnalytics(null);
                 setBillingAnalytics(null);
                 setValidationReport(null);
                 setMissingPropertiesReport(null);
                 setSettingsLocked(false);
-                addNotification('📊 Ready for fresh analytics processing', 'info');
+                // DON'T reset: projectStartDate, isDateLocked, infoByCategoryConfig
+                addNotification('📊 Ready for fresh analytics processing - settings preserved', 'info');
               }}
               className="ml-4 bg-yellow-600 text-white px-3 py-2 rounded hover:bg-yellow-700 text-sm font-medium"
             >
@@ -1821,7 +1822,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                ((infoByCategoryConfig || {}).estimation || []).length + ((infoByCategoryConfig || {}).priced || []).length + 
                ((infoByCategoryConfig || {}).special || []).length) === 0}
             className={`px-6 py-2 rounded-lg flex items-center space-x-2 transition-all ${
-              processed 
+              (processed && !isDataStale)
                 ? 'bg-green-600 text-white hover:bg-green-700'
                 : processing
                 ? 'bg-yellow-600 text-white'
@@ -1830,13 +1831,13 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
           >
             {processing ? (
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-            ) : processed ? (
+            ) : (processed && !isDataStale) ? (
               <CheckCircle className="w-4 h-4" />
             ) : (
               <RefreshCw className="w-4 h-4" />
             )}
             <span>
-              {processing ? 'Processing...' : processed ? 'Processed ✓' : 'Start Processing Session'}
+              {processing ? 'Processing...' : (processed && !isDataStale) ? 'Processed ✓' : 'Start Processing Session'}
             </span>
           </button>
         </div>
