@@ -168,11 +168,7 @@ const JobContainer = ({
       validationReport: analyticsData.validationReport || null,
       
       // Inspector stats for detailed analytics
-      inspectorStats: analyticsData.inspectorStats || {},
-
-      // 🔧 NEW: Clear any stale data flags since we just processed
-      needsRefresh: false,
-      lastAnalyticsUpdate: new Date().toISOString()
+      inspectorStats: analyticsData.inspectorStats || {}
     };
 
     // 🔧 ENHANCED: Update App.js state with database persistence flag
@@ -359,16 +355,10 @@ const JobContainer = ({
                       Soon
                     </span>
                   )}
-                  {/* 🔧 ENHANCED: Show analytics indicator for ProductionTracker */}
+                  {/* 🔧 NEW: Show analytics indicator for ProductionTracker */}
                   {module.id === 'production' && workflowStats?.isProcessed && (
                     <span className="text-xs bg-green-500 text-white px-2 py-1 rounded-full ml-1">
                       ✓
-                    </span>
-                  )}
-                  {/* 🔧 NEW: Show stale data indicator */}
-                  {module.id === 'production' && workflowStats?.needsRefresh && (
-                    <span className="text-xs bg-yellow-500 text-white px-2 py-1 rounded-full ml-1">
-                      !
                     </span>
                   )}
                 </button>
