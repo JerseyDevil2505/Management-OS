@@ -175,6 +175,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
     }
   };
 
+  // FIXED: Enhanced InfoBy code loading with proper Microsystems cleaning
   const loadAvailableInfoByCodes = async () => {
     if (!jobData?.id) return;
 
@@ -245,7 +246,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         }
 
       } else if (vendor === 'Microsystems') {
-        // FIXED: Read from updated parsing structure like in processors/updaters
+        // FIXED: Enhanced Microsystems parsing with proper cleaning
         const fieldCodes = job.parsed_code_definitions.field_codes;
         const flatLookup = job.parsed_code_definitions.flat_lookup;
         
@@ -253,69 +254,77 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
           hasFieldCodes: !!fieldCodes,
           hasFlatLookup: !!flatLookup,
           fieldCodesKeys: fieldCodes ? Object.keys(fieldCodes) : [],
-          has140Category: !!(fieldCodes && fieldCodes['140'])
+          has140Category: !!(fieldCodes && fieldCodes['140']),
+          rawKeys: Object.keys(job.parsed_code_definitions).filter(k => k.startsWith('140')).slice(0, 5)
         });
 
         if (fieldCodes && fieldCodes['140']) {
-          // NEW: Read from structured field_codes['140']
+          // APPROACH 1: Read from clean structured field_codes['140']
           debugLog('CODES', 'Found 140 category in field_codes, loading InfoBy codes...');
           
           Object.keys(fieldCodes['140']).forEach(actualCode => {
             const codeData = fieldCodes['140'][actualCode];
             codes.push({
-              code: actualCode, // Display single letter like "A"
+              code: actualCode, // Should be clean single letter like "A"
               description: codeData.description,
               section: 'InfoBy',
               vendor: 'Microsystems',
-              storageCode: actualCode, // Store single letter like "A"
-              fullCode: codeData.full_code || `140${actualCode}` // Keep full code for reference
+              storageCode: actualCode // Store clean single letter like "A"
             });
             
-            debugLog('CODES', `Found InfoBy code: ${actualCode} = ${codeData.description}`);
+            debugLog('CODES', `✅ Clean InfoBy code: ${actualCode} = ${codeData.description}`);
           });
           
         } else if (flatLookup) {
-          // FALLBACK: Read from flat_lookup for backward compatibility
+          // APPROACH 2: Read from flat_lookup 
           debugLog('CODES', 'No field_codes[140], trying flat_lookup fallback...');
           
           Object.keys(flatLookup).forEach(code => {
             if (code.startsWith('140')) {
+              const cleanCode = code.substring(3); // 140A -> A
               const description = flatLookup[code];
               codes.push({
-                code: code.substring(3), // Display single letter (140A -> A)
+                code: cleanCode,
                 description: description,
                 section: 'InfoBy',
                 vendor: 'Microsystems',
-                storageCode: code.substring(3) // Store single letter (140A -> A)
+                storageCode: cleanCode
               });
               
-              debugLog('CODES', `Found InfoBy code: ${code.substring(3)} = ${description}`);
+              debugLog('CODES', `✅ Clean InfoBy code: ${cleanCode} = ${description}`);
             }
           });
           
         } else {
-          // LEGACY: Old format fallback
-          debugLog('CODES', 'No structured format found, trying legacy format...');
+          // APPROACH 3: FIXED Legacy format with aggressive cleaning
+          debugLog('CODES', 'No structured format found, cleaning raw legacy format...');
           
-          Object.keys(job.parsed_code_definitions).forEach(code => {
-            if (code.startsWith('140')) {
-              const description = job.parsed_code_definitions[code];
+          Object.keys(job.parsed_code_definitions).forEach(rawKey => {
+            if (rawKey.startsWith('140')) {
+              // AGGRESSIVE CLEANING: "140A   9999" -> "A"
+              let cleanCode = rawKey.substring(3); // Remove "140" -> "A   9999"
+              cleanCode = cleanCode.trim(); // Remove leading/trailing spaces -> "A   9999"
+              cleanCode = cleanCode.split(/\s+/)[0]; // Split on whitespace, take first -> "A"
+              
+              const description = job.parsed_code_definitions[rawKey];
+              
               codes.push({
-                code: code.substring(3), // Display single letter (140A -> A)
+                code: cleanCode, // Display clean single letter "A"
                 description: description,
                 section: 'InfoBy',
                 vendor: 'Microsystems',
-                storageCode: code.substring(3) // Store single letter (140A -> A)
+                storageCode: cleanCode // Store clean single letter "A"
               });
               
-              debugLog('CODES', `Found InfoBy code: ${code.substring(3)} = ${description}`);
+              debugLog('CODES', `✅ Cleaned InfoBy code: ${cleanCode} = ${description} (from raw: ${rawKey})`);
             }
           });
         }
       }
 
       setAvailableInfoByCodes(codes);
-      debugLog('CODES', `✅ Loaded ${codes.length} InfoBy codes from ${vendor} definitions`);
+      debugLog('CODES', `✅ FINAL: Loaded ${codes.length} clean InfoBy codes from ${vendor}`, 
+        codes.map(c => `${c.code}=${c.description}`));
 
       // Load existing category configuration
       await loadCategoriesFromDatabase(codes, vendor);
@@ -376,7 +385,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
       });
     } else if (vendor === 'Microsystems') {
       codes.forEach(item => {
-        const storageCode = item.storageCode;
+        const storageCode = item.storageCode || item.code; // Use clean code
         const desc = item.description.toUpperCase();
         if (desc.includes('AGENT') || desc.includes('OWNER') || desc.includes('SPOUSE') || desc.includes('TENANT')) {
           defaultConfig.entry.push(storageCode);
@@ -1273,7 +1282,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
           </div>
         </div>
 
-        {/* ENHANCED: Quick Stats with Percentages and Details - FIXED "0 of 0" issue */}
+        {/* ENHANCED: Quick Stats with Percentages and Details */}
         {analytics && (
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="bg-white p-4 rounded-lg border shadow-sm">
@@ -1318,7 +1327,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
           </div>
         )}
 
-        {/* ENHANCED: Commercial metrics with FIXED "0 of 0" display using proper fields */}
+        {/* Commercial metrics */}
         {(analytics || commercialCounts.inspected > 0) && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
             <div className="bg-white p-4 rounded-lg border shadow-sm">
@@ -1433,12 +1442,12 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
           </div>
         </div>
 
-        {/* NEW: Collapsible InfoBy Category Configuration Panel */}
+        {/* FIXED: Collapsible InfoBy Category Configuration Panel with Clean Codes */}
         {(availableInfoByCodes || []).length > 0 && (
           <div className="mt-6 pt-6 border-t border-gray-200">
             <div className="flex items-center justify-between mb-4">
               <h4 className="text-md font-semibold text-gray-800">
-                InfoBy Category Assignment ({jobData.vendor_type} Format)
+                InfoBy Category Assignment ({jobData.vendor_type} Format) - {availableInfoByCodes.length} codes detected
               </h4>
               <button
                 onClick={() => setShowInfoByConfig(!showInfoByConfig)}
@@ -1449,7 +1458,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
               </button>
             </div>
             
-            {/* Quick Summary (Always Visible) - FIXED: Added safety checks */}
+            {/* Quick Summary (Always Visible) */}
             <div className="grid grid-cols-2 md:grid-cols-6 gap-2 text-sm mb-4">
               <div className="bg-green-50 px-3 py-2 rounded border">
                 <span className="font-medium text-green-800">Entry:</span> {(infoByCategoryConfig.entry || []).length}
@@ -1481,8 +1490,9 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                     </h5>
                     <div className="space-y-2 max-h-40 overflow-y-auto">
                       {(availableInfoByCodes || []).map(codeItem => {
-                        const storageCode = jobData.vendor_type === 'Microsystems' ? codeItem.storageCode : codeItem.code;
-                        const displayCode = storageCode;
+                        // FIXED: Use clean storage code for all vendors
+                        const storageCode = codeItem.storageCode || codeItem.code;
+                        const displayCode = storageCode; // Should be clean: "A", "O", "R", etc.
                         const isAssigned = (infoByCategoryConfig[category] || []).includes(storageCode);
                         
                         return (
@@ -1495,8 +1505,8 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                               className="mr-2 mt-1"
                             />
                             <div className="text-sm">
-                              <span className="font-medium">{displayCode}</span>
-                              <div className="text-gray-600 text-xs leading-tight">{codeItem.description}</div>
+                              <span className="font-medium bg-blue-100 px-1 rounded">{displayCode}</span>
+                              <div className="text-gray-600 text-xs leading-tight mt-1">{codeItem.description}</div>
                             </div>
                           </div>
                         );
@@ -1577,7 +1587,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
           </div>
 
           <div className="p-6">
-            {/* NEW: Separate Residential and Commercial Inspector Analytics */}
+            {/* Inspector Analytics Tab */}
             {activeTab === 'analytics' && (
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
@@ -1864,7 +1874,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
               </div>
             )}
 
-            {/* ENHANCED: Summary for Billing with Progress Bars */}
+            {/* Billing Tab */}
             {activeTab === 'billing' && billingAnalytics && (
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
@@ -1992,7 +2002,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
               </div>
             )}
 
-            {/* ENHANCED: Validation Report with Compound Messages */}
+            {/* Validation Tab */}
             {activeTab === 'validation' && validationReport && (
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
