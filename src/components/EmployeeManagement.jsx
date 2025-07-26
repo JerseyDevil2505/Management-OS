@@ -25,7 +25,8 @@ const EmployeeManagement = () => {
   const [analyticsFilter, setAnalyticsFilter] = useState({
     inspectorType: 'all',
     region: 'all',
-    dateRange: 'all'
+    dateRange: 'all',
+    employmentStatus: 'active'  // Default to active only
   });
 
   // Load employees from database on component mount
@@ -74,21 +75,29 @@ const EmployeeManagement = () => {
     }
   };
 
-  // Global Analytics Functions
+  // Fixed Global Analytics Functions
   const loadGlobalAnalytics = async () => {
     setIsLoadingAnalytics(true);
     try {
-      // Get all inspection data across all jobs with employee info
-      const { data: inspectionData, error } = await supabase
+      // Get inspection data separately (no JOIN)
+      const { data: inspectionData, error: inspectionError } = await supabase
         .from('inspection_data')
-        .select(`
-          *,
-          job:jobs!inner(id, job_name, vendor_type, parsed_code_definitions),
-          employee:employees!inner(id, first_name, last_name, initials, inspector_type, region, employment_status)
-        `)
-        .eq('employee.employment_status', 'active');
+        .select('*');
 
-      if (error) throw error;
+      if (inspectionError) throw inspectionError;
+
+      // Get ONLY inspector employees (Residential, Commercial, Management)
+      const { data: employeesData, error: employeesError } = await supabase
+        .from('employees')
+        .select('*')
+        .in('inspector_type', ['Residential', 'Commercial', 'Management'])
+        .modify((query) => {
+          if (analyticsFilter.employmentStatus !== 'all') {
+            query.eq('employment_status', analyticsFilter.employmentStatus);
+          }
+        });
+
+      if (employeesError) throw employeesError;
 
       if (!inspectionData || inspectionData.length === 0) {
         setGlobalAnalytics({
@@ -99,8 +108,30 @@ const EmployeeManagement = () => {
         return;
       }
 
-      // Process the data similar to ProductionTracker
-      const processedAnalytics = processGlobalInspectionData(inspectionData, analyticsFilter);
+      // Create lookup map for employees by initials
+      const employeeMap = {};
+      employeesData.forEach(emp => {
+        if (emp.initials) {
+          employeeMap[emp.initials] = emp;
+        }
+      });
+
+      // Process inspection data and match with employees
+      const enrichedData = [];
+      inspectionData.forEach(record => {
+        // Check all "by" fields for inspector initials
+        const inspectorInitials = record.list_by || record.measure_by || record.price_by;
+        
+        if (inspectorInitials && employeeMap[inspectorInitials]) {
+          enrichedData.push({
+            ...record,
+            employee: employeeMap[inspectorInitials]
+          });
+        }
+      });
+
+      // Process the enriched data similar to ProductionTracker
+      const processedAnalytics = processGlobalInspectionData(enrichedData, analyticsFilter);
       setGlobalAnalytics(processedAnalytics);
 
     } catch (error) {
@@ -127,7 +158,7 @@ const EmployeeManagement = () => {
 
     // Calculate summary metrics
     const totalInspections = filteredData.length;
-    const validInspections = filteredData.filter(r => r.inspection_initials && r.inspection_date).length;
+    const validInspections = filteredData.filter(r => r.list_by || r.measure_by || r.price_by).length;
     
     // Calculate entry/refusal rates using ProductionTracker logic
     let entryCount = 0;
@@ -158,12 +189,12 @@ const EmployeeManagement = () => {
       inspectorStats[initials].totalInspections++;
 
       // Determine if this is entry/refusal based on InfoBy codes (simplified)
-      if (record.inspection_info_by && record.property_m4_class && ['2', '3A'].includes(record.property_m4_class)) {
+      if (record.info_by_code && record.property_class && ['2', '3A'].includes(record.property_class)) {
         totalEligible++;
         inspectorStats[initials].totalEligible = (inspectorStats[initials].totalEligible || 0) + 1;
 
         // Simple InfoBy logic - you'd want to use actual job code definitions here
-        const infoBy = record.inspection_info_by.toString().toLowerCase();
+        const infoBy = record.info_by_code.toString().toLowerCase();
         if (['01', '02', '03', '04', 'a', 'o', 's', 't'].includes(infoBy)) {
           entryCount++;
           inspectorStats[initials].entryInspections++;
@@ -1012,6 +1043,15 @@ const EmployeeManagement = () => {
                           {getUniqueValues('location').map(location => (
                             <option key={location} value={location}>{location}</option>
                           ))}
+                        </select>
+
+                        <select
+                          value={analyticsFilter.employmentStatus}
+                          onChange={(e) => handleFilterChange('employmentStatus', e.target.value)}
+                          className="px-3 py-1 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
+                        >
+                          <option value="active">Active Employees Only</option>
+                          <option value="all">All Employees (Active + Inactive)</option>
                         </select>
 
                         <button
