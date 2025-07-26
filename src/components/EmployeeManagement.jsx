@@ -183,20 +183,9 @@ const EmployeeManagement = () => {
       const matchesType = filter.inspectorType === 'all' || record.employee.inspector_type === filter.inspectorType;
       const matchesRegion = filter.region === 'all' || record.employee.region === filter.region;
       
-      // IMPORTANT: Only count residential inspectors on residential properties (2, 3A)
-      // and commercial inspectors on commercial properties (5)
-      const isResidentialInspector = record.employee.inspector_type === 'Residential';
-      const isCommercialInspector = record.employee.inspector_type === 'Commercial';
-      const isResidentialProperty = ['2', '3A'].includes(record.property_class);
-      const isCommercialProperty = record.property_class === '5';
-      
-      // Only include if inspector type matches property type
-      const propertyTypeMatch = 
-        (isResidentialInspector && isResidentialProperty) ||
-        (isCommercialInspector && isCommercialProperty) ||
-        record.employee.inspector_type === 'Management'; // Management can inspect anything
-      
-      return matchesType && matchesRegion && propertyTypeMatch;
+      // FIXED: Don't filter out commercial inspectors based on property type
+      // Let all inspector types show up in analytics regardless of what they inspect
+      return matchesType && matchesRegion;
     });
 
     // Calculate summary metrics
