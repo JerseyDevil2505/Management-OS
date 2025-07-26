@@ -1270,6 +1270,9 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         throw new Error('Analytics processing failed');
       }
 
+      // 🔧 FIX: Use the actual results data
+      const { analyticsResult, billingResult, validationReportData } = results;
+
       // ENHANCED: Persist to database for navigation survival
       await saveCategoriesToDatabase();
 
@@ -1277,9 +1280,9 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
       if (onDataUpdate) {
         onDataUpdate({
           jobId: jobData.id,
-          analytics: analyticsResult,
-          billingAnalytics: billingResult,
-          validationReport: validationReportData,
+          analytics: analyticsResult,     // ✅ NOW DEFINED!
+          billingAnalytics: billingResult, // ✅ NOW DEFINED!
+          validationReport: validationReportData, // ✅ NOW DEFINED!
           missingPropertiesReport: missingPropertiesReportData,
           lastProcessed: new Date().toISOString()
         });
