@@ -10,6 +10,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
   const [analytics, setAnalytics] = useState(null);
   const [billingAnalytics, setBillingAnalytics] = useState(null);
   const [validationReport, setValidationReport] = useState(null);
+  const [missingPropertiesReport, setMissingPropertiesReport] = useState(null);
   const [sessionHistory, setSessionHistory] = useState([]);
   const [notifications, setNotifications] = useState([]);
   
@@ -41,7 +42,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
   const [selectedInspectorIssues, setSelectedInspectorIssues] = useState(null);
   
   // NEW: Add collapsible InfoBy configuration state
-  const [showInfoByConfig, setShowInfoByConfig] = useState(true);
+  const [showInfoByConfig, setShowInfoByConfig] = useState(false);
   const [detectedVendor, setDetectedVendor] = useState(null);
   
   // Inspector filtering and sorting
@@ -642,6 +643,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
       const propertyIssues = {};
       const inspectorIssuesMap = {};
       const inspectionDataBatch = []; // NEW: For inspection_data UPSERT
+      const missingProperties = []; // Track properties not added to inspection_data
 
       // Initialize class counters - FIXED: Count ALL properties for denominators
       const allClasses = ['1', '2', '3A', '3B', '4A', '4B', '4C', '15A', '15B', '15C', '15D', '15E', '15F', '5A', '5B', '6A', '6B'];
@@ -659,6 +661,10 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         const priceDate = record.inspection_price_date ? new Date(record.inspection_price_date) : null;
         const propertyKey = record.property_composite_key || `${record.property_block}-${record.property_lot}-${record.property_qualifier || ''}`;
 
+        // Track this property's processing status
+        let wasAddedToInspectionData = false;
+        let reasonNotAdded = '';
+
         // FIXED: Always count ALL properties for denominators (manager progress view)
         if (classBreakdown[propertyClass]) {
           classBreakdown[propertyClass].total++;
@@ -666,7 +672,48 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         }
 
         // Skip UNASSIGNED for inspector analytics but continue for totals
-        if (inspector === 'UNASSIGNED') return;
+        if (inspector === 'UNASSIGNED') {
+          reasonNotAdded = 'Inspector UNASSIGNED';
+          return;
+        }
+
+        // Skip inspections before project start date (removes old inspector noise)
+        if (measuredDate && measuredDate < startDate) {
+          reasonNotAdded = 'Inspection date before project start date';
+          missingProperties.push({
+            composite_key: propertyKey,
+            block: record.property_block,
+            lot: record.property_lot,
+            qualifier: record.property_qualifier || '',
+            property_location: record.property_location || '',
+            property_class: propertyClass,
+            reason: reasonNotAdded,
+            inspector: inspector,
+            info_by_code: infoByCode,
+            measure_date: record.inspection_measure_date,
+            validation_issues: []
+          });
+          return;
+        }
+
+        // Skip inspectors with invalid initials (not in employee database)
+        if (!employeeData[inspector]) {
+          reasonNotAdded = `Inspector ${inspector} not found in employee database`;
+          missingProperties.push({
+            composite_key: propertyKey,
+            block: record.property_block,
+            lot: record.property_lot,
+            qualifier: record.property_qualifier || '',
+            property_location: record.property_location || '',
+            property_class: propertyClass,
+            reason: reasonNotAdded,
+            inspector: inspector,
+            info_by_code: infoByCode,
+            measure_date: record.inspection_measure_date,
+            validation_issues: []
+          });
+          return;
+        }
 
         // Initialize inspector stats
         if (!inspectorStats[inspector]) {
@@ -701,6 +748,20 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
 
         if (!hasAnyInspectionAttempt) {
           // Property not yet inspected - skip validation entirely
+          reasonNotAdded = 'No inspection attempt - completely uninspected';
+          missingProperties.push({
+            composite_key: propertyKey,
+            block: record.property_block,
+            lot: record.property_lot,
+            qualifier: record.property_qualifier || '',
+            property_location: record.property_location || '',
+            property_class: propertyClass,
+            reason: reasonNotAdded,
+            inspector: inspector,
+            info_by_code: infoByCode,
+            measure_date: record.inspection_measure_date,
+            validation_issues: []
+          });
           return;
         }
 
@@ -886,6 +947,33 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
               severity: propertyIssues[propertyKey].issues.length > 2 ? 'high' : 'medium'
             } : null
           });
+          wasAddedToInspectionData = true;
+        } else {
+          // Track properties that didn't make it to inspection_data
+          const reasons = [];
+          if (!hasValidInfoBy) reasons.push(`Invalid InfoBy code: ${infoByCode}`);
+          if (!hasValidMeasuredBy) reasons.push('Missing/invalid inspector');
+          if (!hasValidMeasuredDate) reasons.push('Missing/invalid measure date');
+          if (propertyIssues[propertyKey]?.issues) reasons.push(...propertyIssues[propertyKey].issues);
+          
+          reasonNotAdded = `Failed validation: ${reasons.join(', ')}`;
+        }
+
+        // Track ALL properties that didn't make it to inspection_data
+        if (!wasAddedToInspectionData) {
+          missingProperties.push({
+            composite_key: propertyKey,
+            block: record.property_block,
+            lot: record.property_lot,
+            qualifier: record.property_qualifier || '',
+            property_location: record.property_location || '',
+            property_class: propertyClass,
+            reason: reasonNotAdded,
+            inspector: inspector,
+            info_by_code: infoByCode,
+            measure_date: record.inspection_measure_date,
+            validation_issues: propertyIssues[propertyKey]?.issues || []
+          });
         }
       });
 
@@ -1010,6 +1098,26 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         detailed_issues: inspectorIssuesMap
       };
 
+      // Create missing properties report
+      const missingPropertiesReportData = {
+        summary: {
+          total_missing: missingProperties.length,
+          uninspected_count: missingProperties.filter(p => p.reason.includes('No inspection attempt')).length,
+          validation_failed_count: missingProperties.filter(p => p.reason.includes('Failed validation')).length,
+          by_reason: missingProperties.reduce((acc, prop) => {
+            const reason = prop.reason;
+            acc[reason] = (acc[reason] || 0) + 1;
+            return acc;
+          }, {}),
+          by_inspector: missingProperties.reduce((acc, prop) => {
+            const inspector = prop.inspector || 'UNASSIGNED';
+            acc[inspector] = (acc[inspector] || 0) + 1;
+            return acc;
+          }, {})
+        },
+        detailed_missing: missingProperties
+      };
+
       const analyticsResult = {
         totalRecords: rawData.length,
         validInspections: totalInspected,
@@ -1022,12 +1130,12 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         jobEntryRate: totalResidentialInspected > 0 ? Math.round((totalEntry / totalResidentialInspected) * 100) : 0,
         jobRefusalRate: totalResidentialInspected > 0 ? Math.round((totalRefusal / totalResidentialInspected) * 100) : 0,
         
-        // FIXED: Commercial metrics with correct percentages
+        // FIXED: Commercial metrics using inspector totals not class breakdown
         commercialInspections: totalCommercialInspected,
-        commercialPricing: totalCommercialPriced,
+        commercialPricing: totalPriced,
         totalCommercialProperties,
         commercialCompletePercent: totalCommercialProperties > 0 ? Math.round((totalCommercialInspected / totalCommercialProperties) * 100) : 0,
-        pricingCompletePercent: totalCommercialProperties > 0 ? Math.round((totalCommercialPriced / totalCommercialProperties) * 100) : 0
+        pricingCompletePercent: totalCommercialProperties > 0 ? Math.round((totalPriced / totalCommercialProperties) * 100) : 0
       };
 
       // Billing analytics with progress calculations
@@ -1063,6 +1171,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
       setAnalytics(analyticsResult);
       setBillingAnalytics(billingResult);
       setValidationReport(validationReportData);
+      setMissingPropertiesReport(missingPropertiesReportData);
 
       debugLog('ANALYTICS', '✅ Manager-focused analytics processing complete', {
         totalRecords: rawData.length,
@@ -1187,6 +1296,46 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
     window.URL.revokeObjectURL(url);
 
     addNotification('📊 Validation report exported', 'success');
+  };
+
+  const exportMissingPropertiesReport = () => {
+    if (!missingPropertiesReport || !missingPropertiesReport.detailed_missing) return;
+
+    let csvContent = "Summary\n";
+    csvContent += `Total Missing Properties,${missingPropertiesReport.summary.total_missing}\n`;
+    csvContent += `Uninspected Count,${missingPropertiesReport.summary.uninspected_count}\n`;
+    csvContent += `Validation Failed Count,${missingPropertiesReport.summary.validation_failed_count}\n\n`;
+
+    csvContent += "Breakdown by Reason\n";
+    csvContent += "Reason,Count\n";
+    Object.entries(missingPropertiesReport.summary.by_reason).forEach(([reason, count]) => {
+      csvContent += `"${reason}","${count}"\n`;
+    });
+
+    csvContent += "\nBreakdown by Inspector\n";
+    csvContent += "Inspector,Count\n";
+    Object.entries(missingPropertiesReport.summary.by_inspector).forEach(([inspector, count]) => {
+      csvContent += `"${inspector}","${count}"\n`;
+    });
+
+    csvContent += "\nDetailed Missing Properties\n";
+    csvContent += "Block,Lot,Qualifier,Property Location,Class,Inspector,InfoBy Code,Measure Date,Reason\n";
+    
+    missingPropertiesReport.detailed_missing.forEach(property => {
+      csvContent += `"${property.block}","${property.lot}","${property.qualifier}","${property.property_location}","${property.property_class}","${property.inspector}","${property.info_by_code || ''}","${property.measure_date || ''}","${property.reason}"\n`;
+    });
+
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Missing_Properties_Report_${jobData.ccdd || jobData.ccddCode}_${new Date().toISOString().split('T')[0].replace(/-/g, '')}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+
+    addNotification('📊 Missing properties report exported', 'success');
   };
 
   // ENHANCED: Progress bar component
@@ -1519,7 +1668,19 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
           </div>
         )}
 
-        <div className="mt-6 flex justify-end">
+        <div className="mt-6 flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            {sessionId && (
+              <button
+                onClick={resetSession}
+                className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-all text-sm flex items-center space-x-1"
+              >
+                <RefreshCw className="w-4 h-4" />
+                <span>Reset Session</span>
+              </button>
+            )}
+          </div>
+          
           <button
             onClick={startProcessingSession}
             disabled={processing || (!isDateLocked) || hasUnsavedChanges ||
@@ -1582,6 +1743,16 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                 }`}
               >
                 ⚠️ Validation Report ({validationReport?.summary.total_issues || 0})
+              </button>
+              <button
+                onClick={() => setActiveTab('missing')}
+                className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'missing'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                🔍 Missing Properties ({missingPropertiesReport?.summary.total_missing || 0})
               </button>
             </nav>
           </div>
@@ -2094,6 +2265,152 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                         <p className="text-sm mt-2">Only properties with inspection attempts are validated</p>
                       </div>
                     )}
+                  </>
+                )}
+              </div>
+            )}
+            {/* Missing Properties Report */}
+            {activeTab === 'missing' && missingPropertiesReport && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-bold text-gray-900">
+                    Missing Properties Report - Not Added to Inspection Data
+                  </h3>
+                  {missingPropertiesReport.summary.total_missing > 0 && (
+                    <button
+                      onClick={() => exportMissingPropertiesReport()}
+                      className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 flex items-center space-x-2"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span>Export Missing Report</span>
+                    </button>
+                  )}
+                </div>
+
+                {missingPropertiesReport.summary.total_missing === 0 ? (
+                  <div className="text-center py-8">
+                    <CheckCircle className="w-12 h-12 mx-auto mb-4 text-green-500" />
+                    <h4 className="text-lg font-semibold text-gray-900 mb-2">All Properties Accounted For</h4>
+                    <p className="text-gray-600">Every property record was successfully processed to inspection_data</p>
+                    <p className="text-sm text-gray-500 mt-2">Total Records: {analytics?.totalRecords || 0} | Valid Inspections: {analytics?.validInspections || 0}</p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Summary Cards */}
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                      <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-orange-600 font-medium">Total Missing</p>
+                            <p className="text-2xl font-bold text-orange-800">{missingPropertiesReport.summary.total_missing}</p>
+                          </div>
+                          <AlertTriangle className="w-8 h-8 text-orange-500" />
+                        </div>
+                      </div>
+
+                      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-gray-600 font-medium">Uninspected</p>
+                            <p className="text-2xl font-bold text-gray-800">{missingPropertiesReport.summary.uninspected_count}</p>
+                            <p className="text-xs text-gray-500">No inspection attempt</p>
+                          </div>
+                          <Eye className="w-8 h-8 text-gray-500" />
+                        </div>
+                      </div>
+
+                      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-red-600 font-medium">Validation Failed</p>
+                            <p className="text-2xl font-bold text-red-800">{missingPropertiesReport.summary.validation_failed_count}</p>
+                            <p className="text-xs text-red-500">Attempted but invalid</p>
+                          </div>
+                          <X className="w-8 h-8 text-red-500" />
+                        </div>
+                      </div>
+
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-blue-600 font-medium">Success Rate</p>
+                            <p className="text-2xl font-bold text-blue-800">
+                              {analytics?.totalRecords > 0 ? 
+                                Math.round(((analytics.totalRecords - missingPropertiesReport.summary.total_missing) / analytics.totalRecords) * 100) : 0}%
+                            </p>
+                            <p className="text-xs text-blue-500">Properties processed</p>
+                          </div>
+                          <CheckCircle className="w-8 h-8 text-blue-500" />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Breakdown by Reason */}
+                    <div className="bg-white border border-gray-200 rounded-lg p-6 mb-6">
+                      <h4 className="font-semibold text-gray-900 mb-4">Breakdown by Reason</h4>
+                      <div className="space-y-3">
+                        {Object.entries(missingPropertiesReport.summary.by_reason).map(([reason, count]) => (
+                          <div key={reason} className="flex justify-between items-center p-3 bg-gray-50 rounded">
+                            <span className="text-sm text-gray-700">{reason}</span>
+                            <span className="font-bold text-gray-900">{count} properties</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Breakdown by Inspector */}
+                    <div className="bg-white border border-gray-200 rounded-lg p-6 mb-6">
+                      <h4 className="font-semibold text-gray-900 mb-4">Breakdown by Inspector</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {Object.entries(missingPropertiesReport.summary.by_inspector).map(([inspector, count]) => (
+                          <div key={inspector} className="p-3 bg-gray-50 rounded border">
+                            <div className="font-medium text-gray-900">{inspector}</div>
+                            <div className="text-sm text-gray-600">{count} missing properties</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Detailed Missing Properties Table */}
+                    <div className="bg-white border border-gray-200 rounded-lg p-6">
+                      <h4 className="font-semibold text-gray-900 mb-4">Detailed Missing Properties</h4>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Block</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Lot</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Qualifier</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Property Location</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Class</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Inspector</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">InfoBy Code</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Reason</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {missingPropertiesReport.detailed_missing.map((property, idx) => (
+                              <tr key={idx} className={`border-t border-gray-200 ${
+                                property.reason.includes('No inspection attempt') ? 'bg-gray-50' : 'bg-red-50'
+                              }`}>
+                                <td className="px-3 py-2 font-medium">{property.block}</td>
+                                <td className="px-3 py-2 font-medium">{property.lot}</td>
+                                <td className="px-3 py-2">{property.qualifier || '-'}</td>
+                                <td className="px-3 py-2">{property.property_location}</td>
+                                <td className="px-3 py-2">
+                                  <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded font-medium">
+                                    {property.property_class}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-2">{property.inspector}</td>
+                                <td className="px-3 py-2">{property.info_by_code || '-'}</td>
+                                <td className="px-3 py-2 text-xs">{property.reason}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
                   </>
                 )}
               </div>
