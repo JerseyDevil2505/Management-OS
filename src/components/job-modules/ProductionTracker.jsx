@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Factory, Settings, Download, RefreshCw, AlertTriangle, CheckCircle, TrendingUp, DollarSign, Users, Calendar, X, ChevronDown, ChevronUp, Eye, FileText, Lock, Unlock, Save } from 'lucide-react';
 import { supabase, jobService } from '../../lib/supabaseClient';
 
-const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyRecordsCount }) => {
+const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyRecordsCount, onDataUpdate }) => {
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [processed, setProcessed] = useState(false);
@@ -548,6 +548,19 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
       setLoading(false);
     }
   }, [jobData?.id, latestFileVersion]);
+
+  // NEW: Load data from App.js central hub if available
+  useEffect(() => {
+    if (jobData?.appData) {
+      debugLog('APP_INTEGRATION', '✅ Loading data from App.js central hub');
+      setAnalytics(jobData.appData.analytics);
+      setBillingAnalytics(jobData.appData.billingAnalytics);
+      setValidationReport(jobData.appData.validationReport);
+      setMissingPropertiesReport(jobData.appData.missingPropertiesReport);
+      setProcessed(true);
+      setSettingsLocked(true);
+    }
+  }, [jobData?.appData]);
 
   // Track unsaved changes
   useEffect(() => {
@@ -1260,6 +1273,19 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
       // ENHANCED: Persist to database for navigation survival
       await saveCategoriesToDatabase();
 
+      // NEW: Update App.js central data hub
+      if (onDataUpdate) {
+        onDataUpdate({
+          jobId: jobData.id,
+          analytics: analyticsResult,
+          billingAnalytics: billingResult,
+          validationReport: validationReportData,
+          missingPropertiesReport: missingPropertiesReportData,
+          lastProcessed: new Date().toISOString()
+        });
+        debugLog('APP_INTEGRATION', '✅ Data sent to App.js central hub');
+      }
+
       debugLog('SESSION', '✅ Processing session completed successfully');
       addNotification(`✅ Processing completed! Analytics saved and ready.`, 'success');
 
@@ -1493,10 +1519,15 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                 <div>
                   <p className="text-sm text-gray-600">Commercial Complete</p>
                   <p className="text-2xl font-bold text-blue-600">
-                    {jobData.totalcommercial > 0 ? Math.round((commercialCounts.inspected / jobData.totalcommercial) * 100) : 0}%
+                    {analytics && analytics.totalCommercialProperties > 0 ? 
+                      Math.round((analytics.commercialInspections / analytics.totalCommercialProperties) * 100) : 
+                      jobData.totalcommercial > 0 ? Math.round((commercialCounts.inspected / jobData.totalcommercial) * 100) : 0}%
                   </p>
                   <p className="text-xs text-gray-500 mt-1">
-                    {commercialCounts.inspected.toLocaleString()} of {(jobData.totalcommercial || 0).toLocaleString()} properties
+                    {analytics ? 
+                      `${analytics.commercialInspections.toLocaleString()} of ${analytics.totalCommercialProperties.toLocaleString()} properties` :
+                      `${commercialCounts.inspected.toLocaleString()} of ${(jobData.totalcommercial || 0).toLocaleString()} properties`
+                    }
                   </p>
                 </div>
                 <Factory className="w-8 h-8 text-blue-500" />
@@ -1508,10 +1539,15 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                 <div>
                   <p className="text-sm text-gray-600">Pricing Complete</p>
                   <p className="text-2xl font-bold text-purple-600">
-                    {jobData.totalcommercial > 0 ? Math.round((commercialCounts.priced / jobData.totalcommercial) * 100) : 0}%
+                    {analytics && analytics.totalCommercialProperties > 0 ? 
+                      Math.round((analytics.commercialPricing / analytics.totalCommercialProperties) * 100) : 
+                      jobData.totalcommercial > 0 ? Math.round((commercialCounts.priced / jobData.totalcommercial) * 100) : 0}%
                   </p>
                   <p className="text-xs text-gray-500 mt-1">
-                    {commercialCounts.priced.toLocaleString()} of {(jobData.totalcommercial || 0).toLocaleString()} properties
+                    {analytics ? 
+                      `${analytics.commercialPricing.toLocaleString()} of ${analytics.totalCommercialProperties.toLocaleString()} properties` :
+                      `${commercialCounts.priced.toLocaleString()} of ${(jobData.totalcommercial || 0).toLocaleString()} properties`
+                    }
                   </p>
                 </div>
                 <DollarSign className="w-8 h-8 text-purple-500" />
