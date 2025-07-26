@@ -898,18 +898,16 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
             inspectorStats[inspector].residentialInspected++;
             inspectorStats[inspector].residentialWorkDays.add(workDayString);
             
-            // FIXED: Entry/Refusal counting for individual inspectors (only for residential properties 2, 3A)
-            // Individual inspector credit: measure_by must equal list_by
-            const individualInspectorEntry = isEntryCode && record.inspection_list_by === inspector;
-            const individualInspectorRefusal = isRefusalCode && record.inspection_list_by === inspector;
+            // FIXED: Entry/Refusal counting - separate individual vs global logic
             
-            if (individualInspectorEntry) {
+            // Individual inspector credit: measure_by must equal list_by for personal achievement
+            if (isEntryCode && record.inspection_list_by === inspector) {
               inspectorStats[inspector].entry++;
-            } else if (individualInspectorRefusal) {
+            } else if (isRefusalCode && record.inspection_list_by === inspector) {
               inspectorStats[inspector].refusal++;
             }
             
-            // Global metrics: count all valid entries/refusals regardless of who did list work
+            // Global metrics: count ALL valid entries/refusals regardless of who did list work
             if (isEntryCode && classBreakdown[propertyClass]) {
               classBreakdown[propertyClass].entry++;
             } else if (isRefusalCode && classBreakdown[propertyClass]) {
@@ -1217,7 +1215,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         persistedRecords: inspectionDataBatch.length
       });
 
-      return { analyticsResult, billingResult, validationReportData };
+      return { analyticsResult, billingResult, validationReportData, missingPropertiesReportData };
 
     } catch (error) {
       console.error('Error processing analytics:', error);
@@ -1283,16 +1281,17 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
       }
 
       // 🔧 FIX: Use the actual results data
-      const { analyticsResult, billingResult, validationReportData } = results;
+      const { analyticsResult, billingResult, validationReportData, missingPropertiesReportData } = results;
       
-      // Note: missingPropertiesReportData is set directly in state during processAnalytics
+      // Set the fresh missing properties report in state
+      setMissingPropertiesReport(missingPropertiesReportData);
 
       // ENHANCED: Persist to database for navigation survival with FRESH data
       await saveCategoriesToDatabase(infoByCategoryConfig, {
         analytics: analyticsResult,
         billingAnalytics: billingResult,
         validationReport: validationReportData,
-        missingPropertiesReport: missingPropertiesReport
+        missingPropertiesReport: missingPropertiesReportData // ✅ Use fresh data!
       });
 
       // NEW: Update App.js central data hub
@@ -1302,7 +1301,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
           analytics: analyticsResult,     // ✅ NOW DEFINED!
           billingAnalytics: billingResult, // ✅ NOW DEFINED!
           validationReport: validationReportData, // ✅ NOW DEFINED!
-          missingPropertiesReport: missingPropertiesReport, // ✅ Use state value
+          missingPropertiesReport: missingPropertiesReportData, // ✅ Use fresh data!
           lastProcessed: new Date().toISOString()
         });
         debugLog('APP_INTEGRATION', '✅ Data sent to App.js central hub');
@@ -1468,23 +1467,6 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                 </span>}
               </p>
             </div>
-          </div>
-          <div className="flex items-center space-x-3">
-            {sessionId && (
-              <button
-                onClick={resetSession}
-                className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-all text-sm flex items-center space-x-1"
-              >
-                <RefreshCw className="w-4 h-4" />
-                <span>Reset Session</span>
-              </button>
-            )}
-            <button
-              onClick={onBackToJobs}
-              className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-all"
-            >
-              ← Back to Jobs
-            </button>
           </div>
         </div>
 
@@ -1737,7 +1719,8 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
 
         <div className="mt-6 flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            {sessionId && (
+            {/* Reset button - visible when there's processed data */}
+            {(processed || analytics) && (
               <button
                 onClick={resetSession}
                 className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-all text-sm flex items-center space-x-1"
