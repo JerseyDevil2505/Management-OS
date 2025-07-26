@@ -901,6 +901,9 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
           if (isCommercialProperty) {
             const currentVendor = actualVendor || jobData.vendor_type;
 
+            debugLog('PRICING', `Commercial property ${propertyKey} - Class: ${propertyClass}, InfoBy: ${infoByCode}, Vendor: ${currentVendor}`);
+            debugLog('PRICING', `isPricedCode: ${isPricedCode}, Priced category: [${(infoByCategoryConfig.priced || []).join(', ')}]`);
+
             if (currentVendor === 'BRT' && 
                 record.inspection_price_by && 
                 record.inspection_price_by.trim() !== '' &&
@@ -912,12 +915,16 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
               if (classBreakdown[propertyClass]) {
                 classBreakdown[propertyClass].priced++;
               }
+              debugLog('PRICING', `✅ BRT pricing counted for ${inspector} on ${propertyKey}`);
               
             } else if (currentVendor === 'Microsystems' && isPricedCode) {
               inspectorStats[inspector].priced++;
               if (classBreakdown[propertyClass]) {
                 classBreakdown[propertyClass].priced++;
               }
+              debugLog('PRICING', `✅ Microsystems pricing counted for ${inspector} on ${propertyKey}`);
+            } else {
+              debugLog('PRICING', `❌ No pricing counted for ${inspector} on ${propertyKey} - Vendor: ${currentVendor}, isPricedCode: ${isPricedCode}`);
             }
           }
 
