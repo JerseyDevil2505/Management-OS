@@ -54,6 +54,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
   const [selectedOverrideProperty, setSelectedOverrideProperty] = useState(null);
   const [overrideReason, setOverrideReason] = useState('New Construction');
   const [overrideMap, setOverrideMap] = useState({});
+  const [validationOverrides, setValidationOverrides] = useState([]);
 
   // NEW: Smart data staleness detection
   const currentWorkflowStats = jobData?.appData;
@@ -582,9 +583,9 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
       addNotification(`✅ Override applied: ${overrideReason}`, 'success');
       addNotification('🔄 Reprocessing analytics with override...', 'info');
 
-      // Trigger analytics reprocessing
-      setTimeout(() => {
-        startProcessingSession();
+      // Trigger immediate analytics reprocessing
+      setTimeout(async () => {
+        await startProcessingSession();
       }, 1000);
 
     } catch (error) {
@@ -738,6 +739,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
       
       // Set override map in component state for UI access
       setOverrideMap(overrideMapData);
+      setValidationOverrides(existingOverrides || []);
       
       debugLog('ANALYTICS', `Loaded ${existingOverrides?.length || 0} existing validation overrides`);
       
@@ -2685,16 +2687,126 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
                   <h3 className="text-lg font-bold text-gray-900">
-                    Validation Overrides - Manager Approved Exceptions
+                    Validation Overrides - Manager Approved Exceptions ({validationOverrides.length})
                   </h3>
+                  {validationOverrides.length > 0 && (
+                    <button
+                      onClick={() => {
+                        // Export overrides functionality
+                        let csvContent = "Block,Lot,Qualifier,Card,Property Location,Override Reason,Override By,Override Date\n";
+                        
+                        validationOverrides.forEach(override => {
+                          csvContent += `"${override.block}","${override.lot}","${override.qualifier || ''}","${override.card || '1'}","${override.property_location || ''}","${override.override_reason}","${override.override_by || 'Manager'}","${override.override_date || ''}"\n`;
+                        });
+
+                        const blob = new Blob([csvContent], { type: 'text/csv' });
+                        const url = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `Validation_Overrides_${jobData.ccdd || jobData.ccddCode}_${new Date().toISOString().split('T')[0].replace(/-/g, '')}.csv`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        window.URL.revokeObjectURL(url);
+
+                        addNotification('📊 Validation overrides exported', 'success');
+                      }}
+                      className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center space-x-2"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span>Export Overrides</span>
+                    </button>
+                  )}
                 </div>
 
-                <div className="text-center py-8">
-                  <CheckCircle className="w-12 h-12 mx-auto mb-4 text-blue-500" />
-                  <h4 className="text-lg font-semibold text-gray-900 mb-2">Override Functionality Active</h4>
-                  <p className="text-gray-600">Use the Override button in validation details to approve exceptions.</p>
-                  <p className="text-sm text-gray-500 mt-2">Overridden properties will appear here for tracking.</p>
-                </div>
+                {validationOverrides.length === 0 ? (
+                  <div className="text-center py-8">
+                    <CheckCircle className="w-12 h-12 mx-auto mb-4 text-blue-500" />
+                    <h4 className="text-lg font-semibold text-gray-900 mb-2">No Validation Overrides Yet</h4>
+                    <p className="text-gray-600">Use the Override button in validation details to approve exceptions.</p>
+                    <p className="text-sm text-gray-500 mt-2">Overridden properties will appear here for tracking.</p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Summary Cards */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                      <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-green-600 font-medium">Total Overrides</p>
+                            <p className="text-2xl font-bold text-green-800">{validationOverrides.length}</p>
+                          </div>
+                          <CheckCircle className="w-8 h-8 text-green-500" />
+                        </div>
+                      </div>
+
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-blue-600 font-medium">New Construction</p>
+                            <p className="text-2xl font-bold text-blue-800">
+                              {validationOverrides.filter(o => o.override_reason === 'New Construction').length}
+                            </p>
+                          </div>
+                          <Factory className="w-8 h-8 text-blue-500" />
+                        </div>
+                      </div>
+
+                      <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-purple-600 font-medium">Additional Card</p>
+                            <p className="text-2xl font-bold text-purple-800">
+                              {validationOverrides.filter(o => o.override_reason === 'Additional Card').length}
+                            </p>
+                          </div>
+                          <FileText className="w-8 h-8 text-purple-500" />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Detailed Overrides Table */}
+                    <div className="bg-white border border-gray-200 rounded-lg p-6">
+                      <h4 className="font-semibold text-gray-900 mb-4">Detailed Validation Overrides</h4>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Block</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Lot</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Qualifier</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Card</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Property Location</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Override Reason</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Override By</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Override Date</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {validationOverrides.map((override, idx) => (
+                              <tr key={idx} className="border-t border-gray-200 bg-green-50">
+                                <td className="px-3 py-2 font-medium">{override.block}</td>
+                                <td className="px-3 py-2 font-medium">{override.lot}</td>
+                                <td className="px-3 py-2">{override.qualifier || '-'}</td>
+                                <td className="px-3 py-2">{override.card || '1'}</td>
+                                <td className="px-3 py-2">{override.property_location}</td>
+                                <td className="px-3 py-2">
+                                  <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded font-medium">
+                                    {override.override_reason}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-2">{override.override_by || 'Manager'}</td>
+                                <td className="px-3 py-2 text-xs">
+                                  {override.override_date ? new Date(override.override_date).toLocaleDateString() : '-'}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </div>
