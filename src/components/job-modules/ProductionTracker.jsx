@@ -571,45 +571,71 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
     }
   };
 
-  // NEW: Override validation issue (FIXED - single property only)
+  // NEW: Override validation issue (FIXED - single property with COMPLETE record)
   const handleOverrideValidation = async (property) => {
     if (!overrideReason || !property) return;
 
     try {
-      // Upsert to inspection_data with override flag for SINGLE property only
-      const overrideRecord = {
+      // STEP 1: Get FULL property record from property_records using composite key
+      const { data: fullPropertyRecord, error: fetchError } = await supabase
+        .from('property_records')
+        .select('*')
+        .eq('job_id', jobData.id)
+        .eq('file_version', latestFileVersion)
+        .eq('property_composite_key', property.composite_key)
+        .single();
+
+      if (fetchError || !fullPropertyRecord) {
+        throw new Error(`Could not find property record for ${property.composite_key}`);
+      }
+
+      // STEP 2: Build COMPLETE inspection_data record with ALL fields
+      const completeOverrideRecord = {
+        // Standard fields from property_records
         job_id: jobData.id,
         file_version: latestFileVersion,
-        property_composite_key: property.composite_key,
-        block: property.block,
-        lot: property.lot,
-        qualifier: property.qualifier || '',
-        card: property.card || '1',
-        property_location: property.property_location || '',
-        property_class: property.property_class,
+        property_composite_key: fullPropertyRecord.property_composite_key,
+        block: fullPropertyRecord.property_block,
+        lot: fullPropertyRecord.property_lot,
+        qualifier: fullPropertyRecord.property_qualifier || '',
+        card: fullPropertyRecord.property_addl_card || '1',
+        property_location: fullPropertyRecord.property_location || '',
+        property_class: fullPropertyRecord.property_m4_class,
+        measure_by: fullPropertyRecord.inspection_measure_by,
+        measure_date: fullPropertyRecord.inspection_measure_date,
+        info_by_code: fullPropertyRecord.inspection_info_by,
+        list_by: fullPropertyRecord.inspection_list_by,
+        list_date: fullPropertyRecord.inspection_list_date,
+        price_by: fullPropertyRecord.inspection_price_by,
+        price_date: fullPropertyRecord.inspection_price_date,
+        
+        // Module-specific fields
+        project_start_date: projectStartDate,
+        upload_date: new Date().toISOString(),
+        
+        // Override-specific fields
         override_applied: true,
         override_reason: overrideReason,
-        override_by: 'Manager', // Could be dynamic based on user
-        override_date: new Date().toISOString(),
-        project_start_date: projectStartDate,
-        upload_date: new Date().toISOString()
+        override_by: 'Manager',
+        override_date: new Date().toISOString()
       };
 
-      const { error } = await supabase
+      // STEP 3: UPSERT complete record to inspection_data
+      const { error: upsertError } = await supabase
         .from('inspection_data')
-        .upsert(overrideRecord, {
+        .upsert(completeOverrideRecord, {
           onConflict: 'job_id,property_composite_key,file_version'
         });
 
-      if (error) throw error;
+      if (upsertError) throw upsertError;
 
       // Close modal
       setShowOverrideModal(false);
       setSelectedOverrideProperty(null);
       setOverrideReason('New Construction');
       
-      addNotification(`✅ Override applied: ${overrideReason} for ${property.composite_key}`, 'success');
-      addNotification('🔄 Reprocessing analytics with override...', 'info');
+      addNotification(`✅ Complete override record created: ${overrideReason} for ${property.composite_key}`, 'success');
+      addNotification('🔄 Reprocessing analytics with complete override...', 'info');
 
       // Trigger immediate analytics reprocessing
       setTimeout(async () => {
@@ -617,7 +643,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
       }, 1000);
 
     } catch (error) {
-      console.error('Error applying override:', error);
+      console.error('Error applying complete override:', error);
       addNotification('Error applying override: ' + error.message, 'error');
     }
   };
@@ -2621,10 +2647,8 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                                 <th className="px-3 py-2 text-left font-medium text-gray-700">Block</th>
                                 <th className="px-3 py-2 text-left font-medium text-gray-700">Lot</th>
                                 <th className="px-3 py-2 text-left font-medium text-gray-700">Qualifier</th>
-                                <th className="px-3 py-2 text-left font-medium text-gray-700">Card</th>
                                 <th className="px-3 py-2 text-left font-medium text-gray-700">Property Location</th>
                                 <th className="px-3 py-2 text-left font-medium text-gray-700">Compound Issues</th>
-                                <th className="px-3 py-2 text-left font-medium text-gray-700">Actions</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -2941,7 +2965,6 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                     {/* Detailed Overrides Table */}
                     <div className="bg-white border border-gray-200 rounded-lg p-6">
                       <h4 className="font-semibold text-gray-900 mb-4">Detailed Validation Overrides</h4>
-                      <div className="overflow-x-auto">
                         <table className="w-full text-sm">
                           <thead className="bg-gray-50">
                             <tr>
@@ -2985,7 +3008,6 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                             ))}
                           </tbody>
                         </table>
-                      </div>
                     </div>
                   </>
                 )}
