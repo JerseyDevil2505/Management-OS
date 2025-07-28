@@ -1730,8 +1730,8 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
             <button
               onClick={() => {
                 // Clear the stale flag and trigger reprocessing
-                if (onDataUpdate) {
-                  onDataUpdate({
+                if (onUpdateWorkflowStats) {
+                  onUpdateWorkflowStats({
                     ...currentWorkflowStats,
                     needsRefresh: false,
                     isProcessed: false
