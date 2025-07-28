@@ -1401,7 +1401,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
           warning_message: compoundMessage,
           inspector: property.inspector,
           severity: property.issues.length > 2 ? 'high' : 'medium',
-          composite_key: 
+          composite_key: propertyKey
         };
         
         validationIssues.push(issue);
