@@ -1450,8 +1450,8 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
       });
 
       // NEW: Update App.js central data hub
-      if (onDataUpdate) {
-        onDataUpdate({
+      if (onUpdateWorkflowStats) {
+        onUpdateWorkflowStats({
           jobId: jobData.id,
           analytics: analyticsResult,     // ✅ NOW DEFINED!
           billingAnalytics: billingResult, // ✅ NOW DEFINED!
@@ -2904,3 +2904,4 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
 };
 
 export default ProductionTracker;
+                                )
