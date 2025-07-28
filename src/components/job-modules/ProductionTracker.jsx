@@ -543,12 +543,40 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
     addNotification('Project start date unlocked for editing', 'info');
   };
 
-  // NEW: Override validation issue
+  // NEW: Undo override validation issue
+  const handleUndoOverride = async (propertyKey, overrideReason) => {
+    try {
+      // DELETE the override record entirely from inspection_data
+      const { error } = await supabase
+        .from('inspection_data')
+        .delete()
+        .eq('job_id', jobData.id)
+        .eq('file_version', latestFileVersion)
+        .eq('property_composite_key', propertyKey)
+        .eq('override_applied', true);
+
+      if (error) throw error;
+      
+      addNotification(`✅ Override removed - ${propertyKey} deleted from inspection_data`, 'success');
+      addNotification('🔄 Reprocessing analytics to reflect changes...', 'info');
+
+      // Trigger immediate analytics reprocessing
+      setTimeout(async () => {
+        await startProcessingSession();
+      }, 1000);
+
+    } catch (error) {
+      console.error('Error removing override:', error);
+      addNotification('Error removing override: ' + error.message, 'error');
+    }
+  };
+
+  // NEW: Override validation issue (FIXED - single property only)
   const handleOverrideValidation = async (property) => {
     if (!overrideReason || !property) return;
 
     try {
-      // Upsert to inspection_data with override flag
+      // Upsert to inspection_data with override flag for SINGLE property only
       const overrideRecord = {
         job_id: jobData.id,
         file_version: latestFileVersion,
@@ -580,7 +608,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
       setSelectedOverrideProperty(null);
       setOverrideReason('New Construction');
       
-      addNotification(`✅ Override applied: ${overrideReason}`, 'success');
+      addNotification(`✅ Override applied: ${overrideReason} for ${property.composite_key}`, 'success');
       addNotification('🔄 Reprocessing analytics with override...', 'info');
 
       // Trigger immediate analytics reprocessing
@@ -769,7 +797,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         const measuredDate = record.inspection_measure_date ? new Date(record.inspection_measure_date) : null;
         const listDate = record.inspection_list_date ? new Date(record.inspection_list_date) : null;
         const priceDate = record.inspection_price_date ? new Date(record.inspection_price_date) : null;
-        const propertyKey = record.property_composite_key || `${record.property_block}-${record.property_lot}-${record.property_qualifier || ''}`;
+        const propertyKey = record.property_composite_key;
 
         // Track this property's processing status
         let wasAddedToInspectionData = false;
@@ -872,6 +900,63 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         }
 
         // Skip UNASSIGNED for inspector analytics but track for missing properties
+        if (inspector === 'UNASSIGNED') {
+          reasonNotAdded = 'Inspector UNASSIGNED';
+          missingProperties.push({
+            composite_key: propertyKey,
+            block: record.property_block,
+            lot: record.property_lot,
+            qualifier: record.property_qualifier || '',
+            card: record.property_addl_card || '1',
+            property_location: record.property_location || '',
+            property_class: propertyClass,
+            reason: reasonNotAdded,
+            inspector: inspector,
+            info_by_code: infoByCode,
+            measure_date: record.inspection_measure_date,
+            validation_issues: []
+          });
+          return;
+        }
+
+        // Skip inspections before project start date (removes old inspector noise)
+        if (measuredDate && measuredDate < startDate) {
+          reasonNotAdded = 'Inspection date before project start date';
+          missingProperties.push({
+            composite_key: propertyKey,
+            block: record.property_block,
+            lot: record.property_lot,
+            qualifier: record.property_qualifier || '',
+            card: record.property_addl_card || '1',
+            property_location: record.property_location || '',
+            property_class: propertyClass,
+            reason: reasonNotAdded,
+            inspector: inspector,
+            info_by_code: infoByCode,
+            measure_date: record.inspection_measure_date,
+            validation_issues: []
+          });
+          return;
+        }
+
+        // Skip inspectors with invalid initials (not in employee database)
+        if (!employeeData[inspector]) {
+          reasonNotAdded = `Inspector ${inspector} not found in employee database`;
+          missingProperties.push({
+            composite_key: propertyKey,
+            block: record.property_block,
+            lot: record.property_lot,
+            qualifier: record.property_qualifier || '',
+            property_location: record.property_location || '',
+            property_class: propertyClass,
+            reason: reasonNotAdded,
+            inspector: inspector,
+            info_by_code: infoByCode,
+            measure_date: record.inspection_measure_date,
+            validation_issues: []
+          });
+          return;
+        }
         if (inspector === 'UNASSIGNED') {
           reasonNotAdded = 'Inspector UNASSIGNED';
           missingProperties.push({
@@ -2543,7 +2628,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                             <tbody>
                               {validationReport.detailed_issues[selectedInspectorIssues].map((issue, idx) => {
                                 // Check if this issue has been overridden
-                                const propertyKey = `${issue.block}-${issue.lot}-${issue.qualifier || ''}`;
+                                const propertyKey = issue.composite_key || `${issue.block}-${issue.lot}-${issue.qualifier || ''}`;
                                 const isOverridden = overrideMap && overrideMap[propertyKey]?.override_applied;
                                 
                                 return (
@@ -2567,9 +2652,12 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                                     </td>
                                     <td className="px-3 py-2">
                                       {isOverridden ? (
-                                        <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded font-medium">
-                                          Overridden
-                                        </span>
+                                        <button
+                                          onClick={() => handleUndoOverride(propertyKey, overrideMap[propertyKey]?.override_reason)}
+                                          className="px-2 py-1 bg-orange-600 text-white text-xs rounded hover:bg-orange-700"
+                                        >
+                                          Undo Override
+                                        </button>
                                       ) : (
                                         <button
                                           onClick={() => {
@@ -2858,6 +2946,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                               <th className="px-3 py-2 text-left font-medium text-gray-700">Override Reason</th>
                               <th className="px-3 py-2 text-left font-medium text-gray-700">Override By</th>
                               <th className="px-3 py-2 text-left font-medium text-gray-700">Override Date</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Actions</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -2876,6 +2965,14 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                                 <td className="px-3 py-2">{override.override_by || 'Manager'}</td>
                                 <td className="px-3 py-2 text-xs">
                                   {override.override_date ? new Date(override.override_date).toLocaleDateString() : '-'}
+                                </td>
+                                <td className="px-3 py-2">
+                                  <button
+                                    onClick={() => handleUndoOverride(override.property_composite_key, override.override_reason)}
+                                    className="px-2 py-1 bg-orange-600 text-white text-xs rounded hover:bg-orange-700"
+                                  >
+                                    Undo Override
+                                  </button>
                                 </td>
                               </tr>
                             ))}
