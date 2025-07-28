@@ -774,6 +774,49 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         // Check for existing validation override
         const hasValidationOverride = overrideMapData[propertyKey]?.override_applied;
 
+        // EARLY EXIT: Skip ALL validation if property has been overridden
+        if (hasValidationOverride) {
+          debugLog('VALIDATION', `Property ${propertyKey} has override - skipping all validation`);
+          
+          // Count as valid inspection for progress tracking
+          if (classBreakdown[propertyClass]) {
+            classBreakdown[propertyClass].inspected++;
+            billingByClass[propertyClass].inspected++;
+            billingByClass[propertyClass].billable++;
+          }
+
+          // Add to inspection_data batch with override info
+          const inspectionRecord = {
+            job_id: jobData.id,
+            file_version: latestFileVersion,
+            property_composite_key: propertyKey,
+            block: record.property_block,
+            lot: record.property_lot,
+            qualifier: record.property_qualifier || '',
+            card: record.property_addl_card || '1',
+            property_location: record.property_location || '',
+            property_class: propertyClass,
+            measure_by: inspector,
+            measure_date: record.inspection_measure_date,
+            info_by_code: infoByCode,
+            list_by: record.inspection_list_by,
+            list_date: record.inspection_list_date,
+            price_by: record.inspection_price_by,
+            price_date: record.inspection_price_date,
+            project_start_date: projectStartDate,
+            source_file_name: record.source_file_name,
+            upload_date: new Date().toISOString(),
+            override_applied: true,
+            override_reason: overrideMapData[propertyKey].override_reason
+          };
+
+          inspectionDataBatch.push(inspectionRecord);
+          wasAddedToInspectionData = true;
+          
+          // Skip to next property - no validation needed
+          return;
+        }
+
         // Track this property's processing status
         let wasAddedToInspectionData = false;
         let reasonNotAdded = '';
@@ -982,24 +1025,23 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
           addValidationIssue(`Residential inspector on commercial property`);
         }
 
-        // NEW: Zero improvement validation with override protection
-        if (record.values_mod_improvement === 0 && !hasListingData && !hasValidationOverride) {
+        // NEW: Zero improvement validation (no longer needs override protection - handled above)
+        if (record.values_mod_improvement === 0 && !hasListingData) {
           addValidationIssue('Zero improvement property missing listing data');
         }
 
-        // NEW: Process valid inspections OR overridden properties
-        if ((isValidInspection && hasValidInfoBy && hasValidMeasuredBy && hasValidMeasuredDate) || hasValidationOverride) {
+        // NEW: Process valid inspections (overrides already handled above)
+        if (isValidInspection && hasValidInfoBy && hasValidMeasuredBy && hasValidMeasuredDate) {
           
-          // Count for manager progress (valid inspections OR overrides against total properties)
+          // Count for manager progress (valid inspections against total properties)
           if (classBreakdown[propertyClass]) {
             classBreakdown[propertyClass].inspected++;
             billingByClass[propertyClass].inspected++;
             billingByClass[propertyClass].billable++;
           }
 
-          // Inspector analytics - count valid inspections (NOT overrides for individual inspector credit)
-          if (!hasValidationOverride && isValidInspection) {
-            inspectorStats[inspector].totalInspected++;
+          // Inspector analytics - count valid inspections only
+          inspectorStats[inspector].totalInspected++;
             
             const workDayString = measuredDate.toISOString().split('T')[0];
             inspectorStats[inspector].allWorkDays.add(workDayString);
@@ -1063,7 +1105,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
             }
           }
 
-          // NEW: Prepare for inspection_data UPSERT (include override info)
+          // NEW: Prepare for inspection_data UPSERT
           const inspectionRecord = {
             job_id: jobData.id,
             file_version: latestFileVersion,
@@ -1089,13 +1131,6 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
               severity: propertyIssues[propertyKey].issues.length > 2 ? 'high' : 'medium'
             } : null
           };
-
-          // Add override information if exists
-          if (hasValidationOverride) {
-            inspectionRecord.override_applied = true;
-            inspectionRecord.override_reason = overrideMapData[propertyKey].override_reason;
-            // Keep existing override metadata (don't overwrite override_by, override_date)
-          }
 
           inspectionDataBatch.push(inspectionRecord);
           wasAddedToInspectionData = true;
