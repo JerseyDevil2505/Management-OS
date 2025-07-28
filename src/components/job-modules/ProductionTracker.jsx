@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Factory, Settings, Download, RefreshCw, AlertTriangle, CheckCircle, TrendingUp, DollarSign, Users, Calendar, X, ChevronDown, ChevronUp, Eye, FileText, Lock, Unlock, Save } from 'lucide-react';
 import { supabase, jobService } from '../../lib/supabaseClient';
 
-const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyRecordsCount, onUpdateWorkflowStats }) => {
+const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyRecordsCount, onDataUpdate }) => {
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [processed, setProcessed] = useState(false);
@@ -1450,8 +1450,8 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
       });
 
       // NEW: Update App.js central data hub
-      if (onUpdateWorkflowStats) {
-        onUpdateWorkflowStats({
+      if (onDataUpdate) {
+        onDataUpdate({
           jobId: jobData.id,
           analytics: analyticsResult,     // ✅ NOW DEFINED!
           billingAnalytics: billingResult, // ✅ NOW DEFINED!
@@ -1730,8 +1730,8 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
             <button
               onClick={() => {
                 // Clear the stale flag and trigger reprocessing
-                if (onUpdateWorkflowStats) {
-                  onUpdateWorkflowStats({
+                if (onDataUpdate) {
+                  onDataUpdate({
                     ...currentWorkflowStats,
                     needsRefresh: false,
                     isProcessed: false
@@ -2904,4 +2904,3 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
 };
 
 export default ProductionTracker;
-                                
