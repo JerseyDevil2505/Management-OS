@@ -1103,7 +1103,6 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                 debugLog('PRICING', `❌ No pricing counted for ${inspector} on ${propertyKey} - Vendor: ${currentVendor}, isPricedCode: ${isPricedCode}`);
               }
             }
-          }
 
           // NEW: Prepare for inspection_data UPSERT
           const inspectionRecord = {
