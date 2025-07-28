@@ -457,7 +457,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
       
       setOriginalCategoryConfig(configToSave);
       setHasUnsavedChanges(false);
-      addNotification('✅ Configuration and analytics saved', 'success');
+      
       debugLog('PERSISTENCE', '✅ Saved config and FRESH analytics to job record', analyticsToSave.analytics);
     } catch (error) {
       console.error('Error saving configuration:', error);
@@ -1401,7 +1401,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
           warning_message: compoundMessage,
           inspector: property.inspector,
           severity: property.issues.length > 2 ? 'high' : 'medium',
-          composite_key: propertyKey
+          composite_key: 
         };
         
         validationIssues.push(issue);
