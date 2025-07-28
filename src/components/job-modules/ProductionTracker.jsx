@@ -2903,5 +2903,5 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
   );
 };
 
-export default ProductionTracker);
+export default ProductionTracker;
                                 
