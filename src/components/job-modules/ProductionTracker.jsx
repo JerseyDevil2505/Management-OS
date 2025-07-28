@@ -2965,7 +2965,6 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                     {/* Detailed Overrides Table */}
                     <div className="bg-white border border-gray-200 rounded-lg p-6">
                       <h4 className="font-semibold text-gray-900 mb-4">Detailed Validation Overrides</h4>
-                      <div className="overflow-x-auto">
                         <table className="w-full text-sm">
                           <thead className="bg-gray-50">
                             <tr>
@@ -3009,7 +3008,6 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                             ))}
                           </tbody>
                         </table>
-                      </div>
                     </div>
                   </>
                 )}
