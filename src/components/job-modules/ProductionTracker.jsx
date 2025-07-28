@@ -2705,11 +2705,6 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                                         </button>
                                       )}
                                     </td>
-                                        >
-                                          Override
-                                        </button>
-                                      )}
-                                    </td>
                                   </tr>
                                 );
                               })}
