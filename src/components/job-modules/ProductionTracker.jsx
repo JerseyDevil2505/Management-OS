@@ -871,10 +871,6 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
           return;
         }
 
-        // Track this property's processing status
-        let wasAddedToInspectionData = false;
-        let reasonNotAdded = '';
-
         // Skip UNASSIGNED for inspector analytics but track for missing properties
         if (inspector === 'UNASSIGNED') {
           reasonNotAdded = 'Inspector UNASSIGNED';
