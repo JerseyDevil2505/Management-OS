@@ -671,6 +671,34 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         ...(infoByCategoryConfig.special || []) // NEW: Include special codes as valid
       ];
 
+      // NEW: Load existing validation overrides FIRST, before processing
+      debugLog('ANALYTICS', 'Loading existing validation overrides...');
+      const { data: existingOverrides, error: overrideError } = await supabase
+        .from('inspection_data')
+        .select('property_composite_key, override_applied, override_reason')
+        .eq('job_id', jobData.id)
+        .eq('file_version', latestFileVersion)
+        .eq('override_applied', true);
+
+      if (overrideError) {
+        console.warn('Could not load existing overrides:', overrideError);
+      }
+
+      // Create override lookup map for fast checking
+      const overrideMapData = {};
+      (existingOverrides || []).forEach(override => {
+        overrideMapData[override.property_composite_key] = {
+          override_applied: override.override_applied,
+          override_reason: override.override_reason
+        };
+      });
+      
+      // Set override map in component state for UI access
+      setOverrideMap(overrideMapData);
+      setValidationOverrides(existingOverrides || []);
+      
+      debugLog('ANALYTICS', `Loaded ${existingOverrides?.length || 0} existing validation overrides`);
+
       // Load ALL records using pagination to bypass Supabase 1000 limit
       let allRecords = [];
       let start = 0;
