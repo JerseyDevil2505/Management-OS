@@ -771,21 +771,75 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         const priceDate = record.inspection_price_date ? new Date(record.inspection_price_date) : null;
         const propertyKey = record.property_composite_key || `${record.property_block}-${record.property_lot}-${record.property_qualifier || ''}`;
 
-        // Check for existing validation override
+        // Track this property's processing status
+        let wasAddedToInspectionData = false;
+        let reasonNotAdded = '';
+
+        // FIXED: Always count ALL properties for denominators (manager progress view)
+        if (classBreakdown[propertyClass]) {
+          classBreakdown[propertyClass].total++;
+          billingByClass[propertyClass].total++;
+        }
+
+        // 🔧 FIX: Check for existing validation override FIRST - COMPLETELY SKIP if overridden
         const hasValidationOverride = overrideMapData[propertyKey]?.override_applied;
 
-        // EARLY EXIT: Skip ALL validation if property has been overridden
         if (hasValidationOverride) {
-          debugLog('VALIDATION', `Property ${propertyKey} has override - skipping all validation`);
+          debugLog('VALIDATION', `✅ Property ${propertyKey} has existing override - treating as VALID INSPECTION`);
           
-          // Count as valid inspection for progress tracking
+          // 🔧 FIX: Count overridden properties as VALID INSPECTIONS for progress tracking
           if (classBreakdown[propertyClass]) {
             classBreakdown[propertyClass].inspected++;
             billingByClass[propertyClass].inspected++;
             billingByClass[propertyClass].billable++;
           }
 
-          // Add to inspection_data batch with override info
+          // 🔧 FIX: Initialize inspector stats for overridden properties
+          if (!inspectorStats[inspector] && employeeData[inspector]) {
+            const employeeInfo = employeeData[inspector] || {};
+            inspectorStats[inspector] = {
+              name: employeeInfo.name || inspector,
+              fullName: employeeInfo.fullName || inspector,
+              inspector_type: employeeInfo.inspector_type,
+              totalInspected: 0,
+              residentialInspected: 0,
+              commercialInspected: 0,
+              entry: 0,
+              refusal: 0,
+              priced: 0,
+              allWorkDays: new Set(),
+              residentialWorkDays: new Set(),
+              commercialWorkDays: new Set(),
+              pricingWorkDays: new Set()
+            };
+            inspectorIssuesMap[inspector] = [];
+          }
+
+          // 🔧 FIX: Count overridden properties toward inspector totals
+          if (inspectorStats[inspector]) {
+            inspectorStats[inspector].totalInspected++;
+            
+            // Add to work days if we have a valid date
+            if (measuredDate) {
+              const workDayString = measuredDate.toISOString().split('T')[0];
+              inspectorStats[inspector].allWorkDays.add(workDayString);
+              
+              const isResidentialProperty = ['2', '3A'].includes(propertyClass);
+              const isCommercialProperty = ['4A', '4B', '4C'].includes(propertyClass);
+              
+              if (isResidentialProperty) {
+                inspectorStats[inspector].residentialInspected++;
+                inspectorStats[inspector].residentialWorkDays.add(workDayString);
+              }
+              
+              if (isCommercialProperty) {
+                inspectorStats[inspector].commercialInspected++;
+                inspectorStats[inspector].commercialWorkDays.add(workDayString);
+              }
+            }
+          }
+
+          // Add to inspection_data batch with override info (preserve existing override)
           const inspectionRecord = {
             job_id: jobData.id,
             file_version: latestFileVersion,
@@ -813,19 +867,13 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
           inspectionDataBatch.push(inspectionRecord);
           wasAddedToInspectionData = true;
           
-          // Skip to next property - no validation needed
+          // 🔧 FIX: Skip to next property - NO validation needed, NO missing properties report
           return;
         }
 
         // Track this property's processing status
         let wasAddedToInspectionData = false;
         let reasonNotAdded = '';
-
-        // FIXED: Always count ALL properties for denominators (manager progress view)
-        if (classBreakdown[propertyClass]) {
-          classBreakdown[propertyClass].total++;
-          billingByClass[propertyClass].total++;
-        }
 
         // Skip UNASSIGNED for inspector analytics but track for missing properties
         if (inspector === 'UNASSIGNED') {
