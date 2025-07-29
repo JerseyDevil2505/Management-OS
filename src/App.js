@@ -84,14 +84,26 @@ function App() {
     });
     console.log('📥 App.js RECEIVING from PT:', {
       newStats,
-      entryRate: newStats.jobEntryRate,
-      validInspections: newStats.validInspections,
+      entryRate: newStats.jobEntryRate || newStats.analytics?.jobEntryRate,
+      validInspections: newStats.validInspections || newStats.analytics?.validInspections,
       isProcessed: newStats.isProcessed
     });
+    
+    // Extract the flat structure from nested analytics if needed
+    const flatStats = newStats.analytics ? {
+      ...newStats.analytics,  // Flatten the analytics object
+      billingAnalytics: newStats.billingAnalytics,
+      validationReport: newStats.validationReport,
+      missingPropertiesReport: newStats.missingPropertiesReport,
+      validationOverrides: newStats.validationOverrides,
+      overrideMap: newStats.overrideMap,
+      lastProcessed: newStats.lastProcessed || new Date().toISOString()
+    } : newStats;
+    
     console.log('🔄 App.js AFTER merge will be:', {
-      merged: { ...jobWorkflowStats[jobId], ...newStats },
-      entryRate: { ...jobWorkflowStats[jobId], ...newStats }.jobEntryRate,
-      validInspections: { ...jobWorkflowStats[jobId], ...newStats }.validInspections
+      merged: { ...jobWorkflowStats[jobId], ...flatStats },
+      entryRate: flatStats.jobEntryRate,
+      validInspections: flatStats.validInspections
     });
 
     // Update local state immediately for real-time UI
@@ -99,7 +111,7 @@ function App() {
       ...prev,
       [jobId]: {
         ...prev[jobId],
-        ...newStats,
+        ...flatStats,  // Use the flattened stats
         isProcessed: true,
         lastUpdated: new Date().toISOString()
       }
