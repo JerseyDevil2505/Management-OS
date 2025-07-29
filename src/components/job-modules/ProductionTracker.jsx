@@ -56,6 +56,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
   const [showOverrideModal, setShowOverrideModal] = useState(false);
   const [selectedOverrideProperty, setSelectedOverrideProperty] = useState(null);
   const [overrideReason, setOverrideReason] = useState('New Construction');
+  const [customOverrideReason, setCustomOverrideReason] = useState('');
   const [overrideMap, setOverrideMap] = useState({});
   const [validationOverrides, setValidationOverrides] = useState([]);
 
@@ -736,7 +737,13 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
 
   // Override validation issue (single property with COMPLETE record)
   const handleOverrideValidation = async (property) => {
-    if (!overrideReason || !property) return;
+    // Use custom reason if "Other" is selected, otherwise use dropdown value
+    const finalOverrideReason = overrideReason === 'Other' ? customOverrideReason : overrideReason;
+    
+    if (!finalOverrideReason || !property) {
+      addNotification('Please provide an override reason', 'error');
+      return;
+    }
 
     try {
       // Get FULL property record from property_records using composite key
@@ -778,7 +785,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         
         // Override-specific fields
         override_applied: true,
-        override_reason: overrideReason,
+        override_reason: finalOverrideReason,
         override_by: 'Manager',
         override_date: new Date().toISOString()
       };
@@ -796,6 +803,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
       setShowOverrideModal(false);
       setSelectedOverrideProperty(null);
       setOverrideReason('New Construction');
+      setCustomOverrideReason('');
       
       // Immediately reload validation overrides to get fresh data with all fields
       await loadValidationOverrides();
@@ -844,7 +852,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         debugLog('OVERRIDE', `✅ Override created and App.js notified - new total: ${adjustedAnalytics.validInspections}`);
       }
       
-      addNotification(`✅ Complete override record created: ${overrideReason} for ${property.composite_key}`, 'success');
+      addNotification(`✅ Complete override record created: ${finalOverrideReason} for ${property.composite_key}`, 'success');
       addNotification('🔄 Reprocessing analytics with complete override...', 'info');
 
       // Trigger immediate analytics reprocessing
@@ -860,11 +868,16 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
 
   // NEW: Handle override during processing modal
   const handleProcessingOverride = (propertyKey, reason) => {
+    // Handle custom reason if needed
+    const finalReason = reason === 'Other' ? 
+      (pendingValidations.find(v => v.composite_key === propertyKey)?.custom_override_reason || 'Other') : 
+      reason;
+    
     setProcessedValidationDecisions(prev => ({
       ...prev,
       [propertyKey]: {
         action: 'override',
-        reason: reason,
+        reason: finalReason,
         timestamp: new Date().toISOString()
       }
     }));
@@ -873,7 +886,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
     setPendingValidations(prev => 
       prev.map(val => 
         val.composite_key === propertyKey 
-          ? { ...val, overridden: true, override_reason: reason }
+          ? { ...val, overridden: true, override_reason: finalReason }
           : val
       )
     );
@@ -901,10 +914,9 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
 
   // NEW: Continue processing after validation decisions
   const continueProcessingAfterValidations = async () => {
-    // Mark that we're done reviewing but don't close modal
+    // Just unpause - this will allow processAnalytics to continue
     setProcessingPaused(false);
-    // Set flag that processing is complete
-    setProcessingComplete(true);
+    // Don't set processingComplete here - let the actual processing finish first
   };
 
   // NEW: Close processing modal after everything is done
@@ -932,6 +944,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
     setProcessedValidationDecisions({});
     setLoadedFromDatabase(false); // Reset database load flag
     setProcessingComplete(false);
+    setCustomOverrideReason(''); // Reset custom override reason
     addNotification('🔄 Session reset - settings unlocked', 'info');
   };
 
@@ -2268,16 +2281,43 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                                 >
                                   <option value="New Construction">New Construction</option>
                                   <option value="Additional Card">Additional Card</option>
+                                  <option value="Other">Other (Custom)</option>
                                 </select>
                               </div>
                               
+                              {currentValidation.override_reason === 'Other' && (
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Custom Reason:
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={currentValidation.custom_override_reason || ''}
+                                    onChange={(e) => {
+                                      setPendingValidations(prev => 
+                                        prev.map(v => 
+                                          v.composite_key === currentValidation.composite_key 
+                                            ? { ...v, custom_override_reason: e.target.value }
+                                            : v
+                                        )
+                                      );
+                                    }}
+                                    placeholder="Enter custom override reason"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                  />
+                                </div>
+                              )}
+                              
                               <div className="flex space-x-3">
                                 <button
-                                  onClick={() => handleProcessingOverride(
-                                    currentValidation.composite_key, 
-                                    currentValidation.override_reason || 'New Construction'
-                                  )}
+                                  onClick={() => {
+                                    const finalReason = currentValidation.override_reason === 'Other' 
+                                      ? currentValidation.custom_override_reason 
+                                      : currentValidation.override_reason || 'New Construction';
+                                    handleProcessingOverride(currentValidation.composite_key, finalReason);
+                                  }}
                                   className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium"
+                                  disabled={currentValidation.override_reason === 'Other' && !currentValidation.custom_override_reason}
                                 >
                                   Override Issue
                                 </button>
@@ -3632,8 +3672,25 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
               >
                 <option value="New Construction">New Construction</option>
                 <option value="Additional Card">Additional Card</option>
+                <option value="Other">Other (Custom)</option>
               </select>
             </div>
+            
+            {overrideReason === 'Other' && (
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Custom Reason:
+                </label>
+                <input
+                  type="text"
+                  value={customOverrideReason}
+                  onChange={(e) => setCustomOverrideReason(e.target.value)}
+                  placeholder="Enter custom override reason"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  autoFocus
+                />
+              </div>
+            )}
             
             <div className="flex justify-end space-x-3">
               <button
@@ -3641,6 +3698,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                   setShowOverrideModal(false);
                   setSelectedOverrideProperty(null);
                   setOverrideReason('New Construction');
+                  setCustomOverrideReason('');
                 }}
                 className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
               >
@@ -3649,6 +3707,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
               <button
                 onClick={() => handleOverrideValidation(selectedOverrideProperty)}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                disabled={overrideReason === 'Other' && !customOverrideReason}
               >
                 Save Override
               </button>
