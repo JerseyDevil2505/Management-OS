@@ -1092,12 +1092,10 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
             inspection_measure_date,
             inspection_price_by,
             inspection_price_date,
-            values_mod_improvement,
-            is_assigned_property
+            values_mod_improvement
           `)
           .eq('job_id', jobData.id)
           .eq('file_version', latestFileVersion)
-          .eq('is_assigned_property', true)  // ONLY process assigned properties
           .order('property_block', { ascending: true })
           .order('property_lot', { ascending: true })
           .range(start, start + batchSize - 1);
