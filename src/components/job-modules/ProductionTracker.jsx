@@ -59,11 +59,12 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
   const [overrideMap, setOverrideMap] = useState({});
   const [validationOverrides, setValidationOverrides] = useState([]);
 
-  // NEW: Processing modal for validation during processing
+  // NEW: Processing modal state for validation during processing
   const [pendingValidations, setPendingValidations] = useState([]);
   const [showProcessingModal, setShowProcessingModal] = useState(false);
   const [processingPaused, setProcessingPaused] = useState(false);
   const [processedValidationDecisions, setProcessedValidationDecisions] = useState({});
+  const [processingComplete, setProcessingComplete] = useState(false); // NEW: Track when processing is done
 
   // NEW: Smart data staleness detection
   const isDataStale = currentWorkflowStats?.needsRefresh && 
@@ -75,7 +76,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
     setNotifications(prev => [...prev, notification]);
     
     setTimeout(() => {
-      setNotifications(prev => prev.filter(n => n.id !== id));
+      setNotifications(prev => prev.filter(n => n.id !== notification.id));
     }, 5000);
   };
 
@@ -900,10 +901,19 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
 
   // NEW: Continue processing after validation decisions
   const continueProcessingAfterValidations = async () => {
-    // Don't close the modal yet - just mark that we're done reviewing
+    // Mark that we're done reviewing but don't close modal
     setProcessingPaused(false);
-    // The modal will close when pendingValidations is cleared in processAnalytics
-    addNotification('📊 Continuing analytics processing with validation decisions...', 'info');
+    // Set flag that processing is complete
+    setProcessingComplete(true);
+  };
+
+  // NEW: Close processing modal after everything is done
+  const closeProcessingModal = () => {
+    setPendingValidations([]);
+    setProcessedValidationDecisions({});
+    setShowProcessingModal(false);
+    setProcessingComplete(false);
+    addNotification('✅ Processing complete with validation decisions applied', 'success');
   };
 
   // Reset session
@@ -921,6 +931,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
     setPendingValidations([]);
     setProcessedValidationDecisions({});
     setLoadedFromDatabase(false); // Reset database load flag
+    setProcessingComplete(false);
     addNotification('🔄 Session reset - settings unlocked', 'info');
   };
 
@@ -950,55 +961,6 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
     }
   }, [jobData?.id, latestFileVersion]);
 
-  // REMOVED: This useEffect was causing race condition by loading stale data from App.js
-  // ProductionTracker trusts its own loadPersistedAnalytics() as the source of truth
-  /*
-  useEffect(() => {
-    if (currentWorkflowStats && currentWorkflowStats.analytics) {
-      debugLog('APP_INTEGRATION', '🔍 Checking currentWorkflowStats vs local state');
-      
-      // CRITICAL: Only load from currentWorkflowStats if we haven't loaded from database
-      if (!loadedFromDatabase && !analytics && !processed) {
-        debugLog('APP_INTEGRATION', '✅ Loading data from currentWorkflowStats - no database load happened yet');
-        
-        // Check if we need to adjust for current overrides
-        const loadCurrentOverrides = async () => {
-          const { data: currentOverrides, error } = await supabase
-            .from('inspection_data')
-            .select('property_composite_key, override_applied')
-            .eq('job_id', jobData.id)
-            .eq('file_version', latestFileVersion)
-            .eq('override_applied', true);
-
-          if (!error && currentOverrides) {
-            const currentOverrideCount = currentOverrides.length;
-            const workflowOverrideCount = currentWorkflowStats.validationOverrides?.length || 0;
-            
-            // If database has more overrides than workflow stats, we need to reprocess
-            if (currentOverrideCount > workflowOverrideCount) {
-              debugLog('APP_INTEGRATION', `Database has ${currentOverrideCount} overrides but currentWorkflowStats only knows about ${workflowOverrideCount}. Need to reprocess.`);
-              // Don't load stale data - force a reprocess instead
-              return;
-            }
-          }
-          
-          // Data is current, safe to load
-          setAnalytics(currentWorkflowStats.analytics);
-          setBillingAnalytics(currentWorkflowStats.billingAnalytics);
-          setValidationReport(currentWorkflowStats.validationReport);
-          setMissingPropertiesReport(currentWorkflowStats.missingPropertiesReport);
-          setProcessed(true);
-          setSettingsLocked(true);
-        };
-        
-        loadCurrentOverrides();
-      } else {
-        debugLog('APP_INTEGRATION', '⏭️ Skipping currentWorkflowStats - already loaded from database or processed locally');
-      }
-    }
-  }, [currentWorkflowStats]);
-  */
-
   // Track unsaved changes
   useEffect(() => {
     const hasChanges = JSON.stringify(infoByCategoryConfig) !== JSON.stringify(originalCategoryConfig);
@@ -1027,7 +989,8 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         fileVersion: latestFileVersion,
         startDate: projectStartDate,
         categoryConfig: infoByCategoryConfig,
-        detectedVendor: actualVendor
+        detectedVendor: actualVendor,
+        hasAssignments: jobData.has_property_assignments // Log assignment status
       });
 
       // Get all valid InfoBy codes for validation
@@ -1067,15 +1030,16 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
       
       debugLog('ANALYTICS', `Loaded ${existingOverrides?.length || 0} existing validation overrides`);
 
-      // Load ALL records using pagination to bypass Supabase 1000 limit
+      // Load ALL records using pagination to bypass Supabase 1000 limit - WITH ASSIGNMENT FILTERING
       let allRecords = [];
       let start = 0;
       const batchSize = 1000;
       
-      debugLog('ANALYTICS', 'Loading all property records using pagination...');
+      debugLog('ANALYTICS', `Loading ${jobData.has_property_assignments ? 'ASSIGNED' : 'ALL'} property records using pagination...`);
       
       while (true) {
-        const { data: batchData, error: batchError } = await supabase
+        // Build base query
+        let query = supabase
           .from('property_records')
           .select(`
             property_composite_key,
@@ -1095,7 +1059,16 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
             values_mod_improvement
           `)
           .eq('job_id', jobData.id)
-          .eq('file_version', latestFileVersion)
+          .eq('file_version', latestFileVersion);
+
+        // ADD ASSIGNMENT FILTER IF NEEDED
+        if (jobData.has_property_assignments) {
+          query = query.eq('is_assigned_property', true);
+          debugLog('ANALYTICS', '🎯 Filtering for assigned properties only');
+        }
+
+        // Execute query with ordering and pagination
+        const { data: batchData, error: batchError } = await query
           .order('property_block', { ascending: true })
           .order('property_lot', { ascending: true })
           .range(start, start + batchSize - 1);
@@ -1871,10 +1844,10 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
       setValidationReport(validationReportData);
       setMissingPropertiesReport(missingPropertiesReportData);
 
-      // Clear modal state only after all processing is complete
-      setPendingValidations([]);
-      setProcessedValidationDecisions({});
-      setShowProcessingModal(false);
+      // DON'T clear modal state here - wait for user to close it
+      // setPendingValidations([]);
+      // setProcessedValidationDecisions({});
+      // setShowProcessingModal(false);
 
       debugLog('ANALYTICS', '✅ Manager-focused analytics processing complete', {
         totalRecords: rawData.length,
@@ -1884,8 +1857,9 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         commercialComplete: analyticsResult.commercialCompletePercent,
         pricingComplete: analyticsResult.pricingCompletePercent,
         persistedRecords: inspectionDataBatch.length,
-        jobEntryRate: analyticsResult.jobEntryRate, // Should now be 61%
-        totalClass2And3AProperties // Should be 711
+        jobEntryRate: analyticsResult.jobEntryRate,
+        totalClass2And3AProperties,
+        hasAssignments: jobData.has_property_assignments
       });
 
       return { analyticsResult, billingResult, validationReportData, missingPropertiesReportData };
@@ -2367,12 +2341,21 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                   Skipped properties will remain as validation errors.
                 </div>
                 <button
-                  onClick={continueProcessingAfterValidations}
+                  onClick={() => {
+                    if (processingPaused) {
+                      continueProcessingAfterValidations();
+                    } else {
+                      // Processing is done, close the modal
+                      closeProcessingModal();
+                    }
+                  }}
                   className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
                 >
-                  {pendingValidations.every(v => v.overridden || v.skipped) 
-                    ? 'All Reviewed - Continue Processing' 
-                    : 'Continue Processing'}
+                  {processingPaused 
+                    ? (pendingValidations.every(v => v.overridden || v.skipped) 
+                        ? 'All Reviewed - Continue Processing' 
+                        : 'Continue Processing')
+                    : '✅ Close and Complete'}
                 </button>
               </div>
             </div>
@@ -2380,7 +2363,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         </div>
       )}
 
-      {/* Header */}
+      {/* Header with Assignment Status */}
       <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border-2 border-blue-200 p-6">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center">
@@ -2393,6 +2376,13 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                   {detectedVendor} Format
                 </span>}
               </p>
+            </div>
+          </div>
+          {/* Assignment Status in top right */}
+          <div className="text-right">
+            <div className="text-sm font-medium text-gray-700">Special Assignments:</div>
+            <div className={`text-lg font-bold ${jobData.has_property_assignments ? 'text-purple-600' : 'text-gray-600'}`}>
+              {jobData.has_property_assignments ? 'YES' : 'NO'}
             </div>
           </div>
         </div>
