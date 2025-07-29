@@ -819,7 +819,10 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
     }
 
     try {
-      // Show processing modal (keep create job modal open in background to prevent hooks error)
+      // Close create job modal first
+      setShowCreateJob(false);
+      
+      // Show processing modal
       setShowProcessingModal(true);
       setProcessing(true);
       
@@ -1423,7 +1426,29 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
                       setShowProcessingModal(false);
                       setProcessingResults(null);
                       resetProcessingStatus();
-                      closeJobModal();
+                      // Reset form data
+                      setNewJob({
+                        name: '',
+                        ccddCode: '',
+                        municipality: '',
+                        county: '',
+                        state: 'NJ',
+                        dueDate: '',
+                        assignedManagers: [],
+                        sourceFile: null,
+                        codeFile: null,
+                        vendor: null,
+                        vendorDetection: null,
+                        percentBilled: 0.00
+                      });
+                      setFileAnalysis({
+                        sourceFile: null,
+                        codeFile: null,
+                        detectedVendor: null,
+                        isValid: false,
+                        propertyCount: 0,
+                        codeCount: 0
+                      });
                       // TEMPORARILY COMMENTED OUT FOR TESTING
                       // if (onJobProcessingComplete) {
                       //   onJobProcessingComplete();
