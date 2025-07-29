@@ -15,12 +15,21 @@ function App() {
   // Central module state management for ALL jobs using workflow_stats
   const [jobWorkflowStats, setJobWorkflowStats] = useState({});
   const [isLoadingWorkflowStats, setIsLoadingWorkflowStats] = useState(false);
+  
+  // ADD: Lock to prevent refreshes during job creation
+  const [isCreatingJob, setIsCreatingJob] = useState(false);
 
   // 🔧 BACKEND ENHANCEMENT: Add metrics refresh trigger for AdminJobManagement
   const [metricsRefreshTrigger, setMetricsRefreshTrigger] = useState(0);
 
   // Load persisted workflow stats for all active jobs
   const loadAllJobWorkflowStats = useCallback(async () => {
+    // CRITICAL: Don't refresh while a job is being created
+    if (isCreatingJob) {
+      console.log('⏸️ Skipping workflow stats refresh - job creation in progress');
+      return;
+    }
+    
     setIsLoadingWorkflowStats(true);
     try {
       // Get all active jobs with their workflow stats
@@ -62,7 +71,7 @@ function App() {
     } finally {
       setIsLoadingWorkflowStats(false);
     }
-  }, []);
+  }, [isCreatingJob]); // Add dependency on creation lock
 
   // Load workflow stats on app startup
   useEffect(() => {
@@ -246,14 +255,19 @@ function App() {
     console.log('📊 App.js: File processed, preserved all ProductionTracker state including start date');
   };
 
-  // 🔧 FIX: Defer job processing completion state updates to prevent React Error #301
-  const handleJobProcessingComplete = () => {
+  // 🔧 FIX: Make callback more defensive and properly memoized
+  const handleJobProcessingComplete = useCallback(() => {
     console.log('🔄 App.js: Job processing completed, refreshing metrics');
-    // Defer the state update to the next tick to prevent Error #301
-    setTimeout(() => {
-      setMetricsRefreshTrigger(prev => prev + 1);
-    }, 0);
-  };
+    
+    // Double defer to ensure AdminJobManagement has finished all its state updates
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        setMetricsRefreshTrigger(prev => prev + 1);
+        // Also refresh the job stats to get the new job
+        loadAllJobWorkflowStats();
+      }, 100); // Give a bit more time for modal cleanup
+    });
+  }, [loadAllJobWorkflowStats]); // Include dependency
 
   return (
     <div className="App">
@@ -362,6 +376,13 @@ function App() {
             isLoadingMetrics={isLoadingWorkflowStats}
             metricsRefreshTrigger={metricsRefreshTrigger}
             onJobProcessingComplete={handleJobProcessingComplete}
+            // ADD: Pass creation lock handlers
+            onJobCreationStart={() => setIsCreatingJob(true)}
+            onJobCreationEnd={() => {
+              setIsCreatingJob(false);
+              // Refresh after creation completes
+              setTimeout(() => loadAllJobWorkflowStats(), 500);
+            }}
           />
         )}
 
