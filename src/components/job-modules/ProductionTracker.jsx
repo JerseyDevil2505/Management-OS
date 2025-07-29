@@ -914,9 +914,13 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
 
   // NEW: Continue processing after validation decisions
   const continueProcessingAfterValidations = async () => {
-    // Just unpause - this will allow processAnalytics to continue
+    // Just unpause and resolve the promise to continue processing
     setProcessingPaused(false);
-    // Don't set processingComplete here - let the actual processing finish first
+    // Call the stored resolve function to continue processAnalytics
+    if (window._resolveProcessingModal) {
+      window._resolveProcessingModal();
+      window._resolveProcessingModal = null;
+    }
   };
 
   // NEW: Close processing modal after everything is done
@@ -1107,6 +1111,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
       const propertyIssues = {};
       const inspectorIssuesMap = {};
       const inspectionDataBatch = []; // For inspection_data UPSERT
+      const inspectionDataKeys = new Set(); // Track composite keys to prevent duplicates
       const missingProperties = []; // Track properties not added to inspection_data
       const pendingValidationsList = []; // NEW: Collect validation issues for modal
 
@@ -1219,9 +1224,12 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
             override_reason: overrideMapData[propertyKey].override_reason
           };
 
-          // Just collect the record, don't save yet
-          inspectionDataBatch.push(inspectionRecord);
-          wasAddedToInspectionData = true;
+          // Only add if we haven't already added this property
+          if (!inspectionDataKeys.has(propertyKey)) {
+            inspectionDataBatch.push(inspectionRecord);
+            inspectionDataKeys.add(propertyKey);
+            wasAddedToInspectionData = true;
+          }
           
           // Skip to next property - NO validation needed, NO missing properties report
           return;
@@ -1588,17 +1596,18 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         setShowProcessingModal(true);
         setProcessingPaused(true);
         
-        // Wait for user to make decisions
-        await new Promise((resolve) => {
-          const checkInterval = setInterval(() => {
-            if (!processingPaused) {
-              clearInterval(checkInterval);
-              resolve();
-            }
-          }, 100);
+        // Create a promise that will resolve when user clicks Continue Processing
+        const waitForUserDecision = new Promise((resolve) => {
+          // Store the resolve function so we can call it later
+          window._resolveProcessingModal = resolve;
         });
         
-        debugLog('PROCESSING_MODAL', 'User completed validation review, continuing processing...');
+        debugLog('PROCESSING_MODAL', 'Waiting for user validation decisions...');
+        
+        // Wait for the user to click Continue Processing
+        await waitForUserDecision;
+        
+        debugLog('PROCESSING_MODAL', 'User completed validation review, applying decisions...');
         
         // Apply decisions from modal
         pendingValidationsList.forEach(validation => {
@@ -1614,6 +1623,12 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         
         // Apply overrides to inspection_data
         for (const override of decisionsToApply) {
+          // Check if this property is already in the batch (shouldn't be, but let's be safe)
+          if (inspectionDataKeys.has(override.composite_key)) {
+            debugLog('PROCESSING_MODAL', `⚠️ Property ${override.composite_key} already in batch, skipping duplicate`);
+            continue;
+          }
+          
           const overrideRecord = {
             job_id: jobData.id,
             file_version: latestFileVersion,
@@ -1640,6 +1655,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
           };
           
           inspectionDataBatch.push(overrideRecord);
+          inspectionDataKeys.add(override.composite_key);
           
           // Update counts
           const propertyClass = override.property.property_m4_class;
@@ -1653,24 +1669,29 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         debugLog('PROCESSING_MODAL', `Applied ${decisionsToApply.length} overrides from modal decisions`);
       }
 
-      // UPSERT to inspection_data table for persistence - ONLY AFTER modal decisions
+      // NOW do ONE SINGLE UPSERT for ALL records (valid + overrides)
       if (inspectionDataBatch.length > 0) {
-        debugLog('PERSISTENCE', `Upserting ${inspectionDataBatch.length} records to inspection_data`);
+        debugLog('PERSISTENCE', `Upserting ${inspectionDataBatch.length} records to inspection_data (includes ${decisionsToApply.length} overrides)`);
         
-        const { error: upsertError } = await supabase
-          .from('inspection_data')
-          .upsert(inspectionDataBatch, {
-            onConflict: 'job_id,property_composite_key,file_version'
-          });
+        try {
+          const { error: upsertError } = await supabase
+            .from('inspection_data')
+            .upsert(inspectionDataBatch, {
+              onConflict: 'job_id,property_composite_key,file_version'
+            });
 
-        if (upsertError) {
-          console.error('Error upserting to inspection_data:', upsertError);
-          addNotification('Warning: Could not save to inspection_data table', 'warning');
-        } else {
-          debugLog('PERSISTENCE', '✅ Successfully upserted to inspection_data');
-          addNotification('✅ Successfully saved to inspection_data', 'success');
-          // Reload commercial counts after successful processing
-          await loadCommercialCounts();
+          if (upsertError) {
+            console.error('Error upserting to inspection_data:', upsertError);
+            addNotification(`Error saving to inspection_data: ${upsertError.message}`, 'error');
+          } else {
+            debugLog('PERSISTENCE', '✅ Successfully upserted ALL records to inspection_data');
+            addNotification(`✅ Successfully saved ${inspectionDataBatch.length} records to inspection_data`, 'success');
+            // Reload commercial counts after successful processing
+            await loadCommercialCounts();
+          }
+        } catch (error) {
+          console.error('UPSERT Error:', error);
+          addNotification('Failed to save inspection data', 'error');
         }
       }
 
