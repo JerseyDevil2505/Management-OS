@@ -1208,66 +1208,66 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
           // Inspector analytics - count valid inspections only
           inspectorStats[inspector].totalInspected++;
             
-            const workDayString = measuredDate.toISOString().split('T')[0];
-            inspectorStats[inspector].allWorkDays.add(workDayString);
+          const workDayString = measuredDate.toISOString().split('T')[0];
+          inspectorStats[inspector].allWorkDays.add(workDayString);
 
-            // NEW: Separate residential and commercial counting for analytics
-            if (isResidentialProperty) {
-              inspectorStats[inspector].residentialInspected++;
-              inspectorStats[inspector].residentialWorkDays.add(workDayString);
-              
-              // FIXED: Entry/Refusal counting - separate individual vs global logic
-              
-              // Individual inspector credit: measure_by must equal list_by for personal achievement
-              if (isEntryCode && record.inspection_list_by === inspector) {
-                inspectorStats[inspector].entry++;
-              } else if (isRefusalCode && record.inspection_list_by === inspector) {
-                inspectorStats[inspector].refusal++;
-              }
-              
-              // Global metrics: count ALL valid entries/refusals regardless of who did list work
-              if (isEntryCode && classBreakdown[propertyClass]) {
-                classBreakdown[propertyClass].entry++;
-              } else if (isRefusalCode && classBreakdown[propertyClass]) {
-                classBreakdown[propertyClass].refusal++;
-              }
+          // NEW: Separate residential and commercial counting for analytics
+          if (isResidentialProperty) {
+            inspectorStats[inspector].residentialInspected++;
+            inspectorStats[inspector].residentialWorkDays.add(workDayString);
+            
+            // FIXED: Entry/Refusal counting - separate individual vs global logic
+            
+            // Individual inspector credit: measure_by must equal list_by for personal achievement
+            if (isEntryCode && record.inspection_list_by === inspector) {
+              inspectorStats[inspector].entry++;
+            } else if (isRefusalCode && record.inspection_list_by === inspector) {
+              inspectorStats[inspector].refusal++;
             }
             
-            if (isCommercialProperty) {
-              inspectorStats[inspector].commercialInspected++;
-              inspectorStats[inspector].commercialWorkDays.add(workDayString);
+            // Global metrics: count ALL valid entries/refusals regardless of who did list work
+            if (isEntryCode && classBreakdown[propertyClass]) {
+              classBreakdown[propertyClass].entry++;
+            } else if (isRefusalCode && classBreakdown[propertyClass]) {
+              classBreakdown[propertyClass].refusal++;
             }
+          }
+          
+          if (isCommercialProperty) {
+            inspectorStats[inspector].commercialInspected++;
+            inspectorStats[inspector].commercialWorkDays.add(workDayString);
+          }
 
-            // FIXED: Pricing logic with vendor detection
-            if (isCommercialProperty) {
-              const currentVendor = actualVendor || jobData.vendor_type;
+          // FIXED: Pricing logic with vendor detection
+          if (isCommercialProperty) {
+            const currentVendor = actualVendor || jobData.vendor_type;
 
-              debugLog('PRICING', `Commercial property ${propertyKey} - Class: ${propertyClass}, InfoBy: ${infoByCode}, Vendor: ${currentVendor}`);
-              debugLog('PRICING', `isPricedCode: ${isPricedCode}, Priced category: [${(infoByCategoryConfig.priced || []).join(', ')}]`);
+            debugLog('PRICING', `Commercial property ${propertyKey} - Class: ${propertyClass}, InfoBy: ${infoByCode}, Vendor: ${currentVendor}`);
+            debugLog('PRICING', `isPricedCode: ${isPricedCode}, Priced category: [${(infoByCategoryConfig.priced || []).join(', ')}]`);
 
-              if (currentVendor === 'BRT' && 
-                  record.inspection_price_by && 
-                  record.inspection_price_by.trim() !== '' &&
-                  priceDate && 
-                  priceDate >= startDate) {
-                
-                inspectorStats[inspector].priced++;
-                inspectorStats[inspector].pricingWorkDays.add(priceDate.toISOString().split('T')[0]);
-                if (classBreakdown[propertyClass]) {
-                  classBreakdown[propertyClass].priced++;
-                }
-                debugLog('PRICING', `✅ BRT pricing counted for ${inspector} on ${propertyKey}`);
-                
-              } else if (currentVendor === 'Microsystems' && isPricedCode) {
-                inspectorStats[inspector].priced++;
-                if (classBreakdown[propertyClass]) {
-                  classBreakdown[propertyClass].priced++;
-                }
-                debugLog('PRICING', `✅ Microsystems pricing counted for ${inspector} on ${propertyKey}`);
-              } else {
-                debugLog('PRICING', `❌ No pricing counted for ${inspector} on ${propertyKey} - Vendor: ${currentVendor}, isPricedCode: ${isPricedCode}`);
+            if (currentVendor === 'BRT' && 
+                record.inspection_price_by && 
+                record.inspection_price_by.trim() !== '' &&
+                priceDate && 
+                priceDate >= startDate) {
+              
+              inspectorStats[inspector].priced++;
+              inspectorStats[inspector].pricingWorkDays.add(priceDate.toISOString().split('T')[0]);
+              if (classBreakdown[propertyClass]) {
+                classBreakdown[propertyClass].priced++;
               }
+              debugLog('PRICING', `✅ BRT pricing counted for ${inspector} on ${propertyKey}`);
+              
+            } else if (currentVendor === 'Microsystems' && isPricedCode) {
+              inspectorStats[inspector].priced++;
+              if (classBreakdown[propertyClass]) {
+                classBreakdown[propertyClass].priced++;
+              }
+              debugLog('PRICING', `✅ Microsystems pricing counted for ${inspector} on ${propertyKey}`);
+            } else {
+              debugLog('PRICING', `❌ No pricing counted for ${inspector} on ${propertyKey} - Vendor: ${currentVendor}, isPricedCode: ${isPricedCode}`);
             }
+          }
 
           // NEW: Prepare for inspection_data UPSERT
           const inspectionRecord = {
@@ -1298,6 +1298,8 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
 
           inspectionDataBatch.push(inspectionRecord);
           wasAddedToInspectionData = true;
+        }
+
         // Track properties that didn't make it to inspection_data
         if (!wasAddedToInspectionData) {
           const reasons = [];
@@ -1422,8 +1424,9 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
       // Calculate job-level totals
       const totalInspected = Object.values(inspectorStats).reduce((sum, stats) => sum + stats.totalInspected, 0);
       
-      // FIX: Get accurate denominators from inspection_data table for global rates
-      const { data: class2And3AData, error: class2And3AError } = await supabase
+      // FIX 1: CORRECT GLOBAL ENTRY RATE CALCULATION
+      // Query inspection_data for ALL Class 2+3A properties as denominator
+      const { data: allClass2And3AData, error: class2And3AError } = await supabase
         .from('inspection_data')
         .select('property_composite_key', { count: 'exact' })
         .eq('job_id', jobData.id)
@@ -1434,9 +1437,15 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         console.error('Error counting Class 2/3A properties:', class2And3AError);
       }
 
-      const totalClass2And3AProperties = class2And3AData?.length || 0;
+      const totalClass2And3AProperties = allClass2And3AData?.length || 0;
       const totalEntry = Object.values(inspectorStats).reduce((sum, stats) => sum + stats.entry, 0);
       const totalRefusal = Object.values(inspectorStats).reduce((sum, stats) => sum + stats.refusal, 0);
+
+      debugLog('ENTRY_RATE_FIX', 'Global entry rate calculation', {
+        totalEntry,
+        totalClass2And3AProperties,
+        expectedRate: totalClass2And3AProperties > 0 ? Math.round((totalEntry / totalClass2And3AProperties) * 100) : 0
+      });
 
       // FIXED: Commercial percentage calculations (valid ÷ total, not valid ÷ valid)
       const totalCommercialProperties = ['4A', '4B', '4C'].reduce((sum, cls) => sum + (classBreakdown[cls]?.total || 0), 0);
@@ -1481,6 +1490,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         detailed_missing: missingProperties
       };
 
+      // FIX 2: ENSURE PROPER PERSISTENCE OF ANALYTICS
       const analyticsResult = {
         totalRecords: rawData.length,
         validInspections: totalInspected,
@@ -1489,7 +1499,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         validationIssues: validationIssues.length,
         processingDate: new Date().toISOString(),
         
-        // Job-level metrics based on residential properties only (2, 3A) - FIXED denominators
+        // FIX 1: Use correct denominator for global entry/refusal rates
         jobEntryRate: totalClass2And3AProperties > 0 ? Math.round((totalEntry / totalClass2And3AProperties) * 100) : 0,
         jobRefusalRate: totalClass2And3AProperties > 0 ? Math.round((totalRefusal / totalClass2And3AProperties) * 100) : 0,
         
@@ -1543,7 +1553,9 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         inspectors: Object.keys(inspectorStats).length,
         commercialComplete: analyticsResult.commercialCompletePercent,
         pricingComplete: analyticsResult.pricingCompletePercent,
-        persistedRecords: inspectionDataBatch.length
+        persistedRecords: inspectionDataBatch.length,
+        jobEntryRate: analyticsResult.jobEntryRate, // Should now be 61%
+        totalClass2And3AProperties // Should be 711
       });
 
       return { analyticsResult, billingResult, validationReportData, missingPropertiesReportData };
@@ -1617,27 +1629,29 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
       // Set the fresh missing properties report in state
       setMissingPropertiesReport(missingPropertiesReportData);
 
-      // ENHANCED: Persist to database for navigation survival with FRESH data
+      // FIX 2: ENHANCED PERSISTENCE - Save with complete data structure
       await saveCategoriesToDatabase(infoByCategoryConfig, {
         analytics: analyticsResult,
         billingAnalytics: billingResult,
         validationReport: validationReportData,
-        missingPropertiesReport: missingPropertiesReportData // ✅ Use fresh data!
+        missingPropertiesReport: missingPropertiesReportData,
+        validationOverrides: validationOverrides,
+        overrideMap: overrideMap
       });
 
-      // ISSUE #1 FIX: App.js integration in startProcessingSession() - Add missing fields to onUpdateWorkflowStats()
+      // FIX 2: ENSURE APP.JS INTEGRATION WORKS
       if (onUpdateWorkflowStats) {
         onUpdateWorkflowStats({
           jobId: jobData.id,
-          analytics: analyticsResult,     // ✅ NOW DEFINED!
-          billingAnalytics: billingResult, // ✅ NOW DEFINED!
-          validationReport: validationReportData, // ✅ NOW DEFINED!
-          missingPropertiesReport: missingPropertiesReportData,   // ADD THIS
-          validationOverrides: validationOverrides,              // ADD THIS
-          overrideMap: overrideMap,                              // ADD THIS
+          analytics: analyticsResult,
+          billingAnalytics: billingResult,
+          validationReport: validationReportData,
+          missingPropertiesReport: missingPropertiesReportData,
+          validationOverrides: validationOverrides,
+          overrideMap: overrideMap,
           lastProcessed: new Date().toISOString()
         });
-        debugLog('APP_INTEGRATION', '✅ Data sent to App.js central hub');
+        debugLog('APP_INTEGRATION', '✅ Data sent to App.js central hub with complete analytics');
       }
 
       debugLog('SESSION', '✅ Processing session completed successfully');
@@ -2665,16 +2679,15 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                         </h4>
                         <div className="overflow-x-auto">
                           <table className="w-full text-sm">
-                            {/* ISSUE #3 FIX: Validation report table headers - Find this section and add missing <th> elements */}
                             <thead className="bg-gray-50">
                               <tr>
                                 <th className="px-3 py-2 text-left font-medium text-gray-700">Block</th>
                                 <th className="px-3 py-2 text-left font-medium text-gray-700">Lot</th>
                                 <th className="px-3 py-2 text-left font-medium text-gray-700">Qualifier</th>
-                                <th className="px-3 py-2 text-left font-medium text-gray-700">Card</th>           {/* ADD THIS */}
+                                <th className="px-3 py-2 text-left font-medium text-gray-700">Card</th>
                                 <th className="px-3 py-2 text-left font-medium text-gray-700">Property Location</th>
                                 <th className="px-3 py-2 text-left font-medium text-gray-700">Compound Issues</th>
-                                <th className="px-3 py-2 text-left font-medium text-gray-700">Actions</th>        {/* ADD THIS */}
+                                <th className="px-3 py-2 text-left font-medium text-gray-700">Actions</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -2872,7 +2885,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                             </tr>
                           </thead>
                           <tbody>
-                            {missingPropertiesReport.detailed_missing.map((property, idx) => (
+                            {missingPropertiesReport.detailed_missing.slice(0, 100).map((property, idx) => (
                               <tr key={idx} className={`border-t border-gray-200 ${
                                 property.reason.includes('No inspection attempt') ? 'bg-gray-50' : 'bg-red-50'
                               }`}>
@@ -2893,6 +2906,11 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                             ))}
                           </tbody>
                         </table>
+                        {missingPropertiesReport.detailed_missing.length > 100 && (
+                          <div className="mt-4 text-center text-sm text-gray-500">
+                            Showing first 100 of {missingPropertiesReport.detailed_missing.length} missing properties. Export to see all.
+                          </div>
+                        )}
                       </div>
                     </div>
                   </>
@@ -2986,6 +3004,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                     {/* Detailed Overrides Table */}
                     <div className="bg-white border border-gray-200 rounded-lg p-6">
                       <h4 className="font-semibold text-gray-900 mb-4">Detailed Validation Overrides</h4>
+                      <div className="overflow-x-auto">
                         <table className="w-full text-sm">
                           <thead className="bg-gray-50">
                             <tr>
@@ -3018,7 +3037,6 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                                   {override.override_date ? new Date(override.override_date).toLocaleDateString() : '-'}
                                 </td>
                                 <td className="px-3 py-2">
-                                  {/* ISSUE #4 FIX: Fix action button styling in overrides table - Change styling to dark red */}
                                   <button
                                     onClick={() => handleUndoOverride(override.property_composite_key, override.override_reason)}
                                     className="px-2 py-1 bg-red-700 text-white text-xs rounded hover:bg-red-800 font-medium"
@@ -3030,6 +3048,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                             ))}
                           </tbody>
                         </table>
+                      </div>
                     </div>
                   </>
                 )}
