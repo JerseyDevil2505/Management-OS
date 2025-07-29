@@ -75,6 +75,25 @@ function App() {
     const previousStats = jobWorkflowStats[jobId];
     const analyticsJustCompleted = newStats.isProcessed && !previousStats?.isProcessed;
 
+    // DEBUG LOGGING TO TRACK DATA FLOW
+    console.log('🔍 App.js BEFORE update:', {
+      jobId,
+      currentStats: jobWorkflowStats[jobId],
+      entryRate: jobWorkflowStats[jobId]?.jobEntryRate,
+      validInspections: jobWorkflowStats[jobId]?.validInspections
+    });
+    console.log('📥 App.js RECEIVING from PT:', {
+      newStats,
+      entryRate: newStats.jobEntryRate,
+      validInspections: newStats.validInspections,
+      isProcessed: newStats.isProcessed
+    });
+    console.log('🔄 App.js AFTER merge will be:', {
+      merged: { ...jobWorkflowStats[jobId], ...newStats },
+      entryRate: { ...jobWorkflowStats[jobId], ...newStats }.jobEntryRate,
+      validInspections: { ...jobWorkflowStats[jobId], ...newStats }.validInspections
+    });
+
     // Update local state immediately for real-time UI
     setJobWorkflowStats(prev => ({
       ...prev,
@@ -112,6 +131,12 @@ function App() {
 
         if (error) {
           console.error('❌ Error persisting workflow stats:', error);
+        } else {
+          console.log('✅ App.js saved to database:', {
+            jobId,
+            entryRate: updatedStats.jobEntryRate,
+            validInspections: updatedStats.validInspections
+          });
         }
       } catch (error) {
         console.error('❌ Failed to persist workflow stats:', error);
