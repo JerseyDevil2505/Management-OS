@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Factory, Settings, Download, RefreshCw, AlertTriangle, CheckCircle, TrendingUp, DollarSign, Users, Calendar, X, ChevronDown, ChevronUp, Eye, FileText, Lock, Unlock, Save } from 'lucide-react';
 import { supabase, jobService } from '../../lib/supabaseClient';
 
-const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyRecordsCount, onUpdateWorkflowStats }) => {
+const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyRecordsCount, onUpdateWorkflowStats, currentWorkflowStats }) => {
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [processed, setProcessed] = useState(false);
@@ -63,7 +63,6 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
   const [processedValidationDecisions, setProcessedValidationDecisions] = useState({});
 
   // NEW: Smart data staleness detection
-  const currentWorkflowStats = jobData?.appData;
   const isDataStale = currentWorkflowStats?.needsRefresh && 
                      currentWorkflowStats?.lastFileUpdate > currentWorkflowStats?.lastProcessed;
 
@@ -933,19 +932,14 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
     }
   }, [jobData?.id, latestFileVersion]);
 
-  // Load data from App.js central hub if available - FIXED to prevent race condition
+  // Load data from currentWorkflowStats prop if available - FIXED to use correct prop
   useEffect(() => {
-    if (jobData?.appData && jobData.appData.analytics) {
-      debugLog('APP_INTEGRATION', '🔍 Checking App.js data vs local state');
+    if (currentWorkflowStats && currentWorkflowStats.analytics) {
+      debugLog('APP_INTEGRATION', '🔍 Checking currentWorkflowStats vs local state');
       
-      // Only load from App.js if:
-      // 1. We don't have local analytics yet (initial load)
-      // 2. App.js data is newer than our local data
-      const appDataTime = new Date(jobData.appData.lastProcessed || 0).getTime();
-      const localDataTime = new Date(analytics?.processingDate || 0).getTime();
-      
-      if (!analytics || appDataTime > localDataTime) {
-        debugLog('APP_INTEGRATION', `✅ Loading from App.js - App data: ${new Date(appDataTime).toISOString()}, Local: ${localDataTime ? new Date(localDataTime).toISOString() : 'none'}`);
+      // Only load from currentWorkflowStats if we don't have processed analytics yet
+      if (!analytics || !processed) {
+        debugLog('APP_INTEGRATION', '✅ Loading data from currentWorkflowStats - no local analytics processed yet');
         
         // Check if we need to adjust for current overrides
         const loadCurrentOverrides = async () => {
@@ -958,31 +952,31 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
 
           if (!error && currentOverrides) {
             const currentOverrideCount = currentOverrides.length;
-            const appDataOverrideCount = jobData.appData.validationOverrides?.length || 0;
+            const workflowOverrideCount = currentWorkflowStats.validationOverrides?.length || 0;
             
-            // If database has more overrides than App.js data, we need to reprocess
-            if (currentOverrideCount > appDataOverrideCount) {
-              debugLog('APP_INTEGRATION', `Database has ${currentOverrideCount} overrides but App.js only knows about ${appDataOverrideCount}. Need to reprocess.`);
+            // If database has more overrides than workflow stats, we need to reprocess
+            if (currentOverrideCount > workflowOverrideCount) {
+              debugLog('APP_INTEGRATION', `Database has ${currentOverrideCount} overrides but currentWorkflowStats only knows about ${workflowOverrideCount}. Need to reprocess.`);
               // Don't load stale data - force a reprocess instead
               return;
             }
           }
           
-          // Data is current and newer, safe to load
-          setAnalytics(jobData.appData.analytics);
-          setBillingAnalytics(jobData.appData.billingAnalytics);
-          setValidationReport(jobData.appData.validationReport);
-          setMissingPropertiesReport(jobData.appData.missingPropertiesReport);
+          // Data is current, safe to load
+          setAnalytics(currentWorkflowStats.analytics);
+          setBillingAnalytics(currentWorkflowStats.billingAnalytics);
+          setValidationReport(currentWorkflowStats.validationReport);
+          setMissingPropertiesReport(currentWorkflowStats.missingPropertiesReport);
           setProcessed(true);
           setSettingsLocked(true);
         };
         
         loadCurrentOverrides();
       } else {
-        debugLog('APP_INTEGRATION', '⏭️ Skipping App.js data - local data is newer or same age');
+        debugLog('APP_INTEGRATION', '⏭️ Skipping currentWorkflowStats - local analytics already processed');
       }
     }
-  }, [jobData?.appData]);
+  }, [currentWorkflowStats]);
 
   // Track unsaved changes
   useEffect(() => {
