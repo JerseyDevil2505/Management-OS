@@ -890,25 +890,18 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
         
         updateProcessingStatus(`Processing ${newJob.vendor} data (${fileAnalysis.propertyCount} records)...`, 50);
         
-        // Capture console logs during processing for real-time feedback
+        // Capture console logs during processing (but don't update state constantly)
         const originalConsoleLog = console.log;
         const logs = [];
         
         console.log = (...args) => {
           const message = args.join(' ');
-          // Capture batch processing logs
+          // Just capture logs, don't update state
           if (message.includes('✅') || message.includes('Batch inserting') || message.includes('Processing')) {
             logs.push({
               timestamp: new Date().toLocaleTimeString(),
               message: message
             });
-            // Update processing status with latest logs
-            if (isMountedRef.current) {
-              setProcessingStatus(prev => ({
-                ...prev,
-                logs: [...logs]
-              }));
-            }
           }
           originalConsoleLog(...args);
         };
@@ -930,13 +923,21 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
         // Restore original console.log
         console.log = originalConsoleLog;
         
-        if (!isMountedRef.current) return;
-        
-        updateProcessingStatus('Updating job status...', 90, {
-          recordsProcessed: result.processed || 0,
-          errors: result.warnings || [],
-          warnings: result.warnings || []
-        });
+        // Update with final logs at the end
+        if (isMountedRef.current) {
+          updateProcessingStatus('Updating job status...', 90, {
+            recordsProcessed: result.processed || 0,
+            errors: result.warnings || [],
+            warnings: result.warnings || [],
+            logs: logs // Include all logs in final update
+          });
+        } else {
+          updateProcessingStatus('Updating job status...', 90, {
+            recordsProcessed: result.processed || 0,
+            errors: result.warnings || [],
+            warnings: result.warnings || []
+          });
+        }
         
         const updateData = {
           sourceFileStatus: result.errors > 0 ? 'error' : 'imported',
@@ -1423,10 +1424,10 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
                       setProcessingResults(null);
                       resetProcessingStatus();
                       closeJobModal();
-                      // NOW trigger metrics refresh after everything is done
-                      if (onJobProcessingComplete) {
-                        onJobProcessingComplete();
-                      }
+                      // TEMPORARILY COMMENTED OUT FOR TESTING
+                      // if (onJobProcessingComplete) {
+                      //   onJobProcessingComplete();
+                      // }
                     }}
                     className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium"
                   >
