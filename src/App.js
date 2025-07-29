@@ -241,22 +241,9 @@ function App() {
       setFileRefreshTrigger(prev => prev + 1);
     }, 0);
 
-    // 🔧 SMART INVALIDATION: Preserve settings, just flag as stale
-    if (selectedJob?.id && jobWorkflowStats[selectedJob.id]) {
-      // Defer state update to prevent React Error #301
-      setTimeout(() => {
-        setJobWorkflowStats(prev => ({
-          ...prev,
-          [selectedJob.id]: {
-            ...prev[selectedJob.id], // PRESERVE existing settings & analytics
-            needsRefresh: true,       // Flag for ProductionTracker warning
-            lastFileUpdate: new Date().toISOString(), // Track when files changed
-          }
-        }));
-      }, 0);
-      
-      console.log('📊 App.js: Marked analytics as stale, preserved user settings');
-    }
+    // REMOVED the needsRefresh flag that was causing ProductionTracker to reset!
+    // The ProductionTracker can handle file changes on its own without resetting
+    console.log('📊 App.js: File processed, preserved all ProductionTracker state including start date');
   };
 
   // 🔧 FIX: Defer job processing completion state updates to prevent React Error #301
