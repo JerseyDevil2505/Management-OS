@@ -126,17 +126,11 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
 
   // FIXED: Enhanced Metrics Display Logic with live metrics first
   const getMetricsDisplay = (job) => {
-    // Check for live metrics first - REMOVED problematic isProcessed condition
+    // Check for live metrics first
     const liveMetrics = jobMetrics?.[job.id];
     
-    // Debug log to see what we're getting
-    if (liveMetrics) {
-      console.log('🔍 Live metrics available for', job.name, ':', liveMetrics);
-    }
-    
-    // Use live metrics if available (any live data is better than stale database)
+    // Use live metrics if available
     if (liveMetrics && (liveMetrics.entryRate !== undefined || liveMetrics.totalProperties !== undefined)) {
-      console.log('✅ Using live metrics for', job.name);
       return {
         entryRate: liveMetrics.entryRate || 0,
         refusalRate: liveMetrics.refusalRate || 0,
@@ -144,10 +138,8 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
         pricing: `${liveMetrics.pricingComplete || 0}%`
       };
     }
-
-    console.log('⚠️ Falling back to database for', job.name);
     
-    // FIXED: Fallback to NEW field structure from ProductionTracker
+    // Fallback to database metrics
     const baseMetrics = {
       entryRate: job.workflowStats?.jobEntryRate || 0,              // ✅ NEW FORMAT
       refusalRate: job.workflowStats?.jobRefusalRate || 0,          // ✅ NEW FORMAT  
@@ -186,7 +178,6 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
     // Check for live metrics first
     const liveMetrics = jobMetrics?.[job.id];
     if (liveMetrics && liveMetrics.totalProperties !== undefined) {
-      console.log('✅ Using live property counts for', job.name);
       return {
         inspected: liveMetrics.propertiesInspected || 0,
         total: liveMetrics.totalProperties || 0,
@@ -194,8 +185,6 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
         isAssigned: false
       };
     }
-
-    console.log('⚠️ Using database property counts for', job.name);
     
     // Fallback to existing logic
     if (!job.has_property_assignments) {
@@ -239,7 +228,6 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
       });
       
       setCountyHpiData(hpiByCounty);
-      console.log('✅ Loaded HPI data for counties:', Object.keys(hpiByCounty));
     } catch (error) {
       console.error('Failed to load HPI data:', error);
     }
@@ -290,14 +278,19 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
     try {
       setUploadingAssignment(true);
       const fileContent = await assignmentFile.text();
-      const lines = fileContent.split('\n').filter(line => line.trim());
+      
+      // Try to detect the delimiter
+      const firstLine = fileContent.split('\n')[0];
+      const delimiter = firstLine.includes('\t') ? '\t' : ',';
+      
+      const lines = fileContent.split('\n').map(line => line.trim()).filter(line => line);
       
       if (lines.length < 2) {
         addNotification('Invalid CSV file format', 'error');
         return;
       }
 
-      const header = lines[0].toLowerCase().split(',').map(h => h.trim());
+      const header = lines[0].toLowerCase().split(delimiter).map(h => h.trim());
       const requiredFields = ['block', 'lot'];
       const missingFields = requiredFields.filter(field => 
         !header.some(h => h.includes(field))
@@ -315,38 +308,52 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
       const ccdd = job.ccdd || job.ccddCode;
 
       for (let i = 1; i < lines.length; i++) {
-        const values = lines[i].split(',').map(v => v.trim());
-        if (values.length >= 2) {
-          const blockIdx = header.findIndex(h => h.includes('block'));
-          const lotIdx = header.findIndex(h => h.includes('lot'));
-          const qualIdx = header.findIndex(h => h.includes('qual'));
-          const cardIdx = header.findIndex(h => h.includes('card'));
-          const locationIdx = header.findIndex(h => h.includes('location'));
-
-          const block = values[blockIdx] || '';
-          const lot = values[lotIdx] || '';
-          const qual = values[qualIdx] || '';
-          const card = values[cardIdx] || '';
-          const location = values[locationIdx] || '';
-
-          // Ensure consistent composite key format matching processors
-          const compositeKey = `${year}${ccdd}-${block}-${lot}_${qual || 'NONE'}-${card || 'NONE'}-${location || 'NONE'}`;
-          
-          assignments.push({
-            property_composite_key: compositeKey,
-            property_block: block,
-            property_lot: lot,
-            property_qualifier: qual,
-            property_addl_card: card,
-            property_location: location
-          });
+        const values = lines[i].split(delimiter).map(v => v.trim());
+        
+        // Must have at least as many values as we have headers
+        if (values.length < header.length) {
+          continue; // Skip malformed rows
         }
+        
+        const blockIdx = header.findIndex(h => h.includes('block'));
+        const lotIdx = header.findIndex(h => h.includes('lot'));
+        const qualIdx = header.findIndex(h => h.includes('qual'));
+        const cardIdx = header.findIndex(h => h.includes('card'));
+        const locationIdx = header.findIndex(h => h.includes('location'));
+
+        const block = values[blockIdx] || '';
+        const lot = values[lotIdx] || '';
+        const qual = qualIdx >= 0 ? (values[qualIdx] || '') : '';
+        const card = cardIdx >= 0 ? (values[cardIdx] || '') : '';
+        const location = locationIdx >= 0 ? (values[locationIdx] || '') : '';
+
+        // Skip empty rows
+        if (!block && !lot) continue;
+
+        // Ensure consistent composite key format matching processors
+        const compositeKey = `${year}${ccdd}-${block}-${lot}_${qual || 'NONE'}-${card || 'NONE'}-${location || 'NONE'}`;
+        
+        assignments.push({
+          property_composite_key: compositeKey,
+          property_block: block,
+          property_lot: lot,
+          property_qualifier: qual,
+          property_addl_card: card,
+          property_location: location
+        });
+      }
+
+      // Log the actual count for debugging
+      addNotification(`Parsed ${assignments.length} valid assignments from ${lines.length - 1} CSV rows`, 'info');
+
+      // Add notification for large files
+      if (assignments.length > 1000) {
+        addNotification(`Processing ${assignments.length.toLocaleString()} assignments. This may take a minute...`, 'info');
       }
 
       // Process assignments through Supabase
       
       // First, clear existing assignments for this job
-      console.log('🔍 Step 1: Clearing existing assignments for job:', job.id);
       try {
         const { error: deleteError } = await supabase
           .from('job_responsibilities')
@@ -354,25 +361,23 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
           .eq('job_id', job.id);
 
         if (deleteError) {
-          console.error('❌ Error clearing existing assignments:', deleteError);
           throw new Error(`Failed to clear assignments: ${deleteError.message}`);
         }
-        console.log('✅ Step 1 complete: Existing assignments cleared');
       } catch (err) {
-        console.error('❌ Network error during delete:', err);
         addNotification('Network error: Unable to connect to database. Please check your connection.', 'error');
         return;
       }
 
       // Insert new assignments in batches to handle large files
-      console.log('🔍 Step 2: Inserting', assignments.length, 'new assignments');
-      
-      // Batch size for inserts (Supabase can handle ~1000 records per insert safely)
       const BATCH_SIZE = 500;
       let insertedCount = 0;
+      let failedBatches = [];
       
       for (let i = 0; i < assignments.length; i += BATCH_SIZE) {
         const batch = assignments.slice(i, i + BATCH_SIZE);
+        const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
+        const totalBatches = Math.ceil(assignments.length / BATCH_SIZE);
+        
         const batchRecords = batch.map(assignment => ({
           job_id: job.id,
           ...assignment,
@@ -382,30 +387,35 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
         }));
 
         try {
-          console.log(`📦 Inserting batch ${Math.floor(i / BATCH_SIZE) + 1} of ${Math.ceil(assignments.length / BATCH_SIZE)} (${batchRecords.length} records)`);
-          
           const { data: insertData, error: insertError } = await supabase
             .from('job_responsibilities')
             .insert(batchRecords);
 
           if (insertError) {
-            console.error('❌ Insert error for batch:', insertError);
-            throw new Error(`Batch ${Math.floor(i / BATCH_SIZE) + 1} insert failed: ${insertError.message}`);
+            throw new Error(`Batch ${batchNumber} insert failed: ${insertError.message}`);
           }
           
           insertedCount += batchRecords.length;
           
-          // Update UI with progress
-          addNotification(`Inserted ${insertedCount} of ${assignments.length} assignments...`, 'info');
+          // Update UI with progress for large files
+          if (assignments.length > 1000) {
+            addNotification(`Processing batch ${batchNumber} of ${totalBatches}... (${insertedCount.toLocaleString()} records done)`, 'info');
+          }
           
         } catch (err) {
-          console.error('❌ Network error during batch insert:', err);
-          addNotification(`Error inserting batch starting at record ${i + 1}: ${err.message}`, 'error');
-          throw err;
+          failedBatches.push({ batch: batchNumber, error: err.message, records: batch.length });
+          addNotification(`⚠️ Batch ${batchNumber} failed (${batch.length} records): ${err.message}`, 'warning');
+          // Continue with other batches instead of breaking
         }
       }
       
-      console.log(`✅ Step 2 complete: ${insertedCount} assignments inserted in ${Math.ceil(assignments.length / BATCH_SIZE)} batches`);
+      // Report final status
+      if (failedBatches.length > 0) {
+        const failedRecords = failedBatches.reduce((sum, fb) => sum + fb.records, 0);
+        addNotification(`⚠️ Completed with errors: ${insertedCount} of ${assignments.length} inserted. ${failedRecords} records in ${failedBatches.length} batches failed.`, 'warning');
+      } else {
+        addNotification(`✅ Successfully inserted all ${insertedCount} assignments`, 'success');
+      }
 
       // Check how many properties were matched (in batches for large datasets)
       const assignmentKeys = assignments.map(a => a.property_composite_key);
@@ -450,8 +460,7 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
         .eq('id', job.id);
 
       if (jobUpdateError) {
-        console.error('❌ Error updating job flags:', jobUpdateError);
-        addNotification('Error updating job flags: ' + jobUpdateError.message, 'error');
+        addNotification('Warning: Job flags may not have updated properly', 'warning');
       }
 
       // Update property_records assignment flags (in batches)
@@ -469,8 +478,7 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
             .in('property_composite_key', keyBatch);
 
           if (propUpdateError) {
-            console.error('❌ Error updating property flags batch:', propUpdateError);
-            addNotification('Warning: Some property assignment flags may not have updated', 'warning');
+            // Silent fail - don't spam with batch errors
           }
         }
       }
@@ -639,9 +647,7 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
         .delete()
         .eq('county_name', county);
 
-      if (error) {
-        console.error('Error clearing existing HPI data:', error);
-      }
+      // Alert about import HPI error but don't log details
 
       const { data: insertData, error: insertError } = await supabase
         .from('county_hpi_data')
@@ -689,9 +695,6 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
             authService.getCurrentUser()
           ]);
           
-          console.log('🔍 FIRST JOB DATA:', jobsData[0]); // Debug what fields we get from jobService.getAll()
-          
-          // Separate active and archived jobs
           const activeJobs = jobsData.filter(job => job.status !== 'archived');
           const archived = jobsData.filter(job => job.status === 'archived');
           
@@ -849,7 +852,6 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
 
     // Prevent duplicate submissions
     if (processing) {
-      console.log('Already processing, ignoring duplicate request');
       return;
     }
 
