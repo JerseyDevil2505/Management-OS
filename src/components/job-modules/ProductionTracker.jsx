@@ -697,6 +697,13 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         };
         
         // Send updated data to App.js
+        debugLog('UPDATE_WORKFLOW_STATS', '🚨 Calling onUpdateWorkflowStats from handleUndoOverride', {
+          source: 'handleUndoOverride',
+          analytics: adjustedAnalytics,
+          validInspections: adjustedAnalytics.validInspections,
+          timestamp: new Date().toISOString()
+        });
+        
         onUpdateWorkflowStats({
           jobId: jobData.id,
           analytics: adjustedAnalytics,
@@ -814,6 +821,13 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         };
         
         // Send updated data to App.js
+        debugLog('UPDATE_WORKFLOW_STATS', '🚨 Calling onUpdateWorkflowStats from handleOverrideValidation', {
+          source: 'handleOverrideValidation',
+          analytics: adjustedAnalytics,
+          validInspections: adjustedAnalytics.validInspections,
+          timestamp: new Date().toISOString()
+        });
+        
         onUpdateWorkflowStats({
           jobId: jobData.id,
           analytics: adjustedAnalytics,
@@ -2001,6 +2015,15 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
           // Valid inspections already includes overrides from processing modal
           validationOverrideCount: freshOverrides.length
         };
+
+        debugLog('UPDATE_WORKFLOW_STATS', '🚨 Calling onUpdateWorkflowStats from startProcessingSession', {
+          source: 'startProcessingSession',
+          analytics: adjustedAnalytics,
+          validInspections: adjustedAnalytics.validInspections,
+          jobEntryRate: adjustedAnalytics.jobEntryRate,
+          totalRecords: adjustedAnalytics.totalRecords,
+          timestamp: new Date().toISOString()
+        });
 
         onUpdateWorkflowStats({
           jobId: jobData.id,
