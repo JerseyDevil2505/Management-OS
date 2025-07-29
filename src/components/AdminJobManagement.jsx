@@ -364,48 +364,76 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
         return;
       }
 
-      // Insert new assignments
+      // Insert new assignments in batches to handle large files
       console.log('🔍 Step 2: Inserting', assignments.length, 'new assignments');
-      const assignmentRecords = assignments.map(assignment => ({
-        job_id: job.id,
-        ...assignment,
-        responsibility_file_name: assignmentFile.name,
-        responsibility_file_uploaded_at: new Date().toISOString(),
-        uploaded_by: currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad'
-      }));
+      
+      // Batch size for inserts (Supabase can handle ~1000 records per insert safely)
+      const BATCH_SIZE = 500;
+      let insertedCount = 0;
+      
+      for (let i = 0; i < assignments.length; i += BATCH_SIZE) {
+        const batch = assignments.slice(i, i + BATCH_SIZE);
+        const batchRecords = batch.map(assignment => ({
+          job_id: job.id,
+          ...assignment,
+          responsibility_file_name: assignmentFile.name,
+          responsibility_file_uploaded_at: new Date().toISOString(),
+          uploaded_by: currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad'
+        }));
 
-      try {
-        const { data: insertData, error: insertError } = await supabase
-          .from('job_responsibilities')
-          .insert(assignmentRecords);
+        try {
+          console.log(`📦 Inserting batch ${Math.floor(i / BATCH_SIZE) + 1} of ${Math.ceil(assignments.length / BATCH_SIZE)} (${batchRecords.length} records)`);
+          
+          const { data: insertData, error: insertError } = await supabase
+            .from('job_responsibilities')
+            .insert(batchRecords);
 
-        if (insertError) {
-          console.error('❌ Insert error details:', insertError);
-          throw new Error('Assignment insert failed: ' + insertError.message);
+          if (insertError) {
+            console.error('❌ Insert error for batch:', insertError);
+            throw new Error(`Batch ${Math.floor(i / BATCH_SIZE) + 1} insert failed: ${insertError.message}`);
+          }
+          
+          insertedCount += batchRecords.length;
+          
+          // Update UI with progress
+          addNotification(`Inserted ${insertedCount} of ${assignments.length} assignments...`, 'info');
+          
+        } catch (err) {
+          console.error('❌ Network error during batch insert:', err);
+          addNotification(`Error inserting batch starting at record ${i + 1}: ${err.message}`, 'error');
+          throw err;
         }
-        console.log('✅ Step 2 complete: Assignments inserted');
-      } catch (err) {
-        console.error('❌ Network error during insert:', err);
-        addNotification('Network error: Unable to save assignments. Please try again.', 'error');
-        return;
       }
+      
+      console.log(`✅ Step 2 complete: ${insertedCount} assignments inserted in ${Math.ceil(assignments.length / BATCH_SIZE)} batches`);
 
-      // Check how many properties were matched
+      // Check how many properties were matched (in batches for large datasets)
       const assignmentKeys = assignments.map(a => a.property_composite_key);
+      let matchedProperties = [];
+      
+      // Process in chunks to avoid query size limits
+      const QUERY_BATCH_SIZE = 100;
+      for (let i = 0; i < assignmentKeys.length; i += QUERY_BATCH_SIZE) {
+        const keyBatch = assignmentKeys.slice(i, i + QUERY_BATCH_SIZE);
+        
+        const { data: batchMatches, error: matchError } = await supabase
+          .from('property_records')
+          .select('property_composite_key, property_m4_class')
+          .eq('job_id', job.id)
+          .in('property_composite_key', keyBatch);
 
-      const { data: matchedProperties, error: matchError } = await supabase
-        .from('property_records')
-        .select('property_composite_key, property_m4_class')
-        .eq('job_id', job.id)
-        .in('property_composite_key', assignmentKeys);
-
-      if (matchError) {
-        console.error('❌ Error checking matched properties:', matchError);
-        addNotification('Error checking property matches: ' + matchError.message, 'error');
-        return;
+        if (matchError) {
+          console.error('❌ Error checking matched properties batch:', matchError);
+          addNotification('Error checking property matches: ' + matchError.message, 'error');
+          return;
+        }
+        
+        if (batchMatches) {
+          matchedProperties = [...matchedProperties, ...batchMatches];
+        }
       }
 
-      const matchedCount = matchedProperties?.length || 0;
+      const matchedCount = matchedProperties.length;
       
       // Check for commercial properties (4A, 4B, 4C)
       const hasCommercial = matchedProperties?.some(prop => 
@@ -426,17 +454,24 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
         addNotification('Error updating job flags: ' + jobUpdateError.message, 'error');
       }
 
-      // Update property_records assignment flags
+      // Update property_records assignment flags (in batches)
       if (matchedCount > 0) {
-        const { error: propUpdateError } = await supabase
-          .from('property_records')
-          .update({ is_assigned_property: true })
-          .eq('job_id', job.id)
-          .in('property_composite_key', assignmentKeys);
+        const matchedKeys = matchedProperties.map(p => p.property_composite_key);
+        
+        // Update in batches to avoid query limits
+        for (let i = 0; i < matchedKeys.length; i += QUERY_BATCH_SIZE) {
+          const keyBatch = matchedKeys.slice(i, i + QUERY_BATCH_SIZE);
+          
+          const { error: propUpdateError } = await supabase
+            .from('property_records')
+            .update({ is_assigned_property: true })
+            .eq('job_id', job.id)
+            .in('property_composite_key', keyBatch);
 
-        if (propUpdateError) {
-          console.error('❌ Error updating property flags:', propUpdateError);
-          addNotification('Error updating property assignment flags: ' + propUpdateError.message, 'error');
+          if (propUpdateError) {
+            console.error('❌ Error updating property flags batch:', propUpdateError);
+            addNotification('Warning: Some property assignment flags may not have updated', 'warning');
+          }
         }
       }
       
