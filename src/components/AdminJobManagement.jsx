@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Upload, Plus, Edit3, Users, FileText, Calendar, MapPin, Database, Settings, Eye, DollarSign, Trash2, CheckCircle, Archive, TrendingUp, Target, AlertTriangle, X } from 'lucide-react';
 import { employeeService, jobService, planningJobService, utilityService, authService, propertyService, supabase } from '../lib/supabaseClient';
 
@@ -19,6 +19,10 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
   const [loading, setLoading] = useState(true);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
   const [processing, setProcessing] = useState(false);
+
+  // Use refs to prevent state updates on unmounted components
+  const isMountedRef = useRef(true);
+  const processingTimeoutRef = useRef(null);
 
   // Processing and notification state
   const [processingStatus, setProcessingStatus] = useState({
@@ -91,6 +95,25 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
       other: 0
     }
   });
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      if (processingTimeoutRef.current) {
+        clearTimeout(processingTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Safe state update wrapper
+  const safeSetState = useCallback((setter) => {
+    return (...args) => {
+      if (isMountedRef.current) {
+        setter(...args);
+      }
+    };
+  }, []);
 
   // Helper function for elapsed time formatting
   const formatElapsedTime = (startTime) => {
@@ -223,7 +246,7 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
         hpiByCounty[record.county_name].push(record);
       });
       
-      setCountyHpiData(hpiByCounty);
+      safeSetState(setCountyHpiData)(hpiByCounty);
       console.log('✅ Loaded HPI data for counties:', Object.keys(hpiByCounty));
     } catch (error) {
       console.error('Failed to load HPI data:', error);
@@ -234,16 +257,16 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
   const addNotification = (message, type = 'info') => {
     const id = Date.now();
     const notification = { id, message, type, timestamp: new Date() };
-    setNotifications(prev => [...prev, notification]);
+    safeSetState(setNotifications)(prev => [...prev, notification]);
     
     // Auto-remove after 5 seconds
     setTimeout(() => {
-      setNotifications(prev => prev.filter(n => n.id !== id));
+      safeSetState(setNotifications)(prev => prev.filter(n => n.id !== id));
     }, 5000);
   };
 
   const updateProcessingStatus = (step, progress = 0, details = {}) => {
-    setProcessingStatus(prev => ({
+    safeSetState(setProcessingStatus)(prev => ({
       ...prev,
       currentStep: step,
       progress,
@@ -252,7 +275,7 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
   };
 
   const resetProcessingStatus = () => {
-    setProcessingStatus({
+    safeSetState(setProcessingStatus)({
       isProcessing: false,
       currentStep: '',
       progress: 0,
@@ -273,7 +296,7 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
     }
 
     try {
-      setUploadingAssignment(true);
+      safeSetState(setUploadingAssignment)(true);
       const fileContent = await assignmentFile.text();
       const lines = fileContent.split('\n').filter(line => line.trim());
       
@@ -426,7 +449,7 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
       }
       
       // Set assignment results
-      setAssignmentResults({
+      safeSetState(setAssignmentResults)({
         success: true,
         uploaded: assignments.length,
         matched: matchedCount,
@@ -449,12 +472,14 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
       console.error('Assignment upload error:', error);
       addNotification('Error uploading assignments: ' + error.message, 'error');
     } finally {
-      setUploadingAssignment(false);
+      safeSetState(setUploadingAssignment)(false);
     }
   };
 
   // Refresh jobs with dynamically calculated assigned property counts
   const refreshJobsWithAssignedCounts = async () => {
+    if (!isMountedRef.current) return;
+    
     try {
       const updatedJobs = await jobService.getAll();
       const activeJobs = updatedJobs.filter(job => job.status !== 'archived');
@@ -485,15 +510,15 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
         })
       );
 
-      setJobs(jobsWithAssignedCounts);
-      setArchivedJobs(archived.map(job => ({
+      safeSetState(setJobs)(jobsWithAssignedCounts);
+      safeSetState(setArchivedJobs)(archived.map(job => ({
         ...job,
         county: capitalizeCounty(job.county)
       })));
 
       // Refresh property stats to show updated counts
       const refreshedStats = await utilityService.getStats();
-      setDbStats(refreshedStats);
+      safeSetState(setDbStats)(refreshedStats);
 
     } catch (error) {
       console.error('Error refreshing jobs with assigned counts:', error);
@@ -543,7 +568,7 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
     }
 
     try {
-      setImportingHpi(true);
+      safeSetState(setImportingHpi)(true);
       const fileContent = await hpiFile.text();
       const lines = fileContent.split('\n').filter(line => line.trim());
       
@@ -600,31 +625,33 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
       }
       
       // Update local state
-      setCountyHpiData(prev => ({
+      safeSetState(setCountyHpiData)(prev => ({
         ...prev,
         [county]: hpiRecords
       }));
 
       addNotification(`Successfully imported ${hpiRecords.length} HPI records for ${county} County`, 'success');
-      setShowHpiImport(null);
-      setHpiFile(null);
+      safeSetState(setShowHpiImport)(null);
+      safeSetState(setHpiFile)(null);
       
     } catch (error) {
       console.error('HPI import error:', error);
       addNotification('Error importing HPI data: ' + error.message, 'error');
     } finally {
-      setImportingHpi(false);
+      safeSetState(setImportingHpi)(false);
     }
   };
 
   // Load real data from database with assigned property counts
   useEffect(() => {
     const initializeData = async () => {
+      if (!isMountedRef.current) return;
+      
       try {
-        setLoading(true);
+        safeSetState(setLoading)(true);
         
         const connectionTest = await utilityService.testConnection();
-        setDbConnected(connectionTest.success);
+        safeSetState(setDbConnected)(connectionTest.success);
         
         if (connectionTest.success) {
           const [jobsData, planningData, managersData, statsData, userData] = await Promise.all([
@@ -671,21 +698,23 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
             county: capitalizeCounty(job.county)
           }));
           
-          setJobs(jobsWithAssignedCounts);
-          setArchivedJobs(processedArchivedJobs);
-          setPlanningJobs(planningData);
-          setManagers(managersData);
-          setDbStats(statsData);
-          setCurrentUser(userData || { role: 'admin', canAccessBilling: true });
+          if (!isMountedRef.current) return;
+          
+          safeSetState(setJobs)(jobsWithAssignedCounts);
+          safeSetState(setArchivedJobs)(processedArchivedJobs);
+          safeSetState(setPlanningJobs)(planningData);
+          safeSetState(setManagers)(managersData);
+          safeSetState(setDbStats)(statsData);
+          safeSetState(setCurrentUser)(userData || { role: 'admin', canAccessBilling: true });
 
           // Load HPI data from database
           await loadCountyHpiData();
         }
       } catch (error) {
         console.error('Data initialization error:', error);
-        setDbConnected(false);
+        safeSetState(setDbConnected)(false);
       } finally {
-        setLoading(false);
+        safeSetState(setLoading)(false);
       }
     };
 
@@ -791,12 +820,18 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
       return;
     }
 
+    // Prevent duplicate submissions
+    if (processing) {
+      console.log('Already processing, ignoring duplicate request');
+      return;
+    }
+
     try {
       // Show processing modal (keep create job modal open in background to prevent hooks error)
-      setShowProcessingModal(true);
-      setProcessing(true);
+      safeSetState(setShowProcessingModal)(true);
+      safeSetState(setProcessing)(true);
       
-      setProcessingStatus({
+      safeSetState(setProcessingStatus)({
         isProcessing: true,
         currentStep: 'Preparing job creation...',
         progress: 5,
@@ -809,7 +844,11 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
       });
 
       // Let the UI render the modal first
-      await new Promise(resolve => setTimeout(resolve, 200));
+      await new Promise(resolve => {
+        processingTimeoutRef.current = setTimeout(resolve, 200);
+      });
+      
+      if (!isMountedRef.current) return;
       
       // Start processing
       updateProcessingStatus('Creating job record...', 10);
@@ -846,6 +885,8 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
 
       const createdJob = await jobService.create(jobData);
       
+      if (!isMountedRef.current) return;
+      
       updateProcessingStatus('Job created successfully. Reading files...', 25);
       
       if (newJob.sourceFile && newJob.codeFile) {
@@ -870,10 +911,12 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
               message: message
             });
             // Update processing status with latest logs
-            setProcessingStatus(prev => ({
-              ...prev,
-              logs: [...logs]
-            }));
+            if (isMountedRef.current) {
+              safeSetState(setProcessingStatus)(prev => ({
+                ...prev,
+                logs: [...logs]
+              }));
+            }
           }
           originalConsoleLog(...args);
         };
@@ -894,6 +937,8 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
         
         // Restore original console.log
         console.log = originalConsoleLog;
+        
+        if (!isMountedRef.current) return;
         
         updateProcessingStatus('Updating job status...', 90, {
           recordsProcessed: result.processed || 0,
@@ -918,7 +963,7 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
         
         updateProcessingStatus('Complete!', 100);
         
-        setProcessingResults({
+        safeSetState(setProcessingResults)({
           success: result.errors === 0,
           processed: result.processed || 0,
           errors: result.errors || 0,
@@ -934,17 +979,21 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
           addNotification(`Job created successfully! Processed ${result.processed} properties.`, 'success');
         }
 
-        closeJobModal();
+        // Don't close modal automatically - let user click Close
       }
       
     } catch (error) {
       console.error('Job creation error:', error);
-      updateProcessingStatus('Error occurred', 0, {
-        errors: [error.message]
-      });
-      addNotification('Error creating job: ' + error.message, 'error');
+      if (isMountedRef.current) {
+        updateProcessingStatus('Error occurred', 0, {
+          errors: [error.message]
+        });
+        addNotification('Error creating job: ' + error.message, 'error');
+      }
     } finally {
-      setProcessing(false);
+      if (isMountedRef.current) {
+        safeSetState(setProcessing)(false);
+      }
     }
   };
 
@@ -966,7 +1015,7 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
       await planningJobService.create(planningData);
       
       const updatedPlanningJobs = await planningJobService.getAll();
-      setPlanningJobs(updatedPlanningJobs);
+      safeSetState(setPlanningJobs)(updatedPlanningJobs);
       
       closePlanningModal();
       addNotification('Planning job created successfully!', 'success');
@@ -1019,7 +1068,7 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
       await planningJobService.update(editingPlanning.id, updateData);
       
       const updatedPlanningJobs = await planningJobService.getAll();
-      setPlanningJobs(updatedPlanningJobs);
+      safeSetState(setPlanningJobs)(updatedPlanningJobs);
       
       closePlanningModal();
       addNotification('Planning job updated successfully!', 'success');
@@ -1033,7 +1082,7 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
     try {
       await jobService.delete(job.id);
       await refreshJobsWithAssignedCounts();
-      setShowDeleteConfirm(null);
+      safeSetState(setShowDeleteConfirm)(null);
       addNotification('Job deleted successfully', 'success');
     } catch (error) {
       console.error('Job deletion error:', error);
@@ -1381,6 +1430,7 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
                       setShowProcessingModal(false);
                       setProcessingResults(null);
                       resetProcessingStatus();
+                      closeJobModal();
                       // NOW trigger metrics refresh after everything is done
                       if (onJobProcessingComplete) {
                         onJobProcessingComplete();
