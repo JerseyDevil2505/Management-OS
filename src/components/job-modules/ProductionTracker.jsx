@@ -1577,7 +1577,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
       // NEW: Show processing modal if there are validation issues
       let decisionsToApply = [];
       
-      if (pendingValidationsList.length > 0 && !processingPaused) {
+      if (pendingValidationsList.length > 0) {
         debugLog('PROCESSING_MODAL', `Found ${pendingValidationsList.length} validation issues - showing modal`);
         setPendingValidations(pendingValidationsList);
         setShowProcessingModal(true);
@@ -1592,6 +1592,8 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
             }
           }, 100);
         });
+        
+        debugLog('PROCESSING_MODAL', 'User completed validation review, continuing processing...');
         
         // Apply decisions from modal
         pendingValidationsList.forEach(validation => {
@@ -1646,7 +1648,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         debugLog('PROCESSING_MODAL', `Applied ${decisionsToApply.length} overrides from modal decisions`);
       }
 
-      // UPSERT to inspection_data table for persistence
+      // UPSERT to inspection_data table for persistence - ONLY AFTER modal decisions
       if (inspectionDataBatch.length > 0) {
         debugLog('PERSISTENCE', `Upserting ${inspectionDataBatch.length} records to inspection_data`);
         
@@ -1661,6 +1663,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
           addNotification('Warning: Could not save to inspection_data table', 'warning');
         } else {
           debugLog('PERSISTENCE', '✅ Successfully upserted to inspection_data');
+          addNotification('✅ Successfully saved to inspection_data', 'success');
           // Reload commercial counts after successful processing
           await loadCommercialCounts();
         }
