@@ -20,10 +20,6 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
   const [processing, setProcessing] = useState(false);
 
-  // Use refs to prevent state updates on unmounted components
-  const isMountedRef = useRef(true);
-  const processingTimeoutRef = useRef(null);
-
   // Processing and notification state
   const [processingStatus, setProcessingStatus] = useState({
     isProcessing: false,
@@ -96,21 +92,17 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
     }
   });
 
-  // Cleanup on unmount
+  // Use refs AFTER all useState hooks
+  const isMountedRef = useRef(true);
+  const processingTimeoutRef = useRef(null);
+
+  // Cleanup on unmount - MUST come after ALL hooks
   useEffect(() => {
+    isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
       if (processingTimeoutRef.current) {
         clearTimeout(processingTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  // Safe state update wrapper
-  const safeSetState = useCallback((setter) => {
-    return (...args) => {
-      if (isMountedRef.current) {
-        setter(...args);
       }
     };
   }, []);
