@@ -331,16 +331,26 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
       // Process assignments through Supabase
       
       // First, clear existing assignments for this job
-      const { error: deleteError } = await supabase
-        .from('job_responsibilities')
-        .delete()
-        .eq('job_id', job.id);
+      console.log('🔍 Step 1: Clearing existing assignments for job:', job.id);
+      try {
+        const { error: deleteError } = await supabase
+          .from('job_responsibilities')
+          .delete()
+          .eq('job_id', job.id);
 
-      if (deleteError) {
-        console.error('Error clearing existing assignments:', deleteError);
+        if (deleteError) {
+          console.error('❌ Error clearing existing assignments:', deleteError);
+          throw new Error(`Failed to clear assignments: ${deleteError.message}`);
+        }
+        console.log('✅ Step 1 complete: Existing assignments cleared');
+      } catch (err) {
+        console.error('❌ Network error during delete:', err);
+        addNotification('Network error: Unable to connect to database. Please check your connection.', 'error');
+        return;
       }
 
       // Insert new assignments
+      console.log('🔍 Step 2: Inserting', assignments.length, 'new assignments');
       const assignmentRecords = assignments.map(assignment => ({
         job_id: job.id,
         ...assignment,
@@ -349,12 +359,20 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
         uploaded_by: currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad'
       }));
 
-      const { data: insertData, error: insertError } = await supabase
-        .from('job_responsibilities')
-        .insert(assignmentRecords);
+      try {
+        const { data: insertData, error: insertError } = await supabase
+          .from('job_responsibilities')
+          .insert(assignmentRecords);
 
-      if (insertError) {
-        throw new Error('Assignment insert failed: ' + insertError.message);
+        if (insertError) {
+          console.error('❌ Insert error details:', insertError);
+          throw new Error('Assignment insert failed: ' + insertError.message);
+        }
+        console.log('✅ Step 2 complete: Assignments inserted');
+      } catch (err) {
+        console.error('❌ Network error during insert:', err);
+        addNotification('Network error: Unable to save assignments. Please try again.', 'error');
+        return;
       }
 
       // Check how many properties were matched
@@ -774,7 +792,7 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
     }
 
     try {
-      // Hide create job modal and show processing modal
+      // Show processing modal (keep create job modal open in background to prevent hooks error)
       setShowProcessingModal(true);
       setProcessing(true);
       
@@ -895,10 +913,8 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
         // Refresh with assigned property counts
         await refreshJobsWithAssignedCounts();
         
-        // Trigger metrics refresh in parent component
-        if (onJobProcessingComplete) {
-          onJobProcessingComplete();
-        }
+        // DO NOT trigger metrics refresh here - wait until Close button
+        // This was causing re-renders during processing
         
         updateProcessingStatus('Complete!', 100);
         
@@ -1365,6 +1381,10 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
                       setShowProcessingModal(false);
                       setProcessingResults(null);
                       resetProcessingStatus();
+                      // NOW trigger metrics refresh after everything is done
+                      if (onJobProcessingComplete) {
+                        onJobProcessingComplete();
+                      }
                     }}
                     className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium"
                   >
