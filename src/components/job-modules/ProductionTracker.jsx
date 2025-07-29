@@ -1,318 +1,5 @@
-{/* Billing Tab */}
-            {activeTab === 'billing' && billingAnalytics && (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-bold text-gray-900">Summary for Billing</h3>
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                  <div>
-                    <h4 className="text-md font-semibold text-gray-800 mb-4">Individual Classes</h4>
-                    <div className="space-y-3">
-                      {Object.entries(billingAnalytics.byClass)
-                        .filter(([cls, data]) => data.total > 0)
-                        .map(([cls, data]) => {
-                          const isResidential = ['2', '3A'].includes(cls);
-                          const isCommercial = ['4A', '4B', '4C'].includes(cls);
-                          const colorClass = isResidential 
-                            ? 'bg-green-50 border-green-200' 
-                            : isCommercial 
-                            ? 'bg-blue-50 border-blue-200'
-                            : 'bg-gray-50 border-gray-200';
-                          const textColor = isResidential 
-                            ? 'text-green-600' 
-                            : isCommercial 
-                            ? 'text-blue-600' 
-                            : 'text-gray-600';
-                          const progressColor = isResidential ? 'green' : isCommercial ? 'blue' : 'gray';
-                          
-                          return (
-                            <div key={cls} className={`p-4 rounded-lg border ${colorClass}`}>
-                              <div className="flex justify-between items-center mb-2">
-                                <div>
-                                  <span className="font-medium text-gray-900">Class {cls}</span>
-                                  {isResidential && <span className="ml-2 text-xs text-green-600 font-medium">Residential</span>}
-                                  {isCommercial && <span className="ml-2 text-xs text-blue-600 font-medium">Commercial</span>}
-                                </div>
-                                <div className="text-right">
-                                  <div className={`font-bold ${textColor}`}>{data.billable.toLocaleString()}</div>
-                                  <div className="text-xs text-gray-500">of {data.total.toLocaleString()}</div>
-                                </div>
-                              </div>
-                              <ProgressBar current={data.billable} total={data.total} color={progressColor} />
-                            </div>
-                          );
-                        })}
-                    </div>
-                  </div>
-
-                  <div>
-                    <h4 className="text-md font-semibold text-gray-800 mb-4">Grouped Categories</h4>
-                    <div className="space-y-4">
-                      <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-                        <div className="flex justify-between items-center mb-2">
-                          <div>
-                            <span className="font-medium text-gray-900">Commercial (4A, 4B, 4C)</span>
-                            <div className="text-xs text-gray-600">Commercial properties</div>
-                          </div>
-                          <div className="text-right">
-                            <div className="font-bold text-blue-600 text-xl">{billingAnalytics.grouped.commercial.toLocaleString()}</div>
-                            <div className="text-xs text-blue-600">of {billingAnalytics.progressData.commercial.total.toLocaleString()}</div>
-                          </div>
-                        </div>
-                        <ProgressBar 
-                          current={billingAnalytics.progressData.commercial.billable} 
-                          total={billingAnalytics.progressData.commercial.total} 
-                          color="blue" 
-                        />
-                      </div>
-
-                      <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
-                        <div className="flex items-center justify-between mb-2">
-                          <div>
-                            <span className="font-medium text-gray-900">Exempt (15A-15F)</span>
-                            <div className="text-xs text-gray-600">Tax-exempt properties</div>
-                          </div>
-                          <div className="text-right">
-                            <div className="font-bold text-purple-600 text-xl">{billingAnalytics.grouped.exempt.toLocaleString()}</div>
-                            <div className="text-xs text-purple-600">of {billingAnalytics.progressData.exempt.total.toLocaleString()}</div>
-                          </div>
-                        </div>
-                        <ProgressBar 
-                          current={billingAnalytics.progressData.exempt.billable} 
-                          total={billingAnalytics.progressData.exempt.total} 
-                          color="purple" 
-                        />
-                      </div>
-
-                      <div className="p-4 bg-green-50 rounded-lg border border-green-200">
-                        <div className="flex justify-between items-center mb-2">
-                          <div>
-                            <span className="font-medium text-gray-900">Railroad (5A, 5B)</span>
-                            <div className="text-xs text-gray-600">Railroad properties</div>
-                          </div>
-                          <div className="text-right">
-                            <div className="font-bold text-green-600 text-xl">{billingAnalytics.grouped.railroad.toLocaleString()}</div>
-                            <div className="text-xs text-green-600">of {billingAnalytics.progressData.railroad.total.toLocaleString()}</div>
-                          </div>
-                        </div>
-                        <ProgressBar 
-                          current={billingAnalytics.progressData.railroad.billable} 
-                          total={billingAnalytics.progressData.railroad.total} 
-                          color="green" 
-                        />
-                      </div>
-
-                      <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-                        <div className="flex justify-between items-center mb-2">
-                          <div>
-                            <span className="font-medium text-gray-900">Personal Property (6A, 6B)</span>
-                            <div className="text-xs text-gray-600">Personal property</div>
-                          </div>
-                          <div className="text-right">
-                            <div className="font-bold text-gray-600 text-xl">{billingAnalytics.grouped.personalProperty.toLocaleString()}</div>
-                            <div className="text-xs text-gray-600">of {billingAnalytics.progressData.personalProperty.total.toLocaleString()}</div>
-                          </div>
-                        </div>
-                        <ProgressBar 
-                          current={billingAnalytics.progressData.personalProperty.billable} 
-                          total={billingAnalytics.progressData.personalProperty.total} 
-                          color="gray" 
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Validation Tab */}
-            {activeTab === 'validation' && validationReport && (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-bold text-gray-900">
-                    Validation Report - Historical Reference
-                  </h3>
-                  {validationReport.summary.total_issues > 0 && (
-                    <button
-                      onClick={exportValidationReport}
-                      className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center space-x-2"
-                    >
-                      <Download className="w-4 h-4" />
-                      <span>Export Report</span>
-                    </button>
-                  )}
-                </div>
-
-                {validationReport.summary.total_issues === 0 ? (
-                  <div className="text-center py-8">
-                    <CheckCircle className="w-12 h-12 mx-auto mb-4 text-green-500" />
-                    <h4 className="text-lg font-semibold text-gray-900 mb-2">No Validation Issues</h4>
-                    <p className="text-gray-600">All attempted inspections passed validation checks</p>
-                    <p className="text-sm text-gray-500 mt-2">Properties not yet inspected are excluded from validation</p>
-                  </div>
-                ) : (
-                  <>
-                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
-                      <h4 className="font-semibold text-yellow-800 mb-3">Inspector Summary - Historical View</h4>
-                      <p className="text-sm text-yellow-700 mb-3">
-                        These issues were identified during processing. Override decisions were made in the processing modal.
-                      </p>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        {validationReport.summary.inspector_breakdown.map((inspector, idx) => (
-                          <div 
-                            key={idx}
-                            onClick={() => setSelectedInspectorIssues(
-                              selectedInspectorIssues === inspector.inspector_code ? null : inspector.inspector_code
-                            )}
-                            className="p-3 bg-white rounded border cursor-pointer hover:bg-yellow-50 transition-colors"
-                          >
-                            <div className="flex justify-between items-center">
-                              <div>
-                                <div className="font-medium text-gray-900">{inspector.inspector_code}</div>
-                                <div className="text-sm text-gray-600">{inspector.inspector_name}</div>
-                              </div>
-                              <div className="text-right">
-                                <div className="font-bold text-red-600">{inspector.total_issues}</div>
-                                <div className="text-xs text-gray-500">issues</div>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {selectedInspectorIssues && validationReport.detailed_issues[selectedInspectorIssues] && (
-                      <div className="bg-white border border-gray-200 rounded-lg p-4">
-                        <h4 className="font-semibold text-gray-900 mb-4">
-                          Issues for {selectedInspectorIssues} - {validationReport.summary.inspector_breakdown.find(i => i.inspector_code === selectedInspectorIssues)?.inspector_name}
-                        </h4>
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-sm">
-                            <thead className="bg-gray-50">
-                              <tr>
-                                <th className="px-3 py-2 text-left font-medium text-gray-700">Block</th>
-                                <th className="px-3 py-2 text-left font-medium text-gray-700">Lot</th>
-                                <th className="px-3 py-2 text-left font-medium text-gray-700">Qualifier</th>
-                                <th className="px-3 py-2 text-left font-medium text-gray-700">Card</th>
-                                <th className="px-3 py-2 text-left font-medium text-gray-700">Property Location</th>
-                                <th className="px-3 py-2 text-left font-medium text-gray-700">Compound Issues</th>
-                                <th className="px-3 py-2 text-left font-medium text-gray-700">Status</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {validationReport.detailed_issues[selectedInspectorIssues].map((issue, idx) => {
-                                // Check if this issue has been overridden
-                                const propertyKey = issue.composite_key || `${issue.block}-${issue.lot}-${issue.qualifier || ''}`;
-                                const isOverridden = overrideMap && overrideMap[propertyKey]?.override_applied;
-                                
-                                return (
-                                  <tr key={idx} className={`border-t border-gray-200 ${isOverridden ? 'bg-green-50' : ''}`}>
-                                    <td className="px-3 py-2">{issue.block}</td>
-                                    <td className="px-3 py-2">{issue.lot}</td>
-                                    <td className="px-3 py-2">{issue.qualifier || '-'}</td>
-                                    <td className="px-3 py-2">{issue.card}</td>
-                                    <td className="px-3 py-2">{issue.property_location}</td>
-                                    <td className={`px-3 py-2 ${isOverridden ? 'line-through text-gray-500' : 'text-red-600'}`}>
-                                      {issue.warning_message}
-                                    </td>
-                                    <td className="px-3 py-2">
-                                      {isOverridden ? (
-                                        <div className="text-green-600 text-xs font-medium">
-                                          ✅ Overridden: {overrideMap[propertyKey]?.override_reason}
-                                        </div>
-                                      ) : (
-                                        <span className="text-red-600 text-xs font-medium">Not Overridden</span>
-                                      )}
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    )}
-
-                    {!selectedInspectorIssues && (
-                      <div className="text-center py-8 text-gray-500">
-                        <FileText className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-                        <p>Click on an inspector above to view detailed issues</p>
-                        <p className="text-sm mt-2">This is a historical record of validation issues found during processing</p>
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-            )}
-
-            {/* Missing Properties Report */}
-            {activeTab === 'missing' && missingPropertiesReport && (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-bold text-gray-900">
-                    Missing Properties Report - Not Added to Inspection Data
-                  </h3>
-                  {missingPropertiesReport.summary.total_missing > 0 && (
-                    <button
-                      onClick={() => exportMissingPropertiesReport()}
-                      className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 flex items-center space-x-2"
-                    >
-                      <Download className="w-4 h-4" />
-                      <span>Export Missing Report</span>
-                    </button>
-                  )}
-                </div>
-
-                {missingPropertiesReport.summary.total_missing === 0 ? (
-                  <div className="text-center py-8">
-                    <CheckCircle className="w-12 h-12 mx-auto mb-4 text-green-500" />
-                    <h4 className="text-lg font-semibold text-gray-900 mb-2">All Properties Accounted For</h4>
-                    <p className="text-gray-600">Every property record was successfully processed to inspection_data</p>
-                    <p className="text-sm text-gray-500 mt-2">Total Records: {analytics?.totalRecords || 0} | Valid Inspections: {analytics?.validInspections || 0}</p>
-                  </div>
-                ) : (
-                  <>
-                    {/* Summary Cards */}
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                      <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-sm text-orange-600 font-medium">Total Missing</p>
-                            <p className="text-2xl font-bold text-orange-800">{missingPropertiesReport.summary.total_missing}</p>
-                          </div>
-                          <AlertTriangle className="w-8 h-8 text-orange-500" />
-                        </div>
-                      </div>
-
-                      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-sm text-gray-600 font-medium">Uninspected</p>
-                            <p className="text-2xl font-bold text-gray-800">{missingPropertiesReport.summary.uninspected_count}</p>
-                            <p className="text-xs text-gray-500">No inspection attempt</p>
-                          </div>
-                          <Eye className="w-8 h-8 text-gray-500" />
-                        </div>
-                      </div>
-
-                      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-sm text-red-600 font-medium">Validation Failed</p>
-                            <p className="text-2xl font-bold text-red-800">{missingPropertiesReport.summary.validation_failed_count}</p>
-                            <p className="text-xs text-red-500">Attempted but invalid</p>
-                          </div>
-                          <X className="w-8 h-8 text-red-500" />
-                        </div>
-                      </div>
-
-                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-sm text-blue-600 font-medium">Success Rate</p>
-                            <p className="import React, { useState, useEffect } from 'react';
-import { Factory, Settings, Download, RefreshCw, AlertTriangle, CheckCircle, TrendingUp, DollarSign, Users, Calendar, X, ChevronDown, ChevronUp, Eye, FileText, Lock, Unlock, Save, Shield } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Factory, Settings, Download, RefreshCw, AlertTriangle, CheckCircle, TrendingUp, DollarSign, Users, Calendar, X, ChevronDown, ChevronUp, Eye, FileText, Lock, Unlock, Save } from 'lucide-react';
 import { supabase, jobService } from '../../lib/supabaseClient';
 
 const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyRecordsCount, onUpdateWorkflowStats }) => {
@@ -362,22 +49,18 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
   const [inspectorFilter, setInspectorFilter] = useState('all');
   const [inspectorSort, setInspectorSort] = useState('alphabetical');
   
-  // NEW: Processing modal state
-  const [showProcessingModal, setShowProcessingModal] = useState(false);
-  const [processingStage, setProcessingStage] = useState('');
-  const [processingProgress, setProcessingProgress] = useState(0);
-  const [pendingValidationIssues, setPendingValidationIssues] = useState([]);
-  const [pendingOverrides, setPendingOverrides] = useState({});
-  const [processingResults, setProcessingResults] = useState(null);
-  
-  // Existing override state (for reference/history)
-  const [validationOverrides, setValidationOverrides] = useState([]);
-  const [overrideMap, setOverrideMap] = useState({});
-  
-  // NEW: Override modal state (for post-processing if needed)
+  // NEW: Override modal state
   const [showOverrideModal, setShowOverrideModal] = useState(false);
   const [selectedOverrideProperty, setSelectedOverrideProperty] = useState(null);
   const [overrideReason, setOverrideReason] = useState('New Construction');
+  const [overrideMap, setOverrideMap] = useState({});
+  const [validationOverrides, setValidationOverrides] = useState([]);
+
+  // NEW: Processing modal for validation during processing
+  const [pendingValidations, setPendingValidations] = useState([]);
+  const [showProcessingModal, setShowProcessingModal] = useState(false);
+  const [processingPaused, setProcessingPaused] = useState(false);
+  const [processedValidationDecisions, setProcessedValidationDecisions] = useState({});
 
   // NEW: Smart data staleness detection
   const currentWorkflowStats = jobData?.appData;
@@ -511,7 +194,69 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
     }
   };
 
-  // FIXED: Enhanced InfoBy code loading with proper Microsystems cleaning
+  // Load validation overrides
+  const loadValidationOverrides = async () => {
+    if (!jobData?.id || !latestFileVersion) return;
+
+    try {
+      const { data: overrides, error } = await supabase
+        .from('inspection_data')
+        .select(`
+          property_composite_key,
+          block,
+          lot,
+          qualifier,
+          card,
+          property_location,
+          override_applied,
+          override_reason,
+          override_by,
+          override_date
+        `)
+        .eq('job_id', jobData.id)
+        .eq('file_version', latestFileVersion)
+        .eq('override_applied', true)
+        .order('override_date', { ascending: false });
+
+      if (!error && overrides) {
+        // Some overrides might be missing block/lot if created before fix
+        // For those, parse from composite key
+        const processedOverrides = overrides.map(override => {
+          if (!override.block || !override.lot) {
+            // Parse from composite key format: "BLOCK-LOT-QUALIFIER"
+            const parts = override.property_composite_key.split('-');
+            return {
+              ...override,
+              block: override.block || parts[0] || '',
+              lot: override.lot || parts[1] || '',
+              qualifier: override.qualifier || parts[2] || ''
+            };
+          }
+          return override;
+        });
+        
+        setValidationOverrides(processedOverrides);
+        
+        // Build override map for quick lookup
+        const overrideMapData = {};
+        processedOverrides.forEach(override => {
+          overrideMapData[override.property_composite_key] = {
+            override_applied: override.override_applied,
+            override_reason: override.override_reason,
+            override_by: override.override_by,
+            override_date: override.override_date
+          };
+        });
+        setOverrideMap(overrideMapData);
+        
+        debugLog('VALIDATION_OVERRIDES', `Loaded ${processedOverrides.length} validation overrides with property details`);
+      }
+    } catch (error) {
+      console.error('Error loading validation overrides:', error);
+    }
+  };
+
+  // Enhanced InfoBy code loading with proper Microsystems cleaning
   const loadAvailableInfoByCodes = async () => {
     if (!jobData?.id) return;
 
@@ -582,7 +327,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         }
 
       } else if (vendor === 'Microsystems') {
-        // FIXED: Enhanced Microsystems parsing with proper cleaning
+        // Enhanced Microsystems parsing with proper cleaning
         const fieldCodes = job.parsed_code_definitions.field_codes;
         const flatLookup = job.parsed_code_definitions.flat_lookup;
         
@@ -632,7 +377,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
           });
           
         } else {
-          // APPROACH 3: FIXED Legacy format with aggressive cleaning
+          // APPROACH 3: Legacy format with aggressive cleaning
           debugLog('CODES', 'No structured format found, cleaning raw legacy format...');
           
           Object.keys(job.parsed_code_definitions).forEach(rawKey => {
@@ -732,7 +477,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         } else if (desc.includes('PRICED') || desc.includes('NARRATIVE') || desc.includes('ENCODED')) {
           defaultConfig.priced.push(storageCode);
         } else if (desc.includes('VACANT LAND') || desc.includes('NARRATIVE')) {
-          // NEW: Special category for V (VACANT LAND) and N (NARRATIVE) - valid but no validation
+          // Special category for V (VACANT LAND) and N (NARRATIVE) - valid but no validation
           defaultConfig.special.push(storageCode);
         }
       });
@@ -744,11 +489,19 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
     debugLog('CATEGORIES', '✅ Set default category configuration', defaultConfig);
   };
 
-  // Save category configuration to database
-  const saveCategoriesToDatabase = async (config = null) => {
+  // Save category configuration to database and persist analytics
+  const saveCategoriesToDatabase = async (config = null, freshAnalytics = null) => {
     if (!jobData?.id) return;
 
     const configToSave = config || infoByCategoryConfig;
+    const analyticsToSave = freshAnalytics || {
+      analytics,
+      billingAnalytics,
+      validationReport,
+      missingPropertiesReport,
+      validationOverrides,
+      overrideMap
+    };
 
     try {
       const { error } = await supabase
@@ -758,7 +511,17 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
             ...configToSave,
             vendor_type: jobData.vendor_type,
             last_updated: new Date().toISOString()
-          }
+          },
+          // Persist fresh analytics data for navigation survival
+          workflow_stats: analyticsToSave.analytics ? {
+            ...analyticsToSave.analytics,
+            billingAnalytics: analyticsToSave.billingAnalytics,
+            validationReport: analyticsToSave.validationReport,
+            missingPropertiesReport: analyticsToSave.missingPropertiesReport,
+            validationOverrides: analyticsToSave.validationOverrides,
+            overrideMap: analyticsToSave.overrideMap,
+            lastProcessed: new Date().toISOString()
+          } : undefined
         })
         .eq('id', jobData.id);
 
@@ -767,63 +530,10 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
       setOriginalCategoryConfig(configToSave);
       setHasUnsavedChanges(false);
       
-      debugLog('PERSISTENCE', '✅ Saved config to job record');
+      debugLog('PERSISTENCE', '✅ Saved config and FRESH analytics to job record', analyticsToSave.analytics);
     } catch (error) {
       console.error('Error saving configuration:', error);
       addNotification('Error saving configuration', 'error');
-    }
-  };
-
-  // NEW: Save complete analytics with overrides included
-  const saveCompleteAnalytics = async (analyticsData, billingData, validationData, missingData, overrides) => {
-    if (!jobData?.id) return;
-
-    try {
-      // Calculate final metrics with overrides included
-      const finalAnalytics = {
-        ...analyticsData,
-        validInspections: analyticsData.validInspections + Object.keys(overrides).length,
-        validationOverrideCount: Object.keys(overrides).length
-      };
-
-      // Save to workflow_stats
-      const { error } = await supabase
-        .from('jobs')
-        .update({ 
-          workflow_stats: {
-            ...finalAnalytics,
-            billingAnalytics: billingData,
-            validationReport: validationData,
-            missingPropertiesReport: missingData,
-            validationOverrides: Object.values(overrides),
-            overrideMap: overrides,
-            lastProcessed: new Date().toISOString(),
-            needsRefresh: false
-          }
-        })
-        .eq('id', jobData.id);
-
-      if (error) throw error;
-
-      // Update App.js state
-      if (onUpdateWorkflowStats) {
-        onUpdateWorkflowStats({
-          jobId: jobData.id,
-          analytics: finalAnalytics,
-          billingAnalytics: billingData,
-          validationReport: validationData,
-          missingPropertiesReport: missingData,
-          validationOverrides: Object.values(overrides),
-          overrideMap: overrides,
-          totalValidationOverrides: Object.keys(overrides).length,
-          lastProcessed: new Date().toISOString()
-        });
-      }
-
-      debugLog('PERSISTENCE', '✅ Saved complete analytics with overrides included');
-    } catch (error) {
-      console.error('Error saving complete analytics:', error);
-      addNotification('Error saving analytics', 'error');
     }
   };
 
@@ -839,17 +549,55 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         .single();
 
       if (!error && job?.workflow_stats && job.workflow_stats.totalRecords) {
-        // Load the persisted analytics directly - no adjustment needed
-        setAnalytics(job.workflow_stats);
-        setBillingAnalytics(job.workflow_stats.billingAnalytics);
-        setValidationReport(job.workflow_stats.validationReport);
-        setMissingPropertiesReport(job.workflow_stats.missingPropertiesReport);
-        setValidationOverrides(job.workflow_stats.validationOverrides || []);
-        setOverrideMap(job.workflow_stats.overrideMap || {});
+        // Load the persisted analytics
+        let loadedAnalytics = job.workflow_stats;
+        let loadedBillingAnalytics = job.workflow_stats.billingAnalytics;
+        let loadedValidationReport = job.workflow_stats.validationReport;
+        
+        // Load current validation overrides and adjust totals
+        const { data: currentOverrides, error: overrideError } = await supabase
+          .from('inspection_data')
+          .select('property_composite_key, override_applied, property_class')
+          .eq('job_id', jobData.id)
+          .eq('file_version', latestFileVersion)
+          .eq('override_applied', true);
+
+        if (!overrideError && currentOverrides && currentOverrides.length > 0) {
+          debugLog('PERSISTENCE', `Found ${currentOverrides.length} validation overrides to include in totals`);
+          
+          // Adjust the validInspections count to include overrides
+          const overrideCount = currentOverrides.length;
+          const savedOverrideCount = job.workflow_stats.validationOverrides?.length || 0;
+          
+          // If we have MORE overrides now than when analytics were saved, add the difference
+          if (overrideCount > savedOverrideCount) {
+            const additionalOverrides = overrideCount - savedOverrideCount;
+            loadedAnalytics = {
+              ...loadedAnalytics,
+              validInspections: loadedAnalytics.validInspections + additionalOverrides
+            };
+            debugLog('PERSISTENCE', `Adjusted validInspections from ${job.workflow_stats.validInspections} to ${loadedAnalytics.validInspections}`);
+          }
+        }
+        
+        // Set all the state with potentially adjusted values
+        setAnalytics(loadedAnalytics);
+        setBillingAnalytics(loadedBillingAnalytics);
+        setValidationReport(loadedValidationReport);
+        
+        if (job.workflow_stats.missingPropertiesReport) {
+          setMissingPropertiesReport(job.workflow_stats.missingPropertiesReport);
+        }
+        if (job.workflow_stats.validationOverrides) {
+          setValidationOverrides(job.workflow_stats.validationOverrides);
+        }
+        if (job.workflow_stats.overrideMap) {
+          setOverrideMap(job.workflow_stats.overrideMap);
+        }
         
         setProcessed(true);
         setSettingsLocked(true);
-        debugLog('PERSISTENCE', '✅ Loaded persisted analytics - counts already include overrides');
+        debugLog('PERSISTENCE', '✅ Loaded persisted analytics with override adjustments');
         addNotification('Previously processed analytics loaded', 'info');
       }
     } catch (error) {
@@ -910,6 +658,238 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
     addNotification('Project start date unlocked for editing', 'info');
   };
 
+  // Undo override validation issue
+  const handleUndoOverride = async (propertyKey, overrideReason) => {
+    try {
+      // DELETE the override record entirely from inspection_data
+      const { error } = await supabase
+        .from('inspection_data')
+        .delete()
+        .eq('job_id', jobData.id)
+        .eq('file_version', latestFileVersion)
+        .eq('property_composite_key', propertyKey)
+        .eq('override_applied', true);
+
+      if (error) throw error;
+      
+      // Update App.js state immediately after removing override
+      if (onUpdateWorkflowStats && analytics) {
+        // Get fresh overrides for accurate count
+        const freshOverrides = await getFreshValidationOverrides();
+        const freshOverrideMap = {};
+        freshOverrides.forEach(override => {
+          freshOverrideMap[override.property_composite_key] = {
+            override_applied: override.override_applied,
+            override_reason: override.override_reason,
+            override_by: override.override_by,
+            override_date: override.override_date
+          };
+        });
+        
+        // Create adjusted analytics with reduced override count
+        const adjustedAnalytics = {
+          ...analytics,
+          validInspections: Math.max(0, analytics.validInspections - 1), // Remove the override
+          validationOverrideCount: freshOverrides.length
+        };
+        
+        // Send updated data to App.js
+        onUpdateWorkflowStats({
+          jobId: jobData.id,
+          analytics: adjustedAnalytics,
+          billingAnalytics: billingAnalytics,
+          validationReport: validationReport,
+          missingPropertiesReport: missingPropertiesReport,
+          validationOverrides: freshOverrides,
+          overrideMap: freshOverrideMap,
+          totalValidationOverrides: freshOverrides.length,
+          lastProcessed: analytics.lastProcessed || new Date().toISOString()
+        });
+        
+        debugLog('OVERRIDE', `✅ Override removed and App.js notified - new total: ${adjustedAnalytics.validInspections}`);
+      }
+      
+      addNotification(`✅ Override removed - ${propertyKey} deleted from inspection_data`, 'success');
+      addNotification('🔄 Reprocessing analytics to reflect changes...', 'info');
+
+      // Trigger immediate analytics reprocessing
+      setTimeout(async () => {
+        await startProcessingSession();
+      }, 1000);
+
+    } catch (error) {
+      console.error('Error removing override:', error);
+      addNotification('Error removing override: ' + error.message, 'error');
+    }
+  };
+
+  // Override validation issue (single property with COMPLETE record)
+  const handleOverrideValidation = async (property) => {
+    if (!overrideReason || !property) return;
+
+    try {
+      // Get FULL property record from property_records using composite key
+      const { data: fullPropertyRecord, error: fetchError } = await supabase
+        .from('property_records')
+        .select('*')
+        .eq('job_id', jobData.id)
+        .eq('file_version', latestFileVersion)
+        .eq('property_composite_key', property.composite_key)
+        .single();
+
+      if (fetchError || !fullPropertyRecord) {
+        throw new Error(`Could not find property record for ${property.composite_key}`);
+      }
+
+      // Build COMPLETE inspection_data record with ALL fields
+      const completeOverrideRecord = {
+        // Standard fields from property_records
+        job_id: jobData.id,
+        file_version: latestFileVersion,
+        property_composite_key: fullPropertyRecord.property_composite_key,
+        block: fullPropertyRecord.property_block,
+        lot: fullPropertyRecord.property_lot,
+        qualifier: fullPropertyRecord.property_qualifier || '',
+        card: fullPropertyRecord.property_addl_card || '1',
+        property_location: fullPropertyRecord.property_location || '',
+        property_class: fullPropertyRecord.property_m4_class,
+        measure_by: fullPropertyRecord.inspection_measure_by,
+        measure_date: fullPropertyRecord.inspection_measure_date,
+        info_by_code: fullPropertyRecord.inspection_info_by,
+        list_by: fullPropertyRecord.inspection_list_by,
+        list_date: fullPropertyRecord.inspection_list_date,
+        price_by: fullPropertyRecord.inspection_price_by,
+        price_date: fullPropertyRecord.inspection_price_date,
+        
+        // Module-specific fields
+        project_start_date: projectStartDate,
+        upload_date: new Date().toISOString(),
+        
+        // Override-specific fields
+        override_applied: true,
+        override_reason: overrideReason,
+        override_by: 'Manager',
+        override_date: new Date().toISOString()
+      };
+
+      // UPSERT complete record to inspection_data
+      const { error: upsertError } = await supabase
+        .from('inspection_data')
+        .upsert(completeOverrideRecord, {
+          onConflict: 'job_id,property_composite_key,file_version'
+        });
+
+      if (upsertError) throw upsertError;
+
+      // Close modal
+      setShowOverrideModal(false);
+      setSelectedOverrideProperty(null);
+      setOverrideReason('New Construction');
+      
+      // Immediately reload validation overrides to get fresh data with all fields
+      await loadValidationOverrides();
+      
+      // Update App.js state immediately with the new override
+      if (onUpdateWorkflowStats && analytics) {
+        // Get fresh overrides for accurate count
+        const freshOverrides = await getFreshValidationOverrides();
+        const freshOverrideMap = {};
+        freshOverrides.forEach(override => {
+          freshOverrideMap[override.property_composite_key] = {
+            override_applied: override.override_applied,
+            override_reason: override.override_reason,
+            override_by: override.override_by,
+            override_date: override.override_date
+          };
+        });
+        
+        // Create adjusted analytics with new override count
+        const adjustedAnalytics = {
+          ...analytics,
+          validInspections: analytics.validInspections + 1, // Add the new override
+          validationOverrideCount: freshOverrides.length
+        };
+        
+        // Send updated data to App.js
+        onUpdateWorkflowStats({
+          jobId: jobData.id,
+          analytics: adjustedAnalytics,
+          billingAnalytics: billingAnalytics,
+          validationReport: validationReport,
+          missingPropertiesReport: missingPropertiesReport,
+          validationOverrides: freshOverrides,
+          overrideMap: freshOverrideMap,
+          totalValidationOverrides: freshOverrides.length,
+          lastProcessed: analytics.lastProcessed || new Date().toISOString()
+        });
+        
+        debugLog('OVERRIDE', `✅ Override created and App.js notified - new total: ${adjustedAnalytics.validInspections}`);
+      }
+      
+      addNotification(`✅ Complete override record created: ${overrideReason} for ${property.composite_key}`, 'success');
+      addNotification('🔄 Reprocessing analytics with complete override...', 'info');
+
+      // Trigger immediate analytics reprocessing
+      setTimeout(async () => {
+        await startProcessingSession();
+      }, 1000);
+
+    } catch (error) {
+      console.error('Error applying complete override:', error);
+      addNotification('Error applying override: ' + error.message, 'error');
+    }
+  };
+
+  // NEW: Handle override during processing modal
+  const handleProcessingOverride = (propertyKey, reason) => {
+    setProcessedValidationDecisions(prev => ({
+      ...prev,
+      [propertyKey]: {
+        action: 'override',
+        reason: reason,
+        timestamp: new Date().toISOString()
+      }
+    }));
+    
+    // Update UI to show this property as overridden
+    setPendingValidations(prev => 
+      prev.map(val => 
+        val.composite_key === propertyKey 
+          ? { ...val, overridden: true, override_reason: reason }
+          : val
+      )
+    );
+  };
+
+  // NEW: Skip validation issue during processing
+  const handleProcessingSkip = (propertyKey) => {
+    setProcessedValidationDecisions(prev => ({
+      ...prev,
+      [propertyKey]: {
+        action: 'skip',
+        timestamp: new Date().toISOString()
+      }
+    }));
+    
+    // Update UI to show this property as skipped
+    setPendingValidations(prev => 
+      prev.map(val => 
+        val.composite_key === propertyKey 
+          ? { ...val, skipped: true }
+          : val
+      )
+    );
+  };
+
+  // NEW: Continue processing after validation decisions
+  const continueProcessingAfterValidations = async () => {
+    setShowProcessingModal(false);
+    setProcessingPaused(false);
+    
+    // Processing will continue in processAnalytics with the decisions made
+    addNotification('📊 Continuing analytics processing with validation decisions...', 'info');
+  };
+
   // Reset session
   const resetSession = () => {
     setSessionId(null);
@@ -922,6 +902,8 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
     setMissingPropertiesReport(null);
     setValidationOverrides([]);
     setOverrideMap({});
+    setPendingValidations([]);
+    setProcessedValidationDecisions({});
     addNotification('🔄 Session reset - settings unlocked', 'info');
   };
 
@@ -929,12 +911,21 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
   useEffect(() => {
     if (jobData?.id && latestFileVersion) {
       const loadAllData = async () => {
+        // Load all base data first
         await loadEmployeeData();
         await loadAvailableInfoByCodes();
         await loadProjectStartDate();
         await loadVendorSource();
+        
+        // Load validation overrides BEFORE loading persisted analytics
+        await loadValidationOverrides();
+        
+        // Then load persisted analytics (which may need override data)
         await loadPersistedAnalytics();
+        
+        // Finally load commercial counts
         await loadCommercialCounts();
+        
         setLoading(false);
       };
       
@@ -944,18 +935,42 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
 
   // Load data from App.js central hub if available
   useEffect(() => {
-    if (jobData?.appData && !isDataStale) {
+    if (jobData?.appData) {
       debugLog('APP_INTEGRATION', '✅ Loading data from App.js central hub');
-      setAnalytics(jobData.appData.analytics);
-      setBillingAnalytics(jobData.appData.billingAnalytics);
-      setValidationReport(jobData.appData.validationReport);
-      setMissingPropertiesReport(jobData.appData.missingPropertiesReport);
-      setValidationOverrides(jobData.appData.validationOverrides || []);
-      setOverrideMap(jobData.appData.overrideMap || {});
-      setProcessed(true);
-      setSettingsLocked(true);
+      
+      // Check if we need to adjust for current overrides
+      const loadCurrentOverrides = async () => {
+        const { data: currentOverrides, error } = await supabase
+          .from('inspection_data')
+          .select('property_composite_key, override_applied')
+          .eq('job_id', jobData.id)
+          .eq('file_version', latestFileVersion)
+          .eq('override_applied', true);
+
+        if (!error && currentOverrides) {
+          const currentOverrideCount = currentOverrides.length;
+          const appDataOverrideCount = jobData.appData.validationOverrides?.length || 0;
+          
+          // If database has more overrides than App.js data, we need to reprocess
+          if (currentOverrideCount > appDataOverrideCount) {
+            debugLog('APP_INTEGRATION', `Database has ${currentOverrideCount} overrides but App.js only knows about ${appDataOverrideCount}. Need to reprocess.`);
+            // Don't load stale data - force a reprocess instead
+            return;
+          }
+        }
+        
+        // Data is current, safe to load
+        setAnalytics(jobData.appData.analytics);
+        setBillingAnalytics(jobData.appData.billingAnalytics);
+        setValidationReport(jobData.appData.validationReport);
+        setMissingPropertiesReport(jobData.appData.missingPropertiesReport);
+        setProcessed(true);
+        setSettingsLocked(true);
+      };
+      
+      loadCurrentOverrides();
     }
-  }, [jobData?.appData, isDataStale]);
+  }, [jobData?.appData]);
 
   // Track unsaved changes
   useEffect(() => {
@@ -963,7 +978,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
     setHasUnsavedChanges(hasChanges);
   }, [infoByCategoryConfig, originalCategoryConfig]);
 
-  // ENHANCED: Process analytics with validation review modal
+  // ENHANCED: Process analytics with manager-focused counting and inspection_data persistence
   const processAnalytics = async () => {
     if (!projectStartDate || !jobData?.id || !latestFileVersion) {
       addNotification('Project start date and job data required', 'error');
@@ -971,13 +986,16 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
     }
 
     try {
-      setProcessingStage('Loading property data...');
-      setProcessingProgress(10);
-      
       // Get actual vendor from property_records
       const actualVendor = await loadVendorSource();
       
-      debugLog('ANALYTICS', 'Starting analytics processing', { 
+      debugLog('VENDOR', 'Vendor detection check', { 
+        vendor_from_property_records: actualVendor,
+        vendor_from_jobData: jobData.vendor_type,
+        using_vendor: actualVendor || jobData.vendor_type
+      });
+
+      debugLog('ANALYTICS', 'Starting manager-focused analytics processing', { 
         jobId: jobData.id,
         fileVersion: latestFileVersion,
         startDate: projectStartDate,
@@ -991,15 +1009,43 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         ...(infoByCategoryConfig.refusal || []),
         ...(infoByCategoryConfig.estimation || []),
         ...(infoByCategoryConfig.priced || []),
-        ...(infoByCategoryConfig.special || [])
+        ...(infoByCategoryConfig.special || []) // Include special codes as valid
       ];
+
+      // Load existing validation overrides FIRST, before processing
+      debugLog('ANALYTICS', 'Loading existing validation overrides...');
+      const { data: existingOverrides, error: overrideError } = await supabase
+        .from('inspection_data')
+        .select('property_composite_key, override_applied, override_reason')
+        .eq('job_id', jobData.id)
+        .eq('file_version', latestFileVersion)
+        .eq('override_applied', true);
+
+      if (overrideError) {
+        console.warn('Could not load existing overrides:', overrideError);
+      }
+
+      // Create override lookup map for fast checking
+      const overrideMapData = {};
+      (existingOverrides || []).forEach(override => {
+        overrideMapData[override.property_composite_key] = {
+          override_applied: override.override_applied,
+          override_reason: override.override_reason
+        };
+      });
+      
+      // Set override map in component state for UI access
+      setOverrideMap(overrideMapData);
+      setValidationOverrides(existingOverrides || []);
+      
+      debugLog('ANALYTICS', `Loaded ${existingOverrides?.length || 0} existing validation overrides`);
 
       // Load ALL records using pagination to bypass Supabase 1000 limit
       let allRecords = [];
       let start = 0;
       const batchSize = 1000;
       
-      setProcessingStage('Loading all property records...');
+      debugLog('ANALYTICS', 'Loading all property records using pagination...');
       
       while (true) {
         const { data: batchData, error: batchError } = await supabase
@@ -1031,7 +1077,6 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         if (!batchData || batchData.length === 0) break;
         
         allRecords = [...allRecords, ...batchData];
-        setProcessingProgress(10 + Math.min(30, Math.floor((allRecords.length / propertyRecordsCount) * 30)));
         debugLog('ANALYTICS', `Loaded batch ${Math.floor(start/batchSize) + 1}: ${batchData.length} records (total: ${allRecords.length})`);
         
         start += batchSize;
@@ -1042,19 +1087,17 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
       const rawData = allRecords;
       debugLog('ANALYTICS', `✅ Loaded ${rawData?.length || 0} property records for analysis`);
 
-      setProcessingStage('Analyzing inspection data...');
-      setProcessingProgress(40);
-
       const startDate = new Date(projectStartDate);
       const inspectorStats = {};
       const classBreakdown = {};
       const billingByClass = {};
       const propertyIssues = {};
       const inspectorIssuesMap = {};
-      const inspectionDataBatch = [];
-      const missingProperties = [];
+      const inspectionDataBatch = []; // For inspection_data UPSERT
+      const missingProperties = []; // Track properties not added to inspection_data
+      const pendingValidationsList = []; // NEW: Collect validation issues for modal
 
-      // Initialize class counters
+      // Initialize class counters - Count ALL properties for denominators
       const allClasses = ['1', '2', '3A', '3B', '4A', '4B', '4C', '15A', '15B', '15C', '15D', '15E', '15F', '5A', '5B', '6A', '6B'];
       allClasses.forEach(cls => {
         classBreakdown[cls] = { total: 0, inspected: 0, entry: 0, refusal: 0, priced: 0 };
@@ -1062,10 +1105,6 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
       });
 
       rawData.forEach((record, index) => {
-        if (index % 100 === 0) {
-          setProcessingProgress(40 + Math.floor((index / rawData.length) * 40));
-        }
-
         const inspector = record.inspection_measure_by || 'UNASSIGNED';
         const propertyClass = record.property_m4_class || 'UNKNOWN';
         const infoByCode = record.inspection_info_by;
@@ -1078,13 +1117,103 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         let wasAddedToInspectionData = false;
         let reasonNotAdded = '';
 
-        // Always count ALL properties for denominators
+        // Always count ALL properties for denominators (manager progress view)
         if (classBreakdown[propertyClass]) {
           classBreakdown[propertyClass].total++;
           billingByClass[propertyClass].total++;
         }
 
-        // Skip UNASSIGNED for inspector analytics
+        // Check for existing validation override FIRST - COMPLETELY SKIP if overridden
+        const hasValidationOverride = overrideMapData[propertyKey]?.override_applied;
+
+        if (hasValidationOverride) {
+          debugLog('VALIDATION', `✅ Property ${propertyKey} has existing override - treating as VALID INSPECTION`);
+          
+          // Count overridden properties as VALID INSPECTIONS for progress tracking
+          if (classBreakdown[propertyClass]) {
+            classBreakdown[propertyClass].inspected++;
+            billingByClass[propertyClass].inspected++;
+            billingByClass[propertyClass].billable++;
+          }
+
+          // Initialize inspector stats for overridden properties
+          if (!inspectorStats[inspector] && employeeData[inspector]) {
+            const employeeInfo = employeeData[inspector] || {};
+            inspectorStats[inspector] = {
+              name: employeeInfo.name || inspector,
+              fullName: employeeInfo.fullName || inspector,
+              inspector_type: employeeInfo.inspector_type,
+              totalInspected: 0,
+              residentialInspected: 0,
+              commercialInspected: 0,
+              entry: 0,
+              refusal: 0,
+              priced: 0,
+              allWorkDays: new Set(),
+              residentialWorkDays: new Set(),
+              commercialWorkDays: new Set(),
+              pricingWorkDays: new Set()
+            };
+            inspectorIssuesMap[inspector] = [];
+          }
+
+          // Count overridden properties toward inspector totals
+          if (inspectorStats[inspector]) {
+            inspectorStats[inspector].totalInspected++;
+            
+            // Add to work days if we have a valid date
+            if (measuredDate) {
+              const workDayString = measuredDate.toISOString().split('T')[0];
+              inspectorStats[inspector].allWorkDays.add(workDayString);
+              
+              const isResidentialProperty = ['2', '3A'].includes(propertyClass);
+              const isCommercialProperty = ['4A', '4B', '4C'].includes(propertyClass);
+              
+              if (isResidentialProperty) {
+                inspectorStats[inspector].residentialInspected++;
+                inspectorStats[inspector].residentialWorkDays.add(workDayString);
+              }
+              
+              if (isCommercialProperty) {
+                inspectorStats[inspector].commercialInspected++;
+                inspectorStats[inspector].commercialWorkDays.add(workDayString);
+              }
+            }
+          }
+
+          // Add to inspection_data batch with override info (preserve existing override)
+          const inspectionRecord = {
+            job_id: jobData.id,
+            file_version: latestFileVersion,
+            property_composite_key: propertyKey,
+            block: record.property_block,
+            lot: record.property_lot,
+            qualifier: record.property_qualifier || '',
+            card: record.property_addl_card || '1',
+            property_location: record.property_location || '',
+            property_class: propertyClass,
+            measure_by: inspector,
+            measure_date: record.inspection_measure_date,
+            info_by_code: infoByCode,
+            list_by: record.inspection_list_by,
+            list_date: record.inspection_list_date,
+            price_by: record.inspection_price_by,
+            price_date: record.inspection_price_date,
+            project_start_date: projectStartDate,
+            source_file_name: record.source_file_name,
+            upload_date: new Date().toISOString(),
+            override_applied: true,
+            override_reason: overrideMapData[propertyKey].override_reason
+          };
+
+          inspectionDataBatch.push(inspectionRecord);
+          wasAddedToInspectionData = true;
+          
+          // Skip to next property - NO validation needed, NO missing properties report
+          return;
+        }
+
+        // Skip UNASSIGNED for inspector analytics but track for missing properties
         if (inspector === 'UNASSIGNED') {
           reasonNotAdded = 'Inspector UNASSIGNED';
           missingProperties.push({
@@ -1104,7 +1233,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
           return;
         }
 
-        // Skip inspections before project start date
+        // Skip inspections before project start date (removes old inspector noise)
         if (measuredDate && measuredDate < startDate) {
           reasonNotAdded = 'Inspection date before project start date';
           missingProperties.push({
@@ -1124,7 +1253,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
           return;
         }
 
-        // Skip inspectors with invalid initials
+        // Skip inspectors with invalid initials (not in employee database)
         if (!employeeData[inspector]) {
           reasonNotAdded = `Inspector ${inspector} not found in employee database`;
           missingProperties.push({
@@ -1174,6 +1303,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         );
 
         if (!hasAnyInspectionAttempt) {
+          // Property not yet inspected - skip validation entirely
           reasonNotAdded = 'No inspection attempt - completely uninspected';
           missingProperties.push({
             composite_key: propertyKey,
@@ -1196,18 +1326,21 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         let hasValidMeasuredBy = inspector && inspector !== 'UNASSIGNED' && inspector.trim() !== '';
         let hasValidMeasuredDate = measuredDate && measuredDate >= startDate;
         
-        // Vendor-specific validation logic
+        // Vendor-specific validation logic - no padding for Microsystems!
         let hasValidInfoBy;
         let normalizedInfoBy;
         
         if (actualVendor === 'BRT') {
+          // BRT: Use padding for numeric codes (01, 02, 06, etc.)
           normalizedInfoBy = infoByCode?.toString().padStart(2, '0');
           const normalizedValidCodes = allValidCodes.map(code => code.toString().padStart(2, '0'));
           hasValidInfoBy = normalizedInfoBy && normalizedValidCodes.includes(normalizedInfoBy);
         } else if (actualVendor === 'Microsystems') {
-          normalizedInfoBy = infoByCode;
+          // Microsystems: Direct string comparison for alphabetical codes (A, O, R, V, N, etc.)
+          normalizedInfoBy = infoByCode; // No padding for Microsystems
           hasValidInfoBy = infoByCode && allValidCodes.includes(infoByCode);
         } else {
+          // Fallback: try both approaches
           normalizedInfoBy = infoByCode?.toString().padStart(2, '0');
           const normalizedValidCodes = allValidCodes.map(code => code.toString().padStart(2, '0'));
           hasValidInfoBy = (infoByCode && allValidCodes.includes(infoByCode)) || 
@@ -1242,7 +1375,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
           addValidationIssue('Missing or invalid measure date');
         }
 
-        // Business logic validation
+        // Business logic validation - ENHANCED for special codes
         const isEntryCode = (infoByCategoryConfig.entry || []).includes(actualVendor === 'BRT' ? normalizedInfoBy || infoByCode : infoByCode);
         const isRefusalCode = (infoByCategoryConfig.refusal || []).includes(actualVendor === 'BRT' ? normalizedInfoBy || infoByCode : infoByCode);
         const isEstimationCode = (infoByCategoryConfig.estimation || []).includes(actualVendor === 'BRT' ? normalizedInfoBy || infoByCode : infoByCode);
@@ -1250,8 +1383,12 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         const isSpecialCode = (infoByCategoryConfig.special || []).includes(actualVendor === 'BRT' ? normalizedInfoBy || infoByCode : infoByCode);
         const hasListingData = record.inspection_list_by && record.inspection_list_date;
 
-        // Skip validation for special codes
-        if (!isSpecialCode) {
+        // Skip validation for special codes (V, N) - they're valid but don't need validation reports
+        if (isSpecialCode) {
+          // Special codes are valid inspections but bypass all validation rules
+          debugLog('VALIDATION', `Special code ${infoByCode} found - skipping validation rules`);
+        } else {
+          // Regular validation rules for non-special codes
           if (isRefusalCode && !hasListingData) {
             addValidationIssue(`Refusal code ${infoByCode} but missing listing data`);
           }
@@ -1263,11 +1400,12 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
           }
         }
 
-        // Inspector type validation
+        // Corrected inspector type validation
         const isCommercialProperty = ['4A', '4B', '4C'].includes(propertyClass);
         const isResidentialProperty = ['2', '3A'].includes(propertyClass);
         const isResidentialInspector = employeeData[inspector]?.inspector_type === 'residential';
         
+        // Residential inspectors CAN'T do commercial (4A, 4B, 4C) - everything else is OK
         if (isCommercialProperty && isResidentialInspector) {
           addValidationIssue(`Residential inspector on commercial property`);
         }
@@ -1277,34 +1415,52 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
           addValidationIssue('Zero improvement property missing listing data');
         }
 
+        // NEW: Collect validation issues for processing modal
+        if (!isValidInspection && propertyIssues[propertyKey]) {
+          pendingValidationsList.push({
+            property: record,
+            composite_key: propertyKey,
+            block: record.property_block,
+            lot: record.property_lot,
+            qualifier: record.property_qualifier || '',
+            card: record.property_addl_card || '1',
+            property_location: record.property_location || '',
+            property_class: propertyClass,
+            inspector: inspector,
+            issues: propertyIssues[propertyKey].issues,
+            warning_message: propertyIssues[propertyKey].issues.join(' | ')
+          });
+        }
+
         // Process valid inspections
         if (isValidInspection && hasValidInfoBy && hasValidMeasuredBy && hasValidMeasuredDate) {
           
-          // Count for manager progress
+          // Count for manager progress (valid inspections against total properties)
           if (classBreakdown[propertyClass]) {
             classBreakdown[propertyClass].inspected++;
             billingByClass[propertyClass].inspected++;
             billingByClass[propertyClass].billable++;
           }
 
-          // Inspector analytics
+          // Inspector analytics - count valid inspections only
           inspectorStats[inspector].totalInspected++;
             
           const workDayString = measuredDate.toISOString().split('T')[0];
           inspectorStats[inspector].allWorkDays.add(workDayString);
 
+          // Separate residential and commercial counting for analytics
           if (isResidentialProperty) {
             inspectorStats[inspector].residentialInspected++;
             inspectorStats[inspector].residentialWorkDays.add(workDayString);
             
-            // Individual inspector credit
+            // Individual inspector credit: measure_by must equal list_by for personal achievement
             if (isEntryCode && record.inspection_list_by === inspector) {
               inspectorStats[inspector].entry++;
             } else if (isRefusalCode && record.inspection_list_by === inspector) {
               inspectorStats[inspector].refusal++;
             }
             
-            // Global metrics
+            // Global metrics: count ALL valid entries/refusals regardless of who did list work
             if (isEntryCode && classBreakdown[propertyClass]) {
               classBreakdown[propertyClass].entry++;
             } else if (isRefusalCode && classBreakdown[propertyClass]) {
@@ -1317,9 +1473,12 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
             inspectorStats[inspector].commercialWorkDays.add(workDayString);
           }
 
-          // Pricing logic
+          // Pricing logic with vendor detection
           if (isCommercialProperty) {
             const currentVendor = actualVendor || jobData.vendor_type;
+
+            debugLog('PRICING', `Commercial property ${propertyKey} - Class: ${propertyClass}, InfoBy: ${infoByCode}, Vendor: ${currentVendor}`);
+            debugLog('PRICING', `isPricedCode: ${isPricedCode}, Priced category: [${(infoByCategoryConfig.priced || []).join(', ')}]`);
 
             if (currentVendor === 'BRT' && 
                 record.inspection_price_by && 
@@ -1332,12 +1491,16 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
               if (classBreakdown[propertyClass]) {
                 classBreakdown[propertyClass].priced++;
               }
+              debugLog('PRICING', `✅ BRT pricing counted for ${inspector} on ${propertyKey}`);
               
             } else if (currentVendor === 'Microsystems' && isPricedCode) {
               inspectorStats[inspector].priced++;
               if (classBreakdown[propertyClass]) {
                 classBreakdown[propertyClass].priced++;
               }
+              debugLog('PRICING', `✅ Microsystems pricing counted for ${inspector} on ${propertyKey}`);
+            } else {
+              debugLog('PRICING', `❌ No pricing counted for ${inspector} on ${propertyKey} - Vendor: ${currentVendor}, isPricedCode: ${isPricedCode}`);
             }
           }
 
@@ -1398,10 +1561,98 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         }
       });
 
-      setProcessingStage('Calculating inspector metrics...');
-      setProcessingProgress(80);
+      // NEW: Show processing modal if there are validation issues
+      if (pendingValidationsList.length > 0 && !processingPaused) {
+        debugLog('PROCESSING_MODAL', `Found ${pendingValidationsList.length} validation issues - showing modal`);
+        setPendingValidations(pendingValidationsList);
+        setShowProcessingModal(true);
+        setProcessingPaused(true);
+        
+        // Wait for user to make decisions
+        await new Promise((resolve) => {
+          const checkInterval = setInterval(() => {
+            if (!processingPaused) {
+              clearInterval(checkInterval);
+              resolve();
+            }
+          }, 100);
+        });
+        
+        // Apply decisions from modal
+        const decisionsToApply = [];
+        pendingValidationsList.forEach(validation => {
+          const decision = processedValidationDecisions[validation.composite_key];
+          if (decision && decision.action === 'override') {
+            decisionsToApply.push({
+              property: validation.property,
+              composite_key: validation.composite_key,
+              override_reason: decision.reason
+            });
+          }
+        });
+        
+        // Apply overrides to inspection_data
+        for (const override of decisionsToApply) {
+          const overrideRecord = {
+            job_id: jobData.id,
+            file_version: latestFileVersion,
+            property_composite_key: override.composite_key,
+            block: override.property.property_block,
+            lot: override.property.property_lot,
+            qualifier: override.property.property_qualifier || '',
+            card: override.property.property_addl_card || '1',
+            property_location: override.property.property_location || '',
+            property_class: override.property.property_m4_class,
+            measure_by: override.property.inspection_measure_by,
+            measure_date: override.property.inspection_measure_date,
+            info_by_code: override.property.inspection_info_by,
+            list_by: override.property.inspection_list_by,
+            list_date: override.property.inspection_list_date,
+            price_by: override.property.inspection_price_by,
+            price_date: override.property.inspection_price_date,
+            project_start_date: projectStartDate,
+            upload_date: new Date().toISOString(),
+            override_applied: true,
+            override_reason: override.override_reason,
+            override_by: 'Manager',
+            override_date: new Date().toISOString()
+          };
+          
+          inspectionDataBatch.push(overrideRecord);
+          
+          // Update counts
+          const propertyClass = override.property.property_m4_class;
+          if (classBreakdown[propertyClass]) {
+            classBreakdown[propertyClass].inspected++;
+            billingByClass[propertyClass].inspected++;
+            billingByClass[propertyClass].billable++;
+          }
+        }
+        
+        debugLog('PROCESSING_MODAL', `Applied ${decisionsToApply.length} overrides from modal decisions`);
+      }
 
-      // Calculate inspector rates and averages
+      // UPSERT to inspection_data table for persistence
+      if (inspectionDataBatch.length > 0) {
+        debugLog('PERSISTENCE', `Upserting ${inspectionDataBatch.length} records to inspection_data`);
+        
+        const { error: upsertError } = await supabase
+          .from('inspection_data')
+          .upsert(inspectionDataBatch, {
+            onConflict: 'job_id,property_composite_key,file_version'
+          });
+
+        if (upsertError) {
+          console.error('Error upserting to inspection_data:', upsertError);
+          addNotification('Warning: Could not save to inspection_data table', 'warning');
+        } else {
+          debugLog('PERSISTENCE', '✅ Successfully upserted to inspection_data');
+          // Reload commercial counts after successful processing
+          await loadCommercialCounts();
+        }
+      }
+
+      // Calculate inspector rates and averages with corrected field day logic
       Object.keys(inspectorStats).forEach(inspector => {
         const stats = inspectorStats[inspector];
         
@@ -1411,7 +1662,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         stats.commercialFieldDays = stats.commercialWorkDays.size;
         stats.pricingDays = stats.pricingWorkDays.size;
         
-        // Entry/Refusal rates
+        // Entry/Refusal rates (only for residential properties 2, 3A)
         if (stats.residentialInspected > 0) {
           stats.entryRate = Math.round((stats.entry / stats.residentialInspected) * 100);
           stats.refusalRate = Math.round((stats.refusal / stats.residentialInspected) * 100);
@@ -1422,11 +1673,14 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
 
         // Type-specific daily averages
         if (stats.inspector_type?.toLowerCase() === 'residential') {
+          // Residential daily average: Residential work ÷ Residential field days
           stats.dailyAverage = stats.residentialFieldDays > 0 ? 
             Math.round(stats.residentialInspected / stats.residentialFieldDays) : 0;
         } else if (stats.inspector_type?.toLowerCase() === 'commercial') {
+          // Commercial daily average: Commercial work ÷ Commercial field days
           stats.commercialAverage = stats.commercialFieldDays > 0 ? 
             Math.round(stats.commercialInspected / stats.commercialFieldDays) : 0;
+          // Pricing average (BRT only)
           const currentVendor = actualVendor || jobData.vendor_type;
           if (currentVendor === 'BRT') {
             stats.pricingAverage = stats.pricingDays > 0 ? 
@@ -1435,6 +1689,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
             stats.pricingAverage = null;
           }
         } else if (stats.inspector_type?.toLowerCase() === 'management') {
+          // Management inspector - general daily average using all work
           stats.dailyAverage = stats.fieldDays > 0 ? 
             Math.round(stats.totalInspected / stats.fieldDays) : 0;
         }
@@ -1472,24 +1727,30 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         inspectorIssuesMap[property.inspector].push(issue);
       });
 
-      // Calculate job-level totals - DON'T include overrides yet
+      // Calculate job-level totals
       const totalInspected = Object.values(inspectorStats).reduce((sum, stats) => sum + stats.totalInspected, 0);
       
-      // CORRECT GLOBAL ENTRY RATE CALCULATION
-      const totalClass2And3A = classBreakdown['2'].total + classBreakdown['3A'].total;
-      const totalEntry = classBreakdown['2'].entry + classBreakdown['3A'].entry;
-      const totalRefusal = classBreakdown['2'].refusal + classBreakdown['3A'].refusal;
+      // FIX: CORRECT GLOBAL ENTRY RATE CALCULATION
+      // Use classBreakdown totals, NOT inspector stats
+      const totalClass2And3AProperties = (classBreakdown['2']?.total || 0) + (classBreakdown['3A']?.total || 0);
+      const totalEntry = (classBreakdown['2']?.entry || 0) + (classBreakdown['3A']?.entry || 0);
+      const totalRefusal = (classBreakdown['2']?.refusal || 0) + (classBreakdown['3A']?.refusal || 0);
 
       debugLog('ENTRY_RATE_FIX', 'Global entry rate calculation', {
         totalEntry,
-        totalClass2And3A,
-        expectedRate: totalClass2And3A > 0 ? Math.round((totalEntry / totalClass2And3A) * 100) : 0
+        totalClass2And3AProperties,
+        classBreakdown2Entry: classBreakdown['2']?.entry || 0,
+        classBreakdown3AEntry: classBreakdown['3A']?.entry || 0,
+        expectedRate: totalClass2And3AProperties > 0 ? Math.round((totalEntry / totalClass2And3AProperties) * 100) : 0
       });
 
-      // Commercial percentage calculations
+      // Commercial percentage calculations (valid ÷ total, not valid ÷ valid)
       const totalCommercialProperties = ['4A', '4B', '4C'].reduce((sum, cls) => sum + (classBreakdown[cls]?.total || 0), 0);
       const totalCommercialInspected = ['4A', '4B', '4C'].reduce((sum, cls) => sum + (classBreakdown[cls]?.inspected || 0), 0);
       const totalPriced = Object.values(inspectorStats).reduce((sum, stats) => sum + stats.priced, 0);
+
+      debugLog('TOTALS', `Total priced calculation: ${totalPriced}, Inspector stats:`, Object.values(inspectorStats).map(s => ({name: s.name, priced: s.priced})));
+      const totalCommercialPriced = ['4A', '4B', '4C'].reduce((sum, cls) => sum + (classBreakdown[cls]?.priced || 0), 0);
 
       const validationReportData = {
         summary: {
@@ -1526,20 +1787,20 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         detailed_missing: missingProperties
       };
 
-      // Analytics result WITHOUT overrides yet
+      // Final analytics result with correct entry rate
       const analyticsResult = {
         totalRecords: rawData.length,
-        validInspections: totalInspected,
+        validInspections: totalInspected + decisionsToApply.length, // Include modal overrides
         inspectorStats,
         classBreakdown,
         validationIssues: validationIssues.length,
         processingDate: new Date().toISOString(),
         
-        // Correct global entry/refusal rates
-        jobEntryRate: totalClass2And3A > 0 ? Math.round((totalEntry / totalClass2And3A) * 100) : 0,
-        jobRefusalRate: totalClass2And3A > 0 ? Math.round((totalRefusal / totalClass2And3A) * 100) : 0,
+        // FIX: Use classBreakdown totals for global rates
+        jobEntryRate: totalClass2And3AProperties > 0 ? Math.round((totalEntry / totalClass2And3AProperties) * 100) : 0,
+        jobRefusalRate: totalClass2And3AProperties > 0 ? Math.round((totalRefusal / totalClass2And3AProperties) * 100) : 0,
         
-        // Commercial metrics
+        // Commercial metrics using inspector totals not class breakdown
         commercialInspections: totalCommercialInspected,
         commercialPricing: totalPriced,
         totalCommercialProperties,
@@ -1577,17 +1838,28 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         totalBillable: Object.values(billingByClass).reduce((sum, cls) => sum + cls.billable, 0)
       };
 
-      setProcessingProgress(90);
+      setAnalytics(analyticsResult);
+      setBillingAnalytics(billingResult);
+      setValidationReport(validationReportData);
+      setMissingPropertiesReport(missingPropertiesReportData);
 
-      // Return results along with inspection data to be saved
-      return { 
-        analyticsResult, 
-        billingResult, 
-        validationReportData, 
-        missingPropertiesReportData,
-        inspectionDataBatch,
-        validationIssues 
-      };
+      // Clear modal state
+      setPendingValidations([]);
+      setProcessedValidationDecisions({});
+
+      debugLog('ANALYTICS', '✅ Manager-focused analytics processing complete', {
+        totalRecords: rawData.length,
+        validInspections: analyticsResult.validInspections,
+        totalIssues: validationIssues.length,
+        inspectors: Object.keys(inspectorStats).length,
+        commercialComplete: analyticsResult.commercialCompletePercent,
+        pricingComplete: analyticsResult.pricingCompletePercent,
+        persistedRecords: inspectionDataBatch.length,
+        jobEntryRate: analyticsResult.jobEntryRate, // Should now be 61%
+        totalClass2And3AProperties // Should be 711
+      });
+
+      return { analyticsResult, billingResult, validationReportData, missingPropertiesReportData };
 
     } catch (error) {
       console.error('Error processing analytics:', error);
@@ -1610,136 +1882,32 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
     setInfoByCategoryConfig(newConfig);
   };
 
-  // NEW: Handle override decision in processing modal
-  const handleProcessingOverride = (propertyKey, reason) => {
-    setPendingOverrides(prev => ({
-      ...prev,
-      [propertyKey]: {
-        override_applied: true,
-        override_reason: reason,
-        override_by: 'Manager',
-        override_date: new Date().toISOString()
-      }
-    }));
-  };
-
-  // NEW: Complete processing with overrides
-  const completeProcessingWithOverrides = async () => {
-    if (!processingResults) return;
-
+  // Get fresh override data
+  const getFreshValidationOverrides = async () => {
+    if (!jobData?.id || !latestFileVersion) return [];
+    
     try {
-      setProcessingStage('Applying validation decisions...');
-      setProcessingProgress(95);
-
-      const { 
-        analyticsResult, 
-        billingResult, 
-        validationReportData, 
-        missingPropertiesReportData,
-        inspectionDataBatch 
-      } = processingResults;
-
-      // Apply overrides to inspection data batch
-      const finalInspectionBatch = inspectionDataBatch.map(record => {
-        if (pendingOverrides[record.property_composite_key]) {
-          return {
-            ...record,
-            ...pendingOverrides[record.property_composite_key]
-          };
-        }
-        return record;
-      });
-
-      // Add override records to batch
-      Object.keys(pendingOverrides).forEach(propertyKey => {
-        const existingRecord = finalInspectionBatch.find(r => r.property_composite_key === propertyKey);
-        if (!existingRecord) {
-          // Find the original property data
-          const validationIssue = processingResults.validationIssues.find(issue => issue.composite_key === propertyKey);
-          if (validationIssue) {
-            finalInspectionBatch.push({
-              job_id: jobData.id,
-              file_version: latestFileVersion,
-              property_composite_key: propertyKey,
-              block: validationIssue.block,
-              lot: validationIssue.lot,
-              qualifier: validationIssue.qualifier || '',
-              card: validationIssue.card || '1',
-              property_location: validationIssue.property_location || '',
-              property_class: 'UNKNOWN', // We'd need to track this
-              project_start_date: projectStartDate,
-              upload_date: new Date().toISOString(),
-              ...pendingOverrides[propertyKey]
-            });
-          }
-        }
-      });
-
-      // UPSERT to inspection_data table
-      if (finalInspectionBatch.length > 0) {
-        debugLog('PERSISTENCE', `Upserting ${finalInspectionBatch.length} records to inspection_data (includes ${Object.keys(pendingOverrides).length} overrides)`);
+      const { data: currentOverrides, error } = await supabase
+        .from('inspection_data')
+        .select('*')
+        .eq('job_id', jobData.id)
+        .eq('file_version', latestFileVersion)
+        .eq('override_applied', true);
         
-        const { error: upsertError } = await supabase
-          .from('inspection_data')
-          .upsert(finalInspectionBatch, {
-            onConflict: 'job_id,property_composite_key,file_version'
-          });
-
-        if (upsertError) {
-          console.error('Error upserting to inspection_data:', upsertError);
-          addNotification('Warning: Could not save to inspection_data table', 'warning');
-        } else {
-          debugLog('PERSISTENCE', '✅ Successfully upserted to inspection_data');
-        }
+      if (error) {
+        console.error('Error fetching fresh overrides:', error);
+        return [];
       }
-
-      // Update analytics with override counts
-      const finalAnalytics = {
-        ...analyticsResult,
-        validInspections: analyticsResult.validInspections + Object.keys(pendingOverrides).length,
-        validationOverrideCount: Object.keys(pendingOverrides).length
-      };
-
-      // Recalculate entry/refusal rates if overrides affect residential properties
-      // This is simplified - in production you'd track which class each override affects
-
-      // Save complete analytics
-      await saveCompleteAnalytics(
-        finalAnalytics,
-        billingResult,
-        validationReportData,
-        missingPropertiesReportData,
-        pendingOverrides
-      );
-
-      // Update local state
-      setAnalytics(finalAnalytics);
-      setBillingAnalytics(billingResult);
-      setValidationReport(validationReportData);
-      setMissingPropertiesReport(missingPropertiesReportData);
-      setValidationOverrides(Object.values(pendingOverrides));
-      setOverrideMap(pendingOverrides);
-
-      // Reload commercial counts
-      await loadCommercialCounts();
-
-      setProcessingProgress(100);
-      setProcessingStage('Processing complete!');
       
-      setTimeout(() => {
-        setShowProcessingModal(false);
-        setProcessed(true);
-        addNotification(`✅ Processing completed! ${finalAnalytics.validInspections} valid inspections (includes ${Object.keys(pendingOverrides).length} overrides)`, 'success');
-      }, 1000);
-
+      debugLog('FRESH_OVERRIDES', `Fetched ${currentOverrides?.length || 0} fresh validation overrides`);
+      return currentOverrides || [];
     } catch (error) {
-      console.error('Error completing processing:', error);
-      addNotification('Error completing processing: ' + error.message, 'error');
-      setShowProcessingModal(false);
+      console.error('Error in getFreshValidationOverrides:', error);
+      return [];
     }
   };
 
-  // NEW: Start processing session with modal
+  // Start processing session with persistence
   const startProcessingSession = async () => {
     if (!isDateLocked) {
       addNotification('Please lock the project start date first', 'error');
@@ -1755,8 +1923,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
       ...infoByCategoryConfig.entry,
       ...infoByCategoryConfig.refusal,
       ...infoByCategoryConfig.estimation,
-      ...infoByCategoryConfig.priced,
-      ...infoByCategoryConfig.special
+      ...infoByCategoryConfig.priced
     ];
 
     if (allValidCodes.length === 0) {
@@ -1769,9 +1936,6 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
     setSettingsLocked(true);
     setProcessing(true);
     setProcessed(false);
-    setShowProcessingModal(true);
-    setPendingOverrides({});
-    setPendingValidationIssues([]);
 
     try {
       debugLog('SESSION', 'Starting processing session', { 
@@ -1785,24 +1949,71 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         throw new Error('Analytics processing failed');
       }
 
-      setProcessingResults(results);
+      // Use the actual results data
+      const { analyticsResult, billingResult, validationReportData, missingPropertiesReportData } = results;
       
-      // If there are validation issues, show them in the modal
-      if (results.validationIssues && results.validationIssues.length > 0) {
-        setPendingValidationIssues(results.validationIssues);
-        setProcessingStage('Review validation issues');
-        setProcessingProgress(100);
-      } else {
-        // No validation issues, complete immediately
-        await completeProcessingWithOverrides();
+      // Set the fresh missing properties report in state
+      setMissingPropertiesReport(missingPropertiesReportData);
+
+      // Save with complete data structure
+      await saveCategoriesToDatabase(infoByCategoryConfig, {
+        analytics: analyticsResult,
+        billingAnalytics: billingResult,
+        validationReport: validationReportData,
+        missingPropertiesReport: missingPropertiesReportData,
+        validationOverrides: validationOverrides,
+        overrideMap: overrideMap
+      });
+
+      // Get fresh validation overrides before sending to App.js
+      const freshOverrides = await getFreshValidationOverrides();
+      const freshOverrideMap = {};
+      freshOverrides.forEach(override => {
+        freshOverrideMap[override.property_composite_key] = {
+          override_applied: override.override_applied,
+          override_reason: override.override_reason,
+          override_by: override.override_by,
+          override_date: override.override_date
+        };
+      });
+
+      // Update local state with fresh data
+      setValidationOverrides(freshOverrides);
+      setOverrideMap(freshOverrideMap);
+
+      // Ensure App.js integration works with fresh data
+      if (onUpdateWorkflowStats) {
+        // Create adjusted analytics with override counts included
+        const adjustedAnalytics = {
+          ...analyticsResult,
+          // Valid inspections already includes overrides from processing modal
+          validationOverrideCount: freshOverrides.length
+        };
+
+        onUpdateWorkflowStats({
+          jobId: jobData.id,
+          analytics: adjustedAnalytics,
+          billingAnalytics: billingResult,
+          validationReport: validationReportData,
+          missingPropertiesReport: missingPropertiesReportData,
+          validationOverrides: freshOverrides,
+          overrideMap: freshOverrideMap,
+          totalValidationOverrides: freshOverrides.length,
+          lastProcessed: new Date().toISOString()
+        });
+        debugLog('APP_INTEGRATION', '✅ Data sent to App.js central hub with fresh override data');
       }
+
+      debugLog('SESSION', '✅ Processing session completed successfully');
+      addNotification(`✅ Processing completed! Analytics saved and ready.`, 'success');
+
+      setProcessed(true);
 
     } catch (error) {
       console.error('Error in processing session:', error);
       addNotification('Processing session failed: ' + error.message, 'error');
       setSettingsLocked(false);
       setSessionId(null);
-      setShowProcessingModal(false);
     } finally {
       setProcessing(false);
     }
@@ -1880,7 +2091,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
     addNotification('📊 Missing properties report exported', 'success');
   };
 
-  // ENHANCED: Progress bar component
+  // Progress bar component
   const ProgressBar = ({ current, total, color = 'blue' }) => {
     const percentage = total > 0 ? Math.round((current / total) * 100) : 0;
     const colorClasses = {
@@ -1911,3 +2122,1447 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
       </div>
     );
   }
+
+  return (
+    <div className="max-w-6xl mx-auto p-6 space-y-6">
+      {/* Notifications */}
+      <div className="fixed top-4 right-4 z-50 space-y-2">
+        {notifications.map(notification => (
+          <div
+            key={notification.id}
+            className={`p-4 rounded-lg shadow-lg border-l-4 max-w-md transition-all duration-300 ${
+              notification.type === 'error' ? 'bg-red-50 border-red-400 text-red-800' :
+              notification.type === 'warning' ? 'bg-yellow-50 border-yellow-400 text-yellow-800' :
+              notification.type === 'success' ? 'bg-green-50 border-green-400 text-green-800' :
+              'bg-blue-50 border-blue-400 text-blue-800'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">{notification.message}</span>
+              <button
+                onClick={() => setNotifications(prev => prev.filter(n => n.id !== notification.id))}
+                className="ml-2 text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Processing Modal for Validation Decisions */}
+      {showProcessingModal && pendingValidations.length > 0 && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60]">
+          <div className="bg-white rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="mb-4">
+              <h3 className="text-lg font-bold text-gray-900">Validation Review During Processing</h3>
+              <p className="text-sm text-gray-600 mt-1">Review and decide on validation issues found during processing</p>
+              <div className="mt-2 flex items-center justify-between">
+                <div className="text-sm">
+                  <span className="font-medium text-gray-700">Total Issues: </span>
+                  <span className="text-red-600">{pendingValidations.length}</span>
+                </div>
+                <div className="text-sm">
+                  <span className="font-medium text-gray-700">Overridden: </span>
+                  <span className="text-green-600">{pendingValidations.filter(v => v.overridden).length}</span>
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto mb-4">
+              <div className="space-y-3">
+                {pendingValidations.map((validation, idx) => (
+                  <div 
+                    key={validation.composite_key} 
+                    className={`border rounded-lg p-4 ${
+                      validation.overridden ? 'bg-green-50 border-green-200' : 
+                      validation.skipped ? 'bg-gray-50 border-gray-200' : 
+                      'bg-white border-red-200'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="font-medium text-gray-900">
+                          {validation.block}-{validation.lot}{validation.qualifier ? `-${validation.qualifier}` : ''}
+                        </div>
+                        <div className="text-sm text-gray-600">{validation.property_location}</div>
+                        <div className="text-sm text-red-600 mt-1">{validation.warning_message}</div>
+                        {validation.overridden && (
+                          <div className="text-sm text-green-600 font-medium mt-1">
+                            ✅ Overridden: {validation.override_reason}
+                          </div>
+                        )}
+                        {validation.skipped && (
+                          <div className="text-sm text-gray-600 font-medium mt-1">
+                            ⏭️ Skipped - Will not be included in analytics
+                          </div>
+                        )}
+                      </div>
+                      {!validation.overridden && !validation.skipped && (
+                        <div className="flex space-x-2 ml-4">
+                          <select
+                            value={validation.override_reason || 'New Construction'}
+                            onChange={(e) => {
+                              setPendingValidations(prev => 
+                                prev.map(v => 
+                                  v.composite_key === validation.composite_key 
+                                    ? { ...v, override_reason: e.target.value }
+                                    : v
+                                )
+                              );
+                            }}
+                            className="px-2 py-1 text-sm border border-gray-300 rounded"
+                          >
+                            <option value="New Construction">New Construction</option>
+                            <option value="Additional Card">Additional Card</option>
+                          </select>
+                          <button
+                            onClick={() => handleProcessingOverride(validation.composite_key, validation.override_reason || 'New Construction')}
+                            className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700"
+                          >
+                            Override
+                          </button>
+                          <button
+                            onClick={() => handleProcessingSkip(validation.composite_key)}
+                            className="px-3 py-1 bg-gray-600 text-white text-sm rounded hover:bg-gray-700"
+                          >
+                            Skip
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            
+            <div className="flex justify-end space-x-3 pt-4 border-t">
+              <div className="flex-1 text-sm text-gray-600">
+                Properties with overrides will be included in analytics as valid inspections.
+                Skipped properties will remain invalid.
+              </div>
+              <button
+                onClick={continueProcessingAfterValidations}
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+              >
+                Continue Processing
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Header */}
+      <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border-2 border-blue-200 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center">
+            <Factory className="w-8 h-8 mr-3 text-blue-600" />
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Production Tracker</h1>
+              <p className="text-gray-600">
+                {jobData.name} - Enhanced Analytics & Validation Engine
+                {detectedVendor && <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded font-medium">
+                  {detectedVendor} Format
+                </span>}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Quick Stats with Percentages and Details */}
+        {analytics && (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="bg-white p-4 rounded-lg border shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Total Properties</p>
+                  <p className="text-2xl font-bold text-blue-600">{propertyRecordsCount?.toLocaleString() || analytics.totalRecords.toLocaleString()}</p>
+                </div>
+                <TrendingUp className="w-8 h-8 text-blue-500" />
+              </div>
+            </div>
+            
+            <div className="bg-white p-4 rounded-lg border shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Total Inspections</p>
+                  <p className="text-2xl font-bold text-green-600">{analytics.validInspections.toLocaleString()}</p>
+                </div>
+                <CheckCircle className="w-8 h-8 text-green-500" />
+              </div>
+            </div>
+
+            <div className="bg-white p-4 rounded-lg border shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Job Entry Rate</p>
+                  <p className="text-2xl font-bold text-green-600">{analytics.jobEntryRate || 0}%</p>
+                </div>
+                <Users className="w-8 h-8 text-green-500" />
+              </div>
+            </div>
+
+            <div className="bg-white p-4 rounded-lg border shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Job Refusal Rate</p>
+                  <p className="text-2xl font-bold text-red-600">{analytics.jobRefusalRate || 0}%</p>
+                </div>
+                <AlertTriangle className="w-8 h-8 text-red-500" />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Commercial metrics */}
+        {(analytics || commercialCounts.inspected > 0) && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+            <div className="bg-white p-4 rounded-lg border shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Commercial Complete</p>
+                  <p className="text-2xl font-bold text-blue-600">
+                    {analytics && analytics.totalCommercialProperties > 0 ? 
+                      Math.round((analytics.commercialInspections / analytics.totalCommercialProperties) * 100) : 
+                      jobData.totalcommercial > 0 ? Math.round((commercialCounts.inspected / jobData.totalcommercial) * 100) : 0}%
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {analytics ? 
+                      `${analytics.commercialInspections.toLocaleString()} of ${analytics.totalCommercialProperties.toLocaleString()} properties` :
+                      `${commercialCounts.inspected.toLocaleString()} of ${(jobData.totalcommercial || 0).toLocaleString()} properties`
+                    }
+                  </p>
+                </div>
+                <Factory className="w-8 h-8 text-blue-500" />
+              </div>
+            </div>
+            
+            <div className="bg-white p-4 rounded-lg border shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Pricing Complete</p>
+                  <p className="text-2xl font-bold text-purple-600">
+                    {analytics && analytics.totalCommercialProperties > 0 ? 
+                      Math.round((analytics.commercialPricing / analytics.totalCommercialProperties) * 100) : 
+                      jobData.totalcommercial > 0 ? Math.round((commercialCounts.priced / jobData.totalcommercial) * 100) : 0}%
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {analytics ? 
+                      `${analytics.commercialPricing.toLocaleString()} of ${analytics.totalCommercialProperties.toLocaleString()} properties` :
+                      `${commercialCounts.priced.toLocaleString()} of ${(jobData.totalcommercial || 0).toLocaleString()} properties`
+                    }
+                  </p>
+                </div>
+                <DollarSign className="w-8 h-8 text-purple-500" />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Smart Data Staleness Banner */}
+      {isDataStale && (
+        <div className="mb-4 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+          <div className="flex items-center">
+            <AlertTriangle className="w-5 h-5 text-yellow-600 mr-2" />
+            <div className="flex-1">
+              <h3 className="font-medium text-yellow-800">New Data Available to Process</h3>
+              <p className="text-sm text-yellow-700">
+                Files were updated after your last analytics processing. Current results may be outdated.
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                // Clear the stale flag and trigger reprocessing
+                if (onUpdateWorkflowStats) {
+                  onUpdateWorkflowStats({
+                    ...currentWorkflowStats,
+                    needsRefresh: false,
+                    isProcessed: false
+                  });
+                }
+                // Reset ONLY analytics data, preserve settings
+                setProcessed(false);
+                setAnalytics(null);
+                setBillingAnalytics(null);
+                setValidationReport(null);
+                setMissingPropertiesReport(null);
+                setSettingsLocked(false);
+                addNotification('📊 Ready for fresh analytics processing - settings preserved', 'info');
+              }}
+              className="ml-4 bg-yellow-600 text-white px-3 py-2 rounded hover:bg-yellow-700 text-sm font-medium"
+            >
+              Reprocess Analytics
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Settings Panel */}
+      <div className="bg-white rounded-lg border shadow-sm p-6">
+        <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
+          <Settings className="w-5 h-5 mr-2" />
+          Processing Settings - Enhanced Configuration
+          {settingsLocked && (
+            <span className="ml-3 px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
+              Session Active: {sessionId?.slice(-8)}
+            </span>
+          )}
+        </h3>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Project Start Date *
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="date"
+                value={projectStartDate}
+                onChange={(e) => setProjectStartDate(e.target.value)}
+                disabled={isDateLocked || settingsLocked}
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"
+              />
+              <button
+                onClick={isDateLocked ? unlockStartDate : lockStartDate}
+                disabled={settingsLocked || (!projectStartDate && !isDateLocked)}
+                className={`px-3 py-2 rounded-lg flex items-center gap-1 ${
+                  isDateLocked 
+                    ? 'bg-green-100 text-green-700 hover:bg-green-200' 
+                    : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                } disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                {isDateLocked ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
+                {isDateLocked ? 'Unlock' : 'Lock'}
+              </button>
+            </div>
+            {isDateLocked && (
+              <p className="text-sm text-green-600 mt-1">
+                ✅ Date locked and saved to property records
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              InfoBy Categories ({(availableInfoByCodes || []).length} codes available)
+            </label>
+            <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <span>Entry: {(infoByCategoryConfig.entry || []).length} codes</span>
+                <span>Refusal: {(infoByCategoryConfig.refusal || []).length} codes</span>
+                <span>Estimation: {(infoByCategoryConfig.estimation || []).length} codes</span>
+                <span>Priced: {(infoByCategoryConfig.priced || []).length} codes</span>
+                <span>Invalid: {(infoByCategoryConfig.invalid || []).length} codes</span>
+                <span>Special: {(infoByCategoryConfig.special || []).length} codes</span>
+              </div>
+              
+              {hasUnsavedChanges && (
+                <div className="text-sm text-orange-600 font-medium">
+                  ⚠️ Unsaved changes
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => saveCategoriesToDatabase()}
+                  disabled={!hasUnsavedChanges || settingsLocked}
+                  className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                >
+                  <Save className="w-4 h-4" />
+                  Save Config
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Collapsible InfoBy Category Configuration Panel with Clean Codes */}
+        {(availableInfoByCodes || []).length > 0 && (
+          <div className="mt-6 pt-6 border-t border-gray-200">
+            <div className="flex items-center justify-between mb-4">
+              <h4 className="text-md font-semibold text-gray-800">
+                InfoBy Category Assignment ({jobData.vendor_type} Format) - {availableInfoByCodes.length} codes detected
+              </h4>
+              <button
+                onClick={() => setShowInfoByConfig(!showInfoByConfig)}
+                className="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg flex items-center gap-1"
+              >
+                {showInfoByConfig ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                {showInfoByConfig ? 'Hide' : 'Show'} Configuration
+              </button>
+            </div>
+            
+            {/* Quick Summary (Always Visible) */}
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-2 text-sm mb-4">
+              <div className="bg-green-50 px-3 py-2 rounded border">
+                <span className="font-medium text-green-800">Entry:</span> {(infoByCategoryConfig.entry || []).length}
+              </div>
+              <div className="bg-red-50 px-3 py-2 rounded border">
+                <span className="font-medium text-red-800">Refusal:</span> {(infoByCategoryConfig.refusal || []).length}
+              </div>
+              <div className="bg-blue-50 px-3 py-2 rounded border">
+                <span className="font-medium text-blue-800">Estimation:</span> {(infoByCategoryConfig.estimation || []).length}
+              </div>
+              <div className="bg-gray-50 px-3 py-2 rounded border">
+                <span className="font-medium text-gray-800">Invalid:</span> {(infoByCategoryConfig.invalid || []).length}
+              </div>
+              <div className="bg-purple-50 px-3 py-2 rounded border">
+                <span className="font-medium text-purple-800">Priced:</span> {(infoByCategoryConfig.priced || []).length}
+              </div>
+              <div className="bg-yellow-50 px-3 py-2 rounded border">
+                <span className="font-medium text-yellow-800">Special:</span> {(infoByCategoryConfig.special || []).length}
+              </div>
+            </div>
+            
+            {/* Detailed Configuration (Collapsible) */}
+            {showInfoByConfig && (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+                {['entry', 'refusal', 'estimation', 'invalid', 'priced', 'special'].map(category => (
+                  <div key={category} className="border border-gray-200 rounded-lg p-4">
+                    <h5 className="font-medium text-gray-900 mb-3 capitalize">
+                      {category} ({(infoByCategoryConfig[category] || []).length})
+                    </h5>
+                    <div className="space-y-2 max-h-40 overflow-y-auto">
+                      {(availableInfoByCodes || []).map(codeItem => {
+                        const storageCode = codeItem.storageCode || codeItem.code;
+                        const displayCode = storageCode; // Should be clean: "A", "O", "R", etc.
+                        const isAssigned = (infoByCategoryConfig[category] || []).includes(storageCode);
+                        
+                        return (
+                          <div key={codeItem.code} className="flex items-start">
+                            <input
+                              type="checkbox"
+                              checked={isAssigned}
+                              onChange={() => handleCategoryAssignment(category, storageCode, isAssigned)}
+                              disabled={settingsLocked}
+                              className="mr-2 mt-1"
+                            />
+                            <div className="text-sm">
+                              <span className="font-medium bg-blue-100 px-1 rounded">{displayCode}</span>
+                              <div className="text-gray-600 text-xs leading-tight mt-1">{codeItem.description}</div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="mt-6 flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            {/* Reset button - visible when there's processed data and not stale */}
+            {(processed || analytics) && !isDataStale && (
+              <button
+                onClick={resetSession}
+                className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-all text-sm flex items-center space-x-1"
+              >
+                <RefreshCw className="w-4 h-4" />
+                <span>Reset Session</span>
+              </button>
+            )}
+          </div>
+          
+          <button
+            onClick={startProcessingSession}
+            disabled={processing || (!isDateLocked) || hasUnsavedChanges ||
+              (((infoByCategoryConfig || {}).entry || []).length + ((infoByCategoryConfig || {}).refusal || []).length + 
+               ((infoByCategoryConfig || {}).estimation || []).length + ((infoByCategoryConfig || {}).priced || []).length + 
+               ((infoByCategoryConfig || {}).special || []).length) === 0}
+            className={`px-6 py-2 rounded-lg flex items-center space-x-2 transition-all ${
+              (processed && !isDataStale)
+                ? 'bg-green-600 text-white hover:bg-green-700'
+                : processing
+                ? 'bg-yellow-600 text-white'
+                : 'bg-blue-600 text-white hover:bg-blue-700'
+            } disabled:opacity-50 disabled:cursor-not-allowed`}
+          >
+            {processing ? (
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+            ) : (processed && !isDataStale) ? (
+              <CheckCircle className="w-4 h-4" />
+            ) : (
+              <RefreshCw className="w-4 h-4" />
+            )}
+            <span>
+              {processing ? 'Processing...' : (processed && !isDataStale) ? 'Processed ✓' : 'Start Processing Session'}
+            </span>
+          </button>
+        </div>
+      </div>
+
+      {/* Main Content Tabs */}
+      {analytics && (
+        <div className="bg-white rounded-lg border shadow-sm">
+          <div className="border-b border-gray-200">
+            <nav className="-mb-px flex space-x-8 px-6">
+              <button
+                onClick={() => setActiveTab('analytics')}
+                className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'analytics'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                📊 Inspector Analytics
+              </button>
+              <button
+                onClick={() => setActiveTab('billing')}
+                className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'billing'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                💰 Summary for Billing
+              </button>
+              <button
+                onClick={() => setActiveTab('validation')}
+                className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'validation'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                ⚠️ Validation Report ({validationReport?.summary.total_issues || 0})
+              </button>
+              <button
+                onClick={() => setActiveTab('missing')}
+                className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'missing'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                🔍 Missing Properties ({missingPropertiesReport?.summary.total_missing || 0})
+              </button>
+              <button
+                onClick={() => setActiveTab('overrides')}
+                className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'overrides'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                🚫 Validation Overrides
+              </button>
+            </nav>
+          </div>
+
+          <div className="p-6">
+            {/* Inspector Analytics Tab */}
+            {activeTab === 'analytics' && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-bold text-gray-900">Inspector Performance Analytics</h3>
+                  
+                  <div className="flex items-center space-x-4">
+                    <div className="flex items-center space-x-2">
+                      <label className="text-sm font-medium text-gray-700">Sort:</label>
+                      <select 
+                        value={inspectorSort}
+                        onChange={(e) => setInspectorSort(e.target.value)}
+                        className="px-3 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="alphabetical">Alphabetical</option>
+                        <option value="dailyAverage">Daily Average</option>
+                        <option value="entryRate">Entry Rate</option>
+                        <option value="totalInspected">Total Inspected</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+                
+                {Object.keys(analytics.inspectorStats || {}).length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <Users className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+                    <p>No inspector data available yet</p>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    {/* RESIDENTIAL INSPECTOR ANALYTICS */}
+                    <div className="bg-green-50 rounded-lg border border-green-200 p-6">
+                      <h4 className="text-lg font-semibold text-green-800 mb-4 flex items-center">
+                        <Users className="w-5 h-5 mr-2" />
+                        Residential Inspector Analytics
+                      </h4>
+                      
+                      {Object.entries(analytics.inspectorStats)
+                        .filter(([_, stats]) => stats.inspector_type?.toLowerCase() === 'residential')
+                        .sort(([aKey, aStats], [bKey, bStats]) => {
+                          switch (inspectorSort) {
+                            case 'alphabetical':
+                              return aStats.name.localeCompare(bStats.name);
+                            case 'dailyAverage':
+                              return (bStats.dailyAverage || 0) - (aStats.dailyAverage || 0);
+                            case 'entryRate':
+                              return (bStats.entryRate || 0) - (aStats.entryRate || 0);
+                            case 'totalInspected':
+                              return bStats.totalInspected - aStats.totalInspected;
+                            default:
+                              return 0;
+                          }
+                        })
+                        .map(([inspector, stats]) => (
+                          <div key={inspector} className="bg-white border border-green-200 rounded-lg p-4 mb-3">
+                            {/* Header Row */}
+                            <div className="flex items-center justify-between mb-3">
+                              <div className="flex items-center space-x-3">
+                                <span className="font-semibold text-gray-900">{stats.name} ({inspector})</span>
+                                <span className="px-2 py-1 text-xs font-medium rounded bg-green-100 text-green-800">
+                                  Residential Inspector
+                                </span>
+                                <span className="text-sm text-gray-600">{stats.residentialFieldDays} residential field days</span>
+                              </div>
+                              <span className="text-lg font-bold text-green-600">{stats.totalInspected.toLocaleString()} Total</span>
+                            </div>
+                            
+                            {/* Metrics Grid */}
+                            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
+                              <div className="bg-green-50 p-3 rounded">
+                                <div className="font-bold text-green-700 text-xl">{stats.residentialInspected.toLocaleString()}</div>
+                                <div className="text-xs text-green-600 font-medium">Residential Inspected</div>
+                                <div className="text-xs text-gray-500">(Classes 2, 3A)</div>
+                              </div>
+                              <div className="bg-blue-50 p-3 rounded">
+                                <div className="font-bold text-blue-700 text-xl">{stats.dailyAverage || 0}</div>
+                                <div className="text-xs text-blue-600 font-medium">Daily Average</div>
+                                <div className="text-xs text-gray-500">Residential ÷ Field Days</div>
+                              </div>
+                              <div className="bg-green-50 p-3 rounded">
+                                <div className="font-bold text-green-700 text-xl">{stats.entryRate || 0}%</div>
+                                <div className="text-xs text-green-600 font-medium">Entry Rate</div>
+                                <div className="text-xs text-gray-500">On residential properties</div>
+                              </div>
+                              <div className="bg-red-50 p-3 rounded">
+                                <div className="font-bold text-red-700 text-xl">{stats.refusalRate || 0}%</div>
+                                <div className="text-xs text-red-600 font-medium">Refusal Rate</div>
+                                <div className="text-xs text-gray-500">On residential properties</div>
+                              </div>
+                              <div className="bg-gray-50 p-3 rounded">
+                                <div className="font-bold text-gray-700 text-xl">{(stats.totalInspected - stats.residentialInspected).toLocaleString()}</div>
+                                <div className="text-xs text-gray-600 font-medium">Other Properties</div>
+                                <div className="text-xs text-gray-500">Vacant, exempt, etc.</div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      
+                      {Object.entries(analytics.inspectorStats).filter(([_, stats]) => stats.inspector_type?.toLowerCase() === 'residential').length === 0 && (
+                        <div className="text-center py-4 text-green-600">
+                          <p>No residential inspectors found</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* COMMERCIAL INSPECTOR ANALYTICS */}
+                    <div className="bg-blue-50 rounded-lg border border-blue-200 p-6">
+                      <h4 className="text-lg font-semibold text-blue-800 mb-4 flex items-center">
+                        <Factory className="w-5 h-5 mr-2" />
+                        Commercial Inspector Analytics
+                      </h4>
+                      
+                      {Object.entries(analytics.inspectorStats)
+                        .filter(([_, stats]) => stats.inspector_type?.toLowerCase() === 'commercial')
+                        .sort(([aKey, aStats], [bKey, bStats]) => {
+                          switch (inspectorSort) {
+                            case 'alphabetical':
+                              return aStats.name.localeCompare(bStats.name);
+                            case 'dailyAverage':
+                              return (bStats.commercialAverage || 0) - (aStats.commercialAverage || 0);
+                            case 'totalInspected':
+                              return bStats.totalInspected - aStats.totalInspected;
+                            default:
+                              return 0;
+                          }
+                        })
+                        .map(([inspector, stats]) => (
+                          <div key={inspector} className="bg-white border border-blue-200 rounded-lg p-4 mb-3">
+                            {/* Header Row */}
+                            <div className="flex items-center justify-between mb-3">
+                              <div className="flex items-center space-x-3">
+                                <span className="font-semibold text-gray-900">{stats.name} ({inspector})</span>
+                                <span className="px-2 py-1 text-xs font-medium rounded bg-blue-100 text-blue-800">
+                                  Commercial Inspector
+                                </span>
+                                <span className="text-sm text-gray-600">{stats.commercialFieldDays} commercial field days</span>
+                              </div>
+                              <span className="text-lg font-bold text-blue-600">{stats.totalInspected.toLocaleString()} Total</span>
+                            </div>
+                            
+                            {/* Metrics Grid */}
+                            <div className="grid grid-cols-2 md:grid-cols-6 gap-3 text-center">
+                              <div className="bg-blue-50 p-3 rounded">
+                                <div className="font-bold text-blue-700 text-lg">{stats.commercialInspected.toLocaleString()}</div>
+                                <div className="text-xs text-blue-600 font-medium">Commercial</div>
+                                <div className="text-xs text-gray-500">(4A, 4B, 4C)</div>
+                              </div>
+                              <div className="bg-blue-50 p-3 rounded">
+                                <div className="font-bold text-blue-700 text-lg">{stats.commercialAverage || 0}</div>
+                                <div className="text-xs text-blue-600 font-medium">Commercial Avg</div>
+                                <div className="text-xs text-gray-500">Commercial ÷ Days</div>
+                              </div>
+                              <div className="bg-purple-50 p-3 rounded">
+                                <div className="font-bold text-purple-700 text-lg">{stats.priced.toLocaleString()}</div>
+                                <div className="text-xs text-purple-600 font-medium">Priced</div>
+                                <div className="text-xs text-gray-500">Commercial only</div>
+                              </div>
+                              <div className="bg-purple-50 p-3 rounded">
+                                <div className="font-bold text-purple-700 text-lg">{stats.pricingDays || 0}</div>
+                                <div className="text-xs text-purple-600 font-medium">Pricing Days</div>
+                                <div className="text-xs text-gray-500">{jobData.vendor_type === 'BRT' ? 'BRT only' : 'N/A'}</div>
+                              </div>
+                              <div className="bg-purple-50 p-3 rounded">
+                                <div className="font-bold text-purple-700 text-lg">{stats.pricingAverage || 'N/A'}</div>
+                                <div className="text-xs text-purple-600 font-medium">Pricing Avg</div>
+                                <div className="text-xs text-gray-500">{jobData.vendor_type === 'BRT' ? 'Priced ÷ Days' : 'N/A'}</div>
+                              </div>
+                              <div className="bg-gray-50 p-3 rounded">
+                                <div className="font-bold text-gray-700 text-lg">{(stats.totalInspected - stats.commercialInspected).toLocaleString()}</div>
+                                <div className="text-xs text-gray-600 font-medium">Other Properties</div>
+                                <div className="text-xs text-gray-500">Non-commercial</div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      
+                      {Object.entries(analytics.inspectorStats).filter(([_, stats]) => stats.inspector_type?.toLowerCase() === 'commercial').length === 0 && (
+                        <div className="text-center py-4 text-blue-600">
+                          <p>No commercial inspectors found</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* MANAGEMENT INSPECTOR ANALYTICS */}
+                    {Object.entries(analytics.inspectorStats)
+                      .filter(([_, stats]) => stats.inspector_type?.toLowerCase() === 'management')
+                      .length > 0 && (
+                      <div className="bg-purple-50 rounded-lg border border-purple-200 p-6">
+                        <h4 className="text-lg font-semibold text-purple-800 mb-4 flex items-center">
+                          <Settings className="w-5 h-5 mr-2" />
+                          Management Inspector Analytics
+                        </h4>
+                        
+                        {Object.entries(analytics.inspectorStats)
+                          .filter(([_, stats]) => stats.inspector_type?.toLowerCase() === 'management')
+                          .sort(([aKey, aStats], [bKey, bStats]) => aStats.name.localeCompare(bStats.name))
+                          .map(([inspector, stats]) => (
+                            <div key={inspector} className="bg-white border border-purple-200 rounded-lg p-4 mb-3">
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center space-x-3">
+                                  <span className="font-semibold text-gray-900">{stats.name} ({inspector})</span>
+                                  <span className="px-2 py-1 text-xs font-medium rounded bg-purple-100 text-purple-800">
+                                    Management Inspector
+                                  </span>
+                                  <span className="text-sm text-gray-600">{stats.fieldDays} field days</span>
+                                </div>
+                                <span className="text-lg font-bold text-purple-600">{stats.totalInspected.toLocaleString()} Total</span>
+                              </div>
+                              
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                                <div className="bg-purple-50 p-3 rounded">
+                                  <div className="font-bold text-purple-700 text-lg">{stats.dailyAverage || 0}</div>
+                                  <div className="text-xs text-purple-600 font-medium">Daily Average</div>
+                                  <div className="text-xs text-gray-500">All work ÷ Field days</div>
+                                </div>
+                                <div className="bg-green-50 p-3 rounded">
+                                  <div className="font-bold text-green-700 text-lg">{stats.residentialInspected.toLocaleString()}</div>
+                                  <div className="text-xs text-green-600 font-medium">Residential</div>
+                                  <div className="text-xs text-gray-500">(2, 3A)</div>
+                                </div>
+                                <div className="bg-blue-50 p-3 rounded">
+                                  <div className="font-bold text-blue-700 text-lg">{stats.commercialInspected.toLocaleString()}</div>
+                                  <div className="text-xs text-blue-600 font-medium">Commercial</div>
+                                  <div className="text-xs text-gray-500">(4A, 4B, 4C)</div>
+                                </div>
+                                <div className="bg-gray-50 p-3 rounded">
+                                  <div className="font-bold text-gray-700 text-lg">{(stats.totalInspected - stats.residentialInspected - stats.commercialInspected).toLocaleString()}</div>
+                                  <div className="text-xs text-gray-600 font-medium">Other</div>
+                                  <div className="text-xs text-gray-500">Vacant, exempt, etc.</div>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                    )}
+
+                    {/* UNTYPED INSPECTORS (If Any) */}
+                    {Object.entries(analytics.inspectorStats)
+                      .filter(([_, stats]) => !stats.inspector_type || 
+                        !['residential', 'commercial', 'management'].includes(stats.inspector_type.toLowerCase()))
+                      .length > 0 && (
+                      <div className="bg-gray-50 rounded-lg border border-gray-200 p-6">
+                        <h4 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                          <AlertTriangle className="w-5 h-5 mr-2" />
+                          Other Inspectors (No Type Assigned)
+                        </h4>
+                        
+                        {Object.entries(analytics.inspectorStats)
+                          .filter(([_, stats]) => !stats.inspector_type || 
+                            !['residential', 'commercial', 'management'].includes(stats.inspector_type.toLowerCase()))
+                          .sort(([aKey, aStats], [bKey, bStats]) => aStats.name.localeCompare(bStats.name))
+                          .map(([inspector, stats]) => (
+                            <div key={inspector} className="bg-white border border-gray-200 rounded-lg p-4 mb-3">
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center space-x-3">
+                                  <span className="font-semibold text-gray-900">{stats.name} ({inspector})</span>
+                                  <span className="px-2 py-1 text-xs font-medium rounded bg-yellow-100 text-yellow-800">
+                                    No Inspector Type
+                                  </span>
+                                  <span className="text-sm text-gray-600">{stats.fieldDays} field days</span>
+                                </div>
+                                <span className="text-lg font-bold text-gray-600">{stats.totalInspected.toLocaleString()} Total</span>
+                              </div>
+                              
+                              <div className="grid grid-cols-3 gap-4 text-center">
+                                <div className="bg-gray-50 p-3 rounded">
+                                  <div className="font-bold text-gray-700 text-lg">{stats.residentialInspected.toLocaleString()}</div>
+                                  <div className="text-xs text-gray-600 font-medium">Residential</div>
+                                </div>
+                                <div className="bg-gray-50 p-3 rounded">
+                                  <div className="font-bold text-gray-700 text-lg">{stats.commercialInspected.toLocaleString()}</div>
+                                  <div className="text-xs text-gray-600 font-medium">Commercial</div>
+                                </div>
+                                <div className="bg-gray-50 p-3 rounded">
+                                  <div className="font-bold text-gray-700 text-lg">{(stats.totalInspected - stats.residentialInspected - stats.commercialInspected).toLocaleString()}</div>
+                                  <div className="text-xs text-gray-600 font-medium">Other</div>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Billing Tab */}
+            {activeTab === 'billing' && billingAnalytics && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-bold text-gray-900">Summary for Billing</h3>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                  <div>
+                    <h4 className="text-md font-semibold text-gray-800 mb-4">Individual Classes</h4>
+                    <div className="space-y-3">
+                      {Object.entries(billingAnalytics.byClass)
+                        .filter(([cls, data]) => data.total > 0)
+                        .map(([cls, data]) => {
+                          const isResidential = ['2', '3A'].includes(cls);
+                          const isCommercial = ['4A', '4B', '4C'].includes(cls);
+                          const colorClass = isResidential 
+                            ? 'bg-green-50 border-green-200' 
+                            : isCommercial 
+                            ? 'bg-blue-50 border-blue-200'
+                            : 'bg-gray-50 border-gray-200';
+                          const textColor = isResidential 
+                            ? 'text-green-600' 
+                            : isCommercial 
+                            ? 'text-blue-600' 
+                            : 'text-gray-600';
+                          const progressColor = isResidential ? 'green' : isCommercial ? 'blue' : 'gray';
+                          
+                          return (
+                            <div key={cls} className={`p-4 rounded-lg border ${colorClass}`}>
+                              <div className="flex justify-between items-center mb-2">
+                                <div>
+                                  <span className="font-medium text-gray-900">Class {cls}</span>
+                                  {isResidential && <span className="ml-2 text-xs text-green-600 font-medium">Residential</span>}
+                                  {isCommercial && <span className="ml-2 text-xs text-blue-600 font-medium">Commercial</span>}
+                                </div>
+                                <div className="text-right">
+                                  <div className={`font-bold ${textColor}`}>{data.billable.toLocaleString()}</div>
+                                  <div className="text-xs text-gray-500">of {data.total.toLocaleString()}</div>
+                                </div>
+                              </div>
+                              <ProgressBar current={data.billable} total={data.total} color={progressColor} />
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="text-md font-semibold text-gray-800 mb-4">Grouped Categories</h4>
+                    <div className="space-y-4">
+                      <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                        <div className="flex justify-between items-center mb-2">
+                          <div>
+                            <span className="font-medium text-gray-900">Commercial (4A, 4B, 4C)</span>
+                            <div className="text-xs text-gray-600">Commercial properties</div>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-bold text-blue-600 text-xl">{billingAnalytics.grouped.commercial.toLocaleString()}</div>
+                            <div className="text-xs text-blue-600">of {billingAnalytics.progressData.commercial.total.toLocaleString()}</div>
+                          </div>
+                        </div>
+                        <ProgressBar 
+                          current={billingAnalytics.progressData.commercial.billable} 
+                          total={billingAnalytics.progressData.commercial.total} 
+                          color="blue" 
+                        />
+                      </div>
+
+                      <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
+                        <div className="flex items-center justify-between mb-2">
+                          <div>
+                            <span className="font-medium text-gray-900">Exempt (15A-15F)</span>
+                            <div className="text-xs text-gray-600">Tax-exempt properties</div>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-bold text-purple-600 text-xl">{billingAnalytics.grouped.exempt.toLocaleString()}</div>
+                            <div className="text-xs text-purple-600">of {billingAnalytics.progressData.exempt.total.toLocaleString()}</div>
+                          </div>
+                        </div>
+                        <ProgressBar 
+                          current={billingAnalytics.progressData.exempt.billable} 
+                          total={billingAnalytics.progressData.exempt.total} 
+                          color="purple" 
+                        />
+                      </div>
+
+                      <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                        <div className="flex justify-between items-center mb-2">
+                          <div>
+                            <span className="font-medium text-gray-900">Railroad (5A, 5B)</span>
+                            <div className="text-xs text-gray-600">Railroad properties</div>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-bold text-green-600 text-xl">{billingAnalytics.grouped.railroad.toLocaleString()}</div>
+                            <div className="text-xs text-green-600">of {billingAnalytics.progressData.railroad.total.toLocaleString()}</div>
+                          </div>
+                        </div>
+                        <ProgressBar 
+                          current={billingAnalytics.progressData.railroad.billable} 
+                          total={billingAnalytics.progressData.railroad.total} 
+                          color="green" 
+                        />
+                      </div>
+
+                      <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                        <div className="flex justify-between items-center mb-2">
+                          <div>
+                            <span className="font-medium text-gray-900">Personal Property (6A, 6B)</span>
+                            <div className="text-xs text-gray-600">Personal property</div>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-bold text-gray-600 text-xl">{billingAnalytics.grouped.personalProperty.toLocaleString()}</div>
+                            <div className="text-xs text-gray-600">of {billingAnalytics.progressData.personalProperty.total.toLocaleString()}</div>
+                          </div>
+                        </div>
+                        <ProgressBar 
+                          current={billingAnalytics.progressData.personalProperty.billable} 
+                          total={billingAnalytics.progressData.personalProperty.total} 
+                          color="gray" 
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Validation Tab */}
+            {activeTab === 'validation' && validationReport && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-bold text-gray-900">
+                    Enhanced Validation Report - Smart Validation
+                  </h3>
+                  {validationReport.summary.total_issues > 0 && (
+                    <button
+                      onClick={exportValidationReport}
+                      className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center space-x-2"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span>Export Report</span>
+                    </button>
+                  )}
+                </div>
+
+                {validationReport.summary.total_issues === 0 ? (
+                  <div className="text-center py-8">
+                    <CheckCircle className="w-12 h-12 mx-auto mb-4 text-green-500" />
+                    <h4 className="text-lg font-semibold text-gray-900 mb-2">No Validation Issues</h4>
+                    <p className="text-gray-600">All attempted inspections passed validation checks</p>
+                    <p className="text-sm text-gray-500 mt-2">Properties not yet inspected are excluded from validation</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+                      <h4 className="font-semibold text-yellow-800 mb-3">Inspector Summary - Issues with Attempted Inspections Only</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {validationReport.summary.inspector_breakdown.map((inspector, idx) => (
+                          <div 
+                            key={idx}
+                            onClick={() => setSelectedInspectorIssues(
+                              selectedInspectorIssues === inspector.inspector_code ? null : inspector.inspector_code
+                            )}
+                            className="p-3 bg-white rounded border cursor-pointer hover:bg-yellow-50 transition-colors"
+                          >
+                            <div className="flex justify-between items-center">
+                              <div>
+                                <div className="font-medium text-gray-900">{inspector.inspector_code}</div>
+                                <div className="text-sm text-gray-600">{inspector.inspector_name}</div>
+                              </div>
+                              <div className="text-right">
+                                <div className="font-bold text-red-600">{inspector.total_issues}</div>
+                                <div className="text-xs text-gray-500">issues</div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {selectedInspectorIssues && validationReport.detailed_issues[selectedInspectorIssues] && (
+                      <div className="bg-white border border-gray-200 rounded-lg p-4">
+                        <h4 className="font-semibold text-gray-900 mb-4">
+                          Issues for {selectedInspectorIssues} - {validationReport.summary.inspector_breakdown.find(i => i.inspector_code === selectedInspectorIssues)?.inspector_name}
+                        </h4>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead className="bg-gray-50">
+                              <tr>
+                                <th className="px-3 py-2 text-left font-medium text-gray-700">Block</th>
+                                <th className="px-3 py-2 text-left font-medium text-gray-700">Lot</th>
+                                <th className="px-3 py-2 text-left font-medium text-gray-700">Qualifier</th>
+                                <th className="px-3 py-2 text-left font-medium text-gray-700">Card</th>
+                                <th className="px-3 py-2 text-left font-medium text-gray-700">Property Location</th>
+                                <th className="px-3 py-2 text-left font-medium text-gray-700">Compound Issues</th>
+                                <th className="px-3 py-2 text-left font-medium text-gray-700">Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {validationReport.detailed_issues[selectedInspectorIssues].map((issue, idx) => {
+                                // Check if this issue has been overridden
+                                const propertyKey = issue.composite_key || `${issue.block}-${issue.lot}-${issue.qualifier || ''}`;
+                                const isOverridden = overrideMap && overrideMap[propertyKey]?.override_applied;
+                                
+                                return (
+                                  <tr key={idx} className={`border-t border-gray-200 ${isOverridden ? 'bg-green-50' : ''}`}>
+                                    <td className="px-3 py-2">{issue.block}</td>
+                                    <td className="px-3 py-2">{issue.lot}</td>
+                                    <td className="px-3 py-2">{issue.qualifier || '-'}</td>
+                                    <td className="px-3 py-2">{issue.card}</td>
+                                    <td className="px-3 py-2">{issue.property_location}</td>
+                                    <td className={`px-3 py-2 ${isOverridden ? 'line-through text-gray-500' : 'text-red-600'}`}>
+                                      {isOverridden ? (
+                                        <div>
+                                          <span className="line-through">{issue.warning_message}</span>
+                                          <div className="text-green-600 text-xs font-medium mt-1">
+                                            ✅ Overridden: {overrideMap[propertyKey]?.override_reason}
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        issue.warning_message
+                                      )}
+                                    </td>
+                                    <td className="px-3 py-2">
+                                      {isOverridden ? (
+                                        <button
+                                          onClick={() => handleUndoOverride(propertyKey, overrideMap[propertyKey]?.override_reason)}
+                                          className="px-2 py-1 bg-orange-600 text-white text-xs rounded hover:bg-orange-700 font-medium"
+                                        >
+                                          Undo Override
+                                        </button>
+                                      ) : (
+                                        <button
+                                          onClick={() => {
+                                            setSelectedOverrideProperty({
+                                              composite_key: propertyKey,
+                                              block: issue.block,
+                                              lot: issue.lot,
+                                              qualifier: issue.qualifier,
+                                              card: issue.card,
+                                              property_location: issue.property_location,
+                                              inspector: issue.inspector,
+                                              warning_message: issue.warning_message
+                                            });
+                                            setShowOverrideModal(true);
+                                          }}
+                                          className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 font-medium"
+                                        >
+                                          Override
+                                        </button>
+                                      )}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {!selectedInspectorIssues && (
+                      <div className="text-center py-8 text-gray-500">
+                        <FileText className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+                        <p>Click on an inspector above to view detailed issues</p>
+                        <p className="text-sm mt-2">Only properties with inspection attempts are validated</p>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Missing Properties Report */}
+            {activeTab === 'missing' && missingPropertiesReport && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-bold text-gray-900">
+                    Missing Properties Report - Not Added to Inspection Data
+                  </h3>
+                  {missingPropertiesReport.summary.total_missing > 0 && (
+                    <button
+                      onClick={() => exportMissingPropertiesReport()}
+                      className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 flex items-center space-x-2"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span>Export Missing Report</span>
+                    </button>
+                  )}
+                </div>
+
+                {missingPropertiesReport.summary.total_missing === 0 ? (
+                  <div className="text-center py-8">
+                    <CheckCircle className="w-12 h-12 mx-auto mb-4 text-green-500" />
+                    <h4 className="text-lg font-semibold text-gray-900 mb-2">All Properties Accounted For</h4>
+                    <p className="text-gray-600">Every property record was successfully processed to inspection_data</p>
+                    <p className="text-sm text-gray-500 mt-2">Total Records: {analytics?.totalRecords || 0} | Valid Inspections: {analytics?.validInspections || 0}</p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Summary Cards */}
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                      <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-orange-600 font-medium">Total Missing</p>
+                            <p className="text-2xl font-bold text-orange-800">{missingPropertiesReport.summary.total_missing}</p>
+                          </div>
+                          <AlertTriangle className="w-8 h-8 text-orange-500" />
+                        </div>
+                      </div>
+
+                      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-gray-600 font-medium">Uninspected</p>
+                            <p className="text-2xl font-bold text-gray-800">{missingPropertiesReport.summary.uninspected_count}</p>
+                            <p className="text-xs text-gray-500">No inspection attempt</p>
+                          </div>
+                          <Eye className="w-8 h-8 text-gray-500" />
+                        </div>
+                      </div>
+
+                      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-red-600 font-medium">Validation Failed</p>
+                            <p className="text-2xl font-bold text-red-800">{missingPropertiesReport.summary.validation_failed_count}</p>
+                            <p className="text-xs text-red-500">Attempted but invalid</p>
+                          </div>
+                          <X className="w-8 h-8 text-red-500" />
+                        </div>
+                      </div>
+
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-blue-600 font-medium">Success Rate</p>
+                            <p className="text-2xl font-bold text-blue-800">
+                              {analytics?.totalRecords > 0 ? 
+                                Math.round(((analytics.totalRecords - missingPropertiesReport.summary.total_missing) / analytics.totalRecords) * 100) : 0}%
+                            </p>
+                            <p className="text-xs text-blue-500">Properties processed</p>
+                          </div>
+                          <CheckCircle className="w-8 h-8 text-blue-500" />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Breakdown by Reason */}
+                    <div className="bg-white border border-gray-200 rounded-lg p-6 mb-6">
+                      <h4 className="font-semibold text-gray-900 mb-4">Breakdown by Reason</h4>
+                      <div className="space-y-3">
+                        {Object.entries(missingPropertiesReport.summary.by_reason).map(([reason, count]) => (
+                          <div key={reason} className="flex justify-between items-center p-3 bg-gray-50 rounded">
+                            <span className="text-sm text-gray-700">{reason}</span>
+                            <span className="font-bold text-gray-900">{count} properties</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Breakdown by Inspector */}
+                    <div className="bg-white border border-gray-200 rounded-lg p-6 mb-6">
+                      <h4 className="font-semibold text-gray-900 mb-4">Breakdown by Inspector</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {Object.entries(missingPropertiesReport.summary.by_inspector).map(([inspector, count]) => (
+                          <div key={inspector} className="p-3 bg-gray-50 rounded border">
+                            <div className="font-medium text-gray-900">{inspector}</div>
+                            <div className="text-sm text-gray-600">{count} missing properties</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Detailed Missing Properties Table */}
+                    <div className="bg-white border border-gray-200 rounded-lg p-6">
+                      <h4 className="font-semibold text-gray-900 mb-4">Detailed Missing Properties</h4>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Block</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Lot</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Qualifier</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Card</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Property Location</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Class</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Inspector</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">InfoBy Code</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Reason</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {missingPropertiesReport.detailed_missing.slice(0, 100).map((property, idx) => (
+                              <tr key={idx} className={`border-t border-gray-200 ${
+                                property.reason.includes('No inspection attempt') ? 'bg-gray-50' : 'bg-red-50'
+                              }`}>
+                                <td className="px-3 py-2 font-medium">{property.block}</td>
+                                <td className="px-3 py-2 font-medium">{property.lot}</td>
+                                <td className="px-3 py-2">{property.qualifier || '-'}</td>
+                                <td className="px-3 py-2">{property.card || '1'}</td>
+                                <td className="px-3 py-2">{property.property_location}</td>
+                                <td className="px-3 py-2">
+                                  <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded font-medium">
+                                    {property.property_class}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-2">{property.inspector}</td>
+                                <td className="px-3 py-2">{property.info_by_code || '-'}</td>
+                                <td className="px-3 py-2 text-xs">{property.reason}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        {missingPropertiesReport.detailed_missing.length > 100 && (
+                          <div className="mt-4 text-center text-sm text-gray-500">
+                            Showing first 100 of {missingPropertiesReport.detailed_missing.length} missing properties. Export to see all.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+            
+            {/* Validation Overrides Tab */}
+            {activeTab === 'overrides' && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-bold text-gray-900">
+                    Validation Overrides - Manager Approved Exceptions ({validationOverrides.length})
+                  </h3>
+                  {validationOverrides.length > 0 && (
+                    <button
+                      onClick={() => {
+                        // Export overrides functionality
+                        let csvContent = "Block,Lot,Qualifier,Card,Property Location,Override Reason,Override By,Override Date\n";
+                        
+                        validationOverrides.forEach(override => {
+                          csvContent += `"${override.block}","${override.lot}","${override.qualifier || ''}","${override.card || '1'}","${override.property_location || ''}","${override.override_reason}","${override.override_by || 'Manager'}","${override.override_date || ''}"\n`;
+                        });
+
+                        const blob = new Blob([csvContent], { type: 'text/csv' });
+                        const url = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `Validation_Overrides_${jobData.ccdd || jobData.ccddCode}_${new Date().toISOString().split('T')[0].replace(/-/g, '')}.csv`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        window.URL.revokeObjectURL(url);
+
+                        addNotification('📊 Validation overrides exported', 'success');
+                      }}
+                      className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center space-x-2"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span>Export Overrides</span>
+                    </button>
+                  )}
+                </div>
+
+                {validationOverrides.length === 0 ? (
+                  <div className="text-center py-8">
+                    <CheckCircle className="w-12 h-12 mx-auto mb-4 text-blue-500" />
+                    <h4 className="text-lg font-semibold text-gray-900 mb-2">No Validation Overrides Yet</h4>
+                    <p className="text-gray-600">Use the Override button in validation details to approve exceptions.</p>
+                    <p className="text-sm text-gray-500 mt-2">Overridden properties will appear here for tracking.</p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Summary Cards */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                      <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-green-600 font-medium">Total Overrides</p>
+                            <p className="text-2xl font-bold text-green-800">{validationOverrides.length}</p>
+                          </div>
+                          <CheckCircle className="w-8 h-8 text-green-500" />
+                        </div>
+                      </div>
+
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-blue-600 font-medium">New Construction</p>
+                            <p className="text-2xl font-bold text-blue-800">
+                              {validationOverrides.filter(o => o.override_reason === 'New Construction').length}
+                            </p>
+                          </div>
+                          <Factory className="w-8 h-8 text-blue-500" />
+                        </div>
+                      </div>
+
+                      <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-purple-600 font-medium">Additional Card</p>
+                            <p className="text-2xl font-bold text-purple-800">
+                              {validationOverrides.filter(o => o.override_reason === 'Additional Card').length}
+                            </p>
+                          </div>
+                          <FileText className="w-8 h-8 text-purple-500" />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Detailed Overrides Table */}
+                    <div className="bg-white border border-gray-200 rounded-lg p-6">
+                      <h4 className="font-semibold text-gray-900 mb-4">Detailed Validation Overrides</h4>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Block</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Lot</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Qualifier</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Card</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Property Location</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Override Reason</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Override By</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Override Date</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {validationOverrides.map((override, idx) => (
+                              <tr key={idx} className="border-t border-gray-200 bg-green-50">
+                                <td className="px-3 py-2 font-medium">{override.block}</td>
+                                <td className="px-3 py-2 font-medium">{override.lot}</td>
+                                <td className="px-3 py-2">{override.qualifier || '-'}</td>
+                                <td className="px-3 py-2">{override.card || '1'}</td>
+                                <td className="px-3 py-2">{override.property_location}</td>
+                                <td className="px-3 py-2">
+                                  <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded font-medium">
+                                    {override.override_reason}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-2">{override.override_by || 'Manager'}</td>
+                                <td className="px-3 py-2 text-xs">
+                                  {override.override_date ? new Date(override.override_date).toLocaleDateString() : '-'}
+                                </td>
+                                <td className="px-3 py-2">
+                                  <button
+                                    onClick={() => handleUndoOverride(override.property_composite_key, override.override_reason)}
+                                    className="px-2 py-1 bg-red-700 text-white text-xs rounded hover:bg-red-800 font-medium"
+                                  >
+                                    Undo Override
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Override Modal */}
+      {showOverrideModal && selectedOverrideProperty && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-bold text-gray-900 mb-4">Override Validation Issue</h3>
+            
+            <div className="mb-4">
+              <p className="text-sm text-gray-600 mb-2">Property:</p>
+              <p className="font-medium">{selectedOverrideProperty.block}-{selectedOverrideProperty.lot}{selectedOverrideProperty.qualifier ? `-${selectedOverrideProperty.qualifier}` : ''}</p>
+              <p className="text-sm text-gray-500">{selectedOverrideProperty.property_location}</p>
+            </div>
+            
+            <div className="mb-4">
+              <p className="text-sm text-gray-600 mb-2">Current Issue:</p>
+              <p className="text-sm text-red-600 bg-red-50 p-2 rounded">{selectedOverrideProperty.warning_message}</p>
+            </div>
+            
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Reason for Override:
+              </label>
+              <select
+                value={overrideReason}
+                onChange={(e) => setOverrideReason(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="New Construction">New Construction</option>
+                <option value="Additional Card">Additional Card</option>
+              </select>
+            </div>
+            
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => {
+                  setShowOverrideModal(false);
+                  setSelectedOverrideProperty(null);
+                  setOverrideReason('New Construction');
+                }}
+                className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleOverrideValidation(selectedOverrideProperty)}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                Save Override
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default ProductionTracker;
