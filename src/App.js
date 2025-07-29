@@ -38,7 +38,6 @@ function App() {
             // Load existing workflow stats
             loadedStats[job.id] = {
               ...job.workflow_stats,
-              isProcessed: true,
               lastLoaded: new Date().toISOString()
             };
           } else {
