@@ -441,7 +441,7 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
       }
       
       // Set assignment results
-      safeSetState(setAssignmentResults)({
+      setAssignmentResults({
         success: true,
         uploaded: assignments.length,
         matched: matchedCount,
@@ -904,7 +904,7 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
             });
             // Update processing status with latest logs
             if (isMountedRef.current) {
-              safeSetState(setProcessingStatus)(prev => ({
+              setProcessingStatus(prev => ({
                 ...prev,
                 logs: [...logs]
               }));
@@ -955,7 +955,7 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
         
         updateProcessingStatus('Complete!', 100);
         
-        safeSetState(setProcessingResults)({
+        setProcessingResults({
           success: result.errors === 0,
           processed: result.processed || 0,
           errors: result.errors || 0,
@@ -984,7 +984,7 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
       }
     } finally {
       if (isMountedRef.current) {
-        safeSetState(setProcessing)(false);
+        setProcessing(false);
       }
     }
   };
@@ -1007,7 +1007,7 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
       await planningJobService.create(planningData);
       
       const updatedPlanningJobs = await planningJobService.getAll();
-      safeSetState(setPlanningJobs)(updatedPlanningJobs);
+      setPlanningJobs(updatedPlanningJobs);
       
       closePlanningModal();
       addNotification('Planning job created successfully!', 'success');
@@ -1060,7 +1060,7 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
       await planningJobService.update(editingPlanning.id, updateData);
       
       const updatedPlanningJobs = await planningJobService.getAll();
-      safeSetState(setPlanningJobs)(updatedPlanningJobs);
+      setPlanningJobs(updatedPlanningJobs);
       
       closePlanningModal();
       addNotification('Planning job updated successfully!', 'success');
@@ -1074,7 +1074,7 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
     try {
       await jobService.delete(job.id);
       await refreshJobsWithAssignedCounts();
-      safeSetState(setShowDeleteConfirm)(null);
+      setShowDeleteConfirm(null);
       addNotification('Job deleted successfully', 'success');
     } catch (error) {
       console.error('Job deletion error:', error);
