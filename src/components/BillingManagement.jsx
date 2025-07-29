@@ -8,6 +8,7 @@ const BillingManagement = () => {
   const [showContractSetup, setShowContractSetup] = useState(false);
   const [selectedJob, setSelectedJob] = useState(null);
   const [showBillingForm, setShowBillingForm] = useState(false);
+  const [billingHistoryText, setBillingHistoryText] = useState('');
   const [contractSetup, setContractSetup] = useState({
     contractAmount: '',
     templateType: 'standard',
@@ -20,13 +21,10 @@ const BillingManagement = () => {
   const [billingForm, setBillingForm] = useState({
     billingDate: new Date().toISOString().split('T')[0],
     percentageBilled: '',
-    status: 'D',
+    status: 'P', // Changed from 'D' to 'P' for Paid
     invoiceNumber: '',
     notes: ''
   });
-
-  // Active jobs from your system
-  const activeJobNames = ['Pine Hill', 'Lindenwold', 'Lower Alloways Creek', 'Cedar Grove'];
 
   useEffect(() => {
     loadJobs();
@@ -37,7 +35,7 @@ const BillingManagement = () => {
       setLoading(true);
       
       if (activeTab === 'active') {
-        // Load active jobs with billing contracts and events
+        // Load ALL active jobs (no filter on job names)
         const { data: jobsData, error: jobsError } = await supabase
           .from('jobs')
           .select(`
@@ -45,8 +43,8 @@ const BillingManagement = () => {
             job_contracts(*),
             billing_events(*)
           `)
-          .in('job_name', activeJobNames)
-          .eq('job_type', 'standard');
+          .eq('job_type', 'standard')
+          .order('created_at', { ascending: false });
 
         if (jobsError) throw jobsError;
         setJobs(jobsData || []);
@@ -90,10 +88,45 @@ const BillingManagement = () => {
     };
   };
 
+  const parseBillingHistory = (text) => {
+    // Parse pasted billing history
+    // Format: 12/4/2024 10.00% D 12240225 $49,935.00 $4,994.00 $0.00 $44,941.00
+    const lines = text.trim().split('\n');
+    const parsedEvents = [];
+    
+    lines.forEach(line => {
+      const parts = line.trim().split(/\s+/);
+      if (parts.length >= 8) {
+        const date = parts[0];
+        const percentage = parseFloat(parts[1].replace('%', ''));
+        const status = parts[2] === 'D' ? 'P' : ''; // D becomes P (Paid), blank stays blank
+        const invoiceNumber = parts[3];
+        // Remove $ and commas from amounts
+        const totalAmount = parseFloat(parts[4].replace(/[$,]/g, ''));
+        const retainerAmount = parseFloat(parts[5].replace(/[$,]/g, ''));
+        // Skip parts[6] which seems to be $0.00
+        const amountBilled = parseFloat(parts[7].replace(/[$,]/g, ''));
+        
+        parsedEvents.push({
+          date,
+          percentage,
+          status,
+          invoiceNumber,
+          totalAmount,
+          retainerAmount,
+          amountBilled
+        });
+      }
+    });
+    
+    return parsedEvents;
+  };
+
   const handleContractSetup = async () => {
     if (!selectedJob) return;
     
     try {
+      // First, create the contract
       const contractData = {
         job_id: selectedJob.id,
         contract_amount: parseFloat(contractSetup.contractAmount),
@@ -107,20 +140,64 @@ const BillingManagement = () => {
         second_year_appeals_amount: parseFloat(contractSetup.contractAmount) * contractSetup.secondYearAppealsPercentage
       };
 
-      const { error } = await supabase
+      const { error: contractError } = await supabase
         .from('job_contracts')
         .upsert(contractData);
 
-      if (error) throw error;
+      if (contractError) throw contractError;
 
-      // Update job billing_setup_complete
-      await supabase
-        .from('jobs')
-        .update({ billing_setup_complete: true })
-        .eq('id', selectedJob.id);
+      // If billing history was provided, bulk import the events
+      if (billingHistoryText.trim()) {
+        const parsedEvents = parseBillingHistory(billingHistoryText);
+        let runningTotal = 0;
+        let runningPercentage = 0;
+        
+        for (const event of parsedEvents) {
+          runningTotal += event.amountBilled;
+          runningPercentage += event.percentage / 100;
+          const remainingDue = parseFloat(contractSetup.contractAmount) - runningTotal;
+          
+          const billingData = {
+            job_id: selectedJob.id,
+            billing_date: new Date(event.date).toISOString().split('T')[0],
+            percentage_billed: event.percentage / 100,
+            status: event.status,
+            invoice_number: event.invoiceNumber,
+            total_amount: event.totalAmount,
+            retainer_amount: event.retainerAmount,
+            amount_billed: event.amountBilled,
+            remaining_due: remainingDue,
+            notes: 'Imported from billing history'
+          };
+
+          const { error: eventError } = await supabase
+            .from('billing_events')
+            .insert(billingData);
+
+          if (eventError) {
+            console.error('Error inserting billing event:', eventError);
+          }
+        }
+
+        // Update job percent_billed
+        await supabase
+          .from('jobs')
+          .update({ 
+            billing_setup_complete: true,
+            percent_billed: runningPercentage 
+          })
+          .eq('id', selectedJob.id);
+      } else {
+        // Just update billing_setup_complete if no history provided
+        await supabase
+          .from('jobs')
+          .update({ billing_setup_complete: true })
+          .eq('id', selectedJob.id);
+      }
 
       setShowContractSetup(false);
       setSelectedJob(null);
+      setBillingHistoryText('');
       loadJobs();
     } catch (error) {
       console.error('Error setting up contract:', error);
@@ -172,7 +249,7 @@ const BillingManagement = () => {
       setBillingForm({
         billingDate: new Date().toISOString().split('T')[0],
         percentageBilled: '',
-        status: 'D',
+        status: 'P',
         invoiceNumber: '',
         notes: ''
       });
@@ -219,7 +296,7 @@ const BillingManagement = () => {
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
-            Active Jobs ({activeJobNames.length})
+            Active Jobs ({jobs.filter(j => j.job_type === 'standard').length})
           </button>
           <button
             onClick={() => setActiveTab('legacy')}
@@ -230,16 +307,6 @@ const BillingManagement = () => {
             }`}
           >
             Legacy Jobs
-          </button>
-          <button
-            onClick={() => setActiveTab('import')}
-            className={`py-2 px-1 border-b-2 font-medium text-sm ${
-              activeTab === 'import'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
-          >
-            Import Tools
           </button>
         </nav>
       </div>
@@ -256,7 +323,7 @@ const BillingManagement = () => {
             <div className="space-y-6">
               {jobs.length === 0 ? (
                 <div className="text-center py-12 bg-gray-50 rounded-lg">
-                  <p className="text-gray-600">No active jobs found. Make sure your job names match the active list.</p>
+                  <p className="text-gray-600">No active jobs found.</p>
                 </div>
               ) : (
                 jobs.map(job => {
@@ -354,9 +421,9 @@ const BillingManagement = () => {
                                   </td>
                                   <td className="px-4 py-2 text-sm">
                                     <span className={`px-2 py-1 text-xs rounded-full ${
-                                      event.status === 'C' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                                      event.status === 'P' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
                                     }`}>
-                                      {event.status === 'C' ? 'Complete' : 'Draft'}
+                                      {event.status === 'P' ? 'Paid' : 'Open'}
                                     </span>
                                   </td>
                                   <td className="px-4 py-2 text-sm text-gray-900">{event.invoice_number}</td>
@@ -382,20 +449,13 @@ const BillingManagement = () => {
               <p className="text-gray-600">Legacy billing jobs will appear here</p>
             </div>
           )}
-
-          {/* Import Tools Tab */}
-          {activeTab === 'import' && (
-            <div className="text-center py-12 bg-gray-50 rounded-lg">
-              <p className="text-gray-600">Excel import tools coming soon</p>
-            </div>
-          )}
         </>
       )}
 
       {/* Contract Setup Modal */}
       {showContractSetup && selectedJob && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+          <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-semibold mb-4">Setup Contract: {selectedJob.job_name}</h3>
             
             <div className="space-y-4">
@@ -510,6 +570,24 @@ const BillingManagement = () => {
                   </div>
                 </div>
               )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Billing History (Optional - paste from Excel)
+                </label>
+                <textarea
+                  value={billingHistoryText}
+                  onChange={(e) => setBillingHistoryText(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md font-mono text-sm"
+                  rows="8"
+                  placeholder="Paste billing history in this format:
+12/4/2024 10.00% D 12240225 $49,935.00 $4,994.00 $0.00 $44,941.00
+2/28/2025 24.37% D 020225 $121,690.00 $12,169.00 $0.00 $109,521.00"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Format: Date Percentage% D/blank InvoiceNumber $Total $Retainer $0 $Billed
+                </p>
+              </div>
             </div>
 
             <div className="flex justify-end space-x-3 mt-6">
@@ -517,6 +595,7 @@ const BillingManagement = () => {
                 onClick={() => {
                   setShowContractSetup(false);
                   setSelectedJob(null);
+                  setBillingHistoryText('');
                 }}
                 className="px-4 py-2 text-gray-600 hover:text-gray-800"
               >
@@ -526,7 +605,7 @@ const BillingManagement = () => {
                 onClick={handleContractSetup}
                 className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
               >
-                Save Contract
+                Save Contract {billingHistoryText.trim() && '& Import History'}
               </button>
             </div>
           </div>
@@ -588,8 +667,8 @@ const BillingManagement = () => {
                   onChange={(e) => setBillingForm(prev => ({ ...prev, status: e.target.value }))}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md"
                 >
-                  <option value="D">Draft</option>
-                  <option value="C">Complete</option>
+                  <option value="P">Paid</option>
+                  <option value="">Open</option>
                 </select>
               </div>
 
@@ -614,7 +693,7 @@ const BillingManagement = () => {
                   setBillingForm({
                     billingDate: new Date().toISOString().split('T')[0],
                     percentageBilled: '',
-                    status: 'D',
+                    status: 'P',
                     invoiceNumber: '',
                     notes: ''
                   });
