@@ -117,12 +117,10 @@ function App() {
       }
     }));
 
-    // 🔧 FIX: Defer metrics refresh to prevent React Error #301
+    // 🔧 BACKEND ENHANCEMENT: Trigger metrics refresh when analytics complete
     if (analyticsJustCompleted) {
       console.log('📊 App.js: Analytics completed, triggering AdminJobManagement metrics refresh');
-      setTimeout(() => {
-        setMetricsRefreshTrigger(prev => prev + 1);
-      }, 0);
+      setMetricsRefreshTrigger(prev => prev + 1);
     }
 
     // Persist to database for navigation survival
@@ -225,42 +223,34 @@ function App() {
   // File refresh trigger for JobContainer
   const [fileRefreshTrigger, setFileRefreshTrigger] = useState(0);
 
-  // 🔧 FIX: Defer file processing state updates to prevent React Error #301
+  // 🔧 BACKEND ENHANCEMENT: Smart file processing with preservation
   const handleFileProcessed = async (result) => {
     // FileUploadButton already handles file versioning and tracking
     // Just refresh job metadata without touching ProductionTracker analytics
     await loadAllJobWorkflowStats();
     
-    // CRITICAL: Defer trigger to prevent render-time state updates
-    setTimeout(() => {
-      setFileRefreshTrigger(prev => prev + 1);
-    }, 0);
+    // CRITICAL: Trigger JobContainer to refresh file version
+    setFileRefreshTrigger(prev => prev + 1);
 
     // 🔧 SMART INVALIDATION: Preserve settings, just flag as stale
     if (selectedJob?.id && jobWorkflowStats[selectedJob.id]) {
-      // Defer state update to prevent React Error #301
-      setTimeout(() => {
-        setJobWorkflowStats(prev => ({
-          ...prev,
-          [selectedJob.id]: {
-            ...prev[selectedJob.id], // PRESERVE existing settings & analytics
-            needsRefresh: true,       // Flag for ProductionTracker warning
-            lastFileUpdate: new Date().toISOString(), // Track when files changed
-          }
-        }));
-      }, 0);
+      setJobWorkflowStats(prev => ({
+        ...prev,
+        [selectedJob.id]: {
+          ...prev[selectedJob.id], // PRESERVE existing settings & analytics
+          needsRefresh: true,       // Flag for ProductionTracker warning
+          lastFileUpdate: new Date().toISOString(), // Track when files changed
+        }
+      }));
       
       console.log('📊 App.js: Marked analytics as stale, preserved user settings');
     }
   };
 
-  // 🔧 FIX: Defer job processing completion state updates to prevent React Error #301
+  // 🔧 BACKEND ENHANCEMENT: Handle job processing completion from AdminJobManagement
   const handleJobProcessingComplete = () => {
     console.log('🔄 App.js: Job processing completed, refreshing metrics');
-    // Defer the state update to the next tick to prevent Error #301
-    setTimeout(() => {
-      setMetricsRefreshTrigger(prev => prev + 1);
-    }, 0);
+    setMetricsRefreshTrigger(prev => prev + 1);
   };
 
   return (
