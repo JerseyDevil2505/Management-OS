@@ -1355,8 +1355,8 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
 
           inspectionDataBatch.push(inspectionRecord);
           wasAddedToInspectionData = true;
-        } else {
-          // Track properties that didn't make it to inspection_data
+        // Track properties that didn't make it to inspection_data
+        if (!wasAddedToInspectionData) {
           const reasons = [];
           if (!hasValidInfoBy) reasons.push(`Invalid InfoBy code: ${infoByCode}`);
           if (!hasValidMeasuredBy) reasons.push('Missing/invalid inspector');
@@ -1364,10 +1364,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
           if (propertyIssues[propertyKey]?.issues) reasons.push(...propertyIssues[propertyKey].issues);
           
           reasonNotAdded = `Failed validation: ${reasons.join(', ')}`;
-        }
-
-        // Track ALL properties that didn't make it to inspection_data
-        if (!wasAddedToInspectionData) {
+          
           missingProperties.push({
             composite_key: propertyKey,
             block: record.property_block,
@@ -1481,7 +1478,20 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
 
       // Calculate job-level totals
       const totalInspected = Object.values(inspectorStats).reduce((sum, stats) => sum + stats.totalInspected, 0);
-      const totalResidentialInspected = Object.values(inspectorStats).reduce((sum, stats) => sum + (stats.residentialInspected || 0), 0);
+      
+      // FIX: Get accurate denominators from inspection_data table for global rates
+      const { data: class2And3AData, error: class2And3AError } = await supabase
+        .from('inspection_data')
+        .select('property_composite_key', { count: 'exact' })
+        .eq('job_id', jobData.id)
+        .eq('file_version', latestFileVersion)
+        .in('property_class', ['2', '3A']);
+
+      if (class2And3AError) {
+        console.error('Error counting Class 2/3A properties:', class2And3AError);
+      }
+
+      const totalClass2And3AProperties = class2And3AData?.length || 0;
       const totalEntry = Object.values(inspectorStats).reduce((sum, stats) => sum + stats.entry, 0);
       const totalRefusal = Object.values(inspectorStats).reduce((sum, stats) => sum + stats.refusal, 0);
 
@@ -1536,9 +1546,9 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         validationIssues: validationIssues.length,
         processingDate: new Date().toISOString(),
         
-        // Job-level metrics based on residential properties only (2, 3A)
-        jobEntryRate: totalResidentialInspected > 0 ? Math.round((totalEntry / totalResidentialInspected) * 100) : 0,
-        jobRefusalRate: totalResidentialInspected > 0 ? Math.round((totalRefusal / totalResidentialInspected) * 100) : 0,
+        // Job-level metrics based on residential properties only (2, 3A) - FIXED denominators
+        jobEntryRate: totalClass2And3AProperties > 0 ? Math.round((totalEntry / totalClass2And3AProperties) * 100) : 0,
+        jobRefusalRate: totalClass2And3AProperties > 0 ? Math.round((totalRefusal / totalClass2And3AProperties) * 100) : 0,
         
         // FIXED: Commercial metrics using inspector totals not class breakdown
         commercialInspections: totalCommercialInspected,
