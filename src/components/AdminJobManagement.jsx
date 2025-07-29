@@ -1518,6 +1518,7 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
                     <input
                       type="text"
                       value={newJob.county}
+                      onChange={(e) => setNewJob({...newJob, county: e.target.value})}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       placeholder="e.g., Monmouth"
                       disabled={editingJob}
