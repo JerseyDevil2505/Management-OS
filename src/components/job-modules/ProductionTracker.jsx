@@ -933,42 +933,54 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
     }
   }, [jobData?.id, latestFileVersion]);
 
-  // Load data from App.js central hub if available
+  // Load data from App.js central hub if available - FIXED to prevent race condition
   useEffect(() => {
-    if (jobData?.appData) {
-      debugLog('APP_INTEGRATION', '✅ Loading data from App.js central hub');
+    if (jobData?.appData && jobData.appData.analytics) {
+      debugLog('APP_INTEGRATION', '🔍 Checking App.js data vs local state');
       
-      // Check if we need to adjust for current overrides
-      const loadCurrentOverrides = async () => {
-        const { data: currentOverrides, error } = await supabase
-          .from('inspection_data')
-          .select('property_composite_key, override_applied')
-          .eq('job_id', jobData.id)
-          .eq('file_version', latestFileVersion)
-          .eq('override_applied', true);
-
-        if (!error && currentOverrides) {
-          const currentOverrideCount = currentOverrides.length;
-          const appDataOverrideCount = jobData.appData.validationOverrides?.length || 0;
-          
-          // If database has more overrides than App.js data, we need to reprocess
-          if (currentOverrideCount > appDataOverrideCount) {
-            debugLog('APP_INTEGRATION', `Database has ${currentOverrideCount} overrides but App.js only knows about ${appDataOverrideCount}. Need to reprocess.`);
-            // Don't load stale data - force a reprocess instead
-            return;
-          }
-        }
+      // Only load from App.js if:
+      // 1. We don't have local analytics yet (initial load)
+      // 2. App.js data is newer than our local data
+      const appDataTime = new Date(jobData.appData.lastProcessed || 0).getTime();
+      const localDataTime = new Date(analytics?.processingDate || 0).getTime();
+      
+      if (!analytics || appDataTime > localDataTime) {
+        debugLog('APP_INTEGRATION', `✅ Loading from App.js - App data: ${new Date(appDataTime).toISOString()}, Local: ${localDataTime ? new Date(localDataTime).toISOString() : 'none'}`);
         
-        // Data is current, safe to load
-        setAnalytics(jobData.appData.analytics);
-        setBillingAnalytics(jobData.appData.billingAnalytics);
-        setValidationReport(jobData.appData.validationReport);
-        setMissingPropertiesReport(jobData.appData.missingPropertiesReport);
-        setProcessed(true);
-        setSettingsLocked(true);
-      };
-      
-      loadCurrentOverrides();
+        // Check if we need to adjust for current overrides
+        const loadCurrentOverrides = async () => {
+          const { data: currentOverrides, error } = await supabase
+            .from('inspection_data')
+            .select('property_composite_key, override_applied')
+            .eq('job_id', jobData.id)
+            .eq('file_version', latestFileVersion)
+            .eq('override_applied', true);
+
+          if (!error && currentOverrides) {
+            const currentOverrideCount = currentOverrides.length;
+            const appDataOverrideCount = jobData.appData.validationOverrides?.length || 0;
+            
+            // If database has more overrides than App.js data, we need to reprocess
+            if (currentOverrideCount > appDataOverrideCount) {
+              debugLog('APP_INTEGRATION', `Database has ${currentOverrideCount} overrides but App.js only knows about ${appDataOverrideCount}. Need to reprocess.`);
+              // Don't load stale data - force a reprocess instead
+              return;
+            }
+          }
+          
+          // Data is current and newer, safe to load
+          setAnalytics(jobData.appData.analytics);
+          setBillingAnalytics(jobData.appData.billingAnalytics);
+          setValidationReport(jobData.appData.validationReport);
+          setMissingPropertiesReport(jobData.appData.missingPropertiesReport);
+          setProcessed(true);
+          setSettingsLocked(true);
+        };
+        
+        loadCurrentOverrides();
+      } else {
+        debugLog('APP_INTEGRATION', '⏭️ Skipping App.js data - local data is newer or same age');
+      }
     }
   }, [jobData?.appData]);
 
