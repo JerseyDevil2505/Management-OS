@@ -976,6 +976,86 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     }
   };
 
+  // NEW: Track batch insert operations from propertyService
+  const trackBatchInserts = (operation) => {
+    return new Promise((resolve) => {
+      // Create a listener for console messages
+      const originalLog = console.log;
+      const batchLogs = [];
+      
+      console.log = function(...args) {
+        const message = args.join(' ');
+        
+        // Capture batch insert messages
+        if (message.includes('Batch') || message.includes('insert') || message.includes('upsert') || message.includes('UPSERT')) {
+          batchLogs.push({
+            timestamp: new Date().toISOString(),
+            message: message,
+            type: message.includes('Error') ? 'error' : 
+                  message.includes('Success') ? 'success' : 
+                  message.includes('Retry') ? 'warning' : 'info'
+          });
+          
+          // Parse batch progress from messages
+          const batchMatch = message.match(/Batch (\d+)\/(\d+)/);
+          if (batchMatch) {
+            const currentBatch = parseInt(batchMatch[1]);
+            const totalBatches = parseInt(batchMatch[2]);
+            
+            setBatchInsertProgress(prev => ({
+              ...prev,
+              currentBatch,
+              totalBatches,
+              isInserting: true,
+              currentOperation: message
+            }));
+            
+            addBatchLog(message, message.includes('Success') ? 'success' : 'info');
+          }
+          
+          // Detect batch size
+          const sizeMatch = message.match(/(\d+) records/);
+          if (sizeMatch) {
+            const recordCount = parseInt(sizeMatch[1]);
+            setBatchInsertProgress(prev => ({
+              ...prev,
+              batchSize: recordCount
+            }));
+          }
+        }
+        
+        // Call original console.log
+        originalLog.apply(console, args);
+      };
+      
+      // Execute the operation
+      operation().then(result => {
+        // Restore original console.log
+        console.log = originalLog;
+        
+        // Mark batch insert as complete
+        setBatchInsertProgress(prev => ({
+          ...prev,
+          isInserting: false,
+          currentOperation: 'Batch processing complete'
+        }));
+        
+        resolve(result);
+      }).catch(error => {
+        // Restore original console.log
+        console.log = originalLog;
+        
+        setBatchInsertProgress(prev => ({
+          ...prev,
+          isInserting: false,
+          currentOperation: 'Batch processing failed'
+        }));
+        
+        throw error;
+      });
+    });
+  };
+
   // ENHANCED: Process changes with batch logging modal
   const handleProcessChanges = async () => {
     if (!sourceFile || !sourceFileContent) {
@@ -988,7 +1068,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       clearBatchLogs();
       setShowBatchModal(true);
       setProcessing(true);
-      setProcessingStatus(`Processing ${detectedVendor} data via processor...`);
+      setProcessingStatus(`Processing ${detectedVendor} data via updater...`);
       
       addBatchLog('🚀 Starting file processing workflow', 'batch_start', {
         vendor: detectedVendor,
@@ -1002,101 +1082,32 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       // Call the updater to UPSERT the database
       addBatchLog(`📊 Calling ${detectedVendor} updater (UPSERT mode)...`, 'info');
       
-      // ENHANCED: Mock the batch insert progress
-      const totalRecords = comparisonResults.summary.missing + comparisonResults.summary.changes + comparisonResults.summary.salesChanges + comparisonResults.summary.classChanges;
-      if (totalRecords > 0) {
-        const batchSize = 500;
-        const totalBatches = Math.ceil(totalRecords / batchSize);
-        
-        setBatchInsertProgress({
-          totalBatches,
-          currentBatch: 0,
-          batchSize,
-          insertAttempts: [],
-          isInserting: true,
-          currentOperation: 'Preparing batch insert...'
-        });
-        
-        // Simulate batch processing
-        for (let i = 0; i < totalBatches; i++) {
-          const batchNumber = i + 1;
-          const recordsInBatch = Math.min(batchSize, totalRecords - (i * batchSize));
-          
-          const attemptLog = {
-            batchNumber,
-            size: recordsInBatch,
-            startTime: new Date().toISOString(),
-            status: 'attempting',
-            retries: 0
-          };
-          
-          setBatchInsertProgress(prev => ({
-            ...prev,
-            currentBatch: batchNumber,
-            currentOperation: `Processing batch ${batchNumber} of ${totalBatches} (${recordsInBatch} records)`,
-            insertAttempts: [...prev.insertAttempts, attemptLog]
-          }));
-          
-          // Simulate processing time
-          await new Promise(resolve => setTimeout(resolve, 500));
-          
-          // Simulate retry on first batch
-          if (batchNumber === 1) {
-            attemptLog.retries = 1;
-            attemptLog.status = 'retrying';
-            
-            setBatchInsertProgress(prev => ({
-              ...prev,
-              currentOperation: `Retrying batch ${batchNumber} (attempt 2 of 3)`,
-              insertAttempts: prev.insertAttempts.map(a => 
-                a.batchNumber === batchNumber ? { ...a, ...attemptLog } : a
-              )
-            }));
-            
-            await new Promise(resolve => setTimeout(resolve, 1000));
+      // FIX 1: Calculate new file_version for property_records
+      const newFileVersion = sourceFileVersion + 1;
+      
+      // Track batch operations
+      const result = await trackBatchInserts(async () => {
+        return await propertyService.updateCSVData(
+          sourceFileContent,
+          codeFileContent,
+          job.id,
+          job.year_created || new Date().getFullYear(),
+          job.ccdd_code || job.ccddCode,
+          detectedVendor,
+          {
+            source_file_name: sourceFile?.name,
+            source_file_version_id: crypto.randomUUID(),
+            source_file_uploaded_at: new Date().toISOString(),
+            file_version: newFileVersion  // FIX 1: Pass file_version, not source_file_version
           }
-          
-          // Mark as success
-          attemptLog.status = 'success';
-          attemptLog.endTime = new Date().toISOString();
-          
-          setBatchInsertProgress(prev => ({
-            ...prev,
-            insertAttempts: prev.insertAttempts.map(a => 
-              a.batchNumber === batchNumber ? { ...a, ...attemptLog } : a
-            )
-          }));
-          
-          addBatchLog(`✅ Batch ${batchNumber} successfully processed ${recordsInBatch} records`, 'success');
-        }
-        
-        setBatchInsertProgress(prev => ({
-          ...prev,
-          isInserting: false,
-          currentOperation: 'Batch processing complete'
-        }));
-      }
+        );
+      });
       
-      const result = await propertyService.updateCSVData(
-        sourceFileContent,
-        codeFileContent,
-        job.id,
-        job.year_created || new Date().getFullYear(),
-        job.ccdd_code || job.ccddCode,
-        detectedVendor,
-        {
-          source_file_name: sourceFile?.name,
-          source_file_version_id: crypto.randomUUID(),
-          source_file_uploaded_at: new Date().toISOString(),
-          file_version: (job.source_file_version || 1) + 1
-        }
-      );
-      
-      console.log('📊 Processor completed with result:', result);
+      console.log('📊 Updater completed with result:', result);
       addBatchLog('✅ Property data processing completed', 'success', {
         processed: result.processed,
         errors: result.errors,
-        newVersion: (job.source_file_version || 1) + 1
+        newVersion: newFileVersion  // FIX 1: Show correct version
       });
       
       // Save comparison report with sales decisions
@@ -1149,17 +1160,17 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         console.log(`✅ Saved ${salesDecisions.size} sales decisions to property records`);
       }
       
-      // Update job with new file version info
+      // Update job with new file info - removed source_file_version update
       addBatchLog('🔄 Updating job metadata...', 'info');
       try {
         await jobService.update(job.id, {
           sourceFileStatus: result.errors > 0 ? 'error' : 'imported',
           totalProperties: result.processed,
-          source_file_version: (job.source_file_version || 1) + 1,
           source_file_uploaded_at: new Date().toISOString()
+          // FIX 1: Removed source_file_version update - it's handled in property_records now
         });
         addBatchLog('✅ Job metadata updated successfully', 'success');
-        console.log('✅ Job updated with new version info');
+        console.log('✅ Job updated with new info');
       } catch (updateError) {
         console.error('❌ Failed to update job:', updateError);
         addBatchLog('⚠️ Job metadata update failed', 'warning', { error: updateError.message });
@@ -1181,7 +1192,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
           vendor: detectedVendor,
           salesDecisions: salesDecisions.size
         });
-        addNotification(`✅ Successfully processed ${totalProcessed} records via ${detectedVendor} processor`, 'success');
+        addNotification(`✅ Successfully processed ${totalProcessed} records via ${detectedVendor} updater`, 'success');
         
         if (salesDecisions.size > 0) {
           addNotification(`💾 Saved ${salesDecisions.size} sales decisions`, 'success');
@@ -1322,7 +1333,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
               </div>
             )}
 
-            {/* Batch Insert Progress Section */}
+            {/* Batch Insert Progress Section - FIX 2: Now shows real progress */}
             {batchInsertProgress.isInserting && (
               <div className="mb-4 bg-purple-50 border border-purple-200 rounded-lg p-4">
                 <div className="flex items-center mb-2">
@@ -1333,43 +1344,19 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
                     <span className="text-purple-700">{batchInsertProgress.currentOperation}</span>
-                    <span className="text-purple-800 font-medium">
-                      Batch {batchInsertProgress.currentBatch} of {batchInsertProgress.totalBatches}
-                    </span>
+                    {batchInsertProgress.totalBatches > 0 && (
+                      <span className="text-purple-800 font-medium">
+                        Batch {batchInsertProgress.currentBatch} of {batchInsertProgress.totalBatches}
+                      </span>
+                    )}
                   </div>
                   
-                  <div className="w-full bg-purple-200 rounded-full h-2">
-                    <div 
-                      className="bg-purple-600 h-2 rounded-full transition-all duration-300"
-                      style={{ width: `${(batchInsertProgress.currentBatch / batchInsertProgress.totalBatches) * 100}%` }}
-                    />
-                  </div>
-                  
-                  {/* Batch Insert Attempts Log */}
-                  {batchInsertProgress.insertAttempts.length > 0 && (
-                    <div className="mt-3 max-h-32 overflow-y-auto">
-                      <div className="text-xs font-medium text-purple-700 mb-1">Batch Insert Log:</div>
-                      <div className="space-y-1">
-                        {batchInsertProgress.insertAttempts.map((attempt, idx) => (
-                          <div key={idx} className="text-xs flex items-center justify-between bg-white rounded px-2 py-1">
-                            <span className="font-medium">Batch {attempt.batchNumber} ({attempt.size} records)</span>
-                            <span className={`flex items-center ${
-                              attempt.status === 'success' ? 'text-green-600' :
-                              attempt.status === 'retrying' ? 'text-yellow-600' :
-                              attempt.status === 'attempting' ? 'text-purple-600' :
-                              attempt.status === 'failed' ? 'text-red-600' :
-                              'text-gray-600'
-                            }`}>
-                              {attempt.status === 'success' && <CheckCircle className="w-3 h-3 mr-1" />}
-                              {attempt.status === 'retrying' && <RefreshCw className="w-3 h-3 mr-1 animate-spin" />}
-                              {attempt.status === 'attempting' && <div className="w-3 h-3 mr-1 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />}
-                              {attempt.status === 'failed' && <X className="w-3 h-3 mr-1" />}
-                              {attempt.status}
-                              {attempt.retries > 0 && ` (${attempt.retries} retries)`}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
+                  {batchInsertProgress.totalBatches > 0 && (
+                    <div className="w-full bg-purple-200 rounded-full h-2">
+                      <div 
+                        className="bg-purple-600 h-2 rounded-full transition-all duration-300"
+                        style={{ width: `${(batchInsertProgress.currentBatch / batchInsertProgress.totalBatches) * 100}%` }}
+                      />
                     </div>
                   )}
                 </div>
@@ -1710,7 +1697,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                     clearBatchLogs();
                     setShowBatchModal(true);
                     setProcessing(true);
-                    setProcessingStatus(`Processing ${detectedVendor} data via processor...`);
+                    setProcessingStatus(`Processing ${detectedVendor} data via updater...`);
                     
                     addBatchLog('🚀 Processing file with no changes detected', 'batch_start', {
                       vendor: detectedVendor,
@@ -1724,26 +1711,31 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                     // Call the updater to UPSERT the database with latest data
                     addBatchLog(`📊 Calling ${detectedVendor} updater for version refresh...`, 'info');
                     
-                    const result = await propertyService.updateCSVData(
-                      sourceFileContent,
-                      codeFileContent,
-                      job.id,
-                      job.year_created || new Date().getFullYear(),
-                      job.ccdd_code || job.ccddCode,
-                      detectedVendor,
-                      {
-                        source_file_name: sourceFile?.name,
-                        source_file_version_id: crypto.randomUUID(),
-                        source_file_uploaded_at: new Date().toISOString(),
-                        file_version: (job.source_file_version || 1) + 1
-                      }
-                    );
+                    // FIX 1: Calculate new file_version for property_records
+                    const newFileVersion = sourceFileVersion + 1;
                     
-                    console.log('📊 Processor completed with result:', result);
+                    const result = await trackBatchInserts(async () => {
+                      return await propertyService.updateCSVData(
+                        sourceFileContent,
+                        codeFileContent,
+                        job.id,
+                        job.year_created || new Date().getFullYear(),
+                        job.ccdd_code || job.ccddCode,
+                        detectedVendor,
+                        {
+                          source_file_name: sourceFile?.name,
+                          source_file_version_id: crypto.randomUUID(),
+                          source_file_uploaded_at: new Date().toISOString(),
+                          file_version: newFileVersion  // FIX 1: Pass file_version, not source_file_version
+                        }
+                      );
+                    });
+                    
+                    console.log('📊 Updater completed with result:', result);
                     addBatchLog('✅ Data refresh completed', 'success', {
                       processed: result.processed,
                       errors: result.errors,
-                      newVersion: (job.source_file_version || 1) + 1
+                      newVersion: newFileVersion  // FIX 1: Show correct version
                     });
                     
                     // Save comparison report (showing no changes)
@@ -1751,13 +1743,13 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                     await saveComparisonReport(comparisonResults, salesDecisions);
                     addBatchLog('✅ Comparison report saved', 'success');
                     
-                    // Update job with new file version info
+                    // Update job with new file info - removed source_file_version update
                     addBatchLog('🔄 Updating job metadata...', 'info');
                     await jobService.update(job.id, {
                       sourceFileStatus: result.errors > 0 ? 'error' : 'imported',
                       totalProperties: result.processed,
-                      source_file_version: (job.source_file_version || 1) + 1,
                       source_file_uploaded_at: new Date().toISOString()
+                      // FIX 1: Removed source_file_version update - it's handled in property_records now
                     });
                     addBatchLog('✅ Job metadata updated', 'success');
                     
@@ -1769,7 +1761,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                       addNotification(`⚠️ Processing completed with ${errorCount} errors. ${totalProcessed} records updated.`, 'warning');
                     } else {
                       addBatchLog('🎉 File version refresh completed successfully!', 'success');
-                      addNotification(`✅ Successfully updated ${totalProcessed} records with latest data via ${detectedVendor} processor`, 'success');
+                      addNotification(`✅ Successfully updated ${totalProcessed} records with latest data via ${detectedVendor} updater`, 'success');
                     }
                     
                     // CRITICAL FIX: Refresh banner state immediately
