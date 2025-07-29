@@ -900,10 +900,9 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
 
   // NEW: Continue processing after validation decisions
   const continueProcessingAfterValidations = async () => {
-    setShowProcessingModal(false);
+    // Don't close the modal yet - just mark that we're done reviewing
     setProcessingPaused(false);
-    
-    // Processing will continue in processAnalytics with the decisions made
+    // The modal will close when pendingValidations is cleared in processAnalytics
     addNotification('📊 Continuing analytics processing with validation decisions...', 'info');
   };
 
@@ -1872,9 +1871,10 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
       setValidationReport(validationReportData);
       setMissingPropertiesReport(missingPropertiesReportData);
 
-      // Clear modal state
+      // Clear modal state only after all processing is complete
       setPendingValidations([]);
       setProcessedValidationDecisions({});
+      setShowProcessingModal(false);
 
       debugLog('ANALYTICS', '✅ Manager-focused analytics processing complete', {
         totalRecords: rawData.length,
@@ -2499,29 +2499,6 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                 Files were updated after your last analytics processing. Current results may be outdated.
               </p>
             </div>
-            <button
-              onClick={() => {
-                // Clear the stale flag and trigger reprocessing
-                if (onUpdateWorkflowStats) {
-                  onUpdateWorkflowStats({
-                    ...currentWorkflowStats,
-                    needsRefresh: false,
-                    isProcessed: false
-                  });
-                }
-                // Reset ONLY analytics data, preserve settings
-                setProcessed(false);
-                setAnalytics(null);
-                setBillingAnalytics(null);
-                setValidationReport(null);
-                setMissingPropertiesReport(null);
-                setSettingsLocked(false);
-                addNotification('📊 Ready for fresh analytics processing - settings preserved', 'info');
-              }}
-              className="ml-4 bg-yellow-600 text-white px-3 py-2 rounded hover:bg-yellow-700 text-sm font-medium"
-            >
-              Reprocess Analytics
-            </button>
           </div>
         </div>
       )}
