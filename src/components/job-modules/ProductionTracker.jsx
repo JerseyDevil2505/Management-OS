@@ -1219,6 +1219,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
             override_reason: overrideMapData[propertyKey].override_reason
           };
 
+          // Just collect the record, don't save yet
           inspectionDataBatch.push(inspectionRecord);
           wasAddedToInspectionData = true;
           
@@ -1517,7 +1518,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
             }
           }
 
-          // Prepare for inspection_data UPSERT
+          // Prepare for inspection_data UPSERT - BUT DON'T UPSERT YET
           const inspectionRecord = {
             job_id: jobData.id,
             file_version: latestFileVersion,
@@ -1544,6 +1545,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
             } : null
           };
 
+          // Just collect the record, don't save yet
           inspectionDataBatch.push(inspectionRecord);
           wasAddedToInspectionData = true;
         }
@@ -1574,7 +1576,10 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         }
       });
 
-      // NEW: Show processing modal if there are validation issues
+      // Process ALL records first - collect validation issues and valid records
+      debugLog('ANALYTICS', `Finished processing ${rawData.length} records. Found ${pendingValidationsList.length} validation issues.`);
+
+      // NOW handle validation modal if there are issues
       let decisionsToApply = [];
       
       if (pendingValidationsList.length > 0) {
