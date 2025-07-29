@@ -2191,8 +2191,9 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
       {/* Processing Modal for Validation Decisions */}
       {showProcessingModal && pendingValidations.length > 0 && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60]">
-          <div className="bg-white rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[80vh] overflow-hidden flex flex-col">
-            <div className="mb-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl mx-4 max-h-[80vh] flex flex-col">
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b border-gray-200">
               <h3 className="text-lg font-bold text-gray-900">Validation Review During Processing</h3>
               <p className="text-sm text-gray-600 mt-1">Review and decide on validation issues found during processing</p>
               <div className="mt-2 flex items-center justify-between">
@@ -2201,90 +2202,179 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                   <span className="text-red-600">{pendingValidations.length}</span>
                 </div>
                 <div className="text-sm">
-                  <span className="font-medium text-gray-700">Overridden: </span>
-                  <span className="text-green-600">{pendingValidations.filter(v => v.overridden).length}</span>
+                  <span className="font-medium text-gray-700">Reviewed: </span>
+                  <span className="text-green-600">
+                    {pendingValidations.filter(v => v.overridden || v.skipped).length} of {pendingValidations.length}
+                  </span>
                 </div>
               </div>
             </div>
             
-            <div className="flex-1 overflow-y-auto mb-4">
-              <div className="space-y-3">
-                {pendingValidations.map((validation, idx) => (
-                  <div 
-                    key={validation.composite_key} 
-                    className={`border rounded-lg p-4 ${
-                      validation.overridden ? 'bg-green-50 border-green-200' : 
-                      validation.skipped ? 'bg-gray-50 border-gray-200' : 
-                      'bg-white border-red-200'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="font-medium text-gray-900">
-                          {validation.block}-{validation.lot}{validation.qualifier ? `-${validation.qualifier}` : ''}
+            {/* Modal Body with Navigation */}
+            <div className="flex-1 overflow-hidden flex flex-col px-6 py-4">
+              {/* Current Item Display */}
+              <div className="flex-1 overflow-y-auto">
+                {(() => {
+                  const currentIndex = pendingValidations.findIndex(v => !v.overridden && !v.skipped);
+                  const currentValidation = currentIndex >= 0 ? pendingValidations[currentIndex] : pendingValidations[0];
+                  const displayIndex = currentIndex >= 0 ? currentIndex : 0;
+                  
+                  return (
+                    <div className="space-y-4">
+                      {/* Progress Indicator */}
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="text-sm text-gray-600">
+                          Item {displayIndex + 1} of {pendingValidations.length}
                         </div>
-                        <div className="text-sm text-gray-600">{validation.property_location}</div>
-                        <div className="text-sm text-red-600 mt-1">{validation.warning_message}</div>
-                        {validation.overridden && (
-                          <div className="text-sm text-green-600 font-medium mt-1">
-                            ✅ Overridden: {validation.override_reason}
-                          </div>
-                        )}
-                        {validation.skipped && (
-                          <div className="text-sm text-gray-600 font-medium mt-1">
-                            ⏭️ Skipped - Will not be included in analytics
-                          </div>
-                        )}
+                        <div className="flex space-x-1">
+                          {pendingValidations.map((_, idx) => (
+                            <div
+                              key={idx}
+                              className={`h-2 w-2 rounded-full ${
+                                pendingValidations[idx].overridden ? 'bg-green-500' :
+                                pendingValidations[idx].skipped ? 'bg-gray-400' :
+                                idx === displayIndex ? 'bg-blue-500' :
+                                'bg-gray-200'
+                              }`}
+                            />
+                          ))}
+                        </div>
                       </div>
-                      {!validation.overridden && !validation.skipped && (
-                        <div className="flex space-x-2 ml-4">
-                          <select
-                            value={validation.override_reason || 'New Construction'}
-                            onChange={(e) => {
-                              setPendingValidations(prev => 
-                                prev.map(v => 
-                                  v.composite_key === validation.composite_key 
-                                    ? { ...v, override_reason: e.target.value }
-                                    : v
-                                )
-                              );
-                            }}
-                            className="px-2 py-1 text-sm border border-gray-300 rounded"
-                          >
-                            <option value="New Construction">New Construction</option>
-                            <option value="Additional Card">Additional Card</option>
-                          </select>
-                          <button
-                            onClick={() => handleProcessingOverride(validation.composite_key, validation.override_reason || 'New Construction')}
-                            className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700"
-                          >
-                            Override
-                          </button>
-                          <button
-                            onClick={() => handleProcessingSkip(validation.composite_key)}
-                            className="px-3 py-1 bg-gray-600 text-white text-sm rounded hover:bg-gray-700"
-                          >
-                            Skip
-                          </button>
+                      
+                      {/* Current Validation Item */}
+                      <div className="border rounded-lg p-6 bg-gray-50">
+                        <div className="space-y-3">
+                          <div>
+                            <h4 className="font-semibold text-gray-900 text-lg">
+                              {currentValidation.block}-{currentValidation.lot}
+                              {currentValidation.qualifier ? `-${currentValidation.qualifier}` : ''}
+                            </h4>
+                            <p className="text-sm text-gray-600 mt-1">{currentValidation.property_location}</p>
+                          </div>
+                          
+                          <div className="bg-red-50 border border-red-200 rounded p-3">
+                            <p className="text-sm font-medium text-red-800">Validation Issues:</p>
+                            <p className="text-sm text-red-700 mt-1">{currentValidation.warning_message}</p>
+                          </div>
+                          
+                          {currentValidation.overridden && (
+                            <div className="bg-green-50 border border-green-200 rounded p-3">
+                              <p className="text-sm font-medium text-green-800">
+                                ✅ Overridden: {currentValidation.override_reason}
+                              </p>
+                            </div>
+                          )}
+                          
+                          {currentValidation.skipped && (
+                            <div className="bg-gray-100 border border-gray-300 rounded p-3">
+                              <p className="text-sm font-medium text-gray-700">
+                                ⏭️ Skipped - Will remain as validation error
+                              </p>
+                            </div>
+                          )}
+                          
+                          {!currentValidation.overridden && !currentValidation.skipped && (
+                            <div className="space-y-3 mt-4">
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                  Override Reason:
+                                </label>
+                                <select
+                                  value={currentValidation.override_reason || 'New Construction'}
+                                  onChange={(e) => {
+                                    setPendingValidations(prev => 
+                                      prev.map(v => 
+                                        v.composite_key === currentValidation.composite_key 
+                                          ? { ...v, override_reason: e.target.value }
+                                          : v
+                                      )
+                                    );
+                                  }}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                >
+                                  <option value="New Construction">New Construction</option>
+                                  <option value="Additional Card">Additional Card</option>
+                                </select>
+                              </div>
+                              
+                              <div className="flex space-x-3">
+                                <button
+                                  onClick={() => handleProcessingOverride(
+                                    currentValidation.composite_key, 
+                                    currentValidation.override_reason || 'New Construction'
+                                  )}
+                                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium"
+                                >
+                                  Override Issue
+                                </button>
+                                <button
+                                  onClick={() => handleProcessingSkip(currentValidation.composite_key)}
+                                  className="flex-1 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 font-medium"
+                                >
+                                  Skip (Keep Error)
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      )}
+                      </div>
+                      
+                      {/* Navigation Buttons */}
+                      <div className="flex items-center justify-between mt-4">
+                        <button
+                          onClick={() => {
+                            const prevIndex = displayIndex > 0 ? displayIndex - 1 : pendingValidations.length - 1;
+                            // Force re-render by updating a dummy property
+                            setPendingValidations(prev => prev.map((v, idx) => 
+                              idx === prevIndex ? { ...v, _focused: true } : { ...v, _focused: false }
+                            ));
+                          }}
+                          className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
+                          disabled={pendingValidations.length <= 1}
+                        >
+                          ← Previous
+                        </button>
+                        
+                        <span className="text-sm text-gray-600">
+                          {pendingValidations.filter(v => !v.overridden && !v.skipped).length} items remaining
+                        </span>
+                        
+                        <button
+                          onClick={() => {
+                            const nextIndex = displayIndex < pendingValidations.length - 1 ? displayIndex + 1 : 0;
+                            // Force re-render by updating a dummy property
+                            setPendingValidations(prev => prev.map((v, idx) => 
+                              idx === nextIndex ? { ...v, _focused: true } : { ...v, _focused: false }
+                            ));
+                          }}
+                          className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
+                          disabled={pendingValidations.length <= 1}
+                        >
+                          Next →
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })()}
               </div>
             </div>
             
-            <div className="flex justify-end space-x-3 pt-4 border-t">
-              <div className="flex-1 text-sm text-gray-600">
-                Properties with overrides will be included in analytics as valid inspections.
-                Skipped properties will remain invalid.
+            {/* Modal Footer */}
+            <div className="px-6 py-4 border-t border-gray-200">
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-gray-600">
+                  Properties with overrides will be included as valid inspections.
+                  Skipped properties will remain as validation errors.
+                </div>
+                <button
+                  onClick={continueProcessingAfterValidations}
+                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+                >
+                  {pendingValidations.every(v => v.overridden || v.skipped) 
+                    ? 'All Reviewed - Continue Processing' 
+                    : 'Continue Processing'}
+                </button>
               </div>
-              <button
-                onClick={continueProcessingAfterValidations}
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
-              >
-                Continue Processing
-              </button>
             </div>
           </div>
         </div>
