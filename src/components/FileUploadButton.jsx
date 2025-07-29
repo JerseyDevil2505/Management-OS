@@ -1056,13 +1056,13 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         console.log(`✅ Saved ${salesDecisions.size} sales decisions to property records`);
       }
       
-      // Update job with new file version info
+      // ✅ FIXED: Update job WITHOUT source_file_version field
       addBatchLog('🔄 Updating job metadata...', 'info');
       try {
         await jobService.update(job.id, {
           sourceFileStatus: result.errors > 0 ? 'error' : 'imported',
           totalProperties: result.processed,
-          source_file_version: (job.source_file_version || 1) + 1,
+          // ✅ REMOVED: source_file_version - let processors handle property_records.file_version
           source_file_uploaded_at: new Date().toISOString()
         });
         addBatchLog('✅ Job metadata updated successfully', 'success');
@@ -1604,12 +1604,12 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                     await saveComparisonReport(comparisonResults, salesDecisions);
                     addBatchLog('✅ Comparison report saved', 'success');
                     
-                    // Update job with new file version info
+                    // ✅ FIXED: Update job WITHOUT source_file_version field
                     addBatchLog('🔄 Updating job metadata...', 'info');
                     await jobService.update(job.id, {
                       sourceFileStatus: result.errors > 0 ? 'error' : 'imported',
                       totalProperties: result.processed,
-                      source_file_version: (job.source_file_version || 1) + 1,
+                      // ✅ REMOVED: source_file_version - let processors handle property_records.file_version
                       source_file_uploaded_at: new Date().toISOString()
                     });
                     addBatchLog('✅ Job metadata updated', 'success');
