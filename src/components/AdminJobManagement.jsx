@@ -775,7 +775,6 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
 
     try {
       // Hide create job modal and show processing modal
-      setShowCreateJob(false);
       setShowProcessingModal(true);
       setProcessing(true);
       
