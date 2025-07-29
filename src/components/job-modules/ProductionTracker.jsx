@@ -1378,7 +1378,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
             measure_date: record.inspection_measure_date,
             validation_issues: propertyIssues[propertyKey]?.issues || []
           });
-        }
+        } else {
       });
 
       // NEW: UPSERT to inspection_data table for persistence
