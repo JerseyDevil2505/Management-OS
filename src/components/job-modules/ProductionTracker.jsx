@@ -14,6 +14,9 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
   const [sessionHistory, setSessionHistory] = useState([]);
   const [notifications, setNotifications] = useState([]);
   
+  // NEW: Track if we loaded from database to prevent race condition
+  const [loadedFromDatabase, setLoadedFromDatabase] = useState(false);
+  
   // NEW: Commercial inspection counts from inspection_data
   const [commercialCounts, setCommercialCounts] = useState({
     inspected: 0,
@@ -596,6 +599,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         
         setProcessed(true);
         setSettingsLocked(true);
+        setLoadedFromDatabase(true); // CRITICAL: Mark that we loaded from database
         debugLog('PERSISTENCE', '✅ Loaded persisted analytics with override adjustments');
         addNotification('Previously processed analytics loaded', 'info');
       }
@@ -903,6 +907,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
     setOverrideMap({});
     setPendingValidations([]);
     setProcessedValidationDecisions({});
+    setLoadedFromDatabase(false); // Reset database load flag
     addNotification('🔄 Session reset - settings unlocked', 'info');
   };
 
@@ -932,14 +937,14 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
     }
   }, [jobData?.id, latestFileVersion]);
 
-  // Load data from currentWorkflowStats prop if available - FIXED to use correct prop
+  // Load data from currentWorkflowStats prop if available - FIXED to prevent race condition
   useEffect(() => {
     if (currentWorkflowStats && currentWorkflowStats.analytics) {
       debugLog('APP_INTEGRATION', '🔍 Checking currentWorkflowStats vs local state');
       
-      // Only load from currentWorkflowStats if we don't have processed analytics yet
-      if (!analytics || !processed) {
-        debugLog('APP_INTEGRATION', '✅ Loading data from currentWorkflowStats - no local analytics processed yet');
+      // CRITICAL: Only load from currentWorkflowStats if we haven't loaded from database
+      if (!loadedFromDatabase && !analytics && !processed) {
+        debugLog('APP_INTEGRATION', '✅ Loading data from currentWorkflowStats - no database load happened yet');
         
         // Check if we need to adjust for current overrides
         const loadCurrentOverrides = async () => {
@@ -973,7 +978,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         
         loadCurrentOverrides();
       } else {
-        debugLog('APP_INTEGRATION', '⏭️ Skipping currentWorkflowStats - local analytics already processed');
+        debugLog('APP_INTEGRATION', '⏭️ Skipping currentWorkflowStats - already loaded from database or processed locally');
       }
     }
   }, [currentWorkflowStats]);
