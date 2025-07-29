@@ -1050,63 +1050,6 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
           });
           return;
         }
-        if (inspector === 'UNASSIGNED') {
-          reasonNotAdded = 'Inspector UNASSIGNED';
-          missingProperties.push({
-            composite_key: propertyKey,
-            block: record.property_block,
-            lot: record.property_lot,
-            qualifier: record.property_qualifier || '',
-            card: record.property_addl_card || '1',
-            property_location: record.property_location || '',
-            property_class: propertyClass,
-            reason: reasonNotAdded,
-            inspector: inspector,
-            info_by_code: infoByCode,
-            measure_date: record.inspection_measure_date,
-            validation_issues: []
-          });
-          return;
-        }
-
-        // Skip inspections before project start date (removes old inspector noise)
-        if (measuredDate && measuredDate < startDate) {
-          reasonNotAdded = 'Inspection date before project start date';
-          missingProperties.push({
-            composite_key: propertyKey,
-            block: record.property_block,
-            lot: record.property_lot,
-            qualifier: record.property_qualifier || '',
-            card: record.property_addl_card || '1',
-            property_location: record.property_location || '',
-            property_class: propertyClass,
-            reason: reasonNotAdded,
-            inspector: inspector,
-            info_by_code: infoByCode,
-            measure_date: record.inspection_measure_date,
-            validation_issues: []
-          });
-          return;
-        }
-
-        // Skip inspectors with invalid initials (not in employee database)
-        if (!employeeData[inspector]) {
-          reasonNotAdded = `Inspector ${inspector} not found in employee database`;
-          missingProperties.push({
-            composite_key: propertyKey,
-            block: record.property_block,
-            lot: record.property_lot,
-            qualifier: record.property_qualifier || '',
-            property_location: record.property_location || '',
-            property_class: propertyClass,
-            reason: reasonNotAdded,
-            inspector: inspector,
-            info_by_code: infoByCode,
-            measure_date: record.inspection_measure_date,
-            validation_issues: []
-          });
-          return;
-        }
 
         // Initialize inspector stats
         if (!inspectorStats[inspector]) {
@@ -1378,7 +1321,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
             measure_date: record.inspection_measure_date,
             validation_issues: propertyIssues[propertyKey]?.issues || []
           });
-        } else {
+        }
       });
 
       // NEW: UPSERT to inspection_data table for persistence
