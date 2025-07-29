@@ -214,11 +214,27 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         .order('override_date', { ascending: false });
 
       if (!error && overrides) {
-        setValidationOverrides(overrides);
+        // Some overrides might be missing block/lot if created before fix
+        // For those, parse from composite key
+        const processedOverrides = overrides.map(override => {
+          if (!override.block || !override.lot) {
+            // Parse from composite key format: "BLOCK-LOT-QUALIFIER"
+            const parts = override.property_composite_key.split('-');
+            return {
+              ...override,
+              block: override.block || parts[0] || '',
+              lot: override.lot || parts[1] || '',
+              qualifier: override.qualifier || parts[2] || ''
+            };
+          }
+          return override;
+        });
+        
+        setValidationOverrides(processedOverrides);
         
         // Build override map for quick lookup
         const overrideMapData = {};
-        overrides.forEach(override => {
+        processedOverrides.forEach(override => {
           overrideMapData[override.property_composite_key] = {
             override_applied: override.override_applied,
             override_reason: override.override_reason,
@@ -227,6 +243,8 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
           };
         });
         setOverrideMap(overrideMapData);
+        
+        debugLog('VALIDATION_OVERRIDES', `Loaded ${processedOverrides.length} validation overrides with property details`);
       }
     } catch (error) {
       console.error('Error loading validation overrides:', error);
@@ -526,10 +544,42 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         .single();
 
       if (!error && job?.workflow_stats && job.workflow_stats.totalRecords) {
-        setAnalytics(job.workflow_stats);
-        setBillingAnalytics(job.workflow_stats.billingAnalytics);
-        setValidationReport(job.workflow_stats.validationReport);
-        // ISSUE #1 FIX: Add missing setState calls
+        // Load the persisted analytics
+        let loadedAnalytics = job.workflow_stats;
+        let loadedBillingAnalytics = job.workflow_stats.billingAnalytics;
+        let loadedValidationReport = job.workflow_stats.validationReport;
+        
+        // CRITICAL FIX: Load current validation overrides and adjust totals
+        const { data: currentOverrides, error: overrideError } = await supabase
+          .from('inspection_data')
+          .select('property_composite_key, override_applied, property_class')
+          .eq('job_id', jobData.id)
+          .eq('file_version', latestFileVersion)
+          .eq('override_applied', true);
+
+        if (!overrideError && currentOverrides && currentOverrides.length > 0) {
+          debugLog('PERSISTENCE', `Found ${currentOverrides.length} validation overrides to include in totals`);
+          
+          // Adjust the validInspections count to include overrides
+          const overrideCount = currentOverrides.length;
+          const savedOverrideCount = job.workflow_stats.validationOverrides?.length || 0;
+          
+          // If we have MORE overrides now than when analytics were saved, add the difference
+          if (overrideCount > savedOverrideCount) {
+            const additionalOverrides = overrideCount - savedOverrideCount;
+            loadedAnalytics = {
+              ...loadedAnalytics,
+              validInspections: loadedAnalytics.validInspections + additionalOverrides
+            };
+            debugLog('PERSISTENCE', `Adjusted validInspections from ${job.workflow_stats.validInspections} to ${loadedAnalytics.validInspections}`);
+          }
+        }
+        
+        // Set all the state with potentially adjusted values
+        setAnalytics(loadedAnalytics);
+        setBillingAnalytics(loadedBillingAnalytics);
+        setValidationReport(loadedValidationReport);
+        
         if (job.workflow_stats.missingPropertiesReport) {
           setMissingPropertiesReport(job.workflow_stats.missingPropertiesReport);
         }
@@ -539,9 +589,10 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         if (job.workflow_stats.overrideMap) {
           setOverrideMap(job.workflow_stats.overrideMap);
         }
+        
         setProcessed(true);
         setSettingsLocked(true);
-        debugLog('PERSISTENCE', '✅ Loaded persisted analytics from job record');
+        debugLog('PERSISTENCE', '✅ Loaded persisted analytics with override adjustments');
         addNotification('Previously processed analytics loaded', 'info');
       }
     } catch (error) {
@@ -615,6 +666,43 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         .eq('override_applied', true);
 
       if (error) throw error;
+      
+      // CRITICAL FIX: Update App.js state immediately after removing override
+      if (onUpdateWorkflowStats && analytics) {
+        // Get fresh overrides for accurate count
+        const freshOverrides = await getFreshValidationOverrides();
+        const freshOverrideMap = {};
+        freshOverrides.forEach(override => {
+          freshOverrideMap[override.property_composite_key] = {
+            override_applied: override.override_applied,
+            override_reason: override.override_reason,
+            override_by: override.override_by,
+            override_date: override.override_date
+          };
+        });
+        
+        // Create adjusted analytics with reduced override count
+        const adjustedAnalytics = {
+          ...analytics,
+          validInspections: Math.max(0, analytics.validInspections - 1), // Remove the override
+          validationOverrideCount: freshOverrides.length
+        };
+        
+        // Send updated data to App.js
+        onUpdateWorkflowStats({
+          jobId: jobData.id,
+          analytics: adjustedAnalytics,
+          billingAnalytics: billingAnalytics,
+          validationReport: validationReport,
+          missingPropertiesReport: missingPropertiesReport,
+          validationOverrides: freshOverrides,
+          overrideMap: freshOverrideMap,
+          totalValidationOverrides: freshOverrides.length,
+          lastProcessed: analytics.lastProcessed || new Date().toISOString()
+        });
+        
+        debugLog('OVERRIDE', `✅ Override removed and App.js notified - new total: ${adjustedAnalytics.validInspections}`);
+      }
       
       addNotification(`✅ Override removed - ${propertyKey} deleted from inspection_data`, 'success');
       addNotification('🔄 Reprocessing analytics to reflect changes...', 'info');
@@ -693,6 +781,46 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
       setSelectedOverrideProperty(null);
       setOverrideReason('New Construction');
       
+      // CRITICAL FIX: Immediately reload validation overrides to get fresh data with all fields
+      await loadValidationOverrides();
+      
+      // CRITICAL FIX: Update App.js state immediately with the new override
+      if (onUpdateWorkflowStats && analytics) {
+        // Get fresh overrides for accurate count
+        const freshOverrides = await getFreshValidationOverrides();
+        const freshOverrideMap = {};
+        freshOverrides.forEach(override => {
+          freshOverrideMap[override.property_composite_key] = {
+            override_applied: override.override_applied,
+            override_reason: override.override_reason,
+            override_by: override.override_by,
+            override_date: override.override_date
+          };
+        });
+        
+        // Create adjusted analytics with new override count
+        const adjustedAnalytics = {
+          ...analytics,
+          validInspections: analytics.validInspections + 1, // Add the new override
+          validationOverrideCount: freshOverrides.length
+        };
+        
+        // Send updated data to App.js
+        onUpdateWorkflowStats({
+          jobId: jobData.id,
+          analytics: adjustedAnalytics,
+          billingAnalytics: billingAnalytics,
+          validationReport: validationReport,
+          missingPropertiesReport: missingPropertiesReport,
+          validationOverrides: freshOverrides,
+          overrideMap: freshOverrideMap,
+          totalValidationOverrides: freshOverrides.length,
+          lastProcessed: analytics.lastProcessed || new Date().toISOString()
+        });
+        
+        debugLog('OVERRIDE', `✅ Override created and App.js notified - new total: ${adjustedAnalytics.validInspections}`);
+      }
+      
       addNotification(`✅ Complete override record created: ${overrideReason} for ${property.composite_key}`, 'success');
       addNotification('🔄 Reprocessing analytics with complete override...', 'info');
 
@@ -726,15 +854,26 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
   // Initialize data loading
   useEffect(() => {
     if (jobData?.id && latestFileVersion) {
-      loadEmployeeData();
-      loadAvailableInfoByCodes();
-      loadProjectStartDate();
-      loadPersistedAnalytics(); // ENHANCED: Load persisted analytics
-      loadVendorSource(); // NEW: Load vendor source for display
-      loadCommercialCounts(); // NEW: Load commercial counts from inspection_data
-      // ISSUE #4 FIX: Add function call in useEffect()
-      loadValidationOverrides(); // ADD THIS LINE
-      setLoading(false);
+      const loadAllData = async () => {
+        // Load all base data first
+        await loadEmployeeData();
+        await loadAvailableInfoByCodes();
+        await loadProjectStartDate();
+        await loadVendorSource();
+        
+        // CRITICAL: Load validation overrides BEFORE loading persisted analytics
+        await loadValidationOverrides();
+        
+        // Then load persisted analytics (which may need override data)
+        await loadPersistedAnalytics();
+        
+        // Finally load commercial counts
+        await loadCommercialCounts();
+        
+        setLoading(false);
+      };
+      
+      loadAllData();
     }
   }, [jobData?.id, latestFileVersion]);
 
@@ -742,12 +881,38 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
   useEffect(() => {
     if (jobData?.appData) {
       debugLog('APP_INTEGRATION', '✅ Loading data from App.js central hub');
-      setAnalytics(jobData.appData.analytics);
-      setBillingAnalytics(jobData.appData.billingAnalytics);
-      setValidationReport(jobData.appData.validationReport);
-      setMissingPropertiesReport(jobData.appData.missingPropertiesReport);
-      setProcessed(true);
-      setSettingsLocked(true);
+      
+      // Check if we need to adjust for current overrides
+      const loadCurrentOverrides = async () => {
+        const { data: currentOverrides, error } = await supabase
+          .from('inspection_data')
+          .select('property_composite_key, override_applied')
+          .eq('job_id', jobData.id)
+          .eq('file_version', latestFileVersion)
+          .eq('override_applied', true);
+
+        if (!error && currentOverrides) {
+          const currentOverrideCount = currentOverrides.length;
+          const appDataOverrideCount = jobData.appData.validationOverrides?.length || 0;
+          
+          // If database has more overrides than App.js data, we need to reprocess
+          if (currentOverrideCount > appDataOverrideCount) {
+            debugLog('APP_INTEGRATION', `Database has ${currentOverrideCount} overrides but App.js only knows about ${appDataOverrideCount}. Need to reprocess.`);
+            // Don't load stale data - force a reprocess instead
+            return;
+          }
+        }
+        
+        // Data is current, safe to load
+        setAnalytics(jobData.appData.analytics);
+        setBillingAnalytics(jobData.appData.billingAnalytics);
+        setValidationReport(jobData.appData.validationReport);
+        setMissingPropertiesReport(jobData.appData.missingPropertiesReport);
+        setProcessed(true);
+        setSettingsLocked(true);
+      };
+      
+      loadCurrentOverrides();
     }
   }, [jobData?.appData]);
 
@@ -1581,6 +1746,31 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
     setInfoByCategoryConfig(newConfig);
   };
 
+  // Add this function to always get fresh override data
+  const getFreshValidationOverrides = async () => {
+    if (!jobData?.id || !latestFileVersion) return [];
+    
+    try {
+      const { data: currentOverrides, error } = await supabase
+        .from('inspection_data')
+        .select('*')
+        .eq('job_id', jobData.id)
+        .eq('file_version', latestFileVersion)
+        .eq('override_applied', true);
+        
+      if (error) {
+        console.error('Error fetching fresh overrides:', error);
+        return [];
+      }
+      
+      debugLog('FRESH_OVERRIDES', `Fetched ${currentOverrides?.length || 0} fresh validation overrides`);
+      return currentOverrides || [];
+    } catch (error) {
+      console.error('Error in getFreshValidationOverrides:', error);
+      return [];
+    }
+  };
+
   // ENHANCED: Start processing session with persistence
   const startProcessingSession = async () => {
     if (!isDateLocked) {
@@ -1639,19 +1829,44 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         overrideMap: overrideMap
       });
 
-      // FIX 2: ENSURE APP.JS INTEGRATION WORKS
+      // CRITICAL FIX: Get fresh validation overrides before sending to App.js
+      const freshOverrides = await getFreshValidationOverrides();
+      const freshOverrideMap = {};
+      freshOverrides.forEach(override => {
+        freshOverrideMap[override.property_composite_key] = {
+          override_applied: override.override_applied,
+          override_reason: override.override_reason,
+          override_by: override.override_by,
+          override_date: override.override_date
+        };
+      });
+
+      // Update local state with fresh data
+      setValidationOverrides(freshOverrides);
+      setOverrideMap(freshOverrideMap);
+
+      // FIX 2: ENSURE APP.JS INTEGRATION WORKS WITH FRESH DATA
       if (onUpdateWorkflowStats) {
+        // Create adjusted analytics with override counts included
+        const adjustedAnalytics = {
+          ...analyticsResult,
+          // Ensure valid inspections includes overrides
+          validInspections: analyticsResult.validInspections + freshOverrides.length,
+          validationOverrideCount: freshOverrides.length
+        };
+
         onUpdateWorkflowStats({
           jobId: jobData.id,
-          analytics: analyticsResult,
+          analytics: adjustedAnalytics,
           billingAnalytics: billingResult,
           validationReport: validationReportData,
           missingPropertiesReport: missingPropertiesReportData,
-          validationOverrides: validationOverrides,
-          overrideMap: overrideMap,
+          validationOverrides: freshOverrides,  // Use fresh data
+          overrideMap: freshOverrideMap,        // Use fresh data
+          totalValidationOverrides: freshOverrides.length,  // Add explicit count
           lastProcessed: new Date().toISOString()
         });
-        debugLog('APP_INTEGRATION', '✅ Data sent to App.js central hub with complete analytics');
+        debugLog('APP_INTEGRATION', '✅ Data sent to App.js central hub with fresh override data');
       }
 
       debugLog('SESSION', '✅ Processing session completed successfully');
