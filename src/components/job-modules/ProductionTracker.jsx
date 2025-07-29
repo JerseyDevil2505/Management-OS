@@ -66,6 +66,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
     const notification = { id, message, type, timestamp: new Date() };
     setNotifications(prev => [...prev, notification]);
     
+    // ISSUE #2 FIX: Verify 5-second timer exists
     setTimeout(() => {
       setNotifications(prev => prev.filter(n => n.id !== id));
     }, 5000);
@@ -185,6 +186,50 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
     } catch (error) {
       debugLog('VENDOR_SOURCE', 'Error loading vendor source, using fallback');
       return jobData.vendor_type;
+    }
+  };
+
+  // ISSUE #4 FIX: Add new function loadValidationOverrides()
+  const loadValidationOverrides = async () => {
+    if (!jobData?.id || !latestFileVersion) return;
+
+    try {
+      const { data: overrides, error } = await supabase
+        .from('inspection_data')
+        .select(`
+          property_composite_key,
+          block,
+          lot,
+          qualifier,
+          card,
+          property_location,
+          override_applied,
+          override_reason,
+          override_by,
+          override_date
+        `)
+        .eq('job_id', jobData.id)
+        .eq('file_version', latestFileVersion)
+        .eq('override_applied', true)
+        .order('override_date', { ascending: false });
+
+      if (!error && overrides) {
+        setValidationOverrides(overrides);
+        
+        // Build override map for quick lookup
+        const overrideMapData = {};
+        overrides.forEach(override => {
+          overrideMapData[override.property_composite_key] = {
+            override_applied: override.override_applied,
+            override_reason: override.override_reason,
+            override_by: override.override_by,
+            override_date: override.override_date
+          };
+        });
+        setOverrideMap(overrideMapData);
+      }
+    } catch (error) {
+      console.error('Error loading validation overrides:', error);
     }
   };
 
@@ -421,7 +466,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
     debugLog('CATEGORIES', '✅ Set default category configuration', defaultConfig);
   };
 
-  // Save category configuration to database and persist analytics
+  // ISSUE #1 FIX: Save category configuration to database and persist analytics
   const saveCategoriesToDatabase = async (config = null, freshAnalytics = null) => {
     if (!jobData?.id) return;
 
@@ -430,7 +475,9 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
       analytics,
       billingAnalytics,
       validationReport,
-      missingPropertiesReport
+      missingPropertiesReport,    // ADD THIS
+      validationOverrides,        // ADD THIS  
+      overrideMap                // ADD THIS
     };
 
     try {
@@ -448,6 +495,8 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
             billingAnalytics: analyticsToSave.billingAnalytics,
             validationReport: analyticsToSave.validationReport,
             missingPropertiesReport: analyticsToSave.missingPropertiesReport,
+            validationOverrides: analyticsToSave.validationOverrides,
+            overrideMap: analyticsToSave.overrideMap,
             lastProcessed: new Date().toISOString()
           } : undefined
         })
@@ -465,7 +514,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
     }
   };
 
-  // Load persisted analytics on component mount
+  // ISSUE #1 FIX: Load persisted analytics on component mount
   const loadPersistedAnalytics = async () => {
     if (!jobData?.id) return;
 
@@ -480,6 +529,16 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         setAnalytics(job.workflow_stats);
         setBillingAnalytics(job.workflow_stats.billingAnalytics);
         setValidationReport(job.workflow_stats.validationReport);
+        // ISSUE #1 FIX: Add missing setState calls
+        if (job.workflow_stats.missingPropertiesReport) {
+          setMissingPropertiesReport(job.workflow_stats.missingPropertiesReport);
+        }
+        if (job.workflow_stats.validationOverrides) {
+          setValidationOverrides(job.workflow_stats.validationOverrides);
+        }
+        if (job.workflow_stats.overrideMap) {
+          setOverrideMap(job.workflow_stats.overrideMap);
+        }
         setProcessed(true);
         setSettingsLocked(true);
         debugLog('PERSISTENCE', '✅ Loaded persisted analytics from job record');
@@ -647,6 +706,8 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
       addNotification('Error applying override: ' + error.message, 'error');
     }
   };
+
+  // ISSUE #1 FIX: Reset session
   const resetSession = () => {
     setSessionId(null);
     setSettingsLocked(false);
@@ -655,6 +716,10 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
     setBillingAnalytics(null);
     setValidationReport(null);
     setCommercialCounts({ inspected: 0, priced: 0 });
+    // ISSUE #1 FIX: Add missing reset calls
+    setMissingPropertiesReport(null);
+    setValidationOverrides([]);
+    setOverrideMap({});
     addNotification('🔄 Session reset - settings unlocked', 'info');
   };
 
@@ -667,6 +732,8 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
       loadPersistedAnalytics(); // ENHANCED: Load persisted analytics
       loadVendorSource(); // NEW: Load vendor source for display
       loadCommercialCounts(); // NEW: Load commercial counts from inspection_data
+      // ISSUE #4 FIX: Add function call in useEffect()
+      loadValidationOverrides(); // ADD THIS LINE
       setLoading(false);
     }
   }, [jobData?.id, latestFileVersion]);
@@ -1605,14 +1672,16 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         missingPropertiesReport: missingPropertiesReportData // ✅ Use fresh data!
       });
 
-      // NEW: Update App.js central data hub
+      // ISSUE #1 FIX: App.js integration in startProcessingSession() - Add missing fields to onUpdateWorkflowStats()
       if (onUpdateWorkflowStats) {
         onUpdateWorkflowStats({
           jobId: jobData.id,
           analytics: analyticsResult,     // ✅ NOW DEFINED!
           billingAnalytics: billingResult, // ✅ NOW DEFINED!
           validationReport: validationReportData, // ✅ NOW DEFINED!
-          missingPropertiesReport: missingPropertiesReportData, // ✅ Use fresh data!
+          missingPropertiesReport: missingPropertiesReportData,   // ADD THIS
+          validationOverrides: validationOverrides,              // ADD THIS
+          overrideMap: overrideMap,                              // ADD THIS
           lastProcessed: new Date().toISOString()
         });
         debugLog('APP_INTEGRATION', '✅ Data sent to App.js central hub');
@@ -2643,13 +2712,16 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                         </h4>
                         <div className="overflow-x-auto">
                           <table className="w-full text-sm">
+                            {/* ISSUE #3 FIX: Validation report table headers - Find this section and add missing <th> elements */}
                             <thead className="bg-gray-50">
                               <tr>
                                 <th className="px-3 py-2 text-left font-medium text-gray-700">Block</th>
                                 <th className="px-3 py-2 text-left font-medium text-gray-700">Lot</th>
                                 <th className="px-3 py-2 text-left font-medium text-gray-700">Qualifier</th>
+                                <th className="px-3 py-2 text-left font-medium text-gray-700">Card</th>           {/* ADD THIS */}
                                 <th className="px-3 py-2 text-left font-medium text-gray-700">Property Location</th>
                                 <th className="px-3 py-2 text-left font-medium text-gray-700">Compound Issues</th>
+                                <th className="px-3 py-2 text-left font-medium text-gray-700">Actions</th>        {/* ADD THIS */}
                               </tr>
                             </thead>
                             <tbody>
@@ -2993,9 +3065,10 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                                   {override.override_date ? new Date(override.override_date).toLocaleDateString() : '-'}
                                 </td>
                                 <td className="px-3 py-2">
+                                  {/* ISSUE #4 FIX: Fix action button styling in overrides table - Change styling to dark red */}
                                   <button
                                     onClick={() => handleUndoOverride(override.property_composite_key, override.override_reason)}
-                                    className="px-2 py-1 bg-orange-600 text-white text-xs rounded hover:bg-orange-700"
+                                    className="px-2 py-1 bg-red-700 text-white text-xs rounded hover:bg-red-800 font-medium"
                                   >
                                     Undo Override
                                   </button>
