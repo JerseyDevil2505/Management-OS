@@ -1562,6 +1562,8 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
       });
 
       // NEW: Show processing modal if there are validation issues
+      let decisionsToApply = [];
+      
       if (pendingValidationsList.length > 0 && !processingPaused) {
         debugLog('PROCESSING_MODAL', `Found ${pendingValidationsList.length} validation issues - showing modal`);
         setPendingValidations(pendingValidationsList);
@@ -1579,7 +1581,6 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         });
         
         // Apply decisions from modal
-        const decisionsToApply = [];
         pendingValidationsList.forEach(validation => {
           const decision = processedValidationDecisions[validation.composite_key];
           if (decision && decision.action === 'override') {
