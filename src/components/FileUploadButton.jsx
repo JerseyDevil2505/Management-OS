@@ -976,31 +976,38 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     }
   };
 
-  // NEW: Track batch insert operations from propertyService
+  // ENHANCED: Track batch insert operations from propertyService with better capture
   const trackBatchInserts = (operation) => {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       // Create a listener for console messages
       const originalLog = console.log;
-      const batchLogs = [];
+      const originalError = console.error;
+      let batchCount = 0;
+      let totalRecords = 0;
       
+      // Override console.log to capture batch messages
       console.log = function(...args) {
         const message = args.join(' ');
         
-        // Capture batch insert messages
-        if (message.includes('Batch') || message.includes('insert') || message.includes('upsert') || message.includes('UPSERT')) {
-          batchLogs.push({
-            timestamp: new Date().toISOString(),
-            message: message,
-            type: message.includes('Error') ? 'error' : 
-                  message.includes('Success') ? 'success' : 
-                  message.includes('Retry') ? 'warning' : 'info'
-          });
+        // Capture various batch-related messages
+        if (message.includes('Processing batch') || 
+            message.includes('Batch') || 
+            message.includes('UPSERT') || 
+            message.includes('records processed') ||
+            message.includes('Attempting') ||
+            message.includes('Retry') ||
+            message.includes('batch of')) {
           
-          // Parse batch progress from messages
-          const batchMatch = message.match(/Batch (\d+)\/(\d+)/);
+          // Parse batch information
+          const batchMatch = message.match(/batch (\d+) of (\d+)/i) || 
+                            message.match(/Batch (\d+)\/(\d+)/);
+          const recordMatch = message.match(/(\d+) records/);
+          const retryMatch = message.match(/retry|attempt/i);
+          
           if (batchMatch) {
             const currentBatch = parseInt(batchMatch[1]);
             const totalBatches = parseInt(batchMatch[2]);
+            batchCount = totalBatches;
             
             setBatchInsertProgress(prev => ({
               ...prev,
@@ -1010,48 +1017,111 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
               currentOperation: message
             }));
             
-            addBatchLog(message, message.includes('Success') ? 'success' : 'info');
+            // Add attempt to log
+            setBatchInsertProgress(prev => {
+              const attemptExists = prev.insertAttempts.find(a => a.batchNumber === currentBatch);
+              if (!attemptExists) {
+                return {
+                  ...prev,
+                  insertAttempts: [...prev.insertAttempts, {
+                    batchNumber: currentBatch,
+                    size: recordMatch ? parseInt(recordMatch[1]) : prev.batchSize,
+                    startTime: new Date().toISOString(),
+                    status: retryMatch ? 'retrying' : 'attempting',
+                    retries: retryMatch ? 1 : 0
+                  }]
+                };
+              } else if (retryMatch) {
+                return {
+                  ...prev,
+                  insertAttempts: prev.insertAttempts.map(a => 
+                    a.batchNumber === currentBatch 
+                      ? { ...a, status: 'retrying', retries: a.retries + 1 }
+                      : a
+                  )
+                };
+              }
+              return prev;
+            });
           }
           
-          // Detect batch size
-          const sizeMatch = message.match(/(\d+) records/);
-          if (sizeMatch) {
-            const recordCount = parseInt(sizeMatch[1]);
-            setBatchInsertProgress(prev => ({
-              ...prev,
-              batchSize: recordCount
-            }));
+          if (recordMatch) {
+            totalRecords += parseInt(recordMatch[1]);
           }
+          
+          // Log the batch operation
+          addBatchLog(message, 
+            message.includes('Error') ? 'error' : 
+            message.includes('Success') || message.includes('successfully') ? 'success' : 
+            message.includes('Retry') ? 'warning' : 
+            'info'
+          );
+        }
+        
+        // Also capture general processing messages
+        if (message.includes('Processing') || message.includes('Updating') || message.includes('UPSERT')) {
+          addBatchLog(message, 'info');
         }
         
         // Call original console.log
         originalLog.apply(console, args);
       };
       
+      // Override console.error too
+      console.error = function(...args) {
+        const message = args.join(' ');
+        if (message.includes('batch') || message.includes('UPSERT')) {
+          addBatchLog(`Error: ${message}`, 'error');
+        }
+        originalError.apply(console, args);
+      };
+      
+      // Set initial state
+      setBatchInsertProgress(prev => ({
+        ...prev,
+        isInserting: true,
+        currentOperation: 'Initializing batch processing...'
+      }));
+      
       // Execute the operation
       operation().then(result => {
-        // Restore original console.log
+        // Restore original console methods
         console.log = originalLog;
+        console.error = originalError;
         
-        // Mark batch insert as complete
+        // Mark all batches as complete
         setBatchInsertProgress(prev => ({
           ...prev,
           isInserting: false,
-          currentOperation: 'Batch processing complete'
+          currentOperation: `Batch processing complete - ${totalRecords} records processed`,
+          insertAttempts: prev.insertAttempts.map(a => ({
+            ...a,
+            status: 'success',
+            endTime: new Date().toISOString()
+          }))
         }));
+        
+        addBatchLog(`✅ All batches complete - Total records: ${totalRecords}`, 'success');
         
         resolve(result);
       }).catch(error => {
-        // Restore original console.log
+        // Restore original console methods
         console.log = originalLog;
+        console.error = originalError;
         
         setBatchInsertProgress(prev => ({
           ...prev,
           isInserting: false,
-          currentOperation: 'Batch processing failed'
+          currentOperation: 'Batch processing failed',
+          insertAttempts: prev.insertAttempts.map(a => ({
+            ...a,
+            status: a.status === 'success' ? 'success' : 'failed'
+          }))
         }));
         
-        throw error;
+        addBatchLog(`❌ Batch processing failed: ${error.message}`, 'error');
+        
+        reject(error);
       });
     });
   };
@@ -1544,19 +1614,33 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                           <div>
                             <h4 className="font-bold text-gray-900">
                               Property {change.property_block}-{change.property_lot}
+                              {change.property_qualifier && change.property_qualifier !== 'NONE' && 
+                                <span className="text-gray-600"> (Qual: {change.property_qualifier})</span>}
                             </h4>
                             <p className="text-gray-600 text-sm">{change.property_location}</p>
                           </div>
                           <div className="text-right">
-                            <div className="text-sm text-gray-600">Price Change</div>
-                            <div className="text-sm font-bold text-red-600">
-                              ${change.differences.sales_price.old?.toLocaleString() || 0} 
-                            </div>
-                            <div className="text-sm font-bold text-green-600">
-                              → ${change.differences.sales_price.new?.toLocaleString() || 0}
-                            </div>
-                            <div className="text-xs text-gray-500 mt-1">
-                              {change.differences.sales_date.old || 'No Date'} → {change.differences.sales_date.new || 'No Date'}
+                            <div className="text-sm text-gray-600 font-semibold mb-1">Sale Price Change</div>
+                            <div className="flex items-center gap-2">
+                              <div>
+                                <div className="text-xs text-gray-500">Old</div>
+                                <div className="text-sm font-bold text-red-600">
+                                  ${change.differences.sales_price.old?.toLocaleString() || 0}
+                                </div>
+                                <div className="text-xs text-gray-500">
+                                  {change.differences.sales_date.old || 'No Date'}
+                                </div>
+                              </div>
+                              <div className="text-gray-400">→</div>
+                              <div>
+                                <div className="text-xs text-gray-500">New</div>
+                                <div className="text-sm font-bold text-green-600">
+                                  ${change.differences.sales_price.new?.toLocaleString() || 0}
+                                </div>
+                                <div className="text-xs text-gray-500">
+                                  {change.differences.sales_date.new || 'No Date'}
+                                </div>
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -1606,6 +1690,110 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                       </div>
                     );
                   })}
+                </div>
+              </div>
+            )}
+
+            {/* Class Changes Section (if any) */}
+            {hasClassChanges && (
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Property Class Changes:</h3>
+                <div className="space-y-3 max-h-60 overflow-y-auto">
+                  {details.classChanges.map((change, idx) => (
+                    <div key={idx} className="border border-purple-200 rounded-lg p-3 bg-purple-50">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h4 className="font-bold text-gray-900">
+                            Property {change.property_block}-{change.property_lot}
+                            {change.property_qualifier && change.property_qualifier !== 'NONE' && 
+                              <span className="text-gray-600"> (Qual: {change.property_qualifier})</span>}
+                          </h4>
+                          <p className="text-gray-600 text-sm">{change.property_location}</p>
+                        </div>
+                        <div className="text-right">
+                          {change.changes.map((classChange, cidx) => (
+                            <div key={cidx} className="mb-1">
+                              <div className="text-xs text-gray-600">{classChange.field}</div>
+                              <div className="text-sm">
+                                <span className="font-medium text-red-600">{classChange.old || 'None'}</span>
+                                <span className="mx-1">→</span>
+                                <span className="font-medium text-green-600">{classChange.new || 'None'}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* New Records Section (if any) */}
+            {hasNewRecords && (
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">New Properties to Add:</h3>
+                <div className="text-sm text-gray-600 mb-2">
+                  Showing first 10 of {summary.missing} new properties
+                </div>
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {details.missing.slice(0, 10).map((record, idx) => {
+                    const blockField = detectedVendor === 'BRT' ? 'BLOCK' : 'Block';
+                    const lotField = detectedVendor === 'BRT' ? 'LOT' : 'Lot';
+                    const qualifierField = detectedVendor === 'BRT' ? 'QUALIFIER' : 'Qual';
+                    const locationField = detectedVendor === 'BRT' ? 'PROPERTY_LOCATION' : 'Location';
+                    const classField = detectedVendor === 'BRT' ? 'PROPERTY_CLASS' : 'Class';
+                    const priceField = detectedVendor === 'BRT' ? 'CURRENTSALE_PRICE' : 'Sale Price';
+                    const dateField = detectedVendor === 'BRT' ? 'CURRENTSALE_DATE' : 'Sale Date';
+                    
+                    const salePrice = parseFloat(String(record[priceField] || 0).replace(/[,$]/g, '')) || 0;
+                    
+                    return (
+                      <div key={idx} className="border border-green-200 rounded p-2 bg-green-50 text-sm">
+                        <div className="flex justify-between">
+                          <div>
+                            <span className="font-medium">{record[blockField]}-{record[lotField]}</span>
+                            {record[qualifierField] && record[qualifierField] !== 'NONE' && 
+                              <span className="text-gray-600"> (Qual: {record[qualifierField]})</span>}
+                            <span className="text-gray-600 ml-2">{record[locationField]}</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-gray-600">Class: {record[classField]}</span>
+                            {salePrice > 0 && (
+                              <span className="ml-3 font-medium">${salePrice.toLocaleString()}</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Deletions Section (if any) */}
+            {hasDeletions && (
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Properties to Remove:</h3>
+                <div className="text-sm text-gray-600 mb-2">
+                  Showing first 10 of {summary.deletions} properties not in source file
+                </div>
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {details.deletions.slice(0, 10).map((record, idx) => (
+                    <div key={idx} className="border border-red-200 rounded p-2 bg-red-50 text-sm">
+                      <div className="flex justify-between">
+                        <div>
+                          <span className="font-medium">{record.property_block}-{record.property_lot}</span>
+                          {record.property_qualifier && record.property_qualifier !== 'NONE' && 
+                            <span className="text-gray-600"> (Qual: {record.property_qualifier})</span>}
+                          <span className="text-gray-600 ml-2">{record.property_location}</span>
+                        </div>
+                        <div className="text-right text-gray-600">
+                          Will be removed
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
