@@ -951,7 +951,9 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
     }
   }, [jobData?.id, latestFileVersion]);
 
-  // Load data from currentWorkflowStats prop if available - FIXED to prevent race condition
+  // REMOVED: This useEffect was causing race condition by loading stale data from App.js
+  // ProductionTracker trusts its own loadPersistedAnalytics() as the source of truth
+  /*
   useEffect(() => {
     if (currentWorkflowStats && currentWorkflowStats.analytics) {
       debugLog('APP_INTEGRATION', '🔍 Checking currentWorkflowStats vs local state');
@@ -996,6 +998,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
       }
     }
   }, [currentWorkflowStats]);
+  */
 
   // Track unsaved changes
   useEffect(() => {
