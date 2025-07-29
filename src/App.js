@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from './lib/supabaseClient';
 import EmployeeManagement from './components/EmployeeManagement';
 import AdminJobManagement from './components/AdminJobManagement';
@@ -11,6 +11,20 @@ import './App.css';
 function App() {
   const [activeModule, setActiveModule] = useState('jobs');
   const [selectedJob, setSelectedJob] = useState(null);
+
+  // DEBUG: Track what's causing re-renders
+  const renderCount = useRef(0);
+  const prevActiveModule = useRef(activeModule);
+  
+  useEffect(() => {
+    renderCount.current += 1;
+    console.log(`🔍 App.js render #${renderCount.current}, activeModule: ${activeModule}, prevModule: ${prevActiveModule.current}`);
+    
+    if (prevActiveModule.current !== activeModule) {
+      console.warn(`⚠️ ACTIVE MODULE CHANGED: ${prevActiveModule.current} → ${activeModule}`);
+      prevActiveModule.current = activeModule;
+    }
+  });
 
   // Central module state management for ALL jobs using workflow_stats
   const [jobWorkflowStats, setJobWorkflowStats] = useState({});
@@ -30,6 +44,8 @@ function App() {
       return;
     }
     
+    console.log('📊 loadAllJobWorkflowStats called');
+    
     setIsLoadingWorkflowStats(true);
     try {
       // Get all active jobs with their workflow stats
@@ -40,6 +56,7 @@ function App() {
         .order('created_at', { ascending: false });
 
       if (!error && jobs) {
+        console.log(`📊 Loaded ${jobs.length} jobs`);
         const loadedStats = {};
         
         jobs.forEach(job => {
@@ -71,33 +88,22 @@ function App() {
     } finally {
       setIsLoadingWorkflowStats(false);
     }
-  }, [isCreatingJob]); // Add dependency on creation lock
+  }, [isCreatingJob]);
 
   // Load workflow stats on app startup
   useEffect(() => {
+    console.log('🚀 App startup - loading workflow stats');
     loadAllJobWorkflowStats();
   }, [loadAllJobWorkflowStats]);
 
   // 🔧 BACKEND ENHANCEMENT: Enhanced workflow stats update with metrics refresh trigger
   const handleWorkflowStatsUpdate = async (jobId, newStats, persistToDatabase = true) => {
+    console.log('📈 handleWorkflowStatsUpdate called for job:', jobId);
+    
     // Check if analytics just completed (isProcessed changed from false to true)
     const previousStats = jobWorkflowStats[jobId];
     const analyticsJustCompleted = newStats.isProcessed && !previousStats?.isProcessed;
 
-    // DEBUG LOGGING TO TRACK DATA FLOW
-    console.log('🔍 App.js BEFORE update:', {
-      jobId,
-      currentStats: jobWorkflowStats[jobId],
-      entryRate: jobWorkflowStats[jobId]?.jobEntryRate,
-      validInspections: jobWorkflowStats[jobId]?.validInspections
-    });
-    console.log('📥 App.js RECEIVING from PT:', {
-      newStats,
-      entryRate: newStats.jobEntryRate || newStats.analytics?.jobEntryRate,
-      validInspections: newStats.validInspections || newStats.analytics?.validInspections,
-      isProcessed: newStats.isProcessed
-    });
-    
     // Extract the flat structure from nested analytics if needed
     const flatStats = newStats.analytics ? {
       ...newStats.analytics,  // Flatten the analytics object
@@ -112,12 +118,6 @@ function App() {
       ...newStats,
       isProcessed: true
     };
-    
-    console.log('🔄 App.js AFTER merge will be:', {
-      merged: { ...jobWorkflowStats[jobId], ...flatStats },
-      entryRate: flatStats.jobEntryRate,
-      validInspections: flatStats.validInspections
-    });
 
     // Update local state immediately for real-time UI
     setJobWorkflowStats(prev => ({
@@ -134,6 +134,7 @@ function App() {
     if (analyticsJustCompleted) {
       console.log('📊 App.js: Analytics completed, triggering AdminJobManagement metrics refresh');
       setTimeout(() => {
+        console.log('📊 Actually setting metricsRefreshTrigger');
         setMetricsRefreshTrigger(prev => prev + 1);
       }, 0);
     }
@@ -159,12 +160,6 @@ function App() {
 
         if (error) {
           console.error('❌ Error persisting workflow stats:', error);
-        } else {
-          console.log('✅ App.js saved to database:', {
-            jobId,
-            entryRate: updatedStats.jobEntryRate,
-            validInspections: updatedStats.validInspections
-          });
         }
       } catch (error) {
         console.error('❌ Failed to persist workflow stats:', error);
@@ -226,12 +221,14 @@ function App() {
 
   // Handle job selection from AdminJobManagement
   const handleJobSelect = (job) => {
+    console.log('🎯 handleJobSelect called with job:', job?.job_name);
     setSelectedJob(job);
     setActiveModule('job-modules');
   };
 
   // Handle returning to jobs list
   const handleBackToJobs = () => {
+    console.log('🔙 handleBackToJobs called');
     setSelectedJob(null);
     setActiveModule('jobs');
   };
@@ -241,6 +238,8 @@ function App() {
 
   // 🔧 FIX: Defer file processing state updates to prevent React Error #301
   const handleFileProcessed = async (result) => {
+    console.log('📁 handleFileProcessed called');
+    
     // FileUploadButton already handles file versioning and tracking
     // Just refresh job metadata without touching ProductionTracker analytics
     await loadAllJobWorkflowStats();
@@ -257,17 +256,34 @@ function App() {
 
   // 🔧 FIX: Make callback more defensive and properly memoized
   const handleJobProcessingComplete = useCallback(() => {
-    console.log('🔄 App.js: Job processing completed, refreshing metrics');
+    console.log('🔄 App.js: handleJobProcessingComplete called');
     
     // Double defer to ensure AdminJobManagement has finished all its state updates
     requestAnimationFrame(() => {
       setTimeout(() => {
+        console.log('🔄 Setting metricsRefreshTrigger and loading stats');
         setMetricsRefreshTrigger(prev => prev + 1);
         // Also refresh the job stats to get the new job
         loadAllJobWorkflowStats();
       }, 100); // Give a bit more time for modal cleanup
     });
-  }, [loadAllJobWorkflowStats]); // Include dependency
+  }, [loadAllJobWorkflowStats]);
+
+  // DEBUG: Job creation handlers
+  const handleJobCreationStart = useCallback(() => {
+    console.log('🚀 JOB CREATION STARTED');
+    setIsCreatingJob(true);
+  }, []);
+
+  const handleJobCreationEnd = useCallback(() => {
+    console.log('✅ JOB CREATION ENDED');
+    setIsCreatingJob(false);
+    // Refresh after creation completes
+    setTimeout(() => {
+      console.log('🔄 Refreshing stats after job creation');
+      loadAllJobWorkflowStats();
+    }, 500);
+  }, [loadAllJobWorkflowStats]);
 
   return (
     <div className="App">
@@ -288,7 +304,10 @@ function App() {
           {activeModule !== 'job-modules' && (
             <nav className="flex space-x-6">
               <button
-                onClick={() => setActiveModule('employees')}
+                onClick={() => {
+                  console.log('👥 Switching to employees module');
+                  setActiveModule('employees');
+                }}
                 className={`px-4 py-2 rounded-lg font-medium transition-colors ${
                   activeModule === 'employees'
                     ? 'bg-blue-600 text-white'
@@ -298,7 +317,10 @@ function App() {
                 👥 Employee Management
               </button>
               <button
-                onClick={() => setActiveModule('jobs')}
+                onClick={() => {
+                  console.log('📋 Switching to jobs module');
+                  setActiveModule('jobs');
+                }}
                 className={`px-4 py-2 rounded-lg font-medium transition-colors ${
                   activeModule === 'jobs'
                     ? 'bg-blue-600 text-white'
@@ -314,7 +336,10 @@ function App() {
                 )}
               </button>
               <button
-                onClick={() => setActiveModule('billing')}
+                onClick={() => {
+                  console.log('💰 Switching to billing module');
+                  setActiveModule('billing');
+                }}
                 className={`px-4 py-2 rounded-lg font-medium transition-colors ${
                   activeModule === 'billing'
                     ? 'bg-blue-600 text-white'
@@ -324,7 +349,10 @@ function App() {
                 💰 Billing Management
               </button>
               <button
-                onClick={() => setActiveModule('payroll')}
+                onClick={() => {
+                  console.log('📊 Switching to payroll module');
+                  setActiveModule('payroll');
+                }}
                 className={`px-4 py-2 rounded-lg font-medium transition-colors ${
                   activeModule === 'payroll'
                     ? 'bg-blue-600 text-white'
@@ -377,12 +405,8 @@ function App() {
             metricsRefreshTrigger={metricsRefreshTrigger}
             onJobProcessingComplete={handleJobProcessingComplete}
             // ADD: Pass creation lock handlers
-            onJobCreationStart={() => setIsCreatingJob(true)}
-            onJobCreationEnd={() => {
-              setIsCreatingJob(false);
-              // Refresh after creation completes
-              setTimeout(() => loadAllJobWorkflowStats(), 500);
-            }}
+            onJobCreationStart={handleJobCreationStart}
+            onJobCreationEnd={handleJobCreationEnd}
           />
         )}
 
