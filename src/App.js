@@ -97,8 +97,12 @@ function App() {
       missingPropertiesReport: newStats.missingPropertiesReport,
       validationOverrides: newStats.validationOverrides,
       overrideMap: newStats.overrideMap,
-      lastProcessed: newStats.lastProcessed || new Date().toISOString()
-    } : newStats;
+      lastProcessed: newStats.lastProcessed || new Date().toISOString(),
+      isProcessed: true  // CRITICAL: Preserve the processed flag!
+    } : {
+      ...newStats,
+      isProcessed: true
+    };
     
     console.log('🔄 App.js AFTER merge will be:', {
       merged: { ...jobWorkflowStats[jobId], ...flatStats },
@@ -117,18 +121,21 @@ function App() {
       }
     }));
 
-    // 🔧 BACKEND ENHANCEMENT: Trigger metrics refresh when analytics complete
+    // 🔧 FIX: Defer metrics refresh to prevent React Error #301
     if (analyticsJustCompleted) {
       console.log('📊 App.js: Analytics completed, triggering AdminJobManagement metrics refresh');
-      setMetricsRefreshTrigger(prev => prev + 1);
+      setTimeout(() => {
+        setMetricsRefreshTrigger(prev => prev + 1);
+      }, 0);
     }
 
     // Persist to database for navigation survival
     if (persistToDatabase) {
       try {
+        // CRITICAL FIX: Merge properly, don't overwrite!
         const updatedStats = {
           ...jobWorkflowStats[jobId],
-          ...newStats,
+          ...flatStats,  // This now includes all the analytics data
           isProcessed: true,
           lastUpdated: new Date().toISOString()
         };
@@ -223,34 +230,42 @@ function App() {
   // File refresh trigger for JobContainer
   const [fileRefreshTrigger, setFileRefreshTrigger] = useState(0);
 
-  // 🔧 BACKEND ENHANCEMENT: Smart file processing with preservation
+  // 🔧 FIX: Defer file processing state updates to prevent React Error #301
   const handleFileProcessed = async (result) => {
     // FileUploadButton already handles file versioning and tracking
     // Just refresh job metadata without touching ProductionTracker analytics
     await loadAllJobWorkflowStats();
     
-    // CRITICAL: Trigger JobContainer to refresh file version
-    setFileRefreshTrigger(prev => prev + 1);
+    // CRITICAL: Defer trigger to prevent render-time state updates
+    setTimeout(() => {
+      setFileRefreshTrigger(prev => prev + 1);
+    }, 0);
 
     // 🔧 SMART INVALIDATION: Preserve settings, just flag as stale
     if (selectedJob?.id && jobWorkflowStats[selectedJob.id]) {
-      setJobWorkflowStats(prev => ({
-        ...prev,
-        [selectedJob.id]: {
-          ...prev[selectedJob.id], // PRESERVE existing settings & analytics
-          needsRefresh: true,       // Flag for ProductionTracker warning
-          lastFileUpdate: new Date().toISOString(), // Track when files changed
-        }
-      }));
+      // Defer state update to prevent React Error #301
+      setTimeout(() => {
+        setJobWorkflowStats(prev => ({
+          ...prev,
+          [selectedJob.id]: {
+            ...prev[selectedJob.id], // PRESERVE existing settings & analytics
+            needsRefresh: true,       // Flag for ProductionTracker warning
+            lastFileUpdate: new Date().toISOString(), // Track when files changed
+          }
+        }));
+      }, 0);
       
       console.log('📊 App.js: Marked analytics as stale, preserved user settings');
     }
   };
 
-  // 🔧 BACKEND ENHANCEMENT: Handle job processing completion from AdminJobManagement
+  // 🔧 FIX: Defer job processing completion state updates to prevent React Error #301
   const handleJobProcessingComplete = () => {
     console.log('🔄 App.js: Job processing completed, refreshing metrics');
-    setMetricsRefreshTrigger(prev => prev + 1);
+    // Defer the state update to the next tick to prevent Error #301
+    setTimeout(() => {
+      setMetricsRefreshTrigger(prev => prev + 1);
+    }, 0);
   };
 
   return (
