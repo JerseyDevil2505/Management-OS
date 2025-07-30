@@ -213,12 +213,24 @@ const EmployeeManagement = () => {
       return matchesType && matchesRegion;
     });
 
-    // Calculate summary metrics
-    const totalInspections = filteredData.length;
+    // Separate residential and commercial work days
+    const residentialWorkDays = new Set();
+    const commercialWorkDays = new Set();
     
-    // Get unique dates to calculate actual work days - FIXED to use list_date
-    const uniqueDates = new Set(filteredData.map(r => r.list_date).filter(Boolean));
-    const totalWorkDays = uniqueDates.size || 1; // Prevent division by zero
+    // Track which days had residential vs commercial work
+    filteredData.forEach(record => {
+      if (['2', '3A'].includes(record.property_class)) {
+        // Track all date fields for residential work
+        if (record.list_date) residentialWorkDays.add(record.list_date);
+        if (record.measure_date) residentialWorkDays.add(record.measure_date);
+        if (record.price_date) residentialWorkDays.add(record.price_date);
+      } else if (['4A', '4B', '4C'].includes(record.property_class)) {
+        // Track all date fields for commercial work
+        if (record.list_date) commercialWorkDays.add(record.list_date);
+        if (record.measure_date) commercialWorkDays.add(record.measure_date);
+        if (record.price_date) commercialWorkDays.add(record.price_date);
+      }
+    });
     
     // Calculate entry/refusal rates using ProductionTracker logic
     let entryCount = 0;
@@ -248,11 +260,21 @@ const EmployeeManagement = () => {
     };
 
     // Get unique job count
-    const uniqueJobs = new Set(filteredData.map(r => r.job_id)).size;
+    const uniqueJobs = new Set(validInspections.map(r => r.job_id)).size;
 
-    filteredData.forEach(record => {
+    validInspections.forEach(record => {
       const inspector = record.employee;
       const initials = inspector.initials || 'Unknown';
+      
+      // Define valid inspection: Must have valid initials in list_by, measure_by, or price_by
+      const hasValidInspection = (record.list_by && record.list_date) || 
+                                (record.measure_by && record.measure_date) || 
+                                (record.price_by && record.price_date);
+      
+      // Only process records that have valid inspection data
+      if (!hasValidInspection) {
+        return; // Skip this record - not a valid inspection
+      }
       
       if (!inspectorStats[initials]) {
         inspectorStats[initials] = {
@@ -274,9 +296,14 @@ const EmployeeManagement = () => {
       }
 
       inspectorStats[initials].totalInspections++;
-      // FIXED: Changed from inspection_date to list_date
+      
+      // Track work days based on the appropriate date field
       if (record.list_date) {
         inspectorStats[initials].workDays.add(record.list_date);
+      } else if (record.measure_date) {
+        inspectorStats[initials].workDays.add(record.measure_date);
+      } else if (record.price_date) {
+        inspectorStats[initials].workDays.add(record.price_date);
       }
 
       // Track type-specific metrics
@@ -284,10 +311,10 @@ const EmployeeManagement = () => {
       
       if (inspectorType === 'residential') {
         typeStats.residential.totalInspections++;
-        // FIXED: Changed from inspection_date to list_date
-        if (record.list_date) {
-          typeStats.residential.workDays.add(record.list_date);
-        }
+        // Track work days from any date field
+        if (record.list_date) typeStats.residential.workDays.add(record.list_date);
+        if (record.measure_date) typeStats.residential.workDays.add(record.measure_date);
+        if (record.price_date) typeStats.residential.workDays.add(record.price_date);
         
         // Count residential class properties (2 and 3A)
         if (['2', '3A'].includes(record.property_class)) {
@@ -298,10 +325,10 @@ const EmployeeManagement = () => {
         }
       } else if (inspectorType === 'commercial') {
         typeStats.commercial.totalInspections++;
-        // FIXED: Changed from inspection_date to list_date
-        if (record.list_date) {
-          typeStats.commercial.workDays.add(record.list_date);
-        }
+        // Track work days from any date field
+        if (record.list_date) typeStats.commercial.workDays.add(record.list_date);
+        if (record.measure_date) typeStats.commercial.workDays.add(record.measure_date);
+        if (record.price_date) typeStats.commercial.workDays.add(record.price_date);
         
         // Count commercial properties (4A, 4B, 4C)
         if (['4A', '4B', '4C'].includes(record.property_class)) {
@@ -332,16 +359,26 @@ const EmployeeManagement = () => {
         let isEntry = false;
         let isRefusal = false;
 
+        // Debug logging - remove after testing
+        if (totalEligible <= 5) {
+          console.log('🔍 InfoBy Debug:', {
+            jobId: record.job_id,
+            infoByCode: record.info_by_code,
+            jobConfig: jobConfig,
+            propertyClass: record.property_class
+          });
+        }
+
         if (jobConfig) {
           // Use job-specific InfoBy category config
           const infoByCode = record.info_by_code.toString();
           
           // Check if this code is in the entry category
-          if (jobConfig.entry && jobConfig.entry.includes(infoByCode)) {
+          if (jobConfig.entry && Array.isArray(jobConfig.entry) && jobConfig.entry.includes(infoByCode)) {
             isEntry = true;
           }
           // Check if this code is in the refusal category
-          else if (jobConfig.refusal && jobConfig.refusal.includes(infoByCode)) {
+          else if (jobConfig.refusal && Array.isArray(jobConfig.refusal) && jobConfig.refusal.includes(infoByCode)) {
             isRefusal = true;
           }
         } else {
@@ -471,18 +508,22 @@ const EmployeeManagement = () => {
       };
     }
 
+    // Get unique inspector count
+    const uniqueInspectors = Object.keys(inspectorStats).length || 1;
+    
     return {
       summary: {
         totalInspections: totalInspections,
         overallEntryRate: totalEligible > 0 ? Math.round((entryCount / totalEligible) * 100) : 0,
         overallRefusalRate: totalEligible > 0 ? Math.round((refusalCount / totalEligible) * 100) : 0,
-        avgInspectionsPerDay: Math.round((totalInspections / totalWorkDays) * 10) / 10
+        avgInspectionsPerDay: Math.round((totalInspections / totalWorkDays / uniqueInspectors) * 10) / 10
       },
       jobCount: uniqueJobs,
       byType,
       topPerformers,
       inspectors: inspectorArray,
-      regional: regionalStats
+      regional: regionalStats,
+      totalInspectors: uniqueInspectors
     };
   };
 
@@ -1317,7 +1358,7 @@ const EmployeeManagement = () => {
                       <div className="bg-white p-6 rounded-lg border-2 border-purple-200 shadow-sm">
                         <div className="text-4xl font-bold text-purple-600 mb-2">{globalAnalytics.summary.avgInspectionsPerDay}</div>
                         <div className="text-sm font-medium text-gray-700">Daily Average</div>
-                        <div className="text-xs text-gray-500 mt-1">Inspections per day</div>
+                        <div className="text-xs text-gray-500 mt-1">Per inspector per day</div>
                       </div>
                     </div>
 
