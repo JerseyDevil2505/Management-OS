@@ -79,6 +79,24 @@ const EmployeeManagement = () => {
   const loadGlobalAnalytics = async () => {
     setIsLoadingAnalytics(true);
     try {
+      // First, get all jobs to get their InfoBy category configs
+      const { data: jobsData, error: jobsError } = await supabase
+        .from('jobs')
+        .select('id, infoby_category_config')
+        .not('infoby_category_config', 'is', null);
+
+      if (jobsError) throw jobsError;
+
+      console.log('🔍 Jobs with InfoBy configs:', jobsData?.length);
+
+      // Create a map of job IDs to their InfoBy configs
+      const jobInfoByConfigs = {};
+      jobsData?.forEach(job => {
+        if (job.infoby_category_config) {
+          jobInfoByConfigs[job.id] = job.infoby_category_config;
+        }
+      });
+
       // Get ALL inspection data using pagination
       let allInspectionData = [];
       let page = 0;
@@ -158,9 +176,12 @@ const EmployeeManagement = () => {
         const inspectorInitials = record.list_by || record.measure_by || record.price_by;
         
         if (inspectorInitials && employeeMap[inspectorInitials]) {
+          // Add job-specific InfoBy config to the record
+          const jobConfig = jobInfoByConfigs[record.job_id];
           enrichedData.push({
             ...record,
-            employee: employeeMap[inspectorInitials]
+            employee: employeeMap[inspectorInitials],
+            jobInfoByConfig: jobConfig || null
           });
         }
       });
@@ -195,8 +216,8 @@ const EmployeeManagement = () => {
     // Calculate summary metrics
     const totalInspections = filteredData.length;
     
-    // Get unique dates to calculate actual work days
-    const uniqueDates = new Set(filteredData.map(r => r.inspection_date).filter(Boolean));
+    // Get unique dates to calculate actual work days - FIXED to use list_date
+    const uniqueDates = new Set(filteredData.map(r => r.list_date).filter(Boolean));
     const totalWorkDays = uniqueDates.size || 1; // Prevent division by zero
     
     // Calculate entry/refusal rates using ProductionTracker logic
@@ -253,8 +274,9 @@ const EmployeeManagement = () => {
       }
 
       inspectorStats[initials].totalInspections++;
-      if (record.inspection_date) {
-        inspectorStats[initials].workDays.add(record.inspection_date);
+      // FIXED: Changed from inspection_date to list_date
+      if (record.list_date) {
+        inspectorStats[initials].workDays.add(record.list_date);
       }
 
       // Track type-specific metrics
@@ -262,8 +284,9 @@ const EmployeeManagement = () => {
       
       if (inspectorType === 'residential') {
         typeStats.residential.totalInspections++;
-        if (record.inspection_date) {
-          typeStats.residential.workDays.add(record.inspection_date);
+        // FIXED: Changed from inspection_date to list_date
+        if (record.list_date) {
+          typeStats.residential.workDays.add(record.list_date);
         }
         
         // Count residential class properties (2 and 3A)
@@ -275,8 +298,9 @@ const EmployeeManagement = () => {
         }
       } else if (inspectorType === 'commercial') {
         typeStats.commercial.totalInspections++;
-        if (record.inspection_date) {
-          typeStats.commercial.workDays.add(record.inspection_date);
+        // FIXED: Changed from inspection_date to list_date
+        if (record.list_date) {
+          typeStats.commercial.workDays.add(record.list_date);
         }
         
         // Count commercial properties (4A, 4B, 4C)
@@ -303,15 +327,40 @@ const EmployeeManagement = () => {
           typeStats.residential.eligible++;
         }
 
-        // Simple InfoBy logic - matches ProductionTracker's current implementation
-        const infoBy = record.info_by_code.toString().toLowerCase();
-        if (['01', '02', '03', '04', 'a', 'o', 's', 't'].includes(infoBy)) {
+        // Use job-specific InfoBy config if available
+        const jobConfig = record.jobInfoByConfig;
+        let isEntry = false;
+        let isRefusal = false;
+
+        if (jobConfig) {
+          // Use job-specific InfoBy category config
+          const infoByCode = record.info_by_code.toString();
+          
+          // Check if this code is in the entry category
+          if (jobConfig.entry && jobConfig.entry.includes(infoByCode)) {
+            isEntry = true;
+          }
+          // Check if this code is in the refusal category
+          else if (jobConfig.refusal && jobConfig.refusal.includes(infoByCode)) {
+            isRefusal = true;
+          }
+        } else {
+          // Fallback to simple InfoBy logic if no job config
+          const infoBy = record.info_by_code.toString().toLowerCase();
+          if (['01', '02', '03', '04', 'a', 'o', 's', 't'].includes(infoBy)) {
+            isEntry = true;
+          } else if (['06', 'r'].includes(infoBy)) {
+            isRefusal = true;
+          }
+        }
+
+        if (isEntry) {
           entryCount++;
           inspectorStats[initials].entryInspections++;
           if (inspectorType === 'residential') {
             typeStats.residential.entryCount++;
           }
-        } else if (['06', 'r'].includes(infoBy)) {
+        } else if (isRefusal) {
           refusalCount++;
           inspectorStats[initials].refusalInspections++;
           if (inspectorType === 'residential') {
