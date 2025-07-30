@@ -33,6 +33,17 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     currentOperation: ''
   });
 
+    // ADD THE DEBUG HERE:
+  useEffect(() => {
+    console.log('🔍 DEBUG FileUploadButton - job prop:', {
+      id: job?.id,
+      updated_at: job?.updated_at,
+      code_file_uploaded_at: job?.code_file_uploaded_at,
+      source_file_uploaded_at: job?.source_file_uploaded_at,
+      created_at: job?.created_at
+    });
+  }, [job]);
+
   const addNotification = (message, type = 'info') => {
     const id = Date.now();
     const notification = { id, message, type, timestamp: new Date() };
