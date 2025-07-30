@@ -1,4 +1,10 @@
-import React, { useState, useEffect } from 'react';
+// Final analytics result with correct entry rate
+      const analyticsResult = {
+        totalRecords: rawData.length,
+        validInspections: Object.values(inspectorStats).reduce((sum, stats) => sum + stats.totalInspected, 0) + decisionsToApply.length, // Include modal overrides
+        inspectorStats,
+        classBreakdown,
+        validationIssues: validationIssues.length,import React, { useState, useEffect } from 'react';
 import { Factory, Settings, Download, RefreshCw, AlertTriangle, CheckCircle, TrendingUp, DollarSign, Users, Calendar, X, ChevronDown, ChevronUp, Eye, FileText, Lock, Unlock, Save } from 'lucide-react';
 import { supabase, jobService } from '../../lib/supabaseClient';
 
@@ -1796,7 +1802,8 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         inspectorIssuesMap[property.inspector].push(issue);
       });
 
-      // Calculate job-level totals (totalInspected already calculated above)
+      // Calculate job-level totals
+      const totalInspected = Object.values(inspectorStats).reduce((sum, stats) => sum + stats.totalInspected, 0) + decisionsToApply.length;
 
       // Calculate job-level totals
       const totalInspected = Object.values(inspectorStats).reduce((sum, stats) => sum + stats.totalInspected, 0);
@@ -1861,10 +1868,26 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
       // Final analytics result with correct entry rate
       const analyticsResult = {
         totalRecords: rawData.length,
-        validInspections: totalInspected + decisionsToApply.length, // Include modal overrides
+        validInspections: Object.values(inspectorStats).reduce((sum, stats) => sum + stats.totalInspected, 0) + decisionsToApply.length, // Include modal overrides
         inspectorStats,
         classBreakdown,
         validationIssues: validationIssues.length,
+        processingDate: new Date().toISOString(),
+        
+        // FIX: Use classBreakdown totals for global rates
+        jobEntryRate: totalClass2And3AProperties > 0 ? Math.round((totalEntry / totalClass2And3AProperties) * 100) : 0,
+        jobRefusalRate: totalClass2And3AProperties > 0 ? Math.round((totalRefusal / totalClass2And3AProperties) * 100) : 0,
+        
+        // Commercial metrics using inspector totals not class breakdown
+        commercialInspections: totalCommercialInspected,
+        commercialPricing: totalPriced,
+        totalCommercialProperties,
+        commercialCompletePercent: totalCommercialProperties > 0 ? Math.round((totalCommercialInspected / totalCommercialProperties) * 100) : 0,
+        pricingCompletePercent: totalCommercialProperties > 0 ? Math.round((totalPriced / totalCommercialProperties) * 100) : 0,
+        
+        // Track overrides applied during processing
+        overridesAppliedCount: decisionsToApply.length
+      };
         processingDate: new Date().toISOString(),
         
         // FIX: Use classBreakdown totals for global rates
