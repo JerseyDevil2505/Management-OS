@@ -376,6 +376,50 @@ const BillingManagement = () => {
     }
   };
 
+  const handleDeleteBillingEvent = async () => {
+    if (!editingEvent) return;
+    
+    if (!window.confirm('Are you sure you want to delete this billing event? This cannot be undone.')) {
+      return;
+    }
+    
+    try {
+      // Get the job to recalculate percent_billed after deletion
+      const { data: billingEvent } = await supabase
+        .from('billing_events')
+        .select('job_id, percentage_billed')
+        .eq('id', editingEvent.id)
+        .single();
+
+      // Delete the billing event
+      const { error: deleteError } = await supabase
+        .from('billing_events')
+        .delete()
+        .eq('id', editingEvent.id);
+
+      if (deleteError) throw deleteError;
+
+      // Recalculate the job's percent_billed
+      const { data: remainingEvents } = await supabase
+        .from('billing_events')
+        .select('percentage_billed')
+        .eq('job_id', billingEvent.job_id);
+
+      const newTotalPercentage = remainingEvents.reduce((sum, event) => sum + parseFloat(event.percentage_billed || 0), 0);
+      
+      await supabase
+        .from('jobs')
+        .update({ percent_billed: newTotalPercentage })
+        .eq('id', billingEvent.job_id);
+
+      setShowEditBilling(false);
+      setEditingEvent(null);
+      loadJobs();
+    } catch (error) {
+      console.error('Error deleting billing event:', error);
+    }
+  };
+
   const handleCreateLegacyJob = async () => {
     if (!legacyJobForm.jobName || !legacyJobForm.contractAmount) return;
     
@@ -1159,22 +1203,30 @@ const BillingManagement = () => {
               </div>
             </div>
 
-            <div className="flex justify-end space-x-3 mt-6">
+            <div className="flex justify-between mt-6">
               <button
-                onClick={() => {
-                  setShowEditBilling(false);
-                  setEditingEvent(null);
-                }}
-                className="px-4 py-2 text-gray-600 hover:text-gray-800"
+                onClick={handleDeleteBillingEvent}
+                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
               >
-                Cancel
+                Delete Event
               </button>
-              <button
-                onClick={handleUpdateBillingEvent}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-              >
-                Update Status
-              </button>
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => {
+                    setShowEditBilling(false);
+                    setEditingEvent(null);
+                  }}
+                  className="px-4 py-2 text-gray-600 hover:text-gray-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleUpdateBillingEvent}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                >
+                  Update Status
+                </button>
+              </div>
             </div>
           </div>
         </div>
