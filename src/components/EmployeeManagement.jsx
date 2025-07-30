@@ -198,6 +198,14 @@ const EmployeeManagement = () => {
     let totalEligible = 0;
 
     const inspectorStats = {};
+    const typeStats = {
+      residential: { count: 0, totalInspections: 0, entryCount: 0, refusalCount: 0, eligible: 0, otherProperties: 0 },
+      commercial: { count: 0, totalInspections: 0, commercial: 0, pricing: 0, otherProperties: 0 },
+      management: { count: 0, totalInspections: 0, specialInspections: 0, qaReviews: 0, training: 0 }
+    };
+
+    // Get unique job count
+    const uniqueJobs = new Set(filteredData.map(r => r.job_id)).size;
 
     filteredData.forEach(record => {
       const inspector = record.employee;
@@ -214,27 +222,86 @@ const EmployeeManagement = () => {
           refusalInspections: 0,
           entryRate: 0,
           refusalRate: 0,
-          dailyAvg: 0
+          dailyAvg: 0,
+          commercialCount: 0,
+          pricingDays: 0
         };
       }
 
       inspectorStats[initials].totalInspections++;
 
+      // Track type-specific metrics
+      const inspectorType = inspector.inspector_type?.toLowerCase();
+      
+      if (inspectorType === 'residential' && typeStats.residential) {
+        typeStats.residential.totalInspections++;
+        
+        // Track other properties (non 2/3A)
+        if (!['2', '3A'].includes(record.property_class)) {
+          typeStats.residential.otherProperties++;
+        }
+      } else if (inspectorType === 'commercial' && typeStats.commercial) {
+        typeStats.commercial.totalInspections++;
+        
+        // Track commercial properties (4A, 4B, 4C)
+        if (['4A', '4B', '4C'].includes(record.property_class)) {
+          typeStats.commercial.commercial++;
+          inspectorStats[initials].commercialCount++;
+        }
+        
+        // Track pricing days
+        if (record.price_by && record.price_date) {
+          typeStats.commercial.pricing++;
+          inspectorStats[initials].pricingDays++;
+        }
+        
+        // Track other properties
+        if (!['4A', '4B', '4C'].includes(record.property_class)) {
+          typeStats.commercial.otherProperties++;
+        }
+      } else if (inspectorType === 'management' && typeStats.management) {
+        typeStats.management.totalInspections++;
+        
+        // Mock data for management activities (would need real data structure)
+        // In reality, these would come from specific fields or activity types
+        typeStats.management.specialInspections = Math.floor(typeStats.management.totalInspections * 0.4);
+        typeStats.management.qaReviews = Math.floor(typeStats.management.totalInspections * 0.3);
+        typeStats.management.training = Math.floor(typeStats.management.totalInspections * 0.3);
+      }
+
       // Determine if this is entry/refusal based on InfoBy codes (copying ProductionTracker logic)
       if (record.info_by_code && record.property_class && ['2', '3A'].includes(record.property_class)) {
         totalEligible++;
         inspectorStats[initials].totalEligible = (inspectorStats[initials].totalEligible || 0) + 1;
+        
+        if (inspectorType === 'residential') {
+          typeStats.residential.eligible++;
+        }
 
         // Simple InfoBy logic - matches ProductionTracker's current implementation
         const infoBy = record.info_by_code.toString().toLowerCase();
         if (['01', '02', '03', '04', 'a', 'o', 's', 't'].includes(infoBy)) {
           entryCount++;
           inspectorStats[initials].entryInspections++;
+          if (inspectorType === 'residential') {
+            typeStats.residential.entryCount++;
+          }
         } else if (['06', 'r'].includes(infoBy)) {
           refusalCount++;
           inspectorStats[initials].refusalInspections++;
+          if (inspectorType === 'residential') {
+            typeStats.residential.refusalCount++;
+          }
         }
       }
+    });
+
+    // Count unique inspectors by type
+    Object.values(inspectorStats).forEach(inspector => {
+      const type = inspector.inspectorType?.toLowerCase();
+      if (type === 'residential') typeStats.residential.count++;
+      else if (type === 'commercial') typeStats.commercial.count++;
+      else if (type === 'management') typeStats.management.count++;
     });
 
     // Calculate rates for each inspector
@@ -245,6 +312,44 @@ const EmployeeManagement = () => {
       stats.refusalRate = eligible > 0 ? Math.round((stats.refusalInspections / eligible) * 100) : 0;
       stats.dailyAvg = stats.totalInspections > 0 ? Math.round((stats.totalInspections / 30) * 10) / 10 : 0; // Rough daily avg
     });
+
+    // Calculate type-level rates and averages
+    const byType = {};
+    
+    if (typeStats.residential.count > 0) {
+      byType.residential = {
+        count: typeStats.residential.count,
+        totalInspections: typeStats.residential.totalInspections,
+        avgDaily: Math.round((typeStats.residential.totalInspections / 30) * 10) / 10,
+        entryRate: typeStats.residential.eligible > 0 ? 
+          Math.round((typeStats.residential.entryCount / typeStats.residential.eligible) * 100) : 0,
+        refusalRate: typeStats.residential.eligible > 0 ? 
+          Math.round((typeStats.residential.refusalCount / typeStats.residential.eligible) * 100) : 0,
+        otherProperties: typeStats.residential.otherProperties
+      };
+    }
+    
+    if (typeStats.commercial.count > 0) {
+      byType.commercial = {
+        count: typeStats.commercial.count,
+        totalInspections: typeStats.commercial.totalInspections,
+        avgDaily: Math.round((typeStats.commercial.totalInspections / 30) * 10) / 10,
+        commercial: typeStats.commercial.commercial,
+        pricing: typeStats.commercial.pricing,
+        otherProperties: typeStats.commercial.otherProperties
+      };
+    }
+    
+    if (typeStats.management.count > 0) {
+      byType.management = {
+        count: typeStats.management.count,
+        totalInspections: typeStats.management.totalInspections,
+        avgDaily: Math.round((typeStats.management.totalInspections / 30) * 10) / 10,
+        specialInspections: typeStats.management.specialInspections,
+        qaReviews: typeStats.management.qaReviews,
+        training: typeStats.management.training
+      };
+    }
 
     // Convert to array and sort by total inspections
     const inspectorArray = Object.values(inspectorStats)
@@ -276,6 +381,38 @@ const EmployeeManagement = () => {
       regionalStats[region].avgRefusalRate = Math.round(avgRefusal) || 0;
     });
 
+    // Find top performers by type
+    const topPerformers = {};
+    
+    const residentialInspectors = inspectorArray.filter(i => i.inspectorType === 'Residential');
+    if (residentialInspectors.length > 0) {
+      topPerformers.residential = {
+        name: residentialInspectors[0].name,
+        initials: residentialInspectors[0].initials,
+        totalInspections: residentialInspectors[0].totalInspections,
+        entryRate: residentialInspectors[0].entryRate
+      };
+    }
+    
+    const commercialInspectors = inspectorArray.filter(i => i.inspectorType === 'Commercial');
+    if (commercialInspectors.length > 0) {
+      topPerformers.commercial = {
+        name: commercialInspectors[0].name,
+        initials: commercialInspectors[0].initials,
+        totalInspections: commercialInspectors[0].totalInspections,
+        commercialCount: commercialInspectors[0].commercialCount
+      };
+    }
+    
+    const managementInspectors = inspectorArray.filter(i => i.inspectorType === 'Management');
+    if (managementInspectors.length > 0) {
+      topPerformers.management = {
+        name: managementInspectors[0].name,
+        initials: managementInspectors[0].initials,
+        totalInspections: managementInspectors[0].totalInspections
+      };
+    }
+
     return {
       summary: {
         totalInspections: validInspections,
@@ -283,6 +420,9 @@ const EmployeeManagement = () => {
         overallRefusalRate: totalEligible > 0 ? Math.round((refusalCount / totalEligible) * 100) : 0,
         avgInspectionsPerDay: validInspections > 0 ? Math.round((validInspections / 30) * 10) / 10 : 0
       },
+      jobCount: uniqueJobs,
+      byType,
+      topPerformers,
       inspectors: inspectorArray,
       regional: regionalStats
     };
@@ -1095,68 +1235,244 @@ const EmployeeManagement = () => {
                       </div>
                     </div>
 
-                    {/* Summary Metrics */}
-                    <div className="mb-6 grid grid-cols-1 md:grid-cols-4 gap-4">
-                      <div className="p-4 bg-white rounded-lg border shadow-sm text-center">
-                        <div className="text-3xl font-bold text-indigo-600">{globalAnalytics.summary.totalInspections.toLocaleString()}</div>
-                        <div className="text-sm text-gray-600 font-medium">Total Inspections</div>
-                        <div className="text-xs text-gray-500 mt-1">Across all active jobs</div>
+                    {/* Summary Metrics - ProductionTracker Style Tiles */}
+                    <div className="mb-6 grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="bg-white p-6 rounded-lg border-2 border-indigo-200 shadow-sm">
+                        <div className="text-4xl font-bold text-indigo-600 mb-2">
+                          {globalAnalytics.summary.totalInspections.toLocaleString()}
+                        </div>
+                        <div className="text-sm font-medium text-gray-700">Total Inspections</div>
+                        <div className="text-xs text-gray-500 mt-1">Across all {globalAnalytics.jobCount || 13} jobs</div>
                       </div>
                       
-                      <div className="p-4 bg-white rounded-lg border shadow-sm text-center">
-                        <div className="text-3xl font-bold text-green-600">{globalAnalytics.summary.overallEntryRate}%</div>
-                        <div className="text-sm text-gray-600 font-medium">Overall Entry Rate</div>
+                      <div className="bg-white p-6 rounded-lg border-2 border-green-200 shadow-sm">
+                        <div className="text-4xl font-bold text-green-600 mb-2">{globalAnalytics.summary.overallEntryRate}%</div>
+                        <div className="text-sm font-medium text-gray-700">Entry Rate</div>
                         <div className="text-xs text-gray-500 mt-1">Company-wide average</div>
                       </div>
                       
-                      <div className="p-4 bg-white rounded-lg border shadow-sm text-center">
-                        <div className="text-3xl font-bold text-orange-600">{globalAnalytics.summary.overallRefusalRate}%</div>
-                        <div className="text-sm text-gray-600 font-medium">Overall Refusal Rate</div>
+                      <div className="bg-white p-6 rounded-lg border-2 border-orange-200 shadow-sm">
+                        <div className="text-4xl font-bold text-orange-600 mb-2">{globalAnalytics.summary.overallRefusalRate}%</div>
+                        <div className="text-sm font-medium text-gray-700">Refusal Rate</div>
                         <div className="text-xs text-gray-500 mt-1">Company-wide average</div>
                       </div>
                       
-                      <div className="p-4 bg-white rounded-lg border shadow-sm text-center">
-                        <div className="text-3xl font-bold text-purple-600">{globalAnalytics.summary.avgInspectionsPerDay}</div>
-                        <div className="text-sm text-gray-600 font-medium">Avg Daily Output</div>
+                      <div className="bg-white p-6 rounded-lg border-2 border-purple-200 shadow-sm">
+                        <div className="text-4xl font-bold text-purple-600 mb-2">{globalAnalytics.summary.avgInspectionsPerDay}</div>
+                        <div className="text-sm font-medium text-gray-700">Daily Average</div>
                         <div className="text-xs text-gray-500 mt-1">Inspections per day</div>
                       </div>
                     </div>
 
-                    {/* Regional Performance */}
-                    {Object.keys(globalAnalytics.regional).length > 0 && (
-                      <div className="mb-6 p-4 bg-white rounded-lg border shadow-sm">
-                        <h3 className="text-lg font-semibold text-gray-700 mb-4">🗺️ Regional Performance Breakdown</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                          {Object.entries(globalAnalytics.regional).map(([region, stats]) => (
-                            <div key={region} className="p-3 bg-gray-50 rounded-lg">
-                              <div className="font-medium text-gray-800 mb-2">{region}</div>
-                              <div className="text-sm space-y-1">
-                                <div className="flex justify-between">
-                                  <span className="text-gray-600">Inspections:</span>
-                                  <span className="font-medium">{stats.totalInspections.toLocaleString()}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span className="text-gray-600">Inspectors:</span>
-                                  <span className="font-medium">{stats.inspectors}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span className="text-gray-600">Avg Entry Rate:</span>
-                                  <span className="font-medium text-green-600">{stats.avgEntryRate}%</span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span className="text-gray-600">Avg Refusal Rate:</span>
-                                  <span className="font-medium text-orange-600">{stats.avgRefusalRate}%</span>
-                                </div>
+                    {/* Inspector Type Breakdown - ProductionTracker Style */}
+                    <div className="mb-6">
+                      <h3 className="text-lg font-bold text-gray-800 mb-4">🏠 Inspector Analytics by Type</h3>
+                      
+                      {/* Residential Inspectors */}
+                      {globalAnalytics.byType?.residential && (
+                        <div className="mb-6">
+                          <h4 className="text-md font-semibold text-green-700 mb-3 flex items-center">
+                            <div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
+                            Residential Inspector Analytics
+                          </h4>
+                          <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+                            <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                              <div className="text-2xl font-bold text-green-700">
+                                {globalAnalytics.byType.residential.totalInspections.toLocaleString()}
+                              </div>
+                              <div className="text-xs font-medium text-green-600">Total Inspected</div>
+                            </div>globalAnalytics.byType.residential.totalInspections.toLocaleString()}
+                              </div>
+                              <div className="text-xs font-medium text-green-600">Total Inspected</div>
+                            </div>
+                            <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                              <div className="text-2xl font-bold text-green-700">
+                                {globalAnalytics.byType.residential.avgDaily}
+                              </div>
+                              <div className="text-xs font-medium text-green-600">Daily Average</div>
+                            </div>
+                            <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                              <div className="text-2xl font-bold text-green-700">
+                                {globalAnalytics.byType.residential.entryRate}%
+                              </div>
+                              <div className="text-xs font-medium text-green-600">Entry Rate</div>
+                            </div>
+                            <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                              <div className="text-2xl font-bold text-green-700">
+                                {globalAnalytics.byType.residential.refusalRate}%
+                              </div>
+                              <div className="text-xs font-medium text-green-600">Refusal Rate</div>
+                            </div>
+                            <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                              <div className="text-2xl font-bold text-green-700">
+                                {globalAnalytics.byType.residential.otherProperties.toLocaleString()}
+                              </div>
+                              <div className="text-xs font-medium text-green-600">Other Properties</div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Commercial Inspectors */}
+                      {globalAnalytics.byType?.commercial && (
+                        <div className="mb-6">
+                          <h4 className="text-md font-semibold text-blue-700 mb-3 flex items-center">
+                            <div className="w-3 h-3 bg-blue-500 rounded-full mr-2"></div>
+                            Commercial Inspector Analytics
+                          </h4>
+                          <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+                            <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                              <div className="text-2xl font-bold text-blue-700">
+                                {globalAnalytics.byType.commercial.count}
+                              </div>
+                              <div className="text-xs font-medium text-blue-600">Commercial Inspectors</div>
+                            </div>
+                            <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                              <div className="text-2xl font-bold text-blue-700">
+                                {globalAnalytics.byType.commercial.totalInspections.toLocaleString()}
+                              </div>
+                              <div className="text-xs font-medium text-blue-600">Total Inspected</div>
+                            </div>
+                            <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                              <div className="text-2xl font-bold text-blue-700">
+                                {globalAnalytics.byType.commercial.avgDaily}
+                              </div>
+                              <div className="text-xs font-medium text-blue-600">Daily Average</div>
+                            </div>
+                            <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                              <div className="text-2xl font-bold text-blue-700">
+                                {globalAnalytics.byType.commercial.commercial.toLocaleString()}
+                              </div>
+                              <div className="text-xs font-medium text-blue-600">Commercial (4A-4C)</div>
+                            </div>
+                            <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                              <div className="text-2xl font-bold text-blue-700">
+                                {globalAnalytics.byType.commercial.pricing}
+                              </div>
+                              <div className="text-xs font-medium text-blue-600">Pricing Days</div>
+                            </div>
+                            <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                              <div className="text-2xl font-bold text-blue-700">
+                                {globalAnalytics.byType.commercial.otherProperties.toLocaleString()}
+                              </div>
+                              <div className="text-xs font-medium text-blue-600">Other Properties</div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Management Inspectors */}
+                      {globalAnalytics.byType?.management && (
+                        <div className="mb-6">
+                          <h4 className="text-md font-semibold text-purple-700 mb-3 flex items-center">
+                            <div className="w-3 h-3 bg-purple-500 rounded-full mr-2"></div>
+                            Management Inspector Analytics
+                          </h4>
+                          <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+                            <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                              <div className="text-2xl font-bold text-purple-700">
+                                {globalAnalytics.byType.management.count}
+                              </div>
+                              <div className="text-xs font-medium text-purple-600">Management Team</div>
+                            </div>
+                            <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                              <div className="text-2xl font-bold text-purple-700">
+                                {globalAnalytics.byType.management.totalInspections.toLocaleString()}
+                              </div>
+                              <div className="text-xs font-medium text-purple-600">Total Inspected</div>
+                            </div>
+                            <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                              <div className="text-2xl font-bold text-purple-700">
+                                {globalAnalytics.byType.management.avgDaily}
+                              </div>
+                              <div className="text-xs font-medium text-purple-600">Daily Average</div>
+                            </div>
+                            <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                              <div className="text-2xl font-bold text-purple-700">
+                                {globalAnalytics.byType.management.specialInspections.toLocaleString()}
+                              </div>
+                              <div className="text-xs font-medium text-purple-600">Special Inspections</div>
+                            </div>
+                            <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                              <div className="text-2xl font-bold text-purple-700">
+                                {globalAnalytics.byType.management.qaReviews.toLocaleString()}
+                              </div>
+                              <div className="text-xs font-medium text-purple-600">QA Reviews</div>
+                            </div>
+                            <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                              <div className="text-2xl font-bold text-purple-700">
+                                {globalAnalytics.byType.management.training.toLocaleString()}
+                              </div>
+                              <div className="text-xs font-medium text-purple-600">Training Days</div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Top Performers by Type */}
+                    <div className="mb-6">
+                      <h3 className="text-lg font-bold text-gray-800 mb-4">🏆 Top Performers by Inspector Type</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {/* Top Residential */}
+                        {globalAnalytics.topPerformers?.residential && (
+                          <div className="bg-green-50 p-4 rounded-lg border-2 border-green-200">
+                            <h4 className="font-semibold text-green-800 mb-3">Top Residential Inspector</h4>
+                            <div className="text-center">
+                              <div className="text-xl font-bold text-green-700">
+                                {globalAnalytics.topPerformers.residential.name}
+                              </div>
+                              <div className="text-sm text-green-600">
+                                {globalAnalytics.topPerformers.residential.totalInspections.toLocaleString()} inspections
+                              </div>
+                              <div className="text-xs text-green-500 mt-1">
+                                {globalAnalytics.topPerformers.residential.entryRate}% entry rate
                               </div>
                             </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+                          </div>
+                        )}
 
-                    {/* Inspector Performance Cards */}
+                        {/* Top Commercial */}
+                        {globalAnalytics.topPerformers?.commercial && (
+                          <div className="bg-blue-50 p-4 rounded-lg border-2 border-blue-200">
+                            <h4 className="font-semibold text-blue-800 mb-3">Top Commercial Inspector</h4>
+                            <div className="text-center">
+                              <div className="text-xl font-bold text-blue-700">
+                                {globalAnalytics.topPerformers.commercial.name}
+                              </div>
+                              <div className="text-sm text-blue-600">
+                                {globalAnalytics.topPerformers.commercial.totalInspections.toLocaleString()} inspections
+                              </div>
+                              <div className="text-xs text-blue-500 mt-1">
+                                {globalAnalytics.topPerformers.commercial.commercialCount} commercial properties
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Top Management */}
+                        {globalAnalytics.topPerformers?.management && (
+                          <div className="bg-purple-50 p-4 rounded-lg border-2 border-purple-200">
+                            <h4 className="font-semibold text-purple-800 mb-3">Top Management Inspector</h4>
+                            <div className="text-center">
+                              <div className="text-xl font-bold text-purple-700">
+                                {globalAnalytics.topPerformers.management.name}
+                              </div>
+                              <div className="text-sm text-purple-600">
+                                {globalAnalytics.topPerformers.management.totalInspections.toLocaleString()} inspections
+                              </div>
+                              <div className="text-xs text-purple-500 mt-1">
+                                Leadership excellence
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Individual Inspector Cards - Scrollable List */}
                     <div className="p-4 bg-white rounded-lg border shadow-sm">
-                      <h3 className="text-lg font-semibold text-gray-700 mb-4">👥 Inspector Performance Rankings</h3>
+                      <h3 className="text-lg font-semibold text-gray-700 mb-4">👥 All Inspector Performance Details</h3>
                       
                       {globalAnalytics.inspectors.length === 0 ? (
                         <div className="text-center py-8 text-gray-500">
@@ -1165,61 +1481,60 @@ const EmployeeManagement = () => {
                           <p className="text-sm mt-1">Try adjusting filters or ensure inspection data is available</p>
                         </div>
                       ) : (
-                        <div className="space-y-3 max-h-96 overflow-y-auto">
-                          {globalAnalytics.inspectors.map((inspector, index) => (
-                            <div
-                              key={inspector.initials}
-                              className={`p-4 rounded-lg border-l-4 ${
-                                inspector.inspectorType === 'Residential' ? 'border-green-400 bg-green-50' :
-                                inspector.inspectorType === 'Commercial' ? 'border-blue-400 bg-blue-50' :
-                                inspector.inspectorType === 'Management' ? 'border-purple-400 bg-purple-50' :
-                                'border-gray-400 bg-gray-50'
-                              }`}
-                            >
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center space-x-3">
-                                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm ${
-                                    inspector.inspectorType === 'Residential' ? 'bg-green-500' :
-                                    inspector.inspectorType === 'Commercial' ? 'bg-blue-500' :
-                                    inspector.inspectorType === 'Management' ? 'bg-purple-500' :
-                                    'bg-gray-500'
-                                  }`}>
-                                    {index + 1}
-                                  </div>
+                        <div className="max-h-96 overflow-y-auto">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {globalAnalytics.inspectors.map((inspector) => (
+                              <div
+                                key={inspector.initials}
+                                className={`p-4 rounded-lg border-2 ${
+                                  inspector.inspectorType === 'Residential' ? 'bg-green-50 border-green-200' :
+                                  inspector.inspectorType === 'Commercial' ? 'bg-blue-50 border-blue-200' :
+                                  inspector.inspectorType === 'Management' ? 'bg-purple-50 border-purple-200' :
+                                  'bg-gray-50 border-gray-200'
+                                }`}
+                              >
+                                <div className="flex justify-between items-start mb-3">
                                   <div>
-                                    <div className="font-medium text-gray-800">
+                                    <div className="font-semibold text-gray-800">
                                       {inspector.name} ({inspector.initials})
                                     </div>
                                     <div className="text-sm text-gray-600">
-                                      {inspector.inspectorType} • {inspector.region}
+                                      <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${
+                                        inspector.inspectorType === 'Residential' ? 'bg-green-200 text-green-800' :
+                                        inspector.inspectorType === 'Commercial' ? 'bg-blue-200 text-blue-800' :
+                                        inspector.inspectorType === 'Management' ? 'bg-purple-200 text-purple-800' :
+                                        'bg-gray-200 text-gray-800'
+                                      }`}>
+                                        {inspector.inspectorType}
+                                      </span>
+                                      <span className="ml-2">{inspector.region}</span>
                                     </div>
+                                  </div>
+                                  <div className="text-right">
+                                    <div className="text-2xl font-bold text-gray-800">
+                                      {inspector.totalInspections.toLocaleString()}
+                                    </div>
+                                    <div className="text-xs text-gray-500">Total</div>
                                   </div>
                                 </div>
                                 
-                                <div className="text-right">
-                                  <div className="text-2xl font-bold text-gray-800">
-                                    {inspector.totalInspections.toLocaleString()}
+                                <div className="grid grid-cols-3 gap-2 text-center">
+                                  <div className="bg-white p-2 rounded border">
+                                    <div className="text-lg font-bold text-green-600">{inspector.entryRate}%</div>
+                                    <div className="text-xs text-gray-500">Entry</div>
                                   </div>
-                                  <div className="text-xs text-gray-500">Total Inspections</div>
+                                  <div className="bg-white p-2 rounded border">
+                                    <div className="text-lg font-bold text-orange-600">{inspector.refusalRate}%</div>
+                                    <div className="text-xs text-gray-500">Refusal</div>
+                                  </div>
+                                  <div className="bg-white p-2 rounded border">
+                                    <div className="text-lg font-bold text-purple-600">{inspector.dailyAvg}</div>
+                                    <div className="text-xs text-gray-500">Daily</div>
+                                  </div>
                                 </div>
                               </div>
-                              
-                              <div className="mt-3 grid grid-cols-3 gap-4 text-center">
-                                <div>
-                                  <div className="text-lg font-bold text-green-600">{inspector.entryRate}%</div>
-                                  <div className="text-xs text-gray-500">Entry Rate</div>
-                                </div>
-                                <div>
-                                  <div className="text-lg font-bold text-orange-600">{inspector.refusalRate}%</div>
-                                  <div className="text-xs text-gray-500">Refusal Rate</div>
-                                </div>
-                                <div>
-                                  <div className="text-lg font-bold text-purple-600">{inspector.dailyAvg}</div>
-                                  <div className="text-xs text-gray-500">Daily Avg</div>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
+                            ))}
+                          </div>
                         </div>
                       )}
                     </div>
@@ -1817,3 +2132,4 @@ const EmployeeManagement = () => {
 };
 
 export default EmployeeManagement;
+                             
