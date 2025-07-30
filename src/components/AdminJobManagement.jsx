@@ -2198,7 +2198,7 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-3">
                   <AlertTriangle className="w-6 h-6 text-yellow-600" />
-                  <div>
+                  <div className="flex-1">
                     <h4 className="font-bold text-yellow-900">
                       {isPayrollPeriod() ? '💰 Payroll Period - Updates Required' : '📊 Production Updates Needed'}
                     </h4>
@@ -2206,12 +2206,26 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
                       {getJobsNeedingUpdates().length} job{getJobsNeedingUpdates().length > 1 ? 's' : ''} need ProductionTracker updates
                     </p>
                     <div className="text-xs text-yellow-600 mt-2">
-                      Jobs needing updates: {getJobsNeedingUpdates().map(j => j.municipality).join(', ')}
+                      <details className="cursor-pointer">
+                        <summary className="font-medium hover:text-yellow-800">
+                          Click to see jobs needing updates
+                        </summary>
+                        <div className="mt-2 p-2 bg-yellow-100 rounded space-y-1">
+                          {getJobsNeedingUpdates().map(job => (
+                            <div key={job.id} className="flex items-center justify-between">
+                              <span>• {job.municipality}</span>
+                              <span className="text-yellow-700 ml-2">
+                                (Last run: {formatTimeAgo(jobFreshness[job.id]?.lastProductionRun)})
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </details>
                     </div>
                   </div>
                 </div>
-                <div className="text-right">
-                  <div className="text-sm text-yellow-700">Run ProductionTracker on these jobs</div>
+                <div className="text-right ml-4">
+                  <div className="text-sm text-yellow-700 font-medium">Run ProductionTracker</div>
                   <div className="text-xs text-yellow-600 mt-1">for accurate payroll/billing</div>
                 </div>
               </div>
