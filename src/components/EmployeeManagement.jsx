@@ -187,6 +187,21 @@ const EmployeeManagement = () => {
       });
 
       console.log('🔍 ENRICHED DATA:', enrichedData.length, 'matched records');
+      
+      // Add debug to see what's happening
+      if (enrichedData.length === 0) {
+        console.log('⚠️ No enriched data! Checking why...');
+        console.log('Sample inspection record:', allInspectionData[0]);
+        console.log('Employee initials available:', Object.keys(employeeMap));
+        
+        // Check a few records to see what initials they have
+        const sampleInitials = allInspectionData.slice(0, 5).map(r => ({
+          list_by: r.list_by,
+          measure_by: r.measure_by,
+          price_by: r.price_by
+        }));
+        console.log('Sample initials from inspection data:', sampleInitials);
+      }
 
       // Process the enriched data similar to ProductionTracker
       const processedAnalytics = processGlobalInspectionData(enrichedData, analyticsFilter);
@@ -472,14 +487,14 @@ const EmployeeManagement = () => {
       .map(inspector => {
         // Use the appropriate inspection count based on inspector type
         if (inspector.inspectorType === 'Residential') {
-          return { ...inspector, totalInspections: inspector.residentialInspections };
+          return { ...inspector, displayTotal: inspector.residentialInspections };
         } else if (inspector.inspectorType === 'Commercial') {
-          return { ...inspector, totalInspections: inspector.commercialInspections };
+          return { ...inspector, displayTotal: inspector.commercialInspections };
         }
-        return inspector;
+        return { ...inspector, displayTotal: 0 };
       })
-      .filter(inspector => inspector.totalInspections > 0)
-      .sort((a, b) => b.totalInspections - a.totalInspections);
+      .filter(inspector => inspector.displayTotal > 0)
+      .sort((a, b) => b.displayTotal - a.displayTotal);
 
     // Calculate regional breakdown
     const regionalStats = {};
@@ -514,7 +529,7 @@ const EmployeeManagement = () => {
       topPerformers.residential = {
         name: residentialInspectors[0].name,
         initials: residentialInspectors[0].initials,
-        totalInspections: residentialInspectors[0].totalInspections,
+        totalInspections: residentialInspectors[0].displayTotal,
         entryRate: residentialInspectors[0].entryRate
       };
     }
@@ -524,22 +539,22 @@ const EmployeeManagement = () => {
       topPerformers.commercial = {
         name: commercialInspectors[0].name,
         initials: commercialInspectors[0].initials,
-        totalInspections: commercialInspectors[0].totalInspections,
+        totalInspections: commercialInspectors[0].displayTotal,
         commercialCount: commercialInspectors[0].commercialInspections
       };
     }
 
-    // Get unique inspector counts by type
-    const residentialInspectorCount = inspectorArray.filter(i => i.inspectorType === 'Residential').length || 1;
-    const commercialInspectorCount = inspectorArray.filter(i => i.inspectorType === 'Commercial').length || 1;
+    // Get unique inspector counts by type BEFORE using them
+    const residentialInspectorCount = Object.values(inspectorStats).filter(i => i.inspectorType === 'Residential').length || 1;
+    const commercialInspectorCount = Object.values(inspectorStats).filter(i => i.inspectorType === 'Commercial').length || 1;
     
     // Calculate proper daily averages per inspector
     const overallAvgPerInspector = filter.inspectorType === 'Residential' ?
-      Math.round((totalResidentialInspections / residentialWorkDays.size / residentialInspectorCount) * 10) / 10 :
+      Math.round((totalResidentialInspections / Math.max(residentialWorkDays.size, 1) / residentialInspectorCount) * 10) / 10 :
       filter.inspectorType === 'Commercial' ?
-      Math.round((totalCommercialInspections / commercialWorkDays.size / commercialInspectorCount) * 10) / 10 :
+      Math.round((totalCommercialInspections / Math.max(commercialWorkDays.size, 1) / commercialInspectorCount) * 10) / 10 :
       Math.round(((totalResidentialInspections + totalCommercialInspections) / 
-        (Math.max(residentialWorkDays.size, commercialWorkDays.size)) / 
+        Math.max(residentialWorkDays.size + commercialWorkDays.size, 1) / 
         (residentialInspectorCount + commercialInspectorCount)) * 10) / 10;
     
     return {
@@ -1625,7 +1640,7 @@ const EmployeeManagement = () => {
                                   </div>
                                   <div className="text-right">
                                     <div className="text-2xl font-bold text-gray-800">
-                                      {inspector.totalInspections.toLocaleString()}
+                                      {inspector.displayTotal ? inspector.displayTotal.toLocaleString() : inspector.totalInspections.toLocaleString()}
                                     </div>
                                     <div className="text-xs text-gray-500">Total</div>
                                   </div>
