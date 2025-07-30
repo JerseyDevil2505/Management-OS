@@ -1681,6 +1681,24 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         debugLog('PROCESSING_MODAL', `Applied ${decisionsToApply.length} overrides from modal decisions`);
       }
 
+      // NOW filter out overridden issues from validation report
+      const finalValidationIssues = validationIssues.filter(issue => {
+        // Check if this issue was overridden in this processing run
+        const wasOverridden = decisionsToApply.some(override => 
+          override.composite_key === issue.composite_key
+        );
+        return !wasOverridden;
+      });
+
+      // Rebuild inspector issues map without overridden issues
+      const finalInspectorIssuesMap = {};
+      finalValidationIssues.forEach(issue => {
+        if (!finalInspectorIssuesMap[issue.inspector]) {
+          finalInspectorIssuesMap[issue.inspector] = [];
+        }
+        finalInspectorIssuesMap[issue.inspector].push(issue);
+      });
+
       // NOW do ONE SINGLE UPSERT for ALL records (valid + overrides)
       if (inspectionDataBatch.length > 0) {
         debugLog('PERSISTENCE', `Upserting ${inspectionDataBatch.length} records to inspection_data (includes ${decisionsToApply.length} overrides)`);
@@ -1788,24 +1806,6 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
           inspectorIssuesMap[property.inspector] = [];
         }
         inspectorIssuesMap[property.inspector].push(issue);
-      });
-
-      // Remove overridden issues from validation report
-      const finalValidationIssues = validationIssues.filter(issue => {
-        // Check if this issue was overridden in this processing run
-        const wasOverridden = decisionsToApply.some(override => 
-          override.composite_key === issue.composite_key
-        );
-        return !wasOverridden;
-      });
-
-      // Rebuild inspector issues map without overridden issues
-      const finalInspectorIssuesMap = {};
-      finalValidationIssues.forEach(issue => {
-        if (!finalInspectorIssuesMap[issue.inspector]) {
-          finalInspectorIssuesMap[issue.inspector] = [];
-        }
-        finalInspectorIssuesMap[issue.inspector].push(issue);
       });
 
       // Calculate job-level totals
