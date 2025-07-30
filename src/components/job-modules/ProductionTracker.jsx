@@ -843,10 +843,15 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
 
   // NEW: Handle override during processing modal
   const handleProcessingOverride = (propertyKey, reason) => {
+    // Find the current validation item to get custom reason if needed
+    const currentValidation = pendingValidations.find(v => v.composite_key === propertyKey);
+    
     // Handle custom reason if needed
     const finalReason = reason === 'Other' ? 
-      (pendingValidations.find(v => v.composite_key === propertyKey)?.custom_override_reason || 'Other') : 
+      (currentValidation?.custom_override_reason || 'Other - No reason provided') : 
       reason;
+    
+    debugLog('PROCESSING_MODAL', `Setting override for ${propertyKey} with reason: ${finalReason}`);
     
     setProcessedValidationDecisions(prev => ({
       ...prev,
@@ -1627,23 +1632,30 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
             continue;
           }
           
+          // Get the full property record to ensure we have all fields
+          const fullRecord = rawData.find(r => r.property_composite_key === override.composite_key);
+          if (!fullRecord) {
+            debugLog('PROCESSING_MODAL', `⚠️ Could not find full record for ${override.composite_key}`);
+            continue;
+          }
+          
           const overrideRecord = {
             job_id: jobData.id,
             file_version: latestFileVersion,
             property_composite_key: override.composite_key,
-            block: override.property.property_block,
-            lot: override.property.property_lot,
-            qualifier: override.property.property_qualifier || '',
-            card: override.property.property_addl_card || '1',
-            property_location: override.property.property_location || '',
-            property_class: override.property.property_m4_class,
-            measure_by: override.property.inspection_measure_by,
-            measure_date: override.property.inspection_measure_date,
-            info_by_code: override.property.inspection_info_by,
-            list_by: override.property.inspection_list_by,
-            list_date: override.property.inspection_list_date,
-            price_by: override.property.inspection_price_by,
-            price_date: override.property.inspection_price_date,
+            block: fullRecord.property_block,
+            lot: fullRecord.property_lot,
+            qualifier: fullRecord.property_qualifier || '',
+            card: fullRecord.property_addl_card || '1',
+            property_location: fullRecord.property_location || '',
+            property_class: fullRecord.property_m4_class,
+            measure_by: fullRecord.inspection_measure_by,
+            measure_date: fullRecord.inspection_measure_date,
+            info_by_code: fullRecord.inspection_info_by,
+            list_by: fullRecord.inspection_list_by,
+            list_date: fullRecord.inspection_list_date,
+            price_by: fullRecord.inspection_price_by,
+            price_date: fullRecord.inspection_price_date,
             project_start_date: projectStartDate,
             upload_date: new Date().toISOString(),
             override_applied: true,
@@ -1656,12 +1668,14 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
           inspectionDataKeys.add(override.composite_key);
           
           // Update counts
-          const propertyClass = override.property.property_m4_class;
+          const propertyClass = fullRecord.property_m4_class;
           if (classBreakdown[propertyClass]) {
             classBreakdown[propertyClass].inspected++;
             billingByClass[propertyClass].inspected++;
             billingByClass[propertyClass].billable++;
           }
+          
+          debugLog('PROCESSING_MODAL', `Added override for ${override.composite_key} with reason: ${override.override_reason}`);
         }
         
         debugLog('PROCESSING_MODAL', `Applied ${decisionsToApply.length} overrides from modal decisions`);
@@ -1879,15 +1893,23 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         totalBillable: Object.values(billingByClass).reduce((sum, cls) => sum + cls.billable, 0)
       };
 
+      // Set all the state with potentially adjusted values
       setAnalytics(analyticsResult);
       setBillingAnalytics(billingResult);
       setValidationReport(validationReportData);
       setMissingPropertiesReport(missingPropertiesReportData);
+      
+      // Reload validation overrides to show the new ones from processing modal
+      await loadValidationOverrides();
 
       // DON'T clear modal state here - wait for user to close it
       // setPendingValidations([]);
       // setProcessedValidationDecisions({});
       // setShowProcessingModal(false);
+      
+      // Mark processing as complete so the modal shows the close button
+      setProcessingComplete(true);
+      setProcessingPaused(false);
 
       debugLog('ANALYTICS', '✅ Manager-focused analytics processing complete', {
         totalRecords: rawData.length,
@@ -2386,8 +2408,9 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                                 <button
                                   onClick={() => {
                                     const finalReason = currentValidation.override_reason === 'Other' 
-                                      ? currentValidation.custom_override_reason 
-                                      : currentValidation.override_reason || 'New Construction';
+                                      ? (currentValidation.custom_override_reason || 'Other - No reason provided')
+                                      : (currentValidation.override_reason || 'New Construction');
+                                    debugLog('PROCESSING_MODAL', `Override button clicked for ${currentValidation.composite_key} with reason: ${finalReason}`);
                                     handleProcessingOverride(currentValidation.composite_key, finalReason);
                                   }}
                                   className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium"
