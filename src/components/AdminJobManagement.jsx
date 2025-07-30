@@ -325,7 +325,7 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
           .limit(1);
         
         freshnessData[job.id] = {
-          lastFileUpload: fileData?.[0]?. || null,
+          lastFileUpload: fileData?.[0]?.updated_at || null,
           lastProductionRun: prodData?.[0]?.upload_date || null,
           needsUpdate: needsProductionUpdate(
             prodData?.[0]?.upload_date,
