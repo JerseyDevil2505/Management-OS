@@ -1698,8 +1698,52 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
           } else {
             debugLog('PERSISTENCE', '✅ Successfully upserted ALL records to inspection_data');
             addNotification(`✅ Successfully saved ${inspectionDataBatch.length} records to inspection_data`, 'success');
-            // Reload commercial counts after successful processing
+            
+            // Reload all override-related data after successful save
+            await loadValidationOverrides();
             await loadCommercialCounts();
+            
+            // Regenerate validation report to exclude overridden properties
+            const updatedValidationIssues = validationIssues.filter(issue => {
+              // Check if this issue has been overridden in this processing run
+              const wasOverridden = decisionsToApply.some(override => 
+                override.composite_key === issue.composite_key
+              );
+              return !wasOverridden;
+            });
+            
+            // Update the validation report
+            if (updatedValidationIssues.length !== validationIssues.length) {
+              debugLog('PERSISTENCE', `Removed ${validationIssues.length - updatedValidationIssues.length} overridden issues from validation report`);
+              
+              // Rebuild inspector issues map
+              const updatedInspectorIssuesMap = {};
+              updatedValidationIssues.forEach(issue => {
+                if (!updatedInspectorIssuesMap[issue.inspector]) {
+                  updatedInspectorIssuesMap[issue.inspector] = [];
+                }
+                updatedInspectorIssuesMap[issue.inspector].push(issue);
+              });
+              
+              // Update validation report
+              const updatedValidationReport = {
+                summary: {
+                  total_inspectors: Object.keys(updatedInspectorIssuesMap).filter(k => updatedInspectorIssuesMap[k].length > 0).length,
+                  total_issues: updatedValidationIssues.length,
+                  inspector_breakdown: Object.keys(updatedInspectorIssuesMap)
+                    .filter(inspector => updatedInspectorIssuesMap[inspector].length > 0)
+                    .map(inspector => ({
+                      inspector_code: inspector,
+                      inspector_name: inspectorStats[inspector]?.fullName || inspector,
+                      total_issues: updatedInspectorIssuesMap[inspector].length
+                    }))
+                },
+                detailed_issues: updatedInspectorIssuesMap
+              };
+              
+              setValidationReport(updatedValidationReport);
+              validationReportData = updatedValidationReport;
+            }
           }
         } catch (error) {
           console.error('UPSERT Error:', error);
