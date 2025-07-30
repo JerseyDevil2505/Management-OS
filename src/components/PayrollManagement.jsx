@@ -312,40 +312,70 @@ const PayrollManagement = () => {
 
   const exportToADP = () => {
     const exportData = [];
+    let totalHours = 0;
+    let totalBonus = 0;
     
     if (payrollData.length > 0) {
       // Use merged payroll + bonus data
       const mergedData = mergePayrollWithBonuses();
       mergedData.forEach(emp => {
+        const hours = typeof emp.hours === 'number' ? emp.hours : 0;
+        const bonus = emp.calculatedFieldOT;
+        const total = bonus; // Total is just the bonus since salary stays same
+        
+        totalHours += hours;
+        totalBonus += bonus;
+        
         exportData.push({
           name: emp.worksheetName,
-          hours: typeof emp.hours === 'number' ? emp.hours : 0,
-          inspectionCount: emp.inspectionCount,
-          inspectionBonus: emp.calculatedFieldOT
+          hours: emp.hours === 'same' ? 'same' : hours,
+          salary: 'same', // Salary always stays same
+          bonus: bonus,
+          total: total
         });
       });
     } else {
-      // Use inspection bonuses only
-      Object.entries(inspectionBonuses).forEach(([name, data]) => {
+      // Use inspection bonuses only - need to match with employees for hours
+      employees.forEach(employee => {
+        const employeeName = `${employee.first_name} ${employee.last_name}`;
+        const bonusData = inspectionBonuses[employeeName] || { bonus: 0 };
+        const displayName = `${employee.last_name}, ${employee.first_name}`;
+        
         exportData.push({
-          name: name,
-          hours: 0, // No hours data without worksheet
-          inspectionCount: data.inspections,
-          inspectionBonus: data.bonus
+          name: displayName,
+          hours: 'TBD', // Hours to be determined from worksheet
+          salary: 'same',
+          bonus: bonusData.bonus,
+          total: bonusData.bonus
         });
+        
+        totalBonus += bonusData.bonus;
       });
     }
     
-    // Convert to CSV
-    const headers = ['Employee Name', 'Regular Hours', 'Inspection Count', 'Field OT ($)'];
+    // Convert to CSV with formatted output
+    const headers = ['Employee Name', 'Hours', 'Salary', 'Bonus', 'TOTAL'];
+    const rows = exportData.map(row => [
+      `"${row.name}"`,
+      row.hours,
+      row.salary,
+      row.bonus.toFixed(2),
+      row.total.toFixed(2)
+    ]);
+    
+    // Add totals row
+    rows.push(['', '', '', '', '']); // Empty row
+    rows.push([
+      '"TOTALS"',
+      totalHours > 0 ? totalHours : '',
+      '',
+      totalBonus.toFixed(2),
+      totalBonus.toFixed(2)
+    ]);
+    
     const csvContent = [
       headers.join(','),
-      ...exportData.map(row => [
-        `"${row.name}"`,
-        row.hours,
-        row.inspectionCount,
-        row.inspectionBonus.toFixed(2)
-      ].join(','))
+      ...rows.map(row => row.join(','))
     ].join('\n');
     
     // Download
@@ -353,9 +383,38 @@ const PayrollManagement = () => {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `LOJIK_payroll_${payrollPeriod.startDate}_to_${payrollPeriod.endDate}_with_bonuses.csv`;
+    a.download = `LOJIK_payroll_${payrollPeriod.endDate}_report.csv`;
     a.click();
     window.URL.revokeObjectURL(url);
+  };
+
+  const generatePayrollReport = () => {
+    // Generate a formatted display report
+    const reportData = [];
+    let totalHours = 0;
+    let totalBonus = 0;
+    
+    if (payrollData.length > 0) {
+      const mergedData = mergePayrollWithBonuses();
+      mergedData.forEach(emp => {
+        const hours = typeof emp.hours === 'number' ? emp.hours : emp.hours;
+        const bonus = emp.calculatedFieldOT;
+        
+        if (typeof emp.hours === 'number') totalHours += emp.hours;
+        totalBonus += bonus;
+        
+        reportData.push({
+          name: emp.worksheetName,
+          hours: hours,
+          salary: 'same',
+          bonus: bonus,
+          total: bonus,
+          hasIssues: emp.issues.length > 0
+        });
+      });
+    }
+    
+    return { reportData, totalHours, totalBonus };
   };
 
   const savePayrollPeriod = async () => {
