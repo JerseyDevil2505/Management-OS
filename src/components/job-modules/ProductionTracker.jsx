@@ -138,20 +138,24 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
     try {
       const { data: employees, error } = await supabase
         .from('employees')
-        .select('id, first_name, last_name, inspector_type, employment_status, initials');
+        .select('id, first_name, last_name, inspector_type, employment_status, initials')
+        .not('initials', 'is', null)
+        .neq('initials', '');
 
       if (error) throw error;
 
       const employeeMap = {};
       employees.forEach(emp => {
-        const initials = emp.initials || `${emp.first_name.charAt(0)}${emp.last_name.charAt(0)}`;
-        employeeMap[initials] = {
-          id: emp.id,
-          name: `${emp.first_name} ${emp.last_name}`,
-          fullName: `${emp.last_name}, ${emp.first_name}`,
-          inspector_type: emp.inspector_type,
-          initials: initials
-        };
+        // Only use actual initials from database, no generation
+        if (emp.initials) {
+          employeeMap[emp.initials] = {
+            id: emp.id,
+            name: `${emp.first_name} ${emp.last_name}`,
+            fullName: `${emp.last_name}, ${emp.first_name}`,
+            inspector_type: emp.inspector_type,
+            initials: emp.initials
+          };
+        }
       });
 
       setEmployeeData(employeeMap);
@@ -286,46 +290,16 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         
         debugLog('CODES', 'BRT sections available:', Object.keys(sections));
         
-        // Look for InfoBy codes in Residential section, key 30, MAP - LOAD ALL CODES
+        // FIXED: Look for InfoBy codes in the correct nested location without filtering
         const residentialSection = sections['Residential'];
         if (residentialSection && residentialSection['30'] && residentialSection['30'].MAP) {
-          debugLog('CODES', 'Found Residential[30].MAP, loading ALL InfoBy codes...');
-          
-          Object.keys(residentialSection['30'].MAP).forEach(key => {
-            const item = residentialSection['30'].MAP[key];
-            if (item && item.DATA && item.DATA.VALUE) {
+          const infoByMap = residentialSection['30'].MAP;
+          Object.keys(infoByMap).forEach(key => {
+            const item = infoByMap[key];
+            if (item?.DATA?.VALUE) {
               codes.push({
                 code: item.KEY || item.DATA.KEY,
-                description: item.DATA.VALUE,
-                section: 'Residential[30]',
-                vendor: 'BRT'
-              });
-              
-              debugLog('CODES', `Found InfoBy code: ${item.KEY} = ${item.DATA.VALUE}`);
-            }
-          });
-        } else {
-          debugLog('CODES', 'Residential[30].MAP not found, structure:', residentialSection?.['30']);
-        }
-
-        // Fallback: Search all sections for inspection-related codes
-        if (codes.length === 0) {
-          debugLog('CODES', 'No codes found in Residential[30], searching all sections...');
-          Object.keys(sections).forEach(sectionName => {
-            const section = sections[sectionName];
-            if (typeof section === 'object') {
-              Object.keys(section).forEach(key => {
-                const item = section[key];
-                if (item && item.DATA && item.DATA.VALUE && 
-                    (item.DATA.VALUE.includes('OWNER') || item.DATA.VALUE.includes('REFUSED') || 
-                     item.DATA.VALUE.includes('AGENT') || item.DATA.VALUE.includes('ESTIMATED'))) {
-                  codes.push({
-                    code: item.KEY || item.DATA.KEY,
-                    description: item.DATA.VALUE,
-                    section: sectionName,
-                    vendor: 'BRT'
-                  });
-                }
+                description: item.DATA.VALUE
               });
             }
           });
