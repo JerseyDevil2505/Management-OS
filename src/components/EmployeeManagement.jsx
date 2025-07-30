@@ -79,26 +79,43 @@ const EmployeeManagement = () => {
   const loadGlobalAnalytics = async () => {
     setIsLoadingAnalytics(true);
     try {
-      // Get inspection data separately (no JOIN) 
-      const { data: inspectionData, error: inspectionError } = await supabase
-        .from('inspection_data')
-        .select('*');
+      // Get ALL inspection data using pagination
+      let allInspectionData = [];
+      let page = 0;
+      const pageSize = 1000;
+      let hasMore = true;
 
-      if (inspectionError) throw inspectionError;
+      while (hasMore) {
+        const { data: pageData, error: pageError, count } = await supabase
+          .from('inspection_data')
+          .select('*', { count: 'exact' })
+          .range(page * pageSize, (page + 1) * pageSize - 1);
 
-      console.log('🔍 INSPECTION DATA:', inspectionData?.length, 'records found');
-      console.log('🔍 Sample inspection record:', inspectionData?.[0]);
+        if (pageError) throw pageError;
 
-      // Get ONLY inspector employees (Residential, Commercial, Management)
-      // DEBUG: First check what inspector types exist
-      const { data: allEmployees } = await supabase.from('employees').select('inspector_type, role, initials, first_name, last_name');
-      console.log('🔍 ALL EMPLOYEES inspector_type values:', [...new Set(allEmployees?.map(e => e.inspector_type))]);
-      console.log('🔍 ALL EMPLOYEES role values:', [...new Set(allEmployees?.map(e => e.role))]);
-      
+        if (pageData && pageData.length > 0) {
+          allInspectionData = [...allInspectionData, ...pageData];
+          page++;
+          hasMore = pageData.length === pageSize;
+        } else {
+          hasMore = false;
+        }
+
+        // Log progress
+        if (page === 1) {
+          console.log(`🔍 Total inspection records in database: ${count}`);
+        }
+        console.log(`🔍 Loaded page ${page}: ${pageData?.length} records (total so far: ${allInspectionData.length})`);
+      }
+
+      console.log('🔍 INSPECTION DATA:', allInspectionData.length, 'total records loaded');
+      console.log('🔍 Sample inspection record:', allInspectionData[0]);
+
+      // Get ONLY inspector employees (Residential and Commercial - exclude Management)
       let employeesQuery = supabase
         .from('employees')
         .select('*')
-        .in('inspector_type', ['Residential', 'Commercial', 'Management']);
+        .in('inspector_type', ['Residential', 'Commercial']); // Removed Management
 
       // Apply employment status filter
       if (analyticsFilter.employmentStatus === 'active') {
@@ -113,10 +130,9 @@ const EmployeeManagement = () => {
       if (employeesError) throw employeesError;
 
       console.log('🔍 EMPLOYEES DATA:', employeesData?.length, 'inspector employees found');
-      console.log('🔍 Sample employee:', employeesData?.[0]);
       console.log('🔍 Employee initials:', employeesData?.map(e => e.initials).filter(Boolean));
 
-      if (!inspectionData || inspectionData.length === 0) {
+      if (!allInspectionData || allInspectionData.length === 0) {
         setGlobalAnalytics({
           summary: { totalInspections: 0, overallEntryRate: 0, overallRefusalRate: 0, avgInspectionsPerDay: 0 },
           inspectors: [],
@@ -137,7 +153,7 @@ const EmployeeManagement = () => {
 
       // Process inspection data and match with employees
       const enrichedData = [];
-      inspectionData.forEach(record => {
+      allInspectionData.forEach(record => {
         // Check all "by" fields for inspector initials
         const inspectorInitials = record.list_by || record.measure_by || record.price_by;
         
@@ -149,17 +165,7 @@ const EmployeeManagement = () => {
         }
       });
 
-      console.log('🔍 ENRICHED DATA:', enrichedData?.length, 'matched records');
-      console.log('🔍 Sample enriched record:', enrichedData?.[0]);
-
-      // Sample of inspection initials for debugging
-      const inspectionInitials = inspectionData?.slice(0, 10).map(r => ({
-        list_by: r.list_by,
-        measure_by: r.measure_by, 
-        price_by: r.price_by,
-        chosen: r.list_by || r.measure_by || r.price_by
-      }));
-      console.log('🔍 INSPECTION INITIALS (first 10):', inspectionInitials);
+      console.log('🔍 ENRICHED DATA:', enrichedData.length, 'matched records');
 
       // Process the enriched data similar to ProductionTracker
       const processedAnalytics = processGlobalInspectionData(enrichedData, analyticsFilter);
@@ -200,8 +206,7 @@ const EmployeeManagement = () => {
     const inspectorStats = {};
     const typeStats = {
       residential: { count: 0, totalInspections: 0, entryCount: 0, refusalCount: 0, eligible: 0, otherProperties: 0 },
-      commercial: { count: 0, totalInspections: 0, commercial: 0, pricing: 0, otherProperties: 0 },
-      management: { count: 0, totalInspections: 0, specialInspections: 0, qaReviews: 0, training: 0 }
+      commercial: { count: 0, totalInspections: 0, commercial: 0, pricing: 0, otherProperties: 0 }
     };
 
     // Get unique job count
@@ -259,14 +264,6 @@ const EmployeeManagement = () => {
         if (!['4A', '4B', '4C'].includes(record.property_class)) {
           typeStats.commercial.otherProperties++;
         }
-      } else if (inspectorType === 'management' && typeStats.management) {
-        typeStats.management.totalInspections++;
-        
-        // Mock data for management activities (would need real data structure)
-        // In reality, these would come from specific fields or activity types
-        typeStats.management.specialInspections = Math.floor(typeStats.management.totalInspections * 0.4);
-        typeStats.management.qaReviews = Math.floor(typeStats.management.totalInspections * 0.3);
-        typeStats.management.training = Math.floor(typeStats.management.totalInspections * 0.3);
       }
 
       // Determine if this is entry/refusal based on InfoBy codes (copying ProductionTracker logic)
@@ -301,7 +298,6 @@ const EmployeeManagement = () => {
       const type = inspector.inspectorType?.toLowerCase();
       if (type === 'residential') typeStats.residential.count++;
       else if (type === 'commercial') typeStats.commercial.count++;
-      else if (type === 'management') typeStats.management.count++;
     });
 
     // Calculate rates for each inspector
@@ -337,17 +333,6 @@ const EmployeeManagement = () => {
         commercial: typeStats.commercial.commercial,
         pricing: typeStats.commercial.pricing,
         otherProperties: typeStats.commercial.otherProperties
-      };
-    }
-    
-    if (typeStats.management.count > 0) {
-      byType.management = {
-        count: typeStats.management.count,
-        totalInspections: typeStats.management.totalInspections,
-        avgDaily: Math.round((typeStats.management.totalInspections / 30) * 10) / 10,
-        specialInspections: typeStats.management.specialInspections,
-        qaReviews: typeStats.management.qaReviews,
-        training: typeStats.management.training
       };
     }
 
@@ -401,15 +386,6 @@ const EmployeeManagement = () => {
         initials: commercialInspectors[0].initials,
         totalInspections: commercialInspectors[0].totalInspections,
         commercialCount: commercialInspectors[0].commercialCount
-      };
-    }
-    
-    const managementInspectors = inspectorArray.filter(i => i.inspectorType === 'Management');
-    if (managementInspectors.length > 0) {
-      topPerformers.management = {
-        name: managementInspectors[0].name,
-        initials: managementInspectors[0].initials,
-        totalInspections: managementInspectors[0].totalInspections
       };
     }
 
@@ -1203,7 +1179,6 @@ const EmployeeManagement = () => {
                           <option value="all">All Inspector Types</option>
                           <option value="Residential">Residential Only</option>
                           <option value="Commercial">Commercial Only</option>
-                          <option value="Management">Management Only</option>
                         </select>
 
                         <select
@@ -1410,7 +1385,7 @@ const EmployeeManagement = () => {
                     {/* Top Performers by Type */}
                     <div className="mb-6">
                       <h3 className="text-lg font-bold text-gray-800 mb-4">🏆 Top Performers by Inspector Type</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {/* Top Residential */}
                         {globalAnalytics.topPerformers?.residential && (
                           <div className="bg-green-50 p-4 rounded-lg border-2 border-green-200">
@@ -1442,24 +1417,6 @@ const EmployeeManagement = () => {
                               </div>
                               <div className="text-xs text-blue-500 mt-1">
                                 {globalAnalytics.topPerformers.commercial.commercialCount} commercial properties
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Top Management */}
-                        {globalAnalytics.topPerformers?.management && (
-                          <div className="bg-purple-50 p-4 rounded-lg border-2 border-purple-200">
-                            <h4 className="font-semibold text-purple-800 mb-3">Top Management Inspector</h4>
-                            <div className="text-center">
-                              <div className="text-xl font-bold text-purple-700">
-                                {globalAnalytics.topPerformers.management.name}
-                              </div>
-                              <div className="text-sm text-purple-600">
-                                {globalAnalytics.topPerformers.management.totalInspections.toLocaleString()} inspections
-                              </div>
-                              <div className="text-xs text-purple-500 mt-1">
-                                Leadership excellence
                               </div>
                             </div>
                           </div>
