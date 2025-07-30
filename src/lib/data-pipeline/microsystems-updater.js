@@ -7,6 +7,7 @@
  * ENHANCED: Dual-pattern parsing for standard (140A) and HVAC (8ED) codes
  * FIXED: Proper AAACCCCSSSS parsing - InfoBy single char, Design multi-char, HVAC preserved
  * CLEANED: Removed redundant surgical fix totals (handled by AdminJobManagement/FileUploadButton)
+ * ADDED: Field preservation support for component-defined fields
  */
 
 import { supabase } from '../supabaseClient.js';
@@ -321,9 +322,11 @@ export class MicrosystemsUpdater {
   /**
    * Map Microsystems record to property_records table (ALL 82 FIELDS)
    * UPDATED: Combines original property_records + analysis fields into single record
+   * ENHANCED: Now supports field preservation for component-defined fields
    */
-  mapToPropertyRecord(rawRecord, yearCreated, ccddCode, jobId, versionInfo = {}) {
-    return {
+  mapToPropertyRecord(rawRecord, yearCreated, ccddCode, jobId, versionInfo = {}, preservedData = {}) {
+    // Build the base record
+    const baseRecord = {
       // Job context
       job_id: jobId,
       
@@ -431,6 +434,13 @@ export class MicrosystemsUpdater {
       // Store complete raw data as JSON
       raw_data: rawRecord
     };
+
+    // ENHANCED: Merge with preserved data - preserved fields take precedence
+    // This ensures component-defined fields are not overwritten during updates
+    return {
+      ...baseRecord,
+      ...preservedData
+    };
   }
 
   /**
@@ -439,10 +449,11 @@ export class MicrosystemsUpdater {
    * NEW: Integrates code file storage in jobs table
    * ADDED: Retry logic for connection issues and query cancellations
    * CLEANED: Removed redundant surgical fix (total_properties handled by AdminJobManagement/FileUploadButton)
+   * ENHANCED: Added field preservation support
    */
   async processFile(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, versionInfo = {}) {
     try {
-      console.log('🚀 Starting Enhanced Microsystems UPDATER (UPSERT)...');
+      console.log('🚀 Starting Enhanced Microsystems UPDATER (UPSERT) with field preservation...');
       
       // Process and store code file if provided
       if (codeFileContent) {
@@ -452,18 +463,49 @@ export class MicrosystemsUpdater {
       // Parse source file
       const records = this.parseSourceFile(sourceFileContent);
       
+      // ENHANCED: Check if field preservation is enabled and get preserved data
+      let preservedDataMap = new Map();
+      if (versionInfo.preservedFieldsHandler && typeof versionInfo.preservedFieldsHandler === 'function') {
+        console.log('🔒 Field preservation enabled, fetching existing data...');
+        
+        // Generate composite keys for all records
+        const compositeKeys = records.map(rawRecord => 
+          `${yearCreated}${ccddCode}-${rawRecord['Block']}-${rawRecord['Lot']}_${(rawRecord['Qual'] || '').trim() || 'NONE'}-${(rawRecord['Bldg'] || '').trim() || 'NONE'}-${(rawRecord['Location'] || '').trim() || 'NONE'}`
+        );
+        
+        // Fetch preserved data using the handler from supabaseClient
+        preservedDataMap = await versionInfo.preservedFieldsHandler(jobId, compositeKeys);
+        console.log(`✅ Fetched preserved data for ${preservedDataMap.size} properties`);
+      }
+      
       // Prepare all property records for batch upsert
       const propertyRecords = [];
       
       for (const rawRecord of records) {
         try {
-          // Map to unified property_records table with all 82 fields
-          const propertyRecord = this.mapToPropertyRecord(rawRecord, yearCreated, ccddCode, jobId, versionInfo);
+          // Generate composite key for this record
+          const compositeKey = `${yearCreated}${ccddCode}-${rawRecord['Block']}-${rawRecord['Lot']}_${(rawRecord['Qual'] || '').trim() || 'NONE'}-${(rawRecord['Bldg'] || '').trim() || 'NONE'}-${(rawRecord['Location'] || '').trim() || 'NONE'}`;
+          
+          // Get preserved data for this property if available
+          const preservedData = preservedDataMap.get(compositeKey) || {};
+          
+          // Map to unified property_records table with all 82 fields and preserved data
+          const propertyRecord = this.mapToPropertyRecord(rawRecord, yearCreated, ccddCode, jobId, versionInfo, preservedData);
           propertyRecords.push(propertyRecord);
           
         } catch (error) {
           console.error('Error mapping record:', error);
         }
+      }
+      
+      // Log preservation statistics
+      if (versionInfo.preservedFields && preservedDataMap.size > 0) {
+        const preservedCount = propertyRecords.filter(record => {
+          return versionInfo.preservedFields.some(field => 
+            record[field] !== null && record[field] !== undefined
+          );
+        }).length;
+        console.log(`📊 Preserving user-defined fields in ${preservedCount} records`);
       }
       
       const results = {
