@@ -231,14 +231,14 @@ function App() {
     if (!selectedJob) return;
     
     try {
-      const { data: refreshedJob, error } = await supabase
-        .from('jobs')
-        .select('*')
-        .eq('id', selectedJob.id)
-        .single();
-        
-      if (!error && refreshedJob) {
-        console.log('🔄 Refreshed selected job, updated_at:', refreshedJob.updated_at);
+      // Get all jobs using the service (which includes field mapping)
+      const jobs = await jobService.getAll();
+      
+      // Find the selected job from the results
+      const refreshedJob = jobs.find(j => j.id === selectedJob.id);
+      
+      if (refreshedJob) {
+        console.log('🔄 Refreshed selected job, code_file_uploaded_at:', refreshedJob.code_file_uploaded_at);
         setSelectedJob(refreshedJob);
       }
     } catch (error) {
