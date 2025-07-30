@@ -23,7 +23,20 @@ const BillingManagement = () => {
     percentageBilled: '',
     status: 'P', // Changed from 'D' to 'P' for Paid
     invoiceNumber: '',
-    notes: ''
+    notes: '',
+    manualOverride: false,
+    overrideAmount: ''
+  });
+  const [showBulkPaste, setShowBulkPaste] = useState(false);
+  const [bulkBillingText, setBulkBillingText] = useState('');
+  const [showEditBilling, setShowEditBilling] = useState(false);
+  const [editingEvent, setEditingEvent] = useState(null);
+  const [showLegacyJobForm, setShowLegacyJobForm] = useState(false);
+  const [legacyJobForm, setLegacyJobForm] = useState({
+    jobName: '',
+    vendor: 'BRT',
+    contractAmount: '',
+    billingHistory: ''
   });
 
   useEffect(() => {
@@ -99,13 +112,24 @@ const BillingManagement = () => {
       if (parts.length >= 8) {
         const date = parts[0];
         const percentage = parseFloat(parts[1].replace('%', ''));
-        const status = parts[2] === 'D' ? 'P' : ''; // D becomes P (Paid), blank stays blank
-        const invoiceNumber = parts[3];
+        
+        // Check if third part is D or empty/missing
+        let status, invoiceNumber, startIndex;
+        if (parts[2] === 'D') {
+          status = 'P'; // D becomes P (Paid)
+          invoiceNumber = parts[3];
+          startIndex = 4;
+        } else {
+          status = ''; // No D means Open
+          invoiceNumber = parts[2];
+          startIndex = 3;
+        }
+        
         // Remove $ and commas from amounts
-        const totalAmount = parseFloat(parts[4].replace(/[$,]/g, ''));
-        const retainerAmount = parseFloat(parts[5].replace(/[$,]/g, ''));
-        // Skip parts[6] which seems to be $0.00
-        const amountBilled = parseFloat(parts[7].replace(/[$,]/g, ''));
+        const totalAmount = parseFloat(parts[startIndex].replace(/[$,]/g, ''));
+        const retainerAmount = parseFloat(parts[startIndex + 1].replace(/[$,]/g, ''));
+        // Skip parts[startIndex + 2] which seems to be $0.00
+        const amountBilled = parseFloat(parts[startIndex + 3].replace(/[$,]/g, ''));
         
         parsedEvents.push({
           date,
@@ -137,7 +161,9 @@ const BillingManagement = () => {
         first_year_appeals_percentage: contractSetup.firstYearAppealsPercentage,
         first_year_appeals_amount: parseFloat(contractSetup.contractAmount) * contractSetup.firstYearAppealsPercentage,
         second_year_appeals_percentage: contractSetup.secondYearAppealsPercentage,
-        second_year_appeals_amount: parseFloat(contractSetup.contractAmount) * contractSetup.secondYearAppealsPercentage
+        second_year_appeals_amount: parseFloat(contractSetup.contractAmount) * contractSetup.secondYearAppealsPercentage,
+        third_year_appeals_percentage: contractSetup.thirdYearAppealsPercentage,
+        third_year_appeals_amount: parseFloat(contractSetup.contractAmount) * contractSetup.thirdYearAppealsPercentage
       };
 
       const { error: contractError } = await supabase
@@ -209,41 +235,102 @@ const BillingManagement = () => {
     
     try {
       const contract = selectedJob.job_contracts[0];
-      const percentageDecimal = parseFloat(billingForm.percentageBilled) / 100;
-      const totalAmount = contract.contract_amount * percentageDecimal;
-      const retainerAmount = totalAmount * contract.retainer_percentage;
-      const amountBilled = totalAmount - retainerAmount;
       
-      // Calculate remaining due
-      const existingEvents = selectedJob.billing_events || [];
-      const previousBilled = existingEvents.reduce((sum, event) => sum + parseFloat(event.amount_billed || 0), 0);
-      const remainingDue = contract.contract_amount - previousBilled - amountBilled;
+      if (showBulkPaste && bulkBillingText.trim()) {
+        // Handle bulk paste
+        const parsedEvents = parseBillingHistory(bulkBillingText);
+        let runningTotal = 0;
+        let runningPercentage = 0;
+        
+        // Get existing events to calculate starting totals
+        const existingEvents = selectedJob.billing_events || [];
+        const previousBilled = existingEvents.reduce((sum, event) => sum + parseFloat(event.amount_billed || 0), 0);
+        const previousPercentage = existingEvents.reduce((sum, event) => sum + parseFloat(event.percentage_billed || 0), 0);
+        
+        runningTotal = previousBilled;
+        runningPercentage = previousPercentage;
+        
+        for (const event of parsedEvents) {
+          runningTotal += event.amountBilled;
+          runningPercentage += event.percentage / 100;
+          const remainingDue = contract.contract_amount - runningTotal;
+          
+          const billingData = {
+            job_id: selectedJob.id,
+            billing_date: new Date(event.date).toISOString().split('T')[0],
+            percentage_billed: event.percentage / 100,
+            status: event.status,
+            invoice_number: event.invoiceNumber,
+            total_amount: event.totalAmount,
+            retainer_amount: event.retainerAmount,
+            amount_billed: event.amountBilled,
+            remaining_due: remainingDue,
+            notes: 'Bulk imported'
+          };
 
-      const billingData = {
-        job_id: selectedJob.id,
-        billing_date: billingForm.billingDate,
-        percentage_billed: percentageDecimal,
-        status: billingForm.status,
-        invoice_number: billingForm.invoiceNumber,
-        total_amount: totalAmount,
-        retainer_amount: retainerAmount,
-        amount_billed: amountBilled,
-        remaining_due: remainingDue,
-        notes: billingForm.notes
-      };
+          const { error: eventError } = await supabase
+            .from('billing_events')
+            .insert(billingData);
 
-      const { error } = await supabase
-        .from('billing_events')
-        .insert(billingData);
+          if (eventError) {
+            console.error('Error inserting billing event:', eventError);
+          }
+        }
 
-      if (error) throw error;
+        // Update job percent_billed
+        await supabase
+          .from('jobs')
+          .update({ percent_billed: runningPercentage })
+          .eq('id', selectedJob.id);
+          
+        setShowBulkPaste(false);
+        setBulkBillingText('');
+      } else {
+        // Handle single event
+        const percentageDecimal = parseFloat(billingForm.percentageBilled) / 100;
+        const totalAmount = contract.contract_amount * percentageDecimal;
+        const retainerAmount = totalAmount * contract.retainer_percentage;
+        
+        let amountBilled;
+        if (billingForm.manualOverride && billingForm.overrideAmount) {
+          // Use manual override amount
+          amountBilled = parseFloat(billingForm.overrideAmount);
+        } else {
+          // Use calculated amount
+          amountBilled = totalAmount - retainerAmount;
+        }
+        
+        // Calculate remaining due
+        const existingEvents = selectedJob.billing_events || [];
+        const previousBilled = existingEvents.reduce((sum, event) => sum + parseFloat(event.amount_billed || 0), 0);
+        const remainingDue = contract.contract_amount - previousBilled - amountBilled;
 
-      // Update jobs.percent_billed
-      const newTotalPercentage = existingEvents.reduce((sum, event) => sum + parseFloat(event.percentage_billed || 0), 0) + percentageDecimal;
-      await supabase
-        .from('jobs')
-        .update({ percent_billed: newTotalPercentage })
-        .eq('id', selectedJob.id);
+        const billingData = {
+          job_id: selectedJob.id,
+          billing_date: billingForm.billingDate,
+          percentage_billed: percentageDecimal,
+          status: billingForm.status,
+          invoice_number: billingForm.invoiceNumber,
+          total_amount: totalAmount,
+          retainer_amount: retainerAmount,
+          amount_billed: amountBilled,
+          remaining_due: remainingDue,
+          notes: billingForm.notes
+        };
+
+        const { error } = await supabase
+          .from('billing_events')
+          .insert(billingData);
+
+        if (error) throw error;
+
+        // Update jobs.percent_billed
+        const newTotalPercentage = existingEvents.reduce((sum, event) => sum + parseFloat(event.percentage_billed || 0), 0) + percentageDecimal;
+        await supabase
+          .from('jobs')
+          .update({ percent_billed: newTotalPercentage })
+          .eq('id', selectedJob.id);
+      }
 
       setShowBillingForm(false);
       setBillingForm({
@@ -251,7 +338,9 @@ const BillingManagement = () => {
         percentageBilled: '',
         status: 'P',
         invoiceNumber: '',
-        notes: ''
+        notes: '',
+        manualOverride: false,
+        overrideAmount: ''
       });
       loadJobs();
     } catch (error) {
@@ -266,6 +355,114 @@ const BillingManagement = () => {
       minimumFractionDigits: 0,
       maximumFractionDigits: 0
     }).format(amount || 0);
+  };
+
+  const handleUpdateBillingEvent = async () => {
+    if (!editingEvent) return;
+    
+    try {
+      const { error } = await supabase
+        .from('billing_events')
+        .update({ status: editingEvent.status })
+        .eq('id', editingEvent.id);
+
+      if (error) throw error;
+
+      setShowEditBilling(false);
+      setEditingEvent(null);
+      loadJobs();
+    } catch (error) {
+      console.error('Error updating billing event:', error);
+    }
+  };
+
+  const handleCreateLegacyJob = async () => {
+    if (!legacyJobForm.jobName || !legacyJobForm.contractAmount) return;
+    
+    try {
+      // Create the legacy job
+      const { data: newJob, error: jobError } = await supabase
+        .from('jobs')
+        .insert({
+          job_name: legacyJobForm.jobName,
+          vendor: legacyJobForm.vendor,
+          job_type: 'legacy_billing',
+          billing_setup_complete: true,
+          percent_billed: 0
+        })
+        .select()
+        .single();
+
+      if (jobError) throw jobError;
+
+      // Create the contract with standard percentages
+      const contractData = {
+        job_id: newJob.id,
+        contract_amount: parseFloat(legacyJobForm.contractAmount),
+        retainer_percentage: 0.10,
+        retainer_amount: parseFloat(legacyJobForm.contractAmount) * 0.10,
+        end_of_job_percentage: 0.05,
+        end_of_job_amount: parseFloat(legacyJobForm.contractAmount) * 0.05,
+        first_year_appeals_percentage: 0.03,
+        first_year_appeals_amount: parseFloat(legacyJobForm.contractAmount) * 0.03,
+        second_year_appeals_percentage: 0.02,
+        second_year_appeals_amount: parseFloat(legacyJobForm.contractAmount) * 0.02,
+        third_year_appeals_percentage: 0.00,
+        third_year_appeals_amount: 0
+      };
+
+      const { error: contractError } = await supabase
+        .from('job_contracts')
+        .insert(contractData);
+
+      if (contractError) throw contractError;
+
+      // If billing history provided, bulk import
+      if (legacyJobForm.billingHistory.trim()) {
+        const parsedEvents = parseBillingHistory(legacyJobForm.billingHistory);
+        let runningTotal = 0;
+        let runningPercentage = 0;
+        
+        for (const event of parsedEvents) {
+          runningTotal += event.amountBilled;
+          runningPercentage += event.percentage / 100;
+          const remainingDue = parseFloat(legacyJobForm.contractAmount) - runningTotal;
+          
+          const billingData = {
+            job_id: newJob.id,
+            billing_date: new Date(event.date).toISOString().split('T')[0],
+            percentage_billed: event.percentage / 100,
+            status: event.status,
+            invoice_number: event.invoiceNumber,
+            total_amount: event.totalAmount,
+            retainer_amount: event.retainerAmount,
+            amount_billed: event.amountBilled,
+            remaining_due: remainingDue,
+            notes: 'Imported legacy billing'
+          };
+
+          await supabase.from('billing_events').insert(billingData);
+        }
+
+        // Update job percent_billed
+        await supabase
+          .from('jobs')
+          .update({ percent_billed: runningPercentage })
+          .eq('id', newJob.id);
+      }
+
+      setShowLegacyJobForm(false);
+      setLegacyJobForm({
+        jobName: '',
+        vendor: 'BRT',
+        contractAmount: '',
+        billingHistory: ''
+      });
+      setActiveTab('legacy');
+      loadJobs();
+    } catch (error) {
+      console.error('Error creating legacy job:', error);
+    }
   };
 
   const getJobStatusColor = (job) => {
@@ -412,7 +609,14 @@ const BillingManagement = () => {
                             </thead>
                             <tbody className="divide-y divide-gray-200">
                               {job.billing_events.map(event => (
-                                <tr key={event.id}>
+                                <tr 
+                                  key={event.id}
+                                  className="hover:bg-gray-50 cursor-pointer"
+                                  onClick={() => {
+                                    setEditingEvent(event);
+                                    setShowEditBilling(true);
+                                  }}
+                                >
                                   <td className="px-4 py-2 text-sm text-gray-900">
                                     {new Date(event.billing_date).toLocaleDateString()}
                                   </td>
@@ -445,8 +649,126 @@ const BillingManagement = () => {
 
           {/* Legacy Jobs Tab */}
           {activeTab === 'legacy' && (
-            <div className="text-center py-12 bg-gray-50 rounded-lg">
-              <p className="text-gray-600">Legacy billing jobs will appear here</p>
+            <div className="space-y-6">
+              <div className="flex justify-end mb-4">
+                <button
+                  onClick={() => setShowLegacyJobForm(true)}
+                  className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+                >
+                  + Add Legacy Job
+                </button>
+              </div>
+
+              {jobs.length === 0 ? (
+                <div className="text-center py-12 bg-gray-50 rounded-lg">
+                  <p className="text-gray-600">No legacy billing jobs found. Click "Add Legacy Job" to create one.</p>
+                </div>
+              ) : (
+                jobs.map(job => {
+                  const totals = calculateBillingTotals(job);
+                  const needsContractSetup = !job.job_contracts || job.job_contracts.length === 0;
+                  
+                  return (
+                    <div key={job.id} className={`border-2 rounded-lg p-6 ${getJobStatusColor(job)}`}>
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="flex items-center space-x-3">
+                          <h3 className="text-xl font-semibold text-gray-900">{job.job_name}</h3>
+                          <span className="px-2 py-1 text-xs rounded-full bg-purple-100 text-purple-800">
+                            Legacy Billing
+                          </span>
+                          <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800">
+                            {job.vendor || 'No Vendor'}
+                          </span>
+                          {totals?.isComplete && (
+                            <span className="flex items-center px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">
+                              ✅ 100% Billed
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => {
+                            setSelectedJob(job);
+                            setShowBillingForm(true);
+                          }}
+                          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                        >
+                          Add Billing Event
+                        </button>
+                      </div>
+
+                      {totals && (
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                          <div className="bg-white p-3 rounded-md">
+                            <p className="text-sm text-gray-600">Contract Amount</p>
+                            <p className="text-lg font-semibold">{formatCurrency(totals.contractAmount)}</p>
+                          </div>
+                          <div className="bg-white p-3 rounded-md">
+                            <p className="text-sm text-gray-600">Percentage Billed</p>
+                            <p className="text-lg font-semibold">{totals.totalPercentageBilled.toFixed(1)}%</p>
+                          </div>
+                          <div className="bg-white p-3 rounded-md">
+                            <p className="text-sm text-gray-600">Amount Billed</p>
+                            <p className="text-lg font-semibold">{formatCurrency(totals.totalAmountBilled)}</p>
+                          </div>
+                          <div className="bg-white p-3 rounded-md">
+                            <p className="text-sm text-gray-600">Remaining Due</p>
+                            <p className="text-lg font-semibold">{formatCurrency(totals.remainingDue)}</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Billing Events Table */}
+                      {job.billing_events && job.billing_events.length > 0 && (
+                        <div className="bg-white rounded-md overflow-hidden">
+                          <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                              <tr>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">%</th>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Invoice</th>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Billed</th>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Remaining</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200">
+                              {job.billing_events.map(event => (
+                                <tr 
+                                  key={event.id}
+                                  className="hover:bg-gray-50 cursor-pointer"
+                                  onClick={() => {
+                                    setEditingEvent(event);
+                                    setShowEditBilling(true);
+                                  }}
+                                >
+                                  <td className="px-4 py-2 text-sm text-gray-900">
+                                    {new Date(event.billing_date).toLocaleDateString()}
+                                  </td>
+                                  <td className="px-4 py-2 text-sm text-gray-900">
+                                    {(event.percentage_billed * 100).toFixed(1)}%
+                                  </td>
+                                  <td className="px-4 py-2 text-sm">
+                                    <span className={`px-2 py-1 text-xs rounded-full ${
+                                      event.status === 'P' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                                    }`}>
+                                      {event.status === 'P' ? 'Paid' : 'Open'}
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-2 text-sm text-gray-900">{event.invoice_number}</td>
+                                  <td className="px-4 py-2 text-sm text-gray-900">{formatCurrency(event.total_amount)}</td>
+                                  <td className="px-4 py-2 text-sm text-gray-900">{formatCurrency(event.amount_billed)}</td>
+                                  <td className="px-4 py-2 text-sm text-gray-900">{formatCurrency(event.remaining_due)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
             </div>
           )}
         </>
@@ -568,6 +890,20 @@ const BillingManagement = () => {
                       className="w-full px-3 py-2 border border-gray-300 rounded-md"
                     />
                   </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      3rd Year Appeals %
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="1"
+                      value={contractSetup.thirdYearAppealsPercentage}
+                      onChange={(e) => setContractSetup(prev => ({ ...prev, thirdYearAppealsPercentage: parseFloat(e.target.value) }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    />
+                  </div>
                 </div>
               )}
 
@@ -596,6 +932,16 @@ const BillingManagement = () => {
                   setShowContractSetup(false);
                   setSelectedJob(null);
                   setBillingHistoryText('');
+                  // Reset contract setup to defaults
+                  setContractSetup({
+                    contractAmount: '',
+                    templateType: 'standard',
+                    retainerPercentage: 0.10,
+                    endOfJobPercentage: 0.05,
+                    firstYearAppealsPercentage: 0.03,
+                    secondYearAppealsPercentage: 0.02,
+                    thirdYearAppealsPercentage: 0.00
+                  });
                 }}
                 className="px-4 py-2 text-gray-600 hover:text-gray-800"
               >
@@ -615,87 +961,159 @@ const BillingManagement = () => {
       {/* Billing Event Modal */}
       {showBillingForm && selectedJob && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-semibold mb-4">Add Billing Event: {selectedJob.job_name}</h3>
             
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Billing Date
-                </label>
-                <input
-                  type="date"
-                  value={billingForm.billingDate}
-                  onChange={(e) => setBillingForm(prev => ({ ...prev, billingDate: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Percentage Billed (%)
-                </label>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={billingForm.percentageBilled}
-                  onChange={(e) => setBillingForm(prev => ({ ...prev, percentageBilled: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                  placeholder="25.0"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Invoice Number
-                </label>
-                <input
-                  type="text"
-                  value={billingForm.invoiceNumber}
-                  onChange={(e) => setBillingForm(prev => ({ ...prev, invoiceNumber: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                  placeholder="INV-2025-001"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Status
-                </label>
-                <select
-                  value={billingForm.status}
-                  onChange={(e) => setBillingForm(prev => ({ ...prev, status: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                >
-                  <option value="P">Paid</option>
-                  <option value="">Open</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Notes
-                </label>
-                <textarea
-                  value={billingForm.notes}
-                  onChange={(e) => setBillingForm(prev => ({ ...prev, notes: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                  rows="3"
-                  placeholder="Optional notes..."
-                />
-              </div>
+            <div className="flex justify-center mb-4">
+              <button
+                onClick={() => setShowBulkPaste(false)}
+                className={`px-4 py-2 rounded-l-md ${!showBulkPaste ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'}`}
+              >
+                Single Event
+              </button>
+              <button
+                onClick={() => setShowBulkPaste(true)}
+                className={`px-4 py-2 rounded-r-md ${showBulkPaste ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'}`}
+              >
+                Bulk Paste
+              </button>
             </div>
+            
+            {showBulkPaste ? (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Paste Billing Events
+                  </label>
+                  <textarea
+                    value={bulkBillingText}
+                    onChange={(e) => setBulkBillingText(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md font-mono text-sm"
+                    rows="10"
+                    placeholder="Paste billing events (one per line):
+12/4/2024 10.00% D 12240225 $49,935.00 $4,994.00 $0.00 $44,941.00
+2/28/2025 24.37% D 020225 $121,690.00 $12,169.00 $0.00 $109,521.00"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Format: Date Percentage% D/blank InvoiceNumber $Total $Retainer $0 $Billed
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Billing Date
+                  </label>
+                  <input
+                    type="date"
+                    value={billingForm.billingDate}
+                    onChange={(e) => setBillingForm(prev => ({ ...prev, billingDate: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Percentage Billed (%)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={billingForm.percentageBilled}
+                    onChange={(e) => setBillingForm(prev => ({ ...prev, percentageBilled: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    placeholder="25.0"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Invoice Number
+                  </label>
+                  <input
+                    type="text"
+                    value={billingForm.invoiceNumber}
+                    onChange={(e) => setBillingForm(prev => ({ ...prev, invoiceNumber: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    placeholder="INV-2025-001"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Status
+                  </label>
+                  <select
+                    value={billingForm.status}
+                    onChange={(e) => setBillingForm(prev => ({ ...prev, status: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  >
+                    <option value="P">Paid</option>
+                    <option value="">Open</option>
+                  </select>
+                </div>
+
+                <div className="border-t pt-4">
+                  <label className="flex items-center mb-2">
+                    <input
+                      type="checkbox"
+                      checked={billingForm.manualOverride}
+                      onChange={(e) => setBillingForm(prev => ({ ...prev, manualOverride: e.target.checked }))}
+                      className="mr-2"
+                    />
+                    <span className="text-sm font-medium text-gray-700">Manual Amount Override</span>
+                  </label>
+                  
+                  {billingForm.manualOverride && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Override Amount
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={billingForm.overrideAmount}
+                        onChange={(e) => setBillingForm(prev => ({ ...prev, overrideAmount: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        placeholder="80147.00"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Enter the actual amount to bill (overrides percentage calculation)
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Notes
+                  </label>
+                  <textarea
+                    value={billingForm.notes}
+                    onChange={(e) => setBillingForm(prev => ({ ...prev, notes: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    rows="3"
+                    placeholder="Optional notes..."
+                  />
+                </div>
+              </div>
+            )}
 
             <div className="flex justify-end space-x-3 mt-6">
               <button
                 onClick={() => {
                   setShowBillingForm(false);
+                  setShowBulkPaste(false);
+                  setBulkBillingText('');
                   setBillingForm({
                     billingDate: new Date().toISOString().split('T')[0],
                     percentageBilled: '',
                     status: 'P',
                     invoiceNumber: '',
-                    notes: ''
+                    notes: '',
+                    manualOverride: false,
+                    overrideAmount: ''
                   });
                 }}
                 className="px-4 py-2 text-gray-600 hover:text-gray-800"
@@ -706,7 +1124,148 @@ const BillingManagement = () => {
                 onClick={handleAddBillingEvent}
                 className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
               >
-                Add Billing Event
+                {showBulkPaste ? 'Import Events' : 'Add Billing Event'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Billing Event Modal */}
+      {showEditBilling && editingEvent && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-lg font-semibold mb-4">Edit Billing Event</h3>
+            
+            <div className="space-y-4">
+              <div className="bg-gray-50 p-4 rounded-md">
+                <p className="text-sm text-gray-600 mb-1">Date: {new Date(editingEvent.billing_date).toLocaleDateString()}</p>
+                <p className="text-sm text-gray-600 mb-1">Invoice: {editingEvent.invoice_number}</p>
+                <p className="text-sm text-gray-600 mb-1">Amount Billed: {formatCurrency(editingEvent.amount_billed)}</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Payment Status
+                </label>
+                <select
+                  value={editingEvent.status}
+                  onChange={(e) => setEditingEvent(prev => ({ ...prev, status: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                >
+                  <option value="P">Paid</option>
+                  <option value="">Open</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowEditBilling(false);
+                  setEditingEvent(null);
+                }}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleUpdateBillingEvent}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              >
+                Update Status
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Legacy Job Form Modal */}
+      {showLegacyJobForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-semibold mb-4">Create Legacy Billing Job</h3>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Job Name
+                </label>
+                <input
+                  type="text"
+                  value={legacyJobForm.jobName}
+                  onChange={(e) => setLegacyJobForm(prev => ({ ...prev, jobName: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  placeholder="e.g., Westville Borough 2023"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Vendor System
+                </label>
+                <select
+                  value={legacyJobForm.vendor}
+                  onChange={(e) => setLegacyJobForm(prev => ({ ...prev, vendor: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                >
+                  <option value="BRT">BRT</option>
+                  <option value="Microsystems">Microsystems</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Contract Amount
+                </label>
+                <input
+                  type="number"
+                  value={legacyJobForm.contractAmount}
+                  onChange={(e) => setLegacyJobForm(prev => ({ ...prev, contractAmount: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  placeholder="500000"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Billing History (Optional - paste from Excel)
+                </label>
+                <textarea
+                  value={legacyJobForm.billingHistory}
+                  onChange={(e) => setLegacyJobForm(prev => ({ ...prev, billingHistory: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md font-mono text-sm"
+                  rows="8"
+                  placeholder="Paste billing history in this format:
+12/4/2024 10.00% D 12240225 $49,935.00 $4,994.00 $0.00 $44,941.00
+2/28/2025 24.37% D 020225 $121,690.00 $12,169.00 $0.00 $109,521.00"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Format: Date Percentage% D/blank InvoiceNumber $Total $Retainer $0 $Billed
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowLegacyJobForm(false);
+                  setLegacyJobForm({
+                    jobName: '',
+                    vendor: 'BRT',
+                    contractAmount: '',
+                    billingHistory: ''
+                  });
+                }}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateLegacyJob}
+                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+              >
+                Create Legacy Job
               </button>
             </div>
           </div>
