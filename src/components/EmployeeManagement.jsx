@@ -486,12 +486,13 @@ const EmployeeManagement = () => {
     const inspectorArray = Object.values(inspectorStats)
       .map(inspector => {
         // Use the appropriate inspection count based on inspector type
+        let displayTotal = 0;
         if (inspector.inspectorType === 'Residential') {
-          return { ...inspector, displayTotal: inspector.residentialInspections };
+          displayTotal = inspector.residentialInspections;
         } else if (inspector.inspectorType === 'Commercial') {
-          return { ...inspector, displayTotal: inspector.commercialInspections };
+          displayTotal = inspector.commercialInspections;
         }
-        return { ...inspector, displayTotal: 0 };
+        return { ...inspector, displayTotal, totalInspections: displayTotal };
       })
       .filter(inspector => inspector.displayTotal > 0)
       .sort((a, b) => b.displayTotal - a.displayTotal);
@@ -507,7 +508,7 @@ const EmployeeManagement = () => {
           avgRefusalRate: 0
         };
       }
-      regionalStats[inspector.region].totalInspections += inspector.totalInspections;
+      regionalStats[inspector.region].totalInspections += inspector.displayTotal;
       regionalStats[inspector.region].inspectors++;
     });
 
@@ -544,7 +545,7 @@ const EmployeeManagement = () => {
       };
     }
 
-    // Get unique inspector counts by type BEFORE using them
+    // Get unique inspector counts by type
     const residentialInspectorCount = Object.values(inspectorStats).filter(i => i.inspectorType === 'Residential').length || 1;
     const commercialInspectorCount = Object.values(inspectorStats).filter(i => i.inspectorType === 'Commercial').length || 1;
     
