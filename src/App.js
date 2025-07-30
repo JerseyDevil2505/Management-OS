@@ -226,6 +226,26 @@ function App() {
     setActiveModule('job-modules');
   };
 
+  // NEW: Refresh selected job data to get latest timestamps
+  const refreshSelectedJob = async () => {
+    if (!selectedJob) return;
+    
+    try {
+      const { data: refreshedJob, error } = await supabase
+        .from('jobs')
+        .select('*')
+        .eq('id', selectedJob.id)
+        .single();
+        
+      if (!error && refreshedJob) {
+        console.log('🔄 Refreshed selected job, updated_at:', refreshedJob.updated_at);
+        setSelectedJob(refreshedJob);
+      }
+    } catch (error) {
+      console.error('Error refreshing selected job:', error);
+    }
+  };
+
   // Handle returning to jobs list
   const handleBackToJobs = () => {
     console.log('🔙 handleBackToJobs called');
@@ -239,6 +259,9 @@ function App() {
   // 🔧 FIX: Defer file processing state updates to prevent React Error #301
   const handleFileProcessed = async (result) => {
     console.log('📁 handleFileProcessed called');
+    
+    // NEW: Refresh the selected job to get new updated_at timestamp
+    await refreshSelectedJob();
     
     // FileUploadButton already handles file versioning and tracking
     // Just refresh job metadata without touching ProductionTracker analytics
