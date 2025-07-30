@@ -1281,9 +1281,6 @@ const EmployeeManagement = () => {
                                 {globalAnalytics.byType.residential.totalInspections.toLocaleString()}
                               </div>
                               <div className="text-xs font-medium text-green-600">Total Inspected</div>
-                            </div>globalAnalytics.byType.residential.totalInspections.toLocaleString()}
-                              </div>
-                              <div className="text-xs font-medium text-green-600">Total Inspected</div>
                             </div>
                             <div className="bg-green-50 p-4 rounded-lg border border-green-200">
                               <div className="text-2xl font-bold text-green-700">
@@ -2127,9 +2124,7 @@ const EmployeeManagement = () => {
           </div>
         </div>
       )}
-    </div>
   );
 };
 
 export default EmployeeManagement;
-                             
