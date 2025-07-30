@@ -4,6 +4,7 @@
  * Uses UPSERT instead of INSERT for updating existing jobs
  * Identical parsing logic to the enhanced BRT Processor
  * CLEANED: Removed surgical fix functions - job totals handled by AdminJobManagement/FileUploadButton
+ * ADDED: Field preservation support for component-defined fields
  */
 
 import { supabase } from '../supabaseClient.js';
@@ -435,15 +436,17 @@ export class BRTUpdater {
 
   /**
    * Map BRT record to property_records table with string preservation (UPSERT VERSION)
+   * ENHANCED: Now supports field preservation for component-defined fields
    */
-  mapToPropertyRecord(rawRecord, yearCreated, ccddCode, jobId, versionInfo = {}) {
+  mapToPropertyRecord(rawRecord, yearCreated, ccddCode, jobId, versionInfo = {}, preservedData = {}) {
     const blockValue = this.preserveStringValue(rawRecord.BLOCK);
     const lotValue = this.preserveStringValue(rawRecord.LOT);
     const qualifierValue = this.preserveStringValue(rawRecord.QUALIFIER) || 'NONE';
     const cardValue = this.preserveStringValue(rawRecord.CARD) || 'NONE';
     const locationValue = this.preserveStringValue(rawRecord.PROPERTY_LOCATION) || 'NONE';
     
-    return {
+    // Build the base record
+    const baseRecord = {
       // Job context
       job_id: jobId,
       
@@ -551,15 +554,23 @@ export class BRTUpdater {
       // Store complete raw data as JSON
       raw_data: rawRecord
     };
+
+    // ENHANCED: Merge with preserved data - preserved fields take precedence
+    // This ensures component-defined fields are not overwritten during updates
+    return {
+      ...baseRecord,
+      ...preservedData
+    };
   }
 
   /**
    * MAIN PROCESS METHOD - ENHANCED UPSERT VERSION
    * CLEANED: Removed surgical fix functions - job totals handled by AdminJobManagement/FileUploadButton
+   * ENHANCED: Added field preservation support
    */
   async processFile(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, versionInfo = {}) {
     try {
-      console.log('🚀 Starting ENHANCED BRT UPDATER (UPSERT) with COMPLETE section parsing...');
+      console.log('🚀 Starting ENHANCED BRT UPDATER (UPSERT) with COMPLETE section parsing and field preservation...');
       
       // Process and store code file if provided
       if (codeFileContent) {
@@ -568,15 +579,59 @@ export class BRTUpdater {
       
       const records = this.parseSourceFile(sourceFileContent);
       
+      // ENHANCED: Check if field preservation is enabled and get preserved data
+      let preservedDataMap = new Map();
+      if (versionInfo.preservedFieldsHandler && typeof versionInfo.preservedFieldsHandler === 'function') {
+        console.log('🔒 Field preservation enabled, fetching existing data...');
+        
+        // Generate composite keys for all records
+        const compositeKeys = records.map(rawRecord => {
+          const blockValue = this.preserveStringValue(rawRecord.BLOCK);
+          const lotValue = this.preserveStringValue(rawRecord.LOT);
+          const qualifierValue = this.preserveStringValue(rawRecord.QUALIFIER) || 'NONE';
+          const cardValue = this.preserveStringValue(rawRecord.CARD) || 'NONE';
+          const locationValue = this.preserveStringValue(rawRecord.PROPERTY_LOCATION) || 'NONE';
+          
+          return `${yearCreated}${ccddCode}-${blockValue}-${lotValue}_${qualifierValue}-${cardValue}-${locationValue}`;
+        });
+        
+        // Fetch preserved data using the handler from supabaseClient
+        preservedDataMap = await versionInfo.preservedFieldsHandler(jobId, compositeKeys);
+        console.log(`✅ Fetched preserved data for ${preservedDataMap.size} properties`);
+      }
+      
       const propertyRecords = [];
       
       for (const rawRecord of records) {
         try {
-          const propertyRecord = this.mapToPropertyRecord(rawRecord, yearCreated, ccddCode, jobId, versionInfo);
+          // Generate composite key for this record
+          const blockValue = this.preserveStringValue(rawRecord.BLOCK);
+          const lotValue = this.preserveStringValue(rawRecord.LOT);
+          const qualifierValue = this.preserveStringValue(rawRecord.QUALIFIER) || 'NONE';
+          const cardValue = this.preserveStringValue(rawRecord.CARD) || 'NONE';
+          const locationValue = this.preserveStringValue(rawRecord.PROPERTY_LOCATION) || 'NONE';
+          
+          const compositeKey = `${yearCreated}${ccddCode}-${blockValue}-${lotValue}_${qualifierValue}-${cardValue}-${locationValue}`;
+          
+          // Get preserved data for this property if available
+          const preservedData = preservedDataMap.get(compositeKey) || {};
+          
+          // Map to property record with preserved data
+          const propertyRecord = this.mapToPropertyRecord(rawRecord, yearCreated, ccddCode, jobId, versionInfo, preservedData);
           propertyRecords.push(propertyRecord);
         } catch (error) {
           console.error('Error mapping record:', error);
         }
+      }
+      
+      // Log preservation statistics
+      if (versionInfo.preservedFields && preservedDataMap.size > 0) {
+        const preservedCount = propertyRecords.filter(record => {
+          return versionInfo.preservedFields.some(field => 
+            record[field] !== null && record[field] !== undefined
+          );
+        }).length;
+        console.log(`📊 Preserving user-defined fields in ${preservedCount} records`);
       }
       
       const results = {
