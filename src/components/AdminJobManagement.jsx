@@ -311,9 +311,9 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
         // Get last file upload time from property_records
         const { data: fileData, error: fileError } = await supabase
           .from('property_records')
-          .select('')
+          .select('updated_at')
           .eq('job_id', job.id)
-          .order('', { ascending: false })
+          .order('updated_at', { ascending: false })
           .limit(1);
         
         // Get last production run time from inspection_data
