@@ -2274,7 +2274,7 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
                                 Active
                               </span>
                               <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium shadow-sm">
-                                {(job.percentBilled || 0).toFixed(2)}% Billed
+                                {((job.percentBilled || 0) * 100).toFixed(2)}% Billed
                               </span>
                             </div>
                           </div>
