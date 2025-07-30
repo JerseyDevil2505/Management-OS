@@ -125,9 +125,9 @@ const BillingManagement = () => {
           startIndex = 3;
         }
         
-        // Remove $ and commas from amounts
-        const totalAmount = parseFloat(parts[startIndex].replace(/[$,]/g, ''));
-        const retainerAmount = parseFloat(parts[startIndex + 1].replace(/[$,]/g, ''));
+        // Remove $ and commas from amounts and round to nearest dollar
+        const totalAmount = Math.round(parseFloat(parts[startIndex].replace(/[$,]/g, '')));
+        const retainerAmount = Math.round(parseFloat(parts[startIndex + 1].replace(/[$,]/g, '')));
         // Skip parts[startIndex + 2] which seems to be $0.00
         const amountBilled = parseFloat(parts[startIndex + 3].replace(/[$,]/g, ''));
         
@@ -363,7 +363,10 @@ const BillingManagement = () => {
     try {
       const { error } = await supabase
         .from('billing_events')
-        .update({ status: editingEvent.status })
+        .update({ 
+          status: editingEvent.status,
+          amount_billed: parseFloat(editingEvent.amount_billed)
+        })
         .eq('id', editingEvent.id);
 
       if (error) throw error;
@@ -1185,7 +1188,7 @@ const BillingManagement = () => {
               <div className="bg-gray-50 p-4 rounded-md">
                 <p className="text-sm text-gray-600 mb-1">Date: {new Date(editingEvent.billing_date).toLocaleDateString()}</p>
                 <p className="text-sm text-gray-600 mb-1">Invoice: {editingEvent.invoice_number}</p>
-                <p className="text-sm text-gray-600 mb-1">Amount Billed: {formatCurrency(editingEvent.amount_billed)}</p>
+                <p className="text-sm text-gray-600 mb-1">Percentage: {(editingEvent.percentage_billed * 100).toFixed(2)}%</p>
               </div>
 
               <div>
@@ -1200,6 +1203,23 @@ const BillingManagement = () => {
                   <option value="P">Paid</option>
                   <option value="">Open</option>
                 </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Amount Billed
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={editingEvent.amount_billed}
+                  onChange={(e) => setEditingEvent(prev => ({ ...prev, amount_billed: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  placeholder="0.00"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Original amount: {formatCurrency(editingEvent.total_amount - editingEvent.retainer_amount)}
+                </p>
               </div>
             </div>
 
@@ -1224,7 +1244,7 @@ const BillingManagement = () => {
                   onClick={handleUpdateBillingEvent}
                   className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
                 >
-                  Update Status
+                  Update Event
                 </button>
               </div>
             </div>
