@@ -470,6 +470,79 @@ const BillingManagement = () => {
     }
   };
 
+  const handleUpdatePlannedContract = async (planningJobId, contractAmount) => {
+    try {
+      const { error } = await supabase
+        .from('planning_jobs')
+        .update({ contract_amount: parseFloat(contractAmount) })
+        .eq('id', planningJobId);
+
+      if (error) throw error;
+      loadJobs();
+    } catch (error) {
+      console.error('Error updating planned contract:', error);
+    }
+  };
+
+  const handleRolloverToActive = async (planningJob) => {
+    if (!window.confirm(`Roll over "${planningJob.job_name}" to active jobs? This will create a new active job with billing setup.`)) {
+      return;
+    }
+
+    try {
+      // Create new active job
+      const { data: newJob, error: jobError } = await supabase
+        .from('jobs')
+        .insert({
+          job_name: planningJob.job_name,
+          vendor: planningJob.vendor,
+          job_type: 'standard',
+          billing_setup_complete: true,
+          percent_billed: 0,
+          total_properties: planningJob.total_properties || 0,
+          totalresidential: planningJob.residential_properties || 0,
+          totalcommercial: planningJob.commercial_properties || 0
+        })
+        .select()
+        .single();
+
+      if (jobError) throw jobError;
+
+      // Create contract with standard percentages
+      if (planningJob.contract_amount) {
+        const contractData = {
+          job_id: newJob.id,
+          contract_amount: planningJob.contract_amount,
+          retainer_percentage: 0.10,
+          retainer_amount: planningJob.contract_amount * 0.10,
+          end_of_job_percentage: 0.05,
+          end_of_job_amount: planningJob.contract_amount * 0.05,
+          first_year_appeals_percentage: 0.03,
+          first_year_appeals_amount: planningJob.contract_amount * 0.03,
+          second_year_appeals_percentage: 0.02,
+          second_year_appeals_amount: planningJob.contract_amount * 0.02,
+          third_year_appeals_percentage: 0.00,
+          third_year_appeals_amount: 0
+        };
+
+        await supabase.from('job_contracts').insert(contractData);
+      }
+
+      // Archive the planning job
+      await supabase
+        .from('planning_jobs')
+        .update({ is_archived: true })
+        .eq('id', planningJob.id);
+
+      alert(`Successfully rolled over "${planningJob.job_name}" to active jobs!`);
+      setActiveTab('active');
+      loadJobs();
+    } catch (error) {
+      console.error('Error rolling over planning job:', error);
+      alert('Error rolling over job: ' + error.message);
+    }
+  };
+
   const handleDeleteBillingEvent = async () => {
     if (!editingEvent) return;
     
