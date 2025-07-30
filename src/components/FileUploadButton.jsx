@@ -2130,7 +2130,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       <div className="flex items-center gap-3 text-gray-300">
         <FileText className="w-4 h-4 text-blue-400" />
         <span className="text-sm min-w-0 flex-1">
-          📄 Source: {getFileStatusWithRealVersion(job.source_file_uploaded_at || job.created_at, 'source')}
+          📄 Source: {getFileStatusWithRealVersion(job.updated_at || job.created_at, 'source')}
         </span>
         
         <input
