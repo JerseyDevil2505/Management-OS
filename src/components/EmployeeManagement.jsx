@@ -241,40 +241,34 @@ const EmployeeManagement = () => {
     const typeStats = {
       residential: { 
         count: 0, 
-        totalInspections: 0, 
-        residentialInspections: 0, // Only 2 and 3A
+        totalInspections: 0, // Only 2 and 3A
         entryCount: 0, 
         refusalCount: 0, 
         eligible: 0, 
         otherProperties: 0,
-        workDays: new Set()
+        workDays: residentialWorkDays
       },
       commercial: { 
         count: 0, 
-        totalInspections: 0, 
-        commercialInspections: 0, // Only 4A, 4B, 4C
+        totalInspections: 0, // Only 4A, 4B, 4C
         pricing: 0, 
+        pricingBRT: 0,
+        pricingMicrosystems: 0,
         otherProperties: 0,
-        workDays: new Set()
+        workDays: commercialWorkDays
       }
     };
 
     // Get unique job count
-    const uniqueJobs = new Set(validInspections.map(r => r.job_id)).size;
+    const uniqueJobs = new Set(filteredData.map(r => r.job_id)).size;
 
-    validInspections.forEach(record => {
+    // Track total residential (2/3A) and commercial (4A/4B/4C) inspections
+    let totalResidentialInspections = 0;
+    let totalCommercialInspections = 0;
+
+    filteredData.forEach(record => {
       const inspector = record.employee;
       const initials = inspector.initials || 'Unknown';
-      
-      // Define valid inspection: Must have valid initials in list_by, measure_by, or price_by
-      const hasValidInspection = (record.list_by && record.list_date) || 
-                                (record.measure_by && record.measure_date) || 
-                                (record.price_by && record.price_date);
-      
-      // Only process records that have valid inspection data
-      if (!hasValidInspection) {
-        return; // Skip this record - not a valid inspection
-      }
       
       if (!inspectorStats[initials]) {
         inspectorStats[initials] = {
@@ -291,63 +285,69 @@ const EmployeeManagement = () => {
           refusalRate: 0,
           dailyAvg: 0,
           pricingDays: 0,
-          workDays: new Set()
+          workDays: new Set(),
+          residentialWorkDays: new Set(),
+          commercialWorkDays: new Set()
         };
       }
 
-      inspectorStats[initials].totalInspections++;
-      
-      // Track work days based on the appropriate date field
-      if (record.list_date) {
-        inspectorStats[initials].workDays.add(record.list_date);
-      } else if (record.measure_date) {
-        inspectorStats[initials].workDays.add(record.measure_date);
-      } else if (record.price_date) {
-        inspectorStats[initials].workDays.add(record.price_date);
+      // Track work days based on property class
+      if (['2', '3A'].includes(record.property_class)) {
+        if (record.list_date) inspectorStats[initials].residentialWorkDays.add(record.list_date);
+        if (record.measure_date) inspectorStats[initials].residentialWorkDays.add(record.measure_date);
+        if (record.price_date) inspectorStats[initials].residentialWorkDays.add(record.price_date);
+      } else if (['4A', '4B', '4C'].includes(record.property_class)) {
+        if (record.list_date) inspectorStats[initials].commercialWorkDays.add(record.list_date);
+        if (record.measure_date) inspectorStats[initials].commercialWorkDays.add(record.measure_date);
+        if (record.price_date) inspectorStats[initials].commercialWorkDays.add(record.price_date);
       }
 
       // Track type-specific metrics
       const inspectorType = inspector.inspector_type?.toLowerCase();
       
       if (inspectorType === 'residential') {
-        typeStats.residential.totalInspections++;
-        // Track work days from any date field
-        if (record.list_date) typeStats.residential.workDays.add(record.list_date);
-        if (record.measure_date) typeStats.residential.workDays.add(record.measure_date);
-        if (record.price_date) typeStats.residential.workDays.add(record.price_date);
-        
-        // Count residential class properties (2 and 3A)
+        // Count ONLY residential class properties (2 and 3A) for residential inspectors
         if (['2', '3A'].includes(record.property_class)) {
-          typeStats.residential.residentialInspections++;
+          typeStats.residential.totalInspections++;
           inspectorStats[initials].residentialInspections++;
+          totalResidentialInspections++;
         } else {
           typeStats.residential.otherProperties++;
         }
       } else if (inspectorType === 'commercial') {
-        typeStats.commercial.totalInspections++;
-        // Track work days from any date field
-        if (record.list_date) typeStats.commercial.workDays.add(record.list_date);
-        if (record.measure_date) typeStats.commercial.workDays.add(record.measure_date);
-        if (record.price_date) typeStats.commercial.workDays.add(record.price_date);
-        
-        // Count commercial properties (4A, 4B, 4C)
+        // Count ONLY commercial properties (4A, 4B, 4C) for commercial inspectors
         if (['4A', '4B', '4C'].includes(record.property_class)) {
-          typeStats.commercial.commercialInspections++;
+          typeStats.commercial.totalInspections++;
           inspectorStats[initials].commercialInspections++;
+          totalCommercialInspections++;
+          
+          // Track pricing based on vendor type
+          const vendor = record.vendor || 'unknown';
+          if (vendor.toLowerCase() === 'brt') {
+            // BRT: Check for price_by and price_date
+            if (record.price_by && record.price_date) {
+              typeStats.commercial.pricingBRT++;
+              inspectorStats[initials].pricingDays++;
+            }
+          } else if (vendor.toLowerCase() === 'microsystems') {
+            // Microsystems: Check if info_by_code is in commercial array
+            const jobConfig = record.jobInfoByConfig;
+            if (jobConfig && jobConfig.commercial) {
+              const infoByCode = record.info_by_code?.toString();
+              if (infoByCode && jobConfig.commercial.includes(infoByCode)) {
+                typeStats.commercial.pricingMicrosystems++;
+                inspectorStats[initials].pricingDays++;
+              }
+            }
+          }
         } else {
           typeStats.commercial.otherProperties++;
-        }
-        
-        // Track pricing days
-        if (record.price_by && record.price_date) {
-          typeStats.commercial.pricing++;
-          inspectorStats[initials].pricingDays++;
         }
       }
 
       // Calculate entry/refusal ONLY for residential properties class 2 and 3A
       if (record.info_by_code && record.property_class && ['2', '3A'].includes(record.property_class)) {
-        totalEligible++;
+        // Already counted in totalResidentialInspections, no need to count again
         inspectorStats[initials].totalEligible = (inspectorStats[initials].totalEligible || 0) + 1;
         
         if (inspectorType === 'residential') {
@@ -359,34 +359,24 @@ const EmployeeManagement = () => {
         let isEntry = false;
         let isRefusal = false;
 
-        // Debug logging - remove after testing
-        if (totalEligible <= 5) {
-          console.log('🔍 InfoBy Debug:', {
-            jobId: record.job_id,
-            infoByCode: record.info_by_code,
-            jobConfig: jobConfig,
-            propertyClass: record.property_class
-          });
-        }
-
-        if (jobConfig) {
+        if (jobConfig && jobConfig.entry && jobConfig.refusal) {
           // Use job-specific InfoBy category config
-          const infoByCode = record.info_by_code.toString();
+          const infoByCode = record.info_by_code?.toString();
           
           // Check if this code is in the entry category
-          if (jobConfig.entry && Array.isArray(jobConfig.entry) && jobConfig.entry.includes(infoByCode)) {
+          if (infoByCode && Array.isArray(jobConfig.entry) && jobConfig.entry.includes(infoByCode)) {
             isEntry = true;
           }
           // Check if this code is in the refusal category
-          else if (jobConfig.refusal && Array.isArray(jobConfig.refusal) && jobConfig.refusal.includes(infoByCode)) {
+          else if (infoByCode && Array.isArray(jobConfig.refusal) && jobConfig.refusal.includes(infoByCode)) {
             isRefusal = true;
           }
         } else {
           // Fallback to simple InfoBy logic if no job config
-          const infoBy = record.info_by_code.toString().toLowerCase();
-          if (['01', '02', '03', '04', 'a', 'o', 's', 't'].includes(infoBy)) {
+          const infoBy = record.info_by_code?.toString().toLowerCase();
+          if (infoBy && ['01', '02', '03', '04', 'a', 'o', 's', 't'].includes(infoBy)) {
             isEntry = true;
-          } else if (['06', 'r'].includes(infoBy)) {
+          } else if (infoBy && ['06', 'r'].includes(infoBy)) {
             isRefusal = true;
           }
         }
@@ -407,6 +397,9 @@ const EmployeeManagement = () => {
       }
     });
 
+    // After the forEach loop, totalEligible should equal totalResidentialInspections
+    totalEligible = totalResidentialInspections;
+
     // Count unique inspectors by type
     Object.values(inspectorStats).forEach(inspector => {
       const type = inspector.inspectorType?.toLowerCase();
@@ -421,9 +414,16 @@ const EmployeeManagement = () => {
       stats.entryRate = eligible > 0 ? Math.round((stats.entryInspections / eligible) * 100) : 0;
       stats.refusalRate = eligible > 0 ? Math.round((stats.refusalInspections / eligible) * 100) : 0;
       
-      // Calculate daily average based on actual work days
-      const inspectorWorkDays = stats.workDays.size || 1;
-      stats.dailyAvg = Math.round((stats.totalInspections / inspectorWorkDays) * 10) / 10;
+      // Calculate daily average based on property class and inspector type
+      if (stats.inspectorType === 'Residential') {
+        const workDays = stats.residentialWorkDays.size || 1;
+        stats.dailyAvg = Math.round((stats.residentialInspections / workDays) * 10) / 10;
+        stats.workDays = stats.residentialWorkDays; // Use residential work days for display
+      } else if (stats.inspectorType === 'Commercial') {
+        const workDays = stats.commercialWorkDays.size || 1;
+        stats.dailyAvg = Math.round((stats.commercialInspections / workDays) * 10) / 10;
+        stats.workDays = stats.commercialWorkDays; // Use commercial work days for display
+      }
     });
 
     // Calculate type-level rates and averages
@@ -433,24 +433,25 @@ const EmployeeManagement = () => {
       const residentialWorkDays = typeStats.residential.workDays.size || 1;
       byType.residential = {
         count: typeStats.residential.count,
-        totalInspections: typeStats.residential.residentialInspections, // Only show 2 and 3A
-        avgDaily: Math.round((typeStats.residential.residentialInspections / residentialWorkDays) * 10) / 10,
-        entryRate: typeStats.residential.eligible > 0 ? 
-          Math.round((typeStats.residential.entryCount / typeStats.residential.eligible) * 100) : 0,
-        refusalRate: typeStats.residential.eligible > 0 ? 
-          Math.round((typeStats.residential.refusalCount / typeStats.residential.eligible) * 100) : 0,
+        totalInspections: typeStats.residential.totalInspections, // Only 2 and 3A
+        avgDaily: Math.round((typeStats.residential.totalInspections / residentialWorkDays) * 10) / 10,
+        entryRate: totalEligible > 0 ? 
+          Math.round((typeStats.residential.entryCount / totalEligible) * 100) : 0,
+        refusalRate: totalEligible > 0 ? 
+          Math.round((typeStats.residential.refusalCount / totalEligible) * 100) : 0,
         otherProperties: typeStats.residential.otherProperties
       };
     }
     
     if (typeStats.commercial.count > 0) {
       const commercialWorkDays = typeStats.commercial.workDays.size || 1;
+      const totalPricing = typeStats.commercial.pricingBRT + typeStats.commercial.pricingMicrosystems;
       byType.commercial = {
         count: typeStats.commercial.count,
-        totalInspections: typeStats.commercial.commercialInspections, // Only show 4A, 4B, 4C
-        avgDaily: Math.round((typeStats.commercial.commercialInspections / commercialWorkDays) * 10) / 10,
-        commercial: typeStats.commercial.commercialInspections,
-        pricing: typeStats.commercial.pricing,
+        totalInspections: typeStats.commercial.totalInspections, // Only 4A, 4B, 4C
+        avgDaily: Math.round((typeStats.commercial.totalInspections / commercialWorkDays) * 10) / 10,
+        commercial: typeStats.commercial.totalInspections,
+        pricing: totalPricing,
         otherProperties: typeStats.commercial.otherProperties
       };
     }
@@ -508,22 +509,33 @@ const EmployeeManagement = () => {
       };
     }
 
-    // Get unique inspector count
-    const uniqueInspectors = Object.keys(inspectorStats).length || 1;
+    // Get unique inspector counts by type
+    const residentialInspectorCount = inspectorArray.filter(i => i.inspectorType === 'Residential').length || 1;
+    const commercialInspectorCount = inspectorArray.filter(i => i.inspectorType === 'Commercial').length || 1;
+    
+    // Calculate proper daily averages per inspector
+    const overallAvgPerInspector = filter.inspectorType === 'Residential' ?
+      Math.round((totalResidentialInspections / residentialWorkDays.size / residentialInspectorCount) * 10) / 10 :
+      filter.inspectorType === 'Commercial' ?
+      Math.round((totalCommercialInspections / commercialWorkDays.size / commercialInspectorCount) * 10) / 10 :
+      Math.round(((totalResidentialInspections + totalCommercialInspections) / 
+        (Math.max(residentialWorkDays.size, commercialWorkDays.size)) / 
+        (residentialInspectorCount + commercialInspectorCount)) * 10) / 10;
     
     return {
       summary: {
-        totalInspections: totalInspections,
+        totalInspections: filter.inspectorType === 'Residential' ? totalResidentialInspections :
+                         filter.inspectorType === 'Commercial' ? totalCommercialInspections :
+                         totalResidentialInspections + totalCommercialInspections,
         overallEntryRate: totalEligible > 0 ? Math.round((entryCount / totalEligible) * 100) : 0,
         overallRefusalRate: totalEligible > 0 ? Math.round((refusalCount / totalEligible) * 100) : 0,
-        avgInspectionsPerDay: Math.round((totalInspections / totalWorkDays / uniqueInspectors) * 10) / 10
+        avgInspectionsPerDay: overallAvgPerInspector
       },
       jobCount: uniqueJobs,
       byType,
       topPerformers,
       inspectors: inspectorArray,
-      regional: regionalStats,
-      totalInspectors: uniqueInspectors
+      regional: regionalStats
     };
   };
 
@@ -1340,7 +1352,11 @@ const EmployeeManagement = () => {
                           {globalAnalytics.summary.totalInspections.toLocaleString()}
                         </div>
                         <div className="text-sm font-medium text-gray-700">Total Inspections</div>
-                        <div className="text-xs text-gray-500 mt-1">Across all {globalAnalytics.jobCount || 13} jobs</div>
+                        <div className="text-xs text-gray-500 mt-1">
+                          {analyticsFilter.inspectorType === 'Residential' ? 'Class 2 & 3A only' :
+                           analyticsFilter.inspectorType === 'Commercial' ? 'Class 4A, 4B & 4C only' :
+                           'All property classes'}
+                        </div>
                       </div>
                       
                       <div className="bg-white p-6 rounded-lg border-2 border-green-200 shadow-sm">
