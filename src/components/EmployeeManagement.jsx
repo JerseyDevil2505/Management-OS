@@ -189,14 +189,15 @@ const EmployeeManagement = () => {
       const matchesType = filter.inspectorType === 'all' || record.employee.inspector_type === filter.inspectorType;
       const matchesRegion = filter.region === 'all' || record.employee.region === filter.region;
       
-      // FIXED: Don't filter out commercial inspectors based on property type
-      // Let all inspector types show up in analytics regardless of what they inspect
       return matchesType && matchesRegion;
     });
 
     // Calculate summary metrics
     const totalInspections = filteredData.length;
-    const validInspections = filteredData.filter(r => r.list_by || r.measure_by || r.price_by).length;
+    
+    // Get unique dates to calculate actual work days
+    const uniqueDates = new Set(filteredData.map(r => r.inspection_date).filter(Boolean));
+    const totalWorkDays = uniqueDates.size || 1; // Prevent division by zero
     
     // Calculate entry/refusal rates using ProductionTracker logic
     let entryCount = 0;
@@ -205,8 +206,24 @@ const EmployeeManagement = () => {
 
     const inspectorStats = {};
     const typeStats = {
-      residential: { count: 0, totalInspections: 0, entryCount: 0, refusalCount: 0, eligible: 0, otherProperties: 0 },
-      commercial: { count: 0, totalInspections: 0, commercial: 0, pricing: 0, otherProperties: 0 }
+      residential: { 
+        count: 0, 
+        totalInspections: 0, 
+        residentialInspections: 0, // Only 2 and 3A
+        entryCount: 0, 
+        refusalCount: 0, 
+        eligible: 0, 
+        otherProperties: 0,
+        workDays: new Set()
+      },
+      commercial: { 
+        count: 0, 
+        totalInspections: 0, 
+        commercialInspections: 0, // Only 4A, 4B, 4C
+        pricing: 0, 
+        otherProperties: 0,
+        workDays: new Set()
+      }
     };
 
     // Get unique job count
@@ -223,35 +240,51 @@ const EmployeeManagement = () => {
           inspectorType: inspector.inspector_type,
           region: inspector.region,
           totalInspections: 0,
+          residentialInspections: 0, // Only 2 and 3A
+          commercialInspections: 0, // Only 4A, 4B, 4C
           entryInspections: 0,
           refusalInspections: 0,
           entryRate: 0,
           refusalRate: 0,
           dailyAvg: 0,
-          commercialCount: 0,
-          pricingDays: 0
+          pricingDays: 0,
+          workDays: new Set()
         };
       }
 
       inspectorStats[initials].totalInspections++;
+      if (record.inspection_date) {
+        inspectorStats[initials].workDays.add(record.inspection_date);
+      }
 
       // Track type-specific metrics
       const inspectorType = inspector.inspector_type?.toLowerCase();
       
-      if (inspectorType === 'residential' && typeStats.residential) {
+      if (inspectorType === 'residential') {
         typeStats.residential.totalInspections++;
+        if (record.inspection_date) {
+          typeStats.residential.workDays.add(record.inspection_date);
+        }
         
-        // Track other properties (non 2/3A)
-        if (!['2', '3A'].includes(record.property_class)) {
+        // Count residential class properties (2 and 3A)
+        if (['2', '3A'].includes(record.property_class)) {
+          typeStats.residential.residentialInspections++;
+          inspectorStats[initials].residentialInspections++;
+        } else {
           typeStats.residential.otherProperties++;
         }
-      } else if (inspectorType === 'commercial' && typeStats.commercial) {
+      } else if (inspectorType === 'commercial') {
         typeStats.commercial.totalInspections++;
+        if (record.inspection_date) {
+          typeStats.commercial.workDays.add(record.inspection_date);
+        }
         
-        // Track commercial properties (4A, 4B, 4C)
+        // Count commercial properties (4A, 4B, 4C)
         if (['4A', '4B', '4C'].includes(record.property_class)) {
-          typeStats.commercial.commercial++;
-          inspectorStats[initials].commercialCount++;
+          typeStats.commercial.commercialInspections++;
+          inspectorStats[initials].commercialInspections++;
+        } else {
+          typeStats.commercial.otherProperties++;
         }
         
         // Track pricing days
@@ -259,14 +292,9 @@ const EmployeeManagement = () => {
           typeStats.commercial.pricing++;
           inspectorStats[initials].pricingDays++;
         }
-        
-        // Track other properties
-        if (!['4A', '4B', '4C'].includes(record.property_class)) {
-          typeStats.commercial.otherProperties++;
-        }
       }
 
-      // Determine if this is entry/refusal based on InfoBy codes (copying ProductionTracker logic)
+      // Calculate entry/refusal ONLY for residential properties class 2 and 3A
       if (record.info_by_code && record.property_class && ['2', '3A'].includes(record.property_class)) {
         totalEligible++;
         inspectorStats[initials].totalEligible = (inspectorStats[initials].totalEligible || 0) + 1;
@@ -306,17 +334,21 @@ const EmployeeManagement = () => {
       const eligible = stats.totalEligible || 0;
       stats.entryRate = eligible > 0 ? Math.round((stats.entryInspections / eligible) * 100) : 0;
       stats.refusalRate = eligible > 0 ? Math.round((stats.refusalInspections / eligible) * 100) : 0;
-      stats.dailyAvg = stats.totalInspections > 0 ? Math.round((stats.totalInspections / 30) * 10) / 10 : 0; // Rough daily avg
+      
+      // Calculate daily average based on actual work days
+      const inspectorWorkDays = stats.workDays.size || 1;
+      stats.dailyAvg = Math.round((stats.totalInspections / inspectorWorkDays) * 10) / 10;
     });
 
     // Calculate type-level rates and averages
     const byType = {};
     
     if (typeStats.residential.count > 0) {
+      const residentialWorkDays = typeStats.residential.workDays.size || 1;
       byType.residential = {
         count: typeStats.residential.count,
-        totalInspections: typeStats.residential.totalInspections,
-        avgDaily: Math.round((typeStats.residential.totalInspections / 30) * 10) / 10,
+        totalInspections: typeStats.residential.residentialInspections, // Only show 2 and 3A
+        avgDaily: Math.round((typeStats.residential.residentialInspections / residentialWorkDays) * 10) / 10,
         entryRate: typeStats.residential.eligible > 0 ? 
           Math.round((typeStats.residential.entryCount / typeStats.residential.eligible) * 100) : 0,
         refusalRate: typeStats.residential.eligible > 0 ? 
@@ -326,11 +358,12 @@ const EmployeeManagement = () => {
     }
     
     if (typeStats.commercial.count > 0) {
+      const commercialWorkDays = typeStats.commercial.workDays.size || 1;
       byType.commercial = {
         count: typeStats.commercial.count,
-        totalInspections: typeStats.commercial.totalInspections,
-        avgDaily: Math.round((typeStats.commercial.totalInspections / 30) * 10) / 10,
-        commercial: typeStats.commercial.commercial,
+        totalInspections: typeStats.commercial.commercialInspections, // Only show 4A, 4B, 4C
+        avgDaily: Math.round((typeStats.commercial.commercialInspections / commercialWorkDays) * 10) / 10,
+        commercial: typeStats.commercial.commercialInspections,
         pricing: typeStats.commercial.pricing,
         otherProperties: typeStats.commercial.otherProperties
       };
@@ -385,16 +418,16 @@ const EmployeeManagement = () => {
         name: commercialInspectors[0].name,
         initials: commercialInspectors[0].initials,
         totalInspections: commercialInspectors[0].totalInspections,
-        commercialCount: commercialInspectors[0].commercialCount
+        commercialCount: commercialInspectors[0].commercialInspections
       };
     }
 
     return {
       summary: {
-        totalInspections: validInspections,
+        totalInspections: totalInspections,
         overallEntryRate: totalEligible > 0 ? Math.round((entryCount / totalEligible) * 100) : 0,
         overallRefusalRate: totalEligible > 0 ? Math.round((refusalCount / totalEligible) * 100) : 0,
-        avgInspectionsPerDay: validInspections > 0 ? Math.round((validInspections / 30) * 10) / 10 : 0
+        avgInspectionsPerDay: Math.round((totalInspections / totalWorkDays) * 10) / 10
       },
       jobCount: uniqueJobs,
       byType,
