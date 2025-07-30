@@ -38,10 +38,93 @@ const BillingManagement = () => {
     contractAmount: '',
     billingHistory: ''
   });
+  const [globalMetrics, setGlobalMetrics] = useState({
+    totalSigned: 0,
+    totalPaid: 0,
+    totalRemaining: 0,
+    totalRemainingExcludingRetainer: 0
+  });
 
   useEffect(() => {
     loadJobs();
+    calculateGlobalMetrics();
   }, [activeTab]);
+
+  const calculateGlobalMetrics = async () => {
+    try {
+      // Get all active jobs with contracts
+      const { data: activeJobs } = await supabase
+        .from('jobs')
+        .select(`
+          job_contracts(contract_amount),
+          billing_events(amount_billed, retainer_amount, status)
+        `)
+        .eq('job_type', 'standard');
+
+      // Get planning jobs with contract amounts
+      const { data: planningJobsData } = await supabase
+        .from('planning_jobs')
+        .select('contract_amount')
+        .not('contract_amount', 'is', null)
+        .eq('is_archived', false);
+
+      let totalSigned = 0;
+      let totalPaid = 0;
+      let totalRemaining = 0;
+      let totalRemainingExcludingRetainer = 0;
+
+      // Calculate from active jobs
+      if (activeJobs) {
+        activeJobs.forEach(job => {
+          if (job.job_contracts?.[0]) {
+            const contractAmount = job.job_contracts[0].contract_amount;
+            totalSigned += contractAmount;
+
+            let jobPaid = 0;
+            let jobRetainerPaid = 0;
+
+            if (job.billing_events) {
+              job.billing_events.forEach(event => {
+                if (event.status === 'P') {
+                  jobPaid += event.amount_billed;
+                  jobRetainerPaid += event.retainer_amount;
+                }
+              });
+            }
+
+            totalPaid += jobPaid;
+            const jobRemaining = contractAmount - jobPaid;
+            totalRemaining += jobRemaining;
+            
+            // For remaining excluding retainer, we add back the paid retainer amounts
+            totalRemainingExcludingRetainer += (jobRemaining - jobRetainerPaid);
+          }
+        });
+      }
+
+      // Add planning jobs to total signed
+      if (planningJobsData) {
+        planningJobsData.forEach(job => {
+          if (job.contract_amount) {
+            totalSigned += job.contract_amount;
+            // Planning jobs have no payments yet, so full amount is remaining
+            totalRemaining += job.contract_amount;
+            // Assuming standard 10% retainer for planning jobs
+            totalRemainingExcludingRetainer += (job.contract_amount * 0.9);
+          }
+        });
+      }
+
+      setGlobalMetrics({
+        totalSigned,
+        totalPaid,
+        totalRemaining,
+        totalRemainingExcludingRetainer
+      });
+    } catch (error) {
+      console.error('Error calculating global metrics:', error);
+    }
+  };
 
   const loadJobs = async () => {
     try {
@@ -270,6 +353,7 @@ const BillingManagement = () => {
         thirdYearAppealsPercentage: 0.00
       });
       loadJobs();
+      calculateGlobalMetrics();
     } catch (error) {
       console.error('Error setting up contract:', error);
     }
@@ -388,6 +472,7 @@ const BillingManagement = () => {
         overrideAmount: ''
       });
       loadJobs();
+      calculateGlobalMetrics();
     } catch (error) {
       console.error('Error adding billing event:', error);
     }
@@ -464,6 +549,7 @@ const BillingManagement = () => {
       setShowEditBilling(false);
       setEditingEvent(null);
       loadJobs();
+      calculateGlobalMetrics();
     } catch (error) {
       console.error('Error updating billing event:', error);
       alert('Error updating billing event: ' + error.message);
@@ -691,6 +777,33 @@ const BillingManagement = () => {
         <p className="text-gray-600">Track contracts, billing events, and payment status</p>
       </div>
 
+      {/* Global Metrics Dashboard */}
+      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-6 mb-6">
+        <h2 className="text-lg font-semibold text-gray-800 mb-4">Business Overview</h2>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="bg-white rounded-lg p-4 shadow-sm">
+            <p className="text-sm text-gray-600 mb-1">Total Signed Contracts</p>
+            <p className="text-2xl font-bold text-gray-900">{formatCurrency(globalMetrics.totalSigned)}</p>
+            <p className="text-xs text-gray-500 mt-1">Active + Planned</p>
+          </div>
+          <div className="bg-white rounded-lg p-4 shadow-sm">
+            <p className="text-sm text-gray-600 mb-1">Total Amount Paid</p>
+            <p className="text-2xl font-bold text-green-600">{formatCurrency(globalMetrics.totalPaid)}</p>
+            <p className="text-xs text-gray-500 mt-1">All paid invoices</p>
+          </div>
+          <div className="bg-white rounded-lg p-4 shadow-sm">
+            <p className="text-sm text-gray-600 mb-1">Total Remaining</p>
+            <p className="text-2xl font-bold text-orange-600">{formatCurrency(globalMetrics.totalRemaining)}</p>
+            <p className="text-xs text-gray-500 mt-1">Including retainer</p>
+          </div>
+          <div className="bg-white rounded-lg p-4 shadow-sm border-2 border-blue-400">
+            <p className="text-sm text-gray-600 mb-1">Remaining (No Retainer)</p>
+            <p className="text-2xl font-bold text-blue-600">{formatCurrency(globalMetrics.totalRemainingExcludingRetainer)}</p>
+            <p className="text-xs text-blue-600 mt-1">Actual work remaining</p>
+          </div>
+        </div>
+      </div>
+
       {/* Tab Navigation */}
       <div className="border-b border-gray-200 mb-6">
         <nav className="-mb-px flex space-x-8">
@@ -742,7 +855,14 @@ const BillingManagement = () => {
                   <p className="text-gray-600">No active jobs found.</p>
                 </div>
               ) : (
-                jobs.map(job => {
+                jobs
+                  .sort((a, b) => {
+                    // Calculate percent billed for sorting
+                    const aPercent = a.percent_billed || 0;
+                    const bPercent = b.percent_billed || 0;
+                    return aPercent - bPercent; // Lowest percent first
+                  })
+                  .map(job => {
                   const totals = calculateBillingTotals(job);
                   const needsContractSetup = !job.job_contracts || job.job_contracts.length === 0;
                   
