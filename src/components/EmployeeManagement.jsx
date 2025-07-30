@@ -2124,6 +2124,7 @@ const EmployeeManagement = () => {
           </div>
         </div>
       )}
+    </div>
   );
 };
 
