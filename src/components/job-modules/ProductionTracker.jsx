@@ -1947,6 +1947,49 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
     }
   };
 
+  // Sync validation overrides to current file version to prevent duplicate key errors
+  const syncOverridesToCurrentVersion = async () => {
+    try {
+      console.log('🔄 Syncing validation overrides to current file version...');
+      
+      // Get count of overrides that need syncing
+      const { count, error: countError } = await supabase
+        .from('inspection_data')
+        .select('*', { count: 'exact', head: true })
+        .eq('job_id', jobData.id)
+        .eq('override_applied', true)
+        .lt('file_version', latestFileVersion);
+      
+      if (countError) throw countError;
+      
+      if (count > 0) {
+        // Update them all to current version
+        const { error: updateError } = await supabase
+          .from('inspection_data')
+          .update({ 
+            file_version: latestFileVersion,
+            upload_date: new Date().toISOString()
+          })
+          .eq('job_id', jobData.id)
+          .eq('override_applied', true)
+          .lt('file_version', latestFileVersion);
+        
+        if (updateError) throw updateError;
+        
+        console.log(`✅ Synced ${count} validation overrides from older versions to version ${latestFileVersion}`);
+        addNotification(`✅ Synced ${count} validation overrides to current version ${latestFileVersion}`, 'success');
+      } else {
+        console.log('✅ All validation overrides already at current version');
+      }
+      
+      return count || 0;
+    } catch (error) {
+      console.error('Error syncing overrides:', error);
+      addNotification('Warning: Could not sync existing overrides', 'warning');
+      return 0;
+    }
+  };
+
   // Start processing session with persistence
   const startProcessingSession = async () => {
     if (!isDateLocked) {
@@ -1983,6 +2026,9 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         startDate: projectStartDate,
         categoryConfig: infoByCategoryConfig 
       });
+
+      // 🆕 Sync overrides before processing to prevent duplicate key errors!
+      await syncOverridesToCurrentVersion();
 
       const results = await processAnalytics();
       if (!results) {
