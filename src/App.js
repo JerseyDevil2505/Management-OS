@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { supabase } from './lib/supabaseClient';
+import { supabase, jobService } from './lib/supabaseClient';
 import EmployeeManagement from './components/EmployeeManagement';
 import AdminJobManagement from './components/AdminJobManagement';
 import BillingManagement from './components/BillingManagement';
