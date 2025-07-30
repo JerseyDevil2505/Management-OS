@@ -48,7 +48,7 @@ const JobContainer = ({
       // Get data version from property_records table (latest file_version)
       const { data: dataVersionData, error: dataVersionError } = await supabase
         .from('property_records')
-        .select('file_version')
+        .select('file_version, updated_at')
         .eq('job_id', selectedJob.id)
         .order('file_version', { ascending: false })
         .limit(1)
@@ -57,7 +57,7 @@ const JobContainer = ({
       // Get code version from jobs table 
       const { data: jobData, error: jobError } = await supabase
         .from('jobs')
-        .select('code_file_version')
+        .select('code_file_version, updated_at')
         .eq('id', selectedJob.id)
         .single();
 
@@ -90,6 +90,7 @@ const JobContainer = ({
       // Prepare enriched job data
       const enrichedJobData = {
         ...selectedJob,
+        updated_at: jobData?.updated_at || selectedJob.updated_at,
         manager_name: 'Manager Name Here', // TODO: Resolve from employees table using assigned_manager UUID
         due_year: selectedJob.end_date ? new Date(selectedJob.end_date).getFullYear() : 'TBD',
         latest_data_version: currentFileVersion,
