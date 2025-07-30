@@ -231,8 +231,10 @@ function App() {
     if (!selectedJob) return;
     
     try {
+      console.log('🔍 DEBUG - refreshSelectedJob called for job:', selectedJob.id);
       // Get all jobs using the service (which includes field mapping)
       const jobs = await jobService.getAll();
+      console.log('🔍 DEBUG - jobService.getAll() returned', jobs.length, 'jobs');
       
       // Find the selected job from the results
       const refreshedJob = jobs.find(j => j.id === selectedJob.id);
