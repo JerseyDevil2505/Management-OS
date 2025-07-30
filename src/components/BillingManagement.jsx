@@ -288,8 +288,8 @@ const BillingManagement = () => {
       } else {
         // Handle single event
         const percentageDecimal = parseFloat(billingForm.percentageBilled) / 100;
-        const totalAmount = contract.contract_amount * percentageDecimal;
-        const retainerAmount = totalAmount * contract.retainer_percentage;
+        const totalAmount = Math.round(contract.contract_amount * percentageDecimal);
+        const retainerAmount = Math.round(totalAmount * contract.retainer_percentage);
         
         let amountBilled;
         if (billingForm.manualOverride && billingForm.overrideAmount) {
