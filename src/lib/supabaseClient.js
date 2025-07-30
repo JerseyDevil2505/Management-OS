@@ -1,1075 +1,517 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.REACT_APP_SUPABASE_URL || 'https://zxvavttfvpsagzluqqwn.supabase.co';
-const supabaseKey = process.env.REACT_APP_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp4dmF2dHRmdnBzYWd6bHVxcXduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIzNDA4NjcsImV4cCI6MjA2NzkxNjg2N30.Rrn2pTnImCpBIoKPcdlzzZ9hMwnYtIO5s7i1ejwQReg';
+const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
+const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY;
 
-export const supabase = createClient(supabaseUrl, supabaseKey);
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-// ===== EMPLOYEE MANAGEMENT SERVICES =====
-export const employeeService = {
+// Define fields that must be preserved during file updates
+const PRESERVED_FIELDS = [
+  'project_start_date',      // ProductionTracker
+  'is_assigned_property',    // AdminJobManagement  
+  'validation_status',       // ProductionTracker
+  'asset_building_class',    // FinalValuation
+  'asset_design_style',      // FinalValuation
+  'asset_ext_cond',         // FinalValuation
+  'asset_int_cond',         // FinalValuation
+  'asset_type_use',         // FinalValuation
+  'asset_year_built',       // FinalValuation
+  'asset_zoning',           // FinalValuation
+  'location_analysis',      // MarketAnalysis
+  'new_vcs',                // AppealCoverage
+  'values_norm_size',       // Valuation adjustments
+  'values_norm_time'        // Valuation adjustments
+];
+
+// Job Service
+export const jobService = {
   async getAll() {
-    try {
-      const { data, error } = await supabase
-        .from('employees')
-        .select('*')
-        .order('last_name');
-      
-      if (error) throw error;
-      return data;
-    } catch (error) {
-      console.error('Employee service error:', error);
-      return [];
-    }
+    const { data, error } = await supabase
+      .from('jobs')
+      .select('*')
+      .order('created_at', { ascending: false });
+    
+    if (error) throw error;
+    return data;
   },
 
   async getById(id) {
-    try {
-      const { data, error } = await supabase
-        .from('employees')
-        .select('*')
-        .eq('id', id)
-        .single();
-      
-      if (error) throw error;
-      return data;
-    } catch (error) {
-      console.error('Employee service error:', error);
-      return null;
-    }
-  },
-
-  async create(employee) {
-    try {
-      const { data, error } = await supabase
-        .from('employees')
-        .insert([employee])
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
-    } catch (error) {
-      console.error('Employee service error:', error);
-      throw error;
-    }
-  },
-
-  async update(id, updates) {
-    try {
-      const { data, error } = await supabase
-        .from('employees')
-        .update(updates)
-        .eq('id', id)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
-    } catch (error) {
-      console.error('Employee service error:', error);
-      throw error;
-    }
-  },
-
-  async delete(id) {
-    try {
-      const { error } = await supabase
-        .from('employees')
-        .delete()
-        .eq('id', id);
-      
-      if (error) throw error;
-    } catch (error) {
-      console.error('Employee service error:', error);
-      throw error;
-    }
-  },
-
-  async bulkImport(employees) {
-    try {
-      const { data, error } = await supabase
-        .from('employees')
-        .insert(employees)
-        .select();
-      
-      if (error) throw error;
-      return data;
-    } catch (error) {
-      console.error('Employee service error:', error);
-      throw error;
-    }
-  },
-
-  async bulkUpsert(employees) {
-    try {
-      const { data, error } = await supabase
-        .from('employees')
-        .upsert(employees, { 
-          onConflict: 'email',
-          ignoreDuplicates: false 
-        })
-        .select();
-      
-      if (error) throw error;
-      return data;
-    } catch (error) {
-      console.error('Employee bulk upsert error:', error);
-      throw error;
-    }
-  },
-
-  async bulkUpdate(employees) {
-    try {
-      const updates = await Promise.all(
-        employees.map(emp => 
-          supabase
-            .from('employees')
-            .update(emp)
-            .eq('id', emp.id)
-            .select()
-        )
-      );
-      
-      return updates.map(result => result.data).flat();
-    } catch (error) {
-      console.error('Employee bulk update error:', error);
-      throw error;
-    }
-  },
-
-  async getManagers() {
-    try {
-      const { data, error } = await supabase
-        .from('employees')
-        .select('*')
-        .in('role', ['Management', 'Owner'])
-        .order('last_name');
-      
-      if (error) throw error;
-      
-      // Hard-code admin capabilities for the three admins
-      const managersWithAdminRoles = data.map(emp => {
-        const fullName = `${emp.first_name} ${emp.last_name}`.toLowerCase();
-        
-        const isAdmin = emp.role === 'Owner' || 
-                       fullName.includes('tom davis') || 
-                       fullName.includes('brian schneider') || 
-                       fullName.includes('james duda');
-        
-        return {
-          ...emp,
-          can_be_lead: true,
-          is_admin: isAdmin,
-          effective_role: 'admin'
-        };
-      });
-      
-      return managersWithAdminRoles;
-    } catch (error) {
-      console.error('Manager service error:', error);
-      return this.getAll();
-    }
-  }
-};
-
-// ===== JOB MANAGEMENT SERVICES =====
-export const jobService = {
-  async getAll() {
-    try {
-      const { data, error } = await supabase
-        .from('jobs')
-        .select(`
-          *,
-          job_assignments (
-            id,
-            role,
-            employee:employees!job_assignments_employee_id_fkey (
-              id,
-              first_name,
-              last_name,
-              email,
-              region
-            )
-          )
-        `)
-        .order('created_at', { ascending: false });
-      
-      if (error) throw error;
-      
-      return data.map(job => ({
-        id: job.id,
-        name: job.job_name,
-        ccddCode: job.ccdd_code,
-        ccdd: job.ccdd_code, // ADDED: Alternative accessor for backward compatibility
-        municipality: job.municipality || job.client_name,
-        job_number: job.job_number,
-        year_created: job.year_created,
-        county: job.county,
-        state: job.state,
-        vendor: job.vendor_type,
-        status: job.status,
-        createdDate: job.start_date,
-        dueDate: job.end_date || job.target_completion_date,
-        totalProperties: job.total_properties || 0,
-        
-        // ✅ FIXED: Added missing residential/commercial totals from database
-        totalresidential: job.totalresidential || 0,
-        totalcommercial: job.totalcommercial || 0,
-        
-        // inspectedProperties: job.inspected_properties || 0,  // ❌ REMOVED 2025-01-XX: Field deleted from jobs table, now using live analytics
-        sourceFileStatus: job.source_file_status || 'pending',
-        codeFileStatus: job.code_file_status || 'pending',
-        vendorDetection: job.vendor_detection,
-        workflowStats: job.workflow_stats,
-        percent_billed: job.percent_billed,  // FIXED: was percentBilling, now percent_billed
-        
-        // ADDED: Property assignment tracking for enhanced metrics
-        has_property_assignments: job.has_property_assignments || false,
-        assigned_has_commercial: job.assigned_has_commercial || false,
-        assignedPropertyCount: job.assigned_property_count || 0,
-        
-        // ADDED: File timestamp tracking for FileUploadButton
-        created_at: job.created_at,
-        source_file_uploaded_at: job.source_file_uploaded_at,
-        code_file_uploaded_at: job.code_file_uploaded_at,
-        updated_at: job.updated_at,
-        
-        // ADDED: File version tracking
-        source_file_version: job.source_file_version || 1,
-        code_file_version: job.code_file_version || 1,
-        
-        assignedManagers: job.job_assignments?.map(ja => ({
-          id: ja.employee.id,
-          name: `${ja.employee.first_name} ${ja.employee.last_name}`,
-          role: ja.role,
-          email: ja.employee.email,
-          region: ja.employee.region
-        })) || []
-      }));
-    } catch (error) {
-      console.error('Jobs service error:', error);
-      return [];
-    }
+    const { data, error } = await supabase
+      .from('jobs')
+      .select('*')
+      .eq('id', id)
+      .single();
+    
+    if (error) throw error;
+    return data;
   },
 
   async create(jobData) {
-    try {
-      const { assignedManagers, ...componentFields } = jobData;
-      
-      const dbFields = {
-        job_name: componentFields.name,
-        client_name: componentFields.municipality,
-        ccdd_code: componentFields.ccdd,
-        municipality: componentFields.municipality,
-        county: componentFields.county,
-        state: componentFields.state || 'NJ',
-        vendor_type: componentFields.vendor,
-        status: componentFields.status || 'draft',
-        start_date: componentFields.createdDate || new Date().toISOString().split('T')[0],
-        end_date: componentFields.dueDate,
-        target_completion_date: componentFields.dueDate,
-        total_properties: componentFields.totalProperties || 0,
-        // inspected_properties: componentFields.inspectedProperties || 0,  // ❌ REMOVED 2025-01-XX: Field deleted from jobs table, now using live App.js analytics
-        source_file_status: componentFields.sourceFileStatus || 'pending',
-        code_file_status: componentFields.codeFileStatus || 'pending',
-        vendor_detection: componentFields.vendorDetection,
-        workflow_stats: componentFields.workflowStats,
-        percent_billed: componentFields.percentBilled || 0,
-        
-        // ADDED: File version tracking
-        source_file_version: componentFields.source_file_version || 1,
-        code_file_version: componentFields.code_file_version || 1,
-        
-        // ADDED: File tracking fields for FileUploadButton
-        source_file_name: componentFields.source_file_name,
-        source_file_version_id: componentFields.source_file_version_id,
-        source_file_uploaded_at: componentFields.source_file_uploaded_at,
-        
-        created_by: componentFields.created_by || componentFields.createdBy
-      };
-      
-      const { data: job, error: jobError } = await supabase
-        .from('jobs')
-        .insert([dbFields])
-        .select()
-        .single();
-      
-      if (jobError) throw jobError;
-
-      if (assignedManagers && assignedManagers.length > 0) {
-        const assignments = assignedManagers.map(manager => ({
-          job_id: job.id,
-          employee_id: manager.id,
-          role: manager.role,
-          assigned_by: dbFields.created_by,
-          assigned_date: new Date().toISOString().split('T')[0],
-          is_active: true
-        }));
-
-        const { error: assignError } = await supabase
-          .from('job_assignments')
-          .insert(assignments);
-        
-        if (assignError) {
-          console.error('Manager assignment error:', assignError);
-        }
-      }
-
-      return job;
-    } catch (error) {
-      console.error('Job creation error:', error);
-      throw error;
-    }
+    const { data, error } = await supabase
+      .from('jobs')
+      .insert([jobData])
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data;
   },
 
   async update(id, updates) {
-    try {
-      const { assignedManagers, ...componentFields } = updates;
-      
-      console.log('🔧 DEBUG - jobService.update() called with:', { id, updates });
-      console.log('🔧 DEBUG - componentFields after destructuring:', componentFields);
-      
-      const dbFields = {};
-      
-      // Map component fields to database fields
-      if (componentFields.name) dbFields.job_name = componentFields.name;
-      if (componentFields.municipality) dbFields.municipality = componentFields.municipality;
-      if (componentFields.ccdd) dbFields.ccdd_code = componentFields.ccdd;
-      if (componentFields.county) dbFields.county = componentFields.county;
-      if (componentFields.state) dbFields.state = componentFields.state;
-      if (componentFields.vendor) dbFields.vendor_type = componentFields.vendor;
-      if (componentFields.status) dbFields.status = componentFields.status;
-      if (componentFields.dueDate) {
-        dbFields.end_date = componentFields.dueDate;
-        dbFields.target_completion_date = componentFields.dueDate;
-      }
-      if (componentFields.totalProperties !== undefined) dbFields.total_properties = componentFields.totalProperties;
-      // if (componentFields.inspectedProperties !== undefined) dbFields.inspected_properties = componentFields.inspectedProperties;  // ❌ REMOVED 2025-01-XX: Field deleted from jobs table
-      if (componentFields.sourceFileStatus) dbFields.source_file_status = componentFields.sourceFileStatus;
-      if (componentFields.codeFileStatus) dbFields.code_file_status = componentFields.codeFileStatus;
-      if (componentFields.vendorDetection) dbFields.vendor_detection = componentFields.vendorDetection;
-      if (componentFields.workflowStats) dbFields.workflow_stats = componentFields.workflowStats;
-      
-      // FIXED PERCENT BILLED MAPPING WITH DEBUG
-      if (componentFields.percent_billed !== undefined) {
-        console.log('🎯 DEBUG - Found percent_billed field, value:', componentFields.percent_billed);
-        dbFields.percent_billed = componentFields.percent_billed;
-      } else {
-        console.log('⚠️ DEBUG - percent_billed field NOT found in componentFields');
-        console.log('📋 DEBUG - Available fields:', Object.keys(componentFields));
-      }
-
-      console.log('💾 DEBUG - Final dbFields being sent to Supabase:', dbFields);
-
-      const { data, error } = await supabase
-        .from('jobs')
-        .update(dbFields)
-        .eq('id', id)
-        .select()
-        .single();
-      
-      if (error) {
-        console.error('❌ DEBUG - Supabase update error:', error);
-        throw error;
-      }
-      
-      console.log('✅ DEBUG - Supabase update successful, returned data:', data);
-      return data;
-    } catch (error) {
-      console.error('Job update error:', error);
-      throw error;
-    }
-  },
-
-  // ENHANCED: Delete method with proper cascade deletion
-  async delete(id) {
-    try {
-      console.log(`🗑️ Starting deletion process for job ${id}...`);
-
-      // Step 1: Delete related comparison_reports first
-      const { error: reportsError } = await supabase
-        .from('comparison_reports')
-        .delete()
-        .eq('job_id', id);
-      
-      if (reportsError) {
-        console.error('Error deleting comparison reports:', reportsError);
-        // Don't throw here - continue with job deletion even if no reports exist
-      } else {
-        console.log('✅ Deleted comparison_reports for job', id);
-      }
-
-      // Step 2: Delete related property_change_log records (commented out - table doesn't exist)
-      // const { error: changeLogError } = await supabase
-      //   .from('property_change_log')
-      //   .delete()
-      //   .eq('job_id', id);
-      // 
-      // if (changeLogError) {
-      //   console.error('Error deleting change log:', changeLogError);
-      //   // Don't throw here - table might not exist or no records
-      // } else {
-      //   console.log('✅ Deleted property_change_log for job', id);
-      // }
-
-      // Step 3: Delete related job_assignments
-      const { error: assignmentsError } = await supabase
-        .from('job_assignments')
-        .delete()
-        .eq('job_id', id);
-      
-      if (assignmentsError) {
-        console.error('Error deleting job assignments:', assignmentsError);
-      } else {
-        console.log('✅ Deleted job_assignments for job', id);
-      }
-
-      // Step 4: Delete related job_responsibilities (property assignments)
-      const { error: responsibilitiesError } = await supabase
-        .from('job_responsibilities')
-        .delete()
-        .eq('job_id', id);
-      
-      if (responsibilitiesError) {
-        console.error('Error deleting job responsibilities:', responsibilitiesError);
-      } else {
-        console.log('✅ Deleted job_responsibilities for job', id);
-      }
-
-      // Step 5: Delete related property_records
-      const { error: propertyError } = await supabase
-        .from('property_records')
-        .delete()
-        .eq('job_id', id);
-      
-      if (propertyError) {
-        console.error('Error deleting property records:', propertyError);
-      } else {
-        console.log('✅ Deleted property_records for job', id);
-      }
-
-      // Step 6: Delete related source_file_versions
-      const { error: sourceFileError } = await supabase
-        .from('source_file_versions')
-        .delete()
-        .eq('job_id', id);
-      
-      if (sourceFileError) {
-        console.error('Error deleting source file versions:', sourceFileError);
-      } else {
-        console.log('✅ Deleted source_file_versions for job', id);
-      }
-
-      // Step 7: Finally delete the job itself
-      const { error: jobError } = await supabase
-        .from('jobs')
-        .delete()
-        .eq('id', id);
-      
-      if (jobError) {
-        console.error('❌ FINAL ERROR - Failed to delete job:', jobError);
-        throw jobError;
-      }
-
-      console.log('🎉 Job deletion completed successfully!');
-      
-    } catch (error) {
-      console.error('Job deletion error:', error);
-      throw error;
-    }
-  }
-};
-
-// ===== PLANNING JOB SERVICES =====
-export const planningJobService = {
-  async getAll() {
-    try {
-      const { data, error } = await supabase
-        .from('planning_jobs')
-        .select('*')
-        .order('created_at', { ascending: false });
-      
-      if (error) throw error;
-      
-      return data.map(pj => ({
-        id: pj.id,
-        ccddCode: pj.ccdd_code,
-        ccdd: pj.ccdd_code, // Alternative accessor
-        municipality: pj.municipality,
-        end_date: pj.end_date,  // Use end_date instead
-        comments: pj.comments
-      }));
-    } catch (error) {
-      console.error('Planning jobs error:', error);
-      return [];
-    }
-  },
-
-  async create(planningJobData) {
-    try {
-      const dbFields = {
-        ccdd_code: planningJobData.ccddCode || planningJobData.ccdd,
-        municipality: planningJobData.municipality,
-        end_date: planningJobData.end_date,
-        comments: planningJobData.comments,
-        created_by: planningJobData.created_by
-      };
-      
-      const { data, error } = await supabase
-        .from('planning_jobs')
-        .insert([dbFields])
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
-    } catch (error) {
-      console.error('Planning job creation error:', error);
-      throw error;
-    }
-  },
-
-  async update(id, updates) {
-    try {
-      const dbFields = {
-        ccdd_code: updates.ccddCode || updates.ccdd,
-        municipality: updates.municipality,
-        end_date: updates.end_date,
-        comments: updates.comments
-      };
-
-      const { data, error } = await supabase
-        .from('planning_jobs')
-        .update(dbFields)
-        .eq('id', id)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
-    } catch (error) {
-      console.error('Planning job update error:', error);
-      throw error;
-    }
+    const { data, error } = await supabase
+      .from('jobs')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data;
   },
 
   async delete(id) {
-    try {
-      const { error } = await supabase
-        .from('planning_jobs')
-        .delete()
-        .eq('id', id);
-      
-      if (error) throw error;
-    } catch (error) {
-      console.error('Planning job deletion error:', error);
-      throw error;
-    }
+    const { error } = await supabase
+      .from('jobs')
+      .delete()
+      .eq('id', id);
+    
+    if (error) throw error;
   }
 };
 
-// ===== UNIFIED PROPERTY MANAGEMENT SERVICES =====
+// Property Service with Field Preservation
 export const propertyService = {
-  async getAll(jobId) {
+  async updateCSVData(sourceContent, codeContent, jobId, yearCreated, ccddCode, vendor, metadata) {
     try {
-      const { data, error } = await supabase
-        .from('property_records')
-        .select('*')
-        .eq('job_id', jobId)
-        .order('created_at', { ascending: false });
+      console.log('📊 Starting property data update with field preservation...');
       
-      if (error) throw error;
-      return data;
-    } catch (error) {
-      console.error('Property service error:', error);
-      return [];
-    }
-  },
+      // Parse the CSV content based on vendor
+      const records = this.parseCSVContent(sourceContent, vendor);
+      console.log(`✅ Parsed ${records.length} records from ${vendor} file`);
 
-  async getById(id) {
-    try {
-      const { data, error } = await supabase
-        .from('property_records')
-        .select('*')
-        .eq('id', id)
-        .single();
-      
-      if (error) throw error;
-      return data;
-    } catch (error) {
-      console.error('Property service error:', error);
-      return null;
-    }
-  },
+      // Generate composite keys for all records
+      const recordsWithKeys = records.map(record => ({
+        ...record,
+        compositeKey: this.generateCompositeKey(record, vendor, yearCreated, ccddCode)
+      }));
 
-  async create(propertyData) {
-    try {
-      const { data, error } = await supabase
-        .from('property_records')
-        .insert([propertyData])
-        .select()
-        .single();
+      // Extract all composite keys for preservation lookup
+      const allCompositeKeys = recordsWithKeys.map(r => r.compositeKey);
+
+      // CRITICAL: Fetch existing data to preserve user-entered fields
+      console.log('🔄 Fetching existing data to preserve user fields...');
+      const preservedDataMap = await this.fetchPreservedData(jobId, allCompositeKeys);
+      console.log(`✅ Found ${preservedDataMap.size} existing records with data to preserve`);
+
+      // Build records for UPSERT with preserved data
+      const recordsToUpsert = recordsWithKeys.map(({ compositeKey, ...record }) => {
+        // Get preserved data for this property
+        const preservedData = preservedDataMap.get(compositeKey) || {};
+        
+        // Map CSV fields based on vendor
+        const mappedRecord = this.mapRecordFields(record, vendor, metadata);
+        
+        // Merge with preserved data - preserved data takes precedence for protected fields
+        return {
+          ...mappedRecord,
+          job_id: jobId,
+          property_composite_key: compositeKey,
+          file_version: metadata.file_version,
+          source_file_name: metadata.source_file_name,
+          source_file_uploaded_at: metadata.source_file_uploaded_at,
+          source_file_version_id: metadata.source_file_version_id,
+          vendor_source: vendor,
+          updated_at: new Date().toISOString(),
+          // CRITICAL: Spread preserved data last so it overwrites any nulls
+          ...preservedData
+        };
+      });
+
+      // Log preservation stats
+      const preservedCount = recordsToUpsert.filter(r => 
+        PRESERVED_FIELDS.some(field => r[field] !== null && r[field] !== undefined)
+      ).length;
+      console.log(`📊 Preserving user data in ${preservedCount} records`);
+
+      // Perform batch UPSERT
+      console.log('📤 Starting batch UPSERT operation...');
+      const result = await this.performBatchUpsert(recordsToUpsert, jobId);
       
-      if (error) throw error;
-      return data;
+      console.log('✅ Property data update completed with field preservation');
+      return result;
+
     } catch (error) {
-      console.error('Property creation error:', error);
+      console.error('❌ Error in updateCSVData:', error);
       throw error;
     }
   },
 
-  async bulkCreate(propertyDataArray) {
+  // Fetch existing data for preservation
+  async fetchPreservedData(jobId, compositeKeys) {
+    const preservedDataMap = new Map();
+    
     try {
-      const { data, error } = await supabase
-        .from('property_records')
-        .insert(propertyDataArray)
-        .select();
-      
-      if (error) throw error;
-      return data;
+      // Batch fetch in chunks to avoid query limits
+      const chunkSize = 500;
+      for (let i = 0; i < compositeKeys.length; i += chunkSize) {
+        const chunk = compositeKeys.slice(i, i + chunkSize);
+        
+        const { data: existingRecords, error } = await supabase
+          .from('property_records')
+          .select(`
+            property_composite_key,
+            ${PRESERVED_FIELDS.join(',')}
+          `)
+          .eq('job_id', jobId)
+          .in('property_composite_key', chunk);
+
+        if (error) {
+          console.error('Error fetching preserved data:', error);
+          continue;
+        }
+
+        // Build preservation map
+        existingRecords?.forEach(record => {
+          const preserved = {};
+          PRESERVED_FIELDS.forEach(field => {
+            if (record[field] !== null && record[field] !== undefined) {
+              preserved[field] = record[field];
+            }
+          });
+          
+          // Only add to map if there's data to preserve
+          if (Object.keys(preserved).length > 0) {
+            preservedDataMap.set(record.property_composite_key, preserved);
+          }
+        });
+      }
     } catch (error) {
-      console.error('Property bulk creation error:', error);
-      throw error;
+      console.error('Error in fetchPreservedData:', error);
     }
+
+    return preservedDataMap;
+  },
+
+  // Parse CSV content based on vendor format
+  parseCSVContent(content, vendor) {
+    const lines = content.split('\n').filter(line => line.trim());
+    if (lines.length < 2) return [];
+
+    if (vendor === 'BRT') {
+      return this.parseBRTFormat(lines);
+    } else if (vendor === 'Microsystems') {
+      return this.parseMicrosystemsFormat(lines);
+    }
+    
+    throw new Error(`Unknown vendor: ${vendor}`);
+  },
+
+  // Parse BRT format
+  parseBRTFormat(lines) {
+    // Auto-detect separator
+    const firstLine = lines[0];
+    const commaCount = (firstLine.match(/,/g) || []).length;
+    const tabCount = (firstLine.match(/\t/g) || []).length;
+    const separator = (tabCount > 10 && tabCount > commaCount * 2) ? '\t' : ',';
+
+    // Parse headers
+    const headers = separator === ',' 
+      ? this.parseCSVLine(lines[0])
+      : lines[0].split('\t').map(h => h.trim());
+
+    // Parse records
+    const records = [];
+    for (let i = 1; i < lines.length; i++) {
+      const values = separator === ',' 
+        ? this.parseCSVLine(lines[i])
+        : lines[i].split('\t').map(v => v.trim());
+
+      if (values.length === headers.length) {
+        const record = {};
+        headers.forEach((header, index) => {
+          record[header] = values[index] || null;
+        });
+        records.push(record);
+      }
+    }
+
+    return records;
+  },
+
+  // Parse Microsystems format
+  parseMicrosystemsFormat(lines) {
+    const headers = this.renameDuplicateHeaders(lines[0].split('|'));
+    const records = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const values = lines[i].split('|');
+      if (values.length === headers.length) {
+        const record = {};
+        headers.forEach((header, index) => {
+          record[header] = values[index] || null;
+        });
+        records.push(record);
+      }
+    }
+
+    return records;
+  },
+
+  // Helper: Parse CSV line handling quoted values
+  parseCSVLine(line) {
+    const result = [];
+    let current = '';
+    let inQuotes = false;
+    
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      
+      if (char === '"') {
+        if (inQuotes && line[i + 1] === '"') {
+          current += '"';
+          i++;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (char === ',' && !inQuotes) {
+        result.push(current.trim());
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    
+    result.push(current.trim());
+    return result;
+  },
+
+  // Helper: Rename duplicate headers
+  renameDuplicateHeaders(headers) {
+    const headerCounts = {};
+    return headers.map(header => {
+      if (headerCounts[header]) {
+        headerCounts[header]++;
+        return `${header}${headerCounts[header]}`;
+      } else {
+        headerCounts[header] = 1;
+        return header;
+      }
+    });
+  },
+
+  // Generate composite key based on vendor format
+  generateCompositeKey(record, vendor, yearCreated, ccddCode) {
+    if (vendor === 'BRT') {
+      const block = String(record.BLOCK || '').trim();
+      const lot = String(record.LOT || '').trim();
+      const qualifier = String(record.QUALIFIER || '').trim() || 'NONE';
+      const card = String(record.CARD || '').trim() || 'NONE';
+      const location = String(record.PROPERTY_LOCATION || '').trim() || 'NONE';
+      return `${yearCreated}${ccddCode}-${block}-${lot}_${qualifier}-${card}-${location}`;
+    } else if (vendor === 'Microsystems') {
+      const block = String(record['Block'] || '').trim();
+      const lot = String(record['Lot'] || '').trim();
+      const qual = String(record['Qual'] || '').trim() || 'NONE';
+      const bldg = String(record['Bldg'] || '').trim() || 'NONE';
+      const location = String(record['Location'] || '').trim() || 'NONE';
+      return `${yearCreated}${ccddCode}-${block}-${lot}_${qual}-${bldg}-${location}`;
+    }
+    
+    return null;
+  },
+
+  // Map record fields based on vendor
+  mapRecordFields(record, vendor, metadata) {
+    const parseDate = (dateString) => {
+      if (!dateString || dateString.trim() === '') return null;
+      const date = new Date(dateString);
+      return isNaN(date.getTime()) ? null : date.toISOString().split('T')[0];
+    };
+
+    const parseNumber = (value) => {
+      if (!value) return null;
+      const cleaned = String(value).replace(/[,$]/g, '');
+      const num = parseFloat(cleaned);
+      return isNaN(num) ? null : num;
+    };
+
+    if (vendor === 'BRT') {
+      return {
+        property_block: record.BLOCK,
+        property_lot: record.LOT,
+        property_qualifier: record.QUALIFIER || '',
+        property_addl_lot: record.ADDL_LOT || '',
+        property_addl_card: record.CARD || '1',
+        property_location: record.PROPERTY_LOCATION,
+        property_m4_class: record.PROPERTY_CLASS,
+        property_cama_class: record.PROPCLASS,
+        property_vcs: record.VCS,
+        property_facility: record.FACILITY_NAME,
+        owner_name: record.OWNER_NAME,
+        owner_street: record.OWNER_STREET,
+        owner_csz: record.OWNER_CSZ,
+        inspection_measure_by: record.MEASURE_BY || 'UNASSIGNED',
+        inspection_measure_date: parseDate(record.MEASURE_DATE),
+        inspection_info_by: record.INFO_BY,
+        inspection_list_by: record.LIST_BY,
+        inspection_list_date: parseDate(record.LIST_DATE),
+        inspection_price_by: record.PRICE_BY,
+        inspection_price_date: parseDate(record.PRICE_DATE),
+        sales_price: parseNumber(record.CURRENTSALE_PRICE),
+        sales_date: parseDate(record.CURRENTSALE_DATE),
+        sales_book: record.SALES_BOOK,
+        sales_page: record.SALES_PAGE,
+        sales_nu: record.SALES_NU,
+        values_mod_land: parseNumber(record.TOTALMOD_LAND),
+        values_mod_improvement: parseNumber(record.TOTALMOD_IMPROVEMENT),
+        values_mod_total: parseNumber(record.TOTALMOD_ASSESSMENT),
+        values_cama_land: parseNumber(record.LAND),
+        values_cama_improvement: parseNumber(record.IMPROVEMENT),
+        values_cama_total: parseNumber(record.TOTAL),
+        values_base_cost: parseNumber(record.BASE_COST),
+        values_repl_cost: parseNumber(record.REPL_COST),
+        values_det_items: parseNumber(record.DET_ITEMS),
+        asset_sfla: parseNumber(record.SFLA),
+        asset_story_height: parseNumber(record.STORY_HEIGHT),
+        asset_year_built: parseInt(record.YEAR_BUILT) || null,
+        asset_lot_sf: parseNumber(record.LOT_SIZE),
+        asset_building_class: record.BUILDING_CLASS,
+        asset_design_style: record.DESIGN_STYLE,
+        raw_data: record
+      };
+    } else if (vendor === 'Microsystems') {
+      return {
+        property_block: record['Block'],
+        property_lot: record['Lot'],
+        property_qualifier: record['Qual'] || '',
+        property_addl_lot: '',
+        property_addl_card: record['Bldg'] || '1',
+        property_location: record['Location'],
+        property_m4_class: record['Class'],
+        property_cama_class: record['PropCode'],
+        property_vcs: record['Nbhd'],
+        property_facility: '',
+        owner_name: record['Owner 1'],
+        owner_street: record['Mailing 1'],
+        owner_csz: `${record['City St'] || ''} ${record['Zip'] || ''}`.trim(),
+        inspection_measure_by: record['Measure By'] || 'UNASSIGNED',
+        inspection_measure_date: parseDate(record['Measure Date']),
+        inspection_info_by: record['Info By'],
+        inspection_list_by: record['List By'],
+        inspection_list_date: parseDate(record['List Date']),
+        inspection_price_by: record['Price By'],
+        inspection_price_date: parseDate(record['Price Date']),
+        sales_price: parseNumber(record['Sale Price']),
+        sales_date: parseDate(record['Sale Date']),
+        sales_book: '',
+        sales_page: '',
+        sales_nu: record['Sale Type'],
+        values_mod_land: parseNumber(record['Land Cur']),
+        values_mod_improvement: parseNumber(record['Impr Cur']),
+        values_mod_total: parseNumber(record['Total Cur']),
+        values_cama_land: parseNumber(record['Land New']),
+        values_cama_improvement: parseNumber(record['Impr New']),
+        values_cama_total: parseNumber(record['Total New']),
+        asset_sfla: parseNumber(record['SFLA']),
+        asset_story_height: parseNumber(record['Stories']),
+        asset_year_built: parseInt(record['Year Built']) || null,
+        asset_lot_sf: parseNumber(record['Lot Size']),
+        raw_data: record
+      };
+    }
+  },
+
+  // Perform batch UPSERT with retry logic
+  async performBatchUpsert(records, jobId) {
+    const batchSize = 500;
+    let processed = 0;
+    let errors = 0;
+    
+    for (let i = 0; i < records.length; i += batchSize) {
+      const batch = records.slice(i, i + batchSize);
+      const batchNumber = Math.floor(i / batchSize) + 1;
+      const totalBatches = Math.ceil(records.length / batchSize);
+      
+      console.log(`Processing batch ${batchNumber} of ${totalBatches} (${batch.length} records)...`);
+      
+      let retries = 0;
+      const maxRetries = 3;
+      
+      while (retries < maxRetries) {
+        try {
+          const { error } = await supabase
+            .from('property_records')
+            .upsert(batch, {
+              onConflict: 'job_id,property_composite_key,file_version',
+              ignoreDuplicates: false
+            });
+
+          if (error) throw error;
+          
+          processed += batch.length;
+          console.log(`✅ Batch ${batchNumber} processed successfully`);
+          break;
+          
+        } catch (error) {
+          retries++;
+          console.error(`❌ Batch ${batchNumber} failed (attempt ${retries}/${maxRetries}):`, error.message);
+          
+          if (retries === maxRetries) {
+            errors += batch.length;
+            console.error(`❌ Batch ${batchNumber} failed after ${maxRetries} attempts`);
+          } else {
+            console.log(`🔄 Retrying batch ${batchNumber}...`);
+            await new Promise(resolve => setTimeout(resolve, 1000 * retries));
+          }
+        }
+      }
+    }
+
+    return { processed, errors };
+  }
+};
+
+// Employee Service
+export const employeeService = {
+  async getAll() {
+    const { data, error } = await supabase
+      .from('employees')
+      .select('*')
+      .order('last_name', { ascending: true });
+    
+    if (error) throw error;
+    return data;
+  },
+
+  async create(employeeData) {
+    const { data, error } = await supabase
+      .from('employees')
+      .insert([employeeData])
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data;
   },
 
   async update(id, updates) {
-    try {
-      const { data, error } = await supabase
-        .from('property_records')
-        .update({
-          ...updates,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', id)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
-    } catch (error) {
-      console.error('Property update error:', error);
-      throw error;
-    }
+    const { data, error } = await supabase
+      .from('employees')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data;
   },
 
   async delete(id) {
-    try {
-      const { error } = await supabase
-        .from('property_records')
-        .delete()
-        .eq('id', id);
-      
-      if (error) throw error;
-    } catch (error) {
-      console.error('Property deletion error:', error);
-      throw error;
-    }
-  },
-
-  // EXISTING: Import method with versionInfo parameter for FileUploadButton support - CALLS PROCESSORS (INSERT)
-  async importCSVData(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, vendorType, versionInfo = {}) {
-    try {
-      console.log(`Processing ${vendorType} files for job ${jobId}`);
-      console.log('🔍 DEBUG - versionInfo received:', versionInfo);
-      
-      // Use updated processors for single-table insertion
-      if (vendorType === 'BRT') {
-        const { brtProcessor } = await import('./data-pipeline/brt-processor.js');
-        return await brtProcessor.processFile(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, versionInfo);
-      } else if (vendorType === 'Microsystems') {
-        const { microsystemsProcessor } = await import('./data-pipeline/microsystems-processor.js');
-        return await microsystemsProcessor.processFile(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, versionInfo);
-      } else {
-        throw new Error(`Unsupported vendor type: ${vendorType}`);
-      }
-    } catch (error) {
-      console.error('Property import error:', error);
-      return {
-        processed: 0,
-        errors: 1,
-        warnings: [error.message]
-      };
-    }
-  },
-
-  // NEW: Update method that calls UPDATERS (UPSERT) for existing jobs
-  async updateCSVData(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, vendorType, versionInfo = {}) {
-    try {
-      console.log(`Updating ${vendorType} files for job ${jobId} using UPSERT`);
-      console.log('🔍 DEBUG - versionInfo received:', versionInfo);
-      
-      // Use updaters for UPSERT operations
-      if (vendorType === 'BRT') {
-        const { brtUpdater } = await import('./data-pipeline/brt-updater.js');
-        return await brtUpdater.processFile(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, versionInfo);
-      } else if (vendorType === 'Microsystems') {
-        const { microsystemsUpdater } = await import('./data-pipeline/microsystems-updater.js');
-        return await microsystemsUpdater.processFile(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, versionInfo);
-      } else {
-        throw new Error(`Unsupported vendor type: ${vendorType}`);
-      }
-    } catch (error) {
-      console.error('Property update error:', error);
-      return {
-        processed: 0,
-        errors: 1,
-        warnings: [error.message]
-      };
-    }
-  },
-
-  // Query raw_data JSON field for dynamic reporting
-  async queryRawData(jobId, fieldName, value) {
-    try {
-      const { data, error } = await supabase
-        .from('property_records')
-        .select('*')
-        .eq('job_id', jobId)
-        .eq(`raw_data->>${fieldName}`, value);
-      
-      if (error) throw error;
-      return data;
-    } catch (error) {
-      console.error('Property raw data query error:', error);
-      return [];
-    }
-  },
-
-  // Advanced filtering for analysis
-  async getByCondition(jobId, condition) {
-    try {
-      const { data, error } = await supabase
-        .from('property_records')
-        .select('*')
-        .eq('job_id', jobId)
-        .eq('condition_rating', condition)
-        .order('property_location');
-      
-      if (error) throw error;
-      return data;
-    } catch (error) {
-      console.error('Property condition query error:', error);
-      return [];
-    }
-  },
-
-  // Get properties needing inspection
-  async getPendingInspections(jobId) {
-    try {
-      const { data, error } = await supabase
-        .from('property_records')
-        .select('*')
-        .eq('job_id', jobId)
-        .is('inspection_info_by', null)
-        .order('property_location');
-      
-      if (error) throw error;
-      return data;
-    } catch (error) {
-      console.error('Property pending inspections query error:', error);
-      return [];
-    }
-  },
-
-  // Bulk update inspection data
-  async bulkUpdateInspections(inspectionUpdates) {
-    try {
-      const updates = await Promise.all(
-        inspectionUpdates.map(update => 
-          supabase
-            .from('property_records')
-            .update({
-              ...update.data,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', update.id)
-            .select()
-        )
-      );
-      
-      return updates.map(result => result.data).flat();
-    } catch (error) {
-      console.error('Property bulk inspection update error:', error);
-      throw error;
-    }
+    const { error } = await supabase
+      .from('employees')
+      .delete()
+      .eq('id', id);
+    
+    if (error) throw error;
   }
 };
-
-// ===== SOURCE FILE SERVICES =====
-export const sourceFileService = {
-  async createVersion(jobId, fileName, fileSize, uploadedBy) {
-    try {
-      const { data, error } = await supabase
-        .from('source_file_versions')
-        .insert([{
-          job_id: jobId,
-          file_name: fileName,
-          file_size: fileSize,
-          status: 'pending',
-          uploaded_by: uploadedBy
-        }])
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
-    } catch (error) {
-      console.error('Source file creation error:', error);
-      return {
-        id: Date.now(),
-        version_number: 1,
-        file_name: fileName,
-        status: 'pending'
-      };
-    }
-  },
-
-  async getVersions(jobId) {
-    try {
-      const { data, error } = await supabase
-        .from('source_file_versions')
-        .select('*')
-        .eq('job_id', jobId)
-        .order('created_at', { ascending: false });
-      
-      if (error) throw error;
-      return data;
-    } catch (error) {
-      console.error('Source file versions error:', error);
-      return [];
-    }
-  },
-
-  async updateStatus(id, status) {
-    try {
-      const { data, error } = await supabase
-        .from('source_file_versions')
-        .update({ status })
-        .eq('id', id)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
-    } catch (error) {
-      console.error('Source file status update error:', error);
-      throw error;
-    }
-  }
-};
-
-// ===== PRODUCTION DATA SERVICES =====
-export const productionDataService = {
-  async updateSummary(jobId) {
-    try {
-      console.log(`Updating production summary for job ${jobId}`);
-      
-      // Get property counts from single table
-      const { count, error: countError } = await supabase
-        .from('property_records')
-        .select('id', { count: 'exact', head: true })
-        .eq('job_id', jobId);
-
-      if (countError) throw countError;
-
-      // Count properties with inspection data
-      const { count: inspectedCount, error: inspectedError } = await supabase
-        .from('property_records')
-        .select('id', { count: 'exact', head: true })
-        .eq('job_id', jobId)
-        .not('inspection_info_by', 'is', null);
-
-      if (inspectedError) throw inspectedError;
-
-      // Update job with current totals
-      const { data, error } = await supabase
-        .from('jobs')
-        .update({
-          total_properties: count || 0,
-          // inspected_properties: inspectedCount || 0,  // ❌ REMOVED 2025-01-XX: Field deleted from jobs table
-          workflow_stats: {
-            properties_processed: count || 0,
-            properties_inspected: inspectedCount || 0,
-            last_updated: new Date().toISOString()
-          }
-        })
-        .eq('id', jobId)
-        .select()
-        .single();
-
-      if (error) throw error;
-      return { success: true, data };
-    } catch (error) {
-      console.error('Production data update error:', error);
-      return { success: false, error: error.message };
-    }
-  }
-};
-
-// ===== UTILITY SERVICES =====
-export const utilityService = {
-  async testConnection() {
-    try {
-      const { data, error } = await supabase
-        .from('employees')
-        .select('id')
-        .limit(1);
-      
-      return { success: !error, error };
-    } catch (error) {
-      return { success: false, error: error };
-    }
-  },
-
-  // ENHANCED: Assignment-aware stats function with correct property class field names
-  async getStats() {
-    try {
-      // Get basic counts separately to avoid Promise.all masking errors
-      const { count: employeeCount, error: empError } = await supabase
-        .from('employees')
-        .select('id', { count: 'exact', head: true });
-
-      const { count: jobCount, error: jobError } = await supabase
-        .from('jobs')
-        .select('id', { count: 'exact', head: true });
-
-      // UPDATED: Count all properties (assigned or unassigned)
-      const { count: propertyCount, error: propError } = await supabase
-        .from('property_records')
-        .select('id', { count: 'exact', head: true })
-        .or('is_assigned_property.is.null,is_assigned_property.eq.true');
-
-      // UPDATED: Get residential properties (M4 class 2, 3A) - assignment-aware
-      const { count: residentialCount, error: residentialError } = await supabase
-        .from('property_records')
-        .select('id', { count: 'exact', head: true })
-        .in('property_m4_class', ['2', '3A'])
-        .or('is_assigned_property.is.null,is_assigned_property.eq.true');
-
-      // UPDATED: Get commercial properties (M4 class 4A, 4B, 4C) - assignment-aware
-      const { count: commercialCount, error: commercialError } = await supabase
-        .from('property_records')
-        .select('id', { count: 'exact', head: true })
-        .in('property_m4_class', ['4A', '4B', '4C'])
-        .or('is_assigned_property.is.null,is_assigned_property.eq.true');
-
-      // Log any errors but don't fail completely
-      if (empError) console.error('Employee count error:', empError);
-      if (jobError) console.error('Job count error:', jobError);
-      if (propError) console.error('Property count error:', propError);
-      if (residentialError) console.error('Residential count error:', residentialError);
-      if (commercialError) console.error('Commercial count error:', commercialError);
-
-      const totalProperties = propertyCount || 0;
-      const residential = residentialCount || 0;
-      const commercial = commercialCount || 0;
-      const other = Math.max(0, totalProperties - residential - commercial);
-
-      return {
-        employees: employeeCount || 0,
-        jobs: jobCount || 0,
-        properties: totalProperties,
-        propertiesBreakdown: {
-          total: totalProperties,
-          residential: residential,
-          commercial: commercial,
-          other: other
-        }
-      };
-    } catch (error) {
-      console.error('Stats fetch error:', error);
-      return {
-        employees: 0,
-        jobs: 0,
-        properties: 0,
-        propertiesBreakdown: {
-          total: 0,
-          residential: 0,
-          commercial: 0,
-          other: 0
-        }
-      };
-    }
-  }
-};
-
-// ===== AUTHENTICATION SERVICES =====
-export const authService = {
-  async getCurrentUser() {
-    try {
-      const { data: { user }, error } = await supabase.auth.getUser();
-      if (error) throw error;
-      
-      if (user) {
-        const { data: employee, error: empError } = await supabase
-          .from('employees')
-          .select('*')
-          .eq('auth_user_id', user.id)
-          .single();
-        
-        if (empError) {
-          console.warn('Employee profile not found');
-          return {
-            ...user,
-            role: 'admin',
-            canAccessBilling: true
-          };
-        }
-        
-        return {
-          ...user,
-          employee,
-          role: employee.role,
-          canAccessBilling: ['admin', 'owner'].includes(employee.role) || user.id === '5df85ca3-7a54-4798-a665-c31da8d9caad'
-        };
-      }
-      
-      return null;
-    } catch (error) {
-      console.error('Auth error:', error);
-      return null;
-    }
-  },
-
-  async signInAsDev() {
-    return {
-      user: {
-        id: '5df85ca3-7a54-4798-a665-c31da8d9caad',
-        email: 'ppalead1@gmail.com'
-      },
-      role: 'admin',
-      canAccessBilling: true
-    };
-  },
-
-  async signIn(email, password) {
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password
-      });
-      
-      if (error) throw error;
-      return data;
-    } catch (error) {
-      console.error('Sign in error:', error);
-      throw error;
-    }
-  },
-
-  async signOut() {
-    try {
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
-    } catch (error) {
-      console.error('Sign out error:', error);
-      throw error;
-    }
-  }
-};
-
-// ===== LEGACY COMPATIBILITY =====
-export const signInAsDev = authService.signInAsDev;
-
-export default supabase;
