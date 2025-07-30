@@ -232,6 +232,7 @@ export const jobService = {
         created_at: job.created_at,
         source_file_uploaded_at: job.source_file_uploaded_at,
         code_file_uploaded_at: job.code_file_uploaded_at,
+        updated_at: job.updated_at,
         
         // ADDED: File version tracking
         source_file_version: job.source_file_version || 1,
