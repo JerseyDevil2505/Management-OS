@@ -22,6 +22,12 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
   const [batchLogs, setBatchLogs] = useState([]);
   const [currentBatch, setCurrentBatch] = useState(null);
   const [batchComplete, setBatchComplete] = useState(false);
+
+    console.log('🔍 DEBUG FileUploadButton RENDER - job:', {
+    id: job?.id,
+    updated_at: job?.updated_at, 
+    code_file_uploaded_at: job?.code_file_uploaded_at
+  });
   
   // ENHANCED: Add batch insert progress tracking
   const [batchInsertProgress, setBatchInsertProgress] = useState({
