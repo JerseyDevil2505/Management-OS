@@ -1136,11 +1136,11 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
           billingByClass[propertyClass].total++;
         }
 
-        // Check for existing validation override FIRST - COMPLETELY SKIP if overridden
+        // Check for existing validation override FIRST
         const hasValidationOverride = overrideMapData[propertyKey]?.override_applied;
 
         if (hasValidationOverride) {
-          debugLog('VALIDATION', `✅ Property ${propertyKey} has existing override - treating as VALID INSPECTION`);
+          debugLog('VALIDATION', `✅ Property ${propertyKey} has existing override - preserving override status`);
           
           // Count overridden properties as VALID INSPECTIONS for progress tracking
           if (classBreakdown[propertyClass]) {
@@ -1194,7 +1194,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
             }
           }
 
-          // Add to inspection_data batch with override info (preserve existing override)
+          // Add to inspection_data batch WITH UPDATED DATA but preserve override fields
           const inspectionRecord = {
             job_id: jobData.id,
             file_version: latestFileVersion,
@@ -1219,7 +1219,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
             override_reason: overrideMapData[propertyKey].override_reason
           };
 
-          // Only add if we haven't already added this property
+          // Only add if we haven't already added this property to the batch
           if (!inspectionDataKeys.has(propertyKey)) {
             inspectionDataBatch.push(inspectionRecord);
             inspectionDataKeys.add(propertyKey);
@@ -1521,7 +1521,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
             }
           }
 
-          // Prepare for inspection_data UPSERT - BUT DON'T UPSERT YET
+          // Prepare for inspection_data UPSERT
           const inspectionRecord = {
             job_id: jobData.id,
             file_version: latestFileVersion,
@@ -1548,9 +1548,12 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
             } : null
           };
 
-          // Just collect the record, don't save yet
-          inspectionDataBatch.push(inspectionRecord);
-          wasAddedToInspectionData = true;
+          // Add to batch - UPSERT will handle whether to insert or update
+          if (!inspectionDataKeys.has(propertyKey)) {
+            inspectionDataBatch.push(inspectionRecord);
+            inspectionDataKeys.add(propertyKey);
+            wasAddedToInspectionData = true;
+          }
         }
 
         // Track properties that didn't make it to inspection_data
@@ -1672,7 +1675,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
           const { error: upsertError } = await supabase
             .from('inspection_data')
             .upsert(inspectionDataBatch, {
-              onConflict: 'job_id,property_composite_key,file_version'
+              onConflict: 'property_composite_key'  // Use just property_composite_key if that's the unique constraint
             });
 
           if (upsertError) {
