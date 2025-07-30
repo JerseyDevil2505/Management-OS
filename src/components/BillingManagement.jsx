@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabaseClient';
 const BillingManagement = () => {
   const [activeTab, setActiveTab] = useState('active');
   const [jobs, setJobs] = useState([]);
+  const [planningJobs, setPlanningJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showContractSetup, setShowContractSetup] = useState(false);
   const [selectedJob, setSelectedJob] = useState(null);
@@ -34,7 +35,6 @@ const BillingManagement = () => {
   const [showLegacyJobForm, setShowLegacyJobForm] = useState(false);
   const [legacyJobForm, setLegacyJobForm] = useState({
     jobName: '',
-    vendor: 'BRT',
     contractAmount: '',
     billingHistory: ''
   });
@@ -150,7 +150,7 @@ const BillingManagement = () => {
     if (!selectedJob) return;
     
     try {
-      // First, create the contract
+      // Calculate all amounts based on percentages
       const contractData = {
         job_id: selectedJob.id,
         contract_amount: parseFloat(contractSetup.contractAmount),
@@ -171,6 +171,41 @@ const BillingManagement = () => {
         .upsert(contractData);
 
       if (contractError) throw contractError;
+
+      // If contract amount changed, recalculate all billing events' amounts
+      if (selectedJob.job_contracts?.[0] && 
+          selectedJob.job_contracts[0].contract_amount !== parseFloat(contractSetup.contractAmount)) {
+        
+        // Recalculate all billing event amounts based on new contract
+        const { data: billingEvents } = await supabase
+          .from('billing_events')
+          .select('*')
+          .eq('job_id', selectedJob.id)
+          .order('billing_date');
+
+        if (billingEvents) {
+          let runningTotal = 0;
+          
+          for (const event of billingEvents) {
+            // Recalculate amounts based on new contract amount
+            const totalAmount = Math.round(parseFloat(contractSetup.contractAmount) * event.percentage_billed);
+            const retainerAmount = Math.round(totalAmount * contractSetup.retainerPercentage);
+            const amountBilled = totalAmount - retainerAmount;
+            runningTotal += amountBilled;
+            const remainingDue = parseFloat(contractSetup.contractAmount) - runningTotal;
+
+            await supabase
+              .from('billing_events')
+              .update({
+                total_amount: totalAmount,
+                retainer_amount: retainerAmount,
+                amount_billed: amountBilled,
+                remaining_due: remainingDue
+              })
+              .eq('id', event.id);
+          }
+        }
+      }
 
       // If billing history was provided, bulk import the events
       if (billingHistoryText.trim()) {
@@ -224,6 +259,16 @@ const BillingManagement = () => {
       setShowContractSetup(false);
       setSelectedJob(null);
       setBillingHistoryText('');
+      // Reset contract setup to defaults
+      setContractSetup({
+        contractAmount: '',
+        templateType: 'standard',
+        retainerPercentage: 0.10,
+        endOfJobPercentage: 0.05,
+        firstYearAppealsPercentage: 0.03,
+        secondYearAppealsPercentage: 0.02,
+        thirdYearAppealsPercentage: 0.00
+      });
       loadJobs();
     } catch (error) {
       console.error('Error setting up contract:', error);
@@ -361,21 +406,67 @@ const BillingManagement = () => {
     if (!editingEvent) return;
     
     try {
-      const { error } = await supabase
+      // Prepare update data
+      const updateData = {
+        status: editingEvent.status || '',
+        amount_billed: parseFloat(editingEvent.amount_billed)
+      };
+
+      // First update the billing event
+      const { error: updateError } = await supabase
         .from('billing_events')
-        .update({ 
-          status: editingEvent.status,
-          amount_billed: parseFloat(editingEvent.amount_billed)
-        })
+        .update(updateData)
         .eq('id', editingEvent.id);
 
-      if (error) throw error;
+      if (updateError) throw updateError;
+
+      // Get all billing events for this job ordered by date
+      const { data: jobData } = await supabase
+        .from('jobs')
+        .select(`
+          id,
+          job_contracts(contract_amount),
+          billing_events(
+            id, 
+            amount_billed,
+            billing_date
+          )
+        `)
+        .eq('id', editingEvent.job_id)
+        .single();
+
+      if (jobData && jobData.job_contracts?.[0]) {
+        const contractAmount = jobData.job_contracts[0].contract_amount;
+        
+        // Sort events by billing date
+        const sortedEvents = jobData.billing_events.sort((a, b) => 
+          new Date(a.billing_date) - new Date(b.billing_date)
+        );
+        
+        let runningTotal = 0;
+
+        // Update remaining_due for each event in chronological order
+        for (const event of sortedEvents) {
+          runningTotal += parseFloat(event.amount_billed || 0);
+          const remainingDue = contractAmount - runningTotal;
+          
+          const { error } = await supabase
+            .from('billing_events')
+            .update({ remaining_due: remainingDue })
+            .eq('id', event.id);
+            
+          if (error) {
+            console.error('Error updating remaining_due for event:', event.id, error);
+          }
+        }
+      }
 
       setShowEditBilling(false);
       setEditingEvent(null);
       loadJobs();
     } catch (error) {
       console.error('Error updating billing event:', error);
+      alert('Error updating billing event: ' + error.message);
     }
   };
 
@@ -432,7 +523,6 @@ const BillingManagement = () => {
         .from('jobs')
         .insert({
           job_name: legacyJobForm.jobName,
-          vendor: legacyJobForm.vendor,
           job_type: 'legacy_billing',
           billing_setup_complete: true,
           percent_billed: 0
@@ -501,7 +591,6 @@ const BillingManagement = () => {
       setShowLegacyJobForm(false);
       setLegacyJobForm({
         jobName: '',
-        vendor: 'BRT',
         contractAmount: '',
         billingHistory: ''
       });
@@ -541,6 +630,16 @@ const BillingManagement = () => {
             }`}
           >
             Active Jobs ({jobs.filter(j => j.job_type === 'standard').length})
+          </button>
+          <button
+            onClick={() => setActiveTab('planned')}
+            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+              activeTab === 'planned'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            Planned Jobs
           </button>
           <button
             onClick={() => setActiveTab('legacy')}
@@ -605,15 +704,37 @@ const BillingManagement = () => {
                               Setup Contract
                             </button>
                           ) : (
-                            <button
-                              onClick={() => {
-                                setSelectedJob(job);
-                                setShowBillingForm(true);
-                              }}
-                              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                            >
-                              Add Billing Event
-                            </button>
+                            <>
+                              <button
+                                onClick={() => {
+                                  setSelectedJob(job);
+                                  setShowBillingForm(true);
+                                }}
+                                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                              >
+                                Add Billing Event
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setSelectedJob(job);
+                                  // Pre-fill contract form with existing values
+                                  const contract = job.job_contracts[0];
+                                  setContractSetup({
+                                    contractAmount: contract.contract_amount.toString(),
+                                    templateType: 'custom',
+                                    retainerPercentage: contract.retainer_percentage,
+                                    endOfJobPercentage: contract.end_of_job_percentage,
+                                    firstYearAppealsPercentage: contract.first_year_appeals_percentage,
+                                    secondYearAppealsPercentage: contract.second_year_appeals_percentage,
+                                    thirdYearAppealsPercentage: contract.third_year_appeals_percentage || 0
+                                  });
+                                  setShowContractSetup(true);
+                                }}
+                                className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
+                              >
+                                Edit Contract
+                              </button>
+                            </>
                           )}
                         </div>
                       </div>
@@ -655,7 +776,9 @@ const BillingManagement = () => {
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-200">
-                              {job.billing_events.map(event => (
+                              {job.billing_events
+                                .sort((a, b) => new Date(a.billing_date) - new Date(b.billing_date))
+                                .map(event => (
                                 <tr 
                                   key={event.id}
                                   className="hover:bg-gray-50 cursor-pointer"
@@ -694,6 +817,77 @@ const BillingManagement = () => {
             </div>
           )}
 
+          {/* Planned Jobs Tab */}
+          {activeTab === 'planned' && (
+            <div className="space-y-6">
+              {planningJobs.length === 0 ? (
+                <div className="text-center py-12 bg-gray-50 rounded-lg">
+                  <p className="text-gray-600">No planned jobs found. Create them in the Admin Jobs section.</p>
+                </div>
+              ) : (
+                planningJobs.filter(job => !job.is_archived).map(job => (
+                  <div key={job.id} className="border-2 border-gray-300 rounded-lg p-6 bg-gray-50">
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="flex items-center space-x-3">
+                        <h3 className="text-xl font-semibold text-gray-900">{job.job_name}</h3>
+                        <span className="px-2 py-1 text-xs rounded-full bg-orange-100 text-orange-800">
+                          Planned
+                        </span>
+                        {job.vendor && (
+                          <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800">
+                            {job.vendor}
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => handleRolloverToActive(job)}
+                        className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+                        disabled={!job.contract_amount}
+                        title={!job.contract_amount ? "Set contract amount first" : "Roll over to active jobs"}
+                      >
+                        Roll to Active →
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                      <div className="bg-white p-3 rounded-md">
+                        <p className="text-sm text-gray-600">Contract Amount</p>
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="number"
+                            value={job.contract_amount || ''}
+                            onChange={(e) => handleUpdatePlannedContract(job.id, e.target.value)}
+                            className="w-full px-2 py-1 border border-gray-300 rounded text-lg font-semibold"
+                            placeholder="Enter amount"
+                          />
+                        </div>
+                      </div>
+                      <div className="bg-white p-3 rounded-md">
+                        <p className="text-sm text-gray-600">Total Properties</p>
+                        <p className="text-lg font-semibold">{job.total_properties || 0}</p>
+                      </div>
+                      <div className="bg-white p-3 rounded-md">
+                        <p className="text-sm text-gray-600">Residential</p>
+                        <p className="text-lg font-semibold">{job.residential_properties || 0}</p>
+                      </div>
+                      <div className="bg-white p-3 rounded-md">
+                        <p className="text-sm text-gray-600">Commercial</p>
+                        <p className="text-lg font-semibold">{job.commercial_properties || 0}</p>
+                      </div>
+                    </div>
+
+                    {job.start_date && (
+                      <div className="text-sm text-gray-600">
+                        Start Date: {new Date(job.start_date).toLocaleDateString()}
+                        {job.end_date && ` • End Date: ${new Date(job.end_date).toLocaleDateString()}`}
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
           {/* Legacy Jobs Tab */}
           {activeTab === 'legacy' && (
             <div className="space-y-6">
@@ -722,9 +916,6 @@ const BillingManagement = () => {
                           <h3 className="text-xl font-semibold text-gray-900">{job.job_name}</h3>
                           <span className="px-2 py-1 text-xs rounded-full bg-purple-100 text-purple-800">
                             Legacy Billing
-                          </span>
-                          <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800">
-                            {job.vendor || 'No Vendor'}
                           </span>
                           {totals?.isComplete && (
                             <span className="flex items-center px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">
@@ -780,7 +971,9 @@ const BillingManagement = () => {
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-200">
-                              {job.billing_events.map(event => (
+                              {job.billing_events
+                                .sort((a, b) => new Date(a.billing_date) - new Date(b.billing_date))
+                                .map(event => (
                                 <tr 
                                   key={event.id}
                                   className="hover:bg-gray-50 cursor-pointer"
@@ -825,7 +1018,9 @@ const BillingManagement = () => {
       {showContractSetup && selectedJob && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg font-semibold mb-4">Setup Contract: {selectedJob.job_name}</h3>
+            <h3 className="text-lg font-semibold mb-4">
+              {selectedJob.job_contracts && selectedJob.job_contracts.length > 0 ? 'Edit' : 'Setup'} Contract: {selectedJob.job_name}
+            </h3>
             
             <div className="space-y-4">
               <div>
@@ -1274,20 +1469,6 @@ const BillingManagement = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Vendor System
-                </label>
-                <select
-                  value={legacyJobForm.vendor}
-                  onChange={(e) => setLegacyJobForm(prev => ({ ...prev, vendor: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                >
-                  <option value="BRT">BRT</option>
-                  <option value="Microsystems">Microsystems</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
                   Contract Amount
                 </label>
                 <input
@@ -1324,7 +1505,6 @@ const BillingManagement = () => {
                   setShowLegacyJobForm(false);
                   setLegacyJobForm({
                     jobName: '',
-                    vendor: 'BRT',
                     contractAmount: '',
                     billingHistory: ''
                   });
