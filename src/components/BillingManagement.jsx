@@ -579,7 +579,7 @@ const BillingManagement = () => {
                           </div>
                           <div className="bg-white p-3 rounded-md">
                             <p className="text-sm text-gray-600">Percentage Billed</p>
-                            <p className="text-lg font-semibold">{totals.totalPercentageBilled.toFixed(1)}%</p>
+                            <p className="text-lg font-semibold">{totals.totalPercentageBilled.toFixed(2)}%</p>
                           </div>
                           <div className="bg-white p-3 rounded-md">
                             <p className="text-sm text-gray-600">Amount Billed</p>
@@ -621,7 +621,7 @@ const BillingManagement = () => {
                                     {new Date(event.billing_date).toLocaleDateString()}
                                   </td>
                                   <td className="px-4 py-2 text-sm text-gray-900">
-                                    {(event.percentage_billed * 100).toFixed(1)}%
+                                    {(event.percentage_billed * 100).toFixed(2)}%
                                   </td>
                                   <td className="px-4 py-2 text-sm">
                                     <span className={`px-2 py-1 text-xs rounded-full ${
@@ -704,7 +704,7 @@ const BillingManagement = () => {
                           </div>
                           <div className="bg-white p-3 rounded-md">
                             <p className="text-sm text-gray-600">Percentage Billed</p>
-                            <p className="text-lg font-semibold">{totals.totalPercentageBilled.toFixed(1)}%</p>
+                            <p className="text-lg font-semibold">{totals.totalPercentageBilled.toFixed(2)}%</p>
                           </div>
                           <div className="bg-white p-3 rounded-md">
                             <p className="text-sm text-gray-600">Amount Billed</p>
@@ -746,7 +746,7 @@ const BillingManagement = () => {
                                     {new Date(event.billing_date).toLocaleDateString()}
                                   </td>
                                   <td className="px-4 py-2 text-sm text-gray-900">
-                                    {(event.percentage_billed * 100).toFixed(1)}%
+                                    {(event.percentage_billed * 100).toFixed(2)}%
                                   </td>
                                   <td className="px-4 py-2 text-sm">
                                     <span className={`px-2 py-1 text-xs rounded-full ${
