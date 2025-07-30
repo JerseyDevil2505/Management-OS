@@ -1826,6 +1826,24 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         inspectorIssuesMap[property.inspector].push(issue);
       });
 
+      // Remove overridden issues from validation report
+      const finalValidationIssues = validationIssues.filter(issue => {
+        // Check if this issue was overridden in this processing run
+        const wasOverridden = decisionsToApply.some(override => 
+          override.composite_key === issue.composite_key
+        );
+        return !wasOverridden;
+      });
+
+      // Rebuild inspector issues map without overridden issues
+      const finalInspectorIssuesMap = {};
+      finalValidationIssues.forEach(issue => {
+        if (!finalInspectorIssuesMap[issue.inspector]) {
+          finalInspectorIssuesMap[issue.inspector] = [];
+        }
+        finalInspectorIssuesMap[issue.inspector].push(issue);
+      });
+
       // Calculate job-level totals
       const totalInspected = Object.values(inspectorStats).reduce((sum, stats) => sum + stats.totalInspected, 0);
       
@@ -1853,17 +1871,17 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
 
       const validationReportData = {
         summary: {
-          total_inspectors: Object.keys(inspectorIssuesMap).filter(k => inspectorIssuesMap[k].length > 0).length,
-          total_issues: validationIssues.length,
-          inspector_breakdown: Object.keys(inspectorIssuesMap)
-            .filter(inspector => inspectorIssuesMap[inspector].length > 0)
+          total_inspectors: Object.keys(finalInspectorIssuesMap).filter(k => finalInspectorIssuesMap[k].length > 0).length,
+          total_issues: finalValidationIssues.length,
+          inspector_breakdown: Object.keys(finalInspectorIssuesMap)
+            .filter(inspector => finalInspectorIssuesMap[inspector].length > 0)
             .map(inspector => ({
               inspector_code: inspector,
               inspector_name: inspectorStats[inspector]?.fullName || inspector,
-              total_issues: inspectorIssuesMap[inspector].length
+              total_issues: finalInspectorIssuesMap[inspector].length
             }))
         },
-        detailed_issues: inspectorIssuesMap
+        detailed_issues: finalInspectorIssuesMap
       };
 
       // Create missing properties report
@@ -1904,7 +1922,10 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         commercialPricing: totalPriced,
         totalCommercialProperties,
         commercialCompletePercent: totalCommercialProperties > 0 ? Math.round((totalCommercialInspected / totalCommercialProperties) * 100) : 0,
-        pricingCompletePercent: totalCommercialProperties > 0 ? Math.round((totalPriced / totalCommercialProperties) * 100) : 0
+        pricingCompletePercent: totalCommercialProperties > 0 ? Math.round((totalPriced / totalCommercialProperties) * 100) : 0,
+        
+        // Track overrides applied during processing
+        overridesAppliedCount: decisionsToApply.length
       };
 
       // Billing analytics with progress calculations
