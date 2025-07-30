@@ -1796,8 +1796,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         inspectorIssuesMap[property.inspector].push(issue);
       });
 
-      // Calculate job-level totals
-      const totalInspected = Object.values(inspectorStats).reduce((sum, stats) => sum + stats.totalInspected, 0);
+      // Calculate job-level totals (totalInspected already calculated above)
 
       // Calculate job-level totals
       const totalInspected = Object.values(inspectorStats).reduce((sum, stats) => sum + stats.totalInspected, 0);
