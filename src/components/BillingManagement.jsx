@@ -893,7 +893,7 @@ const BillingManagement = () => {
           {/* Planned Jobs Tab */}
           {activeTab === 'planned' && (
             <div className="space-y-6">
-              {planningJobs.length === 0 ? (
+              {planningJobs.filter(job => !job.is_archived).length === 0 ? (
                 <div className="text-center py-12 bg-gray-50 rounded-lg">
                   <p className="text-gray-600">No planned jobs found. Create them in the Admin Jobs section.</p>
                 </div>
