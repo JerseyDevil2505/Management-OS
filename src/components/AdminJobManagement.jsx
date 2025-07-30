@@ -19,6 +19,7 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
   const [loading, setLoading] = useState(true);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
   const [processing, setProcessing] = useState(false);
+  const [jobFreshness, setJobFreshness] = useState({}); // Track freshness data for each job
 
   // Processing and notification state
   const [processingStatus, setProcessingStatus] = useState({
@@ -122,6 +123,71 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
     return county.split(' ').map(word => 
       word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
     ).join(' ');
+  };
+
+  // Helper function to calculate days since a date
+  const getDaysSince = (dateString) => {
+    if (!dateString) return 999;
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffTime = Math.abs(now - date);
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
+  };
+
+  // Helper function to format time ago
+  const formatTimeAgo = (dateString) => {
+    if (!dateString) return 'Never';
+    const days = getDaysSince(dateString);
+    if (days === 0) return 'Today';
+    if (days === 1) return 'Yesterday';
+    if (days < 7) return `${days} days ago`;
+    if (days < 30) return `${Math.floor(days / 7)} weeks ago`;
+    return `${Math.floor(days / 30)} months ago`;
+  };
+
+  // Get update status color based on last update
+  const getUpdateStatusColor = (lastUpdate, percentBilled) => {
+    // Valuation phase (91%+) always shows blue
+    if (percentBilled >= 0.91) return 'bg-blue-100 text-blue-800';
+    
+    if (!lastUpdate) return 'bg-red-100 text-red-800';
+    const daysSince = getDaysSince(lastUpdate);
+    if (daysSince <= 3) return 'bg-green-100 text-green-800';
+    if (daysSince <= 14) return 'bg-yellow-100 text-yellow-800';
+    return 'bg-red-100 text-red-800';
+  };
+
+  // Check if update is needed
+  const needsProductionUpdate = (lastProductionRun, lastFileUpload, percentBilled) => {
+    // Valuation phase jobs don't "need" updates in the same way
+    if (percentBilled >= 0.91) return false;
+    
+    // If never run, definitely needs update
+    if (!lastProductionRun) return true;
+    
+    // If file upload is newer than production run, needs update
+    if (lastFileUpload && new Date(lastFileUpload) > new Date(lastProductionRun)) return true;
+    
+    // If older than 14 days, needs update
+    return getDaysSince(lastProductionRun) > 14;
+  };
+
+  // Get jobs needing updates for payroll/billing
+  const getJobsNeedingUpdates = () => {
+    return jobs.filter(job => {
+      // Only inspection phase jobs need regular updates for payroll
+      if (job.percentBilled >= 0.91) return false;
+      return needsProductionUpdate(job.lastProductionRun, job.lastFileUpload, job.percentBilled);
+    });
+  };
+
+  // Check if we're in a payroll period (every 2 weeks)
+  const isPayrollPeriod = () => {
+    const now = new Date();
+    const dayOfMonth = now.getDate();
+    // Assuming payroll runs on 15th and last day of month
+    return (dayOfMonth >= 13 && dayOfMonth <= 15) || dayOfMonth >= 28;
   };
 
   // FIXED: Enhanced Metrics Display Logic with live metrics first
@@ -231,6 +297,50 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
     } catch (error) {
       console.error('Failed to load HPI data:', error);
     }
+  };
+
+  // Load freshness data for all jobs
+  const loadJobFreshness = async (jobList) => {
+    const freshnessData = {};
+    
+    for (const job of jobList) {
+      try {
+        // Get last file upload time from property_records
+        const { data: fileData, error: fileError } = await supabase
+          .from('property_records')
+          .select('updated_at')
+          .eq('job_id', job.id)
+          .order('updated_at', { ascending: false })
+          .limit(1);
+        
+        // Get last production run time from inspection_data
+        const { data: prodData, error: prodError } = await supabase
+          .from('inspection_data')
+          .select('updated_at')
+          .eq('job_id', job.id)
+          .order('updated_at', { ascending: false })
+          .limit(1);
+        
+        freshnessData[job.id] = {
+          lastFileUpload: fileData?.[0]?.updated_at || null,
+          lastProductionRun: prodData?.[0]?.updated_at || null,
+          needsUpdate: needsProductionUpdate(
+            prodData?.[0]?.updated_at,
+            fileData?.[0]?.updated_at,
+            job.percentBilled || 0
+          )
+        };
+      } catch (error) {
+        console.error(`Error loading freshness for job ${job.id}:`, error);
+        freshnessData[job.id] = {
+          lastFileUpload: null,
+          lastProductionRun: null,
+          needsUpdate: false
+        };
+      }
+    }
+    
+    setJobFreshness(freshnessData);
   };
 
   // Notification system
@@ -739,6 +849,9 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
 
           // Load HPI data from database
           await loadCountyHpiData();
+          
+          // Load freshness data for active jobs
+          await loadJobFreshness(jobsWithAssignedCounts);
         }
       } catch (error) {
         console.error('Data initialization error:', error);
@@ -1201,15 +1314,24 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
 
   const sortJobsByBilling = (jobList) => {
     return jobList.sort((a, b) => {
+      // Extract year from dueDate (format: "YYYY-MM-DD" or just "YYYY")
+      const aYear = a.dueDate ? parseInt(a.dueDate.split('-')[0]) : 9999;
+      const bYear = b.dueDate ? parseInt(b.dueDate.split('-')[0]) : 9999;
+      
+      // Primary sort: due year (ascending - earlier years first)
+      if (aYear !== bYear) {
+        return aYear - bYear;
+      }
+      
+      // Secondary sort: billing percentage within same year (ascending - lower percentages first)
       const aBilling = a.percentBilled || 0;
       const bBilling = b.percentBilled || 0;
       
-      // Primary sort: billing percentage (ascending - lower percentages first)
       if (aBilling !== bBilling) {
         return aBilling - bBilling;
       }
       
-      // Secondary sort: municipality name (alphabetical)
+      // Tertiary sort: municipality name (alphabetical)
       return (a.municipality || '').localeCompare(b.municipality || '');
     });
   };
@@ -2067,6 +2189,32 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
       {/* Active Jobs Tab with LIVE METRICS */}
       {activeTab === 'jobs' && (
         <div className="space-y-6">
+          {/* Payroll/Billing Update Alert */}
+          {getJobsNeedingUpdates().length > 0 && (
+            <div className="mb-4 p-4 bg-yellow-50 border-l-4 border-yellow-400 rounded-lg shadow-md">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <AlertTriangle className="w-6 h-6 text-yellow-600" />
+                  <div>
+                    <h4 className="font-bold text-yellow-900">
+                      {isPayrollPeriod() ? '💰 Payroll Period - Updates Required' : '📊 Production Updates Needed'}
+                    </h4>
+                    <p className="text-sm text-yellow-700 mt-1">
+                      {getJobsNeedingUpdates().length} job{getJobsNeedingUpdates().length > 1 ? 's' : ''} need ProductionTracker updates
+                    </p>
+                    <div className="text-xs text-yellow-600 mt-2">
+                      Jobs needing updates: {getJobsNeedingUpdates().map(j => j.municipality).join(', ')}
+                    </div>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-sm text-yellow-700">Run ProductionTracker on these jobs</div>
+                  <div className="text-xs text-yellow-600 mt-1">for accurate payroll/billing</div>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="bg-gradient-to-r from-blue-50 to-green-50 rounded-lg border-2 border-blue-200 p-6">
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center">
@@ -2123,7 +2271,7 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
                                 Active
                               </span>
                               <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium shadow-sm">
-                                {((job.percentBilled || 0) * 100).toFixed(2)}% Billed
+                                {(job.percentBilled || 0).toFixed(2)}% Billed
                               </span>
                             </div>
                           </div>
@@ -2183,6 +2331,49 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
                               </div>
                               <div className="text-xs text-gray-600">Pricing Complete</div>
                             </div>
+                          </div>
+
+                          {/* Freshness Indicator */}
+                          <div className="flex items-center justify-between mb-2 px-3">
+                            <div className="flex items-center space-x-3">
+                              {jobFreshness[job.id] && (
+                                job.percentBilled < 0.91 ? (
+                                  // Inspection Phase Freshness
+                                  <div className={`flex items-center space-x-2 px-3 py-1 rounded-full text-xs font-medium ${
+                                    getUpdateStatusColor(jobFreshness[job.id].lastProductionRun, job.percentBilled)
+                                  }`}>
+                                    <Clock className="w-3 h-3" />
+                                    <span>
+                                      Production: {formatTimeAgo(jobFreshness[job.id].lastProductionRun)}
+                                    </span>
+                                    {jobFreshness[job.id].needsUpdate && (
+                                      <AlertTriangle className="w-3 h-3" />
+                                    )}
+                                  </div>
+                                ) : (
+                                  // Valuation Phase Indicator
+                                  <div className="flex items-center space-x-2 px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                    <TrendingUp className="w-3 h-3" />
+                                    <span>Valuation Phase</span>
+                                    {jobFreshness[job.id].lastFileUpload && (
+                                      <span className="text-blue-600">
+                                        • Sales data: {formatTimeAgo(jobFreshness[job.id].lastFileUpload)}
+                                      </span>
+                                    )}
+                                  </div>
+                                )
+                              )}
+                            </div>
+                            
+                            {/* File Upload Indicator (if newer than production) */}
+                            {jobFreshness[job.id] && 
+                             jobFreshness[job.id].lastFileUpload && 
+                             jobFreshness[job.id].lastProductionRun &&
+                             new Date(jobFreshness[job.id].lastFileUpload) > new Date(jobFreshness[job.id].lastProductionRun) && (
+                              <div className="text-xs text-orange-600 font-medium">
+                                📁 New file data available
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>
