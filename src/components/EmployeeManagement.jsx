@@ -445,7 +445,21 @@ const EmployeeManagement = () => {
         stats.workDays = stats.commercialWorkDays; // Use commercial work days for display
       }
     });
-
+        // Convert to array and sort by total inspections
+    const inspectorArray = Object.values(inspectorStats)
+      .map(inspector => {
+        // Use the appropriate inspection count based on inspector type
+        let displayTotal = 0;
+        if (inspector.inspectorType === 'Residential') {
+          displayTotal = inspector.residentialInspections;
+        } else if (inspector.inspectorType === 'Commercial') {
+          displayTotal = inspector.commercialInspections;
+        }
+        return { ...inspector, displayTotal, totalInspections: displayTotal };
+      })
+      .filter(inspector => inspector.displayTotal > 0)
+      .sort((a, b) => b.displayTotal - a.displayTotal);
+    
     // Calculate type-level rates and averages
     const byType = {};
     
@@ -481,21 +495,6 @@ const EmployeeManagement = () => {
         inspectorCount: commercialInspectorCount
       };
     }
-
-    // Convert to array and sort by total inspections
-    const inspectorArray = Object.values(inspectorStats)
-      .map(inspector => {
-        // Use the appropriate inspection count based on inspector type
-        let displayTotal = 0;
-        if (inspector.inspectorType === 'Residential') {
-          displayTotal = inspector.residentialInspections;
-        } else if (inspector.inspectorType === 'Commercial') {
-          displayTotal = inspector.commercialInspections;
-        }
-        return { ...inspector, displayTotal, totalInspections: displayTotal };
-      })
-      .filter(inspector => inspector.displayTotal > 0)
-      .sort((a, b) => b.displayTotal - a.displayTotal);
 
     // Calculate regional breakdown
     const regionalStats = {};
