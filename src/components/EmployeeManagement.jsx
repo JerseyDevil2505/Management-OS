@@ -1492,7 +1492,8 @@ const EmployeeManagement = () => {
                     {/* Inspector Type Breakdown - ProductionTracker Style */}
                     <div className="mb-6">
                       <h3 className="text-lg font-bold text-gray-800 mb-4">🏠 Inspector Analytics by Type</h3>
-                      
+                      <div>
+                        
                       {/* Residential Inspectors */}
                       {globalAnalytics.byType?.residential && (
                         <div className="mb-6">
