@@ -577,18 +577,29 @@ const EmployeeManagement = () => {
       };
     }
 
-    // Get unique inspector counts by type
+     // Get unique inspector counts by type
     const residentialInspectorCount = Object.values(inspectorStats).filter(i => i.inspectorType === 'Residential').length || 1;
     const commercialInspectorCount = Object.values(inspectorStats).filter(i => i.inspectorType === 'Commercial').length || 1;
     
-    // Calculate proper daily averages per inspector
+    // Calculate total inspector-days worked (sum of each inspector's work days)
+    let totalResidentialInspectorDays = 0;
+    let totalCommercialInspectorDays = 0;
+
+    inspectorArray.forEach(inspector => {
+      if (inspector.inspectorType === 'Residential') {
+        totalResidentialInspectorDays += inspector.residentialWorkDays.size;
+      } else if (inspector.inspectorType === 'Commercial') {
+        totalCommercialInspectorDays += inspector.commercialWorkDays.size;
+      }
+    });
+
+    // Calculate proper daily averages based on total inspector-days (for bidding purposes)
     const overallAvgPerInspector = filter.inspectorType === 'Residential' ?
-      Math.round(totalResidentialInspections / Math.max(residentialWorkDays.size, 1) / residentialInspectorCount) :
+      Math.round(totalResidentialInspections / Math.max(totalResidentialInspectorDays, 1)) :
       filter.inspectorType === 'Commercial' ?
-      Math.round(totalCommercialInspections / Math.max(commercialWorkDays.size, 1) / commercialInspectorCount) :
+      Math.round(totalCommercialInspections / Math.max(totalCommercialInspectorDays, 1)) :
       Math.round((totalResidentialInspections + totalCommercialInspections) / 
-        Math.max(residentialWorkDays.size + commercialWorkDays.size, 1) / 
-        (residentialInspectorCount + commercialInspectorCount));
+        Math.max(totalResidentialInspectorDays + totalCommercialInspectorDays, 1));
     
     return {
       summary: {
