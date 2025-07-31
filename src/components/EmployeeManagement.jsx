@@ -1645,15 +1645,13 @@ const EmployeeManagement = () => {
                       ) : (
                         <div className="max-h-96 overflow-y-auto">
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {globalAnalytics.inspectors.map((inspector) => (
+                            {/* Residential Inspectors First */}
+                            {globalAnalytics.inspectors
+                              .filter(inspector => inspector.inspectorType === 'Residential')
+                              .map((inspector) => (
                               <div
                                 key={inspector.initials}
-                                className={`p-4 rounded-lg border-2 ${
-                                  inspector.inspectorType === 'Residential' ? 'bg-green-50 border-green-200' :
-                                  inspector.inspectorType === 'Commercial' ? 'bg-blue-50 border-blue-200' :
-                                  inspector.inspectorType === 'Management' ? 'bg-purple-50 border-purple-200' :
-                                  'bg-gray-50 border-gray-200'
-                                }`}
+                                className="p-4 rounded-lg border-2 bg-green-50 border-green-200"
                               >
                                 <div className="flex justify-between items-start mb-3">
                                   <div>
@@ -1661,12 +1659,99 @@ const EmployeeManagement = () => {
                                       {inspector.name} ({inspector.initials})
                                     </div>
                                     <div className="text-sm text-gray-600">
-                                      <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${
-                                        inspector.inspectorType === 'Residential' ? 'bg-green-200 text-green-800' :
-                                        inspector.inspectorType === 'Commercial' ? 'bg-blue-200 text-blue-800' :
-                                        inspector.inspectorType === 'Management' ? 'bg-purple-200 text-purple-800' :
-                                        'bg-gray-200 text-gray-800'
-                                      }`}>
+                                      <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded-full bg-green-200 text-green-800">
+                                        {inspector.inspectorType}
+                                      </span>
+                                      <span className="ml-2">{inspector.region}</span>
+                                    </div>
+                                  </div>
+                                  <div className="text-right">
+                                    <div className="text-2xl font-bold text-gray-800">
+                                      {inspector.displayTotal ? inspector.displayTotal.toLocaleString() : inspector.totalInspections.toLocaleString()}
+                                    </div>
+                                    <div className="text-xs text-gray-500">Total</div>
+                                  </div>
+                                </div>
+                                
+                                <div className="grid grid-cols-3 gap-2 text-center">
+                                  <div className="bg-white p-2 rounded border">
+                                    <div className="text-lg font-bold text-green-600">{inspector.entryRate}%</div>
+                                    <div className="text-xs text-gray-500">Entry</div>
+                                  </div>
+                                  <div className="bg-white p-2 rounded border">
+                                    <div className="text-lg font-bold text-orange-600">{inspector.refusalRate}%</div>
+                                    <div className="text-xs text-gray-500">Refusal</div>
+                                  </div>
+                                  <div className="bg-white p-2 rounded border">
+                                    <div className="text-lg font-bold text-purple-600">{inspector.dailyAvg}</div>
+                                    <div className="text-xs text-gray-500">Daily</div>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                            
+                            {/* Commercial Inspectors Second */}
+                            {globalAnalytics.inspectors
+                              .filter(inspector => inspector.inspectorType === 'Commercial')
+                              .map((inspector) => (
+                              <div
+                                key={inspector.initials}
+                                className="p-4 rounded-lg border-2 bg-blue-50 border-blue-200"
+                              >
+                                <div className="flex justify-between items-start mb-3">
+                                  <div>
+                                    <div className="font-semibold text-gray-800">
+                                      {inspector.name} ({inspector.initials})
+                                    </div>
+                                    <div className="text-sm text-gray-600">
+                                      <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded-full bg-blue-200 text-blue-800">
+                                        {inspector.inspectorType}
+                                      </span>
+                                      <span className="ml-2">{inspector.region}</span>
+                                    </div>
+                                  </div>
+                                  <div className="text-right">
+                                    <div className="text-2xl font-bold text-gray-800">
+                                      {inspector.displayTotal ? inspector.displayTotal.toLocaleString() : inspector.totalInspections.toLocaleString()}
+                                    </div>
+                                    <div className="text-xs text-gray-500">Total</div>
+                                  </div>
+                                </div>
+                                
+                                <div className="grid grid-cols-3 gap-2 text-center">
+                                  <div className="bg-white p-2 rounded border">
+                                    <div className="text-lg font-bold text-blue-600">{inspector.dailyAvg}</div>
+                                    <div className="text-xs text-gray-500">Avg</div>
+                                  </div>
+                                  <div className="bg-white p-2 rounded border">
+                                    <div className="text-lg font-bold text-orange-600">{inspector.pricingDays || 0}</div>
+                                    <div className="text-xs text-gray-500">Total Priced</div>
+                                  </div>
+                                  <div className="bg-white p-2 rounded border">
+                                    <div className="text-lg font-bold text-purple-600">
+                                      {inspector.pricingDays > 0 ? Math.round(inspector.commercialInspections / inspector.pricingDays) : 0}
+                                    </div>
+                                    <div className="text-xs text-gray-500">Price Avg</div>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                            
+                            {/* Management Inspectors Last (if any) */}
+                            {globalAnalytics.inspectors
+                              .filter(inspector => inspector.inspectorType === 'Management')
+                              .map((inspector) => (
+                              <div
+                                key={inspector.initials}
+                                className="p-4 rounded-lg border-2 bg-purple-50 border-purple-200"
+                              >
+                                <div className="flex justify-between items-start mb-3">
+                                  <div>
+                                    <div className="font-semibold text-gray-800">
+                                      {inspector.name} ({inspector.initials})
+                                    </div>
+                                    <div className="text-sm text-gray-600">
+                                      <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded-full bg-purple-200 text-purple-800">
                                         {inspector.inspectorType}
                                       </span>
                                       <span className="ml-2">{inspector.region}</span>
@@ -1700,19 +1785,6 @@ const EmployeeManagement = () => {
                         </div>
                       )}
                     </div>
-                  </>
-                ) : (
-                  <div className="text-center py-12 text-gray-500">
-                    <Database className="w-12 h-12 mx-auto mb-3 text-gray-400" />
-                    <p>No inspection data available</p>
-                    <p className="text-sm mt-1">Analytics will appear once inspection data is processed</p>
-                  </div>
-                )}
-              </div>
-            </>
-          )}
-        </div>
-      )}
 
       {/* Employee Directory Tab */}
       {activeTab === 'directory' && (
