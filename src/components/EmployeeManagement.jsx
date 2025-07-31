@@ -1709,7 +1709,6 @@ const EmployeeManagement = () => {
       )}
 
       {/* Employee Directory Tab */}
-      {/* Employee Directory Tab */}
       {activeTab === 'directory' && (
         <div className="space-y-6">
           {/* No Data State */}
