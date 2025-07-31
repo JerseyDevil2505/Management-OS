@@ -223,7 +223,7 @@ const EmployeeManagement = () => {
     }
   };
 
-const processGlobalInspectionData = (data, filter) => {
+  const processGlobalInspectionData = (data, filter) => {
     // Filter data based on current filters
     let filteredData = data.filter(record => {
       const matchesType = filter.inspectorType === 'all' || record.employee.inspector_type === filter.inspectorType;
