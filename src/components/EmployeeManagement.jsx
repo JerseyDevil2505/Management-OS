@@ -311,7 +311,8 @@ const EmployeeManagement = () => {
           entryRate: 0,
           refusalRate: 0,
           dailyAvg: 0,
-          pricingDays: 0,
+          pricingCount: 0,
+          pricingDays: new Set(),
           workDays: new Set(),
           residentialWorkDays: new Set(),
           commercialWorkDays: new Set()
@@ -360,12 +361,13 @@ const EmployeeManagement = () => {
           // Method 1: Check for price_by and price_date (typically BRT)
           if (record.price_by && record.price_date) {
             typeStats.commercial.pricingBRT++;
-            inspectorStats[initials].pricingDays++;
-            // Track unique BRT pricing days
+            inspectorStats[initials].pricingCount++;  // Track total properties priced
+            // Track unique pricing days per inspector
             const isoDate = new Date(record.price_date).toISOString().split('T')[0];
+            inspectorStats[initials].pricingDays.add(isoDate);  // Add to Set, not increment
+            // Track unique BRT pricing days globally
             typeStats.commercial.brtPricingDays.add(isoDate);
           }
-          
           // Method 2: Check if info_by_code is in commercial/priced array (typically Microsystems)
           const jobConfig = record.jobInfoByConfig;
           if (jobConfig && (jobConfig.commercial || jobConfig.priced)) {
@@ -377,9 +379,10 @@ const EmployeeManagement = () => {
             
             if (infoByCode && allPricingCodes.includes(infoByCode)) {
               typeStats.commercial.pricingMicrosystems++;
-              inspectorStats[initials].pricingDays++;
+              inspectorStats[initials].pricingCount++;  // Still track total properties priced
+              // Note: Microsystems doesn't track pricing dates, so we can't add to pricingDays Set
             }
-          }
+          }    
         } else {
           typeStats.commercial.otherProperties++;
         }
