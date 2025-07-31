@@ -252,15 +252,13 @@ const EmployeeManagement = () => {
     // Entry: Any record with entry codes that has ANY initials
     const totalResidentialEntries = residentialRecords.filter(r => {
       const hasInitials = r.list_by || r.measure_by || r.price_by;
-      const infoBy = r.info_by_code?.toString().toLowerCase();
-      return hasInitials && ['01', '02', '03', '04', 'a', 'o', 's', 't'].includes(infoBy);
+      return hasInitials && r.jobInfoByConfig?.entry?.includes(r.info_by_code?.toString());
     }).length;
     
     // Refusal: Any record with refusal codes that has ANY initials
     const totalResidentialRefusals = residentialRecords.filter(r => {
       const hasInitials = r.list_by || r.measure_by || r.price_by;
-      const infoBy = r.info_by_code?.toString().toLowerCase();
-      return hasInitials && ['06', 'r'].includes(infoBy);
+      return hasInitials && r.jobInfoByConfig?.refusal?.includes(r.info_by_code?.toString());
     }).length;
     
     // Commercial totals (Class 4A, 4B, 4C only)
@@ -281,18 +279,18 @@ const EmployeeManagement = () => {
         // Residential: filter by list_by = initials AND class 2, 3A
         const myRecords = residentialRecords.filter(r => r.measure_by === initials);
         
-        if (myRecords.length > 0) {
-          // Entry: my records with entry codes
-          const myEntries = myRecords.filter(r => {
-            const infoBy = r.info_by_code?.toString().toLowerCase();
-            return ['01', '02', '03', '04', 'a', 'o', 's', 't'].includes(infoBy);
-          }).length;
+        const myEntries = residentialRecords.filter(r => 
+            r.measure_by === initials && 
+            r.list_by === initials && 
+            r.jobInfoByConfig?.entry?.includes(r.info_by_code?.toString())
+          ).length;
           
           // Refusal: my records with refusal codes
-          const myRefusals = myRecords.filter(r => {
-            const infoBy = r.info_by_code?.toString().toLowerCase();
-            return ['06', 'r'].includes(infoBy);
-          }).length;
+          const myRefusals = residentialRecords.filter(r => 
+            r.measure_by === initials && 
+            r.list_by === initials && 
+            r.jobInfoByConfig?.refusal?.includes(r.info_by_code?.toString())
+          ).length;
           
           // Unique work days
           const workDays = new Set(myRecords.map(r => r.measure_date?.split('T')[0]).filter(Boolean));
@@ -348,15 +346,17 @@ const EmployeeManagement = () => {
       } else if (inspector.inspector_type === 'Management') {
         // Management can do both residential and commercial
         // Residential work
-        const myResidentialRecords = residentialRecords.filter(r => r.list_by === initials);
-        const myResEntries = myResidentialRecords.filter(r => {
-          const infoBy = r.info_by_code?.toString().toLowerCase();
-          return ['01', '02', '03', '04', 'a', 'o', 's', 't'].includes(infoBy);
-        }).length;
-        const myResRefusals = myResidentialRecords.filter(r => {
-          const infoBy = r.info_by_code?.toString().toLowerCase();
-          return ['06', 'r'].includes(infoBy);
-        }).length;
+        const myResidentialRecords = residentialRecords.filter(r => r.measure_by === initials);
+        const myResEntries = residentialRecords.filter(r => 
+          r.measure_by === initials && 
+          r.list_by === initials && 
+          r.jobInfoByConfig?.entry?.includes(r.info_by_code?.toString())
+        ).length;
+        const myResRefusals = residentialRecords.filter(r => 
+          r.measure_by === initials && 
+          r.list_by === initials && 
+          r.jobInfoByConfig?.refusal?.includes(r.info_by_code?.toString())
+        ).length;
         const resWorkDays = new Set(myResidentialRecords.map(r => r.measure_date?.split('T')[0]).filter(Boolean));
         
         // Commercial work
