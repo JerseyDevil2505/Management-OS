@@ -497,10 +497,19 @@ const EmployeeManagement = () => {
     if (typeStats.residential.count > 0 || typeStats.residential.totalInspections > 0) {
       const residentialWorkDays = typeStats.residential.workDays.size || 1;
       const residentialInspectorCount = inspectorArray.filter(i => i.inspectorType === 'Residential').length || 1;
+      
+      // Calculate total residential inspector-days (sum of each residential inspector's work days)
+      let totalResidentialInspectorDaysForType = 0;
+      inspectorArray.forEach(inspector => {
+        if (inspector.inspectorType === 'Residential') {
+          totalResidentialInspectorDaysForType += inspector.residentialWorkDays.size;
+        }
+      });
+      
       byType.residential = {
         count: typeStats.residential.count,
         totalInspections: typeStats.residential.totalInspections, // Only 2 and 3A
-        avgDaily: Math.round(typeStats.residential.totalInspections / residentialWorkDays / residentialInspectorCount),
+        avgDaily: Math.round(typeStats.residential.totalInspections / Math.max(totalResidentialInspectorDaysForType, 1)),
         entryRate: totalEligible > 0 ? 
           Math.round((typeStats.residential.entryCount / totalEligible) * 100) : 0,
         refusalRate: totalEligible > 0 ? 
@@ -514,15 +523,35 @@ const EmployeeManagement = () => {
     if (typeStats.commercial.count > 0 || typeStats.commercial.totalInspections > 0) {
       const commercialWorkDays = typeStats.commercial.workDays.size || 1;
       const commercialInspectorCount = inspectorArray.filter(i => i.inspectorType === 'Commercial').length || 1;
-      const totalPricing = typeStats.commercial.pricingBRT + typeStats.commercial.pricingMicrosystems;
+      
+      // Calculate total commercial inspector-days (sum of each commercial inspector's work days)
+      let totalCommercialInspectorDaysForType = 0;
+      inspectorArray.forEach(inspector => {
+        if (inspector.inspectorType === 'Commercial') {
+          totalCommercialInspectorDaysForType += inspector.commercialWorkDays.size;
+        }
+      });
+      
+      // For pricing average, calculate total pricing-days across all commercial inspectors
+      let totalPricingDays = 0;
+      let totalPricingCount = typeStats.commercial.pricingBRT + typeStats.commercial.pricingMicrosystems;
+      
+      inspectorArray.forEach(inspector => {
+        if (inspector.inspectorType === 'Commercial' && inspector.pricingDays > 0) {
+          totalPricingDays += inspector.pricingDays;
+        }
+      });
+      
       const brtPricingDaysCount = typeStats.commercial.brtPricingDays.size;
+      
       byType.commercial = {
         count: typeStats.commercial.count,
         totalInspections: typeStats.commercial.totalInspections, // Only 4A, 4B, 4C
-        avgDaily: Math.round(typeStats.commercial.totalInspections / commercialWorkDays / commercialInspectorCount),
+        avgDaily: Math.round(typeStats.commercial.totalInspections / Math.max(totalCommercialInspectorDaysForType, 1)),
         commercial: typeStats.commercial.totalInspections,
-        pricing: totalPricing,
+        pricing: totalPricingCount,
         pricingDays: brtPricingDaysCount, // Unique BRT pricing days
+        pricingAvgPerDay: totalPricingDays > 0 ? Math.round(totalPricingCount / totalPricingDays) : 0, // NEW: Average pricing per inspector-day
         otherProperties: typeStats.commercial.otherProperties,
         workDays: commercialWorkDays.size,
         inspectorCount: commercialInspectorCount
@@ -1525,11 +1554,10 @@ const EmployeeManagement = () => {
                             </div>
                             <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                               <div className="text-2xl font-bold text-blue-700">
-                                {globalAnalytics.byType.commercial.pricingDays > 0 ? 
-                                  Math.round(globalAnalytics.byType.commercial.pricing / globalAnalytics.byType.commercial.pricingDays) : 0}
+                                {globalAnalytics.byType.commercial.pricingAvgPerDay || 0}
                               </div>
                               <div className="text-xs font-medium text-blue-600">Pricing Average</div>
-                              <div className="text-xs text-blue-500">Per pricing day</div>
+                              <div className="text-xs text-blue-500">Per inspector-day</div>
                             </div>
                             <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                               <div className="text-2xl font-bold text-blue-700">
