@@ -1500,6 +1500,8 @@ const processGlobalInspectionData = (data, filter) => {
                             </div>
                           </div>
                         </div>
+                      </div>
+                      )}
                       
                     {/* Top Performers by Type */}
                     <div className="mb-6">
