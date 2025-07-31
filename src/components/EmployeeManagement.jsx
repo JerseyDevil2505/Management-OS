@@ -1443,44 +1443,58 @@ const EmployeeManagement = () => {
                         <div className="mb-6">
                           <h4 className="text-md font-semibold text-purple-700 mb-3 flex items-center">
                             <div className="w-3 h-3 bg-purple-500 rounded-full mr-2"></div>
-                            Management Inspector Analytics
+                            Management Inspector Analytics ({globalAnalytics.byType.management.count} inspectors)
                           </h4>
-                          <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+                          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
                             <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
                               <div className="text-2xl font-bold text-purple-700">
-                                {globalAnalytics.byType.management.count}
+                                {globalAnalytics.byType.management.residentialInspections?.toLocaleString() || 0}
                               </div>
-                              <div className="text-xs font-medium text-purple-600">Management Team</div>
+                              <div className="text-xs font-medium text-purple-600">Residential</div>
+                              <div className="text-xs text-purple-500">(Class 2, 3A)</div>
                             </div>
                             <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
                               <div className="text-2xl font-bold text-purple-700">
-                                {globalAnalytics.byType.management.totalInspections.toLocaleString()}
+                                {globalAnalytics.byType.management.residentialAvgDaily || 0}
                               </div>
-                              <div className="text-xs font-medium text-purple-600">Total Inspected</div>
+                              <div className="text-xs font-medium text-purple-600">Res Daily Avg</div>
                             </div>
                             <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
                               <div className="text-2xl font-bold text-purple-700">
-                                {globalAnalytics.byType.management.avgDaily}
+                                {globalAnalytics.byType.management.entryRate || 0}%
                               </div>
-                              <div className="text-xs font-medium text-purple-600">Daily Average</div>
+                              <div className="text-xs font-medium text-purple-600">Entry Rate</div>
                             </div>
                             <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
                               <div className="text-2xl font-bold text-purple-700">
-                                {globalAnalytics.byType.management.specialInspections.toLocaleString()}
+                                {globalAnalytics.byType.management.refusalRate || 0}%
                               </div>
-                              <div className="text-xs font-medium text-purple-600">Special Inspections</div>
+                              <div className="text-xs font-medium text-purple-600">Refusal Rate</div>
                             </div>
                             <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
                               <div className="text-2xl font-bold text-purple-700">
-                                {globalAnalytics.byType.management.qaReviews.toLocaleString()}
+                                {globalAnalytics.byType.management.commercialInspections?.toLocaleString() || 0}
                               </div>
-                              <div className="text-xs font-medium text-purple-600">QA Reviews</div>
+                              <div className="text-xs font-medium text-purple-600">Commercial</div>
+                              <div className="text-xs text-purple-500">(Class 4A-C)</div>
                             </div>
                             <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
                               <div className="text-2xl font-bold text-purple-700">
-                                {globalAnalytics.byType.management.training.toLocaleString()}
+                                {globalAnalytics.byType.management.commercialAvgDaily || 0}
                               </div>
-                              <div className="text-xs font-medium text-purple-600">Training Days</div>
+                              <div className="text-xs font-medium text-purple-600">Com Daily Avg</div>
+                            </div>
+                            <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                              <div className="text-2xl font-bold text-purple-700">
+                                {globalAnalytics.byType.management.totalPriced?.toLocaleString() || 0}
+                              </div>
+                              <div className="text-xs font-medium text-purple-600">Total Priced</div>
+                            </div>
+                            <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                              <div className="text-2xl font-bold text-purple-700">
+                                {globalAnalytics.byType.management.pricingAvgDaily || 0}
+                              </div>
+                              <div className="text-xs font-medium text-purple-600">Price Avg</div>
                             </div>
                           </div>
                         </div>
