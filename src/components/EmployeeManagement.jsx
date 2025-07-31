@@ -208,7 +208,7 @@ const EmployeeManagement = () => {
       }
 
       // Process the enriched data similar to ProductionTracker
-      const processedAnalytics = processGlobalInspectionData(enrichedData, analyticsFilter);
+      const processedAnalytics = processGlobalInspectionData(enrichedData, analyticsFilter, allInspectionData.length);
       setGlobalAnalytics(processedAnalytics);
 
     } catch (error) {
@@ -223,7 +223,7 @@ const EmployeeManagement = () => {
     }
   };
 
-  const processGlobalInspectionData = (data, filter) => {
+  const processGlobalInspectionData = (data, filter, totalRecordCount) => {
     // Filter data based on current filters
     let filteredData = data.filter(record => {
       const matchesType = filter.inspectorType === 'all' || record.employee.inspector_type === filter.inspectorType;
