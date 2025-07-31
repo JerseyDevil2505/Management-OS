@@ -278,8 +278,10 @@ const EmployeeManagement = () => {
       if (inspector.inspector_type === 'Residential') {
         // Residential: filter by list_by = initials AND class 2, 3A
         const myRecords = residentialRecords.filter(r => r.measure_by === initials);
-        
-        const myEntries = residentialRecords.filter(r => 
+
+        if (myRecords.length > 0) {
+         // Entry: records where BOTH measure_by AND list_by match inspector, with entry codes
+          const myEntries = residentialRecords.filter(r => 
             r.measure_by === initials && 
             r.list_by === initials && 
             r.jobInfoByConfig?.entry?.includes(r.info_by_code?.toString())
