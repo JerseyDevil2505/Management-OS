@@ -1757,7 +1757,7 @@ const EmployeeManagement = () => {
                                     <div className="text-xs text-gray-500">Avg</div>
                                   </div>
                                   <div className="bg-white p-2 rounded border">
-                                    <div className="text-lg font-bold text-orange-600">{inspector.pricingCount || 0}
+                                    <div className="text-lg font-bold text-orange-600">{inspector.pricingCount || 0}</div>
                                     <div className="text-xs text-gray-500">Total Priced</div>
                                   </div>
                                   <div className="bg-white p-2 rounded border">
@@ -1816,8 +1816,10 @@ const EmployeeManagement = () => {
                             ))}
                           </div>
                         </div>
-                      ))}
-                  ) : (
+                      )}
+                    </div>
+                  </>
+                ) : (
                   <div className="text-center py-8 text-gray-500">
                     No analytics data available
                   </div>
@@ -1828,6 +1830,7 @@ const EmployeeManagement = () => {
         </div>
       )}
 
+      {/* Employee Directory Tab */}
       {/* Employee Directory Tab */}
       {activeTab === 'directory' && (
         <div className="space-y-6">
