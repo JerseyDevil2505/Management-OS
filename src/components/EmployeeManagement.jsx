@@ -477,6 +477,8 @@ const EmployeeManagement = () => {
         stats.dailyAvg = Math.round(stats.commercialInspections / workDays);
         stats.workDays = stats.commercialWorkDays; // Use commercial work days for display
       }
+      // Convert pricingDays Set to number for display
+      stats.pricingDays = stats.pricingDays.size;
     });
 
     // Convert to array and sort by total inspections
@@ -1557,10 +1559,10 @@ const EmployeeManagement = () => {
                             </div>
                             <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                               <div className="text-2xl font-bold text-blue-700">
-                                {globalAnalytics.byType.commercial.pricingAvgPerDay || 0}
+                                {globalAnalytics.byType.commercial.pricing.toLocaleString()}
                               </div>
-                              <div className="text-xs font-medium text-blue-600">Pricing Average</div>
-                              <div className="text-xs text-blue-500">Per inspector-day</div>
+                              <div className="text-xs font-medium text-blue-600">Total Priced</div>
+                              <div className="text-xs text-blue-500">All properties</div>
                             </div>
                             <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                               <div className="text-2xl font-bold text-blue-700">
@@ -1755,12 +1757,12 @@ const EmployeeManagement = () => {
                                     <div className="text-xs text-gray-500">Avg</div>
                                   </div>
                                   <div className="bg-white p-2 rounded border">
-                                    <div className="text-lg font-bold text-orange-600">{inspector.pricingDays || 0}</div>
+                                    <div className="text-lg font-bold text-orange-600">{inspector.pricingCount || 0}
                                     <div className="text-xs text-gray-500">Total Priced</div>
                                   </div>
                                   <div className="bg-white p-2 rounded border">
                                     <div className="text-lg font-bold text-purple-600">
-                                      {inspector.pricingDays > 0 ? Math.round(inspector.commercialInspections / inspector.pricingDays) : 0}
+                                      {inspector.pricingDays.size > 0 ? Math.round(inspector.pricingCount / inspector.pricingDays.size) : 0}
                                     </div>
                                     <div className="text-xs text-gray-500">Price Avg</div>
                                   </div>
