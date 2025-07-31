@@ -242,7 +242,7 @@ const EmployeeManagement = () => {
     // STEP 1: Calculate Global Totals (KISS method)
     // Total inspections = count all 2, 3A, 4A, 4B, 4C records
     const validPropertyClasses = ['2', '3A', '4A', '4B', '4C'];
-    const totalInspectionRecords = filteredData.length;
+    const totalInspectionRecords = allInspectionData.length;
     
     // Residential totals (Class 2 & 3A only)
     const residentialRecords = filteredData.filter(r => ['2', '3A'].includes(r.property_class));
