@@ -135,7 +135,7 @@ const EmployeeManagement = () => {
       let employeesQuery = supabase
         .from('employees')
         .select('*')
-        .in('inspector_type', ['Residential', 'Commercial']); // Removed Management
+        .in('inspector_type', ['Residential', 'Commercial','Management']);
 
       // Apply employment status filter
       if (analyticsFilter.employmentStatus === 'active') {
