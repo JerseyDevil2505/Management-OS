@@ -26,7 +26,7 @@ const EmployeeManagement = () => {
     inspectorType: 'all',
     region: 'all',
     dateRange: 'all',
-    employmentStatus: 'active'  // Default to active only
+    employmentStatus: 'all'  // Default to all employees
   });
 
   // Load employees from database on component mount
@@ -1492,7 +1492,7 @@ const EmployeeManagement = () => {
                     {/* Inspector Type Breakdown - ProductionTracker Style */}
                     <div className="mb-6">
                       <h3 className="text-lg font-bold text-gray-800 mb-4">🏠 Inspector Analytics by Type</h3>
-                                              
+                      
                       {/* Residential Inspectors */}
                       {globalAnalytics.byType?.residential && (
                         <div className="mb-6">
@@ -1619,9 +1619,10 @@ const EmployeeManagement = () => {
                               <div className="text-xs font-medium text-purple-600">Training Days</div>
                             </div>
                           </div>
-                        )}
-                      </div>
-                   
+                        </div>
+                      )}
+                    </div>
+
                     {/* Top Performers by Type */}
                     <div className="mb-6">
                       <h3 className="text-lg font-bold text-gray-800 mb-4">🏆 Top Performers by Inspector Type</h3>
@@ -1829,6 +1830,7 @@ const EmployeeManagement = () => {
         </div>
       )}
 
+      {/* Employee Directory Tab */}
       {/* Employee Directory Tab */}
       {activeTab === 'directory' && (
         <div className="space-y-6">
