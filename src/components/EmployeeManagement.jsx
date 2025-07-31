@@ -1762,7 +1762,7 @@ const EmployeeManagement = () => {
                                   </div>
                                   <div className="bg-white p-2 rounded border">
                                     <div className="text-lg font-bold text-purple-600">
-                                      {inspector.pricingDays.size > 0 ? Math.round(inspector.pricingCount / inspector.pricingDays.size) : 0}
+                                      {inspector.pricingDays > 0 ? Math.round(inspector.pricingCount / inspector.pricingDays) : 0}
                                     </div>
                                     <div className="text-xs text-gray-500">Price Avg</div>
                                   </div>
