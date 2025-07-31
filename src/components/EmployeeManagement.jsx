@@ -26,7 +26,7 @@ const EmployeeManagement = () => {
     inspectorType: 'all',
     region: 'all',
     dateRange: 'all',
-    employmentStatus: 'active'  // Default to active only
+    employmentStatus: 'all'  // Default to all employees
   });
 
   // Load employees from database on component mount
@@ -228,370 +228,269 @@ const EmployeeManagement = () => {
     let filteredData = data.filter(record => {
       const matchesType = filter.inspectorType === 'all' || record.employee.inspector_type === filter.inspectorType;
       const matchesRegion = filter.region === 'all' || record.employee.region === filter.region;
-      
       return matchesType && matchesRegion;
     });
 
-    // Separate residential and commercial work days
-    const residentialWorkDays = new Set();
-    const commercialWorkDays = new Set();
-    
-    // Track which days had residential vs commercial work
+    // Create employee lookup map
+    const employeeMap = {};
     filteredData.forEach(record => {
-      if (['2', '3A'].includes(record.property_class)) {
-        // Track only measure_date for residential work
-        if (record.measure_date) {
-          const isoDate = new Date(record.measure_date).toISOString().split('T')[0];
-          residentialWorkDays.add(isoDate);
-        }
-      } else if (['4A', '4B', '4C'].includes(record.property_class)) {
-        // Track only measure_date for commercial work
-        if (record.measure_date) {
-          const isoDate = new Date(record.measure_date).toISOString().split('T')[0];
-          commercialWorkDays.add(isoDate);
-        }
+      if (record.employee && record.employee.initials) {
+        employeeMap[record.employee.initials] = record.employee;
       }
     });
-    
-    // Calculate entry/refusal rates using ProductionTracker logic
-    let entryCount = 0;
-    let refusalCount = 0;
-    let totalEligible = 0;
-    let totalInspectionRecords = 0; // NEW: Count ALL inspection records
 
+    // STEP 1: Calculate Global Totals (KISS method)
+    // Total inspections = count all 2, 3A, 4A, 4B, 4C records
+    const validPropertyClasses = ['2', '3A', '4A', '4B', '4C'];
+    const totalInspectionRecords = filteredData.filter(r => validPropertyClasses.includes(r.property_class)).length;
+    
+    // Residential totals (Class 2 & 3A only)
+    const residentialRecords = filteredData.filter(r => ['2', '3A'].includes(r.property_class));
+    const totalResidentialInspections = residentialRecords.length;
+    
+    // Entry: Any record with entry codes that has ANY initials
+    const totalResidentialEntries = residentialRecords.filter(r => {
+      const hasInitials = r.list_by || r.measure_by || r.price_by;
+      const infoBy = r.info_by_code?.toString().toLowerCase();
+      return hasInitials && ['01', '02', '03', '04', 'a', 'o', 's', 't'].includes(infoBy);
+    }).length;
+    
+    // Refusal: Any record with refusal codes that has ANY initials
+    const totalResidentialRefusals = residentialRecords.filter(r => {
+      const hasInitials = r.list_by || r.measure_by || r.price_by;
+      const infoBy = r.info_by_code?.toString().toLowerCase();
+      return hasInitials && ['06', 'r'].includes(infoBy);
+    }).length;
+    
+    // Commercial totals (Class 4A, 4B, 4C only)
+    const commercialRecords = filteredData.filter(r => ['4A', '4B', '4C'].includes(r.property_class));
+    const totalCommercialInspections = commercialRecords.length;
+    
+    // Total pricing (any record with price_by)
+    const totalPricing = commercialRecords.filter(r => r.price_by).length;
+
+    // STEP 2: Process Individual Inspectors
     const inspectorStats = {};
-    const typeStats = {
-      residential: { 
-        count: 0, 
-        totalInspections: 0, // Only 2 and 3A
-        entryCount: 0, 
-        refusalCount: 0, 
-        eligible: 0, 
-        otherProperties: 0,
-        workDays: residentialWorkDays
-      },
-      commercial: { 
-        count: 0, 
-        totalInspections: 0, // Only 4A, 4B, 4C
-        pricing: 0, 
-        pricingBRT: 0,
-        pricingMicrosystems: 0,
-        pricingDays: 0, // Track unique pricing days for BRT
-        otherProperties: 0,
-        workDays: commercialWorkDays,
-        brtPricingDays: new Set() // Track unique BRT pricing days
-      }
-    };
-
-    // Get unique job count
-    const uniqueJobs = new Set(filteredData.map(r => r.job_id)).size;
-
-    // Track total residential (2/3A) and commercial (4A/4B/4C) inspections
-    let totalResidentialInspections = 0;
-    let totalCommercialInspections = 0;
-
-    filteredData.forEach(record => {
-      const inspector = record.employee;
-      const initials = inspector.initials || 'Unknown';
-      
-      // Count ALL inspection records
-      totalInspectionRecords++;
-      
-      if (!inspectorStats[initials]) {
-        inspectorStats[initials] = {
-          name: `${inspector.first_name} ${inspector.last_name}`,
-          initials: initials,
-          inspectorType: inspector.inspector_type,
-          region: inspector.region,
-          totalInspections: 0,
-          residentialInspections: 0, // Only 2 and 3A
-          commercialInspections: 0, // Only 4A, 4B, 4C
-          entryInspections: 0,
-          refusalInspections: 0,
-          entryRate: 0,
-          refusalRate: 0,
-          dailyAvg: 0,
-          pricingCount: 0,
-          pricingDays: new Set(),
-          workDays: new Set(),
-          residentialWorkDays: new Set(),
-          commercialWorkDays: new Set()
-        };
-      }
-
-      // Always increment total inspections for this inspector
-      inspectorStats[initials].totalInspections++;
-
-      // Track work days based on property class (only measure_date)
-      if (['2', '3A'].includes(record.property_class)) {
-        if (record.measure_date) {
-          const isoDate = new Date(record.measure_date).toISOString().split('T')[0];
-          inspectorStats[initials].residentialWorkDays.add(isoDate);
-        }
-      } else if (['4A', '4B', '4C'].includes(record.property_class)) {
-        if (record.measure_date) {
-          const isoDate = new Date(record.measure_date).toISOString().split('T')[0];
-          inspectorStats[initials].commercialWorkDays.add(isoDate);
-        }
-      }
-
-      // Track type-specific metrics
-      const inspectorType = inspector.inspector_type?.toLowerCase();
-      
-      if (inspectorType === 'residential') {
-        // Count ONLY residential class properties (2 and 3A) for residential inspectors
-        if (['2', '3A'].includes(record.property_class)) {
-          typeStats.residential.totalInspections++;
-          inspectorStats[initials].residentialInspections++;
-          totalResidentialInspections++;
-        } else {
-          typeStats.residential.otherProperties++;
-        }
-      } else if (inspectorType === 'commercial') {
-        // Count ONLY commercial properties (4A, 4B, 4C) for commercial inspectors
-        if (['4A', '4B', '4C'].includes(record.property_class)) {
-          typeStats.commercial.totalInspections++;
-          inspectorStats[initials].commercialInspections++;
-          totalCommercialInspections++;
-          
-          // Track pricing based on vendor type
-          // We need to determine vendor from the job or record
-          // For now, check both pricing methods and let the data determine which applies
-          
-          // Method 1: Check for price_by and price_date (typically BRT)
-          if (record.price_by && record.price_date) {
-            typeStats.commercial.pricingBRT++;
-            inspectorStats[initials].pricingCount++;  // Track total properties priced
-            // Track unique pricing days per inspector
-            const isoDate = new Date(record.price_date).toISOString().split('T')[0];
-            inspectorStats[initials].pricingDays.add(isoDate);  // Add to Set, not increment
-            // Track unique BRT pricing days globally
-            typeStats.commercial.brtPricingDays.add(isoDate);
-          }
-          // Method 2: Check if info_by_code is in commercial/priced array (typically Microsystems)
-          const jobConfig = record.jobInfoByConfig;
-          if (jobConfig && (jobConfig.commercial || jobConfig.priced)) {
-            const infoByCode = record.info_by_code?.toString();
-            // Check both 'commercial' and 'priced' arrays
-            const commercialCodes = jobConfig.commercial || [];
-            const pricedCodes = jobConfig.priced || [];
-            const allPricingCodes = [...commercialCodes, ...pricedCodes];
-            
-            if (infoByCode && allPricingCodes.includes(infoByCode)) {
-              typeStats.commercial.pricingMicrosystems++;
-              inspectorStats[initials].pricingCount++;  // Still track total properties priced
-              // Note: Microsystems doesn't track pricing dates, so we can't add to pricingDays Set
-            }
-          }    
-        } else {
-          typeStats.commercial.otherProperties++;
-        }
-      }
-
-      // Calculate entry/refusal ONLY for residential properties class 2 and 3A
-      if (record.info_by_code && record.property_class && ['2', '3A'].includes(record.property_class)) {
-        // Already counted in totalResidentialInspections, no need to count again
-        inspectorStats[initials].totalEligible = (inspectorStats[initials].totalEligible || 0) + 1;
-        
-        if (inspectorType === 'residential') {
-          typeStats.residential.eligible++;
-        }
-
-        // Use job-specific InfoBy config if available
-        const jobConfig = record.jobInfoByConfig;
-        const vendorType = record.vendorType || 'BRT';
-        let isEntry = false;
-        let isRefusal = false;
-
-        if (jobConfig && jobConfig.entry && jobConfig.refusal) {
-          // Use job-specific InfoBy category config
-          const infoByCode = record.info_by_code?.toString();
-          
-          if (vendorType === 'BRT') {
-            // BRT: Pad numeric codes
-            const paddedCode = infoByCode?.padStart(2, '0');
-            if (jobConfig.entry.includes(infoByCode) || jobConfig.entry.includes(paddedCode)) {
-              isEntry = true;
-            } else if (jobConfig.refusal.includes(infoByCode) || jobConfig.refusal.includes(paddedCode)) {
-              isRefusal = true;
-            }
-          } else if (vendorType === 'Microsystems') {
-            // Microsystems: Handle case sensitivity
-            const upperCode = infoByCode?.toUpperCase();
-            if (jobConfig.entry.includes(upperCode)) {
-              isEntry = true;
-            } else if (jobConfig.refusal.includes(upperCode)) {
-              isRefusal = true;
-            }
-          }
-        } else {
-          // Fallback to simple InfoBy logic if no job config
-          const infoBy = record.info_by_code?.toString().toLowerCase();
-          if (infoBy && ['01', '02', '03', '04', 'a', 'o', 's', 't'].includes(infoBy)) {
-            isEntry = true;
-          } else if (infoBy && ['06', 'r'].includes(infoBy)) {
-            isRefusal = true;
-          }
-        }
-
-        if (isEntry) {
-          entryCount++;
-          inspectorStats[initials].entryInspections++;
-          if (inspectorType === 'residential') {
-            typeStats.residential.entryCount++;
-          }
-        } else if (isRefusal) {
-          refusalCount++;
-          inspectorStats[initials].refusalInspections++;
-          if (inspectorType === 'residential') {
-            typeStats.residential.refusalCount++;
-          }
-        }
-      }
-    });
-
-    // After the forEach loop, totalEligible should equal totalResidentialInspections
-    totalEligible = totalResidentialInspections;
-
-    // Count unique inspectors by type
-    Object.values(inspectorStats).forEach(inspector => {
-      const type = inspector.inspectorType?.toLowerCase();
-      if (type === 'residential') typeStats.residential.count++;
-      else if (type === 'commercial') typeStats.commercial.count++;
-    });
-
-    // Calculate rates for each inspector
-    Object.keys(inspectorStats).forEach(initials => {
-      const stats = inspectorStats[initials];
-      const eligible = stats.totalEligible || 0;
-      stats.entryRate = eligible > 0 ? Math.round((stats.entryInspections / eligible) * 100) : 0;
-      stats.refusalRate = eligible > 0 ? Math.round((stats.refusalInspections / eligible) * 100) : 0;
-      
-      // Calculate daily average based on property class and inspector type
-      if (stats.inspectorType === 'Residential') {
-        const workDays = stats.residentialWorkDays.size || 1;
-        stats.dailyAvg = Math.round(stats.residentialInspections / workDays);
-        stats.workDays = stats.residentialWorkDays; // Use residential work days for display
-      } else if (stats.inspectorType === 'Commercial') {
-        const workDays = stats.commercialWorkDays.size || 1;
-        stats.dailyAvg = Math.round(stats.commercialInspections / workDays);
-        stats.workDays = stats.commercialWorkDays; // Use commercial work days for display
-      }
-      // Convert pricingDays Set to number for display
-      stats.pricingDays = stats.pricingDays.size;
-    });
-
-    // Convert to array and sort by total inspections
-    const inspectorArray = Object.values(inspectorStats)
-      .map(inspector => {
-        // Use the appropriate inspection count based on inspector type
-        let displayTotal = 0;
-        if (inspector.inspectorType === 'Residential') {
-          displayTotal = inspector.residentialInspections;
-        } else if (inspector.inspectorType === 'Commercial') {
-          displayTotal = inspector.commercialInspections;
-        }
-        return { ...inspector, displayTotal, totalInspections: displayTotal };
-      })
-      .filter(inspector => inspector.displayTotal > 0)
-      .sort((a, b) => b.displayTotal - a.displayTotal);
     
-    // Calculate type-level rates and averages
+    // Process each inspector
+    Object.keys(employeeMap).forEach(initials => {
+      const inspector = employeeMap[initials];
+      
+      if (inspector.inspector_type === 'Residential') {
+        // Residential: filter by list_by = initials AND class 2, 3A
+        const myRecords = residentialRecords.filter(r => r.list_by === initials);
+        
+        if (myRecords.length > 0) {
+          // Entry: my records with entry codes
+          const myEntries = myRecords.filter(r => {
+            const infoBy = r.info_by_code?.toString().toLowerCase();
+            return ['01', '02', '03', '04', 'a', 'o', 's', 't'].includes(infoBy);
+          }).length;
+          
+          // Refusal: my records with refusal codes
+          const myRefusals = myRecords.filter(r => {
+            const infoBy = r.info_by_code?.toString().toLowerCase();
+            return ['06', 'r'].includes(infoBy);
+          }).length;
+          
+          // Unique work days
+          const workDays = new Set(myRecords.map(r => r.measure_date?.split('T')[0]).filter(Boolean));
+          
+          inspectorStats[initials] = {
+            name: `${inspector.first_name} ${inspector.last_name}`,
+            initials: initials,
+            inspectorType: 'Residential',
+            region: inspector.region,
+            totalInspections: myRecords.length,
+            displayTotal: myRecords.length,
+            entryInspections: myEntries,
+            refusalInspections: myRefusals,
+            entryRate: myRecords.length > 0 ? Math.round((myEntries / myRecords.length) * 100) : 0,
+            refusalRate: myRecords.length > 0 ? Math.round((myRefusals / myRecords.length) * 100) : 0,
+            workDays: workDays.size,
+            dailyAvg: workDays.size > 0 ? Math.round(myRecords.length / workDays.size) : 0
+          };
+        }
+        
+      } else if (inspector.inspector_type === 'Commercial') {
+        // Commercial: filter by measure_by = initials AND class 4A, 4B, 4C
+        const myRecords = commercialRecords.filter(r => r.measure_by === initials);
+        
+        if (myRecords.length > 0) {
+          // Pricing: filter by price_by = initials
+          const myPricing = commercialRecords.filter(r => r.price_by === initials);
+          
+          // Unique work days
+          const workDays = new Set(myRecords.map(r => r.measure_date?.split('T')[0]).filter(Boolean));
+          
+          // Unique pricing days
+          const pricingDays = new Set(myPricing.map(r => r.price_date?.split('T')[0]).filter(Boolean));
+          
+          inspectorStats[initials] = {
+            name: `${inspector.first_name} ${inspector.last_name}`,
+            initials: initials,
+            inspectorType: 'Commercial',
+            region: inspector.region,
+            totalInspections: myRecords.length,
+            displayTotal: myRecords.length,
+            workDays: workDays.size,
+            dailyAvg: workDays.size > 0 ? Math.round(myRecords.length / workDays.size) : 0,
+            pricingCount: myPricing.length,
+            pricingDays: pricingDays.size,
+            entryInspections: 0,
+            refusalInspections: 0,
+            entryRate: 0,
+            refusalRate: 0
+          };
+        }
+        
+      } else if (inspector.inspector_type === 'Management') {
+        // Management can do both residential and commercial
+        // Residential work
+        const myResidentialRecords = residentialRecords.filter(r => r.list_by === initials);
+        const myResEntries = myResidentialRecords.filter(r => {
+          const infoBy = r.info_by_code?.toString().toLowerCase();
+          return ['01', '02', '03', '04', 'a', 'o', 's', 't'].includes(infoBy);
+        }).length;
+        const myResRefusals = myResidentialRecords.filter(r => {
+          const infoBy = r.info_by_code?.toString().toLowerCase();
+          return ['06', 'r'].includes(infoBy);
+        }).length;
+        const resWorkDays = new Set(myResidentialRecords.map(r => r.measure_date?.split('T')[0]).filter(Boolean));
+        
+        // Commercial work
+        const myCommercialRecords = commercialRecords.filter(r => r.measure_by === initials);
+        const myPricing = commercialRecords.filter(r => r.price_by === initials);
+        const comWorkDays = new Set(myCommercialRecords.map(r => r.measure_date?.split('T')[0]).filter(Boolean));
+        const pricingDays = new Set(myPricing.map(r => r.price_date?.split('T')[0]).filter(Boolean));
+        
+        if (myResidentialRecords.length > 0 || myCommercialRecords.length > 0) {
+          inspectorStats[initials] = {
+            name: `${inspector.first_name} ${inspector.last_name}`,
+            initials: initials,
+            inspectorType: 'Management',
+            region: inspector.region,
+            totalInspections: myResidentialRecords.length + myCommercialRecords.length,
+            displayTotal: myResidentialRecords.length + myCommercialRecords.length,
+            // Residential metrics
+            residentialInspections: myResidentialRecords.length,
+            entryInspections: myResEntries,
+            refusalInspections: myResRefusals,
+            entryRate: myResidentialRecords.length > 0 ? Math.round((myResEntries / myResidentialRecords.length) * 100) : 0,
+            refusalRate: myResidentialRecords.length > 0 ? Math.round((myResRefusals / myResidentialRecords.length) * 100) : 0,
+            residentialWorkDays: resWorkDays.size,
+            residentialDailyAvg: resWorkDays.size > 0 ? Math.round(myResidentialRecords.length / resWorkDays.size) : 0,
+            // Commercial metrics
+            commercialInspections: myCommercialRecords.length,
+            commercialWorkDays: comWorkDays.size,
+            commercialDailyAvg: comWorkDays.size > 0 ? Math.round(myCommercialRecords.length / comWorkDays.size) : 0,
+            pricingCount: myPricing.length,
+            pricingDays: pricingDays.size,
+            // Overall
+            workDays: new Set([...resWorkDays, ...comWorkDays]).size,
+            dailyAvg: 0 // Will calculate below
+          };
+          
+          // Overall daily average
+          const totalDays = inspectorStats[initials].workDays;
+          inspectorStats[initials].dailyAvg = totalDays > 0 ? 
+            Math.round(inspectorStats[initials].totalInspections / totalDays) : 0;
+        }
+      }
+    });
+
+    // Convert to array
+    const inspectorArray = Object.values(inspectorStats)
+      .filter(inspector => inspector.totalInspections > 0)
+      .sort((a, b) => b.totalInspections - a.totalInspections);
+
+    // STEP 3: Calculate Type Averages (average of averages)
+    const residentialInspectors = inspectorArray.filter(i => i.inspectorType === 'Residential');
+    const commercialInspectors = inspectorArray.filter(i => i.inspectorType === 'Commercial');
+    const managementInspectors = inspectorArray.filter(i => i.inspectorType === 'Management');
+    
+    // Residential average = average of all residential inspector averages
+    const residentialDailyAvg = residentialInspectors.length > 0 ?
+      Math.round(residentialInspectors.reduce((sum, i) => sum + i.dailyAvg, 0) / residentialInspectors.length) : 0;
+    
+    // Commercial average = average of all commercial inspector averages  
+    const commercialDailyAvg = commercialInspectors.length > 0 ?
+      Math.round(commercialInspectors.reduce((sum, i) => sum + i.dailyAvg, 0) / commercialInspectors.length) : 0;
+    
+    // Pricing average = average of inspectors who actually price (exclude 0s)
+    const inspectorsWhoPriced = commercialInspectors.filter(i => i.pricingCount > 0);
+    const pricingDailyAvg = inspectorsWhoPriced.length > 0 ?
+      Math.round(inspectorsWhoPriced.reduce((sum, i) => sum + (i.pricingCount / i.pricingDays), 0) / inspectorsWhoPriced.length) : 0;
+
+    // Build type summaries
     const byType = {};
     
-    if (typeStats.residential.count > 0 || typeStats.residential.totalInspections > 0) {
-      const residentialWorkDays = typeStats.residential.workDays.size || 1;
-      const residentialInspectorCount = inspectorArray.filter(i => i.inspectorType === 'Residential').length || 1;
-      
-      // Calculate total residential inspector-days (sum of each residential inspector's work days)
-      let totalResidentialInspectorDaysForType = 0;
-      inspectorArray.forEach(inspector => {
-        if (inspector.inspectorType === 'Residential') {
-          totalResidentialInspectorDaysForType += inspector.residentialWorkDays.size;
-        }
-      });
-      
+    if (residentialInspectors.length > 0 || totalResidentialInspections > 0) {
       byType.residential = {
-        count: typeStats.residential.count,
-        totalInspections: typeStats.residential.totalInspections, // Only 2 and 3A
-        avgDaily: Math.round(typeStats.residential.totalInspections / Math.max(totalResidentialInspectorDaysForType, 1)),
-        entryRate: totalEligible > 0 ? 
-          Math.round((typeStats.residential.entryCount / totalEligible) * 100) : 0,
-        refusalRate: totalEligible > 0 ? 
-          Math.round((typeStats.residential.refusalCount / totalEligible) * 100) : 0,
-        otherProperties: typeStats.residential.otherProperties,
-        workDays: residentialWorkDays.size,
-        inspectorCount: residentialInspectorCount
+        count: residentialInspectors.length,
+        totalInspections: totalResidentialInspections,
+        avgDaily: residentialDailyAvg,
+        entryRate: totalResidentialInspections > 0 ? 
+          Math.round((totalResidentialEntries / totalResidentialInspections) * 100) : 0,
+        refusalRate: totalResidentialInspections > 0 ? 
+          Math.round((totalResidentialRefusals / totalResidentialInspections) * 100) : 0,
+        otherProperties: residentialRecords.filter(r => !['2', '3A'].includes(r.property_class)).length
       };
     }
     
-    if (typeStats.commercial.count > 0 || typeStats.commercial.totalInspections > 0) {
-      const commercialWorkDays = typeStats.commercial.workDays.size || 1;
-      const commercialInspectorCount = inspectorArray.filter(i => i.inspectorType === 'Commercial').length || 1;
-      
-      // Calculate total commercial inspector-days (sum of each commercial inspector's work days)
-      let totalCommercialInspectorDaysForType = 0;
-      inspectorArray.forEach(inspector => {
-        if (inspector.inspectorType === 'Commercial') {
-          totalCommercialInspectorDaysForType += inspector.commercialWorkDays.size;
-        }
-      });
-      
-      // For pricing average, calculate total pricing-days across all commercial inspectors
-      let totalPricingDays = 0;
-      let totalPricingCount = typeStats.commercial.pricingBRT + typeStats.commercial.pricingMicrosystems;
-      
-      inspectorArray.forEach(inspector => {
-        if (inspector.inspectorType === 'Commercial' && inspector.pricingDays > 0) {
-          totalPricingDays += inspector.pricingDays;
-        }
-      });
-      
-      const brtPricingDaysCount = typeStats.commercial.brtPricingDays.size;
-      
+    if (commercialInspectors.length > 0 || totalCommercialInspections > 0) {
       byType.commercial = {
-        count: typeStats.commercial.count,
-        totalInspections: typeStats.commercial.totalInspections, // Only 4A, 4B, 4C
-        avgDaily: Math.round(typeStats.commercial.totalInspections / Math.max(totalCommercialInspectorDaysForType, 1)),
-        commercial: typeStats.commercial.totalInspections,
-        pricing: totalPricingCount,
-        pricingDays: brtPricingDaysCount, // Unique BRT pricing days
-        pricingAvgPerDay: totalPricingDays > 0 ? Math.round(totalPricingCount / totalPricingDays) : 0, // NEW: Average pricing per inspector-day
-        otherProperties: typeStats.commercial.otherProperties,
-        workDays: commercialWorkDays.size,
-        inspectorCount: commercialInspectorCount
+        count: commercialInspectors.length,
+        totalInspections: totalCommercialInspections,
+        avgDaily: commercialDailyAvg,
+        pricing: totalPricing,
+        pricingAvgPerDay: pricingDailyAvg,
+        otherProperties: commercialRecords.filter(r => !['4A', '4B', '4C'].includes(r.property_class)).length
+      };
+    }
+    
+    if (managementInspectors.length > 0) {
+      // Management type summary
+      const mgmtResTotal = managementInspectors.reduce((sum, i) => sum + i.residentialInspections, 0);
+      const mgmtComTotal = managementInspectors.reduce((sum, i) => sum + i.commercialInspections, 0);
+      const mgmtPricingTotal = managementInspectors.reduce((sum, i) => sum + i.pricingCount, 0);
+      
+      // Average of averages for management
+      const mgmtResAvg = managementInspectors.filter(i => i.residentialInspections > 0).length > 0 ?
+        Math.round(managementInspectors.filter(i => i.residentialInspections > 0)
+          .reduce((sum, i) => sum + i.residentialDailyAvg, 0) / 
+          managementInspectors.filter(i => i.residentialInspections > 0).length) : 0;
+          
+      const mgmtComAvg = managementInspectors.filter(i => i.commercialInspections > 0).length > 0 ?
+        Math.round(managementInspectors.filter(i => i.commercialInspections > 0)
+          .reduce((sum, i) => sum + i.commercialDailyAvg, 0) / 
+          managementInspectors.filter(i => i.commercialInspections > 0).length) : 0;
+      
+      // Pricing average only for management who price
+      const mgmtWhoPriced = managementInspectors.filter(i => i.pricingCount > 0);
+      const mgmtPricingAvg = mgmtWhoPriced.length > 0 ?
+        Math.round(mgmtWhoPriced.reduce((sum, i) => sum + (i.pricingCount / i.pricingDays), 0) / mgmtWhoPriced.length) : 0;
+      
+      // Calculate entry/refusal for management
+      const mgmtEntries = managementInspectors.reduce((sum, i) => sum + i.entryInspections, 0);
+      const mgmtRefusals = managementInspectors.reduce((sum, i) => sum + i.refusalInspections, 0);
+      
+      byType.management = {
+        count: managementInspectors.length,
+        residentialInspections: mgmtResTotal,
+        residentialAvgDaily: mgmtResAvg,
+        entryRate: mgmtResTotal > 0 ? Math.round((mgmtEntries / mgmtResTotal) * 100) : 0,
+        refusalRate: mgmtResTotal > 0 ? Math.round((mgmtRefusals / mgmtResTotal) * 100) : 0,
+        commercialInspections: mgmtComTotal,
+        commercialAvgDaily: mgmtComAvg,
+        totalPriced: mgmtPricingTotal,
+        pricingAvgDaily: mgmtPricingAvg
       };
     }
 
-    // Calculate regional breakdown
-    const regionalStats = {};
-    inspectorArray.forEach(inspector => {
-      if (!regionalStats[inspector.region]) {
-        regionalStats[inspector.region] = {
-          totalInspections: 0,
-          inspectors: 0,
-          avgEntryRate: 0,
-          avgRefusalRate: 0
-        };
-      }
-      regionalStats[inspector.region].totalInspections += inspector.displayTotal;
-      regionalStats[inspector.region].inspectors++;
-    });
-
-    // Calculate regional averages
-    Object.keys(regionalStats).forEach(region => {
-      const regionInspectors = inspectorArray.filter(i => i.region === region);
-      const avgEntry = regionInspectors.reduce((sum, i) => sum + i.entryRate, 0) / regionInspectors.length;
-      const avgRefusal = regionInspectors.reduce((sum, i) => sum + i.refusalRate, 0) / regionInspectors.length;
-      
-      regionalStats[region].avgEntryRate = Math.round(avgEntry) || 0;
-      regionalStats[region].avgRefusalRate = Math.round(avgRefusal) || 0;
-    });
-
-    // Find top performers by type
+    // Find top performers
     const topPerformers = {};
     
-    const residentialInspectors = inspectorArray.filter(i => i.inspectorType === 'Residential');
     if (residentialInspectors.length > 0) {
       topPerformers.residential = {
         name: residentialInspectors[0].name,
@@ -601,48 +500,33 @@ const EmployeeManagement = () => {
       };
     }
     
-    const commercialInspectors = inspectorArray.filter(i => i.inspectorType === 'Commercial');
     if (commercialInspectors.length > 0) {
       topPerformers.commercial = {
         name: commercialInspectors[0].name,
         initials: commercialInspectors[0].initials,
         totalInspections: commercialInspectors[0].displayTotal,
-        commercialCount: commercialInspectors[0].commercialInspections
+        commercialCount: commercialInspectors[0].totalInspections
       };
     }
 
-     // Get unique inspector counts by type
-    const residentialInspectorCount = Object.values(inspectorStats).filter(i => i.inspectorType === 'Residential').length || 1;
-    const commercialInspectorCount = Object.values(inspectorStats).filter(i => i.inspectorType === 'Commercial').length || 1;
-    
-    // Calculate total inspector-days worked (sum of each inspector's work days)
-    let totalResidentialInspectorDays = 0;
-    let totalCommercialInspectorDays = 0;
-
+    // Regional stats (simplified)
+    const regionalStats = {};
     inspectorArray.forEach(inspector => {
-      if (inspector.inspectorType === 'Residential') {
-        totalResidentialInspectorDays += inspector.residentialWorkDays.size;
-      } else if (inspector.inspectorType === 'Commercial') {
-        totalCommercialInspectorDays += inspector.commercialWorkDays.size;
+      if (!regionalStats[inspector.region]) {
+        regionalStats[inspector.region] = {
+          totalInspections: 0,
+          inspectors: 0
+        };
       }
+      regionalStats[inspector.region].totalInspections += inspector.displayTotal;
+      regionalStats[inspector.region].inspectors++;
     });
 
-    // Calculate proper daily averages based on total inspector-days (for bidding purposes)
-    const overallAvgPerInspector = filter.inspectorType === 'Residential' ?
-      Math.round(totalResidentialInspections / Math.max(totalResidentialInspectorDays, 1)) :
-      filter.inspectorType === 'Commercial' ?
-      Math.round(totalCommercialInspections / Math.max(totalCommercialInspectorDays, 1)) :
-      Math.round((totalResidentialInspections + totalCommercialInspections) / 
-        Math.max(totalResidentialInspectorDays + totalCommercialInspectorDays, 1));
-    
     return {
       summary: {
-        totalInspections: totalInspectionRecords, // Show TRUE total of ALL inspections
-        overallEntryRate: totalEligible > 0 ? Math.round((entryCount / totalEligible) * 100) : 0,
-        overallRefusalRate: totalEligible > 0 ? Math.round((refusalCount / totalEligible) * 100) : 0,
-        avgInspectionsPerDay: overallAvgPerInspector
+        totalInspections: totalInspectionRecords
       },
-      jobCount: uniqueJobs,
+      jobCount: new Set(filteredData.map(r => r.job_id)).size,
       byType,
       topPerformers,
       inspectors: inspectorArray,
@@ -1470,25 +1354,6 @@ const EmployeeManagement = () => {
                         </div>
                       </div>
                       
-                      <div className="bg-white p-6 rounded-lg border-2 border-green-200 shadow-sm">
-                        <div className="text-4xl font-bold text-green-600 mb-2">{globalAnalytics.summary.overallEntryRate}%</div>
-                        <div className="text-sm font-medium text-gray-700">Entry Rate</div>
-                        <div className="text-xs text-gray-500 mt-1">Company-wide average</div>
-                      </div>
-                      
-                      <div className="bg-white p-6 rounded-lg border-2 border-orange-200 shadow-sm">
-                        <div className="text-4xl font-bold text-orange-600 mb-2">{globalAnalytics.summary.overallRefusalRate}%</div>
-                        <div className="text-sm font-medium text-gray-700">Refusal Rate</div>
-                        <div className="text-xs text-gray-500 mt-1">Company-wide average</div>
-                      </div>
-                      
-                      <div className="bg-white p-6 rounded-lg border-2 border-purple-200 shadow-sm">
-                        <div className="text-4xl font-bold text-purple-600 mb-2">{globalAnalytics.summary.avgInspectionsPerDay}</div>
-                        <div className="text-sm font-medium text-gray-700">Daily Average</div>
-                        <div className="text-xs text-gray-500 mt-1">Per inspector per day</div>
-                      </div>
-                    </div>
-
                     {/* Inspector Type Breakdown - ProductionTracker Style */}
                     <div className="mb-6">
                       <h3 className="text-lg font-bold text-gray-800 mb-4">🏠 Inspector Analytics by Type</h3>
@@ -1579,44 +1444,58 @@ const EmployeeManagement = () => {
                         <div className="mb-6">
                           <h4 className="text-md font-semibold text-purple-700 mb-3 flex items-center">
                             <div className="w-3 h-3 bg-purple-500 rounded-full mr-2"></div>
-                            Management Inspector Analytics
+                            Management Inspector Analytics ({globalAnalytics.byType.management.count} inspectors)
                           </h4>
-                          <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+                          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
                             <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
                               <div className="text-2xl font-bold text-purple-700">
-                                {globalAnalytics.byType.management.count}
+                                {globalAnalytics.byType.management.residentialInspections?.toLocaleString() || 0}
                               </div>
-                              <div className="text-xs font-medium text-purple-600">Management Team</div>
+                              <div className="text-xs font-medium text-purple-600">Residential</div>
+                              <div className="text-xs text-purple-500">(Class 2, 3A)</div>
                             </div>
                             <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
                               <div className="text-2xl font-bold text-purple-700">
-                                {globalAnalytics.byType.management.totalInspections.toLocaleString()}
+                                {globalAnalytics.byType.management.residentialAvgDaily || 0}
                               </div>
-                              <div className="text-xs font-medium text-purple-600">Total Inspected</div>
+                              <div className="text-xs font-medium text-purple-600">Res Daily Avg</div>
                             </div>
                             <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
                               <div className="text-2xl font-bold text-purple-700">
-                                {globalAnalytics.byType.management.avgDaily}
+                                {globalAnalytics.byType.management.entryRate || 0}%
                               </div>
-                              <div className="text-xs font-medium text-purple-600">Daily Average</div>
+                              <div className="text-xs font-medium text-purple-600">Entry Rate</div>
                             </div>
                             <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
                               <div className="text-2xl font-bold text-purple-700">
-                                {globalAnalytics.byType.management.specialInspections.toLocaleString()}
+                                {globalAnalytics.byType.management.refusalRate || 0}%
                               </div>
-                              <div className="text-xs font-medium text-purple-600">Special Inspections</div>
+                              <div className="text-xs font-medium text-purple-600">Refusal Rate</div>
                             </div>
                             <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
                               <div className="text-2xl font-bold text-purple-700">
-                                {globalAnalytics.byType.management.qaReviews.toLocaleString()}
+                                {globalAnalytics.byType.management.commercialInspections?.toLocaleString() || 0}
                               </div>
-                              <div className="text-xs font-medium text-purple-600">QA Reviews</div>
+                              <div className="text-xs font-medium text-purple-600">Commercial</div>
+                              <div className="text-xs text-purple-500">(Class 4A-C)</div>
                             </div>
                             <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
                               <div className="text-2xl font-bold text-purple-700">
-                                {globalAnalytics.byType.management.training.toLocaleString()}
+                                {globalAnalytics.byType.management.commercialAvgDaily || 0}
                               </div>
-                              <div className="text-xs font-medium text-purple-600">Training Days</div>
+                              <div className="text-xs font-medium text-purple-600">Com Daily Avg</div>
+                            </div>
+                            <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                              <div className="text-2xl font-bold text-purple-700">
+                                {globalAnalytics.byType.management.totalPriced?.toLocaleString() || 0}
+                              </div>
+                              <div className="text-xs font-medium text-purple-600">Total Priced</div>
+                            </div>
+                            <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                              <div className="text-2xl font-bold text-purple-700">
+                                {globalAnalytics.byType.management.pricingAvgDaily || 0}
+                              </div>
+                              <div className="text-xs font-medium text-purple-600">Price Avg</div>
                             </div>
                           </div>
                         </div>
@@ -1762,7 +1641,7 @@ const EmployeeManagement = () => {
                                   </div>
                                   <div className="bg-white p-2 rounded border">
                                     <div className="text-lg font-bold text-purple-600">
-                                      {inspector.pricingDays > 0 ? Math.round(inspector.pricingCount / inspector.pricingDays) : 0}
+                                      {Math.round(inspector.pricingCount / Math.max(inspector.pricingDays, 1))}
                                     </div>
                                     <div className="text-xs text-gray-500">Price Avg</div>
                                   </div>
