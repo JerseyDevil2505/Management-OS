@@ -1509,18 +1509,13 @@ const EmployeeManagement = () => {
                             <div className="w-3 h-3 bg-blue-500 rounded-full mr-2"></div>
                             Commercial Inspector Analytics ({globalAnalytics.byType.commercial.count} inspectors)
                           </h4>
-                          <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
-                            <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                              <div className="text-2xl font-bold text-blue-700">
-                                {globalAnalytics.byType.commercial.count}
-                              </div>
-                              <div className="text-xs font-medium text-blue-600">Commercial Inspectors</div>
-                            </div>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                             <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                               <div className="text-2xl font-bold text-blue-700">
                                 {globalAnalytics.byType.commercial.totalInspections.toLocaleString()}
                               </div>
                               <div className="text-xs font-medium text-blue-600">Total Inspected</div>
+                              <div className="text-xs text-blue-500">(Classes 4A, 4B, 4C)</div>
                             </div>
                             <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                               <div className="text-2xl font-bold text-blue-700">
@@ -1530,15 +1525,11 @@ const EmployeeManagement = () => {
                             </div>
                             <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                               <div className="text-2xl font-bold text-blue-700">
-                                {globalAnalytics.byType.commercial.commercial.toLocaleString()}
+                                {globalAnalytics.byType.commercial.pricingDays > 0 ? 
+                                  Math.round(globalAnalytics.byType.commercial.pricing / globalAnalytics.byType.commercial.pricingDays) : 0}
                               </div>
-                              <div className="text-xs font-medium text-blue-600">Commercial (4A-4C)</div>
-                            </div>
-                            <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                              <div className="text-2xl font-bold text-blue-700">
-                                {globalAnalytics.byType.commercial.pricing}
-                              </div>
-                              <div className="text-xs font-medium text-blue-600">Pricing Days</div>
+                              <div className="text-xs font-medium text-blue-600">Pricing Average</div>
+                              <div className="text-xs text-blue-500">Per pricing day</div>
                             </div>
                             <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                               <div className="text-2xl font-bold text-blue-700">
