@@ -208,7 +208,7 @@ const EmployeeManagement = () => {
       }
 
       // Process the enriched data similar to ProductionTracker
-      const processedAnalytics = InspectionData(enrichedData, analyticsFilter);
+      const processedAnalytics = processGlobalInspectionData(enrichedData, analyticsFilter);
       setGlobalAnalytics(processedAnalytics);
 
     } catch (error) {
