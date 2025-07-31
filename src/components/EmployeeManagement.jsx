@@ -1399,8 +1399,7 @@ const processGlobalInspectionData = (data, filter) => {
                               <div className="text-xs font-medium text-green-600">Other Properties</div>
                             </div>
                           </div>
-                        </div>
-                      )}
+                        )}
 
                       {/* Commercial Inspectors */}
                       {globalAnalytics.byType?.commercial && (
