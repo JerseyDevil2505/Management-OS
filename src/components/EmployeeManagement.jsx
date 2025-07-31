@@ -26,7 +26,7 @@ const EmployeeManagement = () => {
     inspectorType: 'all',
     region: 'all',
     dateRange: 'all',
-    employmentStatus: 'all'  // Default to all employees
+    employmentStatus: 'all'  // Default to active only
   });
 
   // Load employees from database on component mount
@@ -223,7 +223,7 @@ const EmployeeManagement = () => {
     }
   };
 
-  const processGlobalInspectionData = (data, filter) => {
+const processGlobalInspectionData = (data, filter) => {
     // Filter data based on current filters
     let filteredData = data.filter(record => {
       const matchesType = filter.inspectorType === 'all' || record.employee.inspector_type === filter.inspectorType;
@@ -1341,7 +1341,7 @@ const EmployeeManagement = () => {
                     </div>
 
                     {/* Summary Metrics - ProductionTracker Style Tiles */}
-                    <div className="mb-6">
+                    <div className="mb-6 grid grid-cols-2 md:grid-cols-4 gap-4">
                       <div className="bg-white p-6 rounded-lg border-2 border-indigo-200 shadow-sm">
                         <div className="text-4xl font-bold text-indigo-600 mb-2">
                           {globalAnalytics.summary.totalInspections.toLocaleString()}
@@ -1352,8 +1352,9 @@ const EmployeeManagement = () => {
                            analyticsFilter.inspectorType === 'Commercial' ? 'Class 4A, 4B & 4C only' :
                            'All property classes'}
                         </div>
-                      </div>  
-                    </div>  
+                      </div>
+                    </div>
+
                     {/* Inspector Type Breakdown - ProductionTracker Style */}
                     <div className="mb-6">
                       <h3 className="text-lg font-bold text-gray-800 mb-4">🏠 Inspector Analytics by Type</h3>
@@ -1438,7 +1439,7 @@ const EmployeeManagement = () => {
                           </div>
                         </div>
                       )}
-
+                      
                       {/* Management Inspectors */}
                       {globalAnalytics.byType?.management && (
                         <div className="mb-6">
@@ -1500,7 +1501,6 @@ const EmployeeManagement = () => {
                           </div>
                         </div>
                       )}
-                    </div>
 
                     {/* Top Performers by Type */}
                     <div className="mb-6">
@@ -1702,12 +1702,14 @@ const EmployeeManagement = () => {
                   <div className="text-center py-8 text-gray-500">
                     No analytics data available
                   </div>
-                )
+                )}
               </div>
             </>
           )}
         </div>
       )}
+
+      {/* Employee Directory Tab */}
       {/* Employee Directory Tab */}
       {activeTab === 'directory' && (
         <div className="space-y-6">
