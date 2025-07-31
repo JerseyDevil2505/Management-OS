@@ -102,7 +102,7 @@ const EmployeeManagement = () => {
       // Get ALL inspection data using pagination
       let allInspectionData = [];
       let page = 0;
-      const pageSize = 1000;
+      const pageSize = 5000;
       let hasMore = true;
 
       while (hasMore) {
