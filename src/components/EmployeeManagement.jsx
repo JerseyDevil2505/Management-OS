@@ -252,13 +252,17 @@ const EmployeeManagement = () => {
     // Entry: Any record with entry codes that has ANY initials
     const totalResidentialEntries = residentialRecords.filter(r => {
       const hasInitials = r.list_by || r.measure_by || r.price_by;
-      return hasInitials && r.jobInfoByConfig?.entry?.includes(r.info_by_code?.toString());
+      const code = r.info_by_code?.toString();
+      const paddedCode = r.vendorType === 'BRT' ? code.padStart(2, '0') : code;
+      return hasInitials && r.jobInfoByConfig?.entry?.includes(paddedCode);
     }).length;
     
     // Refusal: Any record with refusal codes that has ANY initials
     const totalResidentialRefusals = residentialRecords.filter(r => {
       const hasInitials = r.list_by || r.measure_by || r.price_by;
-      return hasInitials && r.jobInfoByConfig?.refusal?.includes(r.info_by_code?.toString());
+      const code = r.info_by_code?.toString();
+      const paddedCode = r.vendorType === 'BRT' ? code.padStart(2, '0') : code;
+      return hasInitials && r.jobInfoByConfig?.refusal?.includes(paddedCode);
     }).length;
     
     // Commercial totals (Class 4A, 4B, 4C only)
@@ -281,11 +285,13 @@ const EmployeeManagement = () => {
 
         if (myRecords.length > 0) {
          // Entry: records where BOTH measure_by AND list_by match inspector, with entry codes
-          const myEntries = residentialRecords.filter(r => 
-            r.measure_by === initials && 
-            r.list_by === initials && 
-            r.jobInfoByConfig?.entry?.includes(r.info_by_code?.toString())
-          ).length;
+          const myEntries = residentialRecords.filter(r => {
+            const code = r.info_by_code?.toString();
+            const paddedCode = r.vendorType === 'BRT' ? code.padStart(2, '0') : code;
+            return r.measure_by === initials && 
+                   r.list_by === initials && 
+                   r.jobInfoByConfig?.entry?.includes(paddedCode);
+          }).length;
 
           // DEBUG: Check if info_by codes are being read correctly
           if (initials === 'AL') {
@@ -304,11 +310,13 @@ const EmployeeManagement = () => {
           }          
           
           // Refusal: my records with refusal codes
-          const myRefusals = residentialRecords.filter(r => 
-            r.measure_by === initials && 
-            r.list_by === initials && 
-            r.jobInfoByConfig?.refusal?.includes(r.info_by_code?.toString())
-          ).length;
+          const myRefusals = residentialRecords.filter(r => {
+            const code = r.info_by_code?.toString();
+            const paddedCode = r.vendorType === 'BRT' ? code.padStart(2, '0') : code;
+            return r.measure_by === initials && 
+                   r.list_by === initials && 
+                   r.jobInfoByConfig?.refusal?.includes(paddedCode);
+          }).length;
           
           // Unique work days
           const workDays = new Set(myRecords.map(r => r.measure_date?.split('T')[0]).filter(Boolean));
@@ -365,16 +373,20 @@ const EmployeeManagement = () => {
         // Management can do both residential and commercial
         // Residential work
         const myResidentialRecords = residentialRecords.filter(r => r.measure_by === initials);
-        const myResEntries = residentialRecords.filter(r => 
-          r.measure_by === initials && 
-          r.list_by === initials && 
-          r.jobInfoByConfig?.entry?.includes(r.info_by_code?.toString())
-        ).length;
-        const myResRefusals = residentialRecords.filter(r => 
-          r.measure_by === initials && 
-          r.list_by === initials && 
-          r.jobInfoByConfig?.refusal?.includes(r.info_by_code?.toString())
-        ).length;
+        const myResEntries = residentialRecords.filter(r => {
+          const code = r.info_by_code?.toString();
+          const paddedCode = r.vendorType === 'BRT' ? code.padStart(2, '0') : code;
+          return r.measure_by === initials && 
+                 r.list_by === initials && 
+                 r.jobInfoByConfig?.entry?.includes(paddedCode);
+        }).length;
+        const myResRefusals = residentialRecords.filter(r => {
+          const code = r.info_by_code?.toString();
+          const paddedCode = r.vendorType === 'BRT' ? code.padStart(2, '0') : code;
+          return r.measure_by === initials && 
+                 r.list_by === initials && 
+                 r.jobInfoByConfig?.refusal?.includes(paddedCode);
+        }).length;
         const resWorkDays = new Set(myResidentialRecords.map(r => r.measure_date?.split('T')[0]).filter(Boolean));
         
         // Commercial work
