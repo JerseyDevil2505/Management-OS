@@ -2425,6 +2425,9 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                 </div>
               );
             })()}
+               </div>
+              </div>
+                  
             {/* Modal Footer */}
             <div className="px-6 py-4 border-t border-gray-200">
               <div className="flex items-center justify-between">
