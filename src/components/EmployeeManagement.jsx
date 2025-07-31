@@ -1620,6 +1620,7 @@ const EmployeeManagement = () => {
                             </div>
                           </div>
                         )}
+                      </div>
                    
                     {/* Top Performers by Type */}
                     <div className="mb-6">
@@ -1828,7 +1829,6 @@ const EmployeeManagement = () => {
         </div>
       )}
 
-      {/* Employee Directory Tab */}
       {/* Employee Directory Tab */}
       {activeTab === 'directory' && (
         <div className="space-y-6">
