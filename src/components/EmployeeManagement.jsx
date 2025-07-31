@@ -242,7 +242,7 @@ const EmployeeManagement = () => {
     // STEP 1: Calculate Global Totals (KISS method)
     // Total inspections = count all 2, 3A, 4A, 4B, 4C records
     const validPropertyClasses = ['2', '3A', '4A', '4B', '4C'];
-    const totalInspectionRecords = filteredData.filter(r => validPropertyClasses.includes(r.property_class)).length;
+    const totalInspectionRecords = filteredData.length;
     
     // Residential totals (Class 2 & 3A only)
     const residentialRecords = filteredData.filter(r => ['2', '3A'].includes(r.property_class));
@@ -1341,35 +1341,15 @@ const EmployeeManagement = () => {
                     </div>
 
                     {/* Summary Metrics - ProductionTracker Style Tiles */}
-                    <div className="mb-6 grid grid-cols-2 md:grid-cols-4 gap-4">
-                      <div className="bg-white p-6 rounded-lg border-2 border-indigo-200 shadow-sm">
+                    <div className="mb-6">
+                      <div className="bg-white p-6 rounded-lg border-2 border-indigo-200 shadow-sm inline-block">
                         <div className="text-4xl font-bold text-indigo-600 mb-2">
                           {globalAnalytics.summary.totalInspections.toLocaleString()}
                         </div>
                         <div className="text-sm font-medium text-gray-700">Total Inspections</div>
                         <div className="text-xs text-gray-500 mt-1">
-                          {analyticsFilter.inspectorType === 'Residential' ? 'Class 2 & 3A only' :
-                           analyticsFilter.inspectorType === 'Commercial' ? 'Class 4A, 4B & 4C only' :
-                           'All property classes'}
+                          All property classes
                         </div>
-                      </div>
-                      
-                      <div className="bg-white p-6 rounded-lg border-2 border-green-200 shadow-sm">
-                        <div className="text-4xl font-bold text-green-600 mb-2">{globalAnalytics.summary.overallEntryRate}%</div>
-                        <div className="text-sm font-medium text-gray-700">Entry Rate</div>
-                        <div className="text-xs text-gray-500 mt-1">Company-wide average</div>
-                      </div>
-                      
-                      <div className="bg-white p-6 rounded-lg border-2 border-orange-200 shadow-sm">
-                        <div className="text-4xl font-bold text-orange-600 mb-2">{globalAnalytics.summary.overallRefusalRate}%</div>
-                        <div className="text-sm font-medium text-gray-700">Refusal Rate</div>
-                        <div className="text-xs text-gray-500 mt-1">Company-wide average</div>
-                      </div>
-                      
-                      <div className="bg-white p-6 rounded-lg border-2 border-purple-200 shadow-sm">
-                        <div className="text-4xl font-bold text-purple-600 mb-2">{globalAnalytics.summary.avgInspectionsPerDay}</div>
-                        <div className="text-sm font-medium text-gray-700">Daily Average</div>
-                        <div className="text-xs text-gray-500 mt-1">Per inspector per day</div>
                       </div>
                     </div>
 
