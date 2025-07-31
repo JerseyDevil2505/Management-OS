@@ -1341,7 +1341,7 @@ const EmployeeManagement = () => {
                     </div>
 
                     {/* Summary Metrics - ProductionTracker Style Tiles */}
-                    <div className="mb-6 grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="mb-6">
                       <div className="bg-white p-6 rounded-lg border-2 border-indigo-200 shadow-sm">
                         <div className="text-4xl font-bold text-indigo-600 mb-2">
                           {globalAnalytics.summary.totalInspections.toLocaleString()}
@@ -1352,8 +1352,8 @@ const EmployeeManagement = () => {
                            analyticsFilter.inspectorType === 'Commercial' ? 'Class 4A, 4B & 4C only' :
                            'All property classes'}
                         </div>
-                      </div>
-                      
+                      </div>  
+                    </div>  
                     {/* Inspector Type Breakdown - ProductionTracker Style */}
                     <div className="mb-6">
                       <h3 className="text-lg font-bold text-gray-800 mb-4">🏠 Inspector Analytics by Type</h3>
@@ -1707,7 +1707,6 @@ const EmployeeManagement = () => {
           )}
         </div>
       )}
-
       {/* Employee Directory Tab */}
       {activeTab === 'directory' && (
         <div className="space-y-6">
