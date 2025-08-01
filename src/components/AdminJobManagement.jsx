@@ -788,34 +788,70 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
     }
   };
 
-  // Load real data from database with assigned property counts
-  useEffect(() => {
-    const initializeData = async () => {
-      if (!isMountedRef.current) return;
+// Load real data from database with assigned property counts
+useEffect(() => {
+  const initializeData = async () => {
+    if (!isMountedRef.current) return;
+    
+    try {
+      setLoading(true);
       
-      try {
-        setLoading(true);
+      // PARALLEL LOADING - Load everything at once!
+      const [
+        connectionTest,
+        jobsData,
+        planningData,
+        managersData,
+        statsData,
+        userData
+      ] = await Promise.all([
+        utilityService.testConnection(),
+        jobService.getAll(),
+        planningJobService.getAll(),
+        employeeService.getManagers(),
+        utilityService.getStats(),
+        authService.getCurrentUser()
+      ]);
+      
+      setDbConnected(connectionTest.success);
+      
+      if (connectionTest.success) {
+        const activeJobs = jobsData.filter(job => job.status !== 'archived');
+        const archived = jobsData.filter(job => job.status === 'archived');
         
-        const connectionTest = await utilityService.testConnection();
-        setDbConnected(connectionTest.success);
+        // Set jobs immediately without waiting for counts
+        const jobsWithPlaceholders = activeJobs.map(job => ({
+          ...job,
+          status: job.status === 'active' ? 'Active' : (job.status || 'Active'),
+          county: capitalizeCounty(job.county),
+          percentBilled: job.percent_billed || 0.00,
+          assignedPropertyCount: job.has_property_assignments ? 0 : 0 // Temporary placeholder
+        }));
         
-        if (connectionTest.success) {
-          const [jobsData, planningData, managersData, statsData, userData] = await Promise.all([
-            jobService.getAll(),
-            planningJobService.getAll(),
-            employeeService.getManagers(),
-            utilityService.getStats(),
-            authService.getCurrentUser()
-          ]);
+        const processedArchivedJobs = archived.map(job => ({
+          ...job,
+          county: capitalizeCounty(job.county)
+        }));
+        
+        if (!isMountedRef.current) return;
+        
+        setJobs(jobsWithPlaceholders);
+        setArchivedJobs(processedArchivedJobs);
+        setPlanningJobs(planningData);
+        setManagers(managersData);
+        setDbStats(statsData);
+        setCurrentUser(userData || { role: 'admin', canAccessBilling: true });
+        
+        // Load HPI data and freshness data AFTER showing the UI
+        setTimeout(async () => {
+          await loadCountyHpiData();
+          await loadJobFreshness(jobsWithPlaceholders);
           
-          const activeJobs = jobsData.filter(job => job.status !== 'archived');
-          const archived = jobsData.filter(job => job.status === 'archived');
-          
-          // Calculate assigned property counts for jobs with assignments
+          // Now load the assigned property counts
           const jobsWithAssignedCounts = await Promise.all(
-            activeJobs.map(async (job) => {
+            jobsWithPlaceholders.map(async (job) => {
               if (job.has_property_assignments) {
-                // Dynamically count assigned properties
+                // Get the count for this job
                 const { count, error } = await supabase
                   .from('property_records')
                   .select('id', { count: 'exact' })
@@ -826,46 +862,25 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
                   job.assignedPropertyCount = count;
                 }
               }
-              
-              return {
-                ...job,
-                status: job.status === 'active' ? 'Active' : (job.status || 'Active'),
-                county: capitalizeCounty(job.county),
-                percentBilled: job.percent_billed || 0.00
-              };
+              return job;
             })
           );
           
-          const processedArchivedJobs = archived.map(job => ({
-            ...job,
-            county: capitalizeCounty(job.county)
-          }));
-          
-          if (!isMountedRef.current) return;
-          
-          setJobs(jobsWithAssignedCounts);
-          setArchivedJobs(processedArchivedJobs);
-          setPlanningJobs(planningData);
-          setManagers(managersData);
-          setDbStats(statsData);
-          setCurrentUser(userData || { role: 'admin', canAccessBilling: true });
-
-          // Load HPI data from database
-          await loadCountyHpiData();
-          
-          // Load freshness data for active jobs
-          await loadJobFreshness(jobsWithAssignedCounts);
-        }
-      } catch (error) {
-        console.error('Data initialization error:', error);
-        setDbConnected(false);
-      } finally {
-        setLoading(false);
+          if (isMountedRef.current) {
+            setJobs(jobsWithAssignedCounts);
+          }
+        }, 100); // Small delay to let UI render first
       }
-    };
+    } catch (error) {
+      console.error('Data initialization error:', error);
+      setDbConnected(false);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    initializeData();
-  }, []);
+  initializeData();
+}, []);
 
   // File analysis
   const analyzeFile = async (file, type) => {
