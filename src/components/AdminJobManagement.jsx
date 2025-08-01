@@ -444,7 +444,7 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
         if (!block && !lot) continue;
        
         // Ensure consistent composite key format matching processors
-        const compositeKey = `${year}${ccdd}-${formattedBlock}-${formattedLot}_${qual || 'NONE'}-${card || 'NONE'}-${location || 'NONE'}`;
+        const compositeKey = `${year}${ccdd}-${block}-${lot}_${qual || 'NONE'}-${card || 'NONE'}-${location || 'NONE'}`;
         
         assignments.push({
           property_composite_key: compositeKey,
