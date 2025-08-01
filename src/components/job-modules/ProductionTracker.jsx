@@ -1241,9 +1241,18 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
           return;
         }
 
-        // Skip UNASSIGNED for inspector analytics but track for missing properties
-        if (inspector === 'UNASSIGNED') {
-          reasonNotAdded = 'Inspector UNASSIGNED';
+        // Check for any inspection attempt at all
+        const hasAnyInspectionAttempt = (
+          (record.inspection_measure_by && record.inspection_measure_by.trim() !== '') ||
+          record.inspection_measure_date ||
+          record.inspection_info_by ||
+          record.inspection_list_by ||
+          record.inspection_price_by
+        );
+
+        if (!hasAnyInspectionAttempt) {
+          // Property not yet inspected - no inspection data at all
+          reasonNotAdded = 'Not yet inspected';
           missingProperties.push({
             composite_key: propertyKey,
             block: record.property_block,
@@ -1253,7 +1262,27 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
             property_location: record.property_location || '',
             property_class: propertyClass,
             reason: reasonNotAdded,
-            inspector: inspector,
+            inspector: '',
+            info_by_code: '',
+            measure_date: null,
+            validation_issues: []
+          });
+          return;
+        }
+
+        // Skip if no inspector recorded
+        if (!inspector || inspector.trim() === '') {
+          reasonNotAdded = 'Missing inspector initials';
+          missingProperties.push({
+            composite_key: propertyKey,
+            block: record.property_block,
+            lot: record.property_lot,
+            qualifier: record.property_qualifier || '',
+            card: record.property_addl_card || '1',
+            property_location: record.property_location || '',
+            property_class: propertyClass,
+            reason: reasonNotAdded,
+            inspector: '',
             info_by_code: infoByCode,
             measure_date: record.inspection_measure_date,
             validation_issues: []
@@ -1263,7 +1292,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
 
         // Skip inspections before project start date (removes old inspector noise)
         if (measuredDate && measuredDate < startDate) {
-          reasonNotAdded = 'Inspection date before project start date';
+          reasonNotAdded = `Old inspection (${measuredDate.toLocaleDateString()}) - before project start`;
           missingProperties.push({
             composite_key: propertyKey,
             block: record.property_block,
@@ -1332,7 +1361,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
 
         if (!hasAnyInspectionAttempt) {
           // Property not yet inspected - skip validation entirely
-          reasonNotAdded = 'No inspection attempt - completely uninspected';
+          reasonNotAdded = 'Not yet inspected';
           missingProperties.push({
             composite_key: propertyKey,
             block: record.property_block,
@@ -1341,9 +1370,9 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
             property_location: record.property_location || '',
             property_class: propertyClass,
             reason: reasonNotAdded,
-            inspector: inspector,
-            info_by_code: infoByCode,
-            measure_date: record.inspection_measure_date,
+            inspector: '',
+            info_by_code: '',
+            measure_date: null,
             validation_issues: []
           });
           return;
@@ -1842,15 +1871,18 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
       const missingPropertiesReportData = {
         summary: {
           total_missing: missingProperties.length,
-          uninspected_count: missingProperties.filter(p => p.reason.includes('No inspection attempt')).length,
+          not_yet_inspected: missingProperties.filter(p => p.reason === 'Not yet inspected').length,
+          old_inspections: missingProperties.filter(p => p.reason.includes('Old inspection')).length,
           validation_failed_count: missingProperties.filter(p => p.reason.includes('Failed validation')).length,
+          missing_inspector: missingProperties.filter(p => p.reason === 'Missing inspector initials').length,
+          invalid_employee: missingProperties.filter(p => p.reason.includes('not found in employee database')).length,
           by_reason: missingProperties.reduce((acc, prop) => {
             const reason = prop.reason;
             acc[reason] = (acc[reason] || 0) + 1;
             return acc;
           }, {}),
           by_inspector: missingProperties.reduce((acc, prop) => {
-            const inspector = prop.inspector || 'UNASSIGNED';
+            const inspector = prop.inspector || 'None';
             acc[inspector] = (acc[inspector] || 0) + 1;
             return acc;
           }, {})
