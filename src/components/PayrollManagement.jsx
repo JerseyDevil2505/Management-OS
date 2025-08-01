@@ -23,6 +23,69 @@ const PayrollManagement = () => {
   });
   const [lastProcessedEnd, setLastProcessedEnd] = useState(null);
 
+  // Helper functions
+  const calculateExpectedHours = (startDate, endDate) => {
+    if (!startDate || !endDate) return 0;
+    
+    let start = new Date(startDate);
+    let end = new Date(endDate);
+    let weekdays = 0;
+    
+    // Include both start and end dates
+    while (start <= end) {
+      const dayOfWeek = start.getDay();
+      if (dayOfWeek !== 0 && dayOfWeek !== 6) { // Not Sunday or Saturday
+        weekdays++;
+      }
+      start.setDate(start.getDate() + 1);
+    }
+    
+    return weekdays * 8;
+  };
+
+  // Calculate expected hours based on standard payroll period
+  const getStandardExpectedHours = (endDate) => {
+    if (!endDate) return 0;
+    
+    const end = new Date(endDate);
+    const day = end.getDate();
+    const month = end.getMonth();
+    const year = end.getFullYear();
+    
+    let periodStart, periodEnd;
+    
+    if (day <= 15) {
+      // First half: 1st to 15th
+      periodStart = new Date(year, month, 1);
+      periodEnd = new Date(year, month, 15);
+    } else {
+      // Second half: 16th to end of month
+      periodStart = new Date(year, month, 16);
+      periodEnd = new Date(year, month + 1, 0); // Last day of month
+    }
+    
+    return calculateExpectedHours(periodStart, periodEnd);
+  };
+
+  // Determine payroll period based on end date
+  const getPayrollPeriod = (endDate) => {
+    if (!endDate) return '';
+    
+    const end = new Date(endDate);
+    const day = end.getDate();
+    const month = end.getMonth();
+    const year = end.getFullYear();
+    
+    if (day <= 15) {
+      // First half of month
+      return `${month + 1}/1/${year} - ${month + 1}/15/${year}`;
+    } else {
+      // Second half of month
+      const lastDay = new Date(year, month + 1, 0).getDate();
+      return `${month + 1}/16/${year} - ${month + 1}/${lastDay}/${year}`;
+    }
+  };
+
   useEffect(() => {
     loadInitialData();
   }, []);
