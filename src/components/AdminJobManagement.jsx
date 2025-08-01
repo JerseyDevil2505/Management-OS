@@ -445,10 +445,9 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
 
         // Format block to match processor behavior
         let formattedBlock = block;
-        if (block.includes('.') && !block.endsWith('0')) {
-          // Add trailing zero to single decimal (44.17 → 44.170)
+        if (block.includes('.')) {
           const parts = block.split('.');
-          if (parts[1] && parts[1].length === 2) {
+          if (parts[1] && (parts[1].length === 1 || parts[1].length === 2)) {
             formattedBlock = block + '0';
           }
         }
