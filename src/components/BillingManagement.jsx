@@ -532,9 +532,6 @@ const BillingManagement = () => {
       if (showBulkPaste && bulkBillingText.trim()) {
         // Handle bulk paste
         const parsedEvents = parseBillingHistory(bulkBillingText);
-        if (showBulkPaste && bulkBillingText.trim()) {
-        // Handle bulk paste
-        const parsedEvents = parseBillingHistory(bulkBillingText);
         console.log('Parsed events:', parsedEvents);
         if (parsedEvents.length === 0) {
           alert('No valid events found in pasted text. Check format.');
