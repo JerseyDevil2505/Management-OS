@@ -355,7 +355,7 @@ const BillingManagement = () => {
     const parsedEvents = [];
     
     lines.forEach(line => {
-      const parts = line.trim().split(/\s+/);
+      const parts = line.trim().split('\t');
       if (parts.length >= 8) {
         const date = parts[0];
         const percentage = parseFloat(parts[1].replace('%', ''));
