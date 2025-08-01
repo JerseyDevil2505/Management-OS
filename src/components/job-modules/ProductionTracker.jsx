@@ -3478,11 +3478,22 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                       <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
                         <div className="flex items-center justify-between">
                           <div>
-                            <p className="text-sm text-gray-600 font-medium">Uninspected</p>
-                            <p className="text-2xl font-bold text-gray-800">{missingPropertiesReport.summary.uninspected_count}</p>
-                            <p className="text-xs text-gray-500">No inspection attempt</p>
+                            <p className="text-sm text-gray-600 font-medium">Not Yet Inspected</p>
+                            <p className="text-2xl font-bold text-gray-800">{missingPropertiesReport.summary.not_yet_inspected}</p>
+                            <p className="text-xs text-gray-500">No inspection data</p>
                           </div>
                           <Eye className="w-8 h-8 text-gray-500" />
+                        </div>
+                      </div>
+
+                      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-yellow-600 font-medium">Old Inspections</p>
+                            <p className="text-2xl font-bold text-yellow-800">{missingPropertiesReport.summary.old_inspections}</p>
+                            <p className="text-xs text-yellow-500">Before project start</p>
+                          </div>
+                          <Calendar className="w-8 h-8 text-yellow-500" />
                         </div>
                       </div>
 
@@ -3491,26 +3502,35 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                           <div>
                             <p className="text-sm text-red-600 font-medium">Validation Failed</p>
                             <p className="text-2xl font-bold text-red-800">{missingPropertiesReport.summary.validation_failed_count}</p>
-                            <p className="text-xs text-red-500">Attempted but invalid</p>
+                            <p className="text-xs text-red-500">Current but invalid</p>
                           </div>
                           <X className="w-8 h-8 text-red-500" />
                         </div>
                       </div>
+                    </div>
 
-                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-sm text-blue-600 font-medium">Success Rate</p>
-                            <p className="text-2xl font-bold text-blue-800">
-                              {analytics?.totalRecords > 0 ? 
-                                Math.round(((analytics.totalRecords - missingPropertiesReport.summary.total_missing) / analytics.totalRecords) * 100) : 0}%
-                            </p>
-                            <p className="text-xs text-blue-500">Properties processed</p>
+                    {/* Assignment Status Card - Only show if job has assignments */}
+                    {jobData.has_property_assignments && (
+                      <div className="bg-purple-50 border border-purple-200 rounded-lg p-6 mb-6">
+                        <h4 className="font-semibold text-purple-900 mb-3">Property Assignment Status</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div className="bg-white p-4 rounded border border-purple-200">
+                            <p className="text-sm text-purple-600 font-medium">Total Properties</p>
+                            <p className="text-2xl font-bold text-purple-800">{propertyRecordsCount?.toLocaleString() || 0}</p>
                           </div>
-                          <CheckCircle className="w-8 h-8 text-blue-500" />
+                          <div className="bg-white p-4 rounded border border-purple-200">
+                            <p className="text-sm text-purple-600 font-medium">Assigned External</p>
+                            <p className="text-2xl font-bold text-purple-800">{unassignedPropertyCount.toLocaleString()}</p>
+                            <p className="text-xs text-purple-500">To other contractors</p>
+                          </div>
+                          <div className="bg-white p-4 rounded border border-purple-200">
+                            <p className="text-sm text-purple-600 font-medium">Internal Work</p>
+                            <p className="text-2xl font-bold text-purple-800">{jobData.assignedPropertyCount?.toLocaleString() || 0}</p>
+                            <p className="text-xs text-purple-500">Our responsibility</p>
+                          </div>
                         </div>
                       </div>
-                    </div>
+                    )}
 
                     {/* Breakdown by Reason */}
                     <div className="bg-white border border-gray-200 rounded-lg p-6 mb-6">
@@ -3559,7 +3579,9 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                           <tbody>
                             {missingPropertiesReport.detailed_missing.slice(0, 100).map((property, idx) => (
                               <tr key={idx} className={`border-t border-gray-200 ${
-                                property.reason.includes('No inspection attempt') ? 'bg-gray-50' : 'bg-red-50'
+                                property.reason === 'Not yet inspected' ? 'bg-gray-50' : 
+                                property.reason.includes('Old inspection') ? 'bg-yellow-50' :
+                                'bg-red-50'
                               }`}>
                                 <td className="px-3 py-2 font-medium">{property.block}</td>
                                 <td className="px-3 py-2 font-medium">{property.lot}</td>
@@ -3571,7 +3593,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                                     {property.property_class}
                                   </span>
                                 </td>
-                                <td className="px-3 py-2">{property.inspector}</td>
+                                <td className="px-3 py-2">{property.inspector || '-'}</td>
                                 <td className="px-3 py-2">{property.info_by_code || '-'}</td>
                                 <td className="px-3 py-2 text-xs">{property.reason}</td>
                               </tr>
