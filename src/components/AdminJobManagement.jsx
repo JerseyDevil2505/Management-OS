@@ -614,13 +614,20 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
         }
       }
       
-      // Set assignment results
+      // Get the real count after all updates
+      const { count: finalMatchedCount } = await supabase
+        .from('property_records')
+        .select('id', { count: 'exact' })
+        .eq('job_id', job.id)
+        .eq('is_assigned_property', true);
+
+      // Set assignment results with real count
       setAssignmentResults({
         success: true,
         uploaded: assignments.length,
-        matched: matchedCount,
-        unmatched: assignments.length - matchedCount,
-        matchRate: assignments.length > 0 ? Math.round((matchedCount / assignments.length) * 100) : 0,
+        matched: finalMatchedCount || matchedCount,
+        unmatched: assignments.length - (finalMatchedCount || matchedCount),
+        matchRate: assignments.length > 0 ? Math.round(((finalMatchedCount || matchedCount) / assignments.length) * 100) : 0,
         hasCommercial: hasCommercial,
         jobName: job.name
       });
