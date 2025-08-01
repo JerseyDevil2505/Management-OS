@@ -54,7 +54,8 @@ export class BRTProcessor {
         
         const { data, error } = await supabase
           .from('property_records')
-          .insert(batch);
+          .insert(batch)
+          .select();  // This returns minimal data in v2
         
         if (!error) {
           console.log(`✅ Batch ${batchNumber} successful on attempt ${attempt}`);
