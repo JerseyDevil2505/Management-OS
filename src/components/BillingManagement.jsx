@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
+import * as XLSX from 'xlsx';
 
 const BillingManagement = () => {
   const [activeTab, setActiveTab] = useState('active');
