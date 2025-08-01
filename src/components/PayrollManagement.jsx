@@ -119,13 +119,19 @@ const PayrollManagement = () => {
     setSuccessMessage(null);
     
     try {
-      // Use last processed date + 1 day as start, or period start if no history
+      // Calculate the actual start date for bonus calculations
+      // This is leadDays before the period start to catch orphaned inspections
+      const periodStart = new Date(payrollPeriod.startDate);
+      const bonusStartDate = new Date(periodStart);
+      bonusStartDate.setDate(bonusStartDate.getDate() - leadDays);
+      
       const startDate = lastProcessedEnd 
         ? new Date(new Date(lastProcessedEnd).getTime() + 86400000).toISOString().split('T')[0]
-        : payrollPeriod.startDate;
+        : bonusStartDate.toISOString().split('T')[0];
       const endDate = payrollPeriod.endDate;
       
-      console.log(`Calculating bonuses from ${startDate} to ${endDate}`);
+      console.log(`Payroll period: ${payrollPeriod.startDate} to ${endDate}`);
+      console.log(`Counting inspections from: ${startDate} to ${endDate}`);
       
       // Get all initials from eligible employees
       const validInitials = employees
@@ -662,6 +668,13 @@ const PayrollManagement = () => {
               <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
                 <p className="text-sm text-blue-800">
                   <span className="font-medium">Note:</span> Only inspections after {new Date(lastProcessedEnd).toLocaleDateString()} will be included
+                </p>
+              </div>
+            )}
+            {!lastProcessedEnd && (
+              <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-md">
+                <p className="text-sm text-amber-800">
+                  <span className="font-medium">First Run:</span> Will count inspections from {leadDays} days before period start ({new Date(new Date(payrollPeriod.startDate).getTime() - (leadDays * 86400000)).toLocaleDateString()}) to catch any orphaned inspections
                 </p>
               </div>
             )}
