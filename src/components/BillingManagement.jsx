@@ -195,9 +195,9 @@ const BillingManagement = () => {
       // Calculate total working days in year
       const totalWorkingDays = Object.values(workingDays2025).reduce((sum, days) => sum + days, 0);
 
-      // Calculate daily fringe and projections
+      // Calculate daily fringe (expense rate) and projections
       const revenue = revenueInfo?.total_revenue || totalPaid; // Use total paid as fallback
-      const dailyFringe = workingDaysSoFar > 0 ? revenue / workingDaysSoFar : 0;
+      const dailyFringe = workingDaysSoFar > 0 ? currentExpenses / workingDaysSoFar : 0;
       
       // Project expenses for full year based on current run rate
       const dailyExpenseRate = workingDaysSoFar > 0 ? currentExpenses / workingDaysSoFar : 0;
@@ -1649,7 +1649,7 @@ const BillingManagement = () => {
                             Category
                           </th>
                           {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map((month, idx) => (
-                            <th key={month} className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            <th key={month} className="px-2 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                               {month}
                             </th>
                           ))}
