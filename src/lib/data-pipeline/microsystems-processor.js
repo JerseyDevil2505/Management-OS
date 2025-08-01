@@ -44,7 +44,8 @@ export class MicrosystemsProcessor {
         
         const { data, error } = await supabase
           .from('property_records')
-          .insert(batch);
+          .insert(batch)
+          .select();  // Add this to prevent returning all columns
         
         if (!error) {
           console.log(`Batch ${batchNumber} successful on attempt ${attempt}`);
