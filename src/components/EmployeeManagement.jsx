@@ -476,7 +476,9 @@ const EmployeeManagement = () => {
           Math.round((totalResidentialEntries / totalResidentialInspections) * 100) : 0,
         refusalRate: totalResidentialInspections > 0 ? 
           Math.round((totalResidentialRefusals / totalResidentialInspections) * 100) : 0,
-        otherProperties: residentialRecords.filter(r => !['2', '3A'].includes(r.property_class)).length
+        otherProperties: filteredData.filter(r => 
+          !['2', '3A', '4A', '4B', '4C'].includes(r.property_class)
+        ).length
       };
     }
     
@@ -487,7 +489,9 @@ const EmployeeManagement = () => {
         avgDaily: commercialDailyAvg,
         pricing: totalPricing,
         pricingAvgPerDay: pricingDailyAvg,
-        otherProperties: commercialRecords.filter(r => !['4A', '4B', '4C'].includes(r.property_class)).length
+        otherProperties: filteredData.filter(r => 
+          !['2', '3A', '4A', '4B', '4C'].includes(r.property_class)
+        ).length
       };
     }
     
