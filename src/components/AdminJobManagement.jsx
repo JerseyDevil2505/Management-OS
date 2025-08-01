@@ -458,6 +458,22 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
             formattedBlock = block + '0';
           }
         }
+        
+        // Format lot to match processor behavior
+        let formattedLot = lot;
+        if (lot.includes('.')) {
+          const parts = lot.split('.');
+          const afterDecimal = parts[1];
+          
+          // Only add trailing zero if:
+          // - It's 1 digit: .1 → .10
+          // - It's 2 digits AND doesn't start with 0: .17 → .170
+          if (afterDecimal && afterDecimal.length === 1) {
+            formattedLot = lot + '0';
+          } else if (afterDecimal && afterDecimal.length === 2 && !afterDecimal.startsWith('0')) {
+            formattedLot = lot + '0';
+          }
+        }
 
         // Ensure consistent composite key format matching processors
         const compositeKey = `${year}${ccdd}-${formattedBlock}-${formattedLot}_${qual || 'NONE'}-${card || 'NONE'}-${location || 'NONE'}`;
