@@ -823,7 +823,7 @@ useEffect(() => {
       setDbConnected(connectionTest.success);
       
       if (connectionTest.success) {
-        const activeJobs = jobsData.filter(job => job.status !== 'archived');
+        const activeJobs = jobsData.filter(job => job.status !== 'archived' && job.job_type !== 'legacy_billing');
         const archived = jobsData.filter(job => job.status === 'archived');
         
         // Set jobs immediately without waiting for counts
