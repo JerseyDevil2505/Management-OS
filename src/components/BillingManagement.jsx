@@ -461,6 +461,7 @@ const BillingManagement = () => {
         let runningPercentage = 0;
         
         for (const event of parsedEvents) {
+          console.log('Saving event:', event);
           runningTotal += event.amountBilled;
           runningPercentage += event.percentage / 100;
           const remainingDue = parseFloat(contractSetup.contractAmount) - runningTotal;
