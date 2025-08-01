@@ -2434,11 +2434,6 @@ const BillingManagement = () => {
               </button>
               <button
                 onClick={handleExpenseImport}
-                  // Import logic will go here
-                  alert('Import functionality will be implemented with the expense processing logic');
-                  setShowExpenseImport(false);
-                  setExpenseFile(null);
-                }}
                 className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
                 disabled={!expenseFile}
               >
