@@ -1,15 +1,65 @@
-import React, { useState, useEffect } from 'react';
+<td className="px-4 py-2 text-sm text-gray-900">
+                                        {(() => {
+                                          // Calculate cumulative percentage up to but not including this event
+                                          const sortedPriorEvents = job.billing_events
+                                            .sort((a, b) => new Date(a.billing_date) - new Date(b.billing_date))
+                                            .slice(0, index);
+                                          const priorPercentage = sortedPriorEvents.reduce((sum, e) => sum + e.percentage_billed, 0);
+                                          
+                                          // Check if we've hit 100% with prior events
+                                          if (priorPercentage >= 1.0) {
+                                            // This is a post-100% event
+                                            const contract = job.job_contracts[0];
+                                            
+                                            // Check which percentage this matches
+                                            if (Math.abs(event.percentage_billed - contract.retainer_percentage) < 0.001) {
+                                              return <span className="font-medium text-green-700">Retainer Payout</span>;
+                                            } else if (Math.abs(event.percentage_billed - contract.end_of_job_percentage) < 0.001) {
+                                              return <span className="font-medium text-blue-700">Turnover</span>;
+                                            } else if (Math.abs(event.percentage_billed - contract.first_year_appeals_percentage) < 0.001) {
+                                              return <span className="font-medium text-purple-700">1st Yr Appeals</span>;
+                                            } else if (Math.abs(event.percentage_billed - contract.second_year_appeals_percentage) < 0.001) {
+                                              return <span className="font-medium text-purple-700">2nd Yr Appeals</span>;
+                                            } else if (contract.third_year_appeals_percentage && 
+                                                     Math.abs(event.percentage_billed - contract.third_year_appeals_percentage) < 0.001) {
+                                              return <span className="font-medium text-purple-700">3rd Yr Appeals</span>;
+                                            } else {
+                                              return <span className="font-medium text-gray-700">Special {(event.percentage_billed * 100).toFixed(2)}%</span>;
+                                            }
+                                          } else {
+                                            // Regular percentage display
+                                            return `${(event.percentage_billed * 100).toFixed(2import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
 const BillingManagement = () => {
   const [activeTab, setActiveTab] = useState('active');
   const [jobs, setJobs] = useState([]);
   const [planningJobs, setPlanningJobs] = useState([]);
+  const [expenses, setExpenses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showContractSetup, setShowContractSetup] = useState(false);
   const [selectedJob, setSelectedJob] = useState(null);
   const [showBillingForm, setShowBillingForm] = useState(false);
   const [billingHistoryText, setBillingHistoryText] = useState('');
+  const [showExpenseImport, setShowExpenseImport] = useState(false);
+  const [expenseFile, setExpenseFile] = useState(null);
+  const [revenueData, setRevenueData] = useState({ totalRevenue: 0 });
+  
+  // Working days for 2025 (excluding weekends and federal holidays)
+  const workingDays2025 = {
+    1: 21,  // Jan
+    2: 19,  // Feb
+    3: 21,  // Mar
+    4: 21,  // Apr
+    5: 21,  // May
+    6: 20,  // Jun
+    7: 22,  // Jul
+    8: 21,  // Aug
+    9: 21,  // Sep
+    10: 22, // Oct
+    11: 18, // Nov
+    12: 22  // Dec
+  };
   const [contractSetup, setContractSetup] = useState({
     contractAmount: '',
     templateType: 'standard',
@@ -48,7 +98,12 @@ const BillingManagement = () => {
     totalSigned: 0,
     totalPaid: 0,
     totalRemaining: 0,
-    totalRemainingExcludingRetainer: 0
+    totalRemainingExcludingRetainer: 0,
+    dailyFringe: 0,
+    currentExpenses: 0,
+    projectedExpenses: 0,
+    profitLoss: 0,
+    profitLossPercent: 0
   });
 
   useEffect(() => {
@@ -62,8 +117,8 @@ const BillingManagement = () => {
       const { data: activeJobs } = await supabase
         .from('jobs')
         .select(`
-          job_contracts(contract_amount),
-          billing_events(amount_billed, retainer_amount, status)
+          job_contracts(contract_amount, retainer_amount),
+          billing_events(amount_billed, retainer_amount, status, percentage_billed)
         `)
         .eq('job_type', 'standard');
 
@@ -74,6 +129,21 @@ const BillingManagement = () => {
         .not('contract_amount', 'is', null)
         .eq('is_archived', false);
 
+      // Get current year expenses
+      const currentYear = new Date().getFullYear();
+      const currentMonth = new Date().getMonth() + 1;
+      const { data: expenseData } = await supabase
+        .from('expenses')
+        .select('*')
+        .eq('year', currentYear);
+
+      // Get revenue data
+      const { data: revenueInfo } = await supabase
+        .from('revenue_summary')
+        .select('total_revenue')
+        .eq('year', currentYear)
+        .single();
+
       let totalSigned = 0;
       let totalPaid = 0;
       let totalRemaining = 0;
@@ -83,18 +153,21 @@ const BillingManagement = () => {
       if (activeJobs) {
         activeJobs.forEach(job => {
           if (job.job_contracts?.[0]) {
-            const contractAmount = job.job_contracts[0].contract_amount;
+            const contract = job.job_contracts[0];
+            const contractAmount = contract.contract_amount;
+            const totalRetainerAmount = contract.retainer_amount;
+            
             totalSigned += contractAmount;
 
             let jobPaid = 0;
-            let jobRetainerPaid = 0;
+            let totalPercentageBilled = 0;
 
             if (job.billing_events) {
               job.billing_events.forEach(event => {
                 if (event.status === 'P') {
                   jobPaid += event.amount_billed;
-                  jobRetainerPaid += event.retainer_amount;
                 }
+                totalPercentageBilled += event.percentage_billed;
               });
             }
 
@@ -102,8 +175,12 @@ const BillingManagement = () => {
             const jobRemaining = contractAmount - jobPaid;
             totalRemaining += jobRemaining;
             
-            // For remaining excluding retainer, we add back the paid retainer amounts
-            totalRemainingExcludingRetainer += (jobRemaining - jobRetainerPaid);
+            // Calculate remaining retainer to be collected
+            const remainingPercentage = 1 - totalPercentageBilled;
+            const remainingRetainer = totalRetainerAmount * remainingPercentage;
+            
+            // Remaining excluding future retainer collections
+            totalRemainingExcludingRetainer += (jobRemaining - remainingRetainer);
           }
         });
       }
@@ -121,11 +198,51 @@ const BillingManagement = () => {
         });
       }
 
+      // Calculate expense metrics
+      let currentExpenses = 0;
+      let monthlyExpenses = new Array(12).fill(0);
+      
+      if (expenseData) {
+        expenseData.forEach(expense => {
+          monthlyExpenses[expense.month - 1] += parseFloat(expense.amount);
+          if (expense.month <= currentMonth) {
+            currentExpenses += parseFloat(expense.amount);
+          }
+        });
+      }
+
+      // Calculate working days so far this year
+      let workingDaysSoFar = 0;
+      for (let month = 1; month <= currentMonth; month++) {
+        workingDaysSoFar += workingDays2025[month] || 21;
+      }
+
+      // Calculate total working days in year
+      const totalWorkingDays = Object.values(workingDays2025).reduce((sum, days) => sum + days, 0);
+
+      // Calculate daily fringe and projections
+      const revenue = revenueInfo?.total_revenue || totalPaid; // Use total paid as fallback
+      const dailyFringe = workingDaysSoFar > 0 ? revenue / workingDaysSoFar : 0;
+      
+      // Project expenses for full year based on current run rate
+      const dailyExpenseRate = workingDaysSoFar > 0 ? currentExpenses / workingDaysSoFar : 0;
+      const projectedExpenses = dailyExpenseRate * totalWorkingDays;
+      
+      // Calculate profit/loss
+      const projectedRevenue = dailyFringe * totalWorkingDays;
+      const profitLoss = projectedRevenue - projectedExpenses;
+      const profitLossPercent = projectedRevenue > 0 ? (profitLoss / projectedRevenue) * 100 : 0;
+
       setGlobalMetrics({
         totalSigned,
         totalPaid,
         totalRemaining,
-        totalRemainingExcludingRetainer
+        totalRemainingExcludingRetainer,
+        dailyFringe,
+        currentExpenses,
+        projectedExpenses,
+        profitLoss,
+        profitLossPercent
       });
     } catch (error) {
       console.error('Error calculating global metrics:', error);
@@ -801,7 +918,9 @@ const BillingManagement = () => {
       {/* Global Metrics Dashboard */}
       <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-6 mb-6">
         <h2 className="text-lg font-semibold text-gray-800 mb-4">Business Overview</h2>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        
+        {/* Revenue & Contract Metrics */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
           <div className="bg-white rounded-lg p-4 shadow-sm">
             <p className="text-sm text-gray-600 mb-1">Total Signed Contracts</p>
             <p className="text-2xl font-bold text-gray-900">{formatCurrency(globalMetrics.totalSigned)}</p>
@@ -821,6 +940,39 @@ const BillingManagement = () => {
             <p className="text-sm text-gray-600 mb-1">Remaining (No Retainer)</p>
             <p className="text-2xl font-bold text-blue-600">{formatCurrency(globalMetrics.totalRemainingExcludingRetainer)}</p>
             <p className="text-xs text-blue-600 mt-1">Actual work remaining</p>
+          </div>
+        </div>
+        
+        {/* Financial Performance Metrics */}
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <div className="bg-white rounded-lg p-4 shadow-sm border-2 border-yellow-400">
+            <p className="text-sm text-gray-600 mb-1">Daily Fringe Rate</p>
+            <p className="text-2xl font-bold text-yellow-600">{formatCurrency(globalMetrics.dailyFringe)}</p>
+            <p className="text-xs text-gray-500 mt-1">Revenue per working day</p>
+          </div>
+          <div className="bg-white rounded-lg p-4 shadow-sm">
+            <p className="text-sm text-gray-600 mb-1">Current Expenses</p>
+            <p className="text-2xl font-bold text-red-600">{formatCurrency(globalMetrics.currentExpenses)}</p>
+            <p className="text-xs text-gray-500 mt-1">Year to date</p>
+          </div>
+          <div className="bg-white rounded-lg p-4 shadow-sm">
+            <p className="text-sm text-gray-600 mb-1">Projected Expenses</p>
+            <p className="text-2xl font-bold text-red-700">{formatCurrency(globalMetrics.projectedExpenses)}</p>
+            <p className="text-xs text-gray-500 mt-1">Full year estimate</p>
+          </div>
+          <div className={`bg-white rounded-lg p-4 shadow-sm border-2 ${globalMetrics.profitLoss >= 0 ? 'border-green-400' : 'border-red-400'}`}>
+            <p className="text-sm text-gray-600 mb-1">Profit/Loss</p>
+            <p className={`text-2xl font-bold ${globalMetrics.profitLoss >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              {formatCurrency(globalMetrics.profitLoss)}
+            </p>
+            <p className="text-xs text-gray-500 mt-1">Projected annual</p>
+          </div>
+          <div className={`bg-white rounded-lg p-4 shadow-sm border-2 ${globalMetrics.profitLossPercent >= 0 ? 'border-green-400' : 'border-red-400'}`}>
+            <p className="text-sm text-gray-600 mb-1">Profit Margin</p>
+            <p className={`text-2xl font-bold ${globalMetrics.profitLossPercent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              {globalMetrics.profitLossPercent.toFixed(1)}%
+            </p>
+            <p className="text-xs text-gray-500 mt-1">Of projected revenue</p>
           </div>
         </div>
       </div>
@@ -857,6 +1009,16 @@ const BillingManagement = () => {
             }`}
           >
             Legacy Jobs
+          </button>
+          <button
+            onClick={() => setActiveTab('expenses')}
+            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+              activeTab === 'expenses'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            Expenses
           </button>
         </nav>
       </div>
@@ -954,7 +1116,7 @@ const BillingManagement = () => {
                       </div>
 
                       {totals && (
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
                           <div className="bg-white p-3 rounded-md">
                             <p className="text-sm text-gray-600">Contract Amount</p>
                             <p className="text-lg font-semibold">{formatCurrency(totals.contractAmount)}</p>
@@ -970,6 +1132,12 @@ const BillingManagement = () => {
                           <div className="bg-white p-3 rounded-md">
                             <p className="text-sm text-gray-600">Remaining Due</p>
                             <p className="text-lg font-semibold">{formatCurrency(totals.remainingDue)}</p>
+                          </div>
+                          <div className="bg-white p-3 rounded-md border-2 border-blue-400">
+                            <p className="text-sm text-gray-600">Remaining (No Retainer)</p>
+                            <p className="text-lg font-semibold text-blue-600">
+                              {formatCurrency(totals.remainingDue - (job.job_contracts[0].retainer_amount * (1 - totals.totalPercentageBilled / 100)))}
+                            </p>
                           </div>
                         </div>
                       )}
@@ -1045,39 +1213,84 @@ const BillingManagement = () => {
                                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
                                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Billed</th>
                                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Remaining</th>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Remaining (No Ret)</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-200">
                               {job.billing_events
                                 .sort((a, b) => new Date(a.billing_date) - new Date(b.billing_date))
-                                .map(event => (
-                                <tr 
-                                  key={event.id}
-                                  className="hover:bg-gray-50 cursor-pointer"
-                                  onClick={() => {
-                                    setEditingEvent(event);
-                                    setShowEditBilling(true);
-                                  }}
-                                >
-                                  <td className="px-4 py-2 text-sm text-gray-900">
-                                    {new Date(event.billing_date).toLocaleDateString()}
-                                  </td>
-                                  <td className="px-4 py-2 text-sm text-gray-900">
-                                    {(event.percentage_billed * 100).toFixed(2)}%
-                                  </td>
-                                  <td className="px-4 py-2 text-sm">
-                                    <span className={`px-2 py-1 text-xs rounded-full ${
-                                      event.status === 'P' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                                    }`}>
-                                      {event.status === 'P' ? 'Paid' : 'Open'}
-                                    </span>
-                                  </td>
-                                  <td className="px-4 py-2 text-sm text-gray-900">{event.invoice_number}</td>
-                                  <td className="px-4 py-2 text-sm text-gray-900">{formatCurrency(event.total_amount)}</td>
-                                  <td className="px-4 py-2 text-sm text-gray-900">{formatCurrency(event.amount_billed)}</td>
-                                  <td className="px-4 py-2 text-sm text-gray-900">{formatCurrency(event.remaining_due)}</td>
-                                </tr>
-                              ))}
+                                .map((event, index) => {
+                                  // Calculate cumulative percentage billed up to this point
+                                  const sortedEvents = job.billing_events.sort((a, b) => new Date(a.billing_date) - new Date(b.billing_date));
+                                  let cumulativePercentage = 0;
+                                  for (let i = 0; i <= index; i++) {
+                                    cumulativePercentage += sortedEvents[i].percentage_billed;
+                                  }
+                                  const remainingPercentage = 1 - cumulativePercentage;
+                                  const remainingRetainer = job.job_contracts[0].retainer_amount * remainingPercentage;
+                                  const remainingNoRetainer = event.remaining_due - remainingRetainer;
+                                  
+                                  return (
+                                    <tr 
+                                      key={event.id}
+                                      className="hover:bg-gray-50 cursor-pointer"
+                                      onClick={() => {
+                                        setEditingEvent(event);
+                                        setShowEditBilling(true);
+                                      }}
+                                    >
+                                      <td className="px-4 py-2 text-sm text-gray-900">
+                                        {new Date(event.billing_date).toLocaleDateString()}
+                                      </td>
+                                      <td className="px-4 py-2 text-sm text-gray-900">
+                                        {(() => {
+                                          // Calculate cumulative percentage up to but not including this event
+                                          const sortedPriorEvents = job.billing_events
+                                            .sort((a, b) => new Date(a.billing_date) - new Date(b.billing_date))
+                                            .slice(0, index);
+                                          const priorPercentage = sortedPriorEvents.reduce((sum, e) => sum + e.percentage_billed, 0);
+                                          
+                                          // Check if we've hit 100% with prior events
+                                          if (priorPercentage >= 1.0) {
+                                            // This is a post-100% event
+                                            const contract = job.job_contracts[0];
+                                            
+                                            // Check which percentage this matches
+                                            if (Math.abs(event.percentage_billed - contract.retainer_percentage) < 0.001) {
+                                              return <span className="font-medium text-green-700">Retainer Payout</span>;
+                                            } else if (Math.abs(event.percentage_billed - contract.end_of_job_percentage) < 0.001) {
+                                              return <span className="font-medium text-blue-700">Turnover</span>;
+                                            } else if (Math.abs(event.percentage_billed - contract.first_year_appeals_percentage) < 0.001) {
+                                              return <span className="font-medium text-purple-700">1st Yr Appeals</span>;
+                                            } else if (Math.abs(event.percentage_billed - contract.second_year_appeals_percentage) < 0.001) {
+                                              return <span className="font-medium text-purple-700">2nd Yr Appeals</span>;
+                                            } else if (contract.third_year_appeals_percentage && 
+                                                     Math.abs(event.percentage_billed - contract.third_year_appeals_percentage) < 0.001) {
+                                              return <span className="font-medium text-purple-700">3rd Yr Appeals</span>;
+                                            } else {
+                                              return <span className="font-medium text-gray-700">Special {(event.percentage_billed * 100).toFixed(2)}%</span>;
+                                            }
+                                          } else {
+                                            // Regular percentage display for normal billing
+                                            return `${(event.percentage_billed * 100).toFixed(2)}%`;
+                                          }
+                                        })()}
+                                      </td>
+                                      <td className="px-4 py-2 text-sm">
+                                        <span className={`px-2 py-1 text-xs rounded-full ${
+                                          event.status === 'P' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                                        }`}>
+                                          {event.status === 'P' ? 'Paid' : 'Open'}
+                                        </span>
+                                      </td>
+                                      <td className="px-4 py-2 text-sm text-gray-900">{event.invoice_number}</td>
+                                      <td className="px-4 py-2 text-sm text-gray-900">{formatCurrency(event.total_amount)}</td>
+                                      <td className="px-4 py-2 text-sm text-gray-900">{formatCurrency(event.amount_billed)}</td>
+                                      <td className="px-4 py-2 text-sm text-gray-900">{formatCurrency(event.remaining_due)}</td>
+                                      <td className="px-4 py-2 text-sm font-semibold text-blue-600">{formatCurrency(remainingNoRetainer)}</td>
+                                    </tr>
+                                  );
+                                })}
                             </tbody>
                           </table>
                         </div>
@@ -1224,39 +1437,84 @@ const BillingManagement = () => {
                                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
                                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Billed</th>
                                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Remaining</th>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Remaining (No Ret)</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-200">
                               {job.billing_events
                                 .sort((a, b) => new Date(a.billing_date) - new Date(b.billing_date))
-                                .map(event => (
-                                <tr 
-                                  key={event.id}
-                                  className="hover:bg-gray-50 cursor-pointer"
-                                  onClick={() => {
-                                    setEditingEvent(event);
-                                    setShowEditBilling(true);
-                                  }}
-                                >
-                                  <td className="px-4 py-2 text-sm text-gray-900">
-                                    {new Date(event.billing_date).toLocaleDateString()}
-                                  </td>
-                                  <td className="px-4 py-2 text-sm text-gray-900">
-                                    {(event.percentage_billed * 100).toFixed(2)}%
-                                  </td>
-                                  <td className="px-4 py-2 text-sm">
-                                    <span className={`px-2 py-1 text-xs rounded-full ${
-                                      event.status === 'P' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                                    }`}>
-                                      {event.status === 'P' ? 'Paid' : 'Open'}
-                                    </span>
-                                  </td>
-                                  <td className="px-4 py-2 text-sm text-gray-900">{event.invoice_number}</td>
-                                  <td className="px-4 py-2 text-sm text-gray-900">{formatCurrency(event.total_amount)}</td>
-                                  <td className="px-4 py-2 text-sm text-gray-900">{formatCurrency(event.amount_billed)}</td>
-                                  <td className="px-4 py-2 text-sm text-gray-900">{formatCurrency(event.remaining_due)}</td>
-                                </tr>
-                              ))}
+                                .map((event, index) => {
+                                  // Calculate cumulative percentage billed up to this point
+                                  const sortedEvents = job.billing_events.sort((a, b) => new Date(a.billing_date) - new Date(b.billing_date));
+                                  let cumulativePercentage = 0;
+                                  for (let i = 0; i <= index; i++) {
+                                    cumulativePercentage += sortedEvents[i].percentage_billed;
+                                  }
+                                  const remainingPercentage = 1 - cumulativePercentage;
+                                  const remainingRetainer = job.job_contracts[0].retainer_amount * remainingPercentage;
+                                  const remainingNoRetainer = event.remaining_due - remainingRetainer;
+                                  
+                                  return (
+                                    <tr 
+                                      key={event.id}
+                                      className="hover:bg-gray-50 cursor-pointer"
+                                      onClick={() => {
+                                        setEditingEvent(event);
+                                        setShowEditBilling(true);
+                                      }}
+                                    >
+                                      <td className="px-4 py-2 text-sm text-gray-900">
+                                        {new Date(event.billing_date).toLocaleDateString()}
+                                      </td>
+                                      <td className="px-4 py-2 text-sm text-gray-900">
+                                        {(() => {
+                                          // Calculate cumulative percentage up to but not including this event
+                                          const sortedPriorEvents = job.billing_events
+                                            .sort((a, b) => new Date(a.billing_date) - new Date(b.billing_date))
+                                            .slice(0, index);
+                                          const priorPercentage = sortedPriorEvents.reduce((sum, e) => sum + e.percentage_billed, 0);
+                                          
+                                          // Check if we've hit 100% with prior events
+                                          if (priorPercentage >= 1.0) {
+                                            // This is a post-100% event
+                                            const contract = job.job_contracts[0];
+                                            
+                                            // Check which percentage this matches
+                                            if (Math.abs(event.percentage_billed - contract.retainer_percentage) < 0.001) {
+                                              return <span className="font-medium text-green-700">Retainer Payout</span>;
+                                            } else if (Math.abs(event.percentage_billed - contract.end_of_job_percentage) < 0.001) {
+                                              return <span className="font-medium text-blue-700">Turnover</span>;
+                                            } else if (Math.abs(event.percentage_billed - contract.first_year_appeals_percentage) < 0.001) {
+                                              return <span className="font-medium text-purple-700">1st Yr Appeals</span>;
+                                            } else if (Math.abs(event.percentage_billed - contract.second_year_appeals_percentage) < 0.001) {
+                                              return <span className="font-medium text-purple-700">2nd Yr Appeals</span>;
+                                            } else if (contract.third_year_appeals_percentage && 
+                                                     Math.abs(event.percentage_billed - contract.third_year_appeals_percentage) < 0.001) {
+                                              return <span className="font-medium text-purple-700">3rd Yr Appeals</span>;
+                                            } else {
+                                              return <span className="font-medium text-gray-700">Special {(event.percentage_billed * 100).toFixed(2)}%</span>;
+                                            }
+                                          } else {
+                                            // Regular percentage display for normal billing
+                                            return `${(event.percentage_billed * 100).toFixed(2)}%`;
+                                          }
+                                        })()}
+                                      </td>
+                                      <td className="px-4 py-2 text-sm">
+                                        <span className={`px-2 py-1 text-xs rounded-full ${
+                                          event.status === 'P' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                                        }`}>
+                                          {event.status === 'P' ? 'Paid' : 'Open'}
+                                        </span>
+                                      </td>
+                                      <td className="px-4 py-2 text-sm text-gray-900">{event.invoice_number}</td>
+                                      <td className="px-4 py-2 text-sm text-gray-900">{formatCurrency(event.total_amount)}</td>
+                                      <td className="px-4 py-2 text-sm text-gray-900">{formatCurrency(event.amount_billed)}</td>
+                                      <td className="px-4 py-2 text-sm text-gray-900">{formatCurrency(event.remaining_due)}</td>
+                                      <td className="px-4 py-2 text-sm font-semibold text-blue-600">{formatCurrency(remainingNoRetainer)}</td>
+                                    </tr>
+                                  );
+                                })}
                             </tbody>
                           </table>
                         </div>
@@ -1893,6 +2151,64 @@ const BillingManagement = () => {
                 className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
               >
                 Create Legacy Job
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Expense Import Modal */}
+      {showExpenseImport && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-lg font-semibold mb-4">Import Expense Data</h3>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Select Excel File
+                </label>
+                <input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  onChange={(e) => setExpenseFile(e.target.files[0])}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                />
+                <p className="text-xs text-gray-500 mt-2">
+                  Upload your expense Excel file. The first sheet will be imported.
+                </p>
+              </div>
+
+              {expenseFile && (
+                <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
+                  <p className="text-sm text-blue-800">
+                    Selected: {expenseFile.name}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end space-x-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowExpenseImport(false);
+                  setExpenseFile(null);
+                }}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  // Import logic will go here
+                  alert('Import functionality will be implemented with the expense processing logic');
+                  setShowExpenseImport(false);
+                  setExpenseFile(null);
+                }}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                disabled={!expenseFile}
+              >
+                Import
               </button>
             </div>
           </div>
