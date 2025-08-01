@@ -294,13 +294,13 @@ const EmployeeManagement = () => {
           }).length;
 
           // DEBUG: Check if info_by codes are being read correctly
-          if (initials === 'AL') {
+          if (initials === 'SO') {
             const alRecords = residentialRecords.filter(r => 
-              r.measure_by === 'AL' && r.list_by === 'AL'
+              r.measure_by === 'SO' && r.list_by === 'SO'
             );
             console.log('🔍 AL DEBUG:');
             console.log('Total AL measured & listed:', alRecords.length);
-            console.log('AL entries with info_by check:', myEntries);
+            console.log('SO entries with info_by check:', myEntries);
             console.log('Sample AL records:', alRecords.slice(0, 3).map(r => ({
               info_by_code: r.info_by_code,
               jobConfig: r.jobInfoByConfig,
