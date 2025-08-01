@@ -549,6 +549,7 @@ const BillingManagement = () => {
         runningPercentage = previousPercentage;
         
         for (const event of parsedEvents) {
+          console.log('Processing event:', event);
           runningTotal += event.amountBilled;
           runningPercentage += event.percentage / 100;
           const remainingDue = contract.contract_amount - runningTotal;
