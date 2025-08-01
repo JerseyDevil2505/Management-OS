@@ -1438,27 +1438,27 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         const isPricedCode = (infoByCategoryConfig.priced || []).includes(actualVendor === 'BRT' ? normalizedInfoBy || infoByCode : infoByCode);
         const isSpecialCode = (infoByCategoryConfig.special || []).includes(actualVendor === 'BRT' ? normalizedInfoBy || infoByCode : infoByCode);
         const hasListingData = record.inspection_list_by && record.inspection_list_date;
-                // NEW: List_by/List_date integrity validation
-        const listBy = record.inspection_list_by;
+        // NEW: List_by/List_date integrity validation
+        const listByValue = record.inspection_list_by;
         const listDateValue = record.inspection_list_date;
-        const listDate = listDateValue ? new Date(listDateValue) : null;
+        const parsedListDate = listDateValue ? new Date(listDateValue) : null;
         
         // Check for list_by with invalid employee or invalid date
-        if (listBy && listBy.trim() !== '') {
+        if (listByValue && listByValue.trim() !== '') {
           // Check if list_by is valid employee
-          if (!employeeData[listBy]) {
-            addValidationIssue(`Invalid list_by employee: ${listBy}`);
+          if (!employeeData[listByValue]) {
+            addValidationIssue(`Invalid list_by employee: ${listByValue}`);
           }
           // Check for missing or old date
-          if (!listDate) {
+          if (!parsedListDate) {
             addValidationIssue('Has list_by but missing list_date');
-          } else if (listDate < startDate) {
-            addValidationIssue(`Has list_by but old list_date (${listDate.toLocaleDateString()})`);
+          } else if (parsedListDate < startDate) {
+            addValidationIssue(`Has list_by but old list_date (${parsedListDate.toLocaleDateString()})`);
           }
         }
         
         // Check for list_date without list_by
-        if (listDate && listDate >= startDate && (!listBy || listBy.trim() === '')) {
+        if (parsedListDate && parsedListDate >= startDate && (!listByValue || listByValue.trim() === '')) {
           addValidationIssue('Has valid list_date but missing list_by');
         }
                   
