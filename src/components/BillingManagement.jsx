@@ -137,8 +137,9 @@ const BillingManagement = () => {
               job.billing_events.forEach(event => {
                 if (event.status === 'P') {
                   jobPaid += event.amount_billed;
-                } else if (event.status === '') {  // ADD THIS BLOCK
+                } else if (event.status === 'O') {   // Check for multiple possible open statuses
                   jobOpen += event.amount_billed;
+                  console.log('Open invoice found:', event.invoice_number, event.status, event.amount_billed); // Debug log
                 }
                 totalPercentageBilled += event.percentage_billed;
               });
@@ -155,6 +156,26 @@ const BillingManagement = () => {
             
             // Remaining excluding future retainer collections
             totalRemainingExcludingRetainer += (jobRemaining - remainingRetainer);
+          }
+        });
+      }
+            // Get legacy jobs with open invoices
+      const { data: legacyJobs } = await supabase
+        .from('jobs')
+        .select(`
+          job_contracts(contract_amount),
+          billing_events(amount_billed, status)
+        `)
+        .eq('job_type', 'legacy_billing');
+
+      if (legacyJobs) {
+        legacyJobs.forEach(job => {
+          if (job.billing_events) {
+            job.billing_events.forEach(event => {
+              } else if (event.status === 'O') { 
+                totalOpen += event.amount_billed;
+              }
+            });
           }
         });
       }
