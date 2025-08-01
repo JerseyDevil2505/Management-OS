@@ -69,6 +69,7 @@ const BillingManagement = () => {
   const [globalMetrics, setGlobalMetrics] = useState({
     totalSigned: 0,
     totalPaid: 0,
+    totalOpen: 0,
     totalRemaining: 0,
     totalRemainingExcludingRetainer: 0,
     dailyFringe: 0,
@@ -114,6 +115,7 @@ const BillingManagement = () => {
 
       let totalSigned = 0;
       let totalPaid = 0;
+      let totalOpen = 0;
       let totalRemaining = 0;
       let totalRemainingExcludingRetainer = 0;
 
@@ -128,18 +130,22 @@ const BillingManagement = () => {
             totalSigned += contractAmount;
 
             let jobPaid = 0;
+            let jobOpen = 0;  // ADD THIS LINE
             let totalPercentageBilled = 0;
 
             if (job.billing_events) {
               job.billing_events.forEach(event => {
                 if (event.status === 'P') {
                   jobPaid += event.amount_billed;
+                } else if (event.status === '') {  // ADD THIS BLOCK
+                  jobOpen += event.amount_billed;
                 }
                 totalPercentageBilled += event.percentage_billed;
               });
             }
 
             totalPaid += jobPaid;
+            totalOpen += jobOpen;  // ADD THIS LINE
             const jobRemaining = contractAmount - jobPaid;
             totalRemaining += jobRemaining;
             
@@ -209,7 +215,7 @@ const BillingManagement = () => {
       
       // Use average of monthly daily rates for projection
       const avgMonthlyDailyRate = monthsWithData > 0 ? totalDailyRates / monthsWithData : 0;
-      const projectedExpenses = avgMonthlyDailyRate * totalWorkingDays;
+      const projectedExpenses = avgMonthlyDailyRate * totalWorkingDays;  // This line stays the same
       
       // Keep YTD rate for display
       const dailyExpenseRate = workingDaysSoFar > 0 ? currentExpenses / workingDaysSoFar : 0;
@@ -222,9 +228,10 @@ const BillingManagement = () => {
       setGlobalMetrics({
         totalSigned,
         totalPaid,
+        totalOpen,
         totalRemaining,
         totalRemainingExcludingRetainer,
-        dailyFringe,
+        dailyFringe: avgMonthlyDailyRate || dailyExpenseRate,
         currentExpenses,
         projectedExpenses,
         profitLoss,
@@ -1030,7 +1037,7 @@ const BillingManagement = () => {
         <h2 className="text-lg font-semibold text-gray-800 mb-4">Business Overview</h2>
         
         {/* Revenue & Contract Metrics */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4">
           <div className="bg-white rounded-lg p-4 shadow-sm">
             <p className="text-sm text-gray-600 mb-1">Total Signed Contracts</p>
             <p className="text-2xl font-bold text-gray-900">{formatCurrency(globalMetrics.totalSigned)}</p>
@@ -1040,6 +1047,11 @@ const BillingManagement = () => {
             <p className="text-sm text-gray-600 mb-1">Total Amount Paid</p>
             <p className="text-2xl font-bold text-green-600">{formatCurrency(globalMetrics.totalPaid)}</p>
             <p className="text-xs text-gray-500 mt-1">All paid invoices</p>
+          </div>
+          <div className="bg-white rounded-lg p-4 shadow-sm">
+            <p className="text-sm text-gray-600 mb-1">Total Amount Open</p>
+            <p className="text-2xl font-bold text-orange-600">{formatCurrency(globalMetrics.totalOpen)}</p>
+            <p className="text-xs text-gray-500 mt-1">Unpaid invoices</p>
           </div>
           <div className="bg-white rounded-lg p-4 shadow-sm">
             <p className="text-sm text-gray-600 mb-1">Total Remaining</p>
@@ -1055,10 +1067,10 @@ const BillingManagement = () => {
         
         {/* Financial Performance Metrics */}
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-          <div className="bg-white rounded-lg p-4 shadow-sm border-2 border-yellow-400">
-            <p className="text-sm text-gray-600 mb-1">Daily Fringe Rate</p>
-            <p className="text-2xl font-bold text-yellow-600">{formatCurrency(globalMetrics.dailyFringe)}</p>
-            <p className="text-xs text-gray-500 mt-1">Expenses per working day</p>
+          <div className="bg-white rounded-lg p-4 shadow-sm border-2 border-red-400">
+            <p className="text-sm text-gray-600 mb-1">Daily Expense Rate</p>
+            <p className="text-2xl font-bold text-red-600">{formatCurrency(globalMetrics.dailyFringe)}</p>
+            <p className="text-xs text-gray-500 mt-1">Avg of monthly rates</p>
           </div>
           <div className="bg-white rounded-lg p-4 shadow-sm">
             <p className="text-sm text-gray-600 mb-1">Current Expenses</p>
