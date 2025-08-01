@@ -104,23 +104,23 @@ const PayrollManagement = () => {
     });
   };
 
-  const calculateExpectedHours = (startDate, endDate) => {
-    if (!startDate || !endDate) return 0;
+  // Determine payroll period based on end date
+  const getPayrollPeriod = (endDate) => {
+    if (!endDate) return '';
     
-    let start = new Date(startDate);
-    let end = new Date(endDate);
-    let weekdays = 0;
+    const end = new Date(endDate);
+    const day = end.getDate();
+    const month = end.getMonth();
+    const year = end.getFullYear();
     
-    // Include both start and end dates
-    while (start <= end) {
-      const dayOfWeek = start.getDay();
-      if (dayOfWeek !== 0 && dayOfWeek !== 6) { // Not Sunday or Saturday
-        weekdays++;
-      }
-      start.setDate(start.getDate() + 1);
+    if (day <= 15) {
+      // First half of month
+      return `${month + 1}/1/${year} - ${month + 1}/15/${year}`;
+    } else {
+      // Second half of month
+      const lastDay = new Date(year, month + 1, 0).getDate();
+      return `${month + 1}/16/${year} - ${month + 1}/${lastDay}/${year}`;
     }
-    
-    return weekdays * 8;
   };
 
   const calculateInspectionBonuses = async () => {
