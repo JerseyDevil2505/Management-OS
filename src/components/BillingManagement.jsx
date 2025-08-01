@@ -1381,7 +1381,7 @@ const BillingManagement = () => {
                           <div className="bg-white p-3 rounded-md border-2 border-blue-400">
                             <p className="text-sm text-gray-600">Remaining (No Retainer)</p>
                             <p className="text-lg font-semibold text-blue-600">
-                              {formatCurrency((totals.contractAmount - job.job_contracts[0].retainer_amount) - totals.totalAmountBilled)}
+                              {formatCurrency(totals.contractAmount - job.job_contracts[0].retainer_amount)}
                             </p>
                           </div>
                         </div>
