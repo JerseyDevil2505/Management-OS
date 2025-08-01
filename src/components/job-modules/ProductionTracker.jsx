@@ -1438,7 +1438,30 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         const isPricedCode = (infoByCategoryConfig.priced || []).includes(actualVendor === 'BRT' ? normalizedInfoBy || infoByCode : infoByCode);
         const isSpecialCode = (infoByCategoryConfig.special || []).includes(actualVendor === 'BRT' ? normalizedInfoBy || infoByCode : infoByCode);
         const hasListingData = record.inspection_list_by && record.inspection_list_date;
-
+                // NEW: List_by/List_date integrity validation
+        const listBy = record.inspection_list_by;
+        const listDateValue = record.inspection_list_date;
+        const listDate = listDateValue ? new Date(listDateValue) : null;
+        
+        // Check for list_by with invalid employee or invalid date
+        if (listBy && listBy.trim() !== '') {
+          // Check if list_by is valid employee
+          if (!employeeData[listBy]) {
+            addValidationIssue(`Invalid list_by employee: ${listBy}`);
+          }
+          // Check for missing or old date
+          if (!listDate) {
+            addValidationIssue('Has list_by but missing list_date');
+          } else if (listDate < startDate) {
+            addValidationIssue(`Has list_by but old list_date (${listDate.toLocaleDateString()})`);
+          }
+        }
+        
+        // Check for list_date without list_by
+        if (listDate && listDate >= startDate && (!listBy || listBy.trim() === '')) {
+          addValidationIssue('Has valid list_date but missing list_by');
+        }
+                  
         // Skip validation for special codes (V, N) - they're valid but don't need validation reports
         if (isSpecialCode) {
           // Special codes are valid inspections but bypass all validation rules
