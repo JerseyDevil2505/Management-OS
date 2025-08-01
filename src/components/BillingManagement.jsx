@@ -36,7 +36,13 @@ const BillingManagement = () => {
   const [legacyJobForm, setLegacyJobForm] = useState({
     jobName: '',
     contractAmount: '',
-    billingHistory: ''
+    billingHistory: '',
+    templateType: 'standard',
+    retainerPercentage: 0.10,
+    endOfJobPercentage: 0.05,
+    firstYearAppealsPercentage: 0.03,
+    secondYearAppealsPercentage: 0.02,
+    thirdYearAppealsPercentage: 0.00
   });
   const [globalMetrics, setGlobalMetrics] = useState({
     totalSigned: 0,
@@ -704,16 +710,16 @@ const BillingManagement = () => {
       const contractData = {
         job_id: newJob.id,
         contract_amount: parseFloat(legacyJobForm.contractAmount),
-        retainer_percentage: 0.10,
-        retainer_amount: parseFloat(legacyJobForm.contractAmount) * 0.10,
-        end_of_job_percentage: 0.05,
-        end_of_job_amount: parseFloat(legacyJobForm.contractAmount) * 0.05,
-        first_year_appeals_percentage: 0.03,
-        first_year_appeals_amount: parseFloat(legacyJobForm.contractAmount) * 0.03,
-        second_year_appeals_percentage: 0.02,
-        second_year_appeals_amount: parseFloat(legacyJobForm.contractAmount) * 0.02,
-        third_year_appeals_percentage: 0.00,
-        third_year_appeals_amount: 0
+        retainer_percentage: legacyJobForm.retainerPercentage,
+        retainer_amount: parseFloat(legacyJobForm.contractAmount) * legacyJobForm.retainerPercentage,
+        end_of_job_percentage: legacyJobForm.endOfJobPercentage,
+        end_of_job_amount: parseFloat(legacyJobForm.contractAmount) * legacyJobForm.endOfJobPercentage,
+        first_year_appeals_percentage: legacyJobForm.firstYearAppealsPercentage,
+        first_year_appeals_amount: parseFloat(legacyJobForm.contractAmount) * legacyJobForm.firstYearAppealsPercentage,
+        second_year_appeals_percentage: legacyJobForm.secondYearAppealsPercentage,
+        second_year_appeals_amount: parseFloat(legacyJobForm.contractAmount) * legacyJobForm.secondYearAppealsPercentage,
+        third_year_appeals_percentage: legacyJobForm.thirdYearAppealsPercentage,
+        third_year_appeals_amount: parseFloat(legacyJobForm.contractAmount) * legacyJobForm.thirdYearAppealsPercentage
       };
 
       const { error: contractError } = await supabase
@@ -760,7 +766,13 @@ const BillingManagement = () => {
       setLegacyJobForm({
         jobName: '',
         contractAmount: '',
-        billingHistory: ''
+        billingHistory: '',
+        templateType: 'standard',
+        retainerPercentage: 0.10,
+        endOfJobPercentage: 0.05,
+        firstYearAppealsPercentage: 0.03,
+        secondYearAppealsPercentage: 0.02,
+        thirdYearAppealsPercentage: 0.00
       });
       setActiveTab('legacy');
       loadJobs();
@@ -962,6 +974,64 @@ const BillingManagement = () => {
                         </div>
                       )}
 
+                      {/* Contract Breakdown */}
+                      {job.job_contracts?.[0] && (
+                        <div className="bg-white p-4 rounded-md border border-gray-200 mb-4">
+                          <p className="text-sm font-medium text-gray-700 mb-3">CONTRACT BREAKDOWN</p>
+                          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+                            <div>
+                              <p className="text-gray-600">Total Contract</p>
+                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].contract_amount)}</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-600">Retainer ({(job.job_contracts[0].retainer_percentage * 100).toFixed(0)}%)</p>
+                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].retainer_amount)}</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-600">End of Job ({(job.job_contracts[0].end_of_job_percentage * 100).toFixed(0)}%)</p>
+                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].end_of_job_amount)}</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-600">1st Yr Appeals ({(job.job_contracts[0].first_year_appeals_percentage * 100).toFixed(0)}%)</p>
+                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].first_year_appeals_amount)}</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-600">2nd Yr Appeals ({(job.job_contracts[0].second_year_appeals_percentage * 100).toFixed(0)}%)</p>
+                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].second_year_appeals_amount)}</p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Contract Breakdown */}
+                      {job.job_contracts?.[0] && (
+                        <div className="bg-white p-4 rounded-md border border-gray-200 mb-4">
+                          <p className="text-sm font-medium text-gray-700 mb-3">CONTRACT BREAKDOWN</p>
+                          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+                            <div>
+                              <p className="text-gray-600">Total Contract</p>
+                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].contract_amount)}</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-600">Retainer ({(job.job_contracts[0].retainer_percentage * 100).toFixed(0)}%)</p>
+                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].retainer_amount)}</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-600">End of Job ({(job.job_contracts[0].end_of_job_percentage * 100).toFixed(0)}%)</p>
+                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].end_of_job_amount)}</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-600">1st Yr Appeals ({(job.job_contracts[0].first_year_appeals_percentage * 100).toFixed(0)}%)</p>
+                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].first_year_appeals_amount)}</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-600">2nd Yr Appeals ({(job.job_contracts[0].second_year_appeals_percentage * 100).toFixed(0)}%)</p>
+                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].second_year_appeals_amount)}</p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
                       {/* Billing Events Table */}
                       {job.billing_events && job.billing_events.length > 0 && (
                         <div className="bg-white rounded-md overflow-hidden">
@@ -1027,83 +1097,49 @@ const BillingManagement = () => {
                   <p className="text-gray-600">No planned jobs found. Create them in the Admin Jobs section.</p>
                 </div>
               ) : (
-                planningJobs.filter(job => !job.is_archived).map(job => {
-                  // Calculate breakdown amounts
-                  const contractAmount = parseFloat(job.contract_amount) || 0;
-                  const retainerAmount = contractAmount * 0.10;
-                  const turnoverAmount = contractAmount * 0.05;
-                  const appealsAmount = contractAmount * 0.03;
-                  
-                  return (
-                    <div key={job.id} className="border-2 border-gray-300 rounded-lg p-6 bg-gray-50">
-                      <div className="flex justify-between items-start mb-4">
-                        <div className="flex items-center space-x-3">
-                          <h3 className="text-xl font-semibold text-gray-900">{job.municipality || job.job_name || 'Unnamed Job'}</h3>
-                          {job.ccdd_code && (
-                            <span className="px-2 py-1 text-xs rounded-full bg-gray-200 text-gray-700">
-                              {job.ccdd_code}
-                            </span>
-                          )}
-                          <span className="px-2 py-1 text-xs rounded-full bg-orange-100 text-orange-800">
-                            Planned
+                planningJobs.filter(job => !job.is_archived).map(job => (
+                  <div key={job.id} className="border-2 border-gray-300 rounded-lg p-6 bg-gray-50">
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="flex items-center space-x-3">
+                        <h3 className="text-xl font-semibold text-gray-900">{job.municipality || job.job_name || 'Unnamed Job'}</h3>
+                        {job.ccdd_code && (
+                          <span className="px-2 py-1 text-xs rounded-full bg-gray-200 text-gray-700">
+                            {job.ccdd_code}
                           </span>
-                        </div>
-                        <button
-                          onClick={() => handleRolloverToActive(job)}
-                          className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
-                          disabled={!job.contract_amount}
-                          title={!job.contract_amount ? "Set contract amount first" : "Roll over to active jobs"}
-                        >
-                          Roll to Active →
-                        </button>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-600 mb-1">Contract Amount</label>
-                          <input
-                            type="number"
-                            value={job.contract_amount || ''}
-                            onChange={(e) => handleUpdatePlannedContract(job.id, e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded text-lg font-semibold"
-                            placeholder="Enter amount"
-                          />
-                        </div>
-                        
-                        {contractAmount > 0 && (
-                          <div className="bg-white p-3 rounded-md border border-gray-200">
-                            <p className="text-xs font-medium text-gray-600 mb-2">CONTRACT BREAKDOWN</p>
-                            <div className="space-y-1 text-sm">
-                              <div className="flex justify-between">
-                                <span className="text-gray-600">Retainer (10%)</span>
-                                <span className="font-medium">{formatCurrency(retainerAmount)}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-gray-600">Turnover (5%)</span>
-                                <span className="font-medium">{formatCurrency(turnoverAmount)}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-gray-600">Appeals (3%)</span>
-                                <span className="font-medium">{formatCurrency(appealsAmount)}</span>
-                              </div>
-                              <div className="flex justify-between pt-2 border-t border-gray-200">
-                                <span className="font-medium text-gray-700">Total</span>
-                                <span className="font-bold text-gray-900">{formatCurrency(contractAmount)}</span>
-                              </div>
-                            </div>
-                          </div>
                         )}
+                        <span className="px-2 py-1 text-xs rounded-full bg-orange-100 text-orange-800">
+                          Planned
+                        </span>
                       </div>
-
-                      {job.start_date && (
-                        <div className="text-sm text-gray-600">
-                          Target: {new Date(job.start_date).toLocaleDateString()}
-                          {job.end_date && ` - ${new Date(job.end_date).toLocaleDateString()}`}
-                        </div>
-                      )}
+                      <button
+                        onClick={() => handleRolloverToActive(job)}
+                        className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+                        disabled={!job.contract_amount}
+                        title={!job.contract_amount ? "Set contract amount first" : "Roll over to active jobs"}
+                      >
+                        Roll to Active →
+                      </button>
                     </div>
-                  );
-                })
+
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-gray-600 mb-1">Contract Amount</label>
+                      <input
+                        type="number"
+                        value={job.contract_amount || ''}
+                        onChange={(e) => handleUpdatePlannedContract(job.id, e.target.value)}
+                        className="w-32 px-3 py-2 border border-gray-300 rounded text-lg font-semibold"
+                        placeholder="Enter amount"
+                      />
+                    </div>
+
+                    {job.start_date && (
+                      <div className="text-sm text-gray-600">
+                        Target: {new Date(job.start_date).toLocaleDateString()}
+                        {job.end_date && ` - ${new Date(job.end_date).toLocaleDateString()}`}
+                      </div>
+                    )}
+                  </div>
+                ))
               )}
             </div>
           )}
@@ -1701,6 +1737,119 @@ const BillingManagement = () => {
               </div>
 
               <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Contract Template
+                </label>
+                <div className="space-y-2">
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      value="standard"
+                      checked={legacyJobForm.templateType === 'standard'}
+                      onChange={(e) => {
+                        setLegacyJobForm(prev => ({
+                          ...prev,
+                          templateType: e.target.value,
+                          retainerPercentage: 0.10,
+                          endOfJobPercentage: 0.05,
+                          firstYearAppealsPercentage: 0.03,
+                          secondYearAppealsPercentage: 0.02,
+                          thirdYearAppealsPercentage: 0.00
+                        }));
+                      }}
+                      className="mr-2"
+                    />
+                    Standard (10% retainer, 5% end, 3%+2% appeals)
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      value="custom"
+                      checked={legacyJobForm.templateType === 'custom'}
+                      onChange={(e) => setLegacyJobForm(prev => ({ ...prev, templateType: e.target.value }))}
+                      className="mr-2"
+                    />
+                    Custom Configuration
+                  </label>
+                </div>
+              </div>
+
+              {legacyJobForm.templateType === 'custom' && (
+                <div className="space-y-3 pl-6 border-l-2 border-gray-200">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Retainer %
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="1"
+                      value={legacyJobForm.retainerPercentage}
+                      onChange={(e) => setLegacyJobForm(prev => ({ ...prev, retainerPercentage: parseFloat(e.target.value) }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      End of Job %
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="1"
+                      value={legacyJobForm.endOfJobPercentage}
+                      onChange={(e) => setLegacyJobForm(prev => ({ ...prev, endOfJobPercentage: parseFloat(e.target.value) }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      1st Year Appeals %
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="1"
+                      value={legacyJobForm.firstYearAppealsPercentage}
+                      onChange={(e) => setLegacyJobForm(prev => ({ ...prev, firstYearAppealsPercentage: parseFloat(e.target.value) }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      2nd Year Appeals %
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="1"
+                      value={legacyJobForm.secondYearAppealsPercentage}
+                      onChange={(e) => setLegacyJobForm(prev => ({ ...prev, secondYearAppealsPercentage: parseFloat(e.target.value) }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      3rd Year Appeals %
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="1"
+                      value={legacyJobForm.thirdYearAppealsPercentage}
+                      onChange={(e) => setLegacyJobForm(prev => ({ ...prev, thirdYearAppealsPercentage: parseFloat(e.target.value) }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Billing History (Optional - paste from Excel)
                 </label>
@@ -1726,7 +1875,13 @@ const BillingManagement = () => {
                   setLegacyJobForm({
                     jobName: '',
                     contractAmount: '',
-                    billingHistory: ''
+                    billingHistory: '',
+                    templateType: 'standard',
+                    retainerPercentage: 0.10,
+                    endOfJobPercentage: 0.05,
+                    firstYearAppealsPercentage: 0.03,
+                    secondYearAppealsPercentage: 0.02,
+                    thirdYearAppealsPercentage: 0.00
                   });
                 }}
                 className="px-4 py-2 text-gray-600 hover:text-gray-800"
