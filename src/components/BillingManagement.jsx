@@ -527,6 +527,10 @@ const BillingManagement = () => {
   const handleAddBillingEvent = async () => {
     if (!selectedJob || !selectedJob.job_contracts?.[0]) return;
     
+    console.log('showBulkPaste:', showBulkPaste);
+    console.log('bulkBillingText:', bulkBillingText);
+    console.log('bulkBillingText trimmed:', bulkBillingText.trim())
+    
     try {
       const contract = selectedJob.job_contracts[0];
       
