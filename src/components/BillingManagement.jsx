@@ -172,7 +172,7 @@ const BillingManagement = () => {
         legacyJobs.forEach(job => {
           if (job.billing_events) {
             job.billing_events.forEach(event => {
-              } else if (event.status === 'O') { 
+              if (event.status === 'O') {  // Changed from "} else if" to just "if"
                 totalOpen += event.amount_billed;
               }
             });
