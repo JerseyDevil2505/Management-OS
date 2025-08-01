@@ -443,8 +443,18 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
         // Skip empty rows
         if (!block && !lot) continue;
 
+        // Format block to match processor behavior
+        let formattedBlock = block;
+        if (block.includes('.') && !block.endsWith('0')) {
+          // Add trailing zero to single decimal (44.17 → 44.170)
+          const parts = block.split('.');
+          if (parts[1] && parts[1].length === 2) {
+            formattedBlock = block + '0';
+          }
+        }
+
         // Ensure consistent composite key format matching processors
-        const compositeKey = `${year}${ccdd}-${block}-${lot}_${qual || 'NONE'}-${card || 'NONE'}-${location || 'NONE'}`;
+        const compositeKey = `${year}${ccdd}-${formattedBlock}-${lot}_${qual || 'NONE'}-${card || 'NONE'}-${location || 'NONE'}`;
         
         assignments.push({
           property_composite_key: compositeKey,
