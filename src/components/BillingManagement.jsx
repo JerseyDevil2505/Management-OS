@@ -890,6 +890,113 @@ const BillingManagement = () => {
     }
   };
 
+  const handleExpenseImport = async () => {
+    if (!expenseFile) return;
+    
+    try {
+      // Read the file
+      const arrayBuffer = await expenseFile.arrayBuffer();
+      const data = new Uint8Array(arrayBuffer);
+      
+      // Parse with SheetJS
+      const workbook = XLSX.read(data, { type: 'array' });
+      
+      // Get first sheet only
+      const firstSheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[firstSheetName];
+      
+      // Convert to JSON
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+      
+      // Find the header row (contains month names)
+      let headerRowIndex = -1;
+      for (let i = 0; i < jsonData.length; i++) {
+        const row = jsonData[i];
+        if (row.includes('January') || row.includes('JAN') || row.includes('Jan')) {
+          headerRowIndex = i;
+          break;
+        }
+      }
+      
+      if (headerRowIndex === -1) {
+        alert('Could not find month headers in the file');
+        return;
+      }
+      
+      // Get month column indices (skip % columns)
+      const monthColumns = {};
+      const headerRow = jsonData[headerRowIndex];
+      const months = ['January', 'February', 'March', 'April', 'May', 'June', 
+                     'July', 'August', 'September', 'October', 'November', 'December'];
+      
+      months.forEach((month, index) => {
+        for (let col = 0; col < headerRow.length; col++) {
+          if (headerRow[col] && headerRow[col].toString().toLowerCase().includes(month.toLowerCase().substring(0, 3))) {
+            monthColumns[index + 1] = col; // Store month number (1-12) -> column index
+            break;
+          }
+        }
+      });
+      
+      // Process expense rows
+      const currentYear = new Date().getFullYear();
+      const expenseData = [];
+      
+      // Start from row after header, stop at SUB TOTAL or empty rows
+      for (let rowIndex = headerRowIndex + 1; rowIndex < jsonData.length; rowIndex++) {
+        const row = jsonData[rowIndex];
+        const category = row[0]; // First column is category
+        
+        // Skip if no category or if it's a total row
+        if (!category || 
+            category.toString().toUpperCase().includes('TOTAL') ||
+            category.toString().toUpperCase().includes('FRINGE')) {
+          continue;
+        }
+        
+        // Extract amounts for each month
+        for (const [monthNum, colIndex] of Object.entries(monthColumns)) {
+          const amount = row[colIndex];
+          if (amount && !isNaN(parseFloat(amount))) {
+            expenseData.push({
+              category: category.toString().trim(),
+              month: parseInt(monthNum),
+              year: currentYear,
+              amount: parseFloat(amount)
+            });
+          }
+        }
+      }
+      
+      // Clear existing expenses for the year
+      await supabase
+        .from('expenses')
+        .delete()
+        .eq('year', currentYear);
+      
+      // Insert new expenses
+      if (expenseData.length > 0) {
+        const { error } = await supabase
+          .from('expenses')
+          .insert(expenseData);
+        
+        if (error) throw error;
+        
+        alert(`Successfully imported ${expenseData.length} expense entries`);
+        setShowExpenseImport(false);
+        setExpenseFile(null);
+        loadExpenses(); // Reload the expenses
+        calculateGlobalMetrics(); // Update metrics
+      } else {
+        alert('No expense data found in the file');
+      }
+      
+    } catch (error) {
+      console.error('Error importing expenses:', error);
+      alert('Error importing file: ' + error.message);
+    }
+  };  
+  
   const getJobStatusColor = (job) => {
     const totals = calculateBillingTotals(job);
     if (!totals) return 'bg-gray-100';
@@ -2326,7 +2433,7 @@ const BillingManagement = () => {
                 Cancel
               </button>
               <button
-                onClick={() => {
+                onClick={handleExpenseImport}
                   // Import logic will go here
                   alert('Import functionality will be implemented with the expense processing logic');
                   setShowExpenseImport(false);
