@@ -144,6 +144,15 @@ const BillingManagement = () => {
 
         if (jobsError) throw jobsError;
         setJobs(jobsData || []);
+      } else if (activeTab === 'planned') {
+        // Load planning jobs
+        const { data: planningData, error: planningError } = await supabase
+          .from('planning_jobs')
+          .select('*')
+          .eq('is_archived', false);
+
+        if (planningError) throw planningError;
+        setPlanningJobs(planningData || []);
       } else if (activeTab === 'legacy') {
         // Load legacy billing-only jobs
         const { data: legacyData, error: legacyError } = await supabase
