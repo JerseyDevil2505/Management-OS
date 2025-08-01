@@ -1,34 +1,4 @@
-<td className="px-4 py-2 text-sm text-gray-900">
-                                        {(() => {
-                                          // Calculate cumulative percentage up to but not including this event
-                                          const sortedPriorEvents = job.billing_events
-                                            .sort((a, b) => new Date(a.billing_date) - new Date(b.billing_date))
-                                            .slice(0, index);
-                                          const priorPercentage = sortedPriorEvents.reduce((sum, e) => sum + e.percentage_billed, 0);
-                                          
-                                          // Check if we've hit 100% with prior events
-                                          if (priorPercentage >= 1.0) {
-                                            // This is a post-100% event
-                                            const contract = job.job_contracts[0];
-                                            
-                                            // Check which percentage this matches
-                                            if (Math.abs(event.percentage_billed - contract.retainer_percentage) < 0.001) {
-                                              return <span className="font-medium text-green-700">Retainer Payout</span>;
-                                            } else if (Math.abs(event.percentage_billed - contract.end_of_job_percentage) < 0.001) {
-                                              return <span className="font-medium text-blue-700">Turnover</span>;
-                                            } else if (Math.abs(event.percentage_billed - contract.first_year_appeals_percentage) < 0.001) {
-                                              return <span className="font-medium text-purple-700">1st Yr Appeals</span>;
-                                            } else if (Math.abs(event.percentage_billed - contract.second_year_appeals_percentage) < 0.001) {
-                                              return <span className="font-medium text-purple-700">2nd Yr Appeals</span>;
-                                            } else if (contract.third_year_appeals_percentage && 
-                                                     Math.abs(event.percentage_billed - contract.third_year_appeals_percentage) < 0.001) {
-                                              return <span className="font-medium text-purple-700">3rd Yr Appeals</span>;
-                                            } else {
-                                              return <span className="font-medium text-gray-700">Special {(event.percentage_billed * 100).toFixed(2)}%</span>;
-                                            }
-                                          } else {
-                                            // Regular percentage display
-                                            return `${(event.percentage_billed * 100).toFixed(2import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
 const BillingManagement = () => {
@@ -60,6 +30,7 @@ const BillingManagement = () => {
     11: 18, // Nov
     12: 22  // Dec
   };
+
   const [contractSetup, setContractSetup] = useState({
     contractAmount: '',
     templateType: 'standard',
@@ -109,6 +80,9 @@ const BillingManagement = () => {
   useEffect(() => {
     loadJobs();
     calculateGlobalMetrics();
+    if (activeTab === 'expenses') {
+      loadExpenses();
+    }
   }, [activeTab]);
 
   const calculateGlobalMetrics = async () => {
@@ -249,6 +223,23 @@ const BillingManagement = () => {
     }
   };
 
+  const loadExpenses = async () => {
+    try {
+      const currentYear = new Date().getFullYear();
+      const { data: expenseData, error } = await supabase
+        .from('expenses')
+        .select('*')
+        .eq('year', currentYear)
+        .order('category')
+        .order('month');
+
+      if (error) throw error;
+      setExpenses(expenseData || []);
+    } catch (error) {
+      console.error('Error loading expenses:', error);
+    }
+  };
+
   const loadJobs = async () => {
     try {
       setLoading(true);
@@ -272,7 +263,7 @@ const BillingManagement = () => {
         const { data: planningData, error: planningError } = await supabase
           .from('planning_jobs')
           .select('*')
-          .eq('is_archived', false);
+          .or('is_archived.eq.false,is_archived.is.null');
 
         if (planningError) throw planningError;
         setPlanningJobs(planningData || []);
@@ -712,7 +703,7 @@ const BillingManagement = () => {
       const { data: newJob, error: jobError } = await supabase
         .from('jobs')
         .insert({
-          job_name: planningJob.job_name,
+          job_name: planningJob.job_name || planningJob.municipality,
           vendor: planningJob.vendor,
           job_type: 'standard',
           billing_setup_complete: true,
@@ -752,7 +743,7 @@ const BillingManagement = () => {
         .update({ is_archived: true })
         .eq('id', planningJob.id);
 
-      alert(`Successfully rolled over "${planningJob.job_name}" to active jobs!`);
+      alert(`Successfully rolled over "${planningJob.job_name || planningJob.municipality}" to active jobs!`);
       setActiveTab('active');
       loadJobs();
     } catch (error) {
@@ -823,7 +814,7 @@ const BillingManagement = () => {
 
       if (jobError) throw jobError;
 
-      // Create the contract with standard percentages
+      // Create the contract with specified percentages
       const contractData = {
         job_id: newJob.id,
         contract_amount: parseFloat(legacyJobForm.contractAmount),
@@ -1171,35 +1162,6 @@ const BillingManagement = () => {
                         </div>
                       )}
 
-                      {/* Contract Breakdown */}
-                      {job.job_contracts?.[0] && (
-                        <div className="bg-white p-4 rounded-md border border-gray-200 mb-4">
-                          <p className="text-sm font-medium text-gray-700 mb-3">CONTRACT BREAKDOWN</p>
-                          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
-                            <div>
-                              <p className="text-gray-600">Total Contract</p>
-                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].contract_amount)}</p>
-                            </div>
-                            <div>
-                              <p className="text-gray-600">Retainer ({(job.job_contracts[0].retainer_percentage * 100).toFixed(0)}%)</p>
-                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].retainer_amount)}</p>
-                            </div>
-                            <div>
-                              <p className="text-gray-600">End of Job ({(job.job_contracts[0].end_of_job_percentage * 100).toFixed(0)}%)</p>
-                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].end_of_job_amount)}</p>
-                            </div>
-                            <div>
-                              <p className="text-gray-600">1st Yr Appeals ({(job.job_contracts[0].first_year_appeals_percentage * 100).toFixed(0)}%)</p>
-                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].first_year_appeals_amount)}</p>
-                            </div>
-                            <div>
-                              <p className="text-gray-600">2nd Yr Appeals ({(job.job_contracts[0].second_year_appeals_percentage * 100).toFixed(0)}%)</p>
-                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].second_year_appeals_amount)}</p>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
                       {/* Billing Events Table */}
                       {job.billing_events && job.billing_events.length > 0 && (
                         <div className="bg-white rounded-md overflow-hidden">
@@ -1404,7 +1366,7 @@ const BillingManagement = () => {
                       </div>
 
                       {totals && (
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
                           <div className="bg-white p-3 rounded-md">
                             <p className="text-sm text-gray-600">Contract Amount</p>
                             <p className="text-lg font-semibold">{formatCurrency(totals.contractAmount)}</p>
@@ -1420,6 +1382,41 @@ const BillingManagement = () => {
                           <div className="bg-white p-3 rounded-md">
                             <p className="text-sm text-gray-600">Remaining Due</p>
                             <p className="text-lg font-semibold">{formatCurrency(totals.remainingDue)}</p>
+                          </div>
+                          <div className="bg-white p-3 rounded-md border-2 border-blue-400">
+                            <p className="text-sm text-gray-600">Remaining (No Retainer)</p>
+                            <p className="text-lg font-semibold text-blue-600">
+                              {formatCurrency(totals.remainingDue - (job.job_contracts[0].retainer_amount * (1 - totals.totalPercentageBilled / 100)))}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Contract Breakdown */}
+                      {job.job_contracts?.[0] && (
+                        <div className="bg-white p-4 rounded-md border border-gray-200 mb-4">
+                          <p className="text-sm font-medium text-gray-700 mb-3">CONTRACT BREAKDOWN</p>
+                          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+                            <div>
+                              <p className="text-gray-600">Total Contract</p>
+                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].contract_amount)}</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-600">Retainer ({(job.job_contracts[0].retainer_percentage * 100).toFixed(0)}%)</p>
+                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].retainer_amount)}</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-600">End of Job ({(job.job_contracts[0].end_of_job_percentage * 100).toFixed(0)}%)</p>
+                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].end_of_job_amount)}</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-600">1st Yr Appeals ({(job.job_contracts[0].first_year_appeals_percentage * 100).toFixed(0)}%)</p>
+                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].first_year_appeals_amount)}</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-600">2nd Yr Appeals ({(job.job_contracts[0].second_year_appeals_percentage * 100).toFixed(0)}%)</p>
+                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].second_year_appeals_amount)}</p>
+                            </div>
                           </div>
                         </div>
                       )}
@@ -1522,6 +1519,145 @@ const BillingManagement = () => {
                     </div>
                   );
                 })
+              )}
+            </div>
+          )}
+
+          {/* Expenses Tab */}
+          {activeTab === 'expenses' && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-semibold text-gray-900">Monthly Expenses - {new Date().getFullYear()}</h2>
+                <button
+                  onClick={() => setShowExpenseImport(true)}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                >
+                  Import Excel
+                </button>
+              </div>
+
+              {expenses.length === 0 ? (
+                <div className="text-center py-12 bg-gray-50 rounded-lg">
+                  <p className="text-gray-600 mb-4">No expense data found.</p>
+                  <p className="text-sm text-gray-500">Click "Import Excel" to upload your expense file.</p>
+                </div>
+              ) : (
+                <div className="bg-white rounded-lg shadow overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead>
+                        <tr className="bg-gray-50">
+                          <th className="px-6 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-0 bg-gray-50">
+                            Category
+                          </th>
+                          {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map((month, idx) => (
+                            <th key={month} className="px-6 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              {month}
+                            </th>
+                          ))}
+                          <th className="px-6 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-100">
+                            Total
+                          </th>
+                        </tr>
+                        <tr className="bg-blue-50">
+                          <td className="px-6 py-2 text-xs font-medium text-blue-700 sticky left-0 bg-blue-50">
+                            Working Days
+                          </td>
+                          {Object.values(workingDays2025).map((days, idx) => (
+                            <td key={idx} className="px-6 py-2 text-center text-xs font-semibold text-blue-700">
+                              {days}
+                            </td>
+                          ))}
+                          <td className="px-6 py-2 text-center text-xs font-bold text-blue-700 bg-blue-100">
+                            {Object.values(workingDays2025).reduce((sum, days) => sum + days, 0)}
+                          </td>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {/* Group expenses by category */}
+                        {(() => {
+                          const expensesByCategory = {};
+                          const categoryTotals = {};
+                          
+                          expenses.forEach(expense => {
+                            if (!expensesByCategory[expense.category]) {
+                              expensesByCategory[expense.category] = new Array(12).fill(0);
+                              categoryTotals[expense.category] = 0;
+                            }
+                            expensesByCategory[expense.category][expense.month - 1] = expense.amount;
+                            categoryTotals[expense.category] += parseFloat(expense.amount);
+                          });
+                          
+                          return Object.entries(expensesByCategory).map(([category, monthlyAmounts]) => (
+                            <tr key={category} className="hover:bg-gray-50">
+                              <td className="px-6 py-4 text-sm font-medium text-gray-900 sticky left-0 bg-white">
+                                {category}
+                              </td>
+                              {monthlyAmounts.map((amount, idx) => (
+                                <td key={idx} className="px-6 py-4 text-sm text-right text-gray-900">
+                                  {amount > 0 ? formatCurrency(amount) : '-'}
+                                </td>
+                              ))}
+                              <td className="px-6 py-4 text-sm text-right font-semibold text-gray-900 bg-gray-50">
+                                {formatCurrency(categoryTotals[category])}
+                              </td>
+                            </tr>
+                          ));
+                        })()}
+                        
+                        {/* Totals Row */}
+                        <tr className="bg-gray-100 font-semibold">
+                          <td className="px-6 py-4 text-sm text-gray-900 sticky left-0 bg-gray-100">
+                            TOTAL
+                          </td>
+                          {(() => {
+                            const monthlyTotals = new Array(12).fill(0);
+                            expenses.forEach(expense => {
+                              monthlyTotals[expense.month - 1] += parseFloat(expense.amount);
+                            });
+                            
+                            return monthlyTotals.map((total, idx) => (
+                              <td key={idx} className="px-6 py-4 text-sm text-right text-gray-900">
+                                {total > 0 ? formatCurrency(total) : '-'}
+                              </td>
+                            ));
+                          })()}
+                          <td className="px-6 py-4 text-sm text-right text-gray-900 bg-gray-200">
+                            {formatCurrency(expenses.reduce((sum, exp) => sum + parseFloat(exp.amount), 0))}
+                          </td>
+                        </tr>
+                        
+                        {/* Daily Average Row */}
+                        <tr className="bg-yellow-50 font-medium">
+                          <td className="px-6 py-4 text-sm text-yellow-800 sticky left-0 bg-yellow-50">
+                            Daily Average
+                          </td>
+                          {(() => {
+                            const monthlyTotals = new Array(12).fill(0);
+                            expenses.forEach(expense => {
+                              monthlyTotals[expense.month - 1] += parseFloat(expense.amount);
+                            });
+                            
+                            return monthlyTotals.map((total, idx) => {
+                              const dailyAvg = total / workingDays2025[idx + 1];
+                              return (
+                                <td key={idx} className="px-6 py-4 text-sm text-right text-yellow-800">
+                                  {total > 0 ? formatCurrency(dailyAvg) : '-'}
+                                </td>
+                              );
+                            });
+                          })()}
+                          <td className="px-6 py-4 text-sm text-right text-yellow-800 bg-yellow-100">
+                            {formatCurrency(
+                              expenses.reduce((sum, exp) => sum + parseFloat(exp.amount), 0) / 
+                              Object.values(workingDays2025).reduce((sum, days) => sum + days, 0)
+                            )}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               )}
             </div>
           )}
