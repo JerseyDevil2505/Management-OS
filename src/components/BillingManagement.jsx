@@ -622,14 +622,43 @@ const BillingManagement = () => {
 
         if (error) throw error;
 
-        // Update jobs.percent_billed
+// Update jobs.percent_billed
         const newTotalPercentage = existingEvents.reduce((sum, event) => sum + parseFloat(event.percentage_billed || 0), 0) + percentageDecimal;
         await supabase
           .from('jobs')
           .update({ percent_billed: newTotalPercentage })
           .eq('id', selectedJob.id);
+          
+        // Update the job in state without reloading
+        setJobs(prevJobs => 
+          prevJobs.map(job => {
+            if (job.id === selectedJob.id) {
+              // Add the new event to this job
+              const newEvent = {
+                id: Date.now(), // Temporary ID
+                job_id: selectedJob.id,
+                billing_date: billingForm.billingDate,
+                percentage_billed: percentageDecimal,
+                status: billingForm.status,
+                invoice_number: billingForm.invoiceNumber,
+                total_amount: totalAmount,
+                retainer_amount: retainerAmount,
+                amount_billed: amountBilled,
+                remaining_due: remainingDue,
+                notes: billingForm.notes
+              };
+              
+              return {
+                ...job,
+                billing_events: [...(job.billing_events || []), newEvent],
+                percent_billed: newTotalPercentage
+              };
+            }
+            return job;
+          })
+        );
       }
-
+      
       setShowBillingForm(false);
       setBillingForm({
         billingDate: new Date().toISOString().split('T')[0],
@@ -640,7 +669,6 @@ const BillingManagement = () => {
         manualOverride: false,
         overrideAmount: ''
       });
-      loadJobs();
       calculateGlobalMetrics();
     } catch (error) {
       console.error('Error adding billing event:', error);
