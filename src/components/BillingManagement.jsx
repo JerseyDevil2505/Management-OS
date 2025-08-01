@@ -1649,7 +1649,7 @@ const BillingManagement = () => {
                             Category
                           </th>
                           {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map((month, idx) => (
-                            <th key={month} className="px-6 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            <th key={month} className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                               {month}
                             </th>
                           ))}
