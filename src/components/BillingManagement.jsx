@@ -1127,7 +1127,7 @@ const BillingManagement = () => {
                           <div className="bg-white p-3 rounded-md border-2 border-blue-400">
                             <p className="text-sm text-gray-600">Remaining (No Retainer)</p>
                             <p className="text-lg font-semibold text-blue-600">
-                              {formatCurrency(totals.remainingDue - (job.job_contracts[0].retainer_amount * (1 - totals.totalPercentageBilled / 100)))}
+                              {formatCurrency((totals.contractAmount - job.job_contracts[0].retainer_amount) - totals.totalAmountBilled)}
                             </p>
                           </div>
                         </div>
@@ -1182,15 +1182,10 @@ const BillingManagement = () => {
                               {job.billing_events
                                 .sort((a, b) => new Date(a.billing_date) - new Date(b.billing_date))
                                 .map((event, index) => {
-                                  // Calculate cumulative percentage billed up to this point
-                                  const sortedEvents = job.billing_events.sort((a, b) => new Date(a.billing_date) - new Date(b.billing_date));
-                                  let cumulativePercentage = 0;
-                                  for (let i = 0; i <= index; i++) {
-                                    cumulativePercentage += sortedEvents[i].percentage_billed;
-                                  }
-                                  const remainingPercentage = 1 - cumulativePercentage;
-                                  const remainingRetainer = job.job_contracts[0].retainer_amount * remainingPercentage;
-                                  const remainingNoRetainer = event.remaining_due - remainingRetainer;
+                                  // Simple calculation: (Contract - Total Retainer) - Amount Billed So Far
+                                  const contractMinusRetainer = job.job_contracts[0].contract_amount - job.job_contracts[0].retainer_amount;
+                                  const amountBilledSoFar = job.job_contracts[0].contract_amount - event.remaining_due;
+                                  const remainingNoRetainer = contractMinusRetainer - amountBilledSoFar;
                                   
                                   return (
                                     <tr 
@@ -1386,7 +1381,7 @@ const BillingManagement = () => {
                           <div className="bg-white p-3 rounded-md border-2 border-blue-400">
                             <p className="text-sm text-gray-600">Remaining (No Retainer)</p>
                             <p className="text-lg font-semibold text-blue-600">
-                              {formatCurrency(totals.remainingDue - (job.job_contracts[0].retainer_amount * (1 - totals.totalPercentageBilled / 100)))}
+                              {formatCurrency((totals.contractAmount - job.job_contracts[0].retainer_amount) - totals.totalAmountBilled)}
                             </p>
                           </div>
                         </div>
@@ -1441,15 +1436,10 @@ const BillingManagement = () => {
                               {job.billing_events
                                 .sort((a, b) => new Date(a.billing_date) - new Date(b.billing_date))
                                 .map((event, index) => {
-                                  // Calculate cumulative percentage billed up to this point
-                                  const sortedEvents = job.billing_events.sort((a, b) => new Date(a.billing_date) - new Date(b.billing_date));
-                                  let cumulativePercentage = 0;
-                                  for (let i = 0; i <= index; i++) {
-                                    cumulativePercentage += sortedEvents[i].percentage_billed;
-                                  }
-                                  const remainingPercentage = 1 - cumulativePercentage;
-                                  const remainingRetainer = job.job_contracts[0].retainer_amount * remainingPercentage;
-                                  const remainingNoRetainer = event.remaining_due - remainingRetainer;
+                                  // Simple calculation: (Contract - Total Retainer) - Amount Billed So Far
+                                  const contractMinusRetainer = job.job_contracts[0].contract_amount - job.job_contracts[0].retainer_amount;
+                                  const amountBilledSoFar = job.job_contracts[0].contract_amount - event.remaining_due;
+                                  const remainingNoRetainer = contractMinusRetainer - amountBilledSoFar;
                                   
                                   return (
                                     <tr 
