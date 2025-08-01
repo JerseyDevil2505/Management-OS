@@ -5,6 +5,7 @@ import * as XLSX from 'xlsx';
 const BillingManagement = () => {
   const [activeTab, setActiveTab] = useState('active');
   const [jobs, setJobs] = useState([]);
+  const [legacyJobs, setLegacyJobs] = useState([]);
   const [planningJobs, setPlanningJobs] = useState([]);
   const [expenses, setExpenses] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -320,7 +321,7 @@ const BillingManagement = () => {
           .eq('job_type', 'legacy_billing');
 
         if (legacyError) throw legacyError;
-        setJobs(legacyData || []);
+        setLegacyJobs(legacyData || []);
       }
     } catch (error) {
       console.error('Error loading jobs:', error);
@@ -1517,12 +1518,12 @@ const BillingManagement = () => {
                 </button>
               </div>
 
-              {jobs.length === 0 ? (
+              {legacyJobs.length === 0 ? (
                 <div className="text-center py-12 bg-gray-50 rounded-lg">
                   <p className="text-gray-600">No legacy billing jobs found. Click "Add Legacy Job" to create one.</p>
                 </div>
               ) : (
-                jobs.map(job => {
+                legacyJobs.map(job => {
                   const totals = calculateBillingTotals(job);
                   const needsContractSetup = !job.job_contracts || job.job_contracts.length === 0;
                   
