@@ -642,13 +642,15 @@ export class BRTUpdater {
       };
       
       console.log(`Batch UPSERTING ${propertyRecords.length} property records...`);
-      const batchSize = 1000;
+      const batchSize = 500; // Reduced from 1000
+      let consecutiveErrors = 0;
       
       for (let i = 0; i < propertyRecords.length; i += batchSize) {
         const batch = propertyRecords.slice(i, i + batchSize);
         const batchNumber = Math.floor(i / batchSize) + 1;
+        const totalBatches = Math.ceil(propertyRecords.length / batchSize);
         
-        console.log(`🚀 UPSERT batch ${batchNumber}: records ${i + 1} to ${Math.min(i + batchSize, propertyRecords.length)}`);
+        console.log(`🚀 UPSERT batch ${batchNumber} of ${totalBatches}: records ${i + 1} to ${Math.min(i + batchSize, propertyRecords.length)}`);
         
         const result = await this.upsertBatchWithRetry(batch, batchNumber);
         
@@ -656,9 +658,24 @@ export class BRTUpdater {
           console.error(`❌ UPSERT Batch ${batchNumber} failed:`, result.error);
           results.errors += batch.length;
           results.warnings.push(`Batch ${batchNumber} failed: ${result.error.message}`);
+          
+          // Increase delay on errors
+          consecutiveErrors++;
+          const errorDelay = Math.min(consecutiveErrors * 2000, 10000);
+          console.log(`⚠️ Waiting ${errorDelay/1000}s before continuing due to errors...`);
+          await new Promise(resolve => setTimeout(resolve, errorDelay));
         } else {
           results.processed += batch.length;
-          console.log(`✅ UPSERT Batch ${batchNumber} completed successfully`);
+          console.log(`✅ UPSERT Batch ${batchNumber} completed successfully (${results.processed}/${propertyRecords.length} total)`);
+          
+          // Reset error counter on success
+          consecutiveErrors = 0;
+          
+          // Small delay between successful batches
+          if (i + batchSize < propertyRecords.length) {
+            console.log(`⏳ Pausing 0.5s before next batch...`);
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
         }
       }
       
