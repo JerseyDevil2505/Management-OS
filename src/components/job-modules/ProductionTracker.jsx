@@ -1350,34 +1350,6 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
           inspectorIssuesMap[inspector] = [];
         }
 
-        // Check for any inspection attempt
-        const hasAnyInspectionAttempt = (
-          (record.inspection_measure_by && record.inspection_measure_by.trim() !== '') ||
-          record.inspection_measure_date ||
-          record.inspection_info_by ||
-          record.inspection_list_by ||
-          record.inspection_price_by
-        );
-
-        if (!hasAnyInspectionAttempt) {
-          // Property not yet inspected - skip validation entirely
-          reasonNotAdded = 'Not yet inspected';
-          missingProperties.push({
-            composite_key: propertyKey,
-            block: record.property_block,
-            lot: record.property_lot,
-            qualifier: record.property_qualifier || '',
-            property_location: record.property_location || '',
-            property_class: propertyClass,
-            reason: reasonNotAdded,
-            inspector: '',
-            info_by_code: '',
-            measure_date: null,
-            validation_issues: []
-          });
-          return;
-        }
-
         // Validate attempted inspections
         let isValidInspection = true;
         let hasValidMeasuredBy = inspector && inspector !== 'UNASSIGNED' && inspector.trim() !== '';
