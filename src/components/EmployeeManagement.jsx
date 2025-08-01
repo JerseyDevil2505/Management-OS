@@ -477,6 +477,7 @@ const EmployeeManagement = () => {
         refusalRate: totalResidentialInspections > 0 ? 
           Math.round((totalResidentialRefusals / totalResidentialInspections) * 100) : 0,
         otherProperties: filteredData.filter(r => 
+          r.measure_by === initials && 
           !['2', '3A', '4A', '4B', '4C'].includes(r.property_class)
         ).length
       };
@@ -490,6 +491,7 @@ const EmployeeManagement = () => {
         pricing: totalPricing,
         pricingAvgPerDay: pricingDailyAvg,
         otherProperties: filteredData.filter(r => 
+          r.measure_by === initials && 
           !['2', '3A', '4A', '4B', '4C'].includes(r.property_class)
         ).length
       };
