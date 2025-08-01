@@ -13,6 +13,9 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
   const [missingPropertiesReport, setMissingPropertiesReport] = useState(null);
   const [sessionHistory, setSessionHistory] = useState([]);
   const [notifications, setNotifications] = useState([]);
+
+  // NEW: Track properties going to external contractors
+  const [unassignedPropertyCount, setUnassignedPropertyCount] = useState(0);
   
   // NEW: Track if we loaded from database to prevent race condition
   const [loadedFromDatabase, setLoadedFromDatabase] = useState(false);
@@ -23,6 +26,27 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
     priced: 0
   });
   
+   // Load unassigned property count (properties going to external contractors)
+  const loadUnassignedPropertyCount = async () => {
+    if (!jobData?.id || !latestFileVersion) return;
+
+    try {
+      const { count, error } = await supabase
+        .from('property_records')
+        .select('*', { count: 'exact', head: true })
+        .eq('job_id', jobData.id)
+        .eq('file_version', latestFileVersion)
+        .eq('is_assigned_property', false);
+
+      if (!error && count !== null) {
+        setUnassignedPropertyCount(count);
+        debugLog('UNASSIGNED', `Found ${count} unassigned properties (external contractor work)`);
+      }
+    } catch (error) {
+      console.error('Error loading unassigned property count:', error);
+    }
+  };
+
   // Settings state - Enhanced InfoBy category configuration
   const [availableInfoByCodes, setAvailableInfoByCodes] = useState([]);
   const [infoByCategoryConfig, setInfoByCategoryConfig] = useState({
@@ -957,6 +981,9 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         
         // Finally load commercial counts
         await loadCommercialCounts();
+
+        // Load unassigned property count
+        await loadUnassignedPropertyCount();
         
         setLoading(false);
       };
