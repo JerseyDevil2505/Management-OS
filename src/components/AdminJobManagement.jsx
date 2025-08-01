@@ -824,6 +824,7 @@ useEffect(() => {
       
       if (connectionTest.success) {
         const activeJobs = jobsData.filter(job => job.status !== 'archived' && job.job_type !== 'legacy_billing');
+        console.log('Job types:', jobsData.map(j => ({ name: j.job_name, type: j.job_type })));
         const archived = jobsData.filter(job => job.status === 'archived');
         
         // Set jobs immediately without waiting for counts
