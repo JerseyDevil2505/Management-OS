@@ -112,13 +112,6 @@ const BillingManagement = () => {
         .select('*')
         .eq('year', currentYear);
 
-      // Get revenue data
-      const { data: revenueInfo } = await supabase
-        .from('revenue_summary')
-        .select('total_revenue')
-        .eq('year', currentYear)
-        .single();
-
       let totalSigned = 0;
       let totalPaid = 0;
       let totalRemaining = 0;
@@ -196,7 +189,7 @@ const BillingManagement = () => {
       const totalWorkingDays = Object.values(workingDays2025).reduce((sum, days) => sum + days, 0);
 
       // Calculate daily fringe (expense rate) and projections
-      const revenue = revenueInfo?.total_revenue || totalPaid; // Use total paid as fallback
+      const revenue = totalPaid; // Use total paid invoices as revenue
       const dailyFringe = workingDaysSoFar > 0 ? currentExpenses / workingDaysSoFar : 0;
       
       // Project expenses for full year based on current run rate
