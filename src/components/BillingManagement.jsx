@@ -2188,7 +2188,7 @@ const BillingManagement = () => {
                   className="w-full px-3 py-2 border border-gray-300 rounded-md"
                 >
                   <option value="P">Paid</option>
-                  <option value="O">Open</option>  <!-- Make sure this says "O" not "" -->
+                  <option value="O">Open</option>  
                 </select>
               </div>
 
