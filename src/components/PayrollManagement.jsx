@@ -130,81 +130,6 @@ const PayrollManagement = () => {
     }
   };
 
-  const calculateExpectedHours = (startDate, endDate) => {
-    if (!startDate || !endDate) return 0;
-    
-    let start = new Date(startDate);
-    let end = new Date(endDate);
-    let weekdays = 0;
-    
-    // Include both start and end dates
-    while (start <= end) {
-      const dayOfWeek = start.getDay();
-      if (dayOfWeek !== 0 && dayOfWeek !== 6) { // Not Sunday or Saturday
-        weekdays++;
-      }
-      start.setDate(start.getDate() + 1);
-    }
-    
-    return weekdays * 8;
-  };
-
-  const calculateCurrentPayrollPeriod = () => {
-    const today = new Date();
-    const currentDay = today.getDate();
-    const currentMonth = today.getMonth();
-    const currentYear = today.getFullYear();
-    
-    let startDate, endDate;
-    
-    // Determine which half of month we're in
-    if (currentDay <= 15) {
-      // First half - period is 1st to 15th
-      startDate = new Date(currentYear, currentMonth, 1);
-      endDate = new Date(currentYear, currentMonth, 15);
-    } else {
-      // Second half - period is 16th to end of month
-      startDate = new Date(currentYear, currentMonth, 16);
-      endDate = new Date(currentYear, currentMonth + 1, 0); // Last day of month
-    }
-    
-    // Adjust end date if it falls on weekend
-    const endDay = endDate.getDay();
-    if (endDay === 6) { // Saturday
-      endDate.setDate(endDate.getDate() - 1); // Move to Friday
-    } else if (endDay === 0) { // Sunday
-      endDate.setDate(endDate.getDate() - 2); // Move to Friday
-    }
-    
-    // Calculate expected hours (weekdays * 8)
-    const expectedHours = calculateExpectedHours(startDate, endDate);
-    
-    setPayrollPeriod({
-      startDate: startDate.toISOString().split('T')[0],
-      endDate: endDate.toISOString().split('T')[0],
-      expectedHours
-    });
-  };
-
-  // Determine payroll period based on end date
-  const getPayrollPeriod = (endDate) => {
-    if (!endDate) return '';
-    
-    const end = new Date(endDate);
-    const day = end.getDate();
-    const month = end.getMonth();
-    const year = end.getFullYear();
-    
-    if (day <= 15) {
-      // First half of month
-      return `${month + 1}/1/${year} - ${month + 1}/15/${year}`;
-    } else {
-      // Second half of month
-      const lastDay = new Date(year, month + 1, 0).getDate();
-      return `${month + 1}/16/${year} - ${month + 1}/${lastDay}/${year}`;
-    }
-  };
-
   const calculateInspectionBonuses = async () => {
     setIsProcessing(true);
     setError(null);
@@ -229,11 +154,11 @@ const PayrollManagement = () => {
         .gte('measure_date', startDate)
         .lte('measure_date', endDate)
         .in('measure_by', validInitials)
-        .in('property_class', ['2', '3A']); // Only unprocessed inspections
+        .in('property_class', ['2', '3A']);
 
       if (countError) throw countError;
       
-      console.log(`Total unprocessed inspections: ${count}`);
+      console.log(`Total inspections to process: ${count}`);
 
       // Process in batches
       const batchSize = 1000;
@@ -484,10 +409,11 @@ const PayrollManagement = () => {
             const extractedEnd = new Date(periodMatch[2]).toISOString().split('T')[0];
             
             // Verify it matches our calculated period
-            if (extractedEnd !== payrollPeriod.endDate) {
+            const expectedPeriod = getPayrollPeriod(extractedEnd);
+            if (!expectedPeriod.includes(periodMatch[2])) {
               issues.push({
                 type: 'warning',
-                message: `📅 Period mismatch: Sheet shows ${periodMatch[2]}, expected ${payrollPeriod.endDate}`
+                message: `📅 Period mismatch: Sheet shows ${periodMatch[2]}, expected ${expectedPeriod}`
               });
             }
           }
@@ -654,7 +580,7 @@ const PayrollManagement = () => {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 mb-2">Payroll Management</h1>
-            <p className="text-gray-600">Leann's chaos detector & inspection bonus calculator</p>
+            <p className="text-gray-600">Office Manager chaos detector & inspection bonus calculator</p>
           </div>
           <div className="text-right">
             <p className="text-sm text-gray-500">Today's Date</p>
@@ -830,152 +756,170 @@ const PayrollManagement = () => {
 
           {/* Step 2: Calculate Bonuses */}
           {payrollData.length > 0 && !worksheetIssues.some(i => i.type === 'error') && (
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <h2 className="text-xl font-semibold mb-4">Step 2: Calculate Field Bonuses</h2>
-              
-              <div className="flex items-center space-x-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Job Filter</label>
-                  <select
-                    value={selectedJob}
-                    onChange={(e) => setSelectedJob(e.target.value)}
-                    className="px-3 py-2 border border-gray-300 rounded-md"
-                  >
-                    <option value="all">All Active Jobs</option>
-                    {jobs.map(job => (
-                      <option key={job.id} value={job.id}>
-                        {job.ccdd} - {job.job_name}
-                      </option>
-                    ))}
-                  </select>
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+              <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0 w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white font-semibold">
+                    2
+                  </div>
+                  <h2 className="ml-3 text-lg font-semibold text-gray-900">Calculate Field Bonuses</h2>
                 </div>
-                
-                <button
-                  onClick={calculateInspectionBonuses}
-                  disabled={isProcessing || !payrollPeriod.startDate || !payrollPeriod.endDate}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {isProcessing ? 'Calculating...' : 'Calculate Inspection Bonuses'}
-                </button>
+              </div>
+              
+              <div className="p-6">
+                <div className="flex items-center space-x-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Job Filter</label>
+                    <select
+                      value={selectedJob}
+                      onChange={(e) => setSelectedJob(e.target.value)}
+                      className="px-3 py-2 border border-gray-300 rounded-md"
+                    >
+                      <option value="all">All Active Jobs</option>
+                      {jobs.map(job => (
+                        <option key={job.id} value={job.id}>
+                          {job.ccdd} - {job.job_name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  <button
+                    onClick={calculateInspectionBonuses}
+                    disabled={isProcessing || !payrollPeriod.startDate || !payrollPeriod.endDate}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {isProcessing ? 'Calculating...' : 'Calculate Inspection Bonuses'}
+                  </button>
+                </div>
               </div>
             </div>
           )}
 
           {/* Step 3: Review and Export */}
           {payrollData.length > 0 && Object.keys(inspectionBonuses).length > 0 && (
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <h2 className="text-xl font-semibold mb-4">Step 3: Review and Export</h2>
-              
-              {/* Summary Stats */}
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-                <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 rounded-lg border border-blue-200">
-                  <p className="text-xs font-medium text-blue-600 uppercase tracking-wider">Employees</p>
-                  <p className="mt-1 text-2xl font-bold text-blue-900">{payrollData.length}</p>
-                </div>
-                <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-4 rounded-lg border border-purple-200">
-                  <p className="text-xs font-medium text-purple-600 uppercase tracking-wider">Total Hours</p>
-                  <p className="mt-1 text-2xl font-bold text-purple-900">
-                    {mergePayrollWithBonuses().reduce((sum, emp) => sum + (typeof emp.hours === 'number' ? emp.hours : 0), 0)}
-                  </p>
-                </div>
-                <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-4 rounded-lg border border-orange-200">
-                  <p className="text-xs font-medium text-orange-600 uppercase tracking-wider">Appt OT</p>
-                  <p className="mt-1 text-2xl font-bold text-orange-900">
-                    ${mergePayrollWithBonuses().reduce((sum, emp) => sum + (emp.apptOT || 0), 0).toFixed(2)}
-                  </p>
-                </div>
-                <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded-lg border border-green-200">
-                  <p className="text-xs font-medium text-green-600 uppercase tracking-wider">Field Bonus</p>
-                  <p className="mt-1 text-2xl font-bold text-green-900">
-                    ${mergePayrollWithBonuses().reduce((sum, emp) => sum + emp.calculatedFieldOT, 0).toFixed(2)}
-                  </p>
-                </div>
-                <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 p-4 rounded-lg border border-indigo-200">
-                  <p className="text-xs font-medium text-indigo-600 uppercase tracking-wider">TOTAL OT</p>
-                  <p className="mt-1 text-2xl font-bold text-indigo-900">
-                    ${mergePayrollWithBonuses().reduce((sum, emp) => sum + emp.calculatedTotal, 0).toFixed(2)}
-                  </p>
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+              <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0 w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white font-semibold">
+                    3
+                  </div>
+                  <h2 className="ml-3 text-lg font-semibold text-gray-900">Review and Export</h2>
                 </div>
               </div>
+              
+              <div className="p-6">
+                {/* Summary Stats */}
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+                  <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 rounded-lg border border-blue-200">
+                    <p className="text-xs font-medium text-blue-600 uppercase tracking-wider">Employees</p>
+                    <p className="mt-1 text-2xl font-bold text-blue-900">{payrollData.length}</p>
+                  </div>
+                  <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-4 rounded-lg border border-purple-200">
+                    <p className="text-xs font-medium text-purple-600 uppercase tracking-wider">Total Hours</p>
+                    <p className="mt-1 text-2xl font-bold text-purple-900">
+                      {mergePayrollWithBonuses().reduce((sum, emp) => sum + (typeof emp.hours === 'number' ? emp.hours : 0), 0)}
+                    </p>
+                  </div>
+                  <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-4 rounded-lg border border-orange-200">
+                    <p className="text-xs font-medium text-orange-600 uppercase tracking-wider">Appt OT</p>
+                    <p className="mt-1 text-2xl font-bold text-orange-900">
+                      ${mergePayrollWithBonuses().reduce((sum, emp) => sum + (emp.apptOT || 0), 0).toFixed(2)}
+                    </p>
+                  </div>
+                  <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded-lg border border-green-200">
+                    <p className="text-xs font-medium text-green-600 uppercase tracking-wider">Field Bonus</p>
+                    <p className="mt-1 text-2xl font-bold text-green-900">
+                      ${mergePayrollWithBonuses().reduce((sum, emp) => sum + emp.calculatedFieldOT, 0).toFixed(2)}
+                    </p>
+                  </div>
+                  <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 p-4 rounded-lg border border-indigo-200">
+                    <p className="text-xs font-medium text-indigo-600 uppercase tracking-wider">TOTAL OT</p>
+                    <p className="mt-1 text-2xl font-bold text-indigo-900">
+                      ${mergePayrollWithBonuses().reduce((sum, emp) => sum + emp.calculatedTotal, 0).toFixed(2)}
+                    </p>
+                  </div>
+                </div>
 
-              {/* Employee Data Table */}
-              <div className="overflow-hidden shadow ring-1 ring-black ring-opacity-5 md:rounded-lg">
-                <table className="min-w-full divide-y divide-gray-300">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hours</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Appt OT</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Field Bonus</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-indigo-50">TOTAL OT</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Issues</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200 bg-white">
-                    {mergePayrollWithBonuses().map((employee, index) => (
-                      <tr key={index} className={`hover:bg-gray-50 ${getRowColor(employee)}`}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {employee.worksheetName}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {employee.hours === 'same' ? (
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                              Salary
-                            </span>
-                          ) : (
-                            <span className="font-mono">{employee.hours}</span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-mono">
-                          ${(employee.apptOT || 0).toFixed(2)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600 font-mono">
-                          ${employee.calculatedFieldOT.toFixed(2)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-indigo-600 bg-indigo-50 font-mono">
-                          ${employee.calculatedTotal.toFixed(2)}
-                        </td>
-                        <td className="px-6 py-4 text-sm">
-                          {employee.issues.length > 0 && (
-                            <div className="space-y-1">
-                              {employee.issues.map((issue, idx) => (
-                                <div key={idx} className="text-xs">
-                                  {issue}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </td>
+                {/* Employee Data Table */}
+                <div className="overflow-hidden shadow ring-1 ring-black ring-opacity-5 md:rounded-lg">
+                  <table className="min-w-full divide-y divide-gray-300">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hours</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Appt OT</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Field Bonus</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-indigo-50">TOTAL OT</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Issues</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              
-              <div className="mt-6 flex items-center justify-between">
-                <div className="flex space-x-3">
-                  <button
-                    onClick={exportToADP}
-                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
-                  >
-                    <svg className="mr-2 -ml-1 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    Export to ADP
-                  </button>
-                  <button
-                    onClick={markInspectionsProcessed}
-                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-purple-700 bg-purple-100 hover:bg-purple-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500"
-                  >
-                    <svg className="mr-2 -ml-1 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    Mark as Processed
-                  </button>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200 bg-white">
+                      {mergePayrollWithBonuses().map((employee, index) => (
+                        <tr key={index} className={`hover:bg-gray-50 ${getRowColor(employee)}`}>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            {employee.worksheetName}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {employee.hours === 'same' ? (
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                Salary
+                              </span>
+                            ) : (
+                              <span className="font-mono">{employee.hours}</span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-mono">
+                            ${(employee.apptOT || 0).toFixed(2)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600 font-mono">
+                            ${employee.calculatedFieldOT.toFixed(2)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-indigo-600 bg-indigo-50 font-mono">
+                            ${employee.calculatedTotal.toFixed(2)}
+                          </td>
+                          <td className="px-6 py-4 text-sm">
+                            {employee.issues.length > 0 && (
+                              <div className="space-y-1">
+                                {employee.issues.map((issue, idx) => (
+                                  <div key={idx} className="text-xs">
+                                    {issue}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-                <p className="text-sm text-gray-500">
-                  <span className="font-medium">Remember:</span> Enter TOTAL OT column into ADP
-                </p>
+                
+                <div className="mt-6 flex items-center justify-between">
+                  <div className="flex space-x-3">
+                    <button
+                      onClick={exportToADP}
+                      className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                    >
+                      <svg className="mr-2 -ml-1 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      Export to ADP
+                    </button>
+                    <button
+                      onClick={markInspectionsProcessed}
+                      className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-purple-700 bg-purple-100 hover:bg-purple-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500"
+                    >
+                      <svg className="mr-2 -ml-1 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      Mark as Processed
+                    </button>
+                  </div>
+                  <p className="text-sm text-gray-500">
+                    <span className="font-medium">Remember:</span> Enter TOTAL OT column into ADP
+                  </p>
+                </div>
               </div>
             </div>
           )}
@@ -984,7 +928,7 @@ const PayrollManagement = () => {
 
       {/* Settings Tab */}
       {activeTab === 'settings' && (
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <h2 className="text-xl font-semibold mb-4">Payroll Settings</h2>
           <div className="space-y-6">
             <div>
@@ -1004,32 +948,14 @@ const PayrollManagement = () => {
               </div>
             </div>
             
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Processing Lead Time
-              </label>
-              <div className="flex items-center space-x-2">
-                <input
-                  type="number"
-                  min="1"
-                  max="5"
-                  value={leadDays}
-                  onChange={(e) => setLeadDays(parseInt(e.target.value) || 2)}
-                  className="w-20 px-3 py-2 border border-gray-300 rounded-md"
-                />
-                <span className="text-sm text-gray-600">days before payroll period ends</span>
-              </div>
-            </div>
-            
             <div className="p-4 bg-blue-50 rounded-md">
               <h3 className="text-sm font-medium text-blue-900 mb-2">How it works:</h3>
               <ul className="text-sm text-blue-800 space-y-1">
-                <li>• Payroll periods: 1st-15th and 16th-end of month</li>
-                <li>• Weekend adjustment: If period ends on weekend, moves to Friday</li>
-                <li>• Expected hours: Automatically calculated based on weekdays</li>
+                <li>• Enter bonus calculation dates (can include days before period start)</li>
+                <li>• System displays the actual payroll period (1-15 or 16-end)</li>
+                <li>• Expected hours calculated based on standard payroll period</li>
                 <li>• Only counts Class 2 & 3A residential inspections</li>
-                <li>• Tracks processed inspections to prevent double-counting</li>
-                <li>• Validates Leann's worksheet for errors and inconsistencies</li>
+                <li>• Validates worksheet for errors and inconsistencies</li>
               </ul>
             </div>
             
