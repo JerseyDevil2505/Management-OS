@@ -442,23 +442,7 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
 
         // Skip empty rows
         if (!block && !lot) continue;
-
-        // Format block to match processor behavior
-        let formattedBlock = block;
-        if (block.includes('.')) {
-          const parts = block.split('.');
-          const afterDecimal = parts[1];
-          
-          // Only add trailing zero if:
-          // - It's 1 digit: .1 → .10
-          // - It's 2 digits AND doesn't start with 0: .17 → .170
-          if (afterDecimal && afterDecimal.length === 1) {
-            formattedBlock = block + '0';
-          } else if (afterDecimal && afterDecimal.length === 2 && !afterDecimal.startsWith('0')) {
-            formattedBlock = block + '0';
-          }
-        }
-        
+       
         // Ensure consistent composite key format matching processors
         const compositeKey = `${year}${ccdd}-${formattedBlock}-${formattedLot}_${qual || 'NONE'}-${card || 'NONE'}-${location || 'NONE'}`;
         
