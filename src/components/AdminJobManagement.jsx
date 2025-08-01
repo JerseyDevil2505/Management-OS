@@ -447,17 +447,15 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
         let formattedBlock = block;
         if (block.includes('.')) {
           const parts = block.split('.');
-          if (parts[1] && (parts[1].length === 1 || parts[1].length === 2)) {
+          const afterDecimal = parts[1];
+          
+          // Only add trailing zero if:
+          // - It's 1 digit: .1 → .10
+          // - It's 2 digits AND doesn't start with 0: .17 → .170
+          if (afterDecimal && afterDecimal.length === 1) {
             formattedBlock = block + '0';
-          }
-        }
-        
-        // Format lot to match processor behavior
-        let formattedLot = lot;
-        if (lot.includes('.')) {
-          const parts = lot.split('.');
-          if (parts[1] && (parts[1].length === 1 || parts[1].length === 2)) {
-            formattedLot = lot + '0';
+          } else if (afterDecimal && afterDecimal.length === 2 && !afterDecimal.startsWith('0')) {
+            formattedBlock = block + '0';
           }
         }
 
