@@ -451,9 +451,18 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
             formattedBlock = block + '0';
           }
         }
+        
+        // Format lot to match processor behavior
+        let formattedLot = lot;
+        if (lot.includes('.')) {
+          const parts = lot.split('.');
+          if (parts[1] && (parts[1].length === 1 || parts[1].length === 2)) {
+            formattedLot = lot + '0';
+          }
+        }
 
         // Ensure consistent composite key format matching processors
-        const compositeKey = `${year}${ccdd}-${formattedBlock}-${lot}_${qual || 'NONE'}-${card || 'NONE'}-${location || 'NONE'}`;
+        const compositeKey = `${year}${ccdd}-${formattedBlock}-${formattedLot}_${qual || 'NONE'}-${card || 'NONE'}-${location || 'NONE'}`;
         
         assignments.push({
           property_composite_key: compositeKey,
