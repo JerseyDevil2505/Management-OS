@@ -192,9 +192,27 @@ const BillingManagement = () => {
       const revenue = totalPaid; // Use total paid invoices as revenue
       const dailyFringe = workingDaysSoFar > 0 ? currentExpenses / workingDaysSoFar : 0;
       
-      // Project expenses for full year based on current run rate
+      // Calculate average of monthly daily rates for better projection
+      let monthlyDailyRates = [];
+      let totalDailyRates = 0;
+      let monthsWithData = 0;
+      
+      for (let month = 1; month <= currentMonth; month++) {
+        const monthExpense = monthlyExpenses[month - 1];
+        if (monthExpense > 0) {
+          const dailyRate = monthExpense / workingDays2025[month];
+          monthlyDailyRates.push(dailyRate);
+          totalDailyRates += dailyRate;
+          monthsWithData++;
+        }
+      }
+      
+      // Use average of monthly daily rates for projection
+      const avgMonthlyDailyRate = monthsWithData > 0 ? totalDailyRates / monthsWithData : 0;
+      const projectedExpenses = avgMonthlyDailyRate * totalWorkingDays;
+      
+      // Keep YTD rate for display
       const dailyExpenseRate = workingDaysSoFar > 0 ? currentExpenses / workingDaysSoFar : 0;
-      const projectedExpenses = dailyExpenseRate * totalWorkingDays;
       
       // Calculate profit/loss
       const projectedRevenue = dailyFringe * totalWorkingDays;
@@ -1040,7 +1058,7 @@ const BillingManagement = () => {
           <div className="bg-white rounded-lg p-4 shadow-sm border-2 border-yellow-400">
             <p className="text-sm text-gray-600 mb-1">Daily Fringe Rate</p>
             <p className="text-2xl font-bold text-yellow-600">{formatCurrency(globalMetrics.dailyFringe)}</p>
-            <p className="text-xs text-gray-500 mt-1">Revenue per working day</p>
+            <p className="text-xs text-gray-500 mt-1">Expenses per working day</p>
           </div>
           <div className="bg-white rounded-lg p-4 shadow-sm">
             <p className="text-sm text-gray-600 mb-1">Current Expenses</p>
