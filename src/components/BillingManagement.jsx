@@ -161,7 +161,7 @@ const BillingManagement = () => {
       }
             // Get legacy jobs with open invoices
       const { data: legacyJobs } = await supabase
-        .from('jobs')
+        .from('archived_jobs')
         .select(`
           job_contracts(contract_amount),
           billing_events(amount_billed, status)
@@ -310,7 +310,7 @@ const BillingManagement = () => {
       } else if (activeTab === 'legacy') {
         // Load legacy billing-only jobs
         const { data: legacyData, error: legacyError } = await supabase
-          .from('jobs')
+          .from('archived_jobs')
           .select(`
             *,
             job_contracts(*),
@@ -842,7 +842,7 @@ const BillingManagement = () => {
     try {
       // Create the legacy job
       const { data: newJob, error: jobError } = await supabase
-        .from('jobs')
+        .from('archived_jobs')  // Changed from 'jobs'
         .insert({
           job_name: legacyJobForm.jobName,
           job_type: 'legacy_billing',
