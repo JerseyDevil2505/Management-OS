@@ -349,13 +349,21 @@ const BillingManagement = () => {
   };
 
   const parseBillingHistory = (text) => {
+    console.log('Raw text to parse:', text);
+    console.log('Text length:', text.length);
     // Parse pasted billing history
     // Format: 12/4/2024 10.00% D 12240225 $49,935.00 $4,994.00 $0.00 $44,941.00
     const lines = text.trim().split('\n');
+    console.log('Lines after split:', lines);
+    console.log('Number of lines:', lines.length);
     const parsedEvents = [];
     
     lines.forEach(line => {
+      console.log(`Line ${index}:`, line);
+      console.log(`Line ${index} length:`, line.length);
       const parts = line.trim().split('\t');
+      console.log(`Line ${index} parts:`, parts);
+      console.log(`Line ${index} parts count:`, parts.length);
       if (parts.length >= 8) {
         const date = parts[0];
         const percentage = parseFloat(parts[1].replace('%', ''));
