@@ -25,8 +25,15 @@ const PayrollManagement = () => {
 
   useEffect(() => {
     loadInitialData();
-    calculateCurrentPayrollPeriod();
   }, []);
+
+  // Calculate expected hours when dates change
+  useEffect(() => {
+    if (payrollPeriod.startDate && payrollPeriod.endDate) {
+      const hours = calculateExpectedHours(payrollPeriod.startDate, payrollPeriod.endDate);
+      setPayrollPeriod(prev => ({ ...prev, expectedHours: hours }));
+    }
+  }, [payrollPeriod.startDate, payrollPeriod.endDate]);
 
   const loadInitialData = async () => {
     try {
@@ -119,19 +126,11 @@ const PayrollManagement = () => {
     setSuccessMessage(null);
     
     try {
-      // Calculate the actual start date for bonus calculations
-      // This is leadDays before the period start to catch orphaned inspections
-      const periodStart = new Date(payrollPeriod.startDate);
-      const bonusStartDate = new Date(periodStart);
-      bonusStartDate.setDate(bonusStartDate.getDate() - leadDays);
-      
-      const startDate = lastProcessedEnd 
-        ? new Date(new Date(lastProcessedEnd).getTime() + 86400000).toISOString().split('T')[0]
-        : bonusStartDate.toISOString().split('T')[0];
+      // Use the dates as entered by the user
+      const startDate = payrollPeriod.startDate;
       const endDate = payrollPeriod.endDate;
       
-      console.log(`Payroll period: ${payrollPeriod.startDate} to ${endDate}`);
-      console.log(`Counting inspections from: ${startDate} to ${endDate}`);
+      console.log(`Calculating bonuses from ${startDate} to ${endDate}`);
       
       // Get all initials from eligible employees
       const validInitials = employees
@@ -142,11 +141,10 @@ const PayrollManagement = () => {
       const { count, error: countError } = await supabase
         .from('inspection_data')
         .select('*', { count: 'exact', head: true })
-        .gt('measure_date', startDate)
+        .gte('measure_date', startDate)
         .lte('measure_date', endDate)
         .in('measure_by', validInitials)
-        .in('property_class', ['2', '3A'])
-        .is('payroll_period_end', null); // Only unprocessed inspections
+        .in('property_class', ['2', '3A']); // Only unprocessed inspections
 
       if (countError) throw countError;
       
@@ -164,11 +162,10 @@ const PayrollManagement = () => {
         let query = supabase
           .from('inspection_data')
           .select('id, measure_by, measure_date, property_class, property_composite_key, property_location, job_id')
-          .gt('measure_date', startDate)
+          .gte('measure_date', startDate)
           .lte('measure_date', endDate)
           .in('measure_by', validInitials)
           .in('property_class', ['2', '3A'])
-          .is('payroll_period_end', null)
           .range(from, to);
 
         if (selectedJob !== 'all') {
@@ -633,14 +630,22 @@ const PayrollManagement = () => {
             
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
               <div className="space-y-1">
-                <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Period</p>
-                <p className="text-base font-semibold text-gray-900">
-                  {payrollPeriod.startDate && payrollPeriod.endDate && (
-                    <>
-                      {new Date(payrollPeriod.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - {new Date(payrollPeriod.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                    </>
-                  )}
-                </p>
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Date Range</p>
+                <div className="flex items-center space-x-2">
+                  <input 
+                    type="date" 
+                    value={payrollPeriod.startDate}
+                    onChange={(e) => setPayrollPeriod(prev => ({ ...prev, startDate: e.target.value }))}
+                    className="px-2 py-1 text-sm border border-gray-300 rounded"
+                  />
+                  <span className="text-gray-500">to</span>
+                  <input 
+                    type="date" 
+                    value={payrollPeriod.endDate}
+                    onChange={(e) => setPayrollPeriod(prev => ({ ...prev, endDate: e.target.value }))}
+                    className="px-2 py-1 text-sm border border-gray-300 rounded"
+                  />
+                </div>
               </div>
               <div className="space-y-1">
                 <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Expected Hours</p>
@@ -667,14 +672,7 @@ const PayrollManagement = () => {
             {lastProcessedEnd && (
               <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
                 <p className="text-sm text-blue-800">
-                  <span className="font-medium">Note:</span> Only inspections after {new Date(lastProcessedEnd).toLocaleDateString()} will be included
-                </p>
-              </div>
-            )}
-            {!lastProcessedEnd && (
-              <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-md">
-                <p className="text-sm text-amber-800">
-                  <span className="font-medium">First Run:</span> Will count inspections from {leadDays} days before period start ({new Date(new Date(payrollPeriod.startDate).getTime() - (leadDays * 86400000)).toLocaleDateString()}) to catch any orphaned inspections
+                  <span className="font-medium">Last processed:</span> Period ending {new Date(lastProcessedEnd).toLocaleDateString()}
                 </p>
               </div>
             )}
@@ -767,7 +765,7 @@ const PayrollManagement = () => {
                 
                 <button
                   onClick={calculateInspectionBonuses}
-                  disabled={isProcessing}
+                  disabled={isProcessing || !payrollPeriod.startDate || !payrollPeriod.endDate}
                   className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
                 >
                   {isProcessing ? 'Calculating...' : 'Calculate Inspection Bonuses'}
