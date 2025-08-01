@@ -1493,7 +1493,33 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         if (record.values_mod_improvement === 0 && !hasListingData) {
           addValidationIssue('Zero improvement property missing listing data');
         }
-
+        
+        // NEW: BRT Pricing validation (only for BRT vendor)
+        if (actualVendor === 'BRT') {
+          const priceByValue = record.inspection_price_by;
+          const priceDateValue = record.inspection_price_date;
+          const parsedPriceDate = priceDateValue ? new Date(priceDateValue) : null;
+          
+          // Check for price_by with invalid employee or invalid date
+          if (priceByValue && priceByValue.trim() !== '') {
+            // Check if price_by is valid employee
+            if (!employeeData[priceByValue]) {
+              addValidationIssue(`Invalid price_by employee: ${priceByValue}`);
+            }
+            // Check for missing or old date
+            if (!parsedPriceDate) {
+              addValidationIssue('Has price_by but missing price_date');
+            } else if (parsedPriceDate < startDate) {
+              addValidationIssue(`Has price_by but old price_date (${parsedPriceDate.toLocaleDateString()})`);
+            }
+          }
+          
+          // Check for price_date without price_by
+          if (parsedPriceDate && parsedPriceDate >= startDate && (!priceByValue || priceByValue.trim() === '')) {
+            addValidationIssue('Has valid price_date but missing price_by');
+          }
+        }
+        
         // NEW: Collect validation issues for processing modal
         if (!isValidInspection && propertyIssues[propertyKey]) {
           pendingValidationsList.push({
