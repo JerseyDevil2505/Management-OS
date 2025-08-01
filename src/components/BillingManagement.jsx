@@ -842,12 +842,16 @@ const BillingManagement = () => {
     try {
       // Create the legacy job
       const { data: newJob, error: jobError } = await supabase
-        .from('archived_jobs')  // Changed from 'jobs'
+        .from('jobs')
         .insert({
           job_name: legacyJobForm.jobName,
+          client_name: legacyJobForm.jobName,  // Use job name as client name for legacy
+          start_date: new Date().toISOString().split('T')[0],  // Today's date
+          end_date: new Date().toISOString().split('T')[0],    // Today's date
           job_type: 'legacy_billing',
           billing_setup_complete: true,
-          percent_billed: 0
+          percent_billed: 0,
+          created_by: '5df85ca3-7a54-4798-a665-c31da8d9caad'  // Your ID
         })
         .select()
         .single();
