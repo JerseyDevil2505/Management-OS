@@ -27,13 +27,13 @@ const PayrollManagement = () => {
     loadInitialData();
   }, []);
 
-  // Calculate expected hours when dates change
+  // Calculate expected hours when end date changes
   useEffect(() => {
-    if (payrollPeriod.startDate && payrollPeriod.endDate) {
-      const hours = calculateExpectedHours(payrollPeriod.startDate, payrollPeriod.endDate);
+    if (payrollPeriod.endDate) {
+      const hours = getStandardExpectedHours(payrollPeriod.endDate);
       setPayrollPeriod(prev => ({ ...prev, expectedHours: hours }));
     }
-  }, [payrollPeriod.startDate, payrollPeriod.endDate]);
+  }, [payrollPeriod.endDate]);
 
   const loadInitialData = async () => {
     try {
@@ -65,6 +65,25 @@ const PayrollManagement = () => {
       console.error('Error loading initial data:', error);
       setError('Failed to load initial data');
     }
+  };
+
+  const calculateExpectedHours = (startDate, endDate) => {
+    if (!startDate || !endDate) return 0;
+    
+    let start = new Date(startDate);
+    let end = new Date(endDate);
+    let weekdays = 0;
+    
+    // Include both start and end dates
+    while (start <= end) {
+      const dayOfWeek = start.getDay();
+      if (dayOfWeek !== 0 && dayOfWeek !== 6) { // Not Sunday or Saturday
+        weekdays++;
+      }
+      start.setDate(start.getDate() + 1);
+    }
+    
+    return weekdays * 8;
   };
 
   const calculateCurrentPayrollPeriod = () => {
@@ -631,24 +650,35 @@ const PayrollManagement = () => {
               </span>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
               <div className="md:col-span-2">
-                <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Date Range</p>
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Bonus Calculation Dates</p>
                 <div className="flex items-center space-x-2">
-                  <input 
-                    type="date" 
-                    value={payrollPeriod.startDate}
-                    onChange={(e) => setPayrollPeriod(prev => ({ ...prev, startDate: e.target.value }))}
-                    className="px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                  />
-                  <span className="text-gray-500">to</span>
-                  <input 
-                    type="date" 
-                    value={payrollPeriod.endDate}
-                    onChange={(e) => setPayrollPeriod(prev => ({ ...prev, endDate: e.target.value }))}
-                    className="px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                  />
+                  <div>
+                    <label className="text-xs text-gray-500">Start</label>
+                    <input 
+                      type="date" 
+                      value={payrollPeriod.startDate}
+                      onChange={(e) => setPayrollPeriod(prev => ({ ...prev, startDate: e.target.value }))}
+                      className="block px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500">End</label>
+                    <input 
+                      type="date" 
+                      value={payrollPeriod.endDate}
+                      onChange={(e) => setPayrollPeriod(prev => ({ ...prev, endDate: e.target.value }))}
+                      className="block px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
                 </div>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Payroll Period</p>
+                <p className="text-base font-semibold text-gray-900">
+                  {getPayrollPeriod(payrollPeriod.endDate) || 'Set end date'}
+                </p>
               </div>
               <div className="space-y-1">
                 <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Expected Hours</p>
@@ -679,7 +709,7 @@ const PayrollManagement = () => {
                 <div className="flex-shrink-0 w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white font-semibold">
                   1
                 </div>
-                <h2 className="ml-3 text-lg font-semibold text-gray-900">Upload Leann's Worksheet</h2>
+                <h2 className="ml-3 text-lg font-semibold text-gray-900">Upload Payroll Worksheet</h2>
               </div>
             </div>
             
@@ -943,7 +973,7 @@ const PayrollManagement = () => {
             <div className="p-4 bg-yellow-50 rounded-md">
               <h3 className="text-sm font-medium text-yellow-900 mb-2">Worksheet Requirements:</h3>
               <ul className="text-sm text-yellow-800 space-y-1">
-                <li>• NO frozen rows (Leann!)</li>
+                <li>• NO frozen rows</li>
                 <li>• Consistent formulas in Total column (=Appt OT + Field OT)</li>
                 <li>• "same" for salaried employees, hours for hourly</li>
                 <li>• Accurate totals row with SUM formulas</li>
