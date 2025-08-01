@@ -140,7 +140,6 @@ const BillingManagement = () => {
                   jobPaid += event.amount_billed;
                 } else if (event.status === 'O') {   // Check for multiple possible open statuses
                   jobOpen += event.amount_billed;
-                  console.log('Open invoice found:', event.invoice_number, event.status, event.amount_billed); // Debug log
                 }
                 totalPercentageBilled += event.percentage_billed;
               });
