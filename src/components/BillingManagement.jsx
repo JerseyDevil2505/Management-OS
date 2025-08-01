@@ -376,7 +376,7 @@ const BillingManagement = () => {
         const totalAmount = Math.round(parseFloat(parts[startIndex].replace(/[$,]/g, '')));
         const retainerAmount = Math.round(parseFloat(parts[startIndex + 1].replace(/[$,]/g, '')));
         // Skip parts[startIndex + 2] which seems to be $0.00
-        const amountBilled = parseFloat(parts[startIndex + 3].replace(/[$,]/g, ''));
+        const amountBilled = parseFloat(parts[startIndex + 2].replace(/[$,]/g, ''));
         
         parsedEvents.push({
           date,
