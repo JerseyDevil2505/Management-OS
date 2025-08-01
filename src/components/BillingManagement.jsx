@@ -366,7 +366,7 @@ const BillingManagement = () => {
           invoiceNumber = parts[3];
           startIndex = 4;
         } else {
-          status = ''; // No D means Open
+          status = 'O'; // No D means Open (changed from '')
           invoiceNumber = parts[2];
           startIndex = 3;
         }
@@ -2188,7 +2188,7 @@ const BillingManagement = () => {
                   className="w-full px-3 py-2 border border-gray-300 rounded-md"
                 >
                   <option value="P">Paid</option>
-                  <option value="">Open</option>
+                  <option value="O">Open</option>  <!-- Make sure this says "O" not "" -->
                 </select>
               </div>
 
