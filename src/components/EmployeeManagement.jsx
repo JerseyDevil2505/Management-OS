@@ -177,13 +177,24 @@ const EmployeeManagement = () => {
         // Check all "by" fields for inspector initials
         const inspectorInitials = record.list_by || record.measure_by || record.price_by;
         
-        if (inspectorInitials && employeeMap[inspectorInitials]) {
+        // Clean up whitespace - treat spaces as empty
+        const cleanedInitials = inspectorInitials?.trim() || null;
+        
+        // Include records if:
+        // 1. They have valid employee initials
+        // 2. They have "PO" (Per Office) 
+        // 3. They have no initials at all (null or empty after trimming)
+        if (!cleanedInitials || cleanedInitials === 'PO' || employeeMap[cleanedInitials]) {
           // Add job-specific InfoBy config and vendor type to the record
           const jobConfig = jobInfoByConfigs[record.job_id];
           const vendorType = jobVendorTypes[record.job_id];
+          
+          // For PO or no initials, we don't have an employee to attach
+          const employee = cleanedInitials && cleanedInitials !== 'PO' ? employeeMap[cleanedInitials] : null;
+          
           enrichedData.push({
             ...record,
-            employee: employeeMap[inspectorInitials],
+            employee: employee,
             jobInfoByConfig: jobConfig || null,
             vendorType: vendorType || 'BRT'
           });
