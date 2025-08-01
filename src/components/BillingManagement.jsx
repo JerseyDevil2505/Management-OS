@@ -1027,65 +1027,83 @@ const BillingManagement = () => {
                   <p className="text-gray-600">No planned jobs found. Create them in the Admin Jobs section.</p>
                 </div>
               ) : (
-                planningJobs.filter(job => !job.is_archived).map(job => (
-                  <div key={job.id} className="border-2 border-gray-300 rounded-lg p-6 bg-gray-50">
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="flex items-center space-x-3">
-                        <h3 className="text-xl font-semibold text-gray-900">{job.job_name}</h3>
-                        <span className="px-2 py-1 text-xs rounded-full bg-orange-100 text-orange-800">
-                          Planned
-                        </span>
-                        {job.vendor && (
-                          <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800">
-                            {job.vendor}
+                planningJobs.filter(job => !job.is_archived).map(job => {
+                  // Calculate breakdown amounts
+                  const contractAmount = parseFloat(job.contract_amount) || 0;
+                  const retainerAmount = contractAmount * 0.10;
+                  const turnoverAmount = contractAmount * 0.05;
+                  const appealsAmount = contractAmount * 0.03;
+                  
+                  return (
+                    <div key={job.id} className="border-2 border-gray-300 rounded-lg p-6 bg-gray-50">
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="flex items-center space-x-3">
+                          <h3 className="text-xl font-semibold text-gray-900">{job.municipality || job.job_name || 'Unnamed Job'}</h3>
+                          {job.ccdd_code && (
+                            <span className="px-2 py-1 text-xs rounded-full bg-gray-200 text-gray-700">
+                              {job.ccdd_code}
+                            </span>
+                          )}
+                          <span className="px-2 py-1 text-xs rounded-full bg-orange-100 text-orange-800">
+                            Planned
                           </span>
-                        )}
+                        </div>
+                        <button
+                          onClick={() => handleRolloverToActive(job)}
+                          className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+                          disabled={!job.contract_amount}
+                          title={!job.contract_amount ? "Set contract amount first" : "Roll over to active jobs"}
+                        >
+                          Roll to Active →
+                        </button>
                       </div>
-                      <button
-                        onClick={() => handleRolloverToActive(job)}
-                        className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
-                        disabled={!job.contract_amount}
-                        title={!job.contract_amount ? "Set contract amount first" : "Roll over to active jobs"}
-                      >
-                        Roll to Active →
-                      </button>
-                    </div>
 
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                      <div className="bg-white p-3 rounded-md">
-                        <p className="text-sm text-gray-600">Contract Amount</p>
-                        <div className="flex items-center space-x-2">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-600 mb-1">Contract Amount</label>
                           <input
                             type="number"
                             value={job.contract_amount || ''}
                             onChange={(e) => handleUpdatePlannedContract(job.id, e.target.value)}
-                            className="w-full px-2 py-1 border border-gray-300 rounded text-lg font-semibold"
+                            className="w-full px-3 py-2 border border-gray-300 rounded text-lg font-semibold"
                             placeholder="Enter amount"
                           />
                         </div>
+                        
+                        {contractAmount > 0 && (
+                          <div className="bg-white p-3 rounded-md border border-gray-200">
+                            <p className="text-xs font-medium text-gray-600 mb-2">CONTRACT BREAKDOWN</p>
+                            <div className="space-y-1 text-sm">
+                              <div className="flex justify-between">
+                                <span className="text-gray-600">Retainer (10%)</span>
+                                <span className="font-medium">{formatCurrency(retainerAmount)}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-600">Turnover (5%)</span>
+                                <span className="font-medium">{formatCurrency(turnoverAmount)}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-600">Appeals (3%)</span>
+                                <span className="font-medium">{formatCurrency(appealsAmount)}</span>
+                              </div>
+                              <div className="flex justify-between pt-2 border-t border-gray-200">
+                                <span className="font-medium text-gray-700">Total</span>
+                                <span className="font-bold text-gray-900">{formatCurrency(contractAmount)}</span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                      <div className="bg-white p-3 rounded-md">
-                        <p className="text-sm text-gray-600">Total Properties</p>
-                        <p className="text-lg font-semibold">{job.total_properties || 0}</p>
-                      </div>
-                      <div className="bg-white p-3 rounded-md">
-                        <p className="text-sm text-gray-600">Residential</p>
-                        <p className="text-lg font-semibold">{job.residential_properties || 0}</p>
-                      </div>
-                      <div className="bg-white p-3 rounded-md">
-                        <p className="text-sm text-gray-600">Commercial</p>
-                        <p className="text-lg font-semibold">{job.commercial_properties || 0}</p>
-                      </div>
-                    </div>
 
-                    {job.start_date && (
-                      <div className="text-sm text-gray-600">
-                        Start Date: {new Date(job.start_date).toLocaleDateString()}
-                        {job.end_date && ` • End Date: ${new Date(job.end_date).toLocaleDateString()}`}
-                      </div>
-                    )}
-                  </div>
-                ))
+                      {job.start_date && (
+                        <div className="text-sm text-gray-600">
+                          Target: {new Date(job.start_date).toLocaleDateString()}
+                          {job.end_date && ` - ${new Date(job.end_date).toLocaleDateString()}`}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
               )}
             </div>
           )}
