@@ -755,7 +755,7 @@ const PayrollManagement = () => {
           </div>
 
           {/* Step 2: Calculate Bonuses */}
-          {payrollData.length > 0 && !worksheetIssues.some(i => i.type === 'error') && (
+          {payrollData.length > 0 && (
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
               <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
                 <div className="flex items-center">
@@ -767,6 +767,14 @@ const PayrollManagement = () => {
               </div>
               
               <div className="p-6">
+                {worksheetIssues.some(i => i.type === 'error') && (
+                  <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-md">
+                    <p className="text-sm text-amber-800">
+                      <span className="font-medium">Warning:</span> The worksheet has errors but you can still calculate bonuses
+                    </p>
+                  </div>
+                )}
+                
                 <div className="flex items-center space-x-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Job Filter</label>
