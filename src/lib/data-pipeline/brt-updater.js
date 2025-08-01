@@ -59,7 +59,8 @@ export class BRTUpdater {
           .upsert(batch, { 
             onConflict: 'property_composite_key',
             ignoreDuplicates: false 
-          });
+          })
+          .select();  // Add this to prevent returning all columns
         
         if (!error) {
           console.log(`✅ UPSERT Batch ${batchNumber} successful on attempt ${attempt}`);
