@@ -105,10 +105,13 @@ const PayrollManagement = () => {
   };
 
   const calculateExpectedHours = (startDate, endDate) => {
+    if (!startDate || !endDate) return 0;
+    
     let start = new Date(startDate);
     let end = new Date(endDate);
     let weekdays = 0;
     
+    // Include both start and end dates
     while (start <= end) {
       const dayOfWeek = start.getDay();
       if (dayOfWeek !== 0 && dayOfWeek !== 6) { // Not Sunday or Saturday
@@ -628,22 +631,22 @@ const PayrollManagement = () => {
               </span>
             </div>
             
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Date Range</p>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              <div className="md:col-span-2">
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Date Range</p>
                 <div className="flex items-center space-x-2">
                   <input 
                     type="date" 
                     value={payrollPeriod.startDate}
                     onChange={(e) => setPayrollPeriod(prev => ({ ...prev, startDate: e.target.value }))}
-                    className="px-2 py-1 text-sm border border-gray-300 rounded"
+                    className="px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                   />
                   <span className="text-gray-500">to</span>
                   <input 
                     type="date" 
                     value={payrollPeriod.endDate}
                     onChange={(e) => setPayrollPeriod(prev => ({ ...prev, endDate: e.target.value }))}
-                    className="px-2 py-1 text-sm border border-gray-300 rounded"
+                    className="px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
               </div>
@@ -651,15 +654,6 @@ const PayrollManagement = () => {
                 <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Expected Hours</p>
                 <p className="text-base font-semibold text-gray-900">{payrollPeriod.expectedHours}</p>
                 <p className="text-xs text-gray-500">Full-time employees</p>
-              </div>
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Process By</p>
-                <p className="text-base font-semibold text-gray-900">
-                  {payrollPeriod.endDate && (
-                    new Date(new Date(payrollPeriod.endDate).getTime() - (leadDays * 86400000)).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-                  )}
-                </p>
-                <p className="text-xs text-gray-500">{leadDays} days early</p>
               </div>
               <div className="space-y-1">
                 <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Last Processed</p>
