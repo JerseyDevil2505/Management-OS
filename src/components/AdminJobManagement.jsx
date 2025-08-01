@@ -519,10 +519,10 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
           
           insertedCount += batchRecords.length;
           
-          // Update UI with progress for large files
-          if (assignments.length > 1000) {
-            addNotification(`Processing batch ${batchNumber} of ${totalBatches}... (${insertedCount.toLocaleString()} records done)`, 'info');
-          }
+        // Update UI with progress for large files
+        if (assignments.length > 1000 && (batchNumber === 1 || batchNumber % 5 === 0 || batchNumber === totalBatches)) {
+          addNotification(`Processing batch ${batchNumber} of ${totalBatches}... (${insertedCount.toLocaleString()} records done)`, 'info');
+        }
           
         } catch (err) {
           failedBatches.push({ batch: batchNumber, error: err.message, records: batch.length });
