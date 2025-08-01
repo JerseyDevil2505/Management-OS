@@ -90,11 +90,16 @@ function App() {
     }
   }, [isCreatingJob]);
 
-  // Load workflow stats on app startup
-  useEffect(() => {
-    console.log('🚀 App startup - loading workflow stats');
+// Load workflow stats on app startup - DEFERRED
+useEffect(() => {
+  // Wait a bit before loading heavy workflow stats
+  const timeoutId = setTimeout(() => {
+    console.log('🚀 App startup - loading workflow stats (deferred)');
     loadAllJobWorkflowStats();
-  }, [loadAllJobWorkflowStats]);
+  }, 2000); // Wait 2 seconds
+  
+  return () => clearTimeout(timeoutId);
+}, []); // Remove loadAllJobWorkflowStats from dependencies
 
   // 🔧 BACKEND ENHANCEMENT: Enhanced workflow stats update with metrics refresh trigger
   const handleWorkflowStatsUpdate = async (jobId, newStats, persistToDatabase = true) => {
