@@ -1220,7 +1220,7 @@ const BillingManagement = () => {
             <p className="text-2xl font-bold text-red-700">{formatCurrency(globalMetrics.projectedExpenses)}</p>
             <p className="text-xs text-gray-500 mt-1">Full year estimate</p>
           </div>
-<          div className={`bg-white rounded-lg p-4 shadow-sm border-2 ${(globalMetrics.totalPaid - globalMetrics.currentExpenses) >= 0 ? 'border-green-400' : 'border-red-400'}`}>
+          <div className={`bg-white rounded-lg p-4 shadow-sm border-2 ${(globalMetrics.totalPaid - globalMetrics.currentExpenses) >= 0 ? 'border-green-400' : 'border-red-400'}`}>
             <p className="text-sm text-gray-600 mb-1">Actual P/L</p>
             <p className={`text-2xl font-bold ${(globalMetrics.totalPaid - globalMetrics.currentExpenses) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
               {formatCurrency(globalMetrics.totalPaid - globalMetrics.currentExpenses)}
