@@ -2175,12 +2175,6 @@ const BillingManagement = () => {
                   )}
                 </div>
 
-                                {/* Add this new section */}
-                {selectedJob && selectedJob.percent_billed >= 1.0 && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Billing Type
-                    </label>
                     <select
                       value={billingForm.billingType || ''}
                       onChange={(e) => {
