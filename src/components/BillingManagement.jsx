@@ -1339,9 +1339,11 @@ const BillingManagement = () => {
                           <div className="bg-white p-3 rounded-md border-2 border-blue-400">
                             <p className="text-sm text-gray-600">Remaining (No Retainer)</p>
                             <p className="text-lg font-semibold text-blue-600">
-                              {formatCurrency((totals.contractAmount - job.job_contracts[0].retainer_amount) - totals.totalAmountBilled)}
+                              {(() => {
+                                const remainingNoRet = (totals.contractAmount - job.job_contracts[0].retainer_amount) - totals.totalAmountBilled;
+                                return formatCurrency(remainingNoRet < 0 ? 0 : remainingNoRet);
+                              })()}
                             </p>
-                          </div>
                         </div>
                       )}
 
@@ -1440,7 +1442,9 @@ const BillingManagement = () => {
                                       <td className="px-4 py-2 text-sm text-gray-900">{formatCurrency(event.total_amount)}</td>
                                       <td className="px-4 py-2 text-sm text-gray-900">{formatCurrency(event.amount_billed)}</td>
                                       <td className="px-4 py-2 text-sm text-gray-900">{formatCurrency(event.remaining_due)}</td>
-                                      <td className="px-4 py-2 text-sm font-semibold text-blue-600">{formatCurrency(remainingNoRetainer)}</td>
+                                      <td className="px-4 py-2 text-sm font-semibold text-blue-600">
+                                        {remainingNoRetainer < 0 ? formatCurrency(0) : formatCurrency(remainingNoRetainer)}
+                                      </td>
                                     </tr>
                                   );
                                 })}
@@ -1577,9 +1581,11 @@ const BillingManagement = () => {
                           <div className="bg-white p-3 rounded-md border-2 border-blue-400">
                             <p className="text-sm text-gray-600">Remaining (No Retainer)</p>
                             <p className="text-lg font-semibold text-blue-600">
-                              {formatCurrency((totals.contractAmount - job.job_contracts[0].retainer_amount) - totals.totalAmountBilled)}
+                              {(() => {
+                                const remainingNoRet = (totals.contractAmount - job.job_contracts[0].retainer_amount) - totals.totalAmountBilled;
+                                return formatCurrency(remainingNoRet < 0 ? 0 : remainingNoRet);
+                              })()}
                             </p>
-                          </div>
                         </div>
                       )}
 
@@ -1678,7 +1684,9 @@ const BillingManagement = () => {
                                       <td className="px-4 py-2 text-sm text-gray-900">{formatCurrency(event.total_amount)}</td>
                                       <td className="px-4 py-2 text-sm text-gray-900">{formatCurrency(event.amount_billed)}</td>
                                       <td className="px-4 py-2 text-sm text-gray-900">{formatCurrency(event.remaining_due)}</td>
-                                      <td className="px-4 py-2 text-sm font-semibold text-blue-600">{formatCurrency(remainingNoRetainer)}</td>
+                                      <td className="px-4 py-2 text-sm font-semibold text-blue-600">
+                                        {remainingNoRetainer < 0 ? formatCurrency(0) : formatCurrency(remainingNoRetainer)}
+                                      </td>
                                     </tr>
                                   );
                                 })}
