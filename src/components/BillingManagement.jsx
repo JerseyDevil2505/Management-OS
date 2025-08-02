@@ -913,8 +913,7 @@ const BillingManagement = () => {
       await new Promise(resolve => setTimeout(resolve, 500));
 
       // Update the job in state without reloading
-      setJobs(prevJobs =>
-      
+      setShowEditBilling(false);      
       setShowEditBilling(false);
       setEditingEvent(null);
       loadJobs();
