@@ -1555,8 +1555,11 @@ const BillingManagement = () => {
                   {planningJobs
                     .filter(job => !job.is_archived)
                     .sort((a, b) => {
-                      // Sort by end_date (target date) - earliest first
-                      // If no date, put at the end
+                      // First priority: Jobs without contract amounts go to top
+                      if (!a.contract_amount && b.contract_amount) return -1;
+                      if (a.contract_amount && !b.contract_amount) return 1;
+                      
+                      // Second priority: Sort by end_date (target date) - earliest first
                       if (!a.end_date && !b.end_date) return 0;
                       if (!a.end_date) return 1;
                       if (!b.end_date) return -1;
@@ -1596,6 +1599,9 @@ const BillingManagement = () => {
                                 placeholder="0"
                               />
                             </div>
+                            {!job.contract_amount && (
+                              <span className="text-red-600 font-semibold text-xs">NEED AMT</span>
+                            )}
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
