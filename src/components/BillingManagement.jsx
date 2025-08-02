@@ -1521,78 +1521,102 @@ const BillingManagement = () => {
             </div>
           )}
 
-          {/* Planned Jobs Tab */}
-          {activeTab === 'planned' && (
-            <div className="space-y-6">
-              {planningJobs.filter(job => !job.is_archived).length === 0 ? (
-                <div className="text-center py-12 bg-gray-50 rounded-lg">
-                  <p className="text-gray-600">No planned jobs found. Create them in the Admin Jobs section.</p>
-                </div>
-              ) : (
-                planningJobs.filter(job => !job.is_archived).map(job => (
-                  <div key={job.id} className="border-2 border-gray-300 rounded-lg p-6 bg-gray-50">
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="flex items-center space-x-3">
-                        <h3 className="text-xl font-semibold text-gray-900">{job.municipality || job.job_name || 'Unnamed Job'}</h3>
-                        {job.ccdd_code && (
+      {/* Planned Jobs Tab */}
+      {activeTab === 'planned' && (
+        <div className="space-y-6">
+          {planningJobs.filter(job => !job.is_archived).length === 0 ? (
+            <div className="text-center py-12 bg-gray-50 rounded-lg">
+              <p className="text-gray-600">No planned jobs found. Create them in the Admin Jobs section.</p>
+            </div>
+          ) : (
+            <div className="bg-white rounded-lg shadow overflow-hidden">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Municipality
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      CCDD
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Contract Amount
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Target Date
+                    </th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Action
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {planningJobs
+                    .filter(job => !job.is_archived)
+                    .sort((a, b) => {
+                      // Sort by CCDD code if available, otherwise by name
+                      if (a.ccdd_code && b.ccdd_code) {
+                        return a.ccdd_code.localeCompare(b.ccdd_code);
+                      }
+                      return (a.municipality || a.job_name || '').localeCompare(b.municipality || b.job_name || '');
+                    })
+                    .map(job => (
+                      <tr key={job.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {job.municipality || job.job_name || 'Unnamed Job'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           <span className="px-2 py-1 text-xs rounded-full bg-gray-200 text-gray-700">
-                            {job.ccdd_code}
+                            {job.ccdd_code || '-'}
                           </span>
-                        )}
-                        <span className="px-2 py-1 text-xs rounded-full bg-orange-100 text-orange-800">
-                          Planned
-                        </span>
-                      </div>
-                      <button
-                        onClick={() => handleRolloverToActive(job)}
-                        className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
-                        disabled={!job.contract_amount}
-                        title={!job.contract_amount ? "Set contract amount first" : "Roll over to active jobs"}
-                      >
-                        Roll to Active →
-                      </button>
-                    </div>
-
-                    <div className="mb-4">
-                      <label className="block text-sm font-medium text-gray-600 mb-1">Contract Amount</label>
-                      <div className="flex items-center space-x-2">
-                        <input
-                          type="number"
-                          value={job.contract_amount || ''}
-                          onChange={(e) => {
-                            // Update local state for this specific job
-                            setPlanningJobs(prev => 
-                              prev.map(j => j.id === job.id ? {...j, contract_amount: e.target.value} : j)
-                            );
-                          }}
-                          onKeyPress={(e) => {
-                            if (e.key === 'Enter') {
-                              handleUpdatePlannedContract(job.id, job.contract_amount);
-                            }
-                          }}
-                          className="w-32 px-3 py-2 border border-gray-300 rounded text-lg font-semibold"
-                          placeholder="Enter amount"
-                        />
-                        <button
-                          onClick={() => handleUpdatePlannedContract(job.id, job.contract_amount)}
-                          className="px-3 py-2 bg-green-600 text-white rounded hover:bg-green-700"
-                        >
-                          Save
-                        </button>
-                      </div>
-                    </div>
-
-                    {job.start_date && (
-                      <div className="text-sm text-gray-600">
-                        Target: {new Date(job.start_date).toLocaleDateString()}
-                        {job.end_date && ` - ${new Date(job.end_date).toLocaleDateString()}`}
-                      </div>
-                    )}
-                  </div>
-                ))
-              )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          <div className="flex items-center space-x-2">
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 pointer-events-none">$</span>
+                              <input
+                                type="text"
+                                value={job.contract_amount ? Number(job.contract_amount).toLocaleString() : ''}
+                                onChange={(e) => {
+                                  // Remove commas and non-numeric characters
+                                  const numericValue = e.target.value.replace(/[^0-9]/g, '');
+                                  setPlanningJobs(prev => 
+                                    prev.map(j => j.id === job.id ? {...j, contract_amount: numericValue} : j)
+                                  );
+                                }}
+                                onKeyPress={(e) => {
+                                  if (e.key === 'Enter') {
+                                    handleUpdatePlannedContract(job.id, job.contract_amount);
+                                  }
+                                }}
+                                onBlur={() => handleUpdatePlannedContract(job.id, job.contract_amount)}
+                                className="pl-8 pr-3 py-1 w-32 border border-gray-300 rounded text-sm focus:ring-blue-500 focus:border-blue-500"
+                                placeholder="0"
+                              />
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {job.end_date ? new Date(job.end_date).toLocaleDateString() : '-'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                          <button
+                            onClick={() => handleRolloverToActive(job)}
+                            className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                            disabled={!job.contract_amount}
+                            title={!job.contract_amount ? "Set contract amount first" : "Roll over to active jobs"}
+                          >
+                            Roll to Active →
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
             </div>
           )}
+        </div>
+      )}
 
           {/* Legacy Jobs Tab */}
           {activeTab === 'legacy' && (
