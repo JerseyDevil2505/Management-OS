@@ -687,7 +687,7 @@ const BillingManagement = () => {
         invoiceNumber: '',
         notes: '',
         manualOverride: false,
-        overrideAmount: ''
+        overrideAmount: '',
         billingType: ''
       });
       calculateGlobalMetrics();
