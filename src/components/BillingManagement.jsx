@@ -715,6 +715,7 @@ const BillingManagement = () => {
         overrideAmount: '',
         billingType: ''
       });
+      await loadJobs()
       calculateGlobalMetrics();
     } catch (error) {
       console.error('Error adding billing event:', error);
