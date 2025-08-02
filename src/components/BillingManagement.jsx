@@ -626,7 +626,7 @@ const BillingManagement = () => {
           job_id: selectedJob.id,
           billing_date: billingForm.billingDate,
           percentage_billed: percentageDecimal,
-          status: billingForm.status,
+          status: billingForm.status || 'O',
           invoice_number: billingForm.invoiceNumber,
           total_amount: totalAmount,
           retainer_amount: retainerAmount,
@@ -641,7 +641,7 @@ const BillingManagement = () => {
 
         if (error) throw error;
 
-// Update jobs.percent_billed
+        // Update jobs.percent_billed
         const newTotalPercentage = existingEvents.reduce((sum, event) => sum + parseFloat(event.percentage_billed || 0), 0) + percentageDecimal;
         await supabase
           .from('jobs')
@@ -650,6 +650,7 @@ const BillingManagement = () => {
           
         // Update the job in state without reloading
         alert('Billing event added successfully!');
+        calculateGlobalMetrics();
         setJobs(prevJobs => 
           prevJobs.map(job => {
             if (job.id === selectedJob.id) {
