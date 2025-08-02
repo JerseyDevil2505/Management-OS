@@ -1428,7 +1428,7 @@ const BillingManagement = () => {
                                              event.billing_type}
                                           </span>
                                         ) : (
-                                          `${(event.percentage_billed * 100).toFixed(2)}%`
+                                          (event.percentage_billed * 100).toFixed(2) + '%'
                                         )}
                                       </td>
                                       <td className="px-4 py-2 text-sm">
