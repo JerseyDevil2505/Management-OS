@@ -1526,13 +1526,31 @@ const BillingManagement = () => {
 
                     <div className="mb-4">
                       <label className="block text-sm font-medium text-gray-600 mb-1">Contract Amount</label>
-                      <input
-                        type="number"
-                        value={job.contract_amount || ''}
-                        onChange={(e) => handleUpdatePlannedContract(job.id, e.target.value)}
-                        className="w-32 px-3 py-2 border border-gray-300 rounded text-lg font-semibold"
-                        placeholder="Enter amount"
-                      />
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="number"
+                          value={job.contract_amount || ''}
+                          onChange={(e) => {
+                            // Update local state for this specific job
+                            setPlanningJobs(prev => 
+                              prev.map(j => j.id === job.id ? {...j, contract_amount: e.target.value} : j)
+                            );
+                          }}
+                          onKeyPress={(e) => {
+                            if (e.key === 'Enter') {
+                              handleUpdatePlannedContract(job.id, job.contract_amount);
+                            }
+                          }}
+                          className="w-32 px-3 py-2 border border-gray-300 rounded text-lg font-semibold"
+                          placeholder="Enter amount"
+                        />
+                        <button
+                          onClick={() => handleUpdatePlannedContract(job.id, job.contract_amount)}
+                          className="px-3 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+                        >
+                          Save
+                        </button>
+                      </div>
                     </div>
 
                     {job.start_date && (
