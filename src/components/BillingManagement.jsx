@@ -1655,15 +1655,36 @@ const BillingManagement = () => {
                             </span>
                           )}
                         </div>
-                        <button
-                          onClick={() => {
-                            setSelectedJob(job);
-                            setShowBillingForm(true);
-                          }}
-                          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                        >
-                          Add Billing Event
-                        </button>
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={() => {
+                              setSelectedJob(job);
+                              setShowBillingForm(true);
+                            }}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                          >
+                            Add Billing Event
+                          </button>
+                          <button
+                            onClick={() => {
+                              setSelectedJob(job);
+                              const contract = job.job_contracts[0];
+                              setContractSetup({
+                                contractAmount: contract.contract_amount.toString(),
+                                templateType: 'custom',
+                                retainerPercentage: contract.retainer_percentage,
+                                endOfJobPercentage: contract.end_of_job_percentage,
+                                firstYearAppealsPercentage: contract.first_year_appeals_percentage,
+                                secondYearAppealsPercentage: contract.second_year_appeals_percentage,
+                                thirdYearAppealsPercentage: contract.third_year_appeals_percentage || 0
+                              });
+                              setShowContractSetup(true);
+                            }}
+                            className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
+                          >
+                            Edit Contract
+                          </button>
+                        </div>
                       </div>
 
                       {totals && (
