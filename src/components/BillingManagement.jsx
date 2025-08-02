@@ -1366,6 +1366,10 @@ const BillingManagement = () => {
                               <p className="text-gray-600">2nd Yr Appeals ({(job.job_contracts[0].second_year_appeals_percentage * 100).toFixed(0)}%)</p>
                               <p className="font-semibold">{formatCurrency(job.job_contracts[0].second_year_appeals_amount)}</p>
                             </div>
+                            <div>
+                              <p className="text-gray-600">3rd Yr Appeals ({(job.job_contracts[0].third_year_appeals_percentage * 100).toFixed(0)}%)</p>
+                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].third_year_appeals_amount || 0)}</p>
+                            </div>
                           </div>
                         </div>
                       )}
