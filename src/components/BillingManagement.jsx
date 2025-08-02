@@ -902,13 +902,19 @@ const BillingManagement = () => {
         .select('percentage_billed')
         .eq('job_id', billingEvent.job_id);
 
-      const  = remainingEvents.reduce((sum, event) => sum + parseFloat(event.percentage_billed || 0), 0);
+      const newTotalPercentage = remainingEvents.reduce((sum, event) => sum + parseFloat(event.percentage_billed || 0), 0);
       
       await supabase
         .from('jobs')
-        .update({ percent_billed:  })
+        .update({ percent_billed: newTotalPercentage })
         .eq('id', billingEvent.job_id);
 
+      // Give database time to commit
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Update the job in state without reloading
+      setJobs(prevJobs =>
+      
       setShowEditBilling(false);
       setEditingEvent(null);
       loadJobs();
