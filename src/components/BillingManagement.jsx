@@ -2222,52 +2222,6 @@ const BillingManagement = () => {
         </div>
       )}
                 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Notes
-                  </label>
-                  <textarea
-                    value={billingForm.notes}
-                    onChange={(e) => setBillingForm(prev => ({ ...prev, notes: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                    rows="3"
-                    placeholder="Optional notes..."
-                  />
-                </div>
-              </div>
-            )}
-
-            <div className="flex justify-end space-x-3 mt-6">
-              <button
-                onClick={() => {
-                  setShowBillingForm(false);
-                  setShowBulkPaste(false);
-                  setBulkBillingText('');
-                  setBillingForm({
-                    billingDate: new Date().toISOString().split('T')[0],
-                    percentageBilled: '',
-                    status: 'P',
-                    invoiceNumber: '',
-                    notes: '',
-                    manualOverride: false,
-                    overrideAmount: ''
-                  });
-                }}
-                className="px-4 py-2 text-gray-600 hover:text-gray-800"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleAddBillingEvent}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-              >
-                {showBulkPaste ? 'Import Events' : 'Add Billing Event'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Edit Billing Event Modal */}
       {showEditBilling && editingEvent && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
