@@ -1181,7 +1181,7 @@ const BillingManagement = () => {
         </div>
         
         {/* Row 2: Cash Flow Analysis */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
           <div className="bg-white rounded-lg p-4 shadow-sm border-2 border-blue-400">
             <p className="text-sm text-gray-600 mb-1">Remaining (No Retainer)</p>
             <p className="text-2xl font-bold text-blue-600">{formatCurrency(globalMetrics.totalRemainingExcludingRetainer)}</p>
@@ -1193,13 +1193,6 @@ const BillingManagement = () => {
               {formatCurrency(globalMetrics.totalRemaining - globalMetrics.totalRemainingExcludingRetainer)}
             </p>
             <p className="text-xs text-gray-500 mt-1">Future collections</p>
-          </div>
-          <div className="bg-white rounded-lg p-4 shadow-sm">
-            <p className="text-sm text-gray-600 mb-1">Work Complete</p>
-            <p className="text-2xl font-bold text-blue-700">
-              {globalMetrics.totalSigned > 0 ? ((globalMetrics.totalPaid / globalMetrics.totalSigned) * 100).toFixed(1) : '0.0'}%
-            </p>
-            <p className="text-xs text-gray-500 mt-1">Progress indicator</p>
           </div>
         </div>
         
@@ -1220,19 +1213,23 @@ const BillingManagement = () => {
             <p className="text-2xl font-bold text-red-700">{formatCurrency(globalMetrics.projectedExpenses)}</p>
             <p className="text-xs text-gray-500 mt-1">Full year estimate</p>
           </div>
-          <div className={`bg-white rounded-lg p-4 shadow-sm border-2 ${(globalMetrics.totalPaid - globalMetrics.currentExpenses) >= 0 ? 'border-green-400' : 'border-red-400'}`}>
+<          div className={`bg-white rounded-lg p-4 shadow-sm border-2 ${(globalMetrics.totalPaid - globalMetrics.currentExpenses) >= 0 ? 'border-green-400' : 'border-red-400'}`}>
             <p className="text-sm text-gray-600 mb-1">Actual P/L</p>
             <p className={`text-2xl font-bold ${(globalMetrics.totalPaid - globalMetrics.currentExpenses) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
               {formatCurrency(globalMetrics.totalPaid - globalMetrics.currentExpenses)}
             </p>
-            <p className="text-xs text-gray-500 mt-1">YTD performance</p>
-          </div>
+            <p className="text-xs text-gray-500">
+              Margin: {globalMetrics.totalPaid > 0 ? (((globalMetrics.totalPaid - globalMetrics.currentExpenses) / globalMetrics.totalPaid) * 100).toFixed(1) : '0.0'}%
+            </p>
+          </div>>
           <div className={`bg-white rounded-lg p-4 shadow-sm border-2 ${(globalMetrics.totalSigned - globalMetrics.projectedExpenses) >= 0 ? 'border-green-400' : 'border-red-400'}`}>
             <p className="text-sm text-gray-600 mb-1">Projected P/L</p>
             <p className={`text-2xl font-bold ${(globalMetrics.totalSigned - globalMetrics.projectedExpenses) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
               {formatCurrency(globalMetrics.totalSigned - globalMetrics.projectedExpenses)}
             </p>
-            <p className="text-xs text-gray-500 mt-1">Annual forecast</p>
+            <p className="text-xs text-gray-500">
+              Margin: {globalMetrics.totalSigned > 0 ? (((globalMetrics.totalSigned - globalMetrics.projectedExpenses) / globalMetrics.totalSigned) * 100).toFixed(1) : '0.0'}%
+            </p>
           </div>
         </div>
       </div>
