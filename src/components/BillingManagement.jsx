@@ -1412,38 +1412,7 @@ const BillingManagement = () => {
                                         {new Date(event.billing_date).toLocaleDateString()}
                                       </td>
                                       <td className="px-4 py-2 text-sm text-gray-900">
-                                        {(() => {
-                                          // Calculate cumulative percentage up to but not including this event
-                                          const sortedPriorEvents = job.billing_events
-                                            .sort((a, b) => new Date(a.billing_date) - new Date(b.billing_date))
-                                            .slice(0, index);
-                                          const priorPercentage = sortedPriorEvents.reduce((sum, e) => sum + e.percentage_billed, 0);
-                                          
-                                          // Check if we've hit 100% with prior events
-                                          if (priorPercentage >= 1.0) {
-                                            // This is a post-100% event
-                                            const contract = job.job_contracts[0];
-                                            
-                                            // Check which percentage this matches
-                                            if (Math.abs(event.percentage_billed - contract.retainer_percentage) < 0.001) {
-                                              return <span className="font-medium text-green-700">Retainer Payout</span>;
-                                            } else if (Math.abs(event.percentage_billed - contract.end_of_job_percentage) < 0.001) {
-                                              return <span className="font-medium text-blue-700">Turnover</span>;
-                                            } else if (Math.abs(event.percentage_billed - contract.first_year_appeals_percentage) < 0.001) {
-                                              return <span className="font-medium text-purple-700">1st Yr Appeals</span>;
-                                            } else if (Math.abs(event.percentage_billed - contract.second_year_appeals_percentage) < 0.001) {
-                                              return <span className="font-medium text-purple-700">2nd Yr Appeals</span>;
-                                            } else if (contract.third_year_appeals_percentage && 
-                                                     Math.abs(event.percentage_billed - contract.third_year_appeals_percentage) < 0.001) {
-                                              return <span className="font-medium text-purple-700">3rd Yr Appeals</span>;
-                                            } else {
-                                              return <span className="font-medium text-gray-700">Special {(event.percentage_billed * 100).toFixed(2)}%</span>;
-                                            }
-                                          } else {
-                                            // Regular percentage display for normal billing
-                                            return `${(event.percentage_billed * 100).toFixed(2)}%`;
-                                          }
-                                        })()}
+                                        {(event.percentage_billed * 100).toFixed(2)}%
                                       </td>
                                       <td className="px-4 py-2 text-sm">
                                         <span className={`px-2 py-1 text-xs rounded-full ${
@@ -1670,38 +1639,7 @@ const BillingManagement = () => {
                                         {new Date(event.billing_date).toLocaleDateString()}
                                       </td>
                                       <td className="px-4 py-2 text-sm text-gray-900">
-                                        {(() => {
-                                          // Calculate cumulative percentage up to but not including this event
-                                          const sortedPriorEvents = job.billing_events
-                                            .sort((a, b) => new Date(a.billing_date) - new Date(b.billing_date))
-                                            .slice(0, index);
-                                          const priorPercentage = sortedPriorEvents.reduce((sum, e) => sum + e.percentage_billed, 0);
-                                          
-                                          // Check if we've hit 100% with prior events
-                                          if (priorPercentage >= 1.0) {
-                                            // This is a post-100% event
-                                            const contract = job.job_contracts[0];
-                                            
-                                            // Check which percentage this matches
-                                            if (Math.abs(event.percentage_billed - contract.retainer_percentage) < 0.001) {
-                                              return <span className="font-medium text-green-700">Retainer Payout</span>;
-                                            } else if (Math.abs(event.percentage_billed - contract.end_of_job_percentage) < 0.001) {
-                                              return <span className="font-medium text-blue-700">Turnover</span>;
-                                            } else if (Math.abs(event.percentage_billed - contract.first_year_appeals_percentage) < 0.001) {
-                                              return <span className="font-medium text-purple-700">1st Yr Appeals</span>;
-                                            } else if (Math.abs(event.percentage_billed - contract.second_year_appeals_percentage) < 0.001) {
-                                              return <span className="font-medium text-purple-700">2nd Yr Appeals</span>;
-                                            } else if (contract.third_year_appeals_percentage && 
-                                                     Math.abs(event.percentage_billed - contract.third_year_appeals_percentage) < 0.001) {
-                                              return <span className="font-medium text-purple-700">3rd Yr Appeals</span>;
-                                            } else {
-                                              return <span className="font-medium text-gray-700">Special {(event.percentage_billed * 100).toFixed(2)}%</span>;
-                                            }
-                                          } else {
-                                            // Regular percentage display for normal billing
-                                            return `${(event.percentage_billed * 100).toFixed(2)}%`;
-                                          }
-                                        })()}
+                                        {(event.percentage_billed * 100).toFixed(2)}%
                                       </td>
                                       <td className="px-4 py-2 text-sm">
                                         <span className={`px-2 py-1 text-xs rounded-full ${
