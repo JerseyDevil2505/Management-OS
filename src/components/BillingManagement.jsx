@@ -1709,6 +1709,7 @@ const BillingManagement = () => {
                             Delete
                           </button>
                         </div>
+                      </div>
 
                       {totals && (
                         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
