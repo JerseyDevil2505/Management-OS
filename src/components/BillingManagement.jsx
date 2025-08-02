@@ -650,6 +650,40 @@ const BillingManagement = () => {
           
         // Update the job in state without reloading
         alert('Billing event added successfully!');
+        calculateGlobalMetrics();
+        
+        // Update legacy jobs if this is a legacy job
+        if (selectedJob.job_type === 'legacy_billing') {
+          setLegacyJobs(prevJobs => 
+            prevJobs.map(job => {
+              if (job.id === selectedJob.id) {
+                const newEvent = {
+                  id: Date.now(),
+                  job_id: selectedJob.id,
+                  billing_date: billingForm.billingDate,
+                  percentage_billed: percentageDecimal,
+                  status: billingForm.status || 'O',
+                  invoice_number: billingForm.invoiceNumber,
+                  total_amount: totalAmount,
+                  retainer_amount: retainerAmount,
+                  amount_billed: amountBilled,
+                  remaining_due: remainingDue,
+                  notes: billingForm.notes,
+                  billing_type: billingForm.billingType
+                };
+                
+                return {
+                  ...job,
+                  billing_events: [...(job.billing_events || []), newEvent],
+                  percent_billed: newTotalPercentage
+                };
+              }
+              return job;
+            })
+          );
+        }
+        
+        // Update active jobs
         setJobs(prevJobs => 
           prevJobs.map(job => {
             if (job.id === selectedJob.id) {
@@ -659,13 +693,14 @@ const BillingManagement = () => {
                 job_id: selectedJob.id,
                 billing_date: billingForm.billingDate,
                 percentage_billed: percentageDecimal,
-                status: billingForm.status,
+                status: billingForm.status || 'O',
                 invoice_number: billingForm.invoiceNumber,
                 total_amount: totalAmount,
                 retainer_amount: retainerAmount,
                 amount_billed: amountBilled,
                 remaining_due: remainingDue,
-                notes: billingForm.notes
+                notes: billingForm.notes,
+                billing_type: billingForm.billingType
               };
               
               return {
