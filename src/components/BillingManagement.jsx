@@ -1181,7 +1181,7 @@ const BillingManagement = () => {
         </div>
         
         {/* Row 2: Cash Flow Analysis */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
           <div className="bg-white rounded-lg p-4 shadow-sm border-2 border-blue-400">
             <p className="text-sm text-gray-600 mb-1">Remaining (No Retainer)</p>
             <p className="text-2xl font-bold text-blue-600">{formatCurrency(globalMetrics.totalRemainingExcludingRetainer)}</p>
@@ -1193,6 +1193,13 @@ const BillingManagement = () => {
               {formatCurrency(globalMetrics.totalRemaining - globalMetrics.totalRemainingExcludingRetainer)}
             </p>
             <p className="text-xs text-gray-500 mt-1">Future collections</p>
+          </div>
+          <div className="bg-white rounded-lg p-4 shadow-sm">
+            <p className="text-sm text-gray-600 mb-1">Unbilled Work</p>
+            <p className="text-2xl font-bold text-indigo-600">
+              {formatCurrency(globalMetrics.totalRemaining - globalMetrics.totalOpen)}
+            </p>
+            <p className="text-xs text-gray-500 mt-1">Not yet invoiced</p>
           </div>
         </div>
         
