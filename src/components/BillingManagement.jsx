@@ -49,7 +49,7 @@ const BillingManagement = () => {
     invoiceNumber: '',
     notes: '',
     manualOverride: false,
-    overrideAmount: ''
+    overrideAmount: '',
     billingType: ''
   });
   const [showBulkPaste, setShowBulkPaste] = useState(false);
