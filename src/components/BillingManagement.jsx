@@ -160,8 +160,7 @@ const BillingManagement = () => {
           }
         });
       }
-            // Get legacy jobs with open invoices
-      // Get legacy jobs with open invoices
+       // Get legacy jobs with open invoices
       const { data: legacyJobs } = await supabase
         .from('jobs')
         .select(`
@@ -169,19 +168,33 @@ const BillingManagement = () => {
           billing_events(amount_billed, status)
         `)
         .eq('job_type', 'legacy_billing');
-
+  
       if (legacyJobs) {
         legacyJobs.forEach(job => {
+          // Add open invoices to totalOpen
           if (job.billing_events) {
             job.billing_events.forEach(event => {
-              if (event.status === 'O') {  // Changed from "} else if" to just "if"
+              if (event.status === 'O') {
                 totalOpen += event.amount_billed;
               }
             });
           }
+          
+          // Add remaining contract balance to totalRemaining
+          if (job.job_contracts?.[0]) {
+            const contract = job.job_contracts[0];
+            const totalBilled = job.billing_events?.reduce((sum, event) => 
+              sum + parseFloat(event.amount_billed || 0), 0) || 0;
+            const jobRemaining = contract.contract_amount - totalBilled;
+            
+            if (jobRemaining > 0) {
+              totalRemaining += jobRemaining;
+              // For legacy jobs, assume standard 10% retainer on the remaining amount
+              totalRemainingExcludingRetainer += jobRemaining * 0.9;
+            }
+          }
         });
       }
-
       // Add planning jobs to total signed
       if (planningJobsData) {
         planningJobsData.forEach(job => {
