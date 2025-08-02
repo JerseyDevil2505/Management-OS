@@ -810,6 +810,7 @@ const BillingManagement = () => {
 
       if (error) throw error;
       loadJobs();
+      calculateGlobalMetrics();  // ADD THIS LINE
     } catch (error) {
       console.error('Error updating planned contract:', error);
     }
@@ -1554,11 +1555,12 @@ const BillingManagement = () => {
                   {planningJobs
                     .filter(job => !job.is_archived)
                     .sort((a, b) => {
-                      // Sort by CCDD code if available, otherwise by name
-                      if (a.ccdd_code && b.ccdd_code) {
-                        return a.ccdd_code.localeCompare(b.ccdd_code);
-                      }
-                      return (a.municipality || a.job_name || '').localeCompare(b.municipality || b.job_name || '');
+                      // Sort by end_date (target date) - earliest first
+                      // If no date, put at the end
+                      if (!a.end_date && !b.end_date) return 0;
+                      if (!a.end_date) return 1;
+                      if (!b.end_date) return -1;
+                      return new Date(a.end_date) - new Date(b.end_date);
                     })
                     .map(job => (
                       <tr key={job.id} className="hover:bg-gray-50">
