@@ -650,7 +650,6 @@ const BillingManagement = () => {
           
         // Update the job in state without reloading
         alert('Billing event added successfully!');
-        calculateGlobalMetrics();
         setJobs(prevJobs => 
           prevJobs.map(job => {
             if (job.id === selectedJob.id) {
@@ -678,6 +677,7 @@ const BillingManagement = () => {
             return job;
           })
         );
+        calculateGlobalMetrics();
       }
       
       setShowBillingForm(false);
