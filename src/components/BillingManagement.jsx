@@ -641,16 +641,25 @@ const BillingManagement = () => {
 
         if (error) throw error;
 
+        const { error } = await supabase
+          .from('billing_events')
+          .insert(billingData);
+
+        if (error) throw error;
+
         // Update jobs.percent_billed
         const newTotalPercentage = existingEvents.reduce((sum, event) => sum + parseFloat(event.percentage_billed || 0), 0) + percentageDecimal;
         await supabase
           .from('jobs')
           .update({ percent_billed: newTotalPercentage })
           .eq('id', selectedJob.id);
+        
+        // Wait for database to commit
+        await new Promise(resolve => setTimeout(resolve, 200));
           
         // Update the job in state without reloading
         alert('Billing event added successfully!');
-        calculateGlobalMetrics();
+        await calculateGlobalMetrics();
         
         // Update legacy jobs if this is a legacy job
         if (selectedJob.job_type === 'legacy_billing') {
