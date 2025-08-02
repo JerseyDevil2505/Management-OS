@@ -50,6 +50,7 @@ const BillingManagement = () => {
     notes: '',
     manualOverride: false,
     overrideAmount: ''
+    billingType: ''
   });
   const [showBulkPaste, setShowBulkPaste] = useState(false);
   const [bulkBillingText, setBulkBillingText] = useState('');
@@ -485,6 +486,7 @@ const BillingManagement = () => {
             amount_billed: event.amountBilled,
             remaining_due: remainingDue,
             notes: 'Imported from billing history'
+            billing_type: billingForm.billingType
           };
 
           const { error: eventError } = await supabase
@@ -686,6 +688,7 @@ const BillingManagement = () => {
         notes: '',
         manualOverride: false,
         overrideAmount: ''
+        billingType: ''
       });
       calculateGlobalMetrics();
     } catch (error) {
@@ -710,6 +713,7 @@ const BillingManagement = () => {
       const updateData = {
         status: editingEvent.status || '',
         amount_billed: parseFloat(editingEvent.amount_billed)
+        billing_type: editingEvent.billing_type || null
       };
 
       // First update the billing event
@@ -1413,6 +1417,16 @@ const BillingManagement = () => {
                                       </td>
                                       <td className="px-4 py-2 text-sm text-gray-900">
                                         {(event.percentage_billed * 100).toFixed(2)}%
+                                        {event.billing_type && (
+                                          <span className="ml-2 text-xs font-medium text-purple-700">
+                                            ({event.billing_type === 'turnover' ? 'Turnover' :
+                                              event.billing_type === '1st_appeals' ? '1st Yr Appeals' :
+                                              event.billing_type === '2nd_appeals' ? '2nd Yr Appeals' :
+                                              event.billing_type === '3rd_appeals' ? '3rd Yr Appeals' :
+                                              event.billing_type === 'retainer' ? 'Retainer' :
+                                              event.billing_type})
+                                          </span>
+                                        )}
                                       </td>
                                       <td className="px-4 py-2 text-sm">
                                         <span className={`px-2 py-1 text-xs rounded-full ${
@@ -1640,6 +1654,16 @@ const BillingManagement = () => {
                                       </td>
                                       <td className="px-4 py-2 text-sm text-gray-900">
                                         {(event.percentage_billed * 100).toFixed(2)}%
+                                        {event.billing_type && (
+                                          <span className="ml-2 text-xs font-medium text-purple-700">
+                                            ({event.billing_type === 'turnover' ? 'Turnover' :
+                                              event.billing_type === '1st_appeals' ? '1st Yr Appeals' :
+                                              event.billing_type === '2nd_appeals' ? '2nd Yr Appeals' :
+                                              event.billing_type === '3rd_appeals' ? '3rd Yr Appeals' :
+                                              event.billing_type === 'retainer' ? 'Retainer' :
+                                              event.billing_type})
+                                          </span>
+                                        )}
                                       </td>
                                       <td className="px-4 py-2 text-sm">
                                         <span className={`px-2 py-1 text-xs rounded-full ${
@@ -2090,8 +2114,24 @@ const BillingManagement = () => {
                   </select>
                 </div>
 
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Billing Type (Optional)
+                  </label>
+                  <select
+                    value={billingForm.billingType}
+                    onChange={(e) => setBillingForm(prev => ({ ...prev, billingType: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  >
+                    <option value="">Regular Billing</option>
+                    <option value="retainer">Retainer Payout</option>
+                    <option value="turnover">Turnover</option>
+                    <option value="1st_appeals">1st Year Appeals</option>
+                    <option value="2nd_appeals">2nd Year Appeals</option>
+                    <option value="3rd_appeals">3rd Year Appeals</option>
+                  </select>
+                </div>
                 
-
                 <div className="border-t pt-4">
                   <label className="flex items-center mb-2">
                     <input
@@ -2240,7 +2280,24 @@ const BillingManagement = () => {
                   <option value="O">Open</option>  
                 </select>
               </div>
-
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Billing Type
+                </label>
+                <select
+                  value={editingEvent.billing_type || ''}
+                  onChange={(e) => setEditingEvent(prev => ({ ...prev, billing_type: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                >
+                  <option value="">Regular Billing</option>
+                  <option value="retainer">Retainer Payout</option>
+                  <option value="turnover">Turnover</option>
+                  <option value="1st_appeals">1st Year Appeals</option>
+                  <option value="2nd_appeals">2nd Year Appeals</option>
+                  <option value="3rd_appeals">3rd Year Appeals</option>
+                </select>
+              </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Amount Billed
