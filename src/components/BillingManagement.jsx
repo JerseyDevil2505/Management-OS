@@ -594,6 +594,9 @@ const BillingManagement = () => {
           .from('jobs')
           .update({ percent_billed: runningPercentage })
           .eq('id', selectedJob.id);
+
+        // Add success notification
+        alert(`Successfully imported ${parsedEvents.length} billing events!`);    
           
         setShowBulkPaste(false);
         setBulkBillingText('');
@@ -644,6 +647,7 @@ const BillingManagement = () => {
           .eq('id', selectedJob.id);
           
         // Update the job in state without reloading
+        alert('Billing event added successfully!');
         setJobs(prevJobs => 
           prevJobs.map(job => {
             if (job.id === selectedJob.id) {
