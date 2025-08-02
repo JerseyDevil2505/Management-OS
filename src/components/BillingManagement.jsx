@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+  import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import * as XLSX from 'xlsx';
 
@@ -1149,41 +1149,66 @@ const BillingManagement = () => {
       <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-6 mb-6">
         <h2 className="text-lg font-semibold text-gray-800 mb-4">Business Overview</h2>
         
-        {/* Revenue & Contract Metrics */}
+        {/* Row 1: Contract & Revenue Status */}
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4">
           <div className="bg-white rounded-lg p-4 shadow-sm">
             <p className="text-sm text-gray-600 mb-1">Total Signed Contracts</p>
             <p className="text-2xl font-bold text-gray-900">{formatCurrency(globalMetrics.totalSigned)}</p>
-            <p className="text-xs text-gray-500 mt-1">Active + Planned</p>
+            <p className="text-xs text-gray-500 mt-1">All contracts</p>
           </div>
           <div className="bg-white rounded-lg p-4 shadow-sm">
             <p className="text-sm text-gray-600 mb-1">Total Amount Paid</p>
             <p className="text-2xl font-bold text-green-600">{formatCurrency(globalMetrics.totalPaid)}</p>
-            <p className="text-xs text-gray-500 mt-1">All paid invoices</p>
+            <p className="text-xs text-gray-500 mt-1">Collected revenue</p>
+          </div>
+          <div className="bg-white rounded-lg p-4 shadow-sm border-2 border-green-400">
+            <p className="text-sm text-gray-600 mb-1">Collection Rate</p>
+            <p className="text-2xl font-bold text-green-600">
+              {globalMetrics.totalSigned > 0 ? ((globalMetrics.totalPaid / globalMetrics.totalSigned) * 100).toFixed(1) : '0.0'}%
+            </p>
+            <p className="text-xs text-green-600 mt-1">Payment efficiency</p>
           </div>
           <div className="bg-white rounded-lg p-4 shadow-sm">
             <p className="text-sm text-gray-600 mb-1">Total Amount Open</p>
             <p className="text-2xl font-bold text-orange-600">{formatCurrency(globalMetrics.totalOpen)}</p>
-            <p className="text-xs text-gray-500 mt-1">Unpaid invoices</p>
+            <p className="text-xs text-gray-500 mt-1">Outstanding invoices</p>
           </div>
           <div className="bg-white rounded-lg p-4 shadow-sm">
             <p className="text-sm text-gray-600 mb-1">Total Remaining</p>
-            <p className="text-2xl font-bold text-orange-600">{formatCurrency(globalMetrics.totalRemaining)}</p>
-            <p className="text-xs text-gray-500 mt-1">Including retainer</p>
+            <p className="text-2xl font-bold text-gray-700">{formatCurrency(globalMetrics.totalRemaining)}</p>
+            <p className="text-xs text-gray-500 mt-1">To be billed</p>
           </div>
+        </div>
+        
+        {/* Row 2: Cash Flow Analysis */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
           <div className="bg-white rounded-lg p-4 shadow-sm border-2 border-blue-400">
             <p className="text-sm text-gray-600 mb-1">Remaining (No Retainer)</p>
             <p className="text-2xl font-bold text-blue-600">{formatCurrency(globalMetrics.totalRemainingExcludingRetainer)}</p>
             <p className="text-xs text-blue-600 mt-1">Actual work remaining</p>
           </div>
+          <div className="bg-white rounded-lg p-4 shadow-sm">
+            <p className="text-sm text-gray-600 mb-1">Retainer Held</p>
+            <p className="text-2xl font-bold text-purple-600">
+              {formatCurrency(globalMetrics.totalRemaining - globalMetrics.totalRemainingExcludingRetainer)}
+            </p>
+            <p className="text-xs text-gray-500 mt-1">Future collections</p>
+          </div>
+          <div className="bg-white rounded-lg p-4 shadow-sm">
+            <p className="text-sm text-gray-600 mb-1">Work Complete</p>
+            <p className="text-2xl font-bold text-blue-700">
+              {globalMetrics.totalSigned > 0 ? ((globalMetrics.totalPaid / globalMetrics.totalSigned) * 100).toFixed(1) : '0.0'}%
+            </p>
+            <p className="text-xs text-gray-500 mt-1">Progress indicator</p>
+          </div>
         </div>
         
-        {/* Financial Performance Metrics */}
+        {/* Row 3: Expenses & Profitability */}
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-          <div className="bg-white rounded-lg p-4 shadow-sm border-2 border-red-400">
+          <div className="bg-white rounded-lg p-4 shadow-sm">
             <p className="text-sm text-gray-600 mb-1">Daily Expense Rate</p>
             <p className="text-2xl font-bold text-red-600">{formatCurrency(globalMetrics.dailyFringe)}</p>
-            <p className="text-xs text-gray-500 mt-1">Avg of monthly rates</p>
+            <p className="text-xs text-gray-500 mt-1">Avg daily cost</p>
           </div>
           <div className="bg-white rounded-lg p-4 shadow-sm">
             <p className="text-sm text-gray-600 mb-1">Current Expenses</p>
@@ -1195,19 +1220,19 @@ const BillingManagement = () => {
             <p className="text-2xl font-bold text-red-700">{formatCurrency(globalMetrics.projectedExpenses)}</p>
             <p className="text-xs text-gray-500 mt-1">Full year estimate</p>
           </div>
-          <div className={`bg-white rounded-lg p-4 shadow-sm border-2 ${globalMetrics.profitLoss >= 0 ? 'border-green-400' : 'border-red-400'}`}>
-            <p className="text-sm text-gray-600 mb-1">Profit/Loss</p>
-            <p className={`text-2xl font-bold ${globalMetrics.profitLoss >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {formatCurrency(globalMetrics.profitLoss)}
+          <div className={`bg-white rounded-lg p-4 shadow-sm border-2 ${(globalMetrics.totalPaid - globalMetrics.currentExpenses) >= 0 ? 'border-green-400' : 'border-red-400'}`}>
+            <p className="text-sm text-gray-600 mb-1">Actual P/L</p>
+            <p className={`text-2xl font-bold ${(globalMetrics.totalPaid - globalMetrics.currentExpenses) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              {formatCurrency(globalMetrics.totalPaid - globalMetrics.currentExpenses)}
             </p>
-            <p className="text-xs text-gray-500 mt-1">Projected annual</p>
+            <p className="text-xs text-gray-500 mt-1">YTD performance</p>
           </div>
-          <div className={`bg-white rounded-lg p-4 shadow-sm border-2 ${globalMetrics.profitLossPercent >= 0 ? 'border-green-400' : 'border-red-400'}`}>
-            <p className="text-sm text-gray-600 mb-1">Profit Margin</p>
-            <p className={`text-2xl font-bold ${globalMetrics.profitLossPercent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {globalMetrics.profitLossPercent.toFixed(1)}%
+          <div className={`bg-white rounded-lg p-4 shadow-sm border-2 ${(globalMetrics.totalSigned - globalMetrics.projectedExpenses) >= 0 ? 'border-green-400' : 'border-red-400'}`}>
+            <p className="text-sm text-gray-600 mb-1">Projected P/L</p>
+            <p className={`text-2xl font-bold ${(globalMetrics.totalSigned - globalMetrics.projectedExpenses) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              {formatCurrency(globalMetrics.totalSigned - globalMetrics.projectedExpenses)}
             </p>
-            <p className="text-xs text-gray-500 mt-1">Of projected revenue</p>
+            <p className="text-xs text-gray-500 mt-1">Annual forecast</p>
           </div>
         </div>
       </div>
