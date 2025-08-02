@@ -1344,6 +1344,7 @@ const BillingManagement = () => {
                                 return formatCurrency(remainingNoRet < 0 ? 0 : remainingNoRet);
                               })()}
                             </p>
+                          </div>
                         </div>
                       )}
 
@@ -1586,6 +1587,7 @@ const BillingManagement = () => {
                                 return formatCurrency(remainingNoRet < 0 ? 0 : remainingNoRet);
                               })()}
                             </p>
+                          </div>
                         </div>
                       )}
 
