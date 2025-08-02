@@ -358,7 +358,7 @@ const BillingManagement = () => {
     console.log('Number of lines:', lines.length);
     const parsedEvents = [];
     
-    lines.forEach(line => {
+    lines.forEach((line, index) => {
       console.log(`Line ${index}:`, line);
       console.log(`Line ${index} length:`, line.length);
       const parts = line.trim().split('\t');
