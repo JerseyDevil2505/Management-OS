@@ -1416,16 +1416,17 @@ const BillingManagement = () => {
                                         {new Date(event.billing_date).toLocaleDateString()}
                                       </td>
                                       <td className="px-4 py-2 text-sm text-gray-900">
-                                        {(event.percentage_billed * 100).toFixed(2)}%
-                                        {event.billing_type && (
-                                          <span className="ml-2 text-xs font-medium text-purple-700">
-                                            ({event.billing_type === 'turnover' ? 'Turnover' :
-                                              event.billing_type === '1st_appeals' ? '1st Yr Appeals' :
-                                              event.billing_type === '2nd_appeals' ? '2nd Yr Appeals' :
-                                              event.billing_type === '3rd_appeals' ? '3rd Yr Appeals' :
-                                              event.billing_type === 'retainer' ? 'Retainer' :
-                                              event.billing_type})
+                                        {event.billing_type ? (
+                                          <span className="font-medium text-purple-700">
+                                            {event.billing_type === 'turnover' ? 'Turnover' :
+                                             event.billing_type === '1st_appeals' ? '1st Yr Appeals' :
+                                             event.billing_type === '2nd_appeals' ? '2nd Yr Appeals' :
+                                             event.billing_type === '3rd_appeals' ? '3rd Yr Appeals' :
+                                             event.billing_type === 'retainer' ? 'Retainer Payout' :
+                                             event.billing_type}
                                           </span>
+                                        ) : (
+                                          `${(event.percentage_billed * 100).toFixed(2)}%`
                                         )}
                                       </td>
                                       <td className="px-4 py-2 text-sm">
@@ -1653,16 +1654,17 @@ const BillingManagement = () => {
                                         {new Date(event.billing_date).toLocaleDateString()}
                                       </td>
                                       <td className="px-4 py-2 text-sm text-gray-900">
-                                        {(event.percentage_billed * 100).toFixed(2)}%
-                                        {event.billing_type && (
-                                          <span className="ml-2 text-xs font-medium text-purple-700">
-                                            ({event.billing_type === 'turnover' ? 'Turnover' :
-                                              event.billing_type === '1st_appeals' ? '1st Yr Appeals' :
-                                              event.billing_type === '2nd_appeals' ? '2nd Yr Appeals' :
-                                              event.billing_type === '3rd_appeals' ? '3rd Yr Appeals' :
-                                              event.billing_type === 'retainer' ? 'Retainer' :
-                                              event.billing_type})
+                                        {event.billing_type ? (
+                                          <span className="font-medium text-purple-700">
+                                            {event.billing_type === 'turnover' ? 'Turnover' :
+                                             event.billing_type === '1st_appeals' ? '1st Yr Appeals' :
+                                             event.billing_type === '2nd_appeals' ? '2nd Yr Appeals' :
+                                             event.billing_type === '3rd_appeals' ? '3rd Yr Appeals' :
+                                             event.billing_type === 'retainer' ? 'Retainer Payout' :
+                                             event.billing_type}
                                           </span>
+                                        ) : (
+                                          `${(event.percentage_billed * 100).toFixed(2)}%`
                                         )}
                                       </td>
                                       <td className="px-4 py-2 text-sm">
