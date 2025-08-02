@@ -918,6 +918,7 @@ const BillingManagement = () => {
       setShowEditBilling(false);
       setEditingEvent(null);
       loadJobs();
+      calculateGlobalMetrics();
     } catch (error) {
       console.error('Error deleting billing event:', error);
     }
