@@ -1443,7 +1443,7 @@ const BillingManagement = () => {
                                       <td className="px-4 py-2 text-sm text-gray-900">{formatCurrency(event.amount_billed)}</td>
                                       <td className="px-4 py-2 text-sm text-gray-900">{formatCurrency(event.remaining_due)}</td>
                                       <td className="px-4 py-2 text-sm font-semibold text-blue-600">
-                                        {remainingNoRetainer < 0 ? formatCurrency(0) : formatCurrency(remainingNoRetainer)}
+                                        {formatCurrency(Math.max(0, remainingNoRetainer))}
                                       </td>
                                     </tr>
                                   );
