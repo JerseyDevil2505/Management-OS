@@ -1228,7 +1228,7 @@ const BillingManagement = () => {
             <p className="text-xs text-gray-500">
               Margin: {globalMetrics.totalPaid > 0 ? (((globalMetrics.totalPaid - globalMetrics.currentExpenses) / globalMetrics.totalPaid) * 100).toFixed(1) : '0.0'}%
             </p>
-          </div>>
+          </div>
           <div className={`bg-white rounded-lg p-4 shadow-sm border-2 ${(globalMetrics.totalSigned - globalMetrics.projectedExpenses) >= 0 ? 'border-green-400' : 'border-red-400'}`}>
             <p className="text-sm text-gray-600 mb-1">Projected P/L</p>
             <p className={`text-2xl font-bold ${(globalMetrics.totalSigned - globalMetrics.projectedExpenses) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
