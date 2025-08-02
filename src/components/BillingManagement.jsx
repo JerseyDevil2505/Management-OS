@@ -664,7 +664,7 @@ const BillingManagement = () => {
                 return {
                   ...job,
                   billing_events: [...(job.billing_events || []), newEvent],
-                  percent_billed: newTotalPercentage
+                  percent_billed: runningPercentage
                 };
               }
               return job;
@@ -695,7 +695,7 @@ const BillingManagement = () => {
               return {
                 ...job,
                 billing_events: [...(job.billing_events || []), newEvent],
-                percent_billed: newTotalPercentage
+                percent_billed: runningPercentage
               };
             }
             return job;
@@ -902,11 +902,11 @@ const BillingManagement = () => {
         .select('percentage_billed')
         .eq('job_id', billingEvent.job_id);
 
-      const newTotalPercentage = remainingEvents.reduce((sum, event) => sum + parseFloat(event.percentage_billed || 0), 0);
+      const  = remainingEvents.reduce((sum, event) => sum + parseFloat(event.percentage_billed || 0), 0);
       
       await supabase
         .from('jobs')
-        .update({ percent_billed: newTotalPercentage })
+        .update({ percent_billed:  })
         .eq('id', billingEvent.job_id);
 
       setShowEditBilling(false);
