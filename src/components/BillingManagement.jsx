@@ -2144,6 +2144,8 @@ const BillingManagement = () => {
                   </select>
                 </div>
 
+                
+
                 <div className="border-t pt-4">
                   <label className="flex items-center mb-2">
                     <input
@@ -2175,6 +2177,51 @@ const BillingManagement = () => {
                   )}
                 </div>
 
+                                {/* Add this new section */}
+                {selectedJob && selectedJob.percent_billed >= 1.0 && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Billing Type
+                    </label>
+                    <select
+                      value={billingForm.billingType || ''}
+                      onChange={(e) => {
+                        const type = e.target.value;
+                        const contract = selectedJob.job_contracts[0];
+                        let percentage = '';
+                        
+                        switch(type) {
+                          case 'turnover':
+                            percentage = (contract.end_of_job_percentage * 100).toString();
+                            break;
+                          case '1st_appeals':
+                            percentage = (contract.first_year_appeals_percentage * 100).toString();
+                            break;
+                          case '2nd_appeals':
+                            percentage = (contract.second_year_appeals_percentage * 100).toString();
+                            break;
+                          case '3rd_appeals':
+                            percentage = (contract.third_year_appeals_percentage * 100).toString();
+                            break;
+                        }
+                        
+                        setBillingForm(prev => ({ 
+                          ...prev, 
+                          billingType: type,
+                          percentageBilled: percentage
+                        }));
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    >
+                      <option value="">Select type...</option>
+                      <option value="turnover">Turnover</option>
+                      <option value="1st_appeals">1st Year Appeals</option>
+                      <option value="2nd_appeals">2nd Year Appeals</option>
+                      <option value="3rd_appeals">3rd Year Appeals</option>
+                    </select>
+                  </div>
+                )}
+                
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Notes
