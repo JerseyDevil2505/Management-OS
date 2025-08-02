@@ -1684,8 +1684,31 @@ const BillingManagement = () => {
                           >
                             Edit Contract
                           </button>
+                          <button
+                            onClick={async () => {
+                              if (window.confirm(`Are you sure you want to delete "${job.job_name}"? This will delete all billing events and cannot be undone.`)) {
+                                try {
+                                  const { error } = await supabase
+                                    .from('jobs')
+                                    .delete()
+                                    .eq('id', job.id);
+                                  
+                                  if (error) throw error;
+                                  
+                                  alert('Legacy job deleted successfully');
+                                  loadJobs();
+                                  calculateGlobalMetrics();
+                                } catch (error) {
+                                  console.error('Error deleting legacy job:', error);
+                                  alert('Error deleting job: ' + error.message);
+                                }
+                              }
+                            }}
+                            className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+                          >
+                            Delete
+                          </button>
                         </div>
-                      </div>
 
                       {totals && (
                         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
