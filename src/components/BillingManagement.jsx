@@ -712,7 +712,7 @@ const BillingManagement = () => {
       // Prepare update data
       const updateData = {
         status: editingEvent.status || '',
-        amount_billed: parseFloat(editingEvent.amount_billed)
+        amount_billed: parseFloat(editingEvent.amount_billed),
         billing_type: editingEvent.billing_type || null
       };
 
