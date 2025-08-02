@@ -2174,45 +2174,53 @@ const BillingManagement = () => {
                     </div>
                   )}
                 </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Notes
+                  </label>
+                  <textarea
+                    value={billingForm.notes}
+                    onChange={(e) => setBillingForm(prev => ({ ...prev, notes: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    rows="3"
+                    placeholder="Optional notes..."
+                  />
+                </div>
+              </div>
+            )}
 
-                    <select
-                      value={billingForm.billingType || ''}
-                      onChange={(e) => {
-                        const type = e.target.value;
-                        const contract = selectedJob.job_contracts[0];
-                        let percentage = '';
-                        
-                        switch(type) {
-                          case 'turnover':
-                            percentage = (contract.end_of_job_percentage * 100).toString();
-                            break;
-                          case '1st_appeals':
-                            percentage = (contract.first_year_appeals_percentage * 100).toString();
-                            break;
-                          case '2nd_appeals':
-                            percentage = (contract.second_year_appeals_percentage * 100).toString();
-                            break;
-                          case '3rd_appeals':
-                            percentage = (contract.third_year_appeals_percentage * 100).toString();
-                            break;
-                        }
-                        
-                        setBillingForm(prev => ({ 
-                          ...prev, 
-                          billingType: type,
-                          percentageBilled: percentage
-                        }));
-                      }}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                    >
-                      <option value="">Select type...</option>
-                      <option value="turnover">Turnover</option>
-                      <option value="1st_appeals">1st Year Appeals</option>
-                      <option value="2nd_appeals">2nd Year Appeals</option>
-                      <option value="3rd_appeals">3rd Year Appeals</option>
-                    </select>
-                  </div>
-                )}
+            <div className="flex justify-end space-x-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowBillingForm(false);
+                  setShowBulkPaste(false);
+                  setBulkBillingText('');
+                  setBillingForm({
+                    billingDate: new Date().toISOString().split('T')[0],
+                    percentageBilled: '',
+                    status: 'P',
+                    invoiceNumber: '',
+                    notes: '',
+                    manualOverride: false,
+                    overrideAmount: '',
+                    billingType: ''
+                  });
+                }}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddBillingEvent}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              >
+                {showBulkPaste ? 'Import Events' : 'Add Billing Event'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
                 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
