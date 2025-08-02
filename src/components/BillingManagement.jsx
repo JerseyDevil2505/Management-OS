@@ -485,7 +485,7 @@ const BillingManagement = () => {
             retainer_amount: event.retainerAmount,
             amount_billed: event.amountBilled,
             remaining_due: remainingDue,
-            notes: 'Imported from billing history'
+            notes: 'Imported from billing history',
             billing_type: billingForm.billingType
           };
 
