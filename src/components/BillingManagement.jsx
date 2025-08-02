@@ -664,7 +664,7 @@ const BillingManagement = () => {
                 return {
                   ...job,
                   billing_events: [...(job.billing_events || []), newEvent],
-                  percent_billed: runningPercentage
+                  percent_billed: (job.percent_billed || 0) + percentageDecimal
                 };
               }
               return job;
