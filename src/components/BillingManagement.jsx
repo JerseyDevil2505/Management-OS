@@ -177,8 +177,7 @@ const BillingManagement = () => {
             if (job.billing_events) {
               job.billing_events.forEach(event => {
                 if (event.status === 'P') {
-                  jobPaid += event.amount_billed;
-                  console.log(`Added ${event.amount_billed} to jobPaid. New jobPaid: ${jobPaid}`);                  
+                  jobPaid += event.amount_billed;                                 
                 } else if (event.status === 'O') {   // Check for multiple possible open statuses
                   jobOpen += event.amount_billed;
                 }
