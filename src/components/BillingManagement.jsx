@@ -48,21 +48,46 @@ const BillingManagement = () => {
     cashReserve: 200000
   });
   
-  // Working days for 2025 (excluding weekends and federal holidays)
-  const workingDays2025 = {
-    1: 21,  // Jan
-    2: 19,  // Feb
-    3: 21,  // Mar
-    4: 21,  // Apr
-    5: 21,  // May
-    6: 20,  // Jun
-    7: 22,  // Jul
-    8: 21,  // Aug
-    9: 21,  // Sep
-    10: 22, // Oct
-    11: 18, // Nov
-    12: 22  // Dec
+const [reserveSettings, setReserveSettings] = useState({
+    operatingReserveMonths: 2, // 0, 1, or 2
+    cashReserve: 200000
+  });
+  
+  // Dynamic working days calculation
+  const getWorkingDaysForMonth = (year, month) => {
+    const firstDay = new Date(year, month - 1, 1);
+    const lastDay = new Date(year, month, 0);
+    let workingDays = 0;
+    
+    for (let day = 1; day <= lastDay.getDate(); day++) {
+      const date = new Date(year, month - 1, day);
+      const dayOfWeek = date.getDay();
+      // Count weekdays (Mon-Fri)
+      if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+        workingDays++;
+      }
+    }
+    
+    // Rough federal holiday adjustment
+    const federalHolidayAdjustment = {
+      1: 2,  // New Year's, MLK
+      2: 1,  // Presidents
+      5: 1,  // Memorial
+      7: 1,  // July 4th
+      9: 1,  // Labor
+      11: 2, // Veterans, Thanksgiving
+      12: 1  // Christmas
+    };
+    
+    return workingDays - (federalHolidayAdjustment[month] || 0);
   };
+  
+  // Generate working days for current year
+  const currentYear = new Date().getFullYear();
+  const workingDays = {};
+  for (let month = 1; month <= 12; month++) {
+    workingDays[month] = getWorkingDaysForMonth(currentYear, month);
+  }
 
   const [contractSetup, setContractSetup] = useState({
     contractAmount: '',
@@ -285,11 +310,11 @@ const BillingManagement = () => {
       // Calculate working days so far this year
       let workingDaysSoFar = 0;
       for (let month = 1; month <= currentMonth; month++) {
-        workingDaysSoFar += workingDays2025[month] || 21;
+        workingDaysSoFar += workingDays[month] || 21;
       }
 
       // Calculate total working days in year
-      const totalWorkingDays = Object.values(workingDays2025).reduce((sum, days) => sum + days, 0);
+      const totalWorkingDays = Object.values(workingDays).reduce((sum, days) => sum + days, 0);
 
       // Calculate daily fringe (expense rate) and projections
       const revenue = totalPaid; // Use total paid invoices as revenue
@@ -303,7 +328,7 @@ const BillingManagement = () => {
       for (let month = 1; month <= currentMonth; month++) {
         const monthExpense = monthlyExpenses[month - 1];
         if (monthExpense > 0) {
-          const dailyRate = monthExpense / workingDays2025[month];
+          const dailyRate = monthExpense / workingDays[month];
           monthlyDailyRates.push(dailyRate);
           totalDailyRates += dailyRate;
           monthsWithData++;
@@ -2183,13 +2208,17 @@ const BillingManagement = () => {
                           <td className="px-6 py-2 text-xs font-medium text-blue-700 sticky left-0 bg-blue-50">
                             Working Days
                           </td>
-                          {Object.values(workingDays2025).map((days, idx) => (
+                          {Object.values(workingDays).map((days, idx) => (
                             <td key={idx} className="px-6 py-2 text-center text-xs font-semibold text-blue-700">
                               {days}
                             </td>
                           ))}
                           <td className="px-6 py-2 text-center text-xs font-bold text-blue-700 bg-blue-100">
-                            {Object.values(workingDays2025).reduce((sum, days) => sum + days, 0)}
+                            {Object.values(workingDays).reduce((sum, days) => sum + days, 0)}
+                          </td>
+                          ))}
+                          <td className="px-6 py-2 text-center text-xs font-bold text-blue-700 bg-blue-100">
+                            {Object.values(workingDays).reduce((sum, days) => sum + days, 0)}
                           </td>
                         </tr>
                       </thead>
@@ -2259,7 +2288,7 @@ const BillingManagement = () => {
                             });
                             
                             return monthlyTotals.map((total, idx) => {
-                              const dailyAvg = total / workingDays2025[idx + 1];
+                              const dailyAvg = total / workingDays[idx + 1];
                               return (
                                 <td key={idx} className="px-6 py-4 text-sm text-right text-yellow-800">
                                   {total > 0 ? formatCurrency(dailyAvg) : '-'}
@@ -2270,7 +2299,7 @@ const BillingManagement = () => {
                           <td className="px-6 py-4 text-sm text-right text-yellow-800 bg-yellow-100">
                             {formatCurrency(
                               expenses.reduce((sum, exp) => sum + parseFloat(exp.amount), 0) / 
-                              Object.values(workingDays2025).reduce((sum, days) => sum + days, 0)
+                              Object.values(workingDays).reduce((sum, days) => sum + days, 0)
                             )}
                           </td>
                         </tr>
@@ -2525,7 +2554,7 @@ const BillingManagement = () => {
               
               {/* Distributions by Partner */}
               <div className="bg-white rounded-lg shadow overflow-hidden">
-                <h3 className="text-lg font-semibold text-gray-900 p-6 pb-4">2025 Distribution Summary</h3>
+                <h3 className="text-lg font-semibold text-gray-900 p-6 pb-4">{new Date().getFullYear()} Distribution Summary</h3>
                 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 p-6">
                   {['Thomas Davis', 'Brian Schneider', 'Kristine Duda'].map(partner => {
@@ -2614,7 +2643,7 @@ const BillingManagement = () => {
                 <div className="bg-gray-50 p-4 m-6 rounded-lg">
                   <div className="flex justify-between items-center">
                     <div>
-                      <p className="text-sm text-gray-600">Total Distributed in 2025:</p>
+                      <p className="text-sm text-gray-600">Total Distributed in {new Date().getFullYear()}:</p>
                       <p className="text-2xl font-bold text-gray-900">
                         {formatCurrency((() => {
                           // Calculate the highest distribution level
