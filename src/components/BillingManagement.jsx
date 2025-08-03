@@ -161,6 +161,7 @@ const BillingManagement = () => {
 
       // Calculate from active jobs
       if (activeJobs) {
+        console.log('Active jobs:', activeJobs);
         activeJobs.forEach(job => {
           if (job.job_contracts?.[0]) {
             const contract = job.job_contracts[0];
@@ -497,10 +498,6 @@ const BillingManagement = () => {
 
       // DEBUG: Add this for yellow jobs at 100%
   if (totalPercentageBilled >= 0.99 && totalPercentageBilled <= 1.01) {
-    console.log(`Job: ${job.job_name}`);
-    console.log(`  Total %: ${totalPercentageBilled}`);
-    console.log(`  Is Complete: ${totalPercentageBilled >= 1.0}`);
-    console.log(`  Events:`, events.map(e => e.percentage_billed));
   }
     
     return {
