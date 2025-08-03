@@ -2503,21 +2503,21 @@ const BillingManagement = () => {
                     <p className="text-sm text-gray-600">Thomas Davis (10%)</p>
                     <p className="text-xs text-gray-500 mb-1">Conservative / Projected</p>
                     <p className="text-lg font-semibold text-gray-900">
-                      {formatCurrency(distributionMetrics.conservative * 0.10)} / {formatCurrency(distributionMetrics.projected * 0.10)}
+                      ${Math.floor(distributionMetrics.conservative * 0.10).toLocaleString()} / ${Math.floor(distributionMetrics.projected * 0.10).toLocaleString()}
                     </p>
                   </div>
                   <div className="bg-white rounded-lg p-4 shadow-sm">
                     <p className="text-sm text-gray-600">Brian Schneider (45%)</p>
                     <p className="text-xs text-gray-500 mb-1">Conservative / Projected</p>
                     <p className="text-lg font-semibold text-gray-900">
-                      {formatCurrency(distributionMetrics.conservative * 0.45)} / {formatCurrency(distributionMetrics.projected * 0.45)}
+                      ${Math.floor(distributionMetrics.conservative * 0.45).toLocaleString()} / ${Math.floor(distributionMetrics.projected * 0.45).toLocaleString()}
                     </p>
                   </div>
                   <div className="bg-white rounded-lg p-4 shadow-sm">
                     <p className="text-sm text-gray-600">Kristine Duda (45%)</p>
                     <p className="text-xs text-gray-500 mb-1">Conservative / Projected</p>
                     <p className="text-lg font-semibold text-gray-900">
-                      {formatCurrency(distributionMetrics.conservative * 0.45)} / {formatCurrency(distributionMetrics.projected * 0.45)}
+                      ${Math.floor(distributionMetrics.conservative * 0.45).toLocaleString()} / ${Math.floor(distributionMetrics.projected * 0.45).toLocaleString()}
                     </p>
                   </div>
                 </div>
@@ -2616,7 +2616,23 @@ const BillingManagement = () => {
                     <div>
                       <p className="text-sm text-gray-600">Total Distributed in 2025:</p>
                       <p className="text-2xl font-bold text-gray-900">
-                        {formatCurrency(distributions.filter(d => d.status === 'paid').reduce((sum, d) => sum + d.amount, 0))}
+                        {formatCurrency((() => {
+                          // Calculate the highest distribution level
+                          const allPartners = ['Thomas Davis', 'Brian Schneider', 'Kristine Duda'];
+                          let maxImpliedTotal = 0;
+                          
+                          allPartners.forEach(p => {
+                            const pOwnership = p === 'Thomas Davis' ? 0.10 : 0.45;
+                            const pDistributions = distributions.filter(d => d.shareholder_name === p && d.status === 'paid');
+                            const pTotal = pDistributions.reduce((sum, d) => sum + d.amount, 0);
+                            const impliedTotal = pTotal / pOwnership;
+                            if (impliedTotal > maxImpliedTotal) {
+                              maxImpliedTotal = impliedTotal;
+                            }
+                          });
+                          
+                          return maxImpliedTotal;
+                        })())}
                       </p>
                     </div>
                     <button
