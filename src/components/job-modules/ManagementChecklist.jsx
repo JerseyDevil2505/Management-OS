@@ -40,34 +40,34 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
     getCurrentUser();
   }, []);
 
-useEffect(() => {
-  if (jobData) {
-    loadChecklistItems();
-  }
-}, [jobData, checklistType]);
-
-// Load checklist items from database
-const loadChecklistItems = async () => {
-  try {
-    console.log('📋 Loading checklist for job:', jobData.id);
-    
-    // First, try to load existing items
-    let items = await checklistService.getChecklistItems(jobData.id);
-    
-    // If no items exist, create them
-    if (!items || items.length === 0) {
-      console.log('🔨 No checklist items found, creating new ones...');
-      items = await checklistService.createChecklistForJob(jobData.id, checklistType);
+  useEffect(() => {
+    if (jobData) {
+      loadChecklistItems();
     }
-    
-    setChecklistItems(items);
-    console.log(`✅ Loaded ${items.length} checklist items`);
-  } catch (error) {
-    console.error('Error loading checklist items:', error);
-    // Fallback to empty array on error
-    setChecklistItems([]);
-  }
-};
+  }, [jobData, checklistType]);
+
+  // Load checklist items from database
+  const loadChecklistItems = async () => {
+    try {
+      console.log('📋 Loading checklist for job:', jobData.id);
+      
+      // First, try to load existing items
+      let items = await checklistService.getChecklistItems(jobData.id);
+      
+      // If no items exist, create them
+      if (!items || items.length === 0) {
+        console.log('🔨 No checklist items found, creating new ones...');
+        items = await checklistService.createChecklistForJob(jobData.id, checklistType);
+      }
+      
+      setChecklistItems(items);
+      console.log(`✅ Loaded ${items.length} checklist items`);
+    } catch (error) {
+      console.error('Error loading checklist items:', error);
+      // Fallback to empty array on error
+      setChecklistItems([]);
+    }
+  };
 
   useEffect(() => {
     setHasClientNameChanges(editableClientName !== jobData?.client_name);
@@ -114,46 +114,47 @@ const loadChecklistItems = async () => {
   const totalCount = checklistItems.length;
   const completionPercentage = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
 
-const handleItemStatusChange = async (itemId, newStatus) => {
-  try {
-    // Update in database first
-    const updatedItem = await checklistService.updateItemStatus(
-      itemId, 
-      newStatus, 
-      currentUser?.name || 'System User'
-    );
-    
-    // Then update local state with the response
-    setChecklistItems(items => items.map(item => 
-      item.id === itemId ? updatedItem : item
-    ));
-    
-    console.log(`✅ Updated item ${itemId} status to ${newStatus}`);
-  } catch (error) {
-    console.error('Error updating item status:', error);
-    alert('Failed to update status. Please try again.');
-  }
-};
-const handleClientApproval = async (itemId, approved) => {
-  try {
-    // Update in database first
-    const updatedItem = await checklistService.updateClientApproval(
-      itemId, 
-      approved, 
-      currentUser?.name || 'System User'
-    );
-    
-    // Then update local state with the response
-    setChecklistItems(items => items.map(item => 
-      item.id === itemId ? updatedItem : item
-    ));
-    
-    console.log(`✅ Updated item ${itemId} client approval to ${approved}`);
-  } catch (error) {
-    console.error('Error updating client approval:', error);
-    alert('Failed to update approval. Please try again.');
-  }
-};
+  const handleItemStatusChange = async (itemId, newStatus) => {
+    try {
+      // Update in database first
+      const updatedItem = await checklistService.updateItemStatus(
+        itemId, 
+        newStatus, 
+        currentUser?.name || 'System User'
+      );
+      
+      // Then update local state with the response
+      setChecklistItems(items => items.map(item => 
+        item.id === itemId ? updatedItem : item
+      ));
+      
+      console.log(`✅ Updated item ${itemId} status to ${newStatus}`);
+    } catch (error) {
+      console.error('Error updating item status:', error);
+      alert('Failed to update status. Please try again.');
+    }
+  };
+
+  const handleClientApproval = async (itemId, approved) => {
+    try {
+      // Update in database first
+      const updatedItem = await checklistService.updateClientApproval(
+        itemId, 
+        approved, 
+        currentUser?.name || 'System User'
+      );
+      
+      // Then update local state with the response
+      setChecklistItems(items => items.map(item => 
+        item.id === itemId ? updatedItem : item
+      ));
+      
+      console.log(`✅ Updated item ${itemId} client approval to ${approved}`);
+    } catch (error) {
+      console.error('Error updating client approval:', error);
+      alert('Failed to update approval. Please try again.');
+    }
+  };
 
   const handleFileUpload = async (itemId, file) => {
     if (file.size > 200 * 1024 * 1024) {
@@ -162,45 +163,60 @@ const handleClientApproval = async (itemId, approved) => {
     }
     
     setUploading(true);
-    setTimeout(() => {
+    try {
+      // Upload file and update item
+      const updatedItem = await checklistService.uploadFile(itemId, jobData.id, file, currentUser?.name || 'System User');
+      
+      // Update local state
       setChecklistItems(items => items.map(item => 
-        item.id === itemId 
-          ? { 
-              ...item, 
-              file_attachment_path: `/uploads/${file.name}`,
-              file_size: `${(file.size / 1024 / 1024).toFixed(1)}MB`,
-              status: 'completed',
-              completed_at: new Date().toISOString(),
-              completed_by: currentUser?.name || 'System User'
-            }
-          : item
+        item.id === itemId ? updatedItem : item
       ));
+      
+      alert('File uploaded successfully!');
+    } catch (error) {
+      console.error('Error uploading file:', error);
+      alert('Failed to upload file. Please try again.');
+    } finally {
       setUploading(false);
-    }, 1000);
+    }
   };
 
-const saveClientName = async () => {
-  try {
-    console.log('Saving client name:', editableClientName);
-    
-    // Save to database
-    await checklistService.updateClientName(jobData.id, editableClientName);
-    
-    // Update local state
-    setHasClientNameChanges(false);
-    
-    // Success feedback
-    alert('Client/Assessor name updated successfully!');
-  } catch (error) {
-    console.error('Error saving client name:', error);
-    alert('Failed to save client name. Please try again.');
-  }
-};
-  const generateMailingList = () => {
-    const mockMailingData = [
-      { block: '1', lot: '1', location: 'Property data will come from source files', owner: 'Owner data from property records', address: 'Mailing addresses from normalized data' }
-    ];
-    setMailingListPreview(mockMailingData);
+  const saveClientName = async () => {
+    try {
+      console.log('Saving client name:', editableClientName);
+      
+      // Save to database
+      await checklistService.updateClientName(jobData.id, editableClientName);
+      
+      // Update local state
+      setHasClientNameChanges(false);
+      
+      // Success feedback
+      alert('Client/Assessor name updated successfully!');
+    } catch (error) {
+      console.error('Error saving client name:', error);
+      alert('Failed to save client name. Please try again.');
+    }
+  };
+
+  const generateMailingList = async () => {
+    try {
+      const mailingData = await checklistService.generateMailingList(jobData.id);
+      
+      // Transform data for display
+      const formattedData = mailingData.map(record => ({
+        block: record.property_block,
+        lot: record.property_lot,
+        location: record.property_location,
+        owner: record.owner_name,
+        address: record.owner_address
+      }));
+      
+      setMailingListPreview(formattedData);
+    } catch (error) {
+      console.error('Error generating mailing list:', error);
+      alert('Failed to generate mailing list. Please ensure property data is loaded.');
+    }
   };
 
   const downloadMailingList = () => {
@@ -219,26 +235,30 @@ const saveClientName = async () => {
     setMailingListPreview(null);
   };
 
-  const handleTurnoverDate = (date) => {
+  const handleTurnoverDate = async (itemId, date) => {
     if (date) {
+      // First update the item status
+      await handleItemStatusChange(itemId, 'completed');
+      
+      // Then show archive confirmation
       setShowArchiveConfirm(true);
     }
   };
 
-  const confirmArchive = () => {
-    setChecklistItems(items => items.map(item => 
-      item.id === 29 
-        ? { 
-            ...item, 
-            status: 'completed',
-            completed_at: new Date().toISOString(),
-            completed_by: currentUser?.name || 'System User',
-            notes: 'Job marked for archive'
-          }
-        : item
-    ));
-    setShowArchiveConfirm(false);
-    alert('Job will be archived and moved to completed status in Job Management');
+  const confirmArchive = async () => {
+    try {
+      // Archive the job
+      await checklistService.archiveJob(jobData.id, new Date().toISOString());
+      
+      setShowArchiveConfirm(false);
+      alert('Job has been archived successfully!');
+      
+      // Go back to jobs list
+      onBackToJobs();
+    } catch (error) {
+      console.error('Error archiving job:', error);
+      alert('Failed to archive job. Please try again.');
+    }
   };
 
   if (!jobData) {
@@ -584,7 +604,7 @@ const saveClientName = async () => {
                   {item.input_type === 'date' && (
                     <input
                       type="date"
-                      onChange={(e) => handleTurnoverDate(e.target.value)}
+                      onChange={(e) => handleTurnoverDate(item.id, e.target.value)}
                       className="px-2 py-1 border border-gray-300 rounded-md text-sm"
                       placeholder="Select turnover date"
                     />
