@@ -137,22 +137,18 @@ const PayrollManagement = () => {
       
       console.log(`Calculating bonuses from ${startDate} to ${endDate}`);
       
-      const validInitials = employees
-        .filter(emp => emp.initials)
-        .map(emp => emp.initials.toUpperCase().trim());
-      
-      console.log('Valid employee initials:', validInitials);
-      
-      // First, let's check what property classes exist in the date range
-      const { data: classCheck, error: classError } = await supabase
+      // Get ALL inspections with class 2 or 3A in the date range
+      // Don't filter by employee initials - we'll match them up after
+      const { count, error: countError } = await supabase
         .from('inspection_data')
-        .select('property_class')
+        .select('*', { count: 'exact', head: true })
         .gte('measure_date', startDate)
         .lte('measure_date', endDate)
-        .limit(100);
+        .in('property_class', ['2', '3A']);
+
+      if (countError) throw countError;
       
-      if (!classError && classCheck) {
-        const uniqueClasses = [...new Set(classCheck.map(
+      console.log(`Total inspections to process: ${count}`);
 
       const batchSize = 1000;
       const batches = Math.ceil(count / batchSize);
@@ -167,7 +163,6 @@ const PayrollManagement = () => {
           .select('id, measure_by, measure_date, property_class, property_composite_key, property_location, job_id')
           .gte('measure_date', startDate)
           .lte('measure_date', endDate)
-          .in('measure_by', validInitials)
           .in('property_class', ['2', '3A'])
           .range(from, to);
 
@@ -181,6 +176,7 @@ const PayrollManagement = () => {
         allInspections.push(...batch);
       }
 
+      // Group inspections by inspector
       const inspectorCounts = {};
       
       allInspections.forEach(inspection => {
@@ -204,6 +200,7 @@ const PayrollManagement = () => {
         });
       });
 
+      // Calculate bonuses by employee name - now we match after getting all inspections
       const bonusResults = {};
       
       employees.forEach(employee => {
@@ -226,6 +223,20 @@ const PayrollManagement = () => {
             bonus: 0,
             inspectionIds: [],
             details: []
+          };
+        }
+      });
+      
+      // Also include any inspectors not in employee list (to catch mismatches)
+      Object.keys(inspectorCounts).forEach(initials => {
+        const hasEmployee = employees.some(emp => emp.initials?.toUpperCase().trim() === initials);
+        if (!hasEmployee) {
+          bonusResults[`Unknown Inspector (${initials})`] = {
+            initials: initials,
+            inspections: inspectorCounts[initials].count,
+            bonus: inspectorCounts[initials].count * bonusRate,
+            inspectionIds: inspectorCounts[initials].inspectionIds,
+            details: inspectorCounts[initials].details
           };
         }
       });
