@@ -727,7 +727,30 @@ export const checklistService = {
       throw error;
     }
   }
+},
+  // Update client/assessor name on job
+  async updateClientName(jobId, clientName) {
+    try {
+      const { data, error } = await supabase
+        .from('jobs')
+        .update({ 
+          client_name: clientName,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', jobId)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      console.log('✅ Updated client name:', clientName);
+      return data;
+    } catch (error) {
+      console.error('Client name update error:', error);
+      throw error;
+    }
+  }
 };
+  
 
 // ===== UNIFIED PROPERTY MANAGEMENT SERVICES =====
 export const propertyService = {
