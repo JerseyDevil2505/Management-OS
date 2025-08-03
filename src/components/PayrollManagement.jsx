@@ -3,6 +3,7 @@ import { supabase, employeeService, jobService } from '../lib/supabaseClient';
 import * as XLSX from 'xlsx';
 
 const PayrollManagement = () => {
+  const [activeTab, setActiveTab] = useState('current');
   const [payrollData, setPayrollData] = useState([]);
   const [uploadedFile, setUploadedFile] = useState(null);
   const [inspectionBonuses, setInspectionBonuses] = useState({});
@@ -21,6 +22,7 @@ const PayrollManagement = () => {
     expectedHours: 0
   });
   const [lastProcessedInfo, setLastProcessedInfo] = useState(null);
+  const [archivedPeriods, setArchivedPeriods] = useState([]);
 
   // Helper functions
   const calculateExpectedHours = (startDate, endDate) => {
@@ -62,20 +64,30 @@ const PayrollManagement = () => {
     return calculateExpectedHours(periodStart, periodEnd);
   };
 
-  const getPayrollPeriod = (endDate) => {
-    if (!endDate) return '';
-    
-    const end = new Date(endDate);
+  // Helper function to get next payroll period
+  const getNextPayrollPeriod = (currentEndDate) => {
+    const end = new Date(currentEndDate);
     const day = end.getDate();
     const month = end.getMonth();
     const year = end.getFullYear();
     
+    let nextEnd, nextStart;
+    
     if (day <= 15) {
-      return `${month + 1}/1/${year} - ${month + 1}/15/${year}`;
+      // Current period was 1-15, next is 16-end
+      nextStart = new Date(year, month, 16);
+      nextEnd = new Date(year, month + 1, 0); // Last day of month
     } else {
-      const lastDay = new Date(year, month + 1, 0).getDate();
-      return `${month + 1}/16/${year} - ${month + 1}/${lastDay}/${year}`;
+      // Current period was 16-end, next is 1-15 of next month
+      nextStart = new Date(year, month + 1, 1);
+      nextEnd = new Date(year, month + 1, 15);
     }
+    
+    return {
+      startDate: nextStart.toISOString().split('T')[0],
+      endDate: nextEnd.toISOString().split('T')[0],
+      expectedHours: calculateExpectedHours(nextStart, nextEnd)
+    };
   };
 
   useEffect(() => {
@@ -119,6 +131,17 @@ const PayrollManagement = () => {
             setLastProcessedInfo(parsed);
           }
         }
+      }
+      
+      // Load archived periods
+      const { data: archived, error: archiveError } = await supabase
+        .from('payroll_periods')
+        .select('*')
+        .order('end_date', { ascending: false })
+        .limit(12); // Last 12 periods
+      
+      if (!archiveError && archived) {
+        setArchivedPeriods(archived);
       }
     } catch (error) {
       console.error('Error loading initial data:', error);
@@ -619,6 +642,7 @@ const PayrollManagement = () => {
         return;
       }
       
+      // Update inspections with period end and processed date
       const batchSize = 1000;
       for (let i = 0; i < allInspectionIds.length; i += batchSize) {
         const batch = allInspectionIds.slice(i, i + batchSize);
@@ -634,7 +658,68 @@ const PayrollManagement = () => {
         if (error) throw error;
       }
       
-      // Save processing info to localStorage
+      // Calculate totals for archiving
+      const mergedData = mergePayrollWithBonuses();
+      const totalHours = mergedData.reduce((sum, emp) => sum + (typeof emp.hours === 'number' ? emp.hours : 0), 0);
+      const totalApptOT = mergedData.reduce((sum, emp) => sum + (emp.apptOT || 0), 0);
+      const totalFieldBonus = mergedData.reduce((sum, emp) => sum + emp.calculatedFieldOT, 0);
+      const totalOT = mergedData.reduce((sum, emp) => sum + emp.calculatedTotal, 0);
+      
+      // Save to payroll_periods
+      const { data: periodData, error: periodError } = await supabase
+        .from('payroll_periods')
+        .insert({
+          period_name: getPayrollPeriod(payrollPeriod.endDate),
+          start_date: payrollPeriod.startDate,
+          end_date: payrollPeriod.endDate,
+          processed_date: payrollPeriod.processedDate,
+          bonus_calculation_start: payrollPeriod.startDate,
+          total_hours: totalHours,
+          total_appt_ot: totalApptOT,
+          total_field_bonus: totalFieldBonus,
+          total_ot: totalOT,
+          inspection_count: allInspectionIds.length,
+          expected_hours: payrollPeriod.expectedHours,
+          status: 'completed',
+          total_amount: totalOT, // For compatibility with existing columns
+          processing_settings: {
+            bonus_rate: bonusRate,
+            employee_count: mergedData.length,
+            worksheet_issues: worksheetIssues
+          }
+        })
+        .select()
+        .single();
+      
+      if (periodError) throw periodError;
+      
+      // Save individual entries to payroll_entries
+      for (const emp of mergedData) {
+        if (emp.dbEmployee) {
+          const { error: entryError } = await supabase
+            .from('payroll_entries')
+            .insert({
+              payroll_period_id: periodData.id,
+              employee_id: emp.dbEmployee.id,
+              hours: typeof emp.hours === 'number' ? emp.hours : null,
+              hours_type: emp.hours === 'same' ? 'salary' : 'regular',
+              appt_ot: emp.apptOT || 0,
+              field_bonus: emp.calculatedFieldOT || 0,
+              total_ot: emp.calculatedTotal || 0,
+              inspection_count: emp.inspectionCount || 0,
+              amount: emp.calculatedTotal || 0, // For compatibility
+              bonus_amount: emp.calculatedFieldOT || 0, // For compatibility
+              final_amount: emp.calculatedTotal || 0, // For compatibility
+              notes: emp.issues.length > 0 ? emp.issues.join('; ') : null
+            });
+          
+          if (entryError) {
+            console.error('Error saving payroll entry:', entryError);
+          }
+        }
+      }
+      
+      // Save processing info to localStorage (for backwards compatibility)
       const processInfo = {
         startDate: payrollPeriod.startDate,
         endDate: payrollPeriod.endDate,
@@ -644,8 +729,24 @@ const PayrollManagement = () => {
       localStorage.setItem('lastPayrollProcessed', JSON.stringify(processInfo));
       
       setSuccessMessage(`Successfully marked ${allInspectionIds.length} inspections as processed for period ending ${payrollPeriod.endDate}`);
-      setLastProcessedInfo(processInfo);
+      
+      // Auto-populate next period
+      const nextPeriod = getNextPayrollPeriod(payrollPeriod.endDate);
+      setPayrollPeriod({
+        startDate: payrollPeriod.processedDate, // Start from when we processed
+        endDate: nextPeriod.endDate,
+        processedDate: new Date().toISOString().split('T')[0], // Today
+        expectedHours: nextPeriod.expectedHours
+      });
+      
+      // Clear current data for next run
+      setPayrollData([]);
       setInspectionBonuses({});
+      setWorksheetIssues([]);
+      setUploadedFile(null);
+      
+      // Reload to show archive
+      loadInitialData();
     } catch (error) {
       console.error('Error marking inspections as processed:', error);
       setError('Failed to mark inspections as processed: ' + error.message);
@@ -737,8 +838,35 @@ const PayrollManagement = () => {
         </div>
       )}
 
-      {/* Main Content */}
-      <div className="space-y-6">
+      {/* Tab Navigation */}
+      <div className="border-b border-gray-200 mb-6">
+        <nav className="-mb-px flex space-x-8">
+          <button
+            onClick={() => setActiveTab('current')}
+            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+              activeTab === 'current'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            Current Payroll
+          </button>
+          <button
+            onClick={() => setActiveTab('archive')}
+            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+              activeTab === 'archive'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            Archive
+          </button>
+        </nav>
+      </div>
+
+      {/* Current Payroll Tab */}
+      {activeTab === 'current' && (
+        <div className="space-y-6">
         {/* Payroll Period Setup */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <h2 className="text-xl font-semibold text-gray-900 mb-4">Payroll Period Setup</h2>
@@ -1086,6 +1214,65 @@ const PayrollManagement = () => {
           </div>
         )}
       </div>
+      )}
+
+      {/* Archive Tab */}
+      {activeTab === 'archive' && (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">Payroll Archive</h2>
+          
+          {archivedPeriods.length === 0 ? (
+            <p className="text-gray-500 text-center py-8">No archived payroll periods found</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Period</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Processed</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employees</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hours</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Appt OT</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Field Bonus</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total OT</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Inspections</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {archivedPeriods.map((period) => (
+                    <tr key={period.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {period.period_name || `${new Date(period.start_date).toLocaleDateString()} - ${new Date(period.end_date).toLocaleDateString()}`}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {new Date(period.processed_date).toLocaleDateString()}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {period.processing_settings?.employee_count || '-'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {period.total_hours || '-'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        ${(period.total_appt_ot || 0).toFixed(2)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        ${(period.total_field_bonus || 0).toFixed(2)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        ${(period.total_ot || 0).toFixed(2)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {period.inspection_count || '-'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };
