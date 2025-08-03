@@ -2578,15 +2578,19 @@ const BillingManagement = () => {
                             </p>
                           </div>
                           
-                          {/* Recent distributions */}
-                          <div className="mt-4">
-                            <p className="text-xs text-gray-500 mb-2">Recent:</p>
-                            {partnerDistributions.slice(0, 3).map((dist, idx) => (
-                              <div key={idx} className="text-xs text-gray-600 flex justify-between">
-                                <span>{new Date(dist.distribution_date).toLocaleDateString()}</span>
-                                <span>{formatCurrency(dist.amount)}</span>
-                              </div>
-                            ))}
+                          {/* All distributions for the year */}
+                          <div className="mt-4 max-h-40 overflow-y-auto">
+                            <p className="text-xs text-gray-500 mb-2">All {new Date().getFullYear()} Distributions:</p>
+                            {partnerDistributions.length === 0 ? (
+                              <p className="text-xs text-gray-400 italic">No distributions yet</p>
+                            ) : (
+                              partnerDistributions.map((dist, idx) => (
+                                <div key={idx} className="text-xs text-gray-600 flex justify-between py-1 hover:bg-gray-50">
+                                  <span>{new Date(dist.distribution_date).toLocaleDateString()}</span>
+                                  <span className="font-medium">{formatCurrency(dist.amount)}</span>
+                                </div>
+                              ))
+                            )}
                           </div>
                         </div>
                       </div>
