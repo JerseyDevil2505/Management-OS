@@ -165,7 +165,6 @@ const BillingManagement = () => {
 
       // Calculate from active jobs
       if (activeJobs) {
-        console.log('Active jobs:', activeJobs);
         activeJobs.forEach(job => {
           if (job.job_contracts?.[0]) {
             const contract = job.job_contracts[0];
@@ -190,7 +189,6 @@ const BillingManagement = () => {
             }
 
             totalPaid += jobPaid;
-            console.log(`Job total: ${jobPaid}. Running totalPaid: ${totalPaid}`);
             totalOpen += jobOpen;  // ADD THIS LINE
             const jobRemaining = contractAmount - jobPaid;
             totalRemaining += jobRemaining;
@@ -522,21 +520,13 @@ const BillingManagement = () => {
   };
 
   const parseBillingHistory = (text) => {
-    console.log('Raw text to parse:', text);
-    console.log('Text length:', text.length);
     // Parse pasted billing history
     // Format: 12/4/2024 10.00% D 12240225 $49,935.00 $4,994.00 $0.00 $44,941.00
     const lines = text.trim().split('\n');
-    console.log('Lines after split:', lines);
-    console.log('Number of lines:', lines.length);
     const parsedEvents = [];
     
     lines.forEach((line, index) => {
-      console.log(`Line ${index}:`, line);
-      console.log(`Line ${index} length:`, line.length);
       const parts = line.trim().split('\t');
-      console.log(`Line ${index} parts:`, parts);
-      console.log(`Line ${index} parts count:`, parts.length);
       if (parts.length >= 8) {
         const date = parts[0];
         const percentage = parseFloat(parts[1].replace('%', ''));
@@ -642,7 +632,6 @@ const BillingManagement = () => {
         let runningPercentage = 0;
         
         for (const event of parsedEvents) {
-          console.log('Saving event:', event);
           runningTotal += event.amountBilled;
           runningPercentage += event.percentage / 100;
           const remainingDue = parseFloat(contractSetup.contractAmount) - runningTotal;
@@ -709,17 +698,13 @@ const BillingManagement = () => {
   const handleAddBillingEvent = async () => {
     if (!selectedJob || !selectedJob.job_contracts?.[0]) return;
     
-    console.log('showBulkPaste:', showBulkPaste);
-    console.log('bulkBillingText:', bulkBillingText);
-    console.log('bulkBillingText trimmed:', bulkBillingText.trim())
-    
+  
     try {
       const contract = selectedJob.job_contracts[0];
       
       if (showBulkPaste && bulkBillingText.trim()) {
         // Handle bulk paste
         const parsedEvents = parseBillingHistory(bulkBillingText);
-        console.log('Parsed events:', parsedEvents);
         if (parsedEvents.length === 0) {
           alert('No valid events found in pasted text. Check format.');
           return;
@@ -736,7 +721,6 @@ const BillingManagement = () => {
         runningPercentage = previousPercentage;
         
         for (const event of parsedEvents) {
-          console.log('Processing event:', event);
           runningTotal += event.amountBilled;
           runningPercentage += event.percentage / 100;
           const remainingDue = contract.contract_amount - runningTotal;
