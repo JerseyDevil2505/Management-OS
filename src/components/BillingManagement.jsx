@@ -210,6 +210,20 @@ const BillingManagement = () => {
           }
         });
       }
+      // Get office receivables
+      const { data: receivablesData } = await supabase
+        .from('office_receivables')
+        .select('amount, status');
+
+      if (receivablesData) {
+        receivablesData.forEach(receivable => {
+          if (receivable.status === 'P') {
+            totalPaid += parseFloat(receivable.amount);
+          } else if (receivable.status === 'O') {
+            totalOpen += parseFloat(receivable.amount);
+          }
+        });
+      }
       // Add planning jobs to total signed
       if (planningJobsData) {
         planningJobsData.forEach(job => {
@@ -2130,10 +2144,123 @@ const BillingManagement = () => {
           {/* Office Receivables Tab */}
           {activeTab === 'receivables' && (
             <div className="space-y-6">
-              <div className="text-center py-12 bg-gray-50 rounded-lg">
-                <p className="text-gray-600 mb-4">Office Receivables tracking coming soon.</p>
-                <p className="text-sm text-gray-500">This will track money owed to the office.</p>
+              <div className="flex justify-end mb-4">
+                <button
+                  onClick={() => {
+                    setEditingReceivable(null);
+                    setReceivableForm({
+                      jobName: '',
+                      eventDescription: '',
+                      status: 'O',
+                      invoiceNumber: '',
+                      amount: ''
+                    });
+                    setShowReceivableForm(true);
+                  }}
+                  className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+                >
+                  + Add Receivable
+                </button>
               </div>
+
+              {officeReceivables.length === 0 ? (
+                <div className="text-center py-12 bg-gray-50 rounded-lg">
+                  <p className="text-gray-600">No office receivables found. Click "Add Receivable" to create one.</p>
+                </div>
+              ) : (
+                <div className="bg-white rounded-lg shadow overflow-hidden">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Job Name
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Event
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Status
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Invoice #
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Amount
+                        </th>
+                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {officeReceivables.map((receivable) => (
+                        <tr key={receivable.id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            {receivable.job_name}
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-900">
+                            {receivable.event_description || '-'}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm">
+                            <span className={`px-2 py-1 text-xs rounded-full ${
+                              receivable.status === 'P' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                            }`}>
+                              {receivable.status === 'P' ? 'Paid' : 'Open'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {receivable.invoice_number || '-'}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
+                            {formatCurrency(receivable.amount)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            <button
+                              onClick={() => {
+                                setEditingReceivable(receivable);
+                                setReceivableForm({
+                                  jobName: receivable.job_name,
+                                  eventDescription: receivable.event_description || '',
+                                  status: receivable.status,
+                                  invoiceNumber: receivable.invoice_number || '',
+                                  amount: receivable.amount.toString()
+                                });
+                                setShowReceivableForm(true);
+                              }}
+                              className="text-blue-600 hover:text-blue-900 mr-3"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={async () => {
+                                if (window.confirm('Are you sure you want to delete this receivable?')) {
+                                  try {
+                                    const { error } = await supabase
+                                      .from('office_receivables')
+                                      .delete()
+                                      .eq('id', receivable.id);
+                                    
+                                    if (error) throw error;
+                                    
+                                    loadOfficeReceivables();
+                                    calculateGlobalMetrics();
+                                  } catch (error) {
+                                    console.error('Error deleting receivable:', error);
+                                    alert('Error deleting receivable');
+                                  }
+                                }
+                              }}
+                              className="text-red-600 hover:text-red-900"
+                            >
+                              Delete
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
 
@@ -2946,6 +3073,150 @@ const BillingManagement = () => {
                   </tbody>
                 </table>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Office Receivable Form Modal */}
+      {showReceivableForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-lg font-semibold mb-4">
+              {editingReceivable ? 'Edit' : 'Add'} Office Receivable
+            </h3>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Job Name
+                </label>
+                <input
+                  type="text"
+                  value={receivableForm.jobName}
+                  onChange={(e) => setReceivableForm(prev => ({ ...prev, jobName: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  placeholder="e.g., Springfield Office Renovation"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Event Description
+                </label>
+                <textarea
+                  value={receivableForm.eventDescription}
+                  onChange={(e) => setReceivableForm(prev => ({ ...prev, eventDescription: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  rows="3"
+                  placeholder="Reason for invoice..."
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Status
+                </label>
+                <select
+                  value={receivableForm.status}
+                  onChange={(e) => setReceivableForm(prev => ({ ...prev, status: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                >
+                  <option value="O">Open</option>
+                  <option value="P">Paid</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Invoice Number
+                </label>
+                <input
+                  type="text"
+                  value={receivableForm.invoiceNumber}
+                  onChange={(e) => setReceivableForm(prev => ({ ...prev, invoiceNumber: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  placeholder="INV-2025-001"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Amount
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={receivableForm.amount}
+                  onChange={(e) => setReceivableForm(prev => ({ ...prev, amount: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  placeholder="1500.00"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowReceivableForm(false);
+                  setEditingReceivable(null);
+                  setReceivableForm({
+                    jobName: '',
+                    eventDescription: '',
+                    status: 'O',
+                    invoiceNumber: '',
+                    amount: ''
+                  });
+                }}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  try {
+                    const data = {
+                      job_name: receivableForm.jobName,
+                      event_description: receivableForm.eventDescription,
+                      status: receivableForm.status,
+                      invoice_number: receivableForm.invoiceNumber,
+                      amount: parseFloat(receivableForm.amount)
+                    };
+
+                    if (editingReceivable) {
+                      const { error } = await supabase
+                        .from('office_receivables')
+                        .update(data)
+                        .eq('id', editingReceivable.id);
+                      
+                      if (error) throw error;
+                    } else {
+                      const { error } = await supabase
+                        .from('office_receivables')
+                        .insert(data);
+                      
+                      if (error) throw error;
+                    }
+
+                    setShowReceivableForm(false);
+                    setEditingReceivable(null);
+                    setReceivableForm({
+                      jobName: '',
+                      eventDescription: '',
+                      status: 'O',
+                      invoiceNumber: '',
+                      amount: ''
+                    });
+                    loadOfficeReceivables();
+                    calculateGlobalMetrics();
+                  } catch (error) {
+                    console.error('Error saving receivable:', error);
+                    alert('Error saving receivable');
+                  }
+                }}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              >
+                {editingReceivable ? 'Update' : 'Add'} Receivable
+              </button>
             </div>
           </div>
         </div>
