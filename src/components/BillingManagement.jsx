@@ -2522,8 +2522,7 @@ const BillingManagement = () => {
                   </div>
                 </div>
               </div>
-            </div>
-              
+                    
 {/* Distributions by Partner */}
               <div className="bg-white rounded-lg shadow overflow-hidden">
                 <h3 className="text-lg font-semibold text-gray-900 p-6 pb-4">2025 Distribution Summary</h3>
