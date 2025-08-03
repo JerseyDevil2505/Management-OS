@@ -1298,6 +1298,26 @@ const BillingManagement = () => {
           >
             Expenses
           </button>
+          <button
+            onClick={() => setActiveTab('receivables')}
+            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+              activeTab === 'receivables'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            Office Receivables
+          </button>
+          <button
+            onClick={() => setActiveTab('distributions')}
+            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+              activeTab === 'distributions'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            Shareholder Distributions
+          </button>
         </nav>
       </div>
 
@@ -2012,6 +2032,26 @@ const BillingManagement = () => {
           )}
         </>
       )}
+
+          {/* Office Receivables Tab */}
+          {activeTab === 'receivables' && (
+            <div className="space-y-6">
+              <div className="text-center py-12 bg-gray-50 rounded-lg">
+                <p className="text-gray-600 mb-4">Office Receivables tracking coming soon.</p>
+                <p className="text-sm text-gray-500">This will track money owed to the office.</p>
+              </div>
+            </div>
+          )}
+
+          {/* Shareholder Distributions Tab */}
+          {activeTab === 'distributions' && (
+            <div className="space-y-6">
+              <div className="text-center py-12 bg-gray-50 rounded-lg">
+                <p className="text-gray-600 mb-4">Shareholder Distributions tracking coming soon.</p>
+                <p className="text-sm text-gray-500">This will track distributions to shareholders.</p>
+              </div>
+            </div>
+          )} 
 
       {/* Contract Setup Modal */}
       {showContractSetup && selectedJob && (
