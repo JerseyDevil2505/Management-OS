@@ -178,6 +178,7 @@ const BillingManagement = () => {
               job.billing_events.forEach(event => {
                 if (event.status === 'P') {
                   jobPaid += event.amount_billed;
+                  console.log(`Added ${event.amount_billed} to jobPaid. New jobPaid: ${jobPaid}`);                  
                 } else if (event.status === 'O') {   // Check for multiple possible open statuses
                   jobOpen += event.amount_billed;
                 }
@@ -186,6 +187,7 @@ const BillingManagement = () => {
             }
 
             totalPaid += jobPaid;
+            console.log(`Job total: ${jobPaid}. Running totalPaid: ${totalPaid}`);
             totalOpen += jobOpen;  // ADD THIS LINE
             const jobRemaining = contractAmount - jobPaid;
             totalRemaining += jobRemaining;
