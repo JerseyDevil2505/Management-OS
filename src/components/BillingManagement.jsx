@@ -905,7 +905,7 @@ const BillingManagement = () => {
       const updateData = {
         status: editingEvent.status || '',
         amount_billed: parseFloat(editingEvent.amount_billed),
-        billing_type: editingEvent.billing_type || null
+        billing_type: editingEvent.billing_type || null,
         invoice_number: editingEvent.invoice_number || ''
       };
 
