@@ -43,6 +43,10 @@ const BillingManagement = () => {
     monthlyCollectionRate: 0,
     projectedYearEnd: 0
   });
+  const [reserveSettings, setReserveSettings] = useState({
+    operatingReserveMonths: 2, // 0, 1, or 2
+    cashReserve: 200000
+  });
   
   // Working days for 2025 (excluding weekends and federal holidays)
   const workingDays2025 = {
@@ -125,7 +129,7 @@ const BillingManagement = () => {
     if (activeTab === 'distributions' && globalMetrics.totalPaid > 0) {
       calculateDistributionMetrics();
     }
-  }, [globalMetrics, activeTab]);
+  }, [globalMetrics, activeTab, reserveSettings]);
 
   const calculateGlobalMetrics = async () => {
     try {
@@ -408,9 +412,11 @@ const BillingManagement = () => {
                                (monthlyCollectionRate * monthsRemaining) + 
                                globalMetrics.totalOpen;
       
-      // Calculate operating reserve (2 months)
-      const operatingReserve = globalMetrics.dailyFringe * 42; // ~2 months of working days
-      const cashReserve = 200000; // Fixed $200K
+      // Calculate operating reserve based on user setting
+      const operatingReserve = reserveSettings.operatingReserveMonths > 0 
+        ? globalMetrics.dailyFringe * (reserveSettings.operatingReserveMonths * 21) 
+        : 0;
+      const cashReserve = reserveSettings.cashReserve;
       
       // Calculate remaining year expenses
       const remainingDaysInYear = (12 - currentMonth + 1) * 21; // Rough estimate
@@ -2415,7 +2421,36 @@ const BillingManagement = () => {
             <div className="space-y-6">
               {/* Distribution Metrics Dashboard */}
               <div className="bg-gradient-to-r from-green-50 to-blue-50 rounded-lg p-6">
-                <h2 className="text-lg font-semibold text-gray-800 mb-4">Distribution Analysis</h2>
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-lg font-semibold text-gray-800">Distribution Analysis</h2>
+                  
+                  {/* Reserve Settings */}
+                  <div className="flex items-center space-x-4 text-sm">
+                    <div className="flex items-center space-x-2">
+                      <label className="text-gray-700 font-medium">Operating Reserve:</label>
+                      <select
+                        value={reserveSettings.operatingReserveMonths}
+                        onChange={(e) => setReserveSettings(prev => ({ ...prev, operatingReserveMonths: parseInt(e.target.value) }))}
+                        className="px-3 py-1 border border-gray-300 rounded-md bg-white"
+                      >
+                        <option value="0">None</option>
+                        <option value="1">1 Month</option>
+                        <option value="2">2 Months</option>
+                      </select>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <label className="text-gray-700 font-medium">Cash Reserve: $</label>
+                      <input
+                        type="number"
+                        value={reserveSettings.cashReserve}
+                        onChange={(e) => setReserveSettings(prev => ({ ...prev, cashReserve: parseInt(e.target.value) || 0 }))}
+                        className="w-28 px-3 py-1 border border-gray-300 rounded-md"
+                        step="10000"
+                        placeholder="200000"
+                      />
+                    </div>
+                  </div>
+                </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                   {/* Conservative Approach */}
