@@ -11,8 +11,6 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
   const [checklistItems, setChecklistItems] = useState([]);
   const [filterCategory, setFilterCategory] = useState('all');
   const [showCompleted, setShowCompleted] = useState(true);
-  const [asOfDate, setAsOfDate] = useState('2025-07-15');
-  const [sourceFileDate, setSourceFileDate] = useState('2025-06-01');
   const [searchTerm, setSearchTerm] = useState('');
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
   const [mailingListPreview, setMailingListPreview] = useState(null);
@@ -20,7 +18,18 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
   const [currentUser, setCurrentUser] = useState(null);
   const fileInputRef = useRef();
 
+  // Extract year from end_date
   const dueYear = jobData?.end_date ? new Date(jobData.end_date).getFullYear() : 'TBD';
+  
+  // Format dates from database
+  const formatDate = (dateString) => {
+    if (!dateString) return 'Not available';
+    try {
+      return new Date(dateString).toLocaleDateString();
+    } catch (error) {
+      return 'Invalid date';
+    }
+  };
 
   useEffect(() => {
     const getCurrentUser = async () => {
@@ -81,6 +90,17 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
         { id: 28, item_order: 28, item_text: 'Generate Turnover Document', category: 'completion', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false, special_action: 'generate_turnover_pdf' },
         { id: 29, item_order: 29, item_text: 'Turnover Date', category: 'completion', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false, input_type: 'date', special_action: 'archive_trigger' }
       ];
+      
+      // Update First Attempt Inspections item with workflow stats if available
+      if (jobData?.workflow_stats?.validInspections) {
+        const firstAttemptItem = templateItems.find(item => item.id === 12);
+        if (firstAttemptItem) {
+          firstAttemptItem.notes = `${jobData.workflow_stats.validInspections} properties inspected (${jobData.workflow_stats.jobEntryRate?.toFixed(1) || 0}% entry rate)`;
+          if (jobData.workflow_stats.validInspections > 0) {
+            firstAttemptItem.status = 'in_progress';
+          }
+        }
+      }
       
       setChecklistItems(templateItems);
       
@@ -409,12 +429,12 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
             <div className="space-y-3">
               <div className="flex items-center gap-3">
                 <label className="text-sm font-medium text-gray-700 w-32">As of Date:</label>
-                <span className="text-sm text-gray-600">{asOfDate}</span>
+                <span className="text-sm text-gray-600">{formatDate(jobData?.asOfDate)}</span>
               </div>
               <div className="flex items-center gap-3">
                 <label className="text-sm font-medium text-gray-700 w-32">Source File Date:</label>
-                <span className="text-sm text-gray-600">{sourceFileDate}</span>
-                <span className="text-xs text-gray-500">(from Production Tracker)</span>
+                <span className="text-sm text-gray-600">{formatDate(jobData?.sourceFileDate)}</span>
+                <span className="text-xs text-gray-500">(from property records)</span>
               </div>
             </div>
           </div>
