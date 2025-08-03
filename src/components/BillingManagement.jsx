@@ -16,6 +16,8 @@ const BillingManagement = () => {
   const [showExpenseImport, setShowExpenseImport] = useState(false);
   const [expenseFile, setExpenseFile] = useState(null);
   const [revenueData, setRevenueData] = useState({ totalRevenue: 0 });
+  const [showOpenInvoices, setShowOpenInvoices] = useState(false);
+  const [allOpenInvoices, setAllOpenInvoices] = useState([]);
   
   // Working days for 2025 (excluding weekends and federal holidays)
   const workingDays2025 = {
@@ -837,6 +839,55 @@ const BillingManagement = () => {
     }
   };
 
+  const loadAllOpenInvoices = async () => {
+    try {
+      // Get all jobs with open invoices (both standard and legacy)
+      const { data: allJobs, error } = await supabase
+        .from('jobs')
+        .select(`
+          id,
+          job_name,
+          job_type,
+          billing_events(
+            id,
+            billing_date,
+            invoice_number,
+            amount_billed,
+            percentage_billed,
+            billing_type,
+            status
+          )
+        `)
+        .in('job_type', ['standard', 'legacy_billing']);
+
+      if (error) throw error;
+
+      // Filter and flatten to just open invoices
+      const openInvoices = [];
+      allJobs.forEach(job => {
+        if (job.billing_events) {
+          job.billing_events.forEach(event => {
+            if (event.status === 'O') {
+              openInvoices.push({
+                ...event,
+                job_name: job.job_name,
+                job_type: job.job_type,
+                job_id: job.id
+              });
+            }
+          });
+        }
+      });
+
+      // Sort by billing date (most recent first)
+      openInvoices.sort((a, b) => new Date(b.billing_date) - new Date(a.billing_date));
+      setAllOpenInvoices(openInvoices);
+      setShowOpenInvoices(true);
+    } catch (error) {
+      console.error('Error loading open invoices:', error);
+    }
+  };
+
   const handleRolloverToActive = async (planningJob) => {
     if (!window.confirm(`Roll over "${planningJob.job_name}" to active jobs? This will create a new active job with billing setup.`)) {
       return;
@@ -1169,7 +1220,15 @@ const BillingManagement = () => {
 
       {/* Global Metrics Dashboard */}
       <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-6 mb-6">
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">Business Overview</h2>
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-lg font-semibold text-gray-800">Business Overview</h2>
+          <button
+            onClick={loadAllOpenInvoices}
+            className="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 text-sm font-medium"
+          >
+            View All Open Invoices ({formatCurrency(globalMetrics.totalOpen)})
+          </button>
+        </div>        
         
         {/* Row 1: Contract & Revenue Status */}
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4">
@@ -2774,6 +2833,92 @@ const BillingManagement = () => {
               >
                 Import
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Open Invoices Modal */}
+      {showOpenInvoices && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-semibold">All Open Invoices</h3>
+              <div className="flex items-center space-x-4">
+                <span className="text-lg font-medium text-orange-600">
+                  Total: {formatCurrency(allOpenInvoices.reduce((sum, inv) => sum + parseFloat(inv.amount_billed), 0))}
+                </span>
+                <button
+                  onClick={() => setShowOpenInvoices(false)}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            
+            <div className="flex-1 overflow-auto">
+              {allOpenInvoices.length === 0 ? (
+                <div className="text-center py-12">
+                  <p className="text-gray-600">No open invoices found.</p>
+                </div>
+              ) : (
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50 sticky top-0">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Job</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Invoice #</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Amount</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Billing Type</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {allOpenInvoices.map((invoice) => (
+                      <tr key={invoice.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                          {invoice.job_name}
+                        </td>
+                        <td className="px-4 py-3 text-sm">
+                          <span className={`px-2 py-1 text-xs rounded-full ${
+                            invoice.job_type === 'legacy_billing' 
+                              ? 'bg-purple-100 text-purple-800' 
+                              : 'bg-blue-100 text-blue-800'
+                          }`}>
+                            {invoice.job_type === 'legacy_billing' ? 'Legacy' : 'Active'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-600">
+                          {new Date(invoice.billing_date).toLocaleDateString()}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-900">
+                          {invoice.invoice_number}
+                        </td>
+                        <td className="px-4 py-3 text-sm font-semibold text-orange-600">
+                          {formatCurrency(invoice.amount_billed)}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-600">
+                          {invoice.billing_type ? (
+                            <span className="font-medium text-purple-700">
+                              {invoice.billing_type === 'turnover' ? 'Turnover' :
+                               invoice.billing_type === '1st_appeals' ? '1st Yr Appeals' :
+                               invoice.billing_type === '2nd_appeals' ? '2nd Yr Appeals' :
+                               invoice.billing_type === '3rd_appeals' ? '3rd Yr Appeals' :
+                               invoice.billing_type === 'retainer' ? 'Retainer Payout' :
+                               invoice.billing_type}
+                            </span>
+                          ) : (
+                            `${(invoice.percentage_billed * 100).toFixed(2)}%`
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
           </div>
         </div>
