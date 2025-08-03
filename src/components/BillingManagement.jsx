@@ -131,6 +131,9 @@ const BillingManagement = () => {
     projectedExpenses: 0,
     profitLoss: 0,
     profitLossPercent: 0
+    projectedCash: 0,              
+    projectedProfitLoss: 0,        
+    projectedProfitLossPercent: 0  
   });
 
   useEffect(() => {
@@ -169,6 +172,9 @@ const BillingManagement = () => {
         .select('contract_amount')
         .not('contract_amount', 'is', null)
         .eq('is_archived', false);
+
+      // Calculate planned contracts total for projection formula
+      const plannedContractsTotal = planningJobsData?.reduce((sum, job) => sum + (job.contract_amount || 0), 0) || 0;
 
       // Get current year expenses
       const currentYear = new Date().getFullYear();
@@ -342,6 +348,11 @@ const BillingManagement = () => {
       const projectedRevenue = dailyFringe * totalWorkingDays;
       const profitLoss = projectedRevenue - projectedExpenses;
       const profitLossPercent = projectedRevenue > 0 ? (profitLoss / projectedRevenue) * 100 : 0;
+
+      // Calculate projected cash using the new formula
+      const projectedCash = (totalPaid + totalOpen + totalRemaining) - (plannedContractsTotal * 0.9);
+      const projectedProfitLoss = projectedCash - projectedExpenses;
+      const projectedProfitLossPercent = projectedCash > 0 ? (projectedProfitLoss / projectedCash) * 100 : 0;
 
       setGlobalMetrics({
         totalSigned,
@@ -1515,13 +1526,13 @@ const BillingManagement = () => {
               Margin: {globalMetrics.totalPaid > 0 ? (((globalMetrics.totalPaid - globalMetrics.currentExpenses) / globalMetrics.totalPaid) * 100).toFixed(1) : '0.0'}%
             </p>
           </div>
-          <div className={`bg-white rounded-lg p-4 shadow-sm border-2 ${(globalMetrics.totalSigned - globalMetrics.projectedExpenses) >= 0 ? 'border-green-400' : 'border-red-400'}`}>
+          <div className={`bg-white rounded-lg p-4 shadow-sm border-2 ${globalMetrics.projectedProfitLoss >= 0 ? 'border-green-400' : 'border-red-400'}`}>
             <p className="text-sm text-gray-600 mb-1">Projected P/L</p>
-            <p className={`text-2xl font-bold ${(globalMetrics.totalSigned - globalMetrics.projectedExpenses) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {formatCurrency(globalMetrics.totalSigned - globalMetrics.projectedExpenses)}
+            <p className={`text-2xl font-bold ${globalMetrics.projectedProfitLoss >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              {formatCurrency(globalMetrics.projectedProfitLoss)}
             </p>
             <p className="text-xs text-gray-500">
-              Margin: {globalMetrics.totalSigned > 0 ? (((globalMetrics.totalSigned - globalMetrics.projectedExpenses) / globalMetrics.totalSigned) * 100).toFixed(1) : '0.0'}%
+              Margin: {globalMetrics.projectedCash > 0 ? ((globalMetrics.projectedProfitLoss / globalMetrics.projectedCash) * 100).toFixed(1) : '0.0'}%
             </p>
           </div>
         </div>
