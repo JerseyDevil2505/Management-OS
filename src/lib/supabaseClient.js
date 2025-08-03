@@ -726,8 +726,8 @@ export const checklistService = {
       console.error('Checklist creation error:', error);
       throw error;
     }
-  }
-},
+  },
+
   // Update client/assessor name on job
   async updateClientName(jobId, clientName) {
     try {
@@ -748,9 +748,127 @@ export const checklistService = {
       console.error('Client name update error:', error);
       throw error;
     }
+  },
+
+  // Upload file for checklist item
+  async uploadFile(itemId, jobId, file, completedBy) {
+    try {
+      // Create unique file name
+      const timestamp = Date.now();
+      const fileName = `${jobId}/${itemId}_${timestamp}_${file.name}`;
+      
+      // Upload to Supabase Storage
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('checklist-documents')
+        .upload(fileName, file);
+      
+      if (uploadError) throw uploadError;
+      
+      // Save file info to checklist_documents table
+      const { data: docData, error: docError } = await supabase
+        .from('checklist_documents')
+        .insert({
+          checklist_item_id: itemId,
+          job_id: jobId,
+          file_name: file.name,
+          file_path: fileName,
+          file_size: file.size,
+          uploaded_at: new Date().toISOString()
+        })
+        .select()
+        .single();
+      
+      if (docError) throw docError;
+      
+      // Update checklist item to completed status
+      const { data: itemData, error: itemError } = await supabase
+        .from('checklist_items')
+        .update({
+          status: 'completed',
+          completed_at: new Date().toISOString(),
+          completed_by: completedBy,
+          file_attachment_path: fileName,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', itemId)
+        .select()
+        .single();
+      
+      if (itemError) throw itemError;
+      
+      console.log('✅ File uploaded successfully:', fileName);
+      return itemData;
+    } catch (error) {
+      console.error('File upload error:', error);
+      throw error;
+    }
+  },
+
+  // Generate mailing list from property records
+  async generateMailingList(jobId) {
+    try {
+      const { data, error } = await supabase
+        .from('property_records')
+        .select('property_block, property_lot, property_location, owner_name, owner_address')
+        .eq('job_id', jobId)
+        .order('property_block, property_lot')
+        .limit(1000);
+      
+      if (error) throw error;
+      
+      console.log(`✅ Generated mailing list with ${data.length} properties`);
+      return data;
+    } catch (error) {
+      console.error('Mailing list generation error:', error);
+      throw error;
+    }
+  },
+
+  // Update notes for a checklist item
+  async updateItemNotes(itemId, notes) {
+    try {
+      const { data, error } = await supabase
+        .from('checklist_items')
+        .update({ 
+          notes: notes,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', itemId)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Notes update error:', error);
+      throw error;
+    }
+  },
+
+  // Archive job when turnover date is set
+  async archiveJob(jobId, turnoverDate) {
+    try {
+      const { data, error } = await supabase
+        .from('jobs')
+        .update({ 
+          status: 'archived',
+          turnover_date: turnoverDate,
+          archived_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', jobId)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      console.log('✅ Job archived successfully');
+      return data;
+    } catch (error) {
+      console.error('Job archive error:', error);
+      throw error;
+    }
   }
 };
-  
 
 // ===== UNIFIED PROPERTY MANAGEMENT SERVICES =====
 export const propertyService = {
