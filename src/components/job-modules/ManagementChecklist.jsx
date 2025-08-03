@@ -18,8 +18,8 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
   const [currentUser, setCurrentUser] = useState(null);
   const fileInputRef = useRef();
 
-  // Extract year from end_date
-  const dueYear = jobData?.end_date ? new Date(jobData.end_date).getFullYear() : 'TBD';
+  // Extract year from end_date - just grab first 4 characters to avoid timezone issues
+  const dueYear = jobData?.end_date ? jobData.end_date.substring(0, 4) : 'TBD';
   
   // Format dates from database
   const formatDate = (dateString) => {
