@@ -366,7 +366,7 @@ const BillingManagement = () => {
       totalPercentageBilled: totalPercentageBilled * 100,
       totalAmountBilled,
       remainingDue,
-      isComplete: totalPercentageBilled >= 1.0
+      isComplete: Math.round(totalPercentageBilled * 10000) / 10000 >= 1.0
     };
   };
 
