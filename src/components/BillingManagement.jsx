@@ -2522,8 +2522,8 @@ const BillingManagement = () => {
                   </div>
                 </div>
               </div>
-                    
-{/* Distributions by Partner */}
+              
+              {/* Distributions by Partner */}
               <div className="bg-white rounded-lg shadow overflow-hidden">
                 <h3 className="text-lg font-semibold text-gray-900 p-6 pb-4">2025 Distribution Summary</h3>
                 
@@ -2612,6 +2612,8 @@ const BillingManagement = () => {
                   </div>
                 </div>
               </div>
+            </div>
+          )}
 
       {/* Contract Setup Modal */}
       {showContractSetup && selectedJob && (
@@ -3572,7 +3574,7 @@ const BillingManagement = () => {
           </div>
         </div>
       )}
-{/* Distribution Form Modal */}
+      {/* Distribution Form Modal */}
       {showDistributionForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
