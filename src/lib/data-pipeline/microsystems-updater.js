@@ -8,6 +8,7 @@
  * FIXED: Proper AAACCCCSSSS parsing - InfoBy single char, Design multi-char, HVAC preserved
  * CLEANED: Removed redundant surgical fix totals (handled by AdminJobManagement/FileUploadButton)
  * ADDED: Field preservation support for component-defined fields
+ * CRITICAL: Added automatic rollback for failed batches - all or nothing!
  */
 
 import { supabase } from '../supabaseClient.js';
@@ -451,10 +452,15 @@ export class MicrosystemsUpdater {
    * ADDED: Retry logic for connection issues and query cancellations
    * CLEANED: Removed redundant surgical fix (total_properties handled by AdminJobManagement/FileUploadButton)
    * ENHANCED: Added field preservation support
+   * CRITICAL: Added automatic rollback for failed batches
    */
   async processFile(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, versionInfo = {}) {
+    // Track successful batches for rollback
+    const successfulBatches = [];
+    const processingVersion = versionInfo.file_version || 1;
+    
     try {
-      console.log('🚀 Starting Enhanced Microsystems UPDATER (UPSERT) with field preservation...');
+      console.log('🚀 Starting Enhanced Microsystems UPDATER (UPSERT) with field preservation and ROLLBACK support...');
       
       // Process and store code file if provided
       if (codeFileContent) {
@@ -530,17 +536,97 @@ export class MicrosystemsUpdater {
         
         if (result.error) {
           console.error(`❌ UPSERT Batch ${batchNumber} failed:`, result.error);
-          results.errors += batch.length;
-          results.warnings.push(`Batch ${batchNumber} failed: ${result.error.message}`);
           
-          // Increase delay on errors
-          consecutiveErrors++;
-          const errorDelay = Math.min(consecutiveErrors * 2000, 10000);
-          console.log(`⚠️ Waiting ${errorDelay/1000}s before continuing due to errors...`);
-          await new Promise(resolve => setTimeout(resolve, errorDelay));
+          // CRITICAL: Rollback all successful batches with 50 retries each!
+          console.log(`❌ Batch ${batchNumber} failed - rolling back ${successfulBatches.length} successful batches...`);
+          
+          let rollbackFailures = 0;
+          
+          for (const successBatch of successfulBatches.reverse()) {
+            let rollbackSuccess = false;
+            
+            // Try up to 50 times to rollback each batch
+            for (let rollbackAttempt = 1; rollbackAttempt <= 50; rollbackAttempt++) {
+              try {
+                console.log(`🔄 Rollback attempt ${rollbackAttempt} for batch ${successBatch.batchNumber}...`);
+                
+                const { error } = await supabase
+                  .from('property_records')
+                  .delete()
+                  .eq('job_id', jobId)
+                  .eq('file_version', processingVersion)
+                  .gte('updated_at', successBatch.timestamp);
+                
+                if (!error) {
+                  console.log(`✅ Successfully rolled back batch ${successBatch.batchNumber} on attempt ${rollbackAttempt}`);
+                  rollbackSuccess = true;
+                  break;
+                }
+                
+                // Handle specific error codes
+                if (error.code === '57014' || error.code === '08003' || error.code === '08006' || 
+                    error.message.includes('connection') || error.message.includes('timeout')) {
+                  console.log(`⚠️ Retryable error during rollback of batch ${successBatch.batchNumber}, attempt ${rollbackAttempt}: ${error.message}`);
+                  if (rollbackAttempt < 50) {
+                    await new Promise(resolve => setTimeout(resolve, Math.min(1000 * rollbackAttempt, 10000))); // Exponential backoff up to 10s
+                    continue;
+                  }
+                } else {
+                  console.error(`❌ Non-retryable error during rollback: ${error.message}`);
+                  break;
+                }
+                
+              } catch (networkError) {
+                console.error(`🌐 Network error during rollback attempt ${rollbackAttempt}:`, networkError);
+                if (rollbackAttempt < 50) {
+                  await new Promise(resolve => setTimeout(resolve, Math.min(1000 * rollbackAttempt, 10000)));
+                  continue;
+                }
+              }
+            }
+            
+            if (!rollbackSuccess) {
+              rollbackFailures++;
+              console.error(`❌ FAILED to rollback batch ${successBatch.batchNumber} after 50 attempts!`);
+            }
+          }
+          
+          // Verify rollback completion
+          try {
+            const { count, error: verifyError } = await supabase
+              .from('property_records')
+              .select('*', { count: 'exact', head: true })
+              .eq('job_id', jobId)
+              .eq('file_version', processingVersion);
+            
+            if (!verifyError) {
+              if (count === 0) {
+                console.log('✅ Rollback verification: All records successfully removed');
+              } else {
+                console.warn(`⚠️ Rollback verification: ${count} records still exist with version ${processingVersion}`);
+              }
+            }
+          } catch (verifyError) {
+            console.error('Could not verify rollback:', verifyError);
+          }
+          
+          const rollbackMessage = rollbackFailures > 0 
+            ? `Update failed and rollback attempted - ${successfulBatches.length - rollbackFailures} of ${successfulBatches.length} batches rolled back successfully. WARNING: ${rollbackFailures} batches may need manual cleanup!`
+            : `Update failed and successfully reverted - all ${successfulBatches.length} batches rolled back.`;
+          
+          throw new Error(`${rollbackMessage} Original error: ${result.error.message}`);
+          
         } else {
           results.processed += batch.length;
           console.log(`✅ UPSERT Batch ${batchNumber} completed successfully (${results.processed}/${propertyRecords.length} total)`);
+          
+          // Track successful batch for potential rollback
+          successfulBatches.push({
+            batchNumber,
+            startIndex: i,
+            endIndex: Math.min(i + batchSize, propertyRecords.length),
+            timestamp: new Date().toISOString()
+          });
           
           // Reset error counter on success
           consecutiveErrors = 0;
