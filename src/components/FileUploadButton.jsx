@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Upload, FileText, CheckCircle, AlertTriangle, X, Database, Settings, Download, Eye, Calendar, RefreshCw } from 'lucide-react';
 import { jobService, propertyService, supabase } from '../lib/supabaseClient';
-import { BatchTransactionHandler } from '../utils/batchTransactionHandler';
 
 const FileUploadButton = ({ job, onFileProcessed }) => {
   const [sourceFile, setSourceFile] = useState(null);
