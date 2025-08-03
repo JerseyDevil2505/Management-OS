@@ -18,6 +18,16 @@ const BillingManagement = () => {
   const [revenueData, setRevenueData] = useState({ totalRevenue: 0 });
   const [showOpenInvoices, setShowOpenInvoices] = useState(false);
   const [allOpenInvoices, setAllOpenInvoices] = useState([]);
+  const [officeReceivables, setOfficeReceivables] = useState([]);
+  const [showReceivableForm, setShowReceivableForm] = useState(false);
+  const [receivableForm, setReceivableForm] = useState({
+    jobName: '',
+    eventDescription: '',
+    status: 'O',
+    invoiceNumber: '',
+    amount: ''
+  });
+  const [editingReceivable, setEditingReceivable] = useState(null);
   
   // Working days for 2025 (excluding weekends and federal holidays)
   const workingDays2025 = {
@@ -88,6 +98,9 @@ const BillingManagement = () => {
     calculateGlobalMetrics();
     if (activeTab === 'expenses') {
       loadExpenses();
+    }
+    if (activeTab === 'receivables') {
+      loadOfficeReceivables();
     }
   }, [activeTab]);
 
@@ -296,6 +309,20 @@ const BillingManagement = () => {
       console.error('Error loading expenses:', error);
     }
   };
+
+  const loadOfficeReceivables = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('office_receivables')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setOfficeReceivables(data || []);
+    } catch (error) {
+      console.error('Error loading office receivables:', error);
+    }
+  };  
 
   const loadJobs = async () => {
     try {
