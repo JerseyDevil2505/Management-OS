@@ -130,7 +130,7 @@ const BillingManagement = () => {
     currentExpenses: 0,
     projectedExpenses: 0,
     profitLoss: 0,
-    profitLossPercent: 0
+    profitLossPercent: 0,
     projectedCash: 0,              
     projectedProfitLoss: 0,        
     projectedProfitLossPercent: 0  
