@@ -45,7 +45,7 @@ const JobContainer = ({
     setVersionError(null);
 
     try {
-      // Get data version from property_records table (latest file_version)
+      // Get data version AND source file date from property_records table
       const { data: dataVersionData, error: dataVersionError } = await supabase
         .from('property_records')
         .select('file_version, updated_at')
@@ -54,22 +54,30 @@ const JobContainer = ({
         .limit(1)
         .single();
 
-      // Get code version from jobs table 
+      // Get code version, end_date, and workflow_stats from jobs table 
       const { data: jobData, error: jobError } = await supabase
         .from('jobs')
-        .select('code_file_version, updated_at')
+        .select('code_file_version, updated_at, end_date, workflow_stats')
         .eq('id', selectedJob.id)
         .single();
 
-      // 🔍 DEBUG: Check what we're actually getting from both tables
-      console.log('🔍 DEBUG JobContainer - selectedJob.id:', selectedJob.id);
-      console.log('🔍 DEBUG JobContainer - dataVersionData:', dataVersionData);
-      console.log('🔍 DEBUG JobContainer - data file_version:', dataVersionData?.file_version);
-      console.log('🔍 DEBUG JobContainer - jobData:', jobData);
-      console.log('🔍 DEBUG JobContainer - code_file_version:', jobData?.code_file_version);
+      // Get as_of_date from inspection_data table
+      const { data: inspectionData, error: inspectionError } = await supabase
+        .from('inspection_data')
+        .select('upload_date')
+        .eq('job_id', selectedJob.id)
+        .order('upload_date', { ascending: false })
+        .limit(1)
+        .single();
+
+      // 🔍 DEBUG: Check what we're actually getting from all tables
+      console.log('🔍 DEBUG JobContainer - property_records data:', dataVersionData);
+      console.log('🔍 DEBUG JobContainer - jobs data:', jobData);
+      console.log('🔍 DEBUG JobContainer - inspection_data:', inspectionData);
 
       if (dataVersionError && dataVersionError.code !== 'PGRST116') throw dataVersionError;
       if (jobError) throw jobError;
+      // Don't throw on inspection error - it might not exist yet
 
       const currentFileVersion = dataVersionData?.file_version || 1;
       const currentCodeVersion = jobData?.code_file_version || 1;
@@ -87,7 +95,7 @@ const JobContainer = ({
 
       setPropertyRecordsCount(count || 0);
 
-      // Prepare enriched job data
+      // Prepare enriched job data with all the fetched info
       const enrichedJobData = {
         ...selectedJob,
         updated_at: jobData?.updated_at || selectedJob.updated_at,
@@ -95,12 +103,18 @@ const JobContainer = ({
         due_year: selectedJob.end_date ? new Date(selectedJob.end_date).getFullYear() : 'TBD',
         latest_data_version: currentFileVersion,
         latest_code_version: currentCodeVersion,
-        property_count: count || 0
+        property_count: count || 0,
+        
+        // NEW: Add the properly fetched dates
+        asOfDate: inspectionData?.upload_date || null,
+        sourceFileDate: dataVersionData?.updated_at || null,
+        end_date: jobData?.end_date || selectedJob.end_date,
+        workflow_stats: jobData?.workflow_stats || selectedJob.workflowStats || null
       };
       
       setJobData(enrichedJobData);
 
-      console.log(`📊 JobContainer: Loaded data version ${currentFileVersion}, code version ${currentCodeVersion} with ${count} property records`);
+      console.log(`📊 JobContainer: Loaded complete job data with dates from multiple tables`);
 
     } catch (error) {
       console.error('Error loading file versions:', error);
@@ -113,7 +127,10 @@ const JobContainer = ({
         due_year: selectedJob.end_date ? new Date(selectedJob.end_date).getFullYear() : 'TBD',
         latest_data_version: 1,
         latest_code_version: 1,
-        property_count: 0
+        property_count: 0,
+        asOfDate: null,
+        sourceFileDate: null,
+        workflow_stats: selectedJob.workflowStats || null
       };
       setJobData(fallbackJobData);
     } finally {
