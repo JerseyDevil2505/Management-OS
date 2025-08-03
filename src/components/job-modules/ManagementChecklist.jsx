@@ -218,11 +218,11 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
 
   const handleItemStatusChange = async (itemId, newStatus) => {
     try {
-      // Update in database first
+      // Update in database first - PASS UUID NOT NAME!
       const updatedItem = await checklistService.updateItemStatus(
         itemId, 
         newStatus, 
-        currentUser?.name || 'System User'
+        currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad'
       );
       
       // Then update local state with the response
@@ -239,11 +239,11 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
 
   const handleClientApproval = async (itemId, approved) => {
     try {
-      // Update in database first
+      // Update in database first - PASS UUID NOT NAME!
       const updatedItem = await checklistService.updateClientApproval(
         itemId, 
         approved, 
-        currentUser?.name || 'System User'
+        currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad'
       );
       
       // Then update local state with the response
@@ -266,8 +266,8 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
     
     setUploading(true);
     try {
-      // Upload file and update item
-      const updatedItem = await checklistService.uploadFile(itemId, jobData.id, file, currentUser?.name || 'System User');
+      // Upload file and update item - PASS UUID NOT NAME!
+      const updatedItem = await checklistService.uploadFile(itemId, jobData.id, file, currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad');
       
       // Update local state
       setChecklistItems(items => items.map(item => 
