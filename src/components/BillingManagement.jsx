@@ -28,6 +28,21 @@ const BillingManagement = () => {
     amount: ''
   });
   const [editingReceivable, setEditingReceivable] = useState(null);
+  const [distributions, setDistributions] = useState([]);
+  const [showDistributionForm, setShowDistributionForm] = useState(false);
+  const [distributionForm, setDistributionForm] = useState({
+    shareholder: '',
+    amount: '',
+    date: new Date().toISOString().split('T')[0],
+    notes: ''
+  });
+  const [distributionMetrics, setDistributionMetrics] = useState({
+    conservative: 0,
+    projected: 0,
+    ytdDistributions: 0,
+    monthlyCollectionRate: 0,
+    projectedYearEnd: 0
+  });
   
   // Working days for 2025 (excluding weekends and federal holidays)
   const workingDays2025 = {
@@ -101,6 +116,9 @@ const BillingManagement = () => {
     }
     if (activeTab === 'receivables') {
       loadOfficeReceivables();
+    }
+    if (activeTab === 'distributions') {
+      loadDistributions();
     }
   }, [activeTab]);
 
@@ -335,6 +353,83 @@ const BillingManagement = () => {
       setOfficeReceivables(data || []);
     } catch (error) {
       console.error('Error loading office receivables:', error);
+    }
+  };  
+
+    const loadDistributions = async () => {
+    try {
+      const currentYear = new Date().getFullYear();
+      const { data, error } = await supabase
+        .from('shareholder_distributions')
+        .select('*')
+        .eq('year', currentYear)
+        .order('distribution_date', { ascending: false });
+
+      if (error) throw error;
+      setDistributions(data || []);
+      calculateDistributionMetrics();
+    } catch (error) {
+      console.error('Error loading distributions:', error);
+    }
+  };
+  const calculateDistributionMetrics = async () => {
+    try {
+      const currentDate = new Date();
+      const currentYear = currentDate.getFullYear();
+      const currentMonth = currentDate.getMonth() + 1;
+      const monthsElapsed = currentMonth;
+      const monthsRemaining = 12 - currentMonth;
+      
+      // Get YTD distributions
+      const { data: ytdDists } = await supabase
+        .from('shareholder_distributions')
+        .select('amount')
+        .eq('year', currentYear)
+        .eq('status', 'paid');
+      
+      const ytdDistributions = ytdDists?.reduce((sum, dist) => sum + parseFloat(dist.amount), 0) || 0;
+      
+      // Calculate monthly collection rate
+      const monthlyCollectionRate = monthsElapsed > 0 ? globalMetrics.totalPaid / monthsElapsed : 0;
+      
+      // Project year-end cash
+      const projectedYearEnd = globalMetrics.totalPaid + 
+                               (monthlyCollectionRate * monthsRemaining) + 
+                               globalMetrics.totalOpen;
+      
+      // Calculate operating reserve (2 months)
+      const operatingReserve = globalMetrics.dailyFringe * 42; // ~2 months of working days
+      const cashReserve = 200000; // Fixed $200K
+      
+      // Calculate remaining year expenses
+      const remainingDaysInYear = (12 - currentMonth + 1) * 21; // Rough estimate
+      const remainingYearExpenses = globalMetrics.dailyFringe * remainingDaysInYear;
+      
+      // Conservative approach (available today)
+      const conservative = globalMetrics.totalPaid - 
+                          operatingReserve - 
+                          cashReserve - 
+                          ytdDistributions - 
+                          remainingYearExpenses;
+      
+      // Projected approach (available by year-end)
+      const projected = projectedYearEnd - 
+                       operatingReserve - 
+                       cashReserve - 
+                       ytdDistributions - 
+                       globalMetrics.projectedExpenses;
+      
+      setDistributionMetrics({
+        conservative: Math.max(0, conservative),
+        projected: Math.max(0, projected),
+        ytdDistributions,
+        monthlyCollectionRate,
+        projectedYearEnd,
+        operatingReserve,
+        cashReserve
+      });
+    } catch (error) {
+      console.error('Error calculating distribution metrics:', error);
     }
   };  
 
@@ -2296,12 +2391,145 @@ const BillingManagement = () => {
           {/* Shareholder Distributions Tab */}
           {activeTab === 'distributions' && (
             <div className="space-y-6">
-              <div className="text-center py-12 bg-gray-50 rounded-lg">
-                <p className="text-gray-600 mb-4">Shareholder Distributions tracking coming soon.</p>
-                <p className="text-sm text-gray-500">This will track distributions to shareholders.</p>
+              {/* Distribution Metrics Dashboard */}
+              <div className="bg-gradient-to-r from-green-50 to-blue-50 rounded-lg p-6">
+                <h2 className="text-lg font-semibold text-gray-800 mb-4">Distribution Analysis</h2>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                  {/* Conservative Approach */}
+                  <div className="bg-white rounded-lg p-6 shadow-md border-2 border-green-400">
+                    <h3 className="text-md font-semibold text-gray-700 mb-3">Conservative (Available Today)</h3>
+                    <p className={`text-3xl font-bold ${distributionMetrics.conservative > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {formatCurrency(distributionMetrics.conservative)}
+                    </p>
+                    <div className="mt-4 space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Cash on Hand:</span>
+                        <span className="font-medium">{formatCurrency(globalMetrics.totalPaid)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Operating Reserve (2mo):</span>
+                        <span className="font-medium text-red-600">-{formatCurrency(distributionMetrics.operatingReserve)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Cash Reserve:</span>
+                        <span className="font-medium text-red-600">-{formatCurrency(distributionMetrics.cashReserve)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">YTD Distributions:</span>
+                        <span className="font-medium text-red-600">-{formatCurrency(distributionMetrics.ytdDistributions)}</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Projected Approach */}
+                  <div className="bg-white rounded-lg p-6 shadow-md border-2 border-blue-400">
+                    <h3 className="text-md font-semibold text-gray-700 mb-3">Projected (Year-End)</h3>
+                    <p className={`text-3xl font-bold ${distributionMetrics.projected > 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                      {formatCurrency(distributionMetrics.projected)}
+                    </p>
+                    <div className="mt-4 space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Projected Cash:</span>
+                        <span className="font-medium">{formatCurrency(distributionMetrics.projectedYearEnd)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Monthly Collection Rate:</span>
+                        <span className="font-medium text-green-600">{formatCurrency(distributionMetrics.monthlyCollectionRate)}/mo</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Open Invoices:</span>
+                        <span className="font-medium">{formatCurrency(globalMetrics.totalOpen)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Projected Expenses:</span>
+                        <span className="font-medium text-red-600">-{formatCurrency(globalMetrics.projectedExpenses)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Per-Person Breakdown */}
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="bg-white rounded-lg p-4 shadow-sm">
+                    <p className="text-sm text-gray-600">Thomas Davis (10%)</p>
+                    <p className="text-lg font-semibold text-gray-900">
+                      {formatCurrency(distributionMetrics.conservative * 0.10)} / {formatCurrency(distributionMetrics.projected * 0.10)}
+                    </p>
+                  </div>
+                  <div className="bg-white rounded-lg p-4 shadow-sm">
+                    <p className="text-sm text-gray-600">Brian Schneider (45%)</p>
+                    <p className="text-lg font-semibold text-gray-900">
+                      {formatCurrency(distributionMetrics.conservative * 0.45)} / {formatCurrency(distributionMetrics.projected * 0.45)}
+                    </p>
+                  </div>
+                  <div className="bg-white rounded-lg p-4 shadow-sm">
+                    <p className="text-sm text-gray-600">Kristine Duda (45%)</p>
+                    <p className="text-lg font-semibold text-gray-900">
+                      {formatCurrency(distributionMetrics.conservative * 0.45)} / {formatCurrency(distributionMetrics.projected * 0.45)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Distribution Entry Button */}
+              <div className="flex justify-end">
+                <button
+                  onClick={() => setShowDistributionForm(true)}
+                  className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+                >
+                  + Record Distribution
+                </button>
+              </div>
+              
+              {/* Distributions Table */}
+              <div className="bg-white rounded-lg shadow overflow-hidden">
+                <h3 className="text-lg font-semibold text-gray-900 p-6 pb-4">2025 Distribution History</h3>
+                {distributions.length === 0 ? (
+                  <div className="text-center py-12">
+                    <p className="text-gray-600">No distributions recorded for 2025.</p>
+                  </div>
+                ) : (
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Shareholder</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Amount</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Notes</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {distributions.map(dist => (
+                        <tr key={dist.id} className={dist.status === 'owed' ? 'bg-yellow-50' : ''}>
+                          <td className="px-6 py-4 text-sm text-gray-900">
+                            {new Date(dist.distribution_date).toLocaleDateString()}
+                          </td>
+                          <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                            {dist.shareholder_name}
+                          </td>
+                          <td className="px-6 py-4 text-sm font-semibold text-gray-900">
+                            {formatCurrency(dist.amount)}
+                          </td>
+                          <td className="px-6 py-4 text-sm">
+                            <span className={`px-2 py-1 text-xs rounded-full ${
+                              dist.status === 'paid' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                            }`}>
+                              {dist.status === 'paid' ? 'Paid' : 'Owed'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-600">
+                            {dist.notes || '-'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
               </div>
             </div>
-          )} 
+          )}
 
       {/* Contract Setup Modal */}
       {showContractSetup && selectedJob && (
@@ -3250,6 +3478,185 @@ const BillingManagement = () => {
           </div>
         </div>
       )}
+      {/* Distribution Form Modal */}
+      {showDistributionForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-lg font-semibold mb-4">Record Distribution</h3>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Who is taking the distribution?
+                </label>
+                <select
+                  value={distributionForm.shareholder}
+                  onChange={(e) => setDistributionForm(prev => ({ ...prev, shareholder: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                >
+                  <option value="">Select shareholder...</option>
+                  <option value="Thomas Davis">Thomas Davis (10%)</option>
+                  <option value="Brian Schneider">Brian Schneider (45%)</option>
+                  <option value="Kristine Duda">Kristine Duda (45%)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Amount Taken
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={distributionForm.amount}
+                  onChange={(e) => setDistributionForm(prev => ({ ...prev, amount: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  placeholder="10000.00"
+                />
+                {distributionForm.amount && distributionForm.shareholder && (
+                  <div className="mt-2 p-3 bg-blue-50 rounded-md text-sm">
+                    <p className="font-medium text-blue-900 mb-1">This will create:</p>
+                    {distributionForm.shareholder === 'Thomas Davis' ? (
+                      <>
+                        <p>• Brian owes: {formatCurrency(parseFloat(distributionForm.amount) * 4.5)}</p>
+                        <p>• Kristine owes: {formatCurrency(parseFloat(distributionForm.amount) * 4.5)}</p>
+                      </>
+                    ) : (
+                      <>
+                        <p>• {distributionForm.shareholder === 'Brian Schneider' ? 'Kristine' : 'Brian'} owes: {formatCurrency(parseFloat(distributionForm.amount))}</p>
+                        <p>• Thomas owes: {formatCurrency(parseFloat(distributionForm.amount) * 0.2222)}</p>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Date
+                </label>
+                <input
+                  type="date"
+                  value={distributionForm.date}
+                  onChange={(e) => setDistributionForm(prev => ({ ...prev, date: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Notes (Optional)
+                </label>
+                <textarea
+                  value={distributionForm.notes}
+                  onChange={(e) => setDistributionForm(prev => ({ ...prev, notes: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  rows="2"
+                  placeholder="Purpose of distribution..."
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowDistributionForm(false);
+                  setDistributionForm({
+                    shareholder: '',
+                    amount: '',
+                    date: new Date().toISOString().split('T')[0],
+                    notes: ''
+                  });
+                }}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  try {
+                    if (!distributionForm.shareholder || !distributionForm.amount) {
+                      alert('Please select a shareholder and enter an amount');
+                      return;
+                    }
+
+                    const amount = parseFloat(distributionForm.amount);
+                    const date = new Date(distributionForm.date);
+                    const groupId = crypto.randomUUID();
+                    
+                    // Define ownership percentages
+                    const ownership = {
+                      'Thomas Davis': 0.10,
+                      'Brian Schneider': 0.45,
+                      'Kristine Duda': 0.45
+                    };
+                    
+                    // Calculate total distribution needed
+                    const takerPercentage = ownership[distributionForm.shareholder];
+                    const totalDistribution = amount / takerPercentage;
+                    
+                    // Create distribution records
+                    const distributions = [];
+                    
+                    // Record for the person taking money (paid)
+                    distributions.push({
+                      shareholder_name: distributionForm.shareholder,
+                      ownership_percentage: ownership[distributionForm.shareholder] * 100,
+                      distribution_date: distributionForm.date,
+                      amount: amount,
+                      status: 'paid',
+                      distribution_group_id: groupId,
+                      year: date.getFullYear(),
+                      month: date.getMonth() + 1,
+                      notes: distributionForm.notes
+                    });
+                    
+                    // Records for others (owed)
+                    Object.entries(ownership).forEach(([name, percentage]) => {
+                      if (name !== distributionForm.shareholder) {
+                        distributions.push({
+                          shareholder_name: name,
+                          ownership_percentage: percentage * 100,
+                          distribution_date: distributionForm.date,
+                          amount: totalDistribution * percentage,
+                          status: 'owed',
+                          distribution_group_id: groupId,
+                          year: date.getFullYear(),
+                          month: date.getMonth() + 1,
+                          notes: `Owed from ${distributionForm.shareholder}'s distribution`
+                        });
+                      }
+                    });
+                    
+                    // Insert all records
+                    const { error } = await supabase
+                      .from('shareholder_distributions')
+                      .insert(distributions);
+                    
+                    if (error) throw error;
+                    
+                    setShowDistributionForm(false);
+                    setDistributionForm({
+                      shareholder: '',
+                      amount: '',
+                      date: new Date().toISOString().split('T')[0],
+                      notes: ''
+                    });
+                    loadDistributions();
+                    calculateGlobalMetrics();
+                  } catch (error) {
+                    console.error('Error recording distribution:', error);
+                    alert('Error recording distribution');
+                  }
+                }}
+                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+              >
+                Record Distribution
+              </button>
+            </div>
+          </div>
+        </div>
+      )}      
     </div>
   );
 };
