@@ -141,17 +141,18 @@ const PayrollManagement = () => {
         .filter(emp => emp.initials)
         .map(emp => emp.initials.toUpperCase().trim());
       
-      const { count, error: countError } = await supabase
+      console.log('Valid employee initials:', validInitials);
+      
+      // First, let's check what property classes exist in the date range
+      const { data: classCheck, error: classError } = await supabase
         .from('inspection_data')
-        .select('*', { count: 'exact', head: true })
+        .select('property_class')
         .gte('measure_date', startDate)
         .lte('measure_date', endDate)
-        .in('measure_by', validInitials)
-        .in('property_class', ['2', '3A']);
-
-      if (countError) throw countError;
+        .limit(100);
       
-      console.log(`Total inspections to process: ${count}`);
+      if (!classError && classCheck) {
+        const uniqueClasses = [...new Set(classCheck.map(
 
       const batchSize = 1000;
       const batches = Math.ceil(count / batchSize);
