@@ -48,11 +48,7 @@ const BillingManagement = () => {
     cashReserve: 200000
   });
   
-const [reserveSettings, setReserveSettings] = useState({
-    operatingReserveMonths: 2, // 0, 1, or 2
-    cashReserve: 200000
-  });
-  
+
   // Dynamic working days calculation
   const getWorkingDaysForMonth = (year, month) => {
     const firstDay = new Date(year, month - 1, 1);
