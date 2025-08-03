@@ -134,18 +134,26 @@ const handleItemStatusChange = async (itemId, newStatus) => {
     alert('Failed to update status. Please try again.');
   }
 };
-  const handleClientApproval = (itemId, approved) => {
+const handleClientApproval = async (itemId, approved) => {
+  try {
+    // Update in database first
+    const updatedItem = await checklistService.updateClientApproval(
+      itemId, 
+      approved, 
+      currentUser?.name || 'System User'
+    );
+    
+    // Then update local state with the response
     setChecklistItems(items => items.map(item => 
-      item.id === itemId 
-        ? { 
-            ...item, 
-            client_approved: approved,
-            client_approved_date: approved ? new Date().toISOString() : null,
-            client_approved_by: approved ? currentUser?.name || 'System User' : null
-          }
-        : item
+      item.id === itemId ? updatedItem : item
     ));
-  };
+    
+    console.log(`✅ Updated item ${itemId} client approval to ${approved}`);
+  } catch (error) {
+    console.error('Error updating client approval:', error);
+    alert('Failed to update approval. Please try again.');
+  }
+};
 
   const handleFileUpload = async (itemId, file) => {
     if (file.size > 200 * 1024 * 1024) {
