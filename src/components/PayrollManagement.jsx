@@ -104,7 +104,7 @@ const PayrollManagement = () => {
       // Get last processed info
       const { data: lastInspection, error } = await supabase
         .from('inspection_data')
-        .select('payroll_period_end')
+        .select('payroll_period_end, payroll_processed_date')
         .not('payroll_period_end', 'is', null)
         .order('payroll_period_end', { ascending: false })
         .limit(1)
@@ -307,7 +307,7 @@ const PayrollManagement = () => {
       Object.entries(inspectorCounts)
         .sort((a, b) => b[1].count - a[1].count)
         .forEach(([initials, data]) => {
-          console.log(`  ${initials}: ${data.count} inspections = ${(data.count * bonusRate).toFixed(2)}`);
+          console.log(`  ${initials}: ${data.count} inspections = $${(data.count * bonusRate).toFixed(2)}`);
         });
       console.log('=== END DEBUG ===\n');
       
@@ -625,7 +625,10 @@ const PayrollManagement = () => {
         
         const { error } = await supabase
           .from('inspection_data')
-          .update({ payroll_period_end: payrollPeriod.endDate })
+          .update({ 
+            payroll_period_end: payrollPeriod.endDate,
+            payroll_processed_date: payrollPeriod.processedDate 
+          })
           .in('id', batch);
         
         if (error) throw error;
@@ -856,63 +859,61 @@ const PayrollManagement = () => {
           </div>
         </div>
 
-        {/* Step 2: Calculate Bonuses - Always visible when dates are set */}
-        {payrollPeriod.startDate && payrollPeriod.endDate && (
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-            <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
-              <div className="flex items-center">
-                <div className="flex-shrink-0 w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white font-semibold">
-                  {payrollData.length > 0 ? '2' : '1'}
-                </div>
-                <h2 className="ml-3 text-lg font-semibold text-gray-900">Calculate Field Bonuses</h2>
+        {/* Step 2: Calculate Bonuses - ALWAYS VISIBLE */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+          <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
+            <div className="flex items-center">
+              <div className="flex-shrink-0 w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white font-semibold">
+                2
               </div>
-            </div>
-            
-            <div className="p-6">
-              {!payrollData.length && (
-                <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
-                  <p className="text-sm text-blue-800">
-                    <span className="font-medium">Tip:</span> You can calculate bonuses before uploading the worksheet to preview the amounts
-                  </p>
-                </div>
-              )}
-              
-              <div className="flex items-center space-x-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Job Filter</label>
-                  <select
-                    value={selectedJob}
-                    onChange={(e) => setSelectedJob(e.target.value)}
-                    className="px-3 py-2 border border-gray-300 rounded-md"
-                  >
-                    <option value="all">All Active Jobs</option>
-                    {jobs.map(job => (
-                      <option key={job.id} value={job.id}>
-                        {job.ccdd} - {job.job_name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                
-                <button
-                  onClick={calculateInspectionBonuses}
-                  disabled={isProcessing || !payrollPeriod.startDate || !payrollPeriod.endDate}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {isProcessing ? 'Calculating...' : `Calculate Bonuses (${bonusRate}/inspection)`}
-                </button>
-              </div>
+              <h2 className="ml-3 text-lg font-semibold text-gray-900">Calculate Field Bonuses</h2>
             </div>
           </div>
-        )}
+          
+          <div className="p-6">
+            {!payrollData.length && (
+              <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                <p className="text-sm text-blue-800">
+                  <span className="font-medium">Tip:</span> You can calculate bonuses before uploading the worksheet to preview the amounts
+                </p>
+              </div>
+            )}
+            
+            <div className="flex items-center space-x-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Job Filter</label>
+                <select
+                  value={selectedJob}
+                  onChange={(e) => setSelectedJob(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-md"
+                >
+                  <option value="all">All Active Jobs</option>
+                  {jobs.map(job => (
+                    <option key={job.id} value={job.id}>
+                      {job.ccdd} - {job.job_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              
+              <button
+                onClick={calculateInspectionBonuses}
+                disabled={isProcessing || !payrollPeriod.startDate || !payrollPeriod.endDate}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+              >
+                {isProcessing ? 'Calculating...' : `Calculate Bonuses ($${bonusRate}/inspection)`}
+              </button>
+            </div>
+          </div>
+        </div>
 
-        {/* Step 3: Review and Export - Show bonus preview even without worksheet */}
+        {/* Step 3: Review and Export - ALWAYS VISIBLE when bonuses calculated */}
         {Object.keys(inspectionBonuses).length > 0 && (
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
             <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
               <div className="flex items-center">
                 <div className="flex-shrink-0 w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white font-semibold">
-                  {payrollData.length > 0 ? '3' : '2'}
+                  3
                 </div>
                 <h2 className="ml-3 text-lg font-semibold text-gray-900">
                   {payrollData.length > 0 ? 'Review and Export' : 'Bonus Preview'}
@@ -940,7 +941,7 @@ const PayrollManagement = () => {
                   <p className="text-xs font-medium text-orange-600 uppercase tracking-wider">Appt OT</p>
                   <p className="mt-1 text-2xl font-bold text-orange-900">
                     {payrollData.length > 0 
-                      ? `${mergePayrollWithBonuses().reduce((sum, emp) => sum + (emp.apptOT || 0), 0).toFixed(2)}`
+                      ? `$${mergePayrollWithBonuses().reduce((sum, emp) => sum + (emp.apptOT || 0), 0).toFixed(2)}`
                       : '-'
                     }
                   </p>
@@ -958,8 +959,8 @@ const PayrollManagement = () => {
                   <p className="text-xs font-medium text-indigo-600 uppercase tracking-wider">TOTAL OT</p>
                   <p className="mt-1 text-2xl font-bold text-indigo-900">
                     {payrollData.length > 0 
-                      ? `${mergePayrollWithBonuses().reduce((sum, emp) => sum + emp.calculatedTotal, 0).toFixed(2)}`
-                      : `${Object.values(inspectionBonuses).reduce((sum, emp) => sum + emp.bonus, 0).toFixed(2)}`
+                      ? `$${mergePayrollWithBonuses().reduce((sum, emp) => sum + emp.calculatedTotal, 0).toFixed(2)}`
+                      : `$${Object.values(inspectionBonuses).reduce((sum, emp) => sum + emp.bonus, 0).toFixed(2)}`
                     }
                   </p>
                 </div>
@@ -1077,7 +1078,7 @@ const PayrollManagement = () => {
                 <p className="text-sm text-gray-500">
                   {payrollData.length > 0 
                     ? <><span className="font-medium">Remember:</span> Enter TOTAL OT column into ADP</>
-                    : `Total Field Bonuses: ${Object.values(inspectionBonuses).reduce((sum, emp) => sum + emp.bonus, 0).toFixed(2)}`
+                    : `Total Field Bonuses: $${Object.values(inspectionBonuses).reduce((sum, emp) => sum + emp.bonus, 0).toFixed(2)}`
                   }
                 </p>
               </div>
