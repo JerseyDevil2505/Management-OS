@@ -586,6 +586,149 @@ export const planningJobService = {
   }
 };
 
+// ===== CHECKLIST MANAGEMENT SERVICES =====
+export const checklistService = {
+  // Get all checklist items for a job
+  async getChecklistItems(jobId) {
+    try {
+      console.log('📋 Loading checklist items for job:', jobId);
+      
+      const { data, error } = await supabase
+        .from('checklist_items')
+        .select('*')
+        .eq('job_id', jobId)
+        .order('item_order');
+      
+      if (error) throw error;
+      
+      console.log(`✅ Loaded ${data?.length || 0} checklist items`);
+      return data || [];
+    } catch (error) {
+      console.error('Checklist items fetch error:', error);
+      return [];
+    }
+  },
+
+  // Update item status (completed, pending, etc.)
+  async updateItemStatus(itemId, status, completedBy) {
+    try {
+      const updates = {
+        status: status,
+        completed_at: status === 'completed' ? new Date().toISOString() : null,
+        completed_by: status === 'completed' ? completedBy : null,
+        updated_at: new Date().toISOString()
+      };
+
+      const { data, error } = await supabase
+        .from('checklist_items')
+        .update(updates)
+        .eq('id', itemId)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Checklist status update error:', error);
+      throw error;
+    }
+  },
+
+  // Update client approval
+  async updateClientApproval(itemId, approved, approvedBy) {
+    try {
+      const updates = {
+        client_approved: approved,
+        client_approved_date: approved ? new Date().toISOString() : null,
+        client_approved_by: approved ? approvedBy : null,
+        updated_at: new Date().toISOString()
+      };
+
+      const { data, error } = await supabase
+        .from('checklist_items')
+        .update(updates)
+        .eq('id', itemId)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Client approval update error:', error);
+      throw error;
+    }
+  },
+
+  // Create initial checklist items for a new job
+  async createChecklistForJob(jobId, checklistType = 'revaluation') {
+    try {
+      console.log('🔨 Creating checklist items for job:', jobId);
+      
+      // The 29 template items
+      const templateItems = [
+        // Setup Category (1-8)
+        { item_order: 1, item_text: 'Contract Signed by Client', category: 'setup', requires_client_approval: false, allows_file_upload: false },
+        { item_order: 2, item_text: 'Contract Signed/Approved by State', category: 'setup', requires_client_approval: false, allows_file_upload: false },
+        { item_order: 3, item_text: 'Tax Maps Approved', category: 'setup', requires_client_approval: false, allows_file_upload: false },
+        { item_order: 4, item_text: 'Tax Map Upload', category: 'setup', requires_client_approval: false, allows_file_upload: true },
+        { item_order: 5, item_text: 'Zoning Map Upload', category: 'setup', requires_client_approval: false, allows_file_upload: true },
+        { item_order: 6, item_text: 'Zoning Bulk and Use Regulations Upload', category: 'setup', requires_client_approval: false, allows_file_upload: true },
+        { item_order: 7, item_text: 'PPA Website Updated', category: 'setup', requires_client_approval: false, allows_file_upload: false },
+        { item_order: 8, item_text: 'Data Collection Parameters', category: 'setup', requires_client_approval: true, allows_file_upload: false },
+        
+        // Inspection Category (9-14)
+        { item_order: 9, item_text: 'Initial Mailing List', category: 'inspection', requires_client_approval: false, allows_file_upload: false, special_action: 'generate_mailing_list' },
+        { item_order: 10, item_text: 'Initial Letter and Brochure', category: 'inspection', requires_client_approval: false, allows_file_upload: true, special_action: 'generate_letter' },
+        { item_order: 11, item_text: 'Initial Mailing Sent', category: 'inspection', requires_client_approval: false, allows_file_upload: false },
+        { item_order: 12, item_text: 'First Attempt Inspections', category: 'inspection', requires_client_approval: false, allows_file_upload: false, auto_update_source: 'production_tracker' },
+        { item_order: 13, item_text: 'Second Attempt Inspections', category: 'inspection', requires_client_approval: false, allows_file_upload: false, special_action: 'generate_second_attempt_mailer' },
+        { item_order: 14, item_text: 'Third Attempt Inspections', category: 'inspection', requires_client_approval: false, allows_file_upload: false, special_action: 'generate_third_attempt_mailer' },
+        
+        // Analysis Category (15-26)
+        { item_order: 15, item_text: 'Market Analysis', category: 'analysis', requires_client_approval: false, allows_file_upload: true },
+        { item_order: 16, item_text: 'Page by Page Analysis', category: 'analysis', requires_client_approval: false, allows_file_upload: false },
+        { item_order: 17, item_text: 'Lot Sizing Completed', category: 'analysis', requires_client_approval: false, allows_file_upload: false },
+        { item_order: 18, item_text: 'Lot Sizing Questions Complete', category: 'analysis', requires_client_approval: false, allows_file_upload: false },
+        { item_order: 19, item_text: 'VCS Reviewed/Reset', category: 'analysis', requires_client_approval: false, allows_file_upload: false },
+        { item_order: 20, item_text: 'Land Value Tables Built', category: 'analysis', requires_client_approval: false, allows_file_upload: false },
+        { item_order: 21, item_text: 'Land Values Entered', category: 'analysis', requires_client_approval: true, allows_file_upload: false },
+        { item_order: 22, item_text: 'Economic Obsolescence Study', category: 'analysis', requires_client_approval: true, allows_file_upload: false },
+        { item_order: 23, item_text: 'Cost Conversion Factor Set', category: 'analysis', requires_client_approval: true, allows_file_upload: false },
+        { item_order: 24, item_text: 'Building Class Review/Updated', category: 'analysis', requires_client_approval: false, allows_file_upload: false },
+        { item_order: 25, item_text: 'Effective Age Loaded/Set', category: 'analysis', requires_client_approval: false, allows_file_upload: false },
+        { item_order: 26, item_text: 'Final Values Ready', category: 'analysis', requires_client_approval: false, allows_file_upload: false },
+        
+        // Completion Category (27-29)
+        { item_order: 27, item_text: 'View Value Mailer', category: 'completion', requires_client_approval: false, allows_file_upload: true, special_action: 'view_impact_letter' },
+        { item_order: 28, item_text: 'Generate Turnover Document', category: 'completion', requires_client_approval: false, allows_file_upload: false, special_action: 'generate_turnover_pdf' },
+        { item_order: 29, item_text: 'Turnover Date', category: 'completion', requires_client_approval: false, allows_file_upload: false, input_type: 'date', special_action: 'archive_trigger' }
+      ];
+
+      // Add job_id and default status to each item
+      const itemsToInsert = templateItems.map(item => ({
+        ...item,
+        job_id: jobId,
+        status: 'pending',
+        checklist_type: checklistType,
+        created_at: new Date().toISOString()
+      }));
+
+      const { data, error } = await supabase
+        .from('checklist_items')
+        .insert(itemsToInsert)
+        .select();
+      
+      if (error) throw error;
+      
+      console.log(`✅ Created ${data.length} checklist items for job`);
+      return data;
+    } catch (error) {
+      console.error('Checklist creation error:', error);
+      throw error;
+    }
+  }
+};
+
 // ===== UNIFIED PROPERTY MANAGEMENT SERVICES =====
 export const propertyService = {
   async getAll(jobId) {
