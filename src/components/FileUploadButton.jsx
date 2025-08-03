@@ -1285,6 +1285,13 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
           addNotification(`💾 Saved ${salesDecisions.size} sales decisions`, 'success');
         }
       }
+      // Check if rollback occurred
+      if (result.warnings && result.warnings.some(w => w.includes('rolled back'))) {
+        addBatchLog('⚠️ UPDATE FAILED - All changes have been rolled back', 'error', {
+          message: 'The update encountered errors and all changes were automatically reversed'
+        });
+        addNotification('❌ Update failed - all changes rolled back. Check logs for details.', 'error');
+      }
       
       // CRITICAL FIX: Refresh banner state immediately
       addBatchLog('🔄 Refreshing UI state...', 'info');
@@ -1311,8 +1318,20 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       
     } catch (error) {
       console.error('❌ Processing failed:', error);
-      addBatchLog('❌ Processing workflow failed', 'error', { error: error.message });
-      addNotification(`Processing failed: ${error.message}`, 'error');
+      
+      // Check if this was a rollback error
+      const isRollback = error.message && (error.message.includes('rolled back') || error.message.includes('reverted'));
+      
+      if (isRollback) {
+        addBatchLog('❌ CRITICAL FAILURE - Update rolled back', 'error', { 
+          error: error.message,
+          details: 'All database changes have been reversed'
+        });
+        addNotification(`❌ ${error.message}`, 'error');
+      } else {
+        addBatchLog('❌ Processing workflow failed', 'error', { error: error.message });
+        addNotification(`Processing failed: ${error.message}`, 'error');
+      }
     } finally {
       setProcessing(false);
       setProcessingStatus('');
@@ -1996,6 +2015,11 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                       addBatchLog('🎉 File version refresh completed successfully!', 'success');
                       addNotification(`✅ Successfully updated ${totalProcessed} records with latest data via ${detectedVendor} updater`, 'success');
                     }
+                    // Check if rollback occurred during refresh
+                    if (result.warnings && result.warnings.some(w => w.includes('rolled back'))) {
+                      addBatchLog('⚠️ REFRESH FAILED - All changes have been rolled back', 'error');
+                      addNotification('❌ Refresh failed - all changes rolled back. Check logs for details.', 'error');
+                    }
                     
                     // CRITICAL FIX: Refresh banner state immediately
                     addBatchLog('🔄 Refreshing UI state...', 'info');
@@ -2022,8 +2046,19 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                     
                   } catch (error) {
                     console.error('❌ Processing failed:', error);
-                    addBatchLog('❌ File refresh failed', 'error', { error: error.message });
-                    addNotification(`Processing failed: ${error.message}`, 'error');
+                    
+                    const isRollback = error.message && (error.message.includes('rolled back') || error.message.includes('reverted'));
+                    
+                    if (isRollback) {
+                      addBatchLog('❌ CRITICAL FAILURE - Refresh rolled back', 'error', { 
+                        error: error.message,
+                        details: 'All database changes have been reversed'
+                      });
+                      addNotification(`❌ ${error.message}`, 'error');
+                    } else {
+                      addBatchLog('❌ File refresh failed', 'error', { error: error.message });
+                      addNotification(`Processing failed: ${error.message}`, 'error');
+                    }
                   } finally {
                     setProcessing(false);
                     setProcessingStatus('');
