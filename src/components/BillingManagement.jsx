@@ -365,6 +365,9 @@ const BillingManagement = () => {
         projectedExpenses,
         profitLoss,
         profitLossPercent
+        projectedCash,           
+        projectedProfitLoss,     
+        projectedProfitLossPercent 
       });
     } catch (error) {
       console.error('Error calculating global metrics:', error);
