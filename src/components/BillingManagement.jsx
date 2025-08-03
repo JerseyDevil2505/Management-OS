@@ -919,6 +919,35 @@ const BillingManagement = () => {
           });
         }
       });
+      
+      // Get office receivables
+      const { data: receivables, receivablesError } = await supabase
+        .from('office_receivables')
+        .select('*')
+        .eq('status', 'O');
+
+      if (!receivablesError && receivables) {
+        receivables.forEach(receivable => {
+          openInvoices.push({
+            id: receivable.id,
+            billing_date: receivable.created_at,
+            invoice_number: receivable.invoice_number,
+            amount_billed: receivable.amount,
+            percentage_billed: 0,
+            billing_type: 'office_receivable',
+            status: 'O',
+            job_name: receivable.job_name,
+            job_type: 'office_receivable',
+            job_id: receivable.id,
+            event_description: receivable.event_description
+          });
+        });
+      }
+
+      // Sort by billing date (most recent first)
+      openInvoices.sort((a, b) => new Date(b.billing_date) - new Date(a.billing_date));
+      setAllOpenInvoices(openInvoices);
+      setShowOpenInvoices(true);
 
       // Sort by billing date (most recent first)
       openInvoices.sort((a, b) => new Date(b.billing_date) - new Date(a.billing_date));
