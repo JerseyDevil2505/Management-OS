@@ -121,6 +121,11 @@ const BillingManagement = () => {
       loadDistributions();
     }
   }, [activeTab]);
+  useEffect(() => {
+    if (activeTab === 'distributions' && globalMetrics.totalPaid > 0) {
+      calculateDistributionMetrics();
+    }
+  }, [globalMetrics, activeTab]);
 
   const calculateGlobalMetrics = async () => {
     try {
@@ -366,8 +371,7 @@ const BillingManagement = () => {
         .order('distribution_date', { ascending: false });
 
       if (error) throw error;
-      setDistributions(data || []);
-      calculateDistributionMetrics();
+      setDistributions(data || [])
     } catch (error) {
       console.error('Error loading distributions:', error);
     }
