@@ -2521,6 +2521,8 @@ const BillingManagement = () => {
                     </p>
                   </div>
                 </div>
+              </div>
+            </div>
               
 {/* Distributions by Partner */}
               <div className="bg-white rounded-lg shadow overflow-hidden">
