@@ -2535,10 +2535,22 @@ const BillingManagement = () => {
                     );
                     const totalTaken = partnerDistributions.reduce((sum, d) => sum + d.amount, 0);
                     
-                    // Calculate what everyone should have based on total distributions
-                    const allDistributions = distributions.filter(d => d.status === 'paid');
-                    const totalDistributed = allDistributions.reduce((sum, d) => sum + d.amount, 0);
-                    const shouldHave = totalDistributed * ownership;
+                    // Calculate the highest distribution level to ensure tax matching
+                    const allPartners = ['Thomas Davis', 'Brian Schneider', 'Kristine Duda'];
+                    let maxImpliedTotal = 0;
+                    
+                    allPartners.forEach(p => {
+                      const pOwnership = p === 'Thomas Davis' ? 0.10 : 0.45;
+                      const pDistributions = distributions.filter(d => d.shareholder_name === p && d.status === 'paid');
+                      const pTotal = pDistributions.reduce((sum, d) => sum + d.amount, 0);
+                      const impliedTotal = pTotal / pOwnership;
+                      if (impliedTotal > maxImpliedTotal) {
+                        maxImpliedTotal = impliedTotal;
+                      }
+                    });
+                    
+                    // Calculate what this partner should have based on the max level
+                    const shouldHave = maxImpliedTotal * ownership;
                     const balance = totalTaken - shouldHave;
                     
                     return (
@@ -2553,7 +2565,7 @@ const BillingManagement = () => {
                             balance > 0 ? 'bg-blue-100 text-blue-800' : 'bg-yellow-100 text-yellow-800'
                           }`}>
                             {Math.abs(balance) < 1 ? 'Balanced' : 
-                             balance > 0 ? 'Overpaid' : 'Owed'}
+                             balance > 0 ? 'Distributed' : 'Owed'}
                           </span>
                         </div>
                         
