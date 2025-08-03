@@ -352,6 +352,14 @@ const BillingManagement = () => {
     const totalPercentageBilled = events.reduce((sum, event) => sum + parseFloat(event.percentage_billed || 0), 0);
     const totalAmountBilled = events.reduce((sum, event) => sum + parseFloat(event.amount_billed || 0), 0);
     const remainingDue = contract.contract_amount - totalAmountBilled;
+
+      // DEBUG: Add this for yellow jobs at 100%
+  if (totalPercentageBilled >= 0.99 && totalPercentageBilled <= 1.01) {
+    console.log(`Job: ${job.job_name}`);
+    console.log(`  Total %: ${totalPercentageBilled}`);
+    console.log(`  Is Complete: ${totalPercentageBilled >= 1.0}`);
+    console.log(`  Events:`, events.map(e => e.percentage_billed));
+  }
     
     return {
       contractAmount: contract.contract_amount,
