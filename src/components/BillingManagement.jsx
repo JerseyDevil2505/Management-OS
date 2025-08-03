@@ -1388,7 +1388,8 @@ const BillingManagement = () => {
       </div>
 
       {/* Global Metrics Dashboard */}
-      <div className="flex justify-between items-center mb-4">
+      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-6 mb-6">
+        <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold text-gray-800">Business Overview</h2>
           <div className="flex space-x-3">
             <button
@@ -1410,7 +1411,7 @@ const BillingManagement = () => {
               View All Open Invoices ({formatCurrency(globalMetrics.totalOpen)})
             </button>
           </div>
-        </div>       
+        </div>
         
         {/* Row 1: Contract & Revenue Status */}
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4">
