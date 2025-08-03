@@ -90,6 +90,30 @@ const PayrollManagement = () => {
     };
   };
 
+  // Helper function to format payroll period display
+  const getPayrollPeriod = (endDate) => {
+    if (!endDate) return '';
+    
+    const end = new Date(endDate);
+    const day = end.getDate();
+    const month = end.getMonth();
+    const year = end.getFullYear();
+    
+    let periodStart;
+    
+    if (day <= 15) {
+      periodStart = new Date(year, month, 1);
+    } else {
+      periodStart = new Date(year, month, 16);
+    }
+    
+    // Format as MM/DD/YYYY - MM/DD/YYYY
+    const startStr = periodStart.toLocaleDateString('en-US');
+    const endStr = end.toLocaleDateString('en-US');
+    
+    return `${startStr} - ${endStr}`;
+  };
+
   useEffect(() => {
     loadInitialData();
   }, []);
@@ -159,6 +183,31 @@ const PayrollManagement = () => {
       const endDate = payrollPeriod.endDate;
       
       console.log(`Calculating bonuses from ${startDate} to ${endDate}`);
+      
+      // Check data freshness
+      const { data: uploadCheck } = await supabase
+        .from('inspection_data')
+        .select('upload_date, job_id')
+        .gte('measure_date', startDate)
+        .lte('measure_date', endDate)
+        .order('upload_date', { ascending: false })
+        .limit(1);
+      
+      let dataFreshnessWarning = '';
+      if (uploadCheck && uploadCheck.length > 0 && jobs.length > 0) {
+        const lastUploadDate = new Date(uploadCheck[0].upload_date).toDateString();
+        const processDate = new Date(payrollPeriod.processedDate).toDateString();
+        
+        // Check if there are active inspection jobs
+        const activeInspectionJobs = jobs.filter(job => 
+          !job.percent_billed || job.percent_billed < 0.91
+        );
+        
+        if (lastUploadDate !== processDate && activeInspectionJobs.length > 0) {
+          dataFreshnessWarning = `Note: Inspection data was last uploaded on ${lastUploadDate}. You're processing for ${processDate}.`;
+          console.warn(`⚠️ Data freshness warning: ${dataFreshnessWarning}`);
+        }
+      }
       
       // First, let's do a simple test query
       console.log('Testing basic query...');
@@ -335,7 +384,8 @@ const PayrollManagement = () => {
       console.log('=== END DEBUG ===\n');
       
       setInspectionBonuses(bonusResults);
-      setSuccessMessage(`Successfully calculated bonuses for ${Object.keys(bonusResults).length} employees (${allInspections.length} total inspections)`);
+      const successMsg = `Successfully calculated bonuses for ${Object.keys(bonusResults).length} employees (${allInspections.length} total inspections)`;
+      setSuccessMessage(dataFreshnessWarning ? `${successMsg} ${dataFreshnessWarning}` : successMsg);
     } catch (error) {
       console.error('Error calculating bonuses:', error);
       setError('Failed to calculate inspection bonuses: ' + error.message);
