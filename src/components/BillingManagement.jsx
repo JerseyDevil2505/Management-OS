@@ -1224,7 +1224,7 @@ const BillingManagement = () => {
           <h2 className="text-lg font-semibold text-gray-800">Business Overview</h2>
           <button
             onClick={loadAllOpenInvoices}
-            className="px-4 py-2 bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-md hover:from-orange-600 hover:to-red-600 text-sm font-bold shadow-lg transform hover:scale-105 transition-all duration-200"
+            className="px-4 py-2 bg-gray-800 text-white rounded-md hover:bg-gray-900 text-sm font-bold shadow-md ring-2 ring-gray-600 ring-offset-2"
           >
             View All Open Invoices ({formatCurrency(globalMetrics.totalOpen)})
           </button>
