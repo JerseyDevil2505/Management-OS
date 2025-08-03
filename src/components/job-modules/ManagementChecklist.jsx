@@ -179,12 +179,23 @@ const handleClientApproval = async (itemId, approved) => {
     }, 1000);
   };
 
-  const saveClientName = () => {
+const saveClientName = async () => {
+  try {
     console.log('Saving client name:', editableClientName);
+    
+    // Save to database
+    await checklistService.updateClientName(jobData.id, editableClientName);
+    
+    // Update local state
     setHasClientNameChanges(false);
+    
+    // Success feedback
     alert('Client/Assessor name updated successfully!');
-  };
-
+  } catch (error) {
+    console.error('Error saving client name:', error);
+    alert('Failed to save client name. Please try again.');
+  }
+};
   const generateMailingList = () => {
     const mockMailingData = [
       { block: '1', lot: '1', location: 'Property data will come from source files', owner: 'Owner data from property records', address: 'Mailing addresses from normalized data' }
