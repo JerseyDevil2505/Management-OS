@@ -210,12 +210,17 @@ const BillingManagement = () => {
         .eq('job_type', 'legacy_billing');
   
       if (legacyJobs) {
+        const currentYear = new Date().getFullYear();
         legacyJobs.forEach(job => {
-          // Add open invoices to totalOpen
           if (job.billing_events) {
             job.billing_events.forEach(event => {
+              const billingYear = new Date(event.billing_date).getFullYear();
+              
               if (event.status === 'O') {
                 totalOpen += event.amount_billed;
+              } else if (event.status === 'P' && billingYear === currentYear) {
+                // Only count paid invoices that were billed in the current year
+                totalPaid += event.amount_billed;
               }
             });
           }
@@ -901,6 +906,7 @@ const BillingManagement = () => {
         status: editingEvent.status || '',
         amount_billed: parseFloat(editingEvent.amount_billed),
         billing_type: editingEvent.billing_type || null
+        invoice_number: editingEvent.invoice_number || ''
       };
 
       // First update the billing event
@@ -2934,8 +2940,20 @@ const BillingManagement = () => {
             <div className="space-y-4">
               <div className="bg-gray-50 p-4 rounded-md">
                 <p className="text-sm text-gray-600 mb-1">Date: {new Date(editingEvent.billing_date).toLocaleDateString()}</p>
-                <p className="text-sm text-gray-600 mb-1">Invoice: {editingEvent.invoice_number}</p>
                 <p className="text-sm text-gray-600 mb-1">Percentage: {(editingEvent.percentage_billed * 100).toFixed(2)}%</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Invoice Number
+                </label>
+                <input
+                  type="text"
+                  value={editingEvent.invoice_number || ''}
+                  onChange={(e) => setEditingEvent(prev => ({ ...prev, invoice_number: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  placeholder="INV-2025-001"
+                />
               </div>
 
               <div>
