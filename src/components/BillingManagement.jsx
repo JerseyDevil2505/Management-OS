@@ -205,7 +205,7 @@ const BillingManagement = () => {
         .from('jobs')
         .select(`
           job_contracts(contract_amount),
-          billing_events(amount_billed, status)
+          billing_events(amount_billed, status, billing_date)
         `)
         .eq('job_type', 'legacy_billing');
   
