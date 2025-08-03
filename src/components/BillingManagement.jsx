@@ -1388,16 +1388,29 @@ const BillingManagement = () => {
       </div>
 
       {/* Global Metrics Dashboard */}
-      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-6 mb-6">
-        <div className="flex justify-between items-center mb-4">
+      <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold text-gray-800">Business Overview</h2>
-          <button
-            onClick={loadAllOpenInvoices}
-            className="px-4 py-2 bg-gray-800 text-white rounded-md hover:bg-gray-900 text-sm font-bold shadow-md ring-2 ring-gray-600 ring-offset-2"
-          >
-            View All Open Invoices ({formatCurrency(globalMetrics.totalOpen)})
-          </button>
-        </div>        
+          <div className="flex space-x-3">
+            <button
+              onClick={() => {
+                calculateGlobalMetrics();
+                if (activeTab === 'distributions') {
+                  calculateDistributionMetrics();
+                }
+              }}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium"
+              title="Refresh metrics"
+            >
+              🔄 Refresh
+            </button>
+            <button
+              onClick={loadAllOpenInvoices}
+              className="px-4 py-2 bg-gray-800 text-white rounded-md hover:bg-gray-900 text-sm font-bold shadow-md ring-2 ring-gray-600 ring-offset-2"
+            >
+              View All Open Invoices ({formatCurrency(globalMetrics.totalOpen)})
+            </button>
+          </div>
+        </div>       
         
         {/* Row 1: Contract & Revenue Status */}
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4">
