@@ -16,6 +16,7 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
   const [mailingListPreview, setMailingListPreview] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
+  const [isLoadingItems, setIsLoadingItems] = useState(true);
   const fileInputRef = useRef();
 
   // Extract year from end_date - just grab first 4 characters to avoid timezone issues
@@ -36,6 +37,7 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
+          // Using your UUID for now
           setCurrentUser({
             id: '5df85ca3-7a54-4798-a665-c31da8d9caad',
             email: 'ppalead1@gmail.com',
@@ -44,6 +46,12 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
         }
       } catch (error) {
         console.error('Error getting current user:', error);
+        // Fallback to your UUID
+        setCurrentUser({
+          id: '5df85ca3-7a54-4798-a665-c31da8d9caad',
+          email: 'ppalead1@gmail.com',
+          name: 'Jim Duda'
+        });
       }
     };
     getCurrentUser();
@@ -51,101 +59,115 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
 
   useEffect(() => {
     if (jobData) {
-      // Always start with the 29 template items
-      const templateItems = [
-        // Setup Category (1-8)
-        { id: 1, item_order: 1, item_text: 'Contract Signed by Client', category: 'setup', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false },
-        { id: 2, item_order: 2, item_text: 'Contract Signed/Approved by State', category: 'setup', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false },
-        { id: 3, item_order: 3, item_text: 'Tax Maps Approved', category: 'setup', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false },
-        { id: 4, item_order: 4, item_text: 'Tax Map Upload', category: 'setup', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: true, client_approved: false },
-        { id: 5, item_order: 5, item_text: 'Zoning Map Upload', category: 'setup', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: true, client_approved: false },
-        { id: 6, item_order: 6, item_text: 'Zoning Bulk and Use Regulations Upload', category: 'setup', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: true, client_approved: false },
-        { id: 7, item_order: 7, item_text: 'PPA Website Updated', category: 'setup', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false },
-        { id: 8, item_order: 8, item_text: 'Data Collection Parameters', category: 'setup', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: true, allows_file_upload: false, client_approved: false },
+      loadChecklistItems();
+    }
+  }, [jobData, checklistType]);
+
+  // Load checklist items from database
+  const loadChecklistItems = async () => {
+    try {
+      setIsLoadingItems(true);
+      console.log('📋 Loading checklist for job:', jobData.id);
+      
+      // First, try to load existing items from checklist_items
+      let items = await checklistService.getChecklistItems(jobData.id);
+      
+      // If no items exist, create them from template
+      if (!items || items.length === 0) {
+        console.log('🔨 No checklist items found, creating from template...');
         
-        // Inspection Category (9-14)
-        { id: 9, item_order: 9, item_text: 'Initial Mailing List', category: 'inspection', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false, special_action: 'generate_mailing_list' },
-        { id: 10, item_order: 10, item_text: 'Initial Letter and Brochure', category: 'inspection', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: true, client_approved: false, special_action: 'generate_letter' },
-        { id: 11, item_order: 11, item_text: 'Initial Mailing Sent', category: 'inspection', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false },
-        { id: 12, item_order: 12, item_text: 'First Attempt Inspections', category: 'inspection', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false, auto_update_source: 'production_tracker' },
-        { id: 13, item_order: 13, item_text: 'Second Attempt Inspections', category: 'inspection', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false, special_action: 'generate_second_attempt_mailer' },
-        { id: 14, item_order: 14, item_text: 'Third Attempt Inspections', category: 'inspection', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false, special_action: 'generate_third_attempt_mailer' },
+        // Get the standard revaluation template
+        const { data: template, error: templateError } = await supabase
+          .from('checklist_templates')
+          .select('id')
+          .eq('name', 'Standard Revaluation Checklist')
+          .single();
+
+        if (templateError || !template) {
+          console.error('Template not found:', templateError);
+          throw new Error('Checklist template not found');
+        }
+
+        // Get all template items
+        const { data: templateItems, error: templateItemsError } = await supabase
+          .from('checklist_template_items')
+          .select('*')
+          .eq('template_id', template.id)
+          .order('item_order');
+
+        if (templateItemsError || !templateItems) {
+          console.error('Template items not found:', templateItemsError);
+          throw new Error('Template items not found');
+        }
+
+        // Create checklist items for this job based on template
+        const itemsToCreate = templateItems.map(templateItem => ({
+          job_id: jobData.id,
+          item_text: templateItem.item_text,
+          item_order: templateItem.item_order,
+          category: templateItem.category,
+          status: 'pending',
+          requires_client_approval: templateItem.requires_client_approval || false,
+          allows_file_upload: templateItem.allows_file_upload || false,
+          auto_update_source: templateItem.auto_update_source,
+          created_at: new Date().toISOString()
+        }));
+
+        const { data: createdItems, error: createError } = await supabase
+          .from('checklist_items')
+          .insert(itemsToCreate)
+          .select();
+
+        if (createError) {
+          console.error('Error creating checklist items:', createError);
+          throw createError;
+        }
+
+        items = createdItems;
+        console.log(`✅ Created ${items.length} checklist items from template`);
+      }
+      
+      // Add special action flags based on item text
+      items = items.map(item => {
+        // Add special actions based on item text
+        if (item.item_text === 'Initial Mailing List') {
+          item.special_action = 'generate_mailing_list';
+        } else if (item.item_text === 'Initial Letter and Brochure') {
+          item.special_action = 'generate_letter';
+        } else if (item.item_text === 'Second Attempt Inspections') {
+          item.special_action = 'generate_second_attempt_mailer';
+        } else if (item.item_text === 'Third Attempt Inspections') {
+          item.special_action = 'generate_third_attempt_mailer';
+        } else if (item.item_text === 'View Value Mailer') {
+          item.special_action = 'view_impact_letter';
+        } else if (item.item_text === 'Generate Turnover Document') {
+          item.special_action = 'generate_turnover_pdf';
+        } else if (item.item_text === 'Turnover Date') {
+          item.input_type = 'date';
+          item.special_action = 'archive_trigger';
+        }
         
-        // Analysis Category (15-26)
-        { id: 15, item_order: 15, item_text: 'Market Analysis', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: true, client_approved: false },
-        { id: 16, item_order: 16, item_text: 'Page by Page Analysis', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false },
-        { id: 17, item_order: 17, item_text: 'Lot Sizing Completed', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false },
-        { id: 18, item_order: 18, item_text: 'Lot Sizing Questions Complete', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false },
-        { id: 19, item_order: 19, item_text: 'VCS Reviewed/Reset', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false },
-        { id: 20, item_order: 20, item_text: 'Land Value Tables Built', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false },
-        { id: 21, item_order: 21, item_text: 'Land Values Entered', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: true, allows_file_upload: false, client_approved: false },
-        { id: 22, item_order: 22, item_text: 'Economic Obsolescence Study', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: true, allows_file_upload: false, client_approved: false },
-        { id: 23, item_order: 23, item_text: 'Cost Conversion Factor Set', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: true, allows_file_upload: false, client_approved: false },
-        { id: 24, item_order: 24, item_text: 'Building Class Review/Updated', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false },
-        { id: 25, item_order: 25, item_text: 'Effective Age Loaded/Set', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false },
-        { id: 26, item_order: 26, item_text: 'Final Values Ready', category: 'analysis', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false },
-        
-        // Completion Category (27-29)
-        { id: 27, item_order: 27, item_text: 'View Value Mailer', category: 'completion', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: true, client_approved: false, special_action: 'view_impact_letter' },
-        { id: 28, item_order: 28, item_text: 'Generate Turnover Document', category: 'completion', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false, special_action: 'generate_turnover_pdf' },
-        { id: 29, item_order: 29, item_text: 'Turnover Date', category: 'completion', status: 'pending', completed_at: null, completed_by: null, requires_client_approval: false, allows_file_upload: false, client_approved: false, input_type: 'date', special_action: 'archive_trigger' }
-      ];
+        return item;
+      });
       
       // Update First Attempt Inspections item with workflow stats if available
       if (jobData?.workflow_stats?.validInspections) {
-        const firstAttemptItem = templateItems.find(item => item.id === 12);
+        const firstAttemptItem = items.find(item => item.item_text === 'First Attempt Inspections');
         if (firstAttemptItem) {
           firstAttemptItem.notes = `${jobData.workflow_stats.validInspections} properties inspected (${jobData.workflow_stats.jobEntryRate?.toFixed(1) || 0}% entry rate)`;
-          if (jobData.workflow_stats.validInspections > 0) {
+          if (jobData.workflow_stats.validInspections > 0 && firstAttemptItem.status === 'pending') {
             firstAttemptItem.status = 'in_progress';
           }
         }
       }
       
-      setChecklistItems(templateItems);
-      
-      // Then try to load saved status from database
-      loadChecklistItemStatus();
-    }
-  }, [jobData, checklistType]);
-
-  // Load checklist item status from database (if exists)
-  const loadChecklistItemStatus = async () => {
-    try {
-      console.log('📋 Loading checklist status for job:', jobData.id);
-      
-      // Try to load existing status from database
-      const savedItems = await checklistService.getChecklistItems(jobData.id);
-      
-      if (savedItems && savedItems.length > 0) {
-        console.log('✅ Found saved checklist status, updating...');
-        
-        // Update the template items with saved status
-        setChecklistItems(currentItems => 
-          currentItems.map(templateItem => {
-            const savedItem = savedItems.find(s => s.item_order === templateItem.item_order);
-            if (savedItem) {
-              return {
-                ...templateItem,
-                status: savedItem.status || 'pending',
-                completed_at: savedItem.completed_at,
-                completed_by: savedItem.completed_by,
-                client_approved: savedItem.client_approved || false,
-                client_approved_date: savedItem.client_approved_date,
-                client_approved_by: savedItem.client_approved_by,
-                file_attachment_path: savedItem.file_attachment_path,
-                notes: savedItem.notes
-              };
-            }
-            return templateItem;
-          })
-        );
-      } else {
-        console.log('📋 No saved checklist status found, using defaults');
-      }
+      setChecklistItems(items);
+      console.log(`✅ Loaded ${items.length} checklist items`);
     } catch (error) {
-      console.error('Error loading checklist status:', error);
-      // Keep the default template if there's an error
+      console.error('Error loading checklist items:', error);
+      setChecklistItems([]);
+    } finally {
+      setIsLoadingItems(false);
     }
   };
 
@@ -205,7 +227,7 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
       
       // Then update local state with the response
       setChecklistItems(items => items.map(item => 
-        item.id === itemId ? updatedItem : item
+        item.id === itemId ? { ...item, ...updatedItem } : item
       ));
       
       console.log(`✅ Updated item ${itemId} status to ${newStatus}`);
@@ -226,7 +248,7 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
       
       // Then update local state with the response
       setChecklistItems(items => items.map(item => 
-        item.id === itemId ? updatedItem : item
+        item.id === itemId ? { ...item, ...updatedItem } : item
       ));
       
       console.log(`✅ Updated item ${itemId} client approval to ${approved}`);
@@ -249,7 +271,7 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
       
       // Update local state
       setChecklistItems(items => items.map(item => 
-        item.id === itemId ? updatedItem : item
+        item.id === itemId ? { ...item, ...updatedItem } : item
       ));
       
       alert('File uploaded successfully!');
@@ -348,6 +370,18 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
           <AlertCircle className="w-16 h-16 mx-auto mb-4" />
           <h3 className="text-lg font-semibold mb-2">No Job Selected</h3>
           <p>Please select a job from the Job Management to view the checklist.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isLoadingItems) {
+    return (
+      <div className="max-w-6xl mx-auto p-6 bg-white">
+        <div className="text-center text-gray-500 py-12">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <h3 className="text-lg font-semibold mb-2">Loading Checklist Items...</h3>
+          <p>Preparing your project checklist...</p>
         </div>
       </div>
     );
@@ -567,11 +601,8 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
                       )}
                     </div>
                     <div className="flex items-center gap-4 text-sm text-gray-600 mb-2">
-                      <span className={`px-2 py-1 bg-${categoryColor}-100 text-${categoryColor}-700 rounded-full text-xs`}>
+                      <span className={`px-2 py-1 bg-${categoryColor}-100 text-${categoryColor}-700 rounded-full text-xs capitalize`}>
                         {item.category}
-                      </span>
-                      <span className={`px-2 py-1 bg-${statusColor}-100 text-${statusColor}-700 rounded-full text-xs`}>
-                        {item.status.replace('_', ' ')}
                       </span>
                     </div>
                     {item.completed_at && (
@@ -583,7 +614,6 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
                       <div className="flex items-center gap-2 text-sm text-blue-600 mb-2">
                         <FileText className="w-4 h-4" />
                         <span>{item.file_attachment_path.split('/').pop()}</span>
-                        {item.file_size && <span className="text-gray-500">({item.file_size})</span>}
                         <ExternalLink className="w-4 h-4 cursor-pointer hover:text-blue-800" />
                       </div>
                     )}
