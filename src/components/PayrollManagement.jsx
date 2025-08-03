@@ -137,6 +137,48 @@ const PayrollManagement = () => {
       
       console.log(`Calculating bonuses from ${startDate} to ${endDate}`);
       
+      // First, let's do a simple test query
+      console.log('Testing basic query...');
+      const { data: testData, error: testError } = await supabase
+        .from('inspection_data')
+        .select('id')
+        .limit(1);
+      
+      if (testError) {
+        console.error('Basic test query failed:', testError);
+        throw new Error(`Cannot access inspection_data table: ${testError.message}`);
+      }
+      console.log('Basic query succeeded, found:', testData);
+      
+      // Now test with date filter
+      console.log('Testing with date filter...');
+      const { data: dateTest, error: dateError } = await supabase
+        .from('inspection_data')
+        .select('measure_date, property_class')
+        .gte('measure_date', startDate)
+        .lte('measure_date', endDate)
+        .limit(5);
+      
+      if (dateError) {
+        console.error('Date filter query failed:', dateError);
+        throw new Error(`Date filter error: ${dateError.message}`);
+      }
+      console.log('Date filter succeeded, sample data:', dateTest);
+      
+      // Now test without property class filter
+      console.log('Testing without property class filter...');
+      const { count: noFilterCount, error: noFilterError } = await supabase
+        .from('inspection_data')
+        .select('*', { count: 'exact', head: true })
+        .gte('measure_date', startDate)
+        .lte('measure_date', endDate);
+      
+      if (noFilterError) {
+        console.error('No filter count failed:', noFilterError);
+      } else {
+        console.log(`Count without property class filter: ${noFilterCount}`);
+      }
+      
       // Get ALL inspections with class 2 or 3A in the date range
       // Don't filter by employee initials - we'll match them up after
       const { count, error: countError } = await supabase
@@ -146,7 +188,10 @@ const PayrollManagement = () => {
         .lte('measure_date', endDate)
         .in('property_class', ['2', '3A']);
 
-      if (countError) throw countError;
+      if (countError) {
+        console.error('Count query error:', countError);
+        throw new Error(`Database error: ${countError.message} (${countError.code})`);
+      }
       
       console.log(`Total inspections to process: ${count}`);
 
