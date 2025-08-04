@@ -379,42 +379,43 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
         // Single file upload (existing logic)
         const file = files[0];
         console.log(`📄 File selected for ${itemText}: ${file.name}`);
-      
-      if (file.size > 200 * 1024 * 1024) {
-        alert('File size exceeds 200MB limit');
-        return;
-      }
-      
-      setUploadingItems(prev => ({ ...prev, [itemId]: true }));
-      
-      try {
-        console.log(`⬆️ Starting upload for item ${itemId}: ${itemText}`);
         
-        // Upload file and update item
-        const updatedItem = await checklistService.uploadFile(
-          itemId, 
-          jobData.id, 
-          file, 
-          currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad'
-        );
+        if (file.size > 200 * 1024 * 1024) {
+          alert('File size exceeds 200MB limit');
+          return;
+        }
         
-        console.log(`✅ Upload complete for ${itemText}`, updatedItem);
+        setUploadingItems(prev => ({ ...prev, [itemId]: true }));
         
-        // Update local state
-        setChecklistItems(items => items.map(item => 
-          item.id === itemId ? { ...item, ...updatedItem } : item
-        ));
-        
-        // Mark this file as valid
-        setValidFiles(prev => ({ ...prev, [itemId]: true }));
-        
-        alert('File uploaded successfully!');
-        
-      } catch (error) {
-        console.error(`❌ Error uploading file for ${itemText}:`, error);
-        alert('Failed to upload file. Please try again.');
-      } finally {
-        setUploadingItems(prev => ({ ...prev, [itemId]: false }));
+        try {
+          console.log(`⬆️ Starting upload for item ${itemId}: ${itemText}`);
+          
+          // Upload file and update item
+          const updatedItem = await checklistService.uploadFile(
+            itemId, 
+            jobData.id, 
+            file, 
+            currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad'
+          );
+          
+          console.log(`✅ Upload complete for ${itemText}`, updatedItem);
+          
+          // Update local state
+          setChecklistItems(items => items.map(item => 
+            item.id === itemId ? { ...item, ...updatedItem } : item
+          ));
+          
+          // Mark this file as valid
+          setValidFiles(prev => ({ ...prev, [itemId]: true }));
+          
+          alert('File uploaded successfully!');
+          
+        } catch (error) {
+          console.error(`❌ Error uploading file for ${itemText}:`, error);
+          alert('Failed to upload file. Please try again.');
+        } finally {
+          setUploadingItems(prev => ({ ...prev, [itemId]: false }));
+        }
       }
     };
     
