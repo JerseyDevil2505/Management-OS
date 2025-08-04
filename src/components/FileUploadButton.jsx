@@ -22,13 +22,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
   const [batchLogs, setBatchLogs] = useState([]);
   const [currentBatch, setCurrentBatch] = useState(null);
   const [batchComplete, setBatchComplete] = useState(false);
-
-    console.log('🔍 DEBUG FileUploadButton RENDER - job:', {
-    id: job?.id,
-    updated_at: job?.updated_at, 
-    code_file_uploaded_at: job?.code_file_uploaded_at
-  });
-  
+ 
   // ENHANCED: Add batch insert progress tracking
   const [batchInsertProgress, setBatchInsertProgress] = useState({
     totalBatches: 0,
@@ -38,17 +32,6 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     isInserting: false,
     currentOperation: ''
   });
-
-    // ADD THE DEBUG HERE:
-  useEffect(() => {
-    console.log('🔍 DEBUG FileUploadButton - job prop:', {
-      id: job?.id,
-      updated_at: job?.updated_at,
-      code_file_uploaded_at: job?.code_file_uploaded_at,
-      source_file_uploaded_at: job?.source_file_uploaded_at,
-      created_at: job?.created_at
-    });
-  }, [job]);
 
   const addNotification = (message, type = 'info') => {
     const id = Date.now();
@@ -233,7 +216,6 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         } else {
           // Mixed format with headers - extract JSON sections
           const sections = parseBRTMixedFormat(fileContent);
-          console.log(`✅ Parsed BRT mixed format with sections: ${Object.keys(sections).join(', ')}`);
           return sections;
         }
       } else if (vendor === 'Microsystems') {
@@ -276,10 +258,6 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       setProcessing(true);
       setProcessingStatus('Processing code file...');
 
-      console.log('🔍 DEBUG - Starting code file update');
-      console.log('🔍 DEBUG - Current job.code_file_version:', job.code_file_version);
-      console.log('🔍 DEBUG - Detected vendor:', detectedVendor);
-
       // Parse the code file
       const parsedCodes = parseCodeFile(codeFileContent, detectedVendor);
       
@@ -299,8 +277,6 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         codeCount = Object.keys(parsedCodes).length;
       }
 
-      console.log('🔍 DEBUG - Parsed codes count:', codeCount);
-
       // FIXED: Properly escape special characters to prevent Unicode errors
       const sanitizedContent = codeFileContent
         .replace(/\\/g, '\\\\')  // Escape backslashes first
@@ -312,7 +288,6 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         .replace(/\t/g, '\\t');  // Escape tabs
 
       const newVersion = (job.code_file_version || 1) + 1;
-      console.log('🔍 DEBUG - New version will be:', newVersion);
 
       // Update jobs table directly
       const { error } = await supabase
@@ -329,11 +304,8 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         .eq('id', job.id);
 
       if (error) {
-        console.log('🔍 DEBUG - Database update error:', error);
         throw new Error(`Failed to update job: ${error.message}`);
       }
-
-      console.log('🔍 DEBUG - Database update successful');
 
       addNotification(`✅ Successfully updated ${codeCount} code definitions for ${detectedVendor}`, 'success');
       
@@ -341,8 +313,6 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       setCodeFile(null);
       setCodeFileContent(null);
       document.getElementById('code-file-upload').value = '';
-
-      console.log('🔍 DEBUG - About to call onFileProcessed');
 
       // Notify parent component of the update
       if (onFileProcessed) {
@@ -352,8 +322,6 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
           vendor: detectedVendor 
         });
       }
-
-      console.log('🔍 DEBUG - Code file update completed');
 
     } catch (error) {
       console.error('❌ Code file update failed:', error);
@@ -652,7 +620,6 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
 
       if (error) throw error;
 
-      console.log('📊 All reports for job:', reports);
       addNotification(`Found ${reports.length} comparison reports for this job`, 'info');
       
       // Export all reports in old CSV format
@@ -696,7 +663,6 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       
       // Parse source file
       const sourceRecords = parseSourceFile(sourceFileContent, detectedVendor);
-      console.log(`📊 Parsed ${sourceRecords.length} source records`);
       
       // FIXED: Get ALL database records from property_records table directly
       setProcessingStatus('Fetching current database records...');
@@ -706,13 +672,8 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         .from('property_records')
         .select('*', { count: 'exact', head: true })
         .eq('job_id', job.id);
-
-      console.log('🔍 DEBUG - Actual database count:', actualCount);
-      console.log('🔍 DEBUG - Count error:', countError);
-      
-      // DEBUG: Log the exact query we're about to make
-      console.log('🔍 DEBUG - About to execute main query with pagination...');
-      
+   
+     
       // FIXED: Use pagination to get ALL records instead of relying on limit
       let allDbRecords = [];
       let rangeStart = 0;
@@ -722,7 +683,8 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       while (hasMore) {
         const { data: batch, error: batchError } = await supabase
           .from('property_records')
-          .select('property_composite_key, property_block, property_lot, property_qualifier, property_location, sales_price, sales_date, property_m4_class, property_cama_class')
+          .select('property_composite_key, property_block, property_lot, property_qualifier, property_location, sales_price, sales_date, sales_nu, property_m4_class, property_cama_class')
+
           .eq('job_id', job.id)
           .range(rangeStart, rangeStart + batchSize - 1);
           
@@ -730,9 +692,8 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
           console.error('🔍 DEBUG - Batch error:', batchError);
           break;
         }
-        
-        console.log(`🔍 DEBUG - Batch ${Math.floor(rangeStart/batchSize) + 1}: got ${batch?.length || 0} records`);
-        
+       
+     
         if (batch && batch.length > 0) {
           allDbRecords = allDbRecords.concat(batch);
           rangeStart += batchSize;
@@ -745,14 +706,11 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       const dbRecords = allDbRecords;
       const dbError = null;
         
-      // DEBUG: Log what we actually got back
-      console.log('🔍 DEBUG - Pagination completed, total records:', dbRecords?.length);
       
       if (dbError) {
         throw new Error(`Database fetch failed: ${dbError.message}`);
       }
       
-      console.log(`📊 Found ${dbRecords.length} current database records`);
       
       // Generate composite keys for source records using EXACT processor logic
       setProcessingStatus('Generating composite keys...');
@@ -770,13 +728,11 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         }
       });
       
-      console.log(`🔑 Generated ${sourceKeys.size} source composite keys`);
       
       // Create database key sets
       const dbKeys = new Set(dbRecords.map(r => r.property_composite_key));
       const dbKeyMap = new Map(dbRecords.map(r => [r.property_composite_key, r]));
       
-      console.log(`🔑 Found ${dbKeys.size} database composite keys`);
       
       // Find differences
       setProcessingStatus('Comparing records...');
@@ -801,7 +757,11 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         // FIXED: Check for sales changes with proper number and date comparison
         const sourceSalesPrice = parseFloat(String(sourceRecord[detectedVendor === 'BRT' ? 'CURRENTSALE_PRICE' : 'Sale Price'] || 0).replace(/[,$]/g, '')) || 0;
         const dbSalesPrice = parseFloat(dbRecord.sales_price || 0);
-        
+
+        // ADD: Get sales_nu values
+        const sourceSalesNu = sourceRecord[detectedVendor === 'BRT' ? 'CURRENTSALE_NU' : 'Sale Nu'] || '';
+        const dbSalesNu = dbRecord.sales_nu || '';
+          
         // FIXED: Normalize both dates for accurate comparison using processor method
         const sourceSalesDate = parseDate(sourceRecord[detectedVendor === 'BRT' ? 'CURRENTSALE_DATE' : 'Sale Date']);
         const dbSalesDate = parseDate(dbRecord.sales_date);
@@ -810,7 +770,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         const pricesDifferent = Math.abs(sourceSalesPrice - dbSalesPrice) > 0.01;
         const datesDifferent = sourceSalesDate !== dbSalesDate;
         
-        // DEBUG: Log the first few sales comparisons to see what's happening
+        /* DEBUG: Log the first few sales comparisons to see what's happening
         if ((pricesDifferent || datesDifferent) && salesChanges.length < 3) {
           console.log(`🔍 Sales difference detected for ${key}:`, {
             sourcePrice: sourceSalesPrice,
@@ -823,7 +783,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
             datesDifferent
           });
         }
-        
+        */
         if (pricesDifferent || datesDifferent) {
           salesChanges.push({
             property_composite_key: key,
@@ -834,6 +794,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
             differences: {
               sales_price: { old: dbSalesPrice, new: sourceSalesPrice },
               sales_date: { old: dbSalesDate, new: sourceSalesDate }
+              sales_nu: { old: dbSalesNu, new: sourceSalesNu }
             }
           });
         }
@@ -911,7 +872,6 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         }
       };
       
-      console.log('📊 Comparison Results:', results.summary);
       return results;
       
     } catch (error) {
@@ -967,7 +927,6 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
   // CRITICAL FIX: Refresh banner state immediately after processing
   const refreshBannerState = async () => {
     try {
-      console.log('🔄 REFRESH - Starting banner state refresh...');
       
       // Refresh source file version from property_records
       const { data: sourceVersionData, error: sourceVersionError } = await supabase
@@ -978,15 +937,12 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         .single();
         
       if (sourceVersionData && !sourceVersionError) {
-        console.log('🔄 REFRESH - Updated sourceFileVersion to:', sourceVersionData.file_version);
         setSourceFileVersion(sourceVersionData.file_version || 1);
       } else {
-        console.log('🔄 REFRESH - No property_records found, keeping version 1');
         setSourceFileVersion(1);
       }
       
       // Force a re-render of the component to update banner display
-      console.log('🔄 REFRESH - Banner state refresh completed');
       
     } catch (error) {
       console.error('🔄 REFRESH - Error refreshing banner state:', error);
@@ -1164,7 +1120,6 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         salesDecisions: salesDecisions.size
       });
       
-      console.log('🚀 Processing approved changes...');
       
       // Call the updater to UPSERT the database
       addBatchLog(`📊 Calling ${detectedVendor} updater (UPSERT mode)...`, 'info');
@@ -1190,7 +1145,6 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         );
       });
       
-      console.log('📊 Updater completed with result:', result);
       addBatchLog('✅ Property data processing completed', 'success', {
         processed: result.processed,
         errors: result.errors,
@@ -1244,7 +1198,6 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         }
         
         addBatchLog(`✅ Saved ${salesProcessed}/${salesDecisions.size} sales decisions`, 'success');
-        console.log(`✅ Saved ${salesDecisions.size} sales decisions to property records`);
       }
       
       // Update job with new file info - removed source_file_version update
@@ -1257,7 +1210,6 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
           // FIX 1: Removed source_file_version update - it's handled in property_records now
         });
         addBatchLog('✅ Job metadata updated successfully', 'success');
-        console.log('✅ Job updated with new info');
       } catch (updateError) {
         console.error('❌ Failed to update job:', updateError);
         addBatchLog('⚠️ Job metadata update failed', 'warning', { error: updateError.message });
@@ -1694,6 +1646,11 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                                 <div className="text-xs text-gray-500">
                                   {change.differences.sales_date.old || 'No Date'}
                                 </div>
+                                {change.differences.sales_nu?.old && (
+                                  <div className="text-xs text-gray-500">
+                                    NU: {change.differences.sales_nu.old}
+                                  </div>
+                                )}                                
                               </div>
                               <div className="text-gray-400">→</div>
                               <div>
@@ -1704,6 +1661,11 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                                 <div className="text-xs text-gray-500">
                                   {change.differences.sales_date.new || 'No Date'}
                                 </div>
+                                {change.differences.sales_nu?.new && (
+                                  <div className="text-xs text-gray-500">
+                                    NU: {change.differences.sales_nu.new}
+                                  </div>    
+                                )}                                
                               </div>
                             </div>
                           </div>
@@ -1958,7 +1920,6 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                       salesDecisions: 0
                     });
                     
-                    console.log('🚀 Processing acknowledged file (no changes detected)...');
                     
                     // Call the updater to UPSERT the database with latest data
                     addBatchLog(`📊 Calling ${detectedVendor} updater for version refresh...`, 'info');
@@ -1983,7 +1944,6 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                       );
                     });
                     
-                    console.log('📊 Updater completed with result:', result);
                     addBatchLog('✅ Data refresh completed', 'success', {
                       processed: result.processed,
                       errors: result.errors,
@@ -2102,10 +2062,8 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
           .single();
           
         if (data && !error) {
-          console.log('🔍 DEBUG - Fetched source file_version from property_records:', data.file_version);
           setSourceFileVersion(data.file_version || 1);
         } else {
-          console.log('🔍 DEBUG - No property_records found or error:', error);
           setSourceFileVersion(1);
         }
       } catch (error) {
@@ -2121,21 +2079,18 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
   const getFileStatusWithRealVersion = (timestamp, type) => {
     if (!timestamp) return 'Never';
     
-    console.log('🔍 DEBUG - sourceFileVersion from property_records:', sourceFileVersion);
     console.log('🔍 DEBUG - job.code_file_version from jobs:', job.code_file_version);
     
     if (type === 'source') {
       const result = sourceFileVersion === 1 
         ? `Imported at Job Creation (${formatDate(timestamp)})`
         : `Updated via FileUpload (${formatDate(timestamp)})`;
-      console.log('🔍 DEBUG - source result with real version:', result);
       return result;
     } else if (type === 'code') {
       const codeVersion = job.code_file_version || 1;
       const result = codeVersion === 1 
         ? `Imported at Job Creation (${formatDate(timestamp)})`
         : `Updated via FileUpload (${formatDate(timestamp)})`;
-      console.log('🔍 DEBUG - code result:', result);
       return result;
     }
     
