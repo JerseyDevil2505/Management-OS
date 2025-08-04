@@ -3453,8 +3453,8 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                   </div>
                 ) : (
                   <>
-{/* Summary Cards */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+                    {/* Summary Cards */}
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                       <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
                         <div className="flex items-center justify-between">
                           <div>
@@ -3491,32 +3491,14 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                         <div className="flex items-center justify-between">
                           <div>
                             <p className="text-sm text-red-600 font-medium">Validation Failed</p>
-                            <p className="text-2xl font-bold text-red-800">{missingPropertiesReport.summary.validation_failed_count}</p>
+                            <p className="text-2xl font-bold text-red-800">
+                              {(missingPropertiesReport.summary.validation_failed_count || 0) + 
+                               (missingPropertiesReport.summary.missing_inspector || 0) + 
+                               (missingPropertiesReport.summary.invalid_employee || 0)}
+                            </p>
                             <p className="text-xs text-red-500">Current but invalid</p>
                           </div>
                           <X className="w-8 h-8 text-red-500" />
-                        </div>
-                      </div>
-
-                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-sm text-amber-600 font-medium">Missing Inspector</p>
-                            <p className="text-2xl font-bold text-amber-800">{missingPropertiesReport.summary.missing_inspector}</p>
-                            <p className="text-xs text-amber-500">No initials</p>
-                          </div>
-                          <Users className="w-8 h-8 text-amber-500" />
-                        </div>
-                      </div>
-
-                      <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-sm text-purple-600 font-medium">Invalid Employee</p>
-                            <p className="text-2xl font-bold text-purple-800">{missingPropertiesReport.summary.invalid_employee}</p>
-                            <p className="text-xs text-purple-500">Not in database</p>
-                          </div>
-                          <AlertTriangle className="w-8 h-8 text-purple-500" />
                         </div>
                       </div>
                     </div>
