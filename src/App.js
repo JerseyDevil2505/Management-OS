@@ -46,6 +46,19 @@ function App() {
     checkSession();
   }, []);
 
+    // Set page title based on environment
+  useEffect(() => {
+    if (window.location.hostname.includes('production-black-seven') || 
+        window.location.hostname === 'localhost' ||
+        window.location.hostname.includes('github.dev') ||
+        window.location.hostname.includes('preview')) {
+      document.title = 'Mgmt OS Development';
+    } else {
+      document.title = 'Mgmt OS Production';
+    }  
+  }, []);
+ 
+
   const checkSession = async () => {
     try {
       // Development auto-login - check for dev URLs
