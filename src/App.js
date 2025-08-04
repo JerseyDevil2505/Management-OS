@@ -18,8 +18,7 @@ function App() {
   
   useEffect(() => {
     renderCount.current += 1;
-    console.log(`🔍 App.js render #${renderCount.current}, activeModule: ${activeModule}, prevModule: ${prevActiveModule.current}`);
-    
+       
     if (prevActiveModule.current !== activeModule) {
       console.warn(`⚠️ ACTIVE MODULE CHANGED: ${prevActiveModule.current} → ${activeModule}`);
       prevActiveModule.current = activeModule;
@@ -40,11 +39,9 @@ function App() {
   const loadAllJobWorkflowStats = useCallback(async () => {
     // CRITICAL: Don't refresh while a job is being created
     if (isCreatingJob) {
-      console.log('⏸️ Skipping workflow stats refresh - job creation in progress');
       return;
     }
     
-    console.log('📊 loadAllJobWorkflowStats called');
     
     setIsLoadingWorkflowStats(true);
     try {
@@ -56,7 +53,6 @@ function App() {
         .order('created_at', { ascending: false });
 
       if (!error && jobs) {
-        console.log(`📊 Loaded ${jobs.length} jobs`);
         const loadedStats = {};
         
         jobs.forEach(job => {
@@ -94,7 +90,6 @@ function App() {
 useEffect(() => {
   // Wait a bit before loading heavy workflow stats
   const timeoutId = setTimeout(() => {
-    console.log('🚀 App startup - loading workflow stats (deferred)');
     loadAllJobWorkflowStats();
   }, 2000); // Wait 2 seconds
   
@@ -103,7 +98,6 @@ useEffect(() => {
 
   // 🔧 BACKEND ENHANCEMENT: Enhanced workflow stats update with metrics refresh trigger
   const handleWorkflowStatsUpdate = async (jobId, newStats, persistToDatabase = true) => {
-    console.log('📈 handleWorkflowStatsUpdate called for job:', jobId);
     
     // Check if analytics just completed (isProcessed changed from false to true)
     const previousStats = jobWorkflowStats[jobId];
@@ -137,9 +131,7 @@ useEffect(() => {
 
     // 🔧 FIX: Defer metrics refresh to prevent React Error #301
     if (analyticsJustCompleted) {
-      console.log('📊 App.js: Analytics completed, triggering AdminJobManagement metrics refresh');
       setTimeout(() => {
-        console.log('📊 Actually setting metricsRefreshTrigger');
         setMetricsRefreshTrigger(prev => prev + 1);
       }, 0);
     }
@@ -226,7 +218,6 @@ useEffect(() => {
 
   // Handle job selection from AdminJobManagement
   const handleJobSelect = (job) => {
-    console.log('🎯 handleJobSelect called with job:', job?.job_name);
     setSelectedJob(job);
     setActiveModule('job-modules');
   };
@@ -236,16 +227,13 @@ useEffect(() => {
     if (!selectedJob) return;
     
     try {
-      console.log('🔍 DEBUG - refreshSelectedJob called for job:', selectedJob.id);
       // Get all jobs using the service (which includes field mapping)
       const jobs = await jobService.getAll();
-      console.log('🔍 DEBUG - jobService.getAll() returned', jobs.length, 'jobs');
       
       // Find the selected job from the results
       const refreshedJob = jobs.find(j => j.id === selectedJob.id);
       
       if (refreshedJob) {
-        console.log('🔄 Refreshed selected job, code_file_uploaded_at:', refreshedJob.code_file_uploaded_at);
         setSelectedJob(refreshedJob);
       }
     } catch (error) {
@@ -255,7 +243,6 @@ useEffect(() => {
 
   // Handle returning to jobs list
   const handleBackToJobs = () => {
-    console.log('🔙 handleBackToJobs called');
     setSelectedJob(null);
     setActiveModule('jobs');
   };
@@ -265,7 +252,6 @@ useEffect(() => {
 
   // 🔧 FIX: Defer file processing state updates to prevent React Error #301
   const handleFileProcessed = async (result) => {
-    console.log('📁 handleFileProcessed called');
     
     // NEW: Refresh the selected job to get new updated_at timestamp
     await refreshSelectedJob();
@@ -281,17 +267,14 @@ useEffect(() => {
 
     // REMOVED the needsRefresh flag that was causing ProductionTracker to reset!
     // The ProductionTracker can handle file changes on its own without resetting
-    console.log('📊 App.js: File processed, preserved all ProductionTracker state including start date');
   };
 
   // 🔧 FIX: Make callback more defensive and properly memoized
   const handleJobProcessingComplete = useCallback(() => {
-    console.log('🔄 App.js: handleJobProcessingComplete called');
     
     // Double defer to ensure AdminJobManagement has finished all its state updates
     requestAnimationFrame(() => {
       setTimeout(() => {
-        console.log('🔄 Setting metricsRefreshTrigger and loading stats');
         setMetricsRefreshTrigger(prev => prev + 1);
         // Also refresh the job stats to get the new job
         loadAllJobWorkflowStats();
@@ -301,16 +284,13 @@ useEffect(() => {
 
   // DEBUG: Job creation handlers
   const handleJobCreationStart = useCallback(() => {
-    console.log('🚀 JOB CREATION STARTED');
     setIsCreatingJob(true);
   }, []);
 
   const handleJobCreationEnd = useCallback(() => {
-    console.log('✅ JOB CREATION ENDED');
     setIsCreatingJob(false);
     // Refresh after creation completes
     setTimeout(() => {
-      console.log('🔄 Refreshing stats after job creation');
       loadAllJobWorkflowStats();
     }, 500);
   }, [loadAllJobWorkflowStats]);
@@ -335,7 +315,6 @@ useEffect(() => {
             <nav className="flex space-x-6">
               <button
                 onClick={() => {
-                  console.log('👥 Switching to employees module');
                   setActiveModule('employees');
                 }}
                 className={`px-4 py-2 rounded-lg font-medium transition-colors ${
@@ -348,7 +327,6 @@ useEffect(() => {
               </button>
               <button
                 onClick={() => {
-                  console.log('📋 Switching to jobs module');
                   setActiveModule('jobs');
                 }}
                 className={`px-4 py-2 rounded-lg font-medium transition-colors ${
@@ -367,7 +345,6 @@ useEffect(() => {
               </button>
               <button
                 onClick={() => {
-                  console.log('💰 Switching to billing module');
                   setActiveModule('billing');
                 }}
                 className={`px-4 py-2 rounded-lg font-medium transition-colors ${
@@ -380,7 +357,6 @@ useEffect(() => {
               </button>
               <button
                 onClick={() => {
-                  console.log('📊 Switching to payroll module');
                   setActiveModule('payroll');
                 }}
                 className={`px-4 py-2 rounded-lg font-medium transition-colors ${
