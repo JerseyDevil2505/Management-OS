@@ -1711,11 +1711,6 @@ useEffect(() => {
                         onJobProcessingComplete();
                       }
                     }}
-                      // TEMPORARILY COMMENTED OUT FOR TESTING
-                      // if (onJobProcessingComplete) {
-                      //   onJobProcessingComplete();
-                      // }
-                    }}
                     className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium"
                   >
                     ✅ Close
