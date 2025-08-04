@@ -22,8 +22,7 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
   const [uploadingItems, setUploadingItems] = useState({});
   const [currentUser, setCurrentUser] = useState(null);
   const [isLoadingItems, setIsLoadingItems] = useState(true);
-  
-  // Remove the single fileInputRef - we'll handle this differently
+  const [validFiles, setValidFiles] = useState({}); // Track which files actually exist
 
   // Extract year from end_date - just grab first 4 characters to avoid timezone issues
   const dueYear = jobData?.end_date ? jobData.end_date.substring(0, 4) : 'TBD';
@@ -68,6 +67,41 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
       loadChecklistItems();
     }
   }, [jobData, checklistType]);
+
+  // Check if files actually exist in storage
+  const verifyFiles = async (items) => {
+    const fileChecks = {};
+    
+    for (const item of items) {
+      if (item.file_attachment_path) {
+        try {
+          // Check if file exists in storage
+          const { data, error } = await supabase.storage
+            .from('checklist-documents')
+            .list(jobData.id, {
+              limit: 100,
+              search: item.file_attachment_path.split('/').pop()
+            });
+          
+          if (!error && data && data.length > 0) {
+            fileChecks[item.id] = true;
+          } else {
+            fileChecks[item.id] = false;
+            // If file doesn't exist, clear it from the database
+            await supabase
+              .from('checklist_items')
+              .update({ file_attachment_path: null })
+              .eq('id', item.id);
+          }
+        } catch (err) {
+          console.error('Error checking file:', err);
+          fileChecks[item.id] = false;
+        }
+      }
+    }
+    
+    setValidFiles(fileChecks);
+  };
 
   // Load checklist items from database
   const loadChecklistItems = async () => {
@@ -166,6 +200,9 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
       }
       
       setChecklistItems(items);
+      
+      // Verify which files actually exist
+      await verifyFiles(items);
 
     } catch (error) {
       console.error('Error loading checklist items:', error);
@@ -303,6 +340,9 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
         setChecklistItems(items => items.map(item => 
           item.id === itemId ? { ...item, ...updatedItem } : item
         ));
+        
+        // Mark this file as valid
+        setValidFiles(prev => ({ ...prev, [itemId]: true }));
         
         alert('File uploaded successfully!');
         
@@ -609,7 +649,7 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
               <div>
                 <p className="text-sm text-gray-600">Files Uploaded</p>
                 <p className="text-2xl font-bold text-orange-600">
-                  {checklistItems.filter(item => item.file_attachment_path).length}
+                  {checklistItems.filter(item => item.file_attachment_path && validFiles[item.id]).length}
                 </p>
               </div>
               <Upload className="w-8 h-8 text-orange-500" />
@@ -670,6 +710,7 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
           const CategoryIcon = getCategoryIcon(item.category);
           const categoryColor = getCategoryColor(item.category);
           const statusColor = getStatusColor(item.status);
+          const hasValidFile = item.file_attachment_path && validFiles[item.id];
 
           return (
             <div key={item.id} className={`bg-white border rounded-lg p-4 hover:shadow-md transition-shadow ${
@@ -699,7 +740,7 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
                         Completed on {new Date(item.completed_at).toLocaleDateString()} by {item.completed_by}
                       </div>
                     )}
-                    {item.file_attachment_path && (
+                    {hasValidFile && (
                       <div className="flex items-center gap-2 text-sm text-blue-600 mb-2">
                         <FileText className="w-4 h-4" />
                         <span>{item.file_attachment_path.split('/').pop()}</span>
