@@ -1147,32 +1147,7 @@ useEffect(() => {
           jobName: newJob.name,
           vendor: newJob.vendor
         });
-        
-        // Check if job creation failed due to cleanup
-        if (result.error && (result.error.includes('cleaned up') || result.error.includes('Job creation failed'))) {
-          // Job creation failed - delete the job record
-          try {
-            await jobService.delete(createdJob.id);
-            console.log('✅ Deleted failed job record');
-          } catch (deleteError) {
-            console.error('Failed to delete job record:', deleteError);
-          }
-          
-          updateProcessingStatus('Job creation failed - data cleaned up', 0, {
-            errors: [result.error]
-          });
-          
-          setProcessingResults({
-            success: false,
-            processed: 0,
-            errors: 1,
-            warnings: [result.error],
-            processingTime: new Date() - new Date(processingStatus.startTime),
-            jobName: newJob.name,
-            vendor: newJob.vendor,
-            failureReason: result.error
-          });
-          
+             
           addNotification('❌ Job creation failed - all data cleaned up. No job was created.', 'error');
         // Check if job creation failed due to cleanup
         if (result && result.error && (result.error.includes('cleaned up') || result.error.includes('Job creation failed'))) {
