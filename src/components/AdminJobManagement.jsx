@@ -1057,6 +1057,7 @@ useEffect(() => {
       };
 
       const createdJob = await jobService.create(jobData);
+      let result = null;
       
       if (!isMountedRef.current) return;
       
@@ -1087,7 +1088,7 @@ useEffect(() => {
           originalConsoleLog(...args);
         };
         
-        const result = await propertyService.importCSVData(
+        result = await propertyService.importCSVData(
           sourceFileContent,
           codeFileContent,
           createdJob.id,
@@ -1173,9 +1174,35 @@ useEffect(() => {
           });
           
           addNotification('❌ Job creation failed - all data cleaned up. No job was created.', 'error');
-        } else if (result.errors > 0) {
+        // Check if job creation failed due to cleanup
+        if (result && result.error && (result.error.includes('cleaned up') || result.error.includes('Job creation failed'))) {
+          // Job creation failed - delete the job record
+          try {
+            await jobService.delete(createdJob.id);
+            console.log('✅ Deleted failed job record');
+          } catch (deleteError) {
+            console.error('Failed to delete job record:', deleteError);
+          }
+          
+          updateProcessingStatus('Job creation failed - data cleaned up', 0, {
+            errors: [result.error]
+          });
+          
+          setProcessingResults({
+            success: false,
+            processed: 0,
+            errors: 1,
+            warnings: [result.error],
+            processingTime: new Date() - new Date(processingStatus.startTime),
+            jobName: newJob.name,
+            vendor: newJob.vendor,
+            failureReason: result.error
+          });
+          
+          addNotification('❌ Job creation failed - all data cleaned up. No job was created.', 'error');
+        } else if (result && result.errors > 0) {
           addNotification(`Job created but ${result.errors} errors occurred during processing`, 'warning');
-        } else {
+        } else if (result) {
           addNotification(`Job created successfully! Processed ${result.processed} properties.`, 'success');
         }
 
@@ -1242,7 +1269,9 @@ useEffect(() => {
       await jobService.update(editingJob.id, updateData);
       
       // Refresh with assigned property counts
-      await refreshJobsWithAssignedCounts();
+        if (!result || !result.error || !result.error.includes('cleaned up')) {
+          await refreshJobsWithAssignedCounts();
+        }
       
       closeJobModal();
       addNotification('Job updated successfully!', 'success');
