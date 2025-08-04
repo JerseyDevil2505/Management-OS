@@ -23,6 +23,7 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
   const [currentUser, setCurrentUser] = useState(null);
   const [isLoadingItems, setIsLoadingItems] = useState(true);
   const [validFiles, setValidFiles] = useState({}); // Track which files actually exist
+  const [checklistDocuments, setChecklistDocuments] = useState({}); // Track multiple documents per item
 
   // Extract year from end_date - just grab first 4 characters to avoid timezone issues
   const dueYear = jobData?.end_date ? jobData.end_date.substring(0, 4) : 'TBD';
@@ -165,13 +166,31 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
         items = createdItems;
       }
       
+      // Load all documents for items that can have multiple files
+      const { data: documents, error: docsError } = await supabase
+        .from('checklist_documents')
+        .select('*')
+        .eq('job_id', jobData.id);
+      
+      if (!docsError && documents) {
+        // Group documents by checklist item
+        const docsByItem = documents.reduce((acc, doc) => {
+          if (!acc[doc.checklist_item_id]) {
+            acc[doc.checklist_item_id] = [];
+          }
+          acc[doc.checklist_item_id].push(doc);
+          return acc;
+        }, {});
+        setChecklistDocuments(docsByItem);
+      }
+      
       // Add special action flags based on item text
       items = items.map(item => {
         // Add special actions based on item text
         if (item.item_text === 'Initial Mailing List') {
           item.special_action = 'generate_mailing_list';
         } else if (item.item_text === 'Initial Letter and Brochure') {
-          item.special_action = 'generate_letter';
+          item.special_action = 'generate_brochure';
         } else if (item.item_text === 'Second Attempt Inspections') {
           item.special_action = 'generate_second_attempt_mailer';
         } else if (item.item_text === 'Third Attempt Inspections') {
@@ -309,12 +328,57 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
     fileInput.accept = '.pdf,.doc,.docx,.xlsx,.png,.jpg,.jpeg';
+    fileInput.multiple = item.item_text === 'Initial Letter and Brochure'; // Allow multiple for this item
     
     fileInput.onchange = async (event) => {
-      const file = event.target.files[0];
-      if (!file) return;
+      const files = Array.from(event.target.files);
+      if (!files.length) return;
       
-      console.log(`📄 File selected for ${itemText}: ${file.name}`);
+      // Handle multiple files for Initial Letter and Brochure
+      if (item.item_text === 'Initial Letter and Brochure' && files.length > 1) {
+        console.log(`📄 Multiple files selected for ${itemText}: ${files.map(f => f.name).join(', ')}`);
+        
+        // Check all file sizes
+        const oversizedFile = files.find(file => file.size > 200 * 1024 * 1024);
+        if (oversizedFile) {
+          alert(`File ${oversizedFile.name} exceeds 200MB limit`);
+          return;
+        }
+        
+        setUploadingItems(prev => ({ ...prev, [itemId]: true }));
+        
+        try {
+          console.log(`⬆️ Starting multiple file upload for item ${itemId}: ${itemText}`);
+          
+          // Upload all files
+          const uploadPromises = files.map(file => 
+            checklistService.uploadFile(
+              itemId, 
+              jobData.id, 
+              file, 
+              currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad'
+            )
+          );
+          
+          await Promise.all(uploadPromises);
+          
+          console.log(`✅ All uploads complete for ${itemText}`);
+          
+          // Reload to show all files
+          await loadChecklistItems();
+          
+          alert(`${files.length} files uploaded successfully!`);
+          
+        } catch (error) {
+          console.error(`❌ Error uploading files for ${itemText}:`, error);
+          alert('Failed to upload one or more files. Please try again.');
+        } finally {
+          setUploadingItems(prev => ({ ...prev, [itemId]: false }));
+        }
+      } else {
+        // Single file upload (existing logic)
+        const file = files[0];
+        console.log(`📄 File selected for ${itemText}: ${file.name}`);
       
       if (file.size > 200 * 1024 * 1024) {
         alert('File size exceeds 200MB limit');
@@ -394,13 +458,36 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
     try {
       const mailingData = await checklistService.generateMailingList(jobData.id);
       
+      // Filter for residential properties and specific class 15s
+      const filteredData = mailingData.filter(record => {
+        const propClass = record.property_m4_class?.toUpperCase() || '';
+        
+        // Include residential classes
+        if (['1', '2', '3A', '3B', '4A', '4B', '4C'].includes(propClass)) {
+          return true;
+        }
+        
+        // Include class 15 with specific facility names
+        if (propClass === '15' && record.property_facility) {
+          const facilityLower = record.property_facility.toLowerCase();
+          return facilityLower.includes('residence') ||
+                 facilityLower.includes('vet') ||
+                 facilityLower.includes('veteran') ||
+                 facilityLower.includes('widow') ||
+                 facilityLower.includes('tdv');
+        }
+        
+        return false;
+      });
+      
       // Transform data for display
-      const formattedData = mailingData.map(record => ({
+      const formattedData = filteredData.map(record => ({
         block: record.property_block,
         lot: record.property_lot,
+        propertyClass: record.property_m4_class,
         location: record.property_location,
         owner: record.owner_name,
-        address: record.owner_address
+        address: `${record.owner_street} ${record.owner_csz}`.trim()
       }));
       
       setMailingListPreview(formattedData);
@@ -412,8 +499,8 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
 
   const downloadMailingList = () => {
     const csvContent = [
-      ['Block', 'Lot', 'Location', 'Owner', 'Mailing Address'],
-      ...mailingListPreview.map(item => [item.block, item.lot, item.location, item.owner, item.address])
+      ['Block', 'Lot', 'Class', 'Location', 'Owner', 'Mailing Address'],
+      ...mailingListPreview.map(item => [item.block, item.lot, item.propertyClass, item.location, item.owner, item.address])
     ].map(row => row.join(',')).join('\n');
     
     const blob = new Blob([csvContent], { type: 'text/csv' });
@@ -741,13 +828,42 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
                       </div>
                     )}
                     {hasValidFile && (
-                      <div className="flex items-center gap-2 text-sm text-blue-600 mb-2">
-                        <FileText className="w-4 h-4" />
-                        <span>{item.file_attachment_path.split('/').pop()}</span>
-                        <ExternalLink 
-                          className="w-4 h-4 cursor-pointer hover:text-blue-800" 
-                          onClick={() => downloadFile(item.file_attachment_path, item.file_attachment_path.split('/').pop())}
-                        />
+                      <div className="space-y-1">
+                        {item.item_text === 'Initial Letter and Brochure' ? (
+                          // Check for multiple files in checklist_documents
+                          checklistDocuments && checklistDocuments[item.id] && checklistDocuments[item.id].length > 0 ? (
+                            checklistDocuments[item.id].map((doc, idx) => (
+                              <div key={idx} className="flex items-center gap-2 text-sm text-blue-600">
+                                <FileText className="w-4 h-4" />
+                                <span>{doc.file_name || doc.file_path.split('/').pop()}</span>
+                                <ExternalLink 
+                                  className="w-4 h-4 cursor-pointer hover:text-blue-800" 
+                                  onClick={() => downloadFile(doc.file_path, doc.file_name || doc.file_path.split('/').pop())}
+                                />
+                              </div>
+                            ))
+                          ) : (
+                            // Fallback to single file display
+                            <div className="flex items-center gap-2 text-sm text-blue-600">
+                              <FileText className="w-4 h-4" />
+                              <span>{item.file_attachment_path.split('/').pop()}</span>
+                              <ExternalLink 
+                                className="w-4 h-4 cursor-pointer hover:text-blue-800" 
+                                onClick={() => downloadFile(item.file_attachment_path, item.file_attachment_path.split('/').pop())}
+                              />
+                            </div>
+                          )
+                        ) : (
+                          // Single file display for other items
+                          <div className="flex items-center gap-2 text-sm text-blue-600">
+                            <FileText className="w-4 h-4" />
+                            <span>{item.file_attachment_path.split('/').pop()}</span>
+                            <ExternalLink 
+                              className="w-4 h-4 cursor-pointer hover:text-blue-800" 
+                              onClick={() => downloadFile(item.file_attachment_path, item.file_attachment_path.split('/').pop())}
+                            />
+                          </div>
+                        )}
                       </div>
                     )}
                     {item.notes && (
@@ -801,10 +917,10 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
                       Generate List
                     </button>
                   )}
-                  {item.special_action === 'generate_letter' && (
+                  {item.special_action === 'generate_brochure' && (
                     <button className="px-3 py-1 bg-blue-500 text-white rounded-md text-sm hover:bg-blue-600 flex items-center gap-1">
                       <FileText className="w-4 h-4" />
-                      Generate Letter
+                      Generate Brochure
                     </button>
                   )}
                   {item.special_action === 'generate_second_attempt_mailer' && (
@@ -814,7 +930,7 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
                     </button>
                   )}
                   {item.special_action === 'generate_third_attempt_mailer' && (
-                    <button className="px-3 py-1 bg-orange-500 text-white rounded-md text-sm hover:bg-orange-600 flex items-center gap-1">
+                    <button className="px-3 py-1 bg-red-500 text-white rounded-md text-sm hover:bg-red-600 flex items-center gap-1">
                       <Mail className="w-4 h-4" />
                       3rd Attempt Mailer
                     </button>
@@ -857,6 +973,7 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
                   <tr className="bg-gray-100">
                     <th className="border border-gray-300 p-2 text-left">Block</th>
                     <th className="border border-gray-300 p-2 text-left">Lot</th>
+                    <th className="border border-gray-300 p-2 text-left">Class</th>
                     <th className="border border-gray-300 p-2 text-left">Location</th>
                     <th className="border border-gray-300 p-2 text-left">Owner</th>
                     <th className="border border-gray-300 p-2 text-left">Mailing Address</th>
@@ -867,6 +984,7 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
                     <tr key={index}>
                       <td className="border border-gray-300 p-2">{item.block}</td>
                       <td className="border border-gray-300 p-2">{item.lot}</td>
+                      <td className="border border-gray-300 p-2">{item.propertyClass}</td>
                       <td className="border border-gray-300 p-2">{item.location}</td>
                       <td className="border border-gray-300 p-2">{item.owner}</td>
                       <td className="border border-gray-300 p-2">{item.address}</td>
