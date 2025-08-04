@@ -13,6 +13,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
   const [missingPropertiesReport, setMissingPropertiesReport] = useState(null);
   const [sessionHistory, setSessionHistory] = useState([]);
   const [notifications, setNotifications] = useState([]);
+  const [externalInspectorsList, setExternalInspectorsList] = useState('');
 
   // NEW: Track properties going to external contractors
   const [unassignedPropertyCount, setUnassignedPropertyCount] = useState(0);
@@ -175,7 +176,22 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         }
       });
 
-      setEmployeeData(employeeMap);
+      // Parse external inspectors and add them to employee data
+      const externalCodes = externalInspectorsList.split(',').map(code => code.trim()).filter(code => code);
+      const externalInspectorsMap = {};
+
+      externalCodes.forEach(code => {
+        externalInspectorsMap[code] = {
+          id: `external-${code}`,
+          name: `${code} (External)`,
+          fullName: `${code} (External Inspector)`,
+          inspector_type: 'external',
+          initials: code
+        };
+      });
+
+      // Merge regular employees with external inspectors
+      setEmployeeData({ ...employeeMap, ...externalInspectorsMap });
     } catch (error) {
       console.error('Error loading employee data:', error);
       addNotification('Error loading employee data', 'error');
@@ -485,6 +501,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
             vendor_type: jobData.vendor_type,
             last_updated: new Date().toISOString()
           },
+          external_inspectors: externalInspectorsList,
           // Persist fresh analytics data for navigation survival
           workflow_stats: analyticsToSave.analytics ? {
             ...analyticsToSave.analytics,
@@ -517,9 +534,13 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
     try {
       const { data: job, error } = await supabase
         .from('jobs')
-        .select('workflow_stats')
+        .select('workflow_stats, external_inspectors')
         .eq('id', jobData.id)
         .single();
+      
+      if (job?.external_inspectors) {
+        setExternalInspectorsList(job.external_inspectors);
+      }     
 
       if (!error && job?.workflow_stats && job.workflow_stats.totalRecords) {
         // Load the persisted analytics
@@ -2620,7 +2641,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
           )}
         </h3>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Project Start Date *
@@ -2656,7 +2677,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               InfoBy Categories ({(availableInfoByCodes || []).length} codes available)
-            </label>
+           </label>
             <div className="space-y-2">
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <span>Entry: {(infoByCategoryConfig.entry || []).length} codes</span>
@@ -2666,13 +2687,12 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                 <span>Invalid: {(infoByCategoryConfig.invalid || []).length} codes</span>
                 <span>Special: {(infoByCategoryConfig.special || []).length} codes</span>
               </div>
-              
+
               {hasUnsavedChanges && (
                 <div className="text-sm text-orange-600 font-medium">
                   ⚠️ Unsaved changes
                 </div>
               )}
-
               <div className="flex gap-2">
                 <button
                   onClick={() => saveCategoriesToDatabase()}
@@ -2685,8 +2705,25 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
               </div>
             </div>
           </div>
-        </div>
 
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              External Inspectors (comma-separated)
+            </label>
+            <input
+              type="text"
+              value={externalInspectorsList}
+              onChange={(e) => setExternalInspectorsList(e.target.value)}
+              placeholder="e.g., GL, ABC, XYZ"
+              disabled={settingsLocked}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Client or external inspector codes
+            </p>
+          </div>
+        </div>
+        
         {/* Collapsible InfoBy Category Configuration Panel with Clean Codes */}
         {(availableInfoByCodes || []).length > 0 && (
           <div className="mt-6 pt-6 border-t border-gray-200">
