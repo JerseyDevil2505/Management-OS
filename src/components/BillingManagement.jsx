@@ -559,8 +559,8 @@ Thank you for your immediate attention to this matter.`;
 
   const generateBondLetter = async () => {
     try {
-      // Fetch ALL data we need
-      const { data: activeJobsData } = await supabase
+      // Always fetch fresh data directly from database
+      const { data: activeJobsData, error: activeError } = await supabase
         .from('jobs')
         .select(`
           *,
@@ -570,17 +570,30 @@ Thank you for your immediate attention to this matter.`;
         `)
         .eq('job_type', 'standard');
 
-      const { data: planningJobsData } = await supabase
+      if (activeError) {
+        console.error('Error fetching active jobs:', activeError);
+        throw activeError;
+      }
+
+      const { data: planningJobsData, error: planningError } = await supabase
         .from('planning_jobs')
         .select('*')
         .not('contract_amount', 'is', null)
         .gt('contract_amount', 0)
-        .or('is_archived.eq.false,is_archived.is.null');
+        .eq('is_archived', false);
+
+      if (planningError) {
+        console.error('Error fetching planning jobs:', planningError);
+        throw planningError;
+      }
+
+      console.log('Active jobs fetched:', activeJobsData?.length || 0);
+      console.log('Planning jobs fetched:', planningJobsData?.length || 0);
 
       const allJobs = [];
       
       // Process active jobs
-      if (activeJobsData) {
+      if (activeJobsData && activeJobsData.length > 0) {
         activeJobsData.forEach(job => {
           const contract = job.job_contracts?.[0];
           
@@ -628,11 +641,13 @@ Thank you for your immediate attention to this matter.`;
       }
       
       // Process planning jobs
-      if (planningJobsData) {
+      if (planningJobsData && planningJobsData.length > 0) {
         planningJobsData.forEach(job => {
           const parcels = job.total_properties || 
-                         (job.residential_properties + job.commercial_properties) || 
+                         ((job.residential_properties || 0) + (job.commercial_properties || 0)) || 
                          0;
+          
+          console.log(`Planning job ${job.municipality}: parcels=${parcels}, amount=${job.contract_amount}`);
           
           if (parcels > 0 && job.contract_amount > 0) {
             allJobs.push({
@@ -656,6 +671,10 @@ Thank you for your immediate attention to this matter.`;
       const totalParcels = allJobs.reduce((sum, job) => sum + job.parcels, 0);
       const totalAmount = allJobs.reduce((sum, job) => sum + parseFloat(job.amount), 0);
       const avgPricePerParcel = totalParcels > 0 ? (totalAmount / totalParcels).toFixed(2) : '0.00';
+      
+      console.log('Total jobs in report:', allJobs.length);
+      console.log('Total amount:', totalAmount);
+      console.log('Total parcels:', totalParcels);
       
       // Generate HTML report
       const reportHTML = `
