@@ -345,6 +345,20 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
     
     setJobFreshness(freshnessData);
   };
+  // Refresh both jobs and freshness data
+  const refreshAllJobData = async () => {
+    try {
+      // First refresh the jobs list
+      await refreshJobsWithAssignedCounts();
+      
+      // Then refresh the freshness data with the updated jobs
+      if (jobs.length > 0) {
+        await loadJobFreshness(jobs);
+      }
+    } catch (error) {
+      console.error('Error refreshing job data:', error);
+    }
+  };
 
   // Notification system
   const addNotification = (message, type = 'info') => {
@@ -1661,7 +1675,7 @@ useEffect(() => {
                 {/* Close - Only when complete */}
                 {processingResults && (
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       setShowProcessingModal(false);
                       setProcessingResults(null);
                       resetProcessingStatus();
@@ -1688,6 +1702,15 @@ useEffect(() => {
                         propertyCount: 0,
                         codeCount: 0
                       });
+                      
+                      // Refresh job data including freshness
+                      await refreshAllJobData();
+                      
+                      // Notify parent component if needed
+                      if (onJobProcessingComplete) {
+                        onJobProcessingComplete();
+                      }
+                    }}
                       // TEMPORARILY COMMENTED OUT FOR TESTING
                       // if (onJobProcessingComplete) {
                       //   onJobProcessingComplete();
