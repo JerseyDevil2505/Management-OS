@@ -1,6 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { 
-  CheckCircle, Clock, AlertCircle, Users, Calendar, FileText, Settings, Database, Plus, Edit3, Trash2, ArrowLeft, Download, Upload, Filter, Search, Eye, UserCheck, Building, MapPin, Mail, FileCheck, Target, ExternalLink, FileUp, CheckSquare, Square, FileDown, Printer, Archive, Save
+  CheckCircle, Clock, AlertCircle, Users, Calendar, FileText, Settings, Database, 
+  Plus, Edit3, Trash2, ArrowLeft, Download, Upload, Filter, Search, Eye, UserCheck, 
+  Building, MapPin, Mail, FileCheck, Target, ExternalLink, FileUp, CheckSquare, 
+  Square, FileDown, Printer, Archive, Save
 } from 'lucide-react';
 import { supabase, checklistService } from '../../lib/supabaseClient';
 
@@ -330,6 +333,8 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
       alert('Failed to save assessor email. Please try again.');
     }
   };
+
+  const generateMailingList = async () => {
     try {
       const mailingData = await checklistService.generateMailingList(jobData.id);
       
@@ -395,6 +400,8 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
       alert('Failed to download file. Please try again.');
     }
   };
+
+  const confirmArchive = async () => {
     try {
       // Archive the job
       await checklistService.archiveJob(jobData.id, new Date().toISOString());
