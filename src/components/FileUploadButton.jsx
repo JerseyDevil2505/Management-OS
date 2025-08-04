@@ -793,7 +793,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
             property_location: dbRecord.property_location,
             differences: {
               sales_price: { old: dbSalesPrice, new: sourceSalesPrice },
-              sales_date: { old: dbSalesDate, new: sourceSalesDate }
+              sales_date: { old: dbSalesDate, new: sourceSalesDate },
               sales_nu: { old: dbSalesNu, new: sourceSalesNu }
             }
           });
