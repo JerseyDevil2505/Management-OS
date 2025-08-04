@@ -1207,7 +1207,6 @@ useEffect(() => {
         }
 
         // Don't close modal automatically - let user click Close
-      }
       
     } catch (error) {
       console.error('Job creation error:', error);
