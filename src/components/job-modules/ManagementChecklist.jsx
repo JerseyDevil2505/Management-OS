@@ -3,7 +3,7 @@ import {
   CheckCircle, Clock, AlertCircle, Users, Calendar, FileText, Settings, Database, 
   Plus, Edit3, Trash2, ArrowLeft, Download, Upload, Filter, Search, Eye, UserCheck, 
   Building, MapPin, Mail, FileCheck, Target, ExternalLink, FileUp, CheckSquare, 
-  Square, FileDown, Printer, Archive, Save
+  Square, FileDown, Printer, Archive, Save, X
 } from 'lucide-react';
 import { supabase, checklistService } from '../../lib/supabaseClient';
 
