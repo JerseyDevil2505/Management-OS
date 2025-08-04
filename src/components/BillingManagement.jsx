@@ -417,7 +417,7 @@ Thank you for your immediate attention to this matter.`;
       const profitLossPercent = projectedRevenue > 0 ? (profitLoss / projectedRevenue) * 100 : 0;
 
       // Calculate projected cash using the new formula
-      const projectedCash = (totalPaid + totalOpen + totalRemaining) - (plannedContractsTotal * 0.9);
+      const projectedCash = (totalPaid + totalOpen + totalRemaining) - (plannedContractsTotal * 0.6);
       const projectedProfitLoss = projectedCash - projectedExpenses;
       const projectedProfitLossPercent = projectedCash > 0 ? (projectedProfitLoss / projectedCash) * 100 : 0;
 
@@ -556,6 +556,66 @@ Thank you for your immediate attention to this matter.`;
       console.error('Error calculating distribution metrics:', error);
     }
   };  
+
+  const generateBondLetter = async () => {
+    try {
+      // Calculate bond requirements based on real-time data
+      const activeJobsCount = jobs.filter(j => j.job_type === 'standard').length;
+      const totalContractValue = globalMetrics.totalSigned;
+      const outstandingAmount = globalMetrics.totalOpen;
+      const collectionRate = globalMetrics.totalSigned > 0 
+        ? ((globalMetrics.totalPaid / globalMetrics.totalSigned) * 100).toFixed(1) 
+        : '0.0';
+      
+      // Generate the bond letter content
+      const bondLetterContent = `
+BOND LETTER
+Generated: ${new Date().toLocaleDateString()}
+
+To Whom It May Concern:
+
+This letter certifies the financial standing and bond requirements for our municipal assessment operations.
+
+CURRENT PORTFOLIO SUMMARY:
+- Active Contracts: ${activeJobsCount}
+- Total Contract Value: ${formatCurrency(totalContractValue)}
+- Outstanding Invoices: ${formatCurrency(outstandingAmount)}
+- Collection Rate: ${collectionRate}%
+- YTD Revenue: ${formatCurrency(globalMetrics.totalPaid)}
+
+BOND CALCULATION:
+Based on our current contract portfolio and New Jersey statutory requirements for municipal assessors, 
+the recommended surety bond amount is calculated as follows:
+
+Total Active Contract Value: ${formatCurrency(totalContractValue)}
+Bond Requirement (10% of contracts): ${formatCurrency(totalContractValue * 0.10)}
+Current Outstanding Receivables: ${formatCurrency(outstandingAmount)}
+
+RECOMMENDED BOND AMOUNT: ${formatCurrency(Math.max(totalContractValue * 0.10, 500000))}
+
+This calculation meets or exceeds all applicable New Jersey requirements for municipal assessment services.
+
+Sincerely,
+[Authorized Signature]
+      `;
+
+      // Create a blob and download
+      const blob = new Blob([bondLetterContent], { type: 'text/plain' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Bond_Letter_${new Date().toISOString().split('T')[0]}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      
+      alert('Bond letter generated successfully!');
+    } catch (error) {
+      console.error('Error generating bond letter:', error);
+      alert('Error generating bond letter');
+    }
+  };
 
   const loadJobs = async () => {
     try {
@@ -1606,6 +1666,18 @@ Thank you for your immediate attention to this matter.`;
             </p>
           </div>
         </div>
+      </div>
+      {/* Bond Letter Generation Section */}
+      <div className="mb-6">
+        <button
+          onClick={generateBondLetter}
+          className="w-full px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-semibold rounded-lg shadow-lg hover:from-purple-700 hover:to-indigo-700 transition-all duration-200 flex items-center justify-center space-x-2"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          <span>Generate Bond Letter</span>
+        </button>
       </div>
 
       {/* Tab Navigation */}
