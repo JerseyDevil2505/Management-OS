@@ -328,14 +328,14 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
     fileInput.accept = '.pdf,.doc,.docx,.xlsx,.png,.jpg,.jpeg';
-    fileInput.multiple = item.item_text === 'Initial Letter and Brochure'; // Allow multiple for this item
+    fileInput.multiple = itemText === 'Initial Letter and Brochure'; // Allow multiple for this item
     
     fileInput.onchange = async (event) => {
       const files = Array.from(event.target.files);
       if (!files.length) return;
       
       // Handle multiple files for Initial Letter and Brochure
-      if (item.item_text === 'Initial Letter and Brochure' && files.length > 1) {
+      if (itemText === 'Initial Letter and Brochure' && files.length > 1) {
         console.log(`📄 Multiple files selected for ${itemText}: ${files.map(f => f.name).join(', ')}`);
         
         // Check all file sizes
