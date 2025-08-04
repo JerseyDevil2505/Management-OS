@@ -292,8 +292,6 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
 
   const saveClientName = async () => {
     try {
-      console.log('Saving client name:', editableClientName);
-      
       // Save to database
       await checklistService.updateClientName(jobData.id, editableClientName);
       
@@ -310,8 +308,6 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
 
   const saveAssessorEmail = async () => {
     try {
-      console.log('Saving assessor email:', editableAssessorEmail);
-      
       // Save to database
       await checklistService.updateAssessorEmail(jobData.id, editableAssessorEmail);
       
@@ -374,8 +370,6 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
 
   const downloadFile = async (filePath, fileName) => {
     try {
-      console.log('📥 Downloading file:', filePath);
-      
       // Get public URL for the file
       const { data } = supabase.storage
         .from('checklist-documents')
@@ -723,17 +717,18 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
                     <div>
                       <input
                         type="file"
-                        ref={fileInputRef}
+                        id={`file-upload-${item.id}`}
                         onChange={(e) => {
                           if (e.target.files[0]) {
                             handleFileUpload(item.id, e.target.files[0]);
+                            e.target.value = ''; // Reset input
                           }
                         }}
                         className="hidden"
                         accept=".pdf,.doc,.docx,.xlsx,.png,.jpg,.jpeg"
                       />
                       <button
-                        onClick={() => fileInputRef.current?.click()}
+                        onClick={() => document.getElementById(`file-upload-${item.id}`).click()}
                         disabled={uploadingItems[item.id]}
                         className="px-3 py-1 bg-blue-500 text-white rounded-md text-sm hover:bg-blue-600 disabled:bg-gray-400 flex items-center gap-1"
                       >
