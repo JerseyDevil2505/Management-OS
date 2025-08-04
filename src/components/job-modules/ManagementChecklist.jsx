@@ -24,6 +24,7 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
   const [isLoadingItems, setIsLoadingItems] = useState(true);
   const [validFiles, setValidFiles] = useState({}); // Track which files actually exist
   const [checklistDocuments, setChecklistDocuments] = useState({}); // Track multiple documents per item
+  const [isGeneratingList, setIsGeneratingList] = useState(false); // Loading state for list generation
 
   // Extract year from end_date - just grab first 4 characters to avoid timezone issues
   const dueYear = jobData?.end_date ? jobData.end_date.substring(0, 4) : 'TBD';
@@ -457,6 +458,7 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
 
   const generateMailingList = async () => {
     try {
+      setIsGeneratingList(true);
       const mailingData = await checklistService.generateMailingList(jobData.id);
       
       // Filter for residential properties and specific class 15s
@@ -495,13 +497,176 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
     } catch (error) {
       console.error('Error generating mailing list:', error);
       alert('Failed to generate mailing list. Please ensure property data is loaded.');
+    } finally {
+      setIsGeneratingList(false);
+    }
+  };
+
+  const generateSecondAttemptMailer = async () => {
+    try {
+      setIsGeneratingList(true);
+      console.log('🔄 Generating 2nd attempt mailer list...');
+      
+      // First, get the job's refusal configuration
+      const { data: jobConfig, error: jobError } = await supabase
+        .from('jobs')
+        .select('infoby_category_config')
+        .eq('id', jobData.id)
+        .single();
+      
+      if (jobError) throw jobError;
+      
+      // Get refusal categories from config (assuming it's a JSON object)
+      const refusalCategories = jobConfig?.infoby_category_config?.refusal_categories || [];
+      console.log('📋 Refusal categories:', refusalCategories);
+      
+      // Get all property records for this job
+      const propertyData = await checklistService.generateMailingList(jobData.id);
+      
+      // Get all inspection data for this job
+      const inspectionData = await checklistService.getAllInspectionData(jobData.id);
+      
+      // Create a map of inspection data by property key (block-lot)
+      const inspectionMap = new Map();
+      inspectionData.forEach(inspection => {
+        const key = `${inspection.property_block}-${inspection.property_lot}`;
+        inspectionMap.set(key, inspection);
+      });
+      
+      // Filter properties for 2nd attempt
+      const secondAttemptProperties = propertyData.filter(property => {
+        const propClass = property.property_m4_class?.toUpperCase() || '';
+        const propertyKey = `${property.property_block}-${property.property_lot}`;
+        const inspection = inspectionMap.get(propertyKey);
+        
+        // Check if it's a refusal based on job config
+        if (inspection && refusalCategories.includes(inspection.inspection_info_by)) {
+          return true;
+        }
+        
+        // Check if it's class 2 or 3A with no inspection
+        if (['2', '3A'].includes(propClass)) {
+          // Check both property_records and inspection_data for info_by
+          const hasInspection = property.inspection_info_by || inspection?.inspection_info_by;
+          if (!hasInspection || hasInspection.trim() === '') {
+            return true;
+          }
+        }
+        
+        return false;
+      });
+      
+      // Transform data for display
+      const formattedData = secondAttemptProperties.map(property => ({
+        block: property.property_block,
+        lot: property.property_lot,
+        propertyClass: property.property_m4_class,
+        location: property.property_location,
+        owner: property.owner_name,
+        address: `${property.owner_street} ${property.owner_csz}`.trim(),
+        reason: inspectionMap.get(`${property.property_block}-${property.property_lot}`)?.inspection_info_by || 'Not Inspected'
+      }));
+      
+      console.log(`✅ Found ${formattedData.length} properties for 2nd attempt`);
+      setMailingListPreview(formattedData);
+      
+    } catch (error) {
+      console.error('Error generating 2nd attempt mailer:', error);
+      alert('Failed to generate 2nd attempt mailer list.');
+    } finally {
+      setIsGeneratingList(false);
+    }
+  };
+
+  const generateThirdAttemptMailer = async () => {
+    try {
+      setIsGeneratingList(true);
+      console.log('🔄 Generating 3rd attempt mailer list...');
+      
+      // Get the job's refusal configuration
+      const { data: jobConfig, error: jobError } = await supabase
+        .from('jobs')
+        .select('infoby_category_config')
+        .eq('id', jobData.id)
+        .single();
+      
+      if (jobError) throw jobError;
+      
+      const refusalCategories = jobConfig?.infoby_category_config?.refusal_categories || [];
+      
+      // Get all property records for this job
+      const propertyData = await checklistService.generateMailingList(jobData.id);
+      
+      // Get all inspection data for this job
+      const inspectionData = await checklistService.getAllInspectionData(jobData.id);
+      
+      // Create a map of inspection data by property key (block-lot)
+      const inspectionMap = new Map();
+      inspectionData.forEach(inspection => {
+        const key = `${inspection.property_block}-${inspection.property_lot}`;
+        inspectionMap.set(key, inspection);
+      });
+      
+      // For 3rd attempt, we use same logic as 2nd attempt but could add additional filters
+      // For now, using same logic - you can customize this based on your needs
+      const thirdAttemptProperties = propertyData.filter(property => {
+        const propClass = property.property_m4_class?.toUpperCase() || '';
+        const propertyKey = `${property.property_block}-${property.property_lot}`;
+        const inspection = inspectionMap.get(propertyKey);
+        
+        // Check if it's a refusal based on job config
+        if (inspection && refusalCategories.includes(inspection.inspection_info_by)) {
+          return true;
+        }
+        
+        // Check if it's class 2 or 3A with no inspection
+        if (['2', '3A'].includes(propClass)) {
+          const hasInspection = property.inspection_info_by || inspection?.inspection_info_by;
+          if (!hasInspection || hasInspection.trim() === '') {
+            return true;
+          }
+        }
+        
+        return false;
+      });
+      
+      // Transform data for display
+      const formattedData = thirdAttemptProperties.map(property => ({
+        block: property.property_block,
+        lot: property.property_lot,
+        propertyClass: property.property_m4_class,
+        location: property.property_location,
+        owner: property.owner_name,
+        address: `${property.owner_street} ${property.owner_csz}`.trim(),
+        reason: inspectionMap.get(`${property.property_block}-${property.property_lot}`)?.inspection_info_by || 'Not Inspected'
+      }));
+      
+      console.log(`✅ Found ${formattedData.length} properties for 3rd attempt`);
+      setMailingListPreview(formattedData);
+      
+    } catch (error) {
+      console.error('Error generating 3rd attempt mailer:', error);
+      alert('Failed to generate 3rd attempt mailer list.');
+    } finally {
+      setIsGeneratingList(false);
     }
   };
 
   const downloadMailingList = () => {
+    // Check if we have the reason column (for 2nd/3rd attempts)
+    const hasReason = mailingListPreview[0]?.reason !== undefined;
+    
+    const headers = hasReason 
+      ? ['Block', 'Lot', 'Class', 'Location', 'Owner', 'Mailing Address', 'Reason']
+      : ['Block', 'Lot', 'Class', 'Location', 'Owner', 'Mailing Address'];
+    
     const csvContent = [
-      ['Block', 'Lot', 'Class', 'Location', 'Owner', 'Mailing Address'],
-      ...mailingListPreview.map(item => [item.block, item.lot, item.propertyClass, item.location, item.owner, item.address])
+      headers,
+      ...mailingListPreview.map(item => 
+        hasReason 
+          ? [item.block, item.lot, item.propertyClass, item.location, item.owner, item.address, item.reason]
+          : [item.block, item.lot, item.propertyClass, item.location, item.owner, item.address]
+      )
     ].map(row => row.join(',')).join('\n');
     
     const blob = new Blob([csvContent], { type: 'text/csv' });
@@ -912,10 +1077,11 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
                   {item.special_action === 'generate_mailing_list' && (
                     <button
                       onClick={generateMailingList}
-                      className="px-3 py-1 bg-green-500 text-white rounded-md text-sm hover:bg-green-600 flex items-center gap-1"
+                      disabled={isGeneratingList}
+                      className="px-3 py-1 bg-green-500 text-white rounded-md text-sm hover:bg-green-600 disabled:bg-gray-400 flex items-center gap-1"
                     >
                       <Mail className="w-4 h-4" />
-                      Generate List
+                      {isGeneratingList ? 'Generating...' : 'Generate List'}
                     </button>
                   )}
                   {item.special_action === 'generate_brochure' && (
@@ -925,15 +1091,23 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
                     </button>
                   )}
                   {item.special_action === 'generate_second_attempt_mailer' && (
-                    <button className="px-3 py-1 bg-yellow-500 text-white rounded-md text-sm hover:bg-yellow-600 flex items-center gap-1">
+                    <button 
+                      onClick={generateSecondAttemptMailer}
+                      disabled={isGeneratingList}
+                      className="px-3 py-1 bg-yellow-500 text-white rounded-md text-sm hover:bg-yellow-600 disabled:bg-gray-400 flex items-center gap-1"
+                    >
                       <Mail className="w-4 h-4" />
-                      2nd Attempt Mailer
+                      {isGeneratingList ? 'Generating...' : '2nd Attempt Mailer'}
                     </button>
                   )}
                   {item.special_action === 'generate_third_attempt_mailer' && (
-                    <button className="px-3 py-1 bg-red-500 text-white rounded-md text-sm hover:bg-red-600 flex items-center gap-1">
+                    <button 
+                      onClick={generateThirdAttemptMailer}
+                      disabled={isGeneratingList}
+                      className="px-3 py-1 bg-red-500 text-white rounded-md text-sm hover:bg-red-600 disabled:bg-gray-400 flex items-center gap-1"
+                    >
                       <Mail className="w-4 h-4" />
-                      3rd Attempt Mailer
+                      {isGeneratingList ? 'Generating...' : '3rd Attempt Mailer'}
                     </button>
                   )}
                   {item.special_action === 'view_impact_letter' && (
@@ -966,18 +1140,24 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
       {/* Mailing List Preview Modal */}
       {mailingListPreview && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-4xl w-full max-h-96 overflow-y-auto">
-            <h3 className="text-lg font-semibold mb-4">Initial Mailing List Preview</h3>
-            <div className="overflow-x-auto">
+          <div className="bg-white rounded-lg p-6 max-w-5xl w-full max-h-[80vh] overflow-hidden flex flex-col">
+            <h3 className="text-lg font-semibold mb-4">
+              {mailingListPreview[0]?.reason !== undefined ? 'Attempt Mailer List Preview' : 'Initial Mailing List Preview'}
+              <span className="text-sm font-normal text-gray-600 ml-2">({mailingListPreview.length} properties)</span>
+            </h3>
+            <div className="overflow-auto flex-1">
               <table className="w-full border-collapse border border-gray-300">
                 <thead>
-                  <tr className="bg-gray-100">
+                  <tr className="bg-gray-100 sticky top-0">
                     <th className="border border-gray-300 p-2 text-left">Block</th>
                     <th className="border border-gray-300 p-2 text-left">Lot</th>
                     <th className="border border-gray-300 p-2 text-left">Class</th>
                     <th className="border border-gray-300 p-2 text-left">Location</th>
                     <th className="border border-gray-300 p-2 text-left">Owner</th>
                     <th className="border border-gray-300 p-2 text-left">Mailing Address</th>
+                    {mailingListPreview[0]?.reason !== undefined && (
+                      <th className="border border-gray-300 p-2 text-left">Reason</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
@@ -989,6 +1169,9 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
                       <td className="border border-gray-300 p-2">{item.location}</td>
                       <td className="border border-gray-300 p-2">{item.owner}</td>
                       <td className="border border-gray-300 p-2">{item.address}</td>
+                      {item.reason !== undefined && (
+                        <td className="border border-gray-300 p-2">{item.reason}</td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
