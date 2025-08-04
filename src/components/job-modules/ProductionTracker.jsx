@@ -711,11 +711,6 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
       addNotification(`✅ Override removed - ${propertyKey} deleted from inspection_data`, 'success');
       addNotification('🔄 Reprocessing analytics to reflect changes...', 'info');
 
-      // Trigger immediate analytics reprocessing
-      setTimeout(async () => {
-        await startProcessingSession();
-      }, 1000);
-
     } catch (error) {
       console.error('Error removing override:', error);
       addNotification('Error removing override: ' + error.message, 'error');
@@ -841,11 +836,6 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
       
       addNotification(`✅ Complete override record created: ${finalOverrideReason} for ${property.composite_key}`, 'success');
       addNotification('🔄 Reprocessing analytics with complete override...', 'info');
-
-      // Trigger immediate analytics reprocessing
-      setTimeout(async () => {
-        await startProcessingSession();
-      }, 1000);
 
     } catch (error) {
       console.error('Error applying complete override:', error);
