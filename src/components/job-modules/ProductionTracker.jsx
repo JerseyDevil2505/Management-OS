@@ -956,7 +956,8 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
     if (jobData?.id && latestFileVersion) {
       const loadAllData = async () => {
         // Load all base data first
-        await loadEmployeeData();
+        // Load all base data first
+        // await loadEmployeeData();  // COMMENT OUT OR DELETE THIS LINE
         await loadAvailableInfoByCodes();
         await loadProjectStartDate();
         await loadVendorSource();
@@ -969,9 +970,11 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         
         // Finally load commercial counts
         await loadCommercialCounts();
-
         // Load unassigned property count
         await loadUnassignedPropertyCount();
+        
+        // NOW LOAD EMPLOYEES LAST
+        await loadEmployeeData();  // ADD THIS LINE HERE
         
         setLoading(false);
       };
