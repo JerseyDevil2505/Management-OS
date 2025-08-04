@@ -817,22 +817,92 @@ export const checklistService = {
     }
   },
 
-  // Generate mailing list from property records
+  // UPDATED: Generate mailing list with correct fields - NO FILTERING IN SUPABASE
   async generateMailingList(jobId) {
     try {
       const { data, error } = await supabase
         .from('property_records')
-        .select('property_block, property_lot, property_location, owner_name, owner_address')
+        .select(`
+          property_block, 
+          property_lot, 
+          property_location, 
+          property_m4_class,
+          property_facility,
+          owner_name, 
+          owner_street,
+          owner_csz
+        `)
         .eq('job_id', jobId)
-        .order('property_block, property_lot')
+        .order('property_block')
+        .order('property_lot')
         .limit(1000);
       
       if (error) throw error;
       
-      console.log(`✅ Generated mailing list with ${data.length} properties`);
-      return data;
+      console.log(`✅ Loaded ${data?.length || 0} properties for mailing list`);
+      return data || [];
     } catch (error) {
       console.error('Mailing list generation error:', error);
+      throw error;
+    }
+  },
+
+  // NEW: Get inspection data with pagination for 2nd/3rd attempt mailers
+  async getInspectionData(jobId, page = 1, pageSize = 500) {
+    try {
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+
+      const { data, error, count } = await supabase
+        .from('inspection_data')
+        .select('*', { count: 'exact' })
+        .eq('job_id', jobId)
+        .order('property_block')
+        .order('property_lot')
+        .range(from, to);
+      
+      if (error) throw error;
+      
+      console.log(`✅ Loaded inspection data page ${page} with ${data?.length || 0} records (total: ${count})`);
+      
+      return {
+        data: data || [],
+        page,
+        pageSize,
+        totalCount: count || 0,
+        totalPages: Math.ceil((count || 0) / pageSize),
+        hasMore: to < (count || 0) - 1
+      };
+    } catch (error) {
+      console.error('Inspection data fetch error:', error);
+      throw error;
+    }
+  },
+
+  // Helper to get ALL inspection data (handles pagination automatically)
+  async getAllInspectionData(jobId) {
+    try {
+      let allData = [];
+      let page = 1;
+      let hasMore = true;
+
+      while (hasMore) {
+        const result = await this.getInspectionData(jobId, page, 1000);
+        allData = [...allData, ...result.data];
+        hasMore = result.hasMore;
+        page++;
+        
+        // Safety limit to prevent infinite loops
+        if (page > 100) {
+          console.warn('Reached pagination limit of 100 pages');
+          break;
+        }
+      }
+
+      console.log(`✅ Loaded total of ${allData.length} inspection records`);
+      return allData;
+    } catch (error) {
+      console.error('Error fetching all inspection data:', error);
       throw error;
     }
   },
