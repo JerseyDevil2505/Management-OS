@@ -1139,13 +1139,21 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
 
       {/* Mailing List Preview Modal */}
       {mailingListPreview && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-5xl w-full max-h-[80vh] overflow-hidden flex flex-col">
-            <h3 className="text-lg font-semibold mb-4">
-              {mailingListPreview[0]?.reason !== undefined ? 'Attempt Mailer List Preview' : 'Initial Mailing List Preview'}
-              <span className="text-sm font-normal text-gray-600 ml-2">({mailingListPreview.length} properties)</span>
-            </h3>
-            <div className="overflow-auto flex-1">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 max-w-6xl w-full max-h-[90vh] flex flex-col">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">
+                {mailingListPreview[0]?.reason !== undefined ? 'Attempt Mailer List Preview' : 'Initial Mailing List Preview'}
+                <span className="text-sm font-normal text-gray-600 ml-2">({mailingListPreview.length} properties)</span>
+              </h3>
+              <button
+                onClick={() => setMailingListPreview(null)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="overflow-auto flex-1 mb-4">
               <table className="w-full border-collapse border border-gray-300">
                 <thead>
                   <tr className="bg-gray-100 sticky top-0">
@@ -1162,7 +1170,7 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
                 </thead>
                 <tbody>
                   {mailingListPreview.map((item, index) => (
-                    <tr key={index}>
+                    <tr key={index} className="hover:bg-gray-50">
                       <td className="border border-gray-300 p-2">{item.block}</td>
                       <td className="border border-gray-300 p-2">{item.lot}</td>
                       <td className="border border-gray-300 p-2">{item.propertyClass}</td>
@@ -1177,7 +1185,7 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
                 </tbody>
               </table>
             </div>
-            <div className="flex justify-end gap-4 mt-4">
+            <div className="flex justify-end gap-4 pt-4 border-t">
               <button
                 onClick={() => setMailingListPreview(null)}
                 className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600"
