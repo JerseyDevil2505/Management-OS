@@ -1231,15 +1231,13 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         }
 
         // Check for any inspection attempt at all
-        const hasAnyInspectionAttempt = (
-          (record.inspection_measure_by && record.inspection_measure_by.trim() !== '') ||
-          record.inspection_measure_date ||
-          record.inspection_info_by ||
-          record.inspection_list_by ||
-          record.inspection_price_by
-        );
+        // Check for the three core inspection fields
+        const hasInfoBy = record.inspection_info_by;
+        const hasMeasureBy = record.inspection_measure_by && record.inspection_measure_by.trim() !== '';
+        const hasMeasureDate = record.inspection_measure_date;
 
-        if (!hasAnyInspectionAttempt) {
+        // If ALL three core fields are null/empty, it's not inspected
+        if (!hasInfoBy && !hasMeasureBy && !hasMeasureDate) {
           // Property not yet inspected - no inspection data at all
           reasonNotAdded = 'Not yet inspected';
           missingProperties.push({
