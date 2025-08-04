@@ -714,6 +714,55 @@ Thank you for your immediate attention to this matter.`;
     };
   };
 
+  const loadJobs = async () => {
+    try {
+      setLoading(true);
+      
+      if (activeTab === 'active') {
+        // Load ALL active jobs (no filter on job names)
+        const { data: jobsData, error: jobsError } = await supabase
+          .from('jobs')
+          .select(`
+            *,
+            job_contracts(*),
+            billing_events(*),
+            workflow_stats
+          `)
+          .eq('job_type', 'standard')
+          .order('created_at', { ascending: false });
+
+        if (jobsError) throw jobsError;
+        setJobs(jobsData || []);
+      } else if (activeTab === 'planned') {
+        // Load planning jobs
+        const { data: planningData, error: planningError } = await supabase
+          .from('planning_jobs')
+          .select('*')
+          .or('is_archived.eq.false,is_archived.is.null');
+
+        if (planningError) throw planningError;
+        setPlanningJobs(planningData || []);
+      } else if (activeTab === 'legacy') {
+        // Load legacy billing-only jobs
+        const { data: legacyData, error: legacyError } = await supabase
+          .from('jobs')
+          .select(`
+            *,
+            job_contracts(*),
+            billing_events(*)
+          `)
+          .eq('job_type', 'legacy_billing');
+
+        if (legacyError) throw legacyError;
+        setLegacyJobs(legacyData || []);
+      }
+    } catch (error) {
+      console.error('Error loading jobs:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const parseBillingHistory = (text) => {
     // Parse pasted billing history
     // Format: 12/4/2024 10.00% D 12240225 $49,935.00 $4,994.00 $0.00 $44,941.00
