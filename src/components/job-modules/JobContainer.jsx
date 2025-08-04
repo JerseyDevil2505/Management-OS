@@ -33,7 +33,6 @@ const JobContainer = ({
   // NEW: Refresh when App.js signals file processing completion
   useEffect(() => {
     if (fileRefreshTrigger > 0 && selectedJob) {
-      console.log('🔄 JobContainer: File refresh triggered, reloading version data...');
       loadLatestFileVersions();
     }
   }, [fileRefreshTrigger, selectedJob]);
@@ -70,10 +69,6 @@ const JobContainer = ({
         .limit(1)
         .single();
 
-      // 🔍 DEBUG: Check what we're actually getting from all tables
-      console.log('🔍 DEBUG JobContainer - property_records data:', dataVersionData);
-      console.log('🔍 DEBUG JobContainer - jobs data:', jobData);
-      console.log('🔍 DEBUG JobContainer - inspection_data:', inspectionData);
 
       if (dataVersionError && dataVersionError.code !== 'PGRST116') throw dataVersionError;
       if (jobError) throw jobError;
@@ -114,7 +109,6 @@ const JobContainer = ({
       
       setJobData(enrichedJobData);
 
-      console.log(`📊 JobContainer: Loaded complete job data with dates from multiple tables`);
 
     } catch (error) {
       console.error('Error loading file versions:', error);
@@ -140,14 +134,12 @@ const JobContainer = ({
 
   // Handle file upload completion - refresh version data
   const handleFileProcessed = async (fileType, fileName) => {
-    console.log(`File processed: ${fileType} - ${fileName}`);
     
     // Refresh file version data when new files are uploaded
     await loadLatestFileVersions();
     
     // 🔧 ENHANCED: Invalidate ProductionTracker analytics when files change
     if (onUpdateWorkflowStats && selectedJob?.id) {
-      console.log('📊 JobContainer: Invalidating analytics due to file update');
       onUpdateWorkflowStats({
         totalRecords: 0,
         validInspections: 0,
@@ -165,7 +157,6 @@ const JobContainer = ({
   const handleAnalyticsUpdate = (analyticsData) => {
     if (!onUpdateWorkflowStats || !selectedJob?.id) return;
 
-    console.log('📊 JobContainer: Received analytics from ProductionTracker', analyticsData);
 
     // Transform ProductionTracker data to App.js format
     const transformedStats = {
@@ -192,7 +183,6 @@ const JobContainer = ({
     // 🔧 ENHANCED: Update App.js state with database persistence flag
     onUpdateWorkflowStats(transformedStats, true);
     
-    console.log('📊 JobContainer: Analytics forwarded to App.js state management with refresh trigger');
   };
 
   if (!selectedJob) {
