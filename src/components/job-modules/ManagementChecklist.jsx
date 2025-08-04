@@ -22,7 +22,8 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
   const [uploadingItems, setUploadingItems] = useState({});
   const [currentUser, setCurrentUser] = useState(null);
   const [isLoadingItems, setIsLoadingItems] = useState(true);
-  const fileInputRef = useRef();
+  
+  // Remove the single fileInputRef - we'll handle this differently
 
   // Extract year from end_date - just grab first 4 characters to avoid timezone issues
   const dueYear = jobData?.end_date ? jobData.end_date.substring(0, 4) : 'TBD';
@@ -72,14 +73,12 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
   const loadChecklistItems = async () => {
     try {
       setIsLoadingItems(true);
-
       
       // First, try to load existing items from checklist_items
       let items = await checklistService.getChecklistItems(jobData.id);
       
       // If no items exist, create them from template
       if (!items || items.length === 0) {
-
         
         // Get the standard revaluation template
         const { data: template, error: templateError } = await supabase
@@ -108,6 +107,7 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
         // Create checklist items for this job based on template
         const itemsToCreate = templateItems.map(templateItem => ({
           job_id: jobData.id,
+          template_item_id: templateItem.id, // NOW WE SET THIS!
           item_text: templateItem.item_text,
           item_order: templateItem.item_order,
           category: templateItem.category,
@@ -129,7 +129,6 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
         }
 
         items = createdItems;
-
       }
       
       // Add special action flags based on item text
@@ -265,29 +264,58 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
     }
   };
 
-  const handleFileUpload = async (itemId, file) => {
-    if (file.size > 200 * 1024 * 1024) {
-      alert('File size exceeds 200MB limit');
-      return;
-    }
+  // NEW APPROACH: Direct file handler without hidden inputs
+  const handleFileSelect = async (itemId, itemText) => {
+    console.log(`📁 Opening file selector for item: ${itemText} (ID: ${itemId})`);
     
-    setUploadingItems(prev => ({ ...prev, [itemId]: true }));
-    try {
-      // Upload file and update item - PASS UUID NOT NAME!
-      const updatedItem = await checklistService.uploadFile(itemId, jobData.id, file, currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad');
+    // Create file input programmatically
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.pdf,.doc,.docx,.xlsx,.png,.jpg,.jpeg';
+    
+    fileInput.onchange = async (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
       
-      // Update local state
-      setChecklistItems(items => items.map(item => 
-        item.id === itemId ? { ...item, ...updatedItem } : item
-      ));
+      console.log(`📄 File selected for ${itemText}: ${file.name}`);
       
-      alert('File uploaded successfully!');
-    } catch (error) {
-      console.error('❌ Error uploading file:', error);
-      alert('Failed to upload file. Please try again.');
-    } finally {
-      setUploadingItems(prev => ({ ...prev, [itemId]: false }));
-    }
+      if (file.size > 200 * 1024 * 1024) {
+        alert('File size exceeds 200MB limit');
+        return;
+      }
+      
+      setUploadingItems(prev => ({ ...prev, [itemId]: true }));
+      
+      try {
+        console.log(`⬆️ Starting upload for item ${itemId}: ${itemText}`);
+        
+        // Upload file and update item
+        const updatedItem = await checklistService.uploadFile(
+          itemId, 
+          jobData.id, 
+          file, 
+          currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad'
+        );
+        
+        console.log(`✅ Upload complete for ${itemText}`, updatedItem);
+        
+        // Update local state
+        setChecklistItems(items => items.map(item => 
+          item.id === itemId ? { ...item, ...updatedItem } : item
+        ));
+        
+        alert('File uploaded successfully!');
+        
+      } catch (error) {
+        console.error(`❌ Error uploading file for ${itemText}:`, error);
+        alert('Failed to upload file. Please try again.');
+      } finally {
+        setUploadingItems(prev => ({ ...prev, [itemId]: false }));
+      }
+    };
+    
+    // Trigger file selection
+    fileInput.click();
   };
 
   const saveClientName = async () => {
@@ -714,28 +742,14 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
                     </button>
                   )}
                   {item.allows_file_upload && (
-                    <div>
-                      <input
-                        type="file"
-                        id={`file-upload-${item.id}`}
-                        onChange={(e) => {
-                          if (e.target.files[0]) {
-                            handleFileUpload(item.id, e.target.files[0]);
-                            e.target.value = ''; // Reset input
-                          }
-                        }}
-                        className="hidden"
-                        accept=".pdf,.doc,.docx,.xlsx,.png,.jpg,.jpeg"
-                      />
-                      <button
-                        onClick={() => document.getElementById(`file-upload-${item.id}`).click()}
-                        disabled={uploadingItems[item.id]}
-                        className="px-3 py-1 bg-blue-500 text-white rounded-md text-sm hover:bg-blue-600 disabled:bg-gray-400 flex items-center gap-1"
-                      >
-                        <Upload className="w-4 h-4" />
-                        {uploadingItems[item.id] ? 'Uploading...' : 'Upload File'}
-                      </button>
-                    </div>
+                    <button
+                      onClick={() => handleFileSelect(item.id, item.item_text)}
+                      disabled={uploadingItems[item.id]}
+                      className="px-3 py-1 bg-blue-500 text-white rounded-md text-sm hover:bg-blue-600 disabled:bg-gray-400 flex items-center gap-1"
+                    >
+                      <Upload className="w-4 h-4" />
+                      {uploadingItems[item.id] ? 'Uploading...' : 'Upload File'}
+                    </button>
                   )}
                   {item.special_action === 'generate_mailing_list' && (
                     <button
