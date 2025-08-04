@@ -550,12 +550,10 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         console.error('Error saving comparison report:', error);
         addNotification('⚠️ Comparison completed but report save failed', 'warning');
       } else {
-        console.log('✅ Comparison report saved:', data.id);
       }
 
       return data;
     } catch (error) {
-      console.error('Failed to save comparison report:', error);
     }
   };
 
@@ -2079,7 +2077,6 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
   const getFileStatusWithRealVersion = (timestamp, type) => {
     if (!timestamp) return 'Never';
     
-    console.log('🔍 DEBUG - job.code_file_version from jobs:', job.code_file_version);
     
     if (type === 'source') {
       const result = sourceFileVersion === 1 
