@@ -681,7 +681,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         // Create adjusted analytics with reduced override count
         const adjustedAnalytics = {
           ...analytics,
-          validInspections: Math.max(0, analytics.validInspections - 1), // Remove the override
+          validInspections: billingAnalytics.totalBillable,
           validationOverrideCount: freshOverrides.length
         };
         
@@ -807,7 +807,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         // Create adjusted analytics with new override count
         const adjustedAnalytics = {
           ...analytics,
-          validInspections: analytics.validInspections + 1, // Add the new override
+          validInspections: billingAnalytics.totalBillable,
           validationOverrideCount: freshOverrides.length
         };
         
