@@ -559,109 +559,135 @@ Thank you for your immediate attention to this matter.`;
 
   const generateBondLetter = async () => {
     try {
-      // Calculate bond requirements based on real-time data
-      const activeJobsCount = jobs.filter(j => j.job_type === 'standard').length;
-      const totalContractValue = globalMetrics.totalSigned;
-      const outstandingAmount = globalMetrics.totalOpen;
-      const collectionRate = globalMetrics.totalSigned > 0 
-        ? ((globalMetrics.totalPaid / globalMetrics.totalSigned) * 100).toFixed(1) 
-        : '0.0';
+      // Combine active and planned jobs
+      const allJobs = [];
       
-      // Generate the bond letter content
-      const bondLetterContent = `
-BOND LETTER
-Generated: ${new Date().toLocaleDateString()}
-
-To Whom It May Concern:
-
-This letter certifies the financial standing and bond requirements for our municipal assessment operations.
-
-CURRENT PORTFOLIO SUMMARY:
-- Active Contracts: ${activeJobsCount}
-- Total Contract Value: ${formatCurrency(totalContractValue)}
-- Outstanding Invoices: ${formatCurrency(outstandingAmount)}
-- Collection Rate: ${collectionRate}%
-- YTD Revenue: ${formatCurrency(globalMetrics.totalPaid)}
-
-BOND CALCULATION:
-Based on our current contract portfolio and New Jersey statutory requirements for municipal assessors, 
-the recommended surety bond amount is calculated as follows:
-
-Total Active Contract Value: ${formatCurrency(totalContractValue)}
-Bond Requirement (10% of contracts): ${formatCurrency(totalContractValue * 0.10)}
-Current Outstanding Receivables: ${formatCurrency(outstandingAmount)}
-
-RECOMMENDED BOND AMOUNT: ${formatCurrency(Math.max(totalContractValue * 0.10, 500000))}
-
-This calculation meets or exceeds all applicable New Jersey requirements for municipal assessment services.
-
-Sincerely,
-[Authorized Signature]
+      // Add active jobs
+      jobs.filter(j => j.job_type === 'standard').forEach(job => {
+        const contract = job.job_contracts?.[0];
+        const parcels = job.workflow_stats?.total || job.total_properties || 0;
+        const percentComplete = job.workflow_stats?.billable && job.workflow_stats?.total 
+          ? ((job.workflow_stats.billable / job.workflow_stats.total) * 100).toFixed(1)
+          : '0.0';
+        
+        if (contract && parcels > 0) {
+          allJobs.push({
+            municipality: job.job_name,
+            completionYear: new Date().getFullYear() + 1, // Assume next year
+            contractStatus: 'YES',
+            parcels: parcels,
+            amount: contract.contract_amount,
+            pricePerParcel: (contract.contract_amount / parcels).toFixed(2),
+            percentComplete: percentComplete,
+            percentBilled: ((job.percent_billed || 0) * 100).toFixed(1)
+          });
+        }
+      });
+      
+      // Add planned jobs
+      planningJobs.filter(job => !job.is_archived && job.contract_amount).forEach(job => {
+        const parcels = job.total_properties || 0;
+        if (parcels > 0) {
+          allJobs.push({
+            municipality: job.municipality || job.job_name,
+            completionYear: new Date(job.end_date).getFullYear() || new Date().getFullYear() + 1,
+            contractStatus: 'PENDING',
+            parcels: parcels,
+            amount: job.contract_amount,
+            pricePerParcel: (job.contract_amount / parcels).toFixed(2),
+            percentComplete: '0.0',
+            percentBilled: '0.0'
+          });
+        }
+      });
+      
+      // Sort by municipality name
+      allJobs.sort((a, b) => a.municipality.localeCompare(b.municipality));
+      
+      // Calculate totals
+      const totalParcels = allJobs.reduce((sum, job) => sum + job.parcels, 0);
+      const totalAmount = allJobs.reduce((sum, job) => sum + parseFloat(job.amount), 0);
+      const avgPricePerParcel = totalParcels > 0 ? (totalAmount / totalParcels).toFixed(2) : '0.00';
+      
+      // Generate HTML report
+      const reportHTML = `
+<!DOCTYPE html>
+<html>
+<head>
+  <title>PPA Contract Report</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    h1 { font-size: 18px; margin-bottom: 5px; }
+    h2 { font-size: 14px; margin-bottom: 15px; color: #666; }
+    table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th { background-color: #f2f2f2; font-weight: bold; font-size: 12px; }
+    td { font-size: 11px; }
+    .number { text-align: right; }
+    .center { text-align: center; }
+    .summary { margin-top: 20px; font-size: 12px; }
+    .summary-box { background-color: #f8f8f8; padding: 10px; border: 1px solid #ddd; }
+  </style>
+</head>
+<body>
+  <h1>PROFESSIONAL PROPERTY APPRAISERS</h1>
+  <h2>Contract Status Report - ${new Date().toLocaleDateString()}</h2>
+  
+  <table>
+    <thead>
+      <tr>
+        <th>Municipality</th>
+        <th class="center">Completion Year</th>
+        <th class="center">Contract Status</th>
+        <th class="number">Parcels</th>
+        <th class="number">Contract Amount</th>
+        <th class="number">$/Parcel</th>
+        <th class="center">% Complete</th>
+        <th class="center">% Billed</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${allJobs.map(job => `
+        <tr>
+          <td>${job.municipality}</td>
+          <td class="center">${job.completionYear}</td>
+          <td class="center">${job.contractStatus}</td>
+          <td class="number">${job.parcels.toLocaleString()}</td>
+          <td class="number">$${parseFloat(job.amount).toLocaleString()}</td>
+          <td class="number">$${job.pricePerParcel}</td>
+          <td class="center">${job.percentComplete}%</td>
+          <td class="center">${job.percentBilled}%</td>
+        </tr>
+      `).join('')}
+    </tbody>
+  </table>
+  
+  <div class="summary-box">
+    <strong>SUMMARY</strong><br>
+    Total Contracts: ${allJobs.length}<br>
+    Total Parcels: ${totalParcels.toLocaleString()}<br>
+    Total Contract Value: $${totalAmount.toLocaleString()}<br>
+    Average Price per Parcel: $${avgPricePerParcel}
+  </div>
+</body>
+</html>
       `;
-
-      // Create a blob and download
-      const blob = new Blob([bondLetterContent], { type: 'text/plain' });
+      
+      // Create blob and download as HTML
+      const blob = new Blob([reportHTML], { type: 'text/html' });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `Bond_Letter_${new Date().toISOString().split('T')[0]}.txt`;
+      a.download = `PPA_Contract_Report_${new Date().toISOString().split('T')[0]}.html`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
       
-      alert('Bond letter generated successfully!');
+      alert('Contract report generated successfully!');
     } catch (error) {
-      console.error('Error generating bond letter:', error);
-      alert('Error generating bond letter');
-    }
-  };
-
-  const loadJobs = async () => {
-    try {
-      setLoading(true);
-      
-      if (activeTab === 'active') {
-        // Load ALL active jobs (no filter on job names)
-        const { data: jobsData, error: jobsError } = await supabase
-          .from('jobs')
-          .select(`
-            *,
-            job_contracts(*),
-            billing_events(*)
-          `)
-          .eq('job_type', 'standard')
-          .order('created_at', { ascending: false });
-
-        if (jobsError) throw jobsError;
-        setJobs(jobsData || []);
-      } else if (activeTab === 'planned') {
-        // Load planning jobs
-        const { data: planningData, error: planningError } = await supabase
-          .from('planning_jobs')
-          .select('*')
-          .or('is_archived.eq.false,is_archived.is.null');
-
-        if (planningError) throw planningError;
-        setPlanningJobs(planningData || []);
-      } else if (activeTab === 'legacy') {
-        // Load legacy billing-only jobs
-        const { data: legacyData, error: legacyError } = await supabase
-          .from('jobs')
-          .select(`
-            *,
-            job_contracts(*),
-            billing_events(*)
-          `)
-          .eq('job_type', 'legacy_billing');
-
-        if (legacyError) throw legacyError;
-        setLegacyJobs(legacyData || []);
-      }
-    } catch (error) {
-      console.error('Error loading jobs:', error);
-    } finally {
-      setLoading(false);
+      console.error('Error generating report:', error);
+      alert('Error generating report: ' + error.message);
     }
   };
 
