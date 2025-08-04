@@ -1245,9 +1245,9 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         addNotification('❌ Update failed - all changes rolled back. Check logs for details.', 'error');
       }
       
-      // CRITICAL FIX: Refresh banner state immediately
+      // CRITICAL FIX: Update banner state immediately
       addBatchLog('🔄 Refreshing UI state...', 'info');
-      await refreshBannerState();
+      setSourceFileVersion(newFileVersion);  // Use the newFileVersion we already calculated
       addBatchLog('✅ UI state refreshed successfully', 'success');
       
       setBatchComplete(true);
@@ -1981,10 +1981,10 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                       addNotification('❌ Refresh failed - all changes rolled back. Check logs for details.', 'error');
                     }
                     
-                    // CRITICAL FIX: Refresh banner state immediately
+                    // CRITICAL FIX: Update banner state immediately
                     addBatchLog('🔄 Refreshing UI state...', 'info');
-                    await refreshBannerState();
-                    addBatchLog('✅ UI state refreshed', 'success');
+                    setSourceFileVersion(newFileVersion);  // Use the newFileVersion we already calculated
+                    addBatchLog('✅ UI state refreshed successfully', 'success');
                     
                     setBatchComplete(true);
                     
