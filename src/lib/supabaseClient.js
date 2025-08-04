@@ -1507,4 +1507,72 @@ export const authService = {
 // ===== LEGACY COMPATIBILITY =====
 export const signInAsDev = authService.signInAsDev;
 
+// ===== AUTH HELPER FUNCTIONS =====
+export const authHelpers = {
+  // Get current user with role
+  getCurrentUser: async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return null;
+
+      const { data: employee } = await supabase
+        .from('employees')
+        .select('*')
+        .eq('email', session.user.email.toLowerCase())
+        .single();
+
+      return {
+        ...session.user,
+        role: employee?.role || 'inspector',
+        employeeData: employee
+      };
+    } catch (error) {
+      console.error('Error getting current user:', error);
+      return null;
+    }
+  },
+
+  // Check if user has required role
+  hasRole: async (requiredRole) => {
+    const user = await authHelpers.getCurrentUser();
+    if (!user) return false;
+
+    const roleHierarchy = {
+      admin: 3,
+      manager: 2,
+      inspector: 1
+    };
+
+    return roleHierarchy[user.role] >= roleHierarchy[requiredRole];
+  },
+
+  // Subscribe to auth changes
+  onAuthStateChange: (callback) => {
+    return supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session) {
+        const user = await authHelpers.getCurrentUser();
+        callback(event, user);
+      } else {
+        callback(event, null);
+      }
+    });
+  },
+
+  // Update user has_account flag when account is created
+  updateHasAccount: async (email) => {
+    try {
+      const { error } = await supabase
+        .from('employees')
+        .update({ has_account: true })
+        .eq('email', email.toLowerCase());
+
+      if (error) throw error;
+      return { success: true };
+    } catch (error) {
+      console.error('Error updating has_account:', error);
+      return { success: false, error };
+    }
+  }
+};
+
 export default supabase;
