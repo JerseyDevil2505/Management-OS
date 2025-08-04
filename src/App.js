@@ -1,14 +1,20 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase, jobService } from './lib/supabaseClient';
+import LandingPage from './components/LandingPage';
 import EmployeeManagement from './components/EmployeeManagement';
 import AdminJobManagement from './components/AdminJobManagement';
 import BillingManagement from './components/BillingManagement';
 import PayrollManagement from './components/PayrollManagement';
+import UserManagement from './components/UserManagement';
 import JobContainer from './components/job-modules/JobContainer';
 import FileUploadButton from './components/FileUploadButton';
 import './App.css';
 
 function App() {
+  // Authentication state
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  
   const [activeModule, setActiveModule] = useState('jobs');
   const [selectedJob, setSelectedJob] = useState(null);
 
@@ -34,6 +40,75 @@ function App() {
 
   // 🔧 BACKEND ENHANCEMENT: Add metrics refresh trigger for AdminJobManagement
   const [metricsRefreshTrigger, setMetricsRefreshTrigger] = useState(0);
+
+  // Check for existing session or dev mode on mount
+  useEffect(() => {
+    checkSession();
+  }, []);
+
+  const checkSession = async () => {
+    try {
+      // Development auto-login - check for dev URLs
+      if (window.location.hostname.includes('production-black-seven') || 
+          window.location.hostname === 'localhost' ||
+          window.location.hostname.includes('github.dev') ||
+          window.location.hostname.includes('preview')) {
+        setUser({
+          email: 'dev@lojik.com',
+          role: 'admin',
+          employeeData: { 
+            name: 'Development Mode',
+            role: 'admin'
+          }
+        });
+        setLoading(false);
+        return;
+      }
+
+      // Production - check for real session
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session) {
+        // Get employee data for role
+        const { data: employee } = await supabase
+          .from('employees')
+          .select('*')
+          .eq('email', session.user.email.toLowerCase())
+          .single();
+
+        if (employee) {
+          setUser({
+            ...session.user,
+            role: employee.role || 'inspector',
+            employeeData: employee
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Session check error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogin = (userData) => {
+    setUser(userData);
+    // Set default tab based on role
+    if (userData.role === 'manager') {
+      setActiveModule('employees');
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+      setUser(null);
+      setSelectedJob(null);
+      setActiveModule('jobs');
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  };
 
   // Load persisted workflow stats for all active jobs
   const loadAllJobWorkflowStats = useCallback(async () => {
@@ -86,15 +161,15 @@ function App() {
     }
   }, [isCreatingJob]);
 
-// Load workflow stats on app startup - DEFERRED
-useEffect(() => {
-  // Wait a bit before loading heavy workflow stats
-  const timeoutId = setTimeout(() => {
-    loadAllJobWorkflowStats();
-  }, 2000); // Wait 2 seconds
-  
-  return () => clearTimeout(timeoutId);
-}, []); // Remove loadAllJobWorkflowStats from dependencies
+  // Load workflow stats on app startup - DEFERRED
+  useEffect(() => {
+    // Wait a bit before loading heavy workflow stats
+    const timeoutId = setTimeout(() => {
+      loadAllJobWorkflowStats();
+    }, 2000); // Wait 2 seconds
+    
+    return () => clearTimeout(timeoutId);
+  }, []); // Remove loadAllJobWorkflowStats from dependencies
 
   // 🔧 BACKEND ENHANCEMENT: Enhanced workflow stats update with metrics refresh trigger
   const handleWorkflowStatsUpdate = async (jobId, newStats, persistToDatabase = true) => {
@@ -295,78 +370,88 @@ useEffect(() => {
     }, 500);
   }, [loadAllJobWorkflowStats]);
 
+  const renderTabs = () => {
+    const tabs = [
+      { id: 'employees', label: '👥 Employee Management' },
+      { id: 'jobs', label: '📋 Current Jobs' }
+    ];
+
+    // Only show billing and payroll tabs for admins
+    if (user?.role === 'admin') {
+      tabs.push(
+        { id: 'billing', label: '💰 Billing Management' },
+        { id: 'payroll', label: '📊 Payroll Management' },
+        { id: 'users', label: '🔐 User Management' }
+      );
+    }
+
+    return tabs;
+  };
+
+  // Show loading state
+  if (loading) {
+    return (
+      <div className="loading-container">
+        <div className="loading-spinner"></div>
+        <p>Loading...</p>
+      </div>
+    );
+  }
+
+  // Show landing page if not authenticated
+  if (!user) {
+    return <LandingPage onLogin={handleLogin} />;
+  }
+
   return (
     <div className="App">
       {/* Top Navigation */}
       <div className="bg-gray-900 text-white p-4 mb-6">
         <div className="max-w-6xl mx-auto">
-          <h1 className="text-2xl font-bold mb-4">
-            Management OS
-            {isLoadingWorkflowStats && (
-              <span className="ml-3 text-sm text-gray-300">
-                <div className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-gray-300 mr-2"></div>
-                Loading analytics...
+          <div className="flex justify-between items-center mb-4">
+            <h1 className="text-2xl font-bold">
+              Management OS
+              {isLoadingWorkflowStats && (
+                <span className="ml-3 text-sm text-gray-300">
+                  <div className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-gray-300 mr-2"></div>
+                  Loading analytics...
+                </span>
+              )}
+            </h1>
+            <div className="flex items-center gap-4">
+              <span className="text-sm text-gray-300">
+                {user.employeeData?.name || user.email} ({user.role})
               </span>
-            )}
-          </h1>
+              <button
+                onClick={handleLogout}
+                className="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm"
+              >
+                Logout
+              </button>
+            </div>
+          </div>
           
           {/* Only show main navigation when NOT in job-specific modules */}
           {activeModule !== 'job-modules' && (
             <nav className="flex space-x-6">
-              <button
-                onClick={() => {
-                  setActiveModule('employees');
-                }}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                  activeModule === 'employees'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                }`}
-              >
-                👥 Employee Management
-              </button>
-              <button
-                onClick={() => {
-                  setActiveModule('jobs');
-                }}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                  activeModule === 'jobs'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                }`}
-              >
-                📋 Current Jobs
-                {/* Show analytics ready indicator */}
-                {Object.values(getAllJobMetrics()).filter(m => m.isProcessed).length > 0 && (
-                  <span className="ml-2 text-xs bg-green-500 text-white px-2 py-1 rounded-full">
-                    {Object.values(getAllJobMetrics()).filter(m => m.isProcessed).length}
-                  </span>
-                )}
-              </button>
-              <button
-                onClick={() => {
-                  setActiveModule('billing');
-                }}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                  activeModule === 'billing'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                }`}
-              >
-                💰 Billing Management
-              </button>
-              <button
-                onClick={() => {
-                  setActiveModule('payroll');
-                }}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                  activeModule === 'payroll'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                }`}
-              >
-                📊 Payroll Management
-              </button>
+              {renderTabs().map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveModule(tab.id)}
+                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                    activeModule === tab.id
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  }`}
+                >
+                  {tab.label}
+                  {tab.id === 'jobs' && Object.values(getAllJobMetrics()).filter(m => m.isProcessed).length > 0 && (
+                    <span className="ml-2 text-xs bg-green-500 text-white px-2 py-1 rounded-full">
+                      {Object.values(getAllJobMetrics()).filter(m => m.isProcessed).length}
+                    </span>
+                  )}
+                </button>
+              ))}
             </nav>
           )}
           
@@ -416,9 +501,11 @@ useEffect(() => {
           />
         )}
 
-        {activeModule === 'billing' && <BillingManagement />}
+        {activeModule === 'billing' && user?.role === 'admin' && <BillingManagement />}
 
-        {activeModule === 'payroll' && <PayrollManagement />}
+        {activeModule === 'payroll' && user?.role === 'admin' && <PayrollManagement />}
+        
+        {activeModule === 'users' && user?.role === 'admin' && <UserManagement />}
         
         {activeModule === 'job-modules' && selectedJob && (
           <JobContainer 
