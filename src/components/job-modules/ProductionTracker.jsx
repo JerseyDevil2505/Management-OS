@@ -40,7 +40,6 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
 
       if (!error && count !== null) {
         setUnassignedPropertyCount(count);
-        debugLog('UNASSIGNED', `Found ${count} unassigned properties (external contractor work)`);
       }
     } catch (error) {
       console.error('Error loading unassigned property count:', error);
@@ -145,12 +144,6 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         priced: pricedData?.length || 0
       });
 
-      debugLog('COMMERCIAL_COUNTS', 'Loaded commercial counts from inspection_data', {
-        inspected: inspectedData?.length || 0,
-        priced: pricedData?.length || 0,
-        totalCommercial: jobData.totalCommercial
-      });
-
     } catch (error) {
       console.error('Error loading commercial counts:', error);
       debugLog('COMMERCIAL_COUNTS', 'Error loading commercial counts');
@@ -183,14 +176,6 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
       });
 
       setEmployeeData(employeeMap);
-      debugLog('EMPLOYEES', 'Loaded employee data with types', { 
-        count: Object.keys(employeeMap).length,
-        inspectorTypes: Object.values(employeeMap).reduce((acc, emp) => {
-          const type = emp.inspector_type || 'untyped';
-          acc[type] = (acc[type] || 0) + 1;
-          return acc;
-        }, {})
-      });
     } catch (error) {
       console.error('Error loading employee data:', error);
       addNotification('Error loading employee data', 'error');
@@ -212,17 +197,14 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         .single();
 
       if (!error && record?.vendor_source) {
-        debugLog('VENDOR_SOURCE', `Detected vendor from property_records: ${record.vendor_source}`);
         setDetectedVendor(record.vendor_source);
         return record.vendor_source;
       }
       
       // Fallback to jobData vendor_type
-      debugLog('VENDOR_SOURCE', `Using fallback vendor from jobData: ${jobData.vendor_type}`);
       setDetectedVendor(jobData.vendor_type);
       return jobData.vendor_type;
     } catch (error) {
-      debugLog('VENDOR_SOURCE', 'Error loading vendor source, using fallback');
       return jobData.vendor_type;
     }
   };
@@ -301,7 +283,6 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         .single();
 
       if (error || !job?.parsed_code_definitions) {
-        debugLog('CODES', 'No parsed code definitions found for job');
         addNotification('No code definitions found. Upload code file first.', 'warning');
         return;
       }
@@ -334,14 +315,6 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         const fieldCodes = job.parsed_code_definitions.field_codes;
         const flatLookup = job.parsed_code_definitions.flat_lookup;
         
-        debugLog('CODES', 'Microsystems parsed structure:', {
-          hasFieldCodes: !!fieldCodes,
-          hasFlatLookup: !!flatLookup,
-          fieldCodesKeys: fieldCodes ? Object.keys(fieldCodes) : [],
-          has140Category: !!(fieldCodes && fieldCodes['140']),
-          rawKeys: Object.keys(job.parsed_code_definitions).filter(k => k.startsWith('140')).slice(0, 5)
-        });
-
         if (fieldCodes && fieldCodes['140']) {
           // APPROACH 1: Read from clean structured field_codes['140']
           debugLog('CODES', 'Found 140 category in field_codes, loading InfoBy codes...');
@@ -433,12 +406,10 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
       if (!error && job?.infoby_category_config && Object.keys(job.infoby_category_config).length > 0) {
         setInfoByCategoryConfig(job.infoby_category_config);
         setOriginalCategoryConfig(job.infoby_category_config);
-        debugLog('CATEGORIES', '✅ Loaded existing category config from infoby_category_config field');
       } else if (!error && job?.workflow_stats?.infoByCategoryConfig) {
         const oldConfig = job.workflow_stats.infoByCategoryConfig;
         setInfoByCategoryConfig(oldConfig);
         setOriginalCategoryConfig(oldConfig);
-        debugLog('CATEGORIES', '✅ Migrated category config from workflow_stats');
         await saveCategoriesToDatabase(oldConfig);
       } else if (codes && codes.length > 0) {
         setDefaultCategoryConfig(vendor, codes);
@@ -489,7 +460,6 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
     setInfoByCategoryConfig(defaultConfig);
     setOriginalCategoryConfig(defaultConfig);
     setHasUnsavedChanges(true);
-    debugLog('CATEGORIES', '✅ Set default category configuration', defaultConfig);
   };
 
   // Save category configuration to database and persist analytics
@@ -625,10 +595,8 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
       if (!error && records?.project_start_date) {
         setProjectStartDate(records.project_start_date);
         setIsDateLocked(true);
-        debugLog('START_DATE', `Loaded existing start date: ${records.project_start_date}`);
       }
     } catch (error) {
-      debugLog('START_DATE', 'No existing start date found');
     }
   };
 
@@ -649,7 +617,6 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
 
       setIsDateLocked(true);
       addNotification('✅ Project start date locked and saved to all property records', 'success');
-      debugLog('START_DATE', `Locked start date: ${projectStartDate}`);
 
     } catch (error) {
       console.error('Error locking start date:', error);
@@ -1009,11 +976,6 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
       // Get actual vendor from property_records
       const actualVendor = await loadVendorSource();
       
-      debugLog('VENDOR', 'Vendor detection check', { 
-        vendor_from_property_records: actualVendor,
-        vendor_from_jobData: jobData.vendor_type,
-        using_vendor: actualVendor || jobData.vendor_type
-      });
 
       debugLog('ANALYTICS', 'Starting manager-focused analytics processing', { 
         jobId: jobData.id,
@@ -1582,8 +1544,6 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
           if (isCommercialProperty) {
             const currentVendor = actualVendor || jobData.vendor_type;
 
-            debugLog('PRICING', `Commercial property ${propertyKey} - Class: ${propertyClass}, InfoBy: ${infoByCode}, Vendor: ${currentVendor}`);
-            debugLog('PRICING', `isPricedCode: ${isPricedCode}, Priced category: [${(infoByCategoryConfig.priced || []).join(', ')}]`);
 
             if (currentVendor === 'BRT' && 
                 record.inspection_price_by && 
@@ -1596,16 +1556,13 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
               if (classBreakdown[propertyClass]) {
                 classBreakdown[propertyClass].priced++;
               }
-              debugLog('PRICING', `✅ BRT pricing counted for ${inspector} on ${propertyKey}`);
               
             } else if (currentVendor === 'Microsystems' && isPricedCode) {
               inspectorStats[inspector].priced++;
               if (classBreakdown[propertyClass]) {
                 classBreakdown[propertyClass].priced++;
               }
-              debugLog('PRICING', `✅ Microsystems pricing counted for ${inspector} on ${propertyKey}`);
             } else {
-              debugLog('PRICING', `❌ No pricing counted for ${inspector} on ${propertyKey} - Vendor: ${currentVendor}, isPricedCode: ${isPricedCode}`);
             }
           }
 
@@ -1884,20 +1841,11 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
       const totalEntry = (classBreakdown['2']?.entry || 0) + (classBreakdown['3A']?.entry || 0);
       const totalRefusal = (classBreakdown['2']?.refusal || 0) + (classBreakdown['3A']?.refusal || 0);
 
-      debugLog('ENTRY_RATE_FIX', 'Global entry rate calculation', {
-        totalEntry,
-        totalClass2And3AProperties,
-        classBreakdown2Entry: classBreakdown['2']?.entry || 0,
-        classBreakdown3AEntry: classBreakdown['3A']?.entry || 0,
-        expectedRate: totalClass2And3AProperties > 0 ? Math.round((totalEntry / totalClass2And3AProperties) * 100) : 0
-      });
-
       // Commercial percentage calculations (valid ÷ total, not valid ÷ valid)
       const totalCommercialProperties = ['4A', '4B', '4C'].reduce((sum, cls) => sum + (classBreakdown[cls]?.total || 0), 0);
       const totalCommercialInspected = ['4A', '4B', '4C'].reduce((sum, cls) => sum + (classBreakdown[cls]?.inspected || 0), 0);
       const totalPriced = Object.values(inspectorStats).reduce((sum, stats) => sum + stats.priced, 0);
 
-      debugLog('TOTALS', `Total priced calculation: ${totalPriced}, Inspector stats:`, Object.values(inspectorStats).map(s => ({name: s.name, priced: s.priced})));
       const totalCommercialPriced = ['4A', '4B', '4C'].reduce((sum, cls) => sum + (classBreakdown[cls]?.priced || 0), 0);
 
       const validationReportData = {
@@ -2063,7 +2011,6 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         return [];
       }
       
-      debugLog('FRESH_OVERRIDES', `Fetched ${currentOverrides?.length || 0} fresh validation overrides`);
       return currentOverrides || [];
     } catch (error) {
       console.error('Error in getFreshValidationOverrides:', error);
@@ -2145,11 +2092,6 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
     setProcessed(false);
 
     try {
-      debugLog('SESSION', 'Starting processing session', { 
-        sessionId: newSessionId,
-        startDate: projectStartDate,
-        categoryConfig: infoByCategoryConfig 
-      });
 
       // 🆕 Sync overrides before processing to prevent duplicate key errors!
       await syncOverridesToCurrentVersion();
@@ -3495,11 +3437,12 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                   {missingPropertiesReport.summary.total_missing > 0 && (
                     <button
                       onClick={() => exportMissingPropertiesReport()}
-                      className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 flex items-center space-x-2"
+                      className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center space-x-2"
                     >
                       <Download className="w-4 h-4" />
                       <span>Export Missing Report</span>
                     </button>
+                  )}
                   )}
                 </div>
 
