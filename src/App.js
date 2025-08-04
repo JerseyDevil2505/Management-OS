@@ -46,7 +46,7 @@ function App() {
     checkSession();
   }, []);
 
-    // Set page title based on environment
+  // Set page title based on environment
   useEffect(() => {
     if (window.location.hostname.includes('production-black-seven') || 
         window.location.hostname === 'localhost' ||
@@ -55,9 +55,8 @@ function App() {
       document.title = 'Mgmt OS Development';
     } else {
       document.title = 'Mgmt OS Production';
-    }  
+    }
   }, []);
- 
 
   const checkSession = async () => {
     try {
@@ -413,6 +412,20 @@ function App() {
 
   // Show landing page if not authenticated
   if (!user) {
+    console.log('LandingPage type:', typeof LandingPage);
+    console.log('LandingPage:', LandingPage);
+    
+    if (typeof LandingPage !== 'function') {
+      return (
+        <div style={{ padding: '20px' }}>
+          <h1>Loading Error</h1>
+          <p>LandingPage is not a valid component</p>
+          <p>Type: {typeof LandingPage}</p>
+          <pre>{JSON.stringify(LandingPage, null, 2)}</pre>
+        </div>
+      );
+    }
+    
     return <LandingPage onLogin={handleLogin} />;
   }
 
