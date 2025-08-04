@@ -1321,6 +1321,10 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
           return;
         }
 
+        // Check if inspector is external
+        const externalInspectors = externalInspectorsList.split(',').map(code => code.trim()).filter(code => code);
+        const isExternalInspector = externalInspectors.includes(inspector);
+        
         // Skip inspectors with invalid initials (not in employee database)
         if (!employeeData[inspector]) {
           reasonNotAdded = `Inspector ${inspector} not found in employee database`;
