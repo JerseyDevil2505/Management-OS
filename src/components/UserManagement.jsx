@@ -31,7 +31,7 @@ const UserManagement = () => {
       const { data, error } = await supabase
         .from('employees')
         .select('*')
-        .order('name');
+        .order('last_name');
 
       if (error) throw error;
       setUsers(data || []);
@@ -198,7 +198,7 @@ const UserManagement = () => {
             <tbody>
               {users.map(user => (
                 <tr key={user.id}>
-                  <td>{user.name}</td>
+                  <td>{user.first_name} {user.last_name}</td>
                   <td>{user.email}</td>
                   <td>
                     <select
@@ -309,7 +309,7 @@ const UserManagement = () => {
       {showResetModal && selectedUser && (
         <div className="um-modal-overlay" onClick={() => setShowResetModal(false)}>
           <div className="um-modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Reset Password for {selectedUser.name}</h3>
+            <h3>Reset Password for {selectedUser.first_name} {selectedUser.last_name}</h3>
             <p className="reset-info">
               A password reset email will be sent to {selectedUser.email}
             </p>
