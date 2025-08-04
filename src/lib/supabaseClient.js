@@ -576,6 +576,7 @@ export const checklistService = {
   // Get all checklist items for a job
   async getChecklistItems(jobId) {
     try {
+      console.log('📋 Loading checklist items for job:', jobId);
       
       const { data, error } = await supabase
         .from('checklist_items')
@@ -585,6 +586,7 @@ export const checklistService = {
       
       if (error) throw error;
       
+      console.log(`✅ Loaded ${data?.length || 0} checklist items`);
       return data || [];
     } catch (error) {
       console.error('Checklist items fetch error:', error);
@@ -645,6 +647,7 @@ export const checklistService = {
   // Create initial checklist items for a new job
   async createChecklistForJob(jobId, checklistType = 'revaluation') {
     try {
+      console.log('🔨 Creating checklist items for job:', jobId);
       
       // The 29 template items
       const templateItems = [
@@ -702,6 +705,7 @@ export const checklistService = {
       
       if (error) throw error;
       
+      console.log(`✅ Created ${data.length} checklist items for job`);
       return data;
     } catch (error) {
       console.error('Checklist creation error:', error);
@@ -723,9 +727,32 @@ export const checklistService = {
         .single();
       
       if (error) throw error;
+      console.log('✅ Updated client name:', clientName);
       return data;
     } catch (error) {
       console.error('Client name update error:', error);
+      throw error;
+    }
+  },
+
+  // Update assessor email on job
+  async updateAssessorEmail(jobId, assessorEmail) {
+    try {
+      const { data, error } = await supabase
+        .from('jobs')
+        .update({ 
+          assessor_email: assessorEmail,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', jobId)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      console.log('✅ Updated assessor email:', assessorEmail);
+      return data;
+    } catch (error) {
+      console.error('Assessor email update error:', error);
       throw error;
     }
   },
@@ -737,12 +764,16 @@ export const checklistService = {
       const timestamp = Date.now();
       const fileName = `${jobId}/${itemId}_${timestamp}_${file.name}`;
       
+      console.log('📤 Uploading file to storage:', fileName);
+      
       // Upload to Supabase Storage
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('checklist-documents')
         .upload(fileName, file);
       
       if (uploadError) throw uploadError;
+      
+      console.log('💾 Saving file info to database...');
       
       // Save file info to checklist_documents table
       const { data: docData, error: docError } = await supabase
@@ -760,6 +791,8 @@ export const checklistService = {
       
       if (docError) throw docError;
       
+      console.log('✅ Updating checklist item status...');
+      
       // Update checklist item to completed status
       const { data: itemData, error: itemError } = await supabase
         .from('checklist_items')
@@ -776,6 +809,7 @@ export const checklistService = {
       
       if (itemError) throw itemError;
       
+      console.log('✅ File uploaded successfully:', fileName);
       return itemData;
     } catch (error) {
       console.error('File upload error:', error);
@@ -795,6 +829,7 @@ export const checklistService = {
       
       if (error) throw error;
       
+      console.log(`✅ Generated mailing list with ${data.length} properties`);
       return data;
     } catch (error) {
       console.error('Mailing list generation error:', error);
@@ -839,6 +874,7 @@ export const checklistService = {
         .single();
       
       if (error) throw error;
+      console.log('✅ Job archived successfully');
       return data;
     } catch (error) {
       console.error('Job archive error:', error);
@@ -949,6 +985,7 @@ export const propertyService = {
   // EXISTING: Import method with versionInfo parameter for FileUploadButton support - CALLS PROCESSORS (INSERT)
   async importCSVData(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, vendorType, versionInfo = {}) {
     try {
+      console.log(`🔄 Importing ${vendorType} data for job ${jobId}`);
       
       // Use updated processors for single-table insertion
       if (vendorType === 'BRT') {
@@ -973,6 +1010,7 @@ export const propertyService = {
   // ENHANCED: Update method with field preservation that calls UPDATERS (UPSERT) for existing jobs
   async updateCSVData(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, vendorType, versionInfo = {}) {
     try {
+      console.log(`🔄 Updating ${vendorType} data for job ${jobId} with field preservation`);
       
       // Store preserved fields handler in versionInfo for updaters to use
       versionInfo.preservedFieldsHandler = this.createPreservedFieldsHandler.bind(this);
@@ -1038,6 +1076,7 @@ export const propertyService = {
         });
       }
       
+      console.log(`✅ Loaded preserved data for ${preservedDataMap.size} properties`);
     } catch (error) {
       console.error('Error in createPreservedFieldsHandler:', error);
     }
@@ -1189,6 +1228,7 @@ export const sourceFileService = {
 export const productionDataService = {
   async updateSummary(jobId) {
     try {
+      console.log(`📊 Updating production summary for job ${jobId}`);
       
       // Get property counts from single table
       const { count, error: countError } = await supabase
