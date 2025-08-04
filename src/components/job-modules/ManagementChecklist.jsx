@@ -6,7 +6,9 @@ import { supabase, checklistService } from '../../lib/supabaseClient';
 
 const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checklist', onSubModuleChange }) => {
   const [editableClientName, setEditableClientName] = useState(jobData?.client_name || '');
+  const [editableAssessorEmail, setEditableAssessorEmail] = useState(jobData?.assessor_email || '');
   const [hasClientNameChanges, setHasClientNameChanges] = useState(false);
+  const [hasAssessorEmailChanges, setHasAssessorEmailChanges] = useState(false);
   const [checklistType, setChecklistType] = useState('revaluation');
   const [checklistItems, setChecklistItems] = useState([]);
   const [filterCategory, setFilterCategory] = useState('all');
@@ -14,7 +16,7 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
   const [searchTerm, setSearchTerm] = useState('');
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
   const [mailingListPreview, setMailingListPreview] = useState(null);
-  const [uploading, setUploading] = useState(false);
+  const [uploadingItems, setUploadingItems] = useState({});
   const [currentUser, setCurrentUser] = useState(null);
   const [isLoadingItems, setIsLoadingItems] = useState(true);
   const fileInputRef = useRef();
@@ -175,6 +177,10 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
     setHasClientNameChanges(editableClientName !== jobData?.client_name);
   }, [editableClientName, jobData?.client_name]);
 
+  useEffect(() => {
+    setHasAssessorEmailChanges(editableAssessorEmail !== jobData?.assessor_email);
+  }, [editableAssessorEmail, jobData?.assessor_email]);
+
   const getCategoryIcon = (category) => {
     switch (category) {
       case 'setup': return Building;
@@ -259,15 +265,20 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
   };
 
   const handleFileUpload = async (itemId, file) => {
+    console.log('📁 Starting file upload:', { itemId, fileName: file.name, fileSize: file.size });
+    
     if (file.size > 200 * 1024 * 1024) {
       alert('File size exceeds 200MB limit');
       return;
     }
     
-    setUploading(true);
+    setUploadingItems(prev => ({ ...prev, [itemId]: true }));
     try {
+      console.log('📤 Calling checklistService.uploadFile...');
       // Upload file and update item - PASS UUID NOT NAME!
       const updatedItem = await checklistService.uploadFile(itemId, jobData.id, file, currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad');
+      
+      console.log('✅ Upload successful:', updatedItem);
       
       // Update local state
       setChecklistItems(items => items.map(item => 
@@ -276,10 +287,11 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
       
       alert('File uploaded successfully!');
     } catch (error) {
-      console.error('Error uploading file:', error);
+      console.error('❌ Error uploading file:', error);
+      console.error('Error details:', error.message, error.stack);
       alert('Failed to upload file. Please try again.');
     } finally {
-      setUploading(false);
+      setUploadingItems(prev => ({ ...prev, [itemId]: false }));
     }
   };
 
@@ -301,7 +313,23 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
     }
   };
 
-  const generateMailingList = async () => {
+  const saveAssessorEmail = async () => {
+    try {
+      console.log('Saving assessor email:', editableAssessorEmail);
+      
+      // Save to database
+      await checklistService.updateAssessorEmail(jobData.id, editableAssessorEmail);
+      
+      // Update local state
+      setHasAssessorEmailChanges(false);
+      
+      // Success feedback
+      alert('Assessor email updated successfully!');
+    } catch (error) {
+      console.error('Error saving assessor email:', error);
+      alert('Failed to save assessor email. Please try again.');
+    }
+  };
     try {
       const mailingData = await checklistService.generateMailingList(jobData.id);
       
@@ -347,7 +375,26 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
     }
   };
 
-  const confirmArchive = async () => {
+  const downloadFile = async (filePath, fileName) => {
+    try {
+      console.log('📥 Downloading file:', filePath);
+      
+      // Get public URL for the file
+      const { data } = supabase.storage
+        .from('checklist-documents')
+        .getPublicUrl(filePath);
+      
+      if (data?.publicUrl) {
+        // Open in new tab or trigger download
+        window.open(data.publicUrl, '_blank');
+      } else {
+        throw new Error('Could not get file URL');
+      }
+    } catch (error) {
+      console.error('Error downloading file:', error);
+      alert('Failed to download file. Please try again.');
+    }
+  };
     try {
       // Archive the job
       await checklistService.archiveJob(jobData.id, new Date().toISOString());
@@ -408,6 +455,27 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
                   {hasClientNameChanges && (
                     <button
                       onClick={saveClientName}
+                      className="px-3 py-2 bg-blue-500 text-white rounded-md text-sm hover:bg-blue-600 flex items-center gap-1"
+                    >
+                      <Save className="w-4 h-4" />
+                      Save
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <label className="text-sm font-medium text-gray-700 w-32">Assessor Email:</label>
+                <div className="flex items-center gap-2 flex-1">
+                  <input
+                    type="email"
+                    value={editableAssessorEmail}
+                    onChange={(e) => setEditableAssessorEmail(e.target.value)}
+                    className="px-3 py-2 border border-gray-300 rounded-md text-sm flex-1"
+                    placeholder="Enter assessor email"
+                  />
+                  {hasAssessorEmailChanges && (
+                    <button
+                      onClick={saveAssessorEmail}
                       className="px-3 py-2 bg-blue-500 text-white rounded-md text-sm hover:bg-blue-600 flex items-center gap-1"
                     >
                       <Save className="w-4 h-4" />
@@ -614,7 +682,10 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
                       <div className="flex items-center gap-2 text-sm text-blue-600 mb-2">
                         <FileText className="w-4 h-4" />
                         <span>{item.file_attachment_path.split('/').pop()}</span>
-                        <ExternalLink className="w-4 h-4 cursor-pointer hover:text-blue-800" />
+                        <ExternalLink 
+                          className="w-4 h-4 cursor-pointer hover:text-blue-800" 
+                          onClick={() => downloadFile(item.file_attachment_path, item.file_attachment_path.split('/').pop())}
+                        />
                       </div>
                     )}
                     {item.notes && (
@@ -664,11 +735,11 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
                       />
                       <button
                         onClick={() => fileInputRef.current?.click()}
-                        disabled={uploading}
+                        disabled={uploadingItems[item.id]}
                         className="px-3 py-1 bg-blue-500 text-white rounded-md text-sm hover:bg-blue-600 disabled:bg-gray-400 flex items-center gap-1"
                       >
                         <Upload className="w-4 h-4" />
-                        {uploading ? 'Uploading...' : 'Upload File'}
+                        {uploadingItems[item.id] ? 'Uploading...' : 'Upload File'}
                       </button>
                     </div>
                   )}
