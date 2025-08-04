@@ -3512,8 +3512,8 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                   </div>
                 ) : (
                   <>
-                    {/* Summary Cards */}
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+{/* Summary Cards */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
                       <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
                         <div className="flex items-center justify-between">
                           <div>
@@ -3556,7 +3556,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                           <X className="w-8 h-8 text-red-500" />
                         </div>
                       </div>
-                      {/* ADD: New tiles for missing categories */}
+
                       <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
                         <div className="flex items-center justify-between">
                           <div>
@@ -3578,7 +3578,6 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                           <AlertTriangle className="w-8 h-8 text-purple-500" />
                         </div>
                       </div>
-                      {
                     </div>
 
                     {/* Assignment Status Card - Only show if job has assignments */}
