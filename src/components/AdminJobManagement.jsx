@@ -1055,6 +1055,7 @@ useEffect(() => {
       };
 
       const createdJob = await jobService.create(jobData);
+      let result = null;
       
       if (!isMountedRef.current) return;
       
@@ -1085,7 +1086,7 @@ useEffect(() => {
           originalConsoleLog(...args);
         };
         
-        const result = await propertyService.importCSVData(
+        result = await propertyService.importCSVData(
           sourceFileContent,
           codeFileContent,
           createdJob.id,
@@ -1118,37 +1119,66 @@ useEffect(() => {
           });
         }
         
-        const updateData = {
-          sourceFileStatus: result.errors > 0 ? 'error' : 'imported',
-          totalProperties: result.processed || 0
-        };
-        
-        await jobService.update(createdJob.id, updateData);
-        
-        updateProcessingStatus('Refreshing job list...', 95);
-        
-        // Refresh with assigned property counts
-        await refreshJobsWithAssignedCounts();
-        
-        // DO NOT trigger metrics refresh here - wait until Close button
-        // This was causing re-renders during processing
-        
-        updateProcessingStatus('Complete!', 100);
-        
-        setProcessingResults({
-          success: result.errors === 0,
-          processed: result.processed || 0,
-          errors: result.errors || 0,
-          warnings: result.warnings || [],
-          processingTime: new Date() - new Date(processingStatus.startTime),
-          jobName: newJob.name,
-          vendor: newJob.vendor
-        });
-        
-        if (result.errors > 0) {
-          addNotification(`Job created but ${result.errors} errors occurred during processing`, 'warning');
+        // Check if job creation failed due to cleanup
+        if (result && result.error && (result.error.includes('cleaned up') || result.error.includes('Job creation failed'))) {
+          // Job creation failed - delete the job record
+          try {
+            await jobService.delete(createdJob.id);
+            console.log('✅ Deleted failed job record');
+          } catch (deleteError) {
+            console.error('Failed to delete job record:', deleteError);
+          }
+          
+          updateProcessingStatus('Job creation failed - data cleaned up', 0, {
+            errors: [result.error]
+          });
+          
+          setProcessingResults({
+            success: false,
+            processed: 0,
+            errors: 1,
+            warnings: [result.error],
+            processingTime: new Date() - new Date(processingStatus.startTime),
+            jobName: newJob.name,
+            vendor: newJob.vendor,
+            failureReason: result.error
+          });
+          
+          addNotification('❌ Job creation failed - all data cleaned up. No job was created.', 'error');
         } else {
-          addNotification(`Job created successfully! Processed ${result.processed} properties.`, 'success');
+          // Normal processing - job succeeded
+          const updateData = {
+            sourceFileStatus: result.errors > 0 ? 'error' : 'imported',
+            totalProperties: result.processed || 0
+          };
+          
+          await jobService.update(createdJob.id, updateData);
+          
+          updateProcessingStatus('Refreshing job list...', 95);
+          
+          // Only refresh jobs list if processing was successful
+          await refreshJobsWithAssignedCounts();
+          
+          // DO NOT trigger metrics refresh here - wait until Close button
+          // This was causing re-renders during processing
+          
+          updateProcessingStatus('Complete!', 100);
+          
+          setProcessingResults({
+            success: result.errors === 0,
+            processed: result.processed || 0,
+            errors: result.errors || 0,
+            warnings: result.warnings || [],
+            processingTime: new Date() - new Date(processingStatus.startTime),
+            jobName: newJob.name,
+            vendor: newJob.vendor
+          });
+          
+          if (result.errors > 0) {
+            addNotification(`Job created but ${result.errors} errors occurred during processing`, 'warning');
+          } else {
+            addNotification(`Job created successfully! Processed ${result.processed} properties.`, 'success');
+          }
         }
 
         // Don't close modal automatically - let user click Close
@@ -1558,26 +1588,50 @@ useEffect(() => {
               
               {/* Completion Results */}
               {processingResults && (
-                <div className="mb-4 p-4 bg-green-50 rounded-lg border-2 border-green-200">
-                  <div className="text-lg font-bold text-green-800 mb-3">🎉 Processing Complete!</div>
-                  <div className="text-sm text-green-700 space-y-2">
-                    <div className="flex justify-between">
-                      <span>✅ Properties Processed:</span>
-                      <span className="font-bold">{processingResults.processed.toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>⏱️ Total Time:</span>
-                      <span className="font-bold">{formatElapsedTime(processingStatus.startTime)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>🏢 Job Created:</span>
-                      <span className="font-bold">{processingResults.jobName}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>📊 Vendor:</span>
-                      <span className="font-bold">{processingResults.vendor}</span>
-                    </div>
-                    {processingResults.errors > 0 && (
+                <div className={`mb-4 p-4 rounded-lg border-2 ${
+                  processingResults.success 
+                    ? 'bg-green-50 border-green-200' 
+                    : 'bg-red-50 border-red-200'
+                }`}>
+                  <div className={`text-lg font-bold mb-3 ${
+                    processingResults.success ? 'text-green-800' : 'text-red-800'
+                  }`}>
+                    {processingResults.success ? '🎉 Processing Complete!' : '❌ Job Creation Failed!'}
+                  </div>
+                  <div className={`text-sm ${
+                    processingResults.success ? 'text-green-700' : 'text-red-700'
+                  } space-y-2`}>
+                    {processingResults.success ? (
+                      <>
+                        <div className="flex justify-between">
+                          <span>✅ Properties Processed:</span>
+                          <span className="font-bold">{processingResults.processed.toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>⏱️ Total Time:</span>
+                          <span className="font-bold">{formatElapsedTime(processingStatus.startTime)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>🏢 Job Created:</span>
+                          <span className="font-bold">{processingResults.jobName}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>📊 Vendor:</span>
+                          <span className="font-bold">{processingResults.vendor}</span>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="font-bold">All partial data has been cleaned up.</div>
+                        <div className="mt-2">
+                          <span className="font-medium">Reason:</span> {processingResults.failureReason || 'Processing failed'}
+                        </div>
+                        <div className="text-xs mt-2 text-red-600">
+                          No job was created. Please check your data files and try again.
+                        </div>
+                      </>
+                    )}
+                    {processingResults.errors > 0 && processingResults.success && (
                       <div className="flex justify-between text-red-600">
                         <span>⚠️ Errors:</span>
                         <span className="font-bold">{processingResults.errors}</span>
