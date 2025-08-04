@@ -574,7 +574,7 @@ Thank you for your immediate attention to this matter.`;
         .from('planning_jobs')
         .select('*')
         .not('contract_amount', 'is', null)
-        .neq('contract_amount', 0)
+        .gt('contract_amount', 0)
         .or('is_archived.eq.false,is_archived.is.null');
 
       const allJobs = [];
@@ -583,22 +583,32 @@ Thank you for your immediate attention to this matter.`;
       if (activeJobsData) {
         activeJobsData.forEach(job => {
           const contract = job.job_contracts?.[0];
-          const parcels = job.workflow_stats?.total || job.total_properties || job.totalresidential + job.totalcommercial || 0;
           
-          // Calculate % complete from workflow stats
+          // Get parcels from workflow_stats or job properties
+          let parcels = 0;
+          if (job.workflow_stats?.totalRecords) {
+            parcels = job.workflow_stats.totalRecords;
+          } else if (job.workflow_stats?.billingAnalytics?.totalBillable) {
+            parcels = job.workflow_stats.billingAnalytics.totalBillable;
+          } else {
+            parcels = job.total_properties || (job.totalresidential + job.totalcommercial) || 0;
+          }
+          
+          // Calculate % complete from workflow_stats
           let percentComplete = '0.0';
           if (job.workflow_stats) {
-            const billable = job.workflow_stats.billable || 0;
-            const total = job.workflow_stats.total || 0;
-            if (total > 0) {
+            const billable = job.workflow_stats.billingAnalytics?.totalBillable || 0;
+            const total = job.workflow_stats.totalRecords || 0;
+            if (total > 0 && billable > 0) {
               percentComplete = ((billable / total) * 100).toFixed(1);
             }
           }
           
-          // Calculate % billed
+          // Calculate % billed from billing events
           let percentBilled = '0.0';
-          if (job.billing_events && contract) {
-            const totalBilled = job.billing_events.reduce((sum, event) => sum + parseFloat(event.percentage_billed || 0), 0);
+          if (job.billing_events && job.billing_events.length > 0) {
+            const totalBilled = job.billing_events.reduce((sum, event) => 
+              sum + parseFloat(event.percentage_billed || 0), 0);
             percentBilled = (totalBilled * 100).toFixed(1);
           }
           
@@ -620,10 +630,13 @@ Thank you for your immediate attention to this matter.`;
       // Process planning jobs
       if (planningJobsData) {
         planningJobsData.forEach(job => {
-          const parcels = job.total_properties || job.residential_properties + job.commercial_properties || 0;
+          const parcels = job.total_properties || 
+                         (job.residential_properties + job.commercial_properties) || 
+                         0;
+          
           if (parcels > 0 && job.contract_amount > 0) {
             allJobs.push({
-              municipality: job.municipality || job.job_name,
+              municipality: job.municipality || job.job_name || 'Unknown',
               completionYear: job.end_date ? new Date(job.end_date).getFullYear() : new Date().getFullYear() + 2,
               contractStatus: 'PENDING',
               parcels: parcels,
@@ -644,7 +657,7 @@ Thank you for your immediate attention to this matter.`;
       const totalAmount = allJobs.reduce((sum, job) => sum + parseFloat(job.amount), 0);
       const avgPricePerParcel = totalParcels > 0 ? (totalAmount / totalParcels).toFixed(2) : '0.00';
       
-      // Generate enhanced HTML report
+      // Generate HTML report
       const reportHTML = `
 <!DOCTYPE html>
 <html>
@@ -844,7 +857,7 @@ Thank you for your immediate attention to this matter.`;
       </div>
       <div class="summary-item">
         <div class="summary-label">Contract Value</div>
-        <div class="summary-value">$${(totalAmount / 1000000).toFixed(1)}M</div>
+        <div class="summary-value">$${totalAmount.toLocaleString()}</div>
       </div>
       <div class="summary-item">
         <div class="summary-label">Avg $/Parcel</div>
@@ -873,7 +886,6 @@ Thank you for your immediate attention to this matter.`;
       alert('Error generating report: ' + error.message);
     }
   };
-
   const calculateBillingTotals = (job) => {
     if (!job.job_contracts?.[0] || !job.billing_events) return null;
     
