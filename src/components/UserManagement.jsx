@@ -71,24 +71,26 @@ const UserManagement = () => {
         return;
       }
 
-      // Create auth user
-      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+      // Create auth user using regular signUp
+      const { data: authData, error: authError } = await supabase.auth.signUp({
         email: newUser.email,
-        password: newUser.password,
-        email_confirm: true
+        password: newUser.password
       });
 
       if (authError) throw authError;
 
-      // Update employee role
+      // Update employee role and has_account flag
       const { error: updateError } = await supabase
         .from('employees')
-        .update({ role: newUser.role })
+        .update({ 
+          role: newUser.role,
+          has_account: true 
+        })
         .eq('email', newUser.email.toLowerCase());
 
       if (updateError) throw updateError;
 
-      setSuccessMessage('User created successfully');
+      setSuccessMessage('User created successfully. They should check their email to confirm.');
       setShowCreateModal(false);
       setNewUser({ email: '', password: '', confirmPassword: '', role: 'inspector' });
       loadUsers();
@@ -103,32 +105,22 @@ const UserManagement = () => {
     setError('');
     setSuccessMessage('');
 
-    if (resetPassword !== confirmResetPassword) {
-      setError('Passwords do not match');
-      return;
-    }
-
-    if (resetPassword.length < 6) {
-      setError('Password must be at least 6 characters');
-      return;
-    }
-
     try {
-      const { error } = await supabase.auth.admin.updateUserById(
-        selectedUser.id,
-        { password: resetPassword }
-      );
+      // Send password reset email
+      const { error } = await supabase.auth.resetPasswordForEmail(selectedUser.email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
 
       if (error) throw error;
 
-      setSuccessMessage(`Password reset successfully for ${selectedUser.email}`);
+      setSuccessMessage(`Password reset email sent to ${selectedUser.email}`);
       setShowResetModal(false);
       setResetPassword('');
       setConfirmResetPassword('');
       setSelectedUser(null);
     } catch (err) {
       console.error('Error resetting password:', err);
-      setError(err.message || 'Failed to reset password');
+      setError(err.message || 'Failed to send reset email');
     }
   };
 
@@ -318,35 +310,16 @@ const UserManagement = () => {
         <div className="um-modal-overlay" onClick={() => setShowResetModal(false)}>
           <div className="um-modal" onClick={(e) => e.stopPropagation()}>
             <h3>Reset Password for {selectedUser.name}</h3>
+            <p className="reset-info">
+              A password reset email will be sent to {selectedUser.email}
+            </p>
             <form onSubmit={handleResetPassword}>
-              <div className="um-form-group">
-                <label>New Password</label>
-                <input
-                  type="password"
-                  value={resetPassword}
-                  onChange={(e) => setResetPassword(e.target.value)}
-                  placeholder="Minimum 6 characters"
-                  required
-                />
-              </div>
-
-              <div className="um-form-group">
-                <label>Confirm New Password</label>
-                <input
-                  type="password"
-                  value={confirmResetPassword}
-                  onChange={(e) => setConfirmResetPassword(e.target.value)}
-                  placeholder="Confirm password"
-                  required
-                />
-              </div>
-
               <div className="um-modal-actions">
                 <button type="button" onClick={() => setShowResetModal(false)}>
                   Cancel
                 </button>
                 <button type="submit" className="primary">
-                  Reset Password
+                  Send Reset Email
                 </button>
               </div>
             </form>
