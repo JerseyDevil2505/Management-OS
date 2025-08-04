@@ -614,10 +614,8 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
         jobName: job.name
       });
 
-        // Only refresh jobs list if processing was successful
-        if (!result.error || !result.error.includes('cleaned up')) {
-          await refreshJobsWithAssignedCounts();
-        }
+      // Refresh jobs data with updated assigned property counts
+      await refreshJobsWithAssignedCounts();
 
       const matchPercentage = assignments.length > 0 ? Math.round((matchedCount / assignments.length) * 100) : 0;
       addNotification(
@@ -1057,7 +1055,6 @@ useEffect(() => {
       };
 
       const createdJob = await jobService.create(jobData);
-      let result = null;
       
       if (!isMountedRef.current) return;
       
@@ -1088,7 +1085,7 @@ useEffect(() => {
           originalConsoleLog(...args);
         };
         
-        result = await propertyService.importCSVData(
+        const result = await propertyService.importCSVData(
           sourceFileContent,
           codeFileContent,
           createdJob.id,
@@ -1147,41 +1144,15 @@ useEffect(() => {
           jobName: newJob.name,
           vendor: newJob.vendor
         });
-             
-          addNotification('❌ Job creation failed - all data cleaned up. No job was created.', 'error');
-        // Check if job creation failed due to cleanup
-        if (result && result.error && (result.error.includes('cleaned up') || result.error.includes('Job creation failed'))) {
-          // Job creation failed - delete the job record
-          try {
-            await jobService.delete(createdJob.id);
-            console.log('✅ Deleted failed job record');
-          } catch (deleteError) {
-            console.error('Failed to delete job record:', deleteError);
-          }
-          
-          updateProcessingStatus('Job creation failed - data cleaned up', 0, {
-            errors: [result.error]
-          });
-          
-          setProcessingResults({
-            success: false,
-            processed: 0,
-            errors: 1,
-            warnings: [result.error],
-            processingTime: new Date() - new Date(processingStatus.startTime),
-            jobName: newJob.name,
-            vendor: newJob.vendor,
-            failureReason: result.error
-          });
-          
-          addNotification('❌ Job creation failed - all data cleaned up. No job was created.', 'error');
-        } else if (result && result.errors > 0) {
+        
+        if (result.errors > 0) {
           addNotification(`Job created but ${result.errors} errors occurred during processing`, 'warning');
-        } else if (result) {
+        } else {
           addNotification(`Job created successfully! Processed ${result.processed} properties.`, 'success');
         }
 
         // Don't close modal automatically - let user click Close
+      }
       
     } catch (error) {
       console.error('Job creation error:', error);
@@ -1243,9 +1214,7 @@ useEffect(() => {
       await jobService.update(editingJob.id, updateData);
       
       // Refresh with assigned property counts
-        if (!result || !result.error || !result.error.includes('cleaned up')) {
-          await refreshJobsWithAssignedCounts();
-        }
+      await refreshJobsWithAssignedCounts();
       
       closeJobModal();
       addNotification('Job updated successfully!', 'success');
@@ -1588,51 +1557,27 @@ useEffect(() => {
               )}
               
               {/* Completion Results */}
-{processingResults && (
-                <div className={`mb-4 p-4 rounded-lg border-2 ${
-                  processingResults.success 
-                    ? 'bg-green-50 border-green-200' 
-                    : 'bg-red-50 border-red-200'
-                }`}>
-                  <div className={`text-lg font-bold mb-3 ${
-                    processingResults.success ? 'text-green-800' : 'text-red-800'
-                  }`}>
-                    {processingResults.success ? '🎉 Processing Complete!' : '❌ Job Creation Failed!'}
-                  </div>
-                  <div className={`text-sm ${
-                    processingResults.success ? 'text-green-700' : 'text-red-700'
-                  } space-y-2`}>
-                    {processingResults.success ? (
-                      <>
-                        <div className="flex justify-between">
-                          <span>✅ Properties Processed:</span>
-                          <span className="font-bold">{processingResults.processed.toLocaleString()}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>⏱️ Total Time:</span>
-                          <span className="font-bold">{formatElapsedTime(processingStatus.startTime)}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>🏢 Job Created:</span>
-                          <span className="font-bold">{processingResults.jobName}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>📊 Vendor:</span>
-                          <span className="font-bold">{processingResults.vendor}</span>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <div className="font-bold">All partial data has been cleaned up.</div>
-                        <div className="mt-2">
-                          <span className="font-medium">Reason:</span> {processingResults.failureReason || 'Processing failed'}
-                        </div>
-                        <div className="text-xs mt-2 text-red-600">
-                          No job was created. Please check your data files and try again.
-                        </div>
-                      </>
-                    )}
-                    {processingResults.errors > 0 && processingResults.success && (
+              {processingResults && (
+                <div className="mb-4 p-4 bg-green-50 rounded-lg border-2 border-green-200">
+                  <div className="text-lg font-bold text-green-800 mb-3">🎉 Processing Complete!</div>
+                  <div className="text-sm text-green-700 space-y-2">
+                    <div className="flex justify-between">
+                      <span>✅ Properties Processed:</span>
+                      <span className="font-bold">{processingResults.processed.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>⏱️ Total Time:</span>
+                      <span className="font-bold">{formatElapsedTime(processingStatus.startTime)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>🏢 Job Created:</span>
+                      <span className="font-bold">{processingResults.jobName}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>📊 Vendor:</span>
+                      <span className="font-bold">{processingResults.vendor}</span>
+                    </div>
+                    {processingResults.errors > 0 && (
                       <div className="flex justify-between text-red-600">
                         <span>⚠️ Errors:</span>
                         <span className="font-bold">{processingResults.errors}</span>
