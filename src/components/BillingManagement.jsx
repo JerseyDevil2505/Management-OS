@@ -559,47 +559,82 @@ Thank you for your immediate attention to this matter.`;
 
   const generateBondLetter = async () => {
     try {
-      // Combine active and planned jobs
+      // Fetch ALL data we need
+      const { data: activeJobsData } = await supabase
+        .from('jobs')
+        .select(`
+          *,
+          job_contracts(*),
+          workflow_stats,
+          billing_events(*)
+        `)
+        .eq('job_type', 'standard');
+
+      const { data: planningJobsData } = await supabase
+        .from('planning_jobs')
+        .select('*')
+        .not('contract_amount', 'is', null)
+        .neq('contract_amount', 0)
+        .or('is_archived.eq.false,is_archived.is.null');
+
       const allJobs = [];
       
-      // Add active jobs
-      jobs.filter(j => j.job_type === 'standard').forEach(job => {
-        const contract = job.job_contracts?.[0];
-        const parcels = job.workflow_stats?.total || job.total_properties || 0;
-        const percentComplete = job.workflow_stats?.billable && job.workflow_stats?.total 
-          ? ((job.workflow_stats.billable / job.workflow_stats.total) * 100).toFixed(1)
-          : '0.0';
-        
-        if (contract && parcels > 0) {
-          allJobs.push({
-            municipality: job.job_name,
-            completionYear: new Date().getFullYear() + 1, // Assume next year
-            contractStatus: 'YES',
-            parcels: parcels,
-            amount: contract.contract_amount,
-            pricePerParcel: (contract.contract_amount / parcels).toFixed(2),
-            percentComplete: percentComplete,
-            percentBilled: ((job.percent_billed || 0) * 100).toFixed(1)
-          });
-        }
-      });
+      // Process active jobs
+      if (activeJobsData) {
+        activeJobsData.forEach(job => {
+          const contract = job.job_contracts?.[0];
+          const parcels = job.workflow_stats?.total || job.total_properties || job.totalresidential + job.totalcommercial || 0;
+          
+          // Calculate % complete from workflow stats
+          let percentComplete = '0.0';
+          if (job.workflow_stats) {
+            const billable = job.workflow_stats.billable || 0;
+            const total = job.workflow_stats.total || 0;
+            if (total > 0) {
+              percentComplete = ((billable / total) * 100).toFixed(1);
+            }
+          }
+          
+          // Calculate % billed
+          let percentBilled = '0.0';
+          if (job.billing_events && contract) {
+            const totalBilled = job.billing_events.reduce((sum, event) => sum + parseFloat(event.percentage_billed || 0), 0);
+            percentBilled = (totalBilled * 100).toFixed(1);
+          }
+          
+          if (contract && parcels > 0) {
+            allJobs.push({
+              municipality: job.job_name,
+              completionYear: job.end_date ? new Date(job.end_date).getFullYear() : new Date().getFullYear() + 1,
+              contractStatus: 'YES',
+              parcels: parcels,
+              amount: contract.contract_amount,
+              pricePerParcel: (contract.contract_amount / parcels).toFixed(2),
+              percentComplete: percentComplete,
+              percentBilled: percentBilled
+            });
+          }
+        });
+      }
       
-      // Add planned jobs
-      planningJobs.filter(job => !job.is_archived && job.contract_amount).forEach(job => {
-        const parcels = job.total_properties || 0;
-        if (parcels > 0) {
-          allJobs.push({
-            municipality: job.municipality || job.job_name,
-            completionYear: new Date(job.end_date).getFullYear() || new Date().getFullYear() + 1,
-            contractStatus: 'PENDING',
-            parcels: parcels,
-            amount: job.contract_amount,
-            pricePerParcel: (job.contract_amount / parcels).toFixed(2),
-            percentComplete: '0.0',
-            percentBilled: '0.0'
-          });
-        }
-      });
+      // Process planning jobs
+      if (planningJobsData) {
+        planningJobsData.forEach(job => {
+          const parcels = job.total_properties || job.residential_properties + job.commercial_properties || 0;
+          if (parcels > 0 && job.contract_amount > 0) {
+            allJobs.push({
+              municipality: job.municipality || job.job_name,
+              completionYear: job.end_date ? new Date(job.end_date).getFullYear() : new Date().getFullYear() + 2,
+              contractStatus: 'PENDING',
+              parcels: parcels,
+              amount: job.contract_amount,
+              pricePerParcel: (job.contract_amount / parcels).toFixed(2),
+              percentComplete: '0.0',
+              percentBilled: '0.0'
+            });
+          }
+        });
+      }
       
       // Sort by municipality name
       allJobs.sort((a, b) => a.municipality.localeCompare(b.municipality));
@@ -609,65 +644,213 @@ Thank you for your immediate attention to this matter.`;
       const totalAmount = allJobs.reduce((sum, job) => sum + parseFloat(job.amount), 0);
       const avgPricePerParcel = totalParcels > 0 ? (totalAmount / totalParcels).toFixed(2) : '0.00';
       
-      // Generate HTML report
+      // Generate enhanced HTML report
       const reportHTML = `
 <!DOCTYPE html>
 <html>
 <head>
-  <title>PPA Contract Report</title>
+  <title>PPA Contract Status Report</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 20px; }
-    h1 { font-size: 18px; margin-bottom: 5px; }
-    h2 { font-size: 14px; margin-bottom: 15px; color: #666; }
-    table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
-    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-    th { background-color: #f2f2f2; font-weight: bold; font-size: 12px; }
-    td { font-size: 11px; }
-    .number { text-align: right; }
-    .center { text-align: center; }
-    .summary { margin-top: 20px; font-size: 12px; }
-    .summary-box { background-color: #f8f8f8; padding: 10px; border: 1px solid #ddd; }
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    
+    body { 
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; 
+      margin: 0;
+      padding: 30px;
+      background-color: #f9fafb;
+      color: #111827;
+    }
+    
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+      padding: 40px;
+    }
+    
+    .header {
+      text-align: center;
+      margin-bottom: 40px;
+      border-bottom: 2px solid #e5e7eb;
+      padding-bottom: 20px;
+    }
+    
+    h1 { 
+      font-size: 28px; 
+      font-weight: 700;
+      margin: 0 0 8px 0;
+      color: #1f2937;
+      letter-spacing: -0.5px;
+    }
+    
+    h2 { 
+      font-size: 16px; 
+      font-weight: 400;
+      margin: 0;
+      color: #6b7280;
+    }
+    
+    table { 
+      border-collapse: collapse; 
+      width: 100%; 
+      margin-bottom: 30px;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+    }
+    
+    th { 
+      background: linear-gradient(to bottom, #f9fafb, #f3f4f6);
+      font-weight: 600;
+      font-size: 12px;
+      color: #374151;
+      padding: 12px 16px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid #e5e7eb;
+      text-align: center;
+    }
+    
+    td { 
+      font-size: 13px;
+      padding: 12px 16px;
+      border-bottom: 1px solid #f3f4f6;
+      text-align: center;
+    }
+    
+    tr:hover {
+      background-color: #f9fafb;
+    }
+    
+    tr:last-child td {
+      border-bottom: none;
+    }
+    
+    .municipality {
+      text-align: left;
+      font-weight: 500;
+      color: #1f2937;
+    }
+    
+    .number { 
+      font-variant-numeric: tabular-nums;
+      color: #374151;
+    }
+    
+    .status-yes {
+      display: inline-block;
+      padding: 4px 12px;
+      background-color: #d1fae5;
+      color: #065f46;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    
+    .status-pending {
+      display: inline-block;
+      padding: 4px 12px;
+      background-color: #fef3c7;
+      color: #92400e;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    
+    .summary {
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+      color: white;
+      padding: 24px;
+      border-radius: 12px;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 20px;
+      text-align: center;
+    }
+    
+    .summary-item {
+      padding: 10px;
+    }
+    
+    .summary-label {
+      font-size: 12px;
+      opacity: 0.9;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    
+    .summary-value {
+      font-size: 24px;
+      font-weight: 700;
+    }
+    
+    @media print {
+      body { background: white; padding: 20px; }
+      .container { box-shadow: none; padding: 0; }
+    }
   </style>
 </head>
 <body>
-  <h1>PROFESSIONAL PROPERTY APPRAISERS</h1>
-  <h2>Contract Status Report - ${new Date().toLocaleDateString()}</h2>
-  
-  <table>
-    <thead>
-      <tr>
-        <th>Municipality</th>
-        <th class="center">Completion Year</th>
-        <th class="center">Contract Status</th>
-        <th class="number">Parcels</th>
-        <th class="number">Contract Amount</th>
-        <th class="number">$/Parcel</th>
-        <th class="center">% Complete</th>
-        <th class="center">% Billed</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${allJobs.map(job => `
+  <div class="container">
+    <div class="header">
+      <h1>PROFESSIONAL PROPERTY APPRAISERS</h1>
+      <h2>Contract Status Report - ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</h2>
+    </div>
+    
+    <table>
+      <thead>
         <tr>
-          <td>${job.municipality}</td>
-          <td class="center">${job.completionYear}</td>
-          <td class="center">${job.contractStatus}</td>
-          <td class="number">${job.parcels.toLocaleString()}</td>
-          <td class="number">$${parseFloat(job.amount).toLocaleString()}</td>
-          <td class="number">$${job.pricePerParcel}</td>
-          <td class="center">${job.percentComplete}%</td>
-          <td class="center">${job.percentBilled}%</td>
+          <th style="text-align: left;">Municipality</th>
+          <th>Completion<br>Year</th>
+          <th>Fully<br>Executed</th>
+          <th>Parcels</th>
+          <th>Contract<br>Amount</th>
+          <th>Price per<br>Parcel</th>
+          <th>%<br>Complete</th>
+          <th>%<br>Billed</th>
         </tr>
-      `).join('')}
-    </tbody>
-  </table>
-  
-  <div class="summary-box">
-    <strong>SUMMARY</strong><br>
-    Total Contracts: ${allJobs.length}<br>
-    Total Parcels: ${totalParcels.toLocaleString()}<br>
-    Total Contract Value: $${totalAmount.toLocaleString()}<br>
-    Average Price per Parcel: $${avgPricePerParcel}
+      </thead>
+      <tbody>
+        ${allJobs.map((job, index) => `
+          <tr>
+            <td class="municipality">${job.municipality}</td>
+            <td class="number">${job.completionYear}</td>
+            <td>
+              <span class="${job.contractStatus === 'YES' ? 'status-yes' : 'status-pending'}">
+                ${job.contractStatus}
+              </span>
+            </td>
+            <td class="number">${job.parcels.toLocaleString()}</td>
+            <td class="number">$${parseFloat(job.amount).toLocaleString()}</td>
+            <td class="number">$${job.pricePerParcel}</td>
+            <td class="number">${job.percentComplete}%</td>
+            <td class="number">${job.percentBilled}%</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+    
+    <div class="summary">
+      <div class="summary-item">
+        <div class="summary-label">Total Contracts</div>
+        <div class="summary-value">${allJobs.length}</div>
+      </div>
+      <div class="summary-item">
+        <div class="summary-label">Total Parcels</div>
+        <div class="summary-value">${totalParcels.toLocaleString()}</div>
+      </div>
+      <div class="summary-item">
+        <div class="summary-label">Contract Value</div>
+        <div class="summary-value">$${(totalAmount / 1000000).toFixed(1)}M</div>
+      </div>
+      <div class="summary-item">
+        <div class="summary-label">Avg $/Parcel</div>
+        <div class="summary-value">$${avgPricePerParcel}</div>
+      </div>
+    </div>
   </div>
 </body>
 </html>
@@ -1743,15 +1926,15 @@ Thank you for your immediate attention to this matter.`;
         </div>
       </div>
       {/* Bond Letter Generation Section */}
-      <div className="mb-6">
+      <div className="flex justify-end mb-6">
         <button
           onClick={generateBondLetter}
-          className="w-full px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-semibold rounded-lg shadow-lg hover:from-purple-700 hover:to-indigo-700 transition-all duration-200 flex items-center justify-center space-x-2"
+          className="px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-md shadow hover:bg-purple-700 transition-colors duration-200 flex items-center space-x-2"
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
-          <span>Generate Bond Letter</span>
+          <span>Generate Contract Report</span>
         </button>
       </div>
 
