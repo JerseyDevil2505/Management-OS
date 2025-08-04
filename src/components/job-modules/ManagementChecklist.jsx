@@ -72,14 +72,14 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
   const loadChecklistItems = async () => {
     try {
       setIsLoadingItems(true);
-      console.log('📋 Loading checklist for job:', jobData.id);
+
       
       // First, try to load existing items from checklist_items
       let items = await checklistService.getChecklistItems(jobData.id);
       
       // If no items exist, create them from template
       if (!items || items.length === 0) {
-        console.log('🔨 No checklist items found, creating from template...');
+
         
         // Get the standard revaluation template
         const { data: template, error: templateError } = await supabase
@@ -129,7 +129,7 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
         }
 
         items = createdItems;
-        console.log(`✅ Created ${items.length} checklist items from template`);
+
       }
       
       // Add special action flags based on item text
@@ -167,7 +167,7 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
       }
       
       setChecklistItems(items);
-      console.log(`✅ Loaded ${items.length} checklist items`);
+
     } catch (error) {
       console.error('Error loading checklist items:', error);
       setChecklistItems([]);
@@ -238,8 +238,7 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
       setChecklistItems(items => items.map(item => 
         item.id === itemId ? { ...item, ...updatedItem } : item
       ));
-      
-      console.log(`✅ Updated item ${itemId} status to ${newStatus}`);
+
     } catch (error) {
       console.error('Error updating item status:', error);
       alert('Failed to update status. Please try again.');
@@ -259,8 +258,7 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
       setChecklistItems(items => items.map(item => 
         item.id === itemId ? { ...item, ...updatedItem } : item
       ));
-      
-      console.log(`✅ Updated item ${itemId} client approval to ${approved}`);
+
     } catch (error) {
       console.error('Error updating client approval:', error);
       alert('Failed to update approval. Please try again.');
@@ -268,8 +266,6 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
   };
 
   const handleFileUpload = async (itemId, file) => {
-    console.log('📁 Starting file upload:', { itemId, fileName: file.name, fileSize: file.size });
-    
     if (file.size > 200 * 1024 * 1024) {
       alert('File size exceeds 200MB limit');
       return;
@@ -277,11 +273,8 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
     
     setUploadingItems(prev => ({ ...prev, [itemId]: true }));
     try {
-      console.log('📤 Calling checklistService.uploadFile...');
       // Upload file and update item - PASS UUID NOT NAME!
       const updatedItem = await checklistService.uploadFile(itemId, jobData.id, file, currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad');
-      
-      console.log('✅ Upload successful:', updatedItem);
       
       // Update local state
       setChecklistItems(items => items.map(item => 
@@ -291,7 +284,6 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
       alert('File uploaded successfully!');
     } catch (error) {
       console.error('❌ Error uploading file:', error);
-      console.error('Error details:', error.message, error.stack);
       alert('Failed to upload file. Please try again.');
     } finally {
       setUploadingItems(prev => ({ ...prev, [itemId]: false }));
