@@ -43,11 +43,78 @@ const BillingManagement = () => {
     monthlyCollectionRate: 0,
     projectedYearEnd: 0
   });
+  
+  const [showReminderModal, setShowReminderModal] = useState(false);
+  const [selectedReminderInvoice, setSelectedReminderInvoice] = useState(null);
+  const [reminderMessage, setReminderMessage] = useState('');
+  
   const [reserveSettings, setReserveSettings] = useState({
     operatingReserveMonths: 2, // 0, 1, or 2
     cashReserve: 200000
   });
-  
+
+  //Invoice aging helpers
+  const calculateInvoiceAge = (billingDate) => {
+    const today = new Date();
+    const invoiceDate = new Date(billingDate);
+    const diffTime = today - invoiceDate;
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
+  };
+
+  const getAgingBucket = (days) => {
+    if (days < 30) return 'current';
+    if (days < 60) return '30-59';
+    if (days < 90) return '60-89';
+    if (days < 120) return '90-119';
+    return '120+';
+  };
+
+  const getAgingColor = (days) => {
+    if (days < 30) return '';
+    if (days < 60) return 'bg-yellow-50';
+    if (days < 90) return 'bg-orange-50';
+    if (days < 120) return 'bg-orange-100';
+    return 'bg-red-50';
+  };
+
+  const generateReminderMessage = (invoice, daysOld) => {
+    const municipality = invoice.job_name?.replace(' Township', '')?.replace(' Borough', '')?.replace(' City', '');
+    const amount = formatCurrency(invoice.open_balance || invoice.amount_billed);
+    const invoiceDate = new Date(invoice.billing_date).toLocaleDateString();
+    
+    if (daysOld >= 60 && daysOld < 90) {
+      return `Hi ${municipality},
+
+We wanted to check in on invoice #${invoice.invoice_number} dated ${invoiceDate} for ${amount}. We noticed it's been about ${daysOld} days since submission.
+
+Just wanted to make sure you have everything you need from us to process this payment. Please let us know if you need any additional documentation.
+
+Thanks so much!`;
+    } else if (daysOld >= 90 && daysOld < 120) {
+      return `Hi ${municipality},
+
+Following up on invoice #${invoice.invoice_number} from ${invoiceDate} (${amount}) which is now ${daysOld} days outstanding.
+
+We understand the typical municipal payment timeline is within 60 days per New Jersey statutes. We'd appreciate if you could look into this when you get a chance.
+
+If there are any issues or questions about this invoice, please let us know so we can resolve them promptly.
+
+Thank you for your attention to this matter.`;
+    } else if (daysOld >= 120) {
+      return `Dear ${municipality},
+
+RE: Outstanding Invoice #${invoice.invoice_number} - ${daysOld} Days Past Due
+
+This invoice totaling ${amount} dated ${invoiceDate} remains unpaid after ${daysOld} days. Per N.J.S.A. 40A:5-16, municipal payments are required within 60 days of invoice receipt.
+
+Please remit payment immediately. If there are any disputes regarding this invoice, please notify us in writing within 5 business days.
+
+Thank you for your immediate attention to this matter.`;
+    }
+    
+    return '';
+  };
 
   // Dynamic working days calculation
   const getWorkingDaysForMonth = (year, month) => {
@@ -3446,54 +3513,60 @@ const BillingManagement = () => {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50 sticky top-0">
                     <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Job</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Municipality</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Invoice #</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Amount</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Billing Type</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Open Balance</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Age</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {allOpenInvoices.map((invoice) => (
-                      <tr key={invoice.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                          {invoice.job_name}
-                        </td>
-                        <td className="px-4 py-3 text-sm">
-                          <span className={`px-2 py-1 text-xs rounded-full ${
-                            invoice.job_type === 'legacy_billing' 
-                              ? 'bg-purple-100 text-purple-800' 
-                              : 'bg-blue-100 text-blue-800'
-                          }`}>
-                            {invoice.job_type === 'legacy_billing' ? 'Legacy' : 'Active'}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-600">
-                          {new Date(invoice.billing_date).toLocaleDateString()}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-900">
-                          {invoice.invoice_number}
-                        </td>
-                        <td className="px-4 py-3 text-sm font-semibold text-orange-600">
-                          {formatCurrency(invoice.amount_billed)}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-600">
-                          {invoice.billing_type ? (
-                            <span className="font-medium text-purple-700">
-                              {invoice.billing_type === 'turnover' ? 'Turnover' :
-                               invoice.billing_type === '1st_appeals' ? '1st Yr Appeals' :
-                               invoice.billing_type === '2nd_appeals' ? '2nd Yr Appeals' :
-                               invoice.billing_type === '3rd_appeals' ? '3rd Yr Appeals' :
-                               invoice.billing_type === 'retainer' ? 'Retainer Payout' :
-                               invoice.billing_type}
+                    {allOpenInvoices.map((invoice) => {
+                      const daysOld = calculateInvoiceAge(invoice.billing_date);
+                      const rowColor = getAgingColor(daysOld);
+                      
+                      return (
+                        <tr key={invoice.id} className={rowColor}>
+                          <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                            {invoice.job_name}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-900">
+                            {invoice.invoice_number}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-600">
+                            {new Date(invoice.billing_date).toLocaleDateString()}
+                          </td>
+                          <td className="px-4 py-3 text-sm font-semibold text-orange-600">
+                            {formatCurrency(invoice.amount_billed)}
+                          </td>
+                          <td className="px-4 py-3 text-sm font-medium">
+                            <span className={`${
+                              daysOld >= 120 ? 'text-red-600 font-bold' :
+                              daysOld >= 90 ? 'text-orange-600 font-bold' :
+                              daysOld >= 60 ? 'text-yellow-600 font-bold' :
+                              'text-gray-600'
+                            }`}>
+                              {daysOld} days
                             </span>
-                          ) : (
-                            `${(invoice.percentage_billed * 100).toFixed(2)}%`
-                          )}
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+                          <td className="px-4 py-3 text-sm">
+                            {daysOld >= 60 && (
+                              <button
+                                onClick={() => {
+                                  setSelectedReminderInvoice(invoice);
+                                  setReminderMessage(generateReminderMessage(invoice, daysOld));
+                                  setShowReminderModal(true);
+                                }}
+                                className="px-2 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600"
+                              >
+                                Send Reminder
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               )}
@@ -3774,6 +3847,60 @@ const BillingManagement = () => {
                 className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
               >
                 Record Distribution
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Payment Reminder Modal */}
+      {showReminderModal && selectedReminderInvoice && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+            <h2 className="text-xl font-bold mb-4">Payment Reminder</h2>
+            
+            <div className="mb-4">
+              <p className="text-sm text-gray-600 mb-2">
+                Invoice: {selectedReminderInvoice.invoice_number} - {selectedReminderInvoice.job_name}
+              </p>
+              <p className="text-sm text-gray-600">
+                Days Outstanding: {calculateInvoiceAge(selectedReminderInvoice.billing_date)}
+              </p>
+            </div>
+            
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Message Preview (you can edit before copying):
+              </label>
+              <textarea
+                value={reminderMessage}
+                onChange={(e) => setReminderMessage(e.target.value)}
+                className="w-full h-64 p-3 border border-gray-300 rounded-md"
+              />
+            </div>
+            
+            <div className="flex justify-end space-x-2">
+              <button
+                onClick={() => {
+                  setShowReminderModal(false);
+                  setSelectedReminderInvoice(null);
+                  setReminderMessage('');
+                }}
+                className="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(reminderMessage);
+                  alert('Reminder message copied to clipboard!');
+                  setShowReminderModal(false);
+                  setSelectedReminderInvoice(null);
+                  setReminderMessage('');
+                }}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              >
+                Copy to Clipboard
               </button>
             </div>
           </div>
