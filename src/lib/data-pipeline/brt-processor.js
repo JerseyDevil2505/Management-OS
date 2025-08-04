@@ -3,6 +3,7 @@
  * FIXED: Now properly extracts ALL sections and InfoBy codes from nested MAP structures
  * Uses the proven parsing logic from the artifact tester
  * CLEANED: Removed surgical fix functions - job totals handled by AdminJobManagement
+ * CRITICAL: Added automatic cleanup for failed batches - prevents partial job creation!
  */
 
 import { supabase } from '../supabaseClient.js';
@@ -604,10 +605,15 @@ export class BRTProcessor {
   /**
    * Process complete file and store in database with enhanced code file integration
    * RESTORED: totalresidential and totalcommercial calculations (total_properties handled by AdminJobManagement/FileUploadButton)
+   * CRITICAL: Added automatic cleanup for failed batches - prevents partial job creation!
    */
   async processFile(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, versionInfo = {}) {
+    // Track successful batches for cleanup
+    const successfulBatches = [];
+    const processingTimestamp = new Date().toISOString();
+    
     try {
-      console.log('🚀 Starting ENHANCED BRT file processing with COMPLETE section parsing...');
+      console.log('🚀 Starting ENHANCED BRT file processing with CLEANUP support...');
       
       // Process and store code file if provided
       if (codeFileContent) {
@@ -651,17 +657,96 @@ export class BRTProcessor {
         
         if (result.error) {
           console.error(`❌ Batch ${batchNumber} failed after retries:`, result.error);
-          results.errors += batch.length;
-          results.warnings.push(`Batch ${batchNumber} failed: ${result.error.message}`);
           
-          // Increase delay on errors
-          consecutiveErrors++;
-          const errorDelay = Math.min(consecutiveErrors * 2000, 10000);
-          console.log(`⚠️ Waiting ${errorDelay/1000}s before continuing due to errors...`);
-          await new Promise(resolve => setTimeout(resolve, errorDelay));
+          // CRITICAL: Clean up all successful batches with 50 retries each!
+          console.log(`❌ Batch ${batchNumber} failed - cleaning up ${successfulBatches.length} successful batches...`);
+          
+          let cleanupFailures = 0;
+          
+          for (const successBatch of successfulBatches.reverse()) {
+            let cleanupSuccess = false;
+            
+            // Try up to 50 times to cleanup each batch
+            for (let cleanupAttempt = 1; cleanupAttempt <= 50; cleanupAttempt++) {
+              try {
+                console.log(`🔄 Cleanup attempt ${cleanupAttempt} for batch ${successBatch.batchNumber}...`);
+                
+                const { error } = await supabase
+                  .from('property_records')
+                  .delete()
+                  .eq('job_id', jobId)
+                  .gte('created_at', successBatch.timestamp);
+                
+                if (!error) {
+                  console.log(`✅ Successfully cleaned up batch ${successBatch.batchNumber} on attempt ${cleanupAttempt}`);
+                  cleanupSuccess = true;
+                  break;
+                }
+                
+                // Handle specific error codes
+                if (error.code === '57014' || error.code === '08003' || error.code === '08006' || 
+                    error.message.includes('connection') || error.message.includes('timeout')) {
+                  console.log(`⚠️ Retryable error during cleanup of batch ${successBatch.batchNumber}, attempt ${cleanupAttempt}: ${error.message}`);
+                  if (cleanupAttempt < 50) {
+                    await new Promise(resolve => setTimeout(resolve, Math.min(1000 * cleanupAttempt, 10000))); // Exponential backoff up to 10s
+                    continue;
+                  }
+                } else {
+                  console.error(`❌ Non-retryable error during cleanup: ${error.message}`);
+                  break;
+                }
+                
+              } catch (networkError) {
+                console.error(`🌐 Network error during cleanup attempt ${cleanupAttempt}:`, networkError);
+                if (cleanupAttempt < 50) {
+                  await new Promise(resolve => setTimeout(resolve, Math.min(1000 * cleanupAttempt, 10000)));
+                  continue;
+                }
+              }
+            }
+            
+            if (!cleanupSuccess) {
+              cleanupFailures++;
+              console.error(`❌ FAILED to cleanup batch ${successBatch.batchNumber} after 50 attempts!`);
+            }
+          }
+          
+          // Verify cleanup completion
+          try {
+            const { count, error: verifyError } = await supabase
+              .from('property_records')
+              .select('*', { count: 'exact', head: true })
+              .eq('job_id', jobId)
+              .gte('created_at', processingTimestamp);
+            
+            if (!verifyError) {
+              if (count === 0) {
+                console.log('✅ Cleanup verification: All partial records successfully removed');
+              } else {
+                console.warn(`⚠️ Cleanup verification: ${count} records still exist for job ${jobId}`);
+              }
+            }
+          } catch (verifyError) {
+            console.error('Could not verify cleanup:', verifyError);
+          }
+          
+          const cleanupMessage = cleanupFailures > 0 
+            ? `Job creation failed and cleanup attempted - ${successfulBatches.length - cleanupFailures} of ${successfulBatches.length} batches cleaned up successfully. WARNING: ${cleanupFailures} batches may need manual cleanup!`
+            : `Job creation failed and all partial data cleaned up - all ${successfulBatches.length} batches removed.`;
+          
+          throw new Error(`${cleanupMessage} Original error: ${result.error.message}`);
+          
         } else {
           results.processed += batch.length;
           console.log(`✅ Batch ${batchNumber} completed successfully (${results.processed}/${propertyRecords.length} total)`);
+          
+          // Track successful batch for potential cleanup
+          successfulBatches.push({
+            batchNumber,
+            startIndex: i,
+            endIndex: Math.min(i + batchSize, propertyRecords.length),
+            timestamp: new Date().toISOString()
+          });
           
           // Reset error counter on success
           consecutiveErrors = 0;
