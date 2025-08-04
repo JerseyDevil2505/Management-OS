@@ -1326,7 +1326,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         const isExternalInspector = externalInspectors.includes(inspector);
         
         // Skip inspectors with invalid initials (not in employee database)
-        if (!employeeData[inspector]) {
+        if (!employeeData[inspector] && !isExternalInspector) {
           reasonNotAdded = `Inspector ${inspector} not found in employee database`;
           missingProperties.push({
             composite_key: propertyKey,
@@ -1346,7 +1346,16 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
 
         // Initialize inspector stats
         if (!inspectorStats[inspector]) {
-          const employeeInfo = employeeData[inspector] || {};
+          let employeeInfo = employeeData[inspector] || {};
+          
+          // If not in employeeData, check if external inspector
+          if (!employeeData[inspector] && isExternalInspector) {
+            employeeInfo = {
+              name: `${inspector} (External)`,
+              fullName: `${inspector} (External Inspector)`,
+              inspector_type: 'external'
+            };
+          }
           inspectorStats[inspector] = {
             name: employeeInfo.name || inspector,
             fullName: employeeInfo.fullName || inspector,
