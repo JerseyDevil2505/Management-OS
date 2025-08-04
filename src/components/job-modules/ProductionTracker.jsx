@@ -1787,9 +1787,9 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
             await loadCommercialCounts();
             
             // Log override success if any were applied
-            if (analyticsResult.overridesAppliedCount > 0) {
-              debugLog('PERSISTENCE', `✅ Successfully applied ${analyticsResult.overridesAppliedCount} validation overrides`);
-              addNotification(`✅ Applied ${analyticsResult.overridesAppliedCount} validation overrides`, 'success');
+            if (decisionsToApply.length > 0) {  // CHANGED: Use decisionsToApply.length instead
+              debugLog('PERSISTENCE', `✅ Successfully applied ${decisionsToApply.length} validation overrides`);
+              addNotification(`✅ Applied ${decisionsToApply.length} validation overrides`, 'success');
             }
           }
         } catch (error) {
@@ -3556,6 +3556,29 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
                           <X className="w-8 h-8 text-red-500" />
                         </div>
                       </div>
+                      {/* ADD: New tiles for missing categories */}
+                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-amber-600 font-medium">Missing Inspector</p>
+                            <p className="text-2xl font-bold text-amber-800">{missingPropertiesReport.summary.missing_inspector}</p>
+                            <p className="text-xs text-amber-500">No initials</p>
+                          </div>
+                          <Users className="w-8 h-8 text-amber-500" />
+                        </div>
+                      </div>
+
+                      <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-purple-600 font-medium">Invalid Employee</p>
+                            <p className="text-2xl font-bold text-purple-800">{missingPropertiesReport.summary.invalid_employee}</p>
+                            <p className="text-xs text-purple-500">Not in database</p>
+                          </div>
+                          <AlertTriangle className="w-8 h-8 text-purple-500" />
+                        </div>
+                      </div>
+                      {
                     </div>
 
                     {/* Assignment Status Card - Only show if job has assignments */}
