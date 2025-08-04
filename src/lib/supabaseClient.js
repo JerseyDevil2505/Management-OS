@@ -344,8 +344,6 @@ export const jobService = {
     try {
       const { assignedManagers, ...componentFields } = updates;
       
-      console.log('🔧 DEBUG - jobService.update() called with:', { id, updates });
-      console.log('🔧 DEBUG - componentFields after destructuring:', componentFields);
       
       const dbFields = {};
       
@@ -370,14 +368,10 @@ export const jobService = {
       
       // FIXED PERCENT BILLED MAPPING WITH DEBUG
       if (componentFields.percent_billed !== undefined) {
-        console.log('🎯 DEBUG - Found percent_billed field, value:', componentFields.percent_billed);
         dbFields.percent_billed = componentFields.percent_billed;
       } else {
-        console.log('⚠️ DEBUG - percent_billed field NOT found in componentFields');
-        console.log('📋 DEBUG - Available fields:', Object.keys(componentFields));
       }
 
-      console.log('💾 DEBUG - Final dbFields being sent to Supabase:', dbFields);
 
       const { data, error } = await supabase
         .from('jobs')
@@ -391,7 +385,6 @@ export const jobService = {
         throw error;
       }
       
-      console.log('✅ DEBUG - Supabase update successful, returned data:', data);
       return data;
     } catch (error) {
       console.error('Job update error:', error);
@@ -402,7 +395,6 @@ export const jobService = {
   // ENHANCED: Delete method with proper cascade deletion
   async delete(id) {
     try {
-      console.log(`🗑️ Starting deletion process for job ${id}...`);
 
       // Step 1: Delete related comparison_reports first
       const { error: reportsError } = await supabase
@@ -414,7 +406,6 @@ export const jobService = {
         console.error('Error deleting comparison reports:', reportsError);
         // Don't throw here - continue with job deletion even if no reports exist
       } else {
-        console.log('✅ Deleted comparison_reports for job', id);
       }
 
       // Step 2: Delete related property_change_log records (commented out - table doesn't exist)
@@ -427,7 +418,6 @@ export const jobService = {
       //   console.error('Error deleting change log:', changeLogError);
       //   // Don't throw here - table might not exist or no records
       // } else {
-      //   console.log('✅ Deleted property_change_log for job', id);
       // }
 
       // Step 3: Delete related job_assignments
@@ -439,7 +429,6 @@ export const jobService = {
       if (assignmentsError) {
         console.error('Error deleting job assignments:', assignmentsError);
       } else {
-        console.log('✅ Deleted job_assignments for job', id);
       }
 
       // Step 4: Delete related job_responsibilities (property assignments)
@@ -451,7 +440,6 @@ export const jobService = {
       if (responsibilitiesError) {
         console.error('Error deleting job responsibilities:', responsibilitiesError);
       } else {
-        console.log('✅ Deleted job_responsibilities for job', id);
       }
 
       // Step 5: Delete related property_records
@@ -463,7 +451,6 @@ export const jobService = {
       if (propertyError) {
         console.error('Error deleting property records:', propertyError);
       } else {
-        console.log('✅ Deleted property_records for job', id);
       }
 
       // Step 6: Delete related source_file_versions
@@ -475,7 +462,6 @@ export const jobService = {
       if (sourceFileError) {
         console.error('Error deleting source file versions:', sourceFileError);
       } else {
-        console.log('✅ Deleted source_file_versions for job', id);
       }
 
       // Step 7: Finally delete the job itself
@@ -489,7 +475,6 @@ export const jobService = {
         throw jobError;
       }
 
-      console.log('🎉 Job deletion completed successfully!');
       
     } catch (error) {
       console.error('Job deletion error:', error);
@@ -591,7 +576,6 @@ export const checklistService = {
   // Get all checklist items for a job
   async getChecklistItems(jobId) {
     try {
-      console.log('📋 Loading checklist items for job:', jobId);
       
       const { data, error } = await supabase
         .from('checklist_items')
@@ -601,7 +585,6 @@ export const checklistService = {
       
       if (error) throw error;
       
-      console.log(`✅ Loaded ${data?.length || 0} checklist items`);
       return data || [];
     } catch (error) {
       console.error('Checklist items fetch error:', error);
@@ -662,7 +645,6 @@ export const checklistService = {
   // Create initial checklist items for a new job
   async createChecklistForJob(jobId, checklistType = 'revaluation') {
     try {
-      console.log('🔨 Creating checklist items for job:', jobId);
       
       // The 29 template items
       const templateItems = [
@@ -720,7 +702,6 @@ export const checklistService = {
       
       if (error) throw error;
       
-      console.log(`✅ Created ${data.length} checklist items for job`);
       return data;
     } catch (error) {
       console.error('Checklist creation error:', error);
@@ -742,7 +723,6 @@ export const checklistService = {
         .single();
       
       if (error) throw error;
-      console.log('✅ Updated client name:', clientName);
       return data;
     } catch (error) {
       console.error('Client name update error:', error);
@@ -796,7 +776,6 @@ export const checklistService = {
       
       if (itemError) throw itemError;
       
-      console.log('✅ File uploaded successfully:', fileName);
       return itemData;
     } catch (error) {
       console.error('File upload error:', error);
@@ -816,7 +795,6 @@ export const checklistService = {
       
       if (error) throw error;
       
-      console.log(`✅ Generated mailing list with ${data.length} properties`);
       return data;
     } catch (error) {
       console.error('Mailing list generation error:', error);
@@ -861,7 +839,6 @@ export const checklistService = {
         .single();
       
       if (error) throw error;
-      console.log('✅ Job archived successfully');
       return data;
     } catch (error) {
       console.error('Job archive error:', error);
@@ -972,8 +949,6 @@ export const propertyService = {
   // EXISTING: Import method with versionInfo parameter for FileUploadButton support - CALLS PROCESSORS (INSERT)
   async importCSVData(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, vendorType, versionInfo = {}) {
     try {
-      console.log(`Processing ${vendorType} files for job ${jobId}`);
-      console.log('🔍 DEBUG - versionInfo received:', versionInfo);
       
       // Use updated processors for single-table insertion
       if (vendorType === 'BRT') {
@@ -998,8 +973,6 @@ export const propertyService = {
   // ENHANCED: Update method with field preservation that calls UPDATERS (UPSERT) for existing jobs
   async updateCSVData(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, vendorType, versionInfo = {}) {
     try {
-      console.log(`Updating ${vendorType} files for job ${jobId} using UPSERT with field preservation`);
-      console.log('🔍 DEBUG - versionInfo received:', versionInfo);
       
       // Store preserved fields handler in versionInfo for updaters to use
       versionInfo.preservedFieldsHandler = this.createPreservedFieldsHandler.bind(this);
@@ -1065,7 +1038,6 @@ export const propertyService = {
         });
       }
       
-      console.log(`✅ Fetched ${preservedDataMap.size} records with preserved fields`);
     } catch (error) {
       console.error('Error in createPreservedFieldsHandler:', error);
     }
@@ -1217,7 +1189,6 @@ export const sourceFileService = {
 export const productionDataService = {
   async updateSummary(jobId) {
     try {
-      console.log(`Updating production summary for job ${jobId}`);
       
       // Get property counts from single table
       const { count, error: countError } = await supabase
