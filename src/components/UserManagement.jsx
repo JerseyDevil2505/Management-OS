@@ -31,7 +31,7 @@ const UserManagement = () => {
       const { data, error } = await supabase
         .from('employees')
         .select('*')
-        .eq('employment_status', 'Full Time')  // Only full-time employees
+        .eq('employment_status', 'full_time')  // Only full-time employees
         .in('role', ['Management', 'Admin'])   // Only Management and Admin roles
         .order('last_name');
 
