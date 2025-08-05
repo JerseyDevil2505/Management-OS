@@ -533,6 +533,9 @@ const PayrollManagement = () => {
       const totalFieldBonus = mergedData.reduce((sum, emp) => sum + emp.calculatedFieldOT, 0);
       const totalOT = mergedData.reduce((sum, emp) => sum + emp.calculatedTotal, 0);
       
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      
       // Save to payroll_periods
       const { data: periodData, error: periodError } = await supabase
         .from('payroll_periods')
@@ -554,7 +557,8 @@ const PayrollManagement = () => {
             bonus_rate: bonusRate,
             employee_count: mergedData.length,
             worksheet_issues: worksheetIssues
-          }
+          },
+          created_by: user?.id || null
         })
         .select()
         .single();
