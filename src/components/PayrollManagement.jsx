@@ -184,75 +184,7 @@ const PayrollManagement = () => {
       
       console.log(`Calculating bonuses from ${startDate} to ${endDate}`);
       
-      // Check data freshness
-      const { data: uploadCheck } = await supabase
-        .from('inspection_data')
-        .select('upload_date, job_id')
-        .gte('measure_date', startDate)
-        .lte('measure_date', endDate)
-        .order('upload_date', { ascending: false })
-        .limit(1);
-      
-      let dataFreshnessWarning = '';
-      if (uploadCheck && uploadCheck.length > 0 && jobs.length > 0) {
-        const lastUploadDate = new Date(uploadCheck[0].upload_date).toDateString();
-        const processDate = new Date(payrollPeriod.processedDate).toDateString();
-        
-        // Check if there are active inspection jobs
-        const activeInspectionJobs = jobs.filter(job => 
-          !job.percent_billed || job.percent_billed < 0.91
-        );
-        
-        if (lastUploadDate !== processDate && activeInspectionJobs.length > 0) {
-          dataFreshnessWarning = `Note: Inspection data was last uploaded on ${lastUploadDate}. You're processing for ${processDate}.`;
-          console.warn(`⚠️ Data freshness warning: ${dataFreshnessWarning}`);
-        }
-      }
-      
-      // First, let's do a simple test query
-      console.log('Testing basic query...');
-      const { data: testData, error: testError } = await supabase
-        .from('inspection_data')
-        .select('id')
-        .limit(1);
-      
-      if (testError) {
-        console.error('Basic test query failed:', testError);
-        throw new Error(`Cannot access inspection_data table: ${testError.message}`);
-      }
-      console.log('Basic query succeeded, found:', testData);
-      
-      // Now test with date filter
-      console.log('Testing with date filter...');
-      const { data: dateTest, error: dateError } = await supabase
-        .from('inspection_data')
-        .select('measure_date, property_class')
-        .gte('measure_date', startDate)
-        .lte('measure_date', endDate)
-        .limit(5);
-      
-      if (dateError) {
-        console.error('Date filter query failed:', dateError);
-        throw new Error(`Date filter error: ${dateError.message}`);
-      }
-      console.log('Date filter succeeded, sample data:', dateTest);
-      
-      // Now test without property class filter
-      console.log('Testing without property class filter...');
-      const { count: noFilterCount, error: noFilterError } = await supabase
-        .from('inspection_data')
-        .select('*', { count: 'exact', head: true })
-        .gte('measure_date', startDate)
-        .lte('measure_date', endDate);
-      
-      if (noFilterError) {
-        console.error('No filter count failed:', noFilterError);
-      } else {
-        console.log(`Count without property class filter: ${noFilterCount}`);
-      }
-      
       // Get ALL inspections with class 2 or 3A in the date range
-      // Don't filter by employee initials - we'll match them up after
       const { count, error: countError } = await supabase
         .from('inspection_data')
         .select('*', { count: 'exact', head: true })
@@ -262,7 +194,7 @@ const PayrollManagement = () => {
 
       if (countError) {
         console.error('Count query error:', countError);
-        throw new Error(`Database error: ${countError.message} (${countError.code})`);
+        throw new Error(`Database error: ${countError.message}`);
       }
       
       console.log(`Total inspections to process: ${count}`);
@@ -293,7 +225,7 @@ const PayrollManagement = () => {
         allInspections.push(...batch);
       }
 
-      // Group inspections by inspector
+      // Group inspections by inspector initials
       const inspectorCounts = {};
       
       allInspections.forEach(inspection => {
@@ -317,75 +249,28 @@ const PayrollManagement = () => {
         });
       });
 
-      // Debug: Show all unique initials found
-      console.log('=== INITIALS MATCHING DEBUG ===');
-      console.log('Unique initials found in inspections:', Object.keys(inspectorCounts).sort());
-      console.log('Employee initials in database:', employees.map(e => e.initials).filter(Boolean).sort());
-      
-      // Calculate bonuses by employee name - now we match after getting all inspections
+      // Calculate bonuses by initials
       const bonusResults = {};
-      const matchedInitials = [];
-      const unmatchedInitials = [];
       
-      employees.forEach(employee => {
-        const employeeName = `${employee.first_name} ${employee.last_name}`;
-        const empInitials = employee.initials?.toUpperCase().trim();
-        
-        if (empInitials && inspectorCounts[empInitials]) {
-          const count = inspectorCounts[empInitials].count;
-          matchedInitials.push(`${empInitials} → ${employeeName} (${count} inspections)`);
-          bonusResults[employeeName] = {
-            initials: empInitials,
-            inspections: count,
-            bonus: count * bonusRate,
-            inspectionIds: inspectorCounts[empInitials].inspectionIds,
-            details: inspectorCounts[empInitials].details
-          };
-        } else {
-          bonusResults[employeeName] = {
-            initials: empInitials || 'N/A',
-            inspections: 0,
-            bonus: 0,
-            inspectionIds: [],
-            details: []
-          };
-        }
+      Object.entries(inspectorCounts).forEach(([initials, data]) => {
+        bonusResults[initials] = {
+          initials: initials,
+          inspections: data.count,
+          bonus: data.count * bonusRate,
+          inspectionIds: data.inspectionIds,
+          details: data.details
+        };
       });
-      
-      // Also include any inspectors not in employee list (to catch mismatches)
-      Object.keys(inspectorCounts).forEach(initials => {
-        const hasEmployee = employees.some(emp => emp.initials?.toUpperCase().trim() === initials);
-        if (!hasEmployee) {
-          unmatchedInitials.push(`${initials} (${inspectorCounts[initials].count} inspections)`);
-          bonusResults[`Unknown Inspector (${initials})`] = {
-            initials: initials,
-            inspections: inspectorCounts[initials].count,
-            bonus: inspectorCounts[initials].count * bonusRate,
-            inspectionIds: inspectorCounts[initials].inspectionIds,
-            details: inspectorCounts[initials].details
-          };
-        }
-      });
-      
-      console.log('\nMatched initials:');
-      matchedInitials.forEach(match => console.log(`  ✓ ${match}`));
-      
-      if (unmatchedInitials.length > 0) {
-        console.log('\nUnmatched initials (no employee found):');
-        unmatchedInitials.forEach(unmatched => console.log(`  ✗ ${unmatched}`));
-      }
       
       console.log('\nTotal inspections by initials:');
-      Object.entries(inspectorCounts)
-        .sort((a, b) => b[1].count - a[1].count)
+      Object.entries(bonusResults)
+        .sort((a, b) => b[1].inspections - a[1].inspections)
         .forEach(([initials, data]) => {
-          console.log(`  ${initials}: ${data.count} inspections = $${(data.count * bonusRate).toFixed(2)}`);
+          console.log(`  ${initials}: ${data.inspections} inspections = $${data.bonus.toFixed(2)}`);
         });
-      console.log('=== END DEBUG ===\n');
       
       setInspectionBonuses(bonusResults);
-      const successMsg = `Successfully calculated bonuses for ${Object.keys(bonusResults).length} employees (${allInspections.length} total inspections)`;
-      setSuccessMessage(dataFreshnessWarning ? `${successMsg} ${dataFreshnessWarning}` : successMsg);
+      setSuccessMessage(`Successfully calculated bonuses for ${Object.keys(bonusResults).length} inspectors (${allInspections.length} total inspections)`);
     } catch (error) {
       console.error('Error calculating bonuses:', error);
       setError('Failed to calculate inspection bonuses: ' + error.message);
@@ -417,25 +302,15 @@ const PayrollManagement = () => {
         const issues = [];
         const parsedData = [];
         
-        // Check for frozen panes
-        if (firstSheet['!freeze']) {
-          issues.push({
-            type: 'suggestion',
-            message: 'The worksheet has frozen rows. While this works, a clean template without frozen rows is easier to process.',
-            emailText: 'Note: The worksheet has frozen rows. If you\'d like, I can provide a clean template that\'s a bit easier for the system to process.'
-          });
-        }
-        
         // Parse employee data
         let totalHoursSum = 0;
         let apptOTSum = 0;
-        let formulaIssues = [];
         let rowsStartIndex = -1;
         
         // Find where employee data starts (look for EMPLOYEE header)
         for (let i = 0; i < Math.min(10, rawData.length); i++) {
           if (rawData[i] && rawData[i][0] === 'EMPLOYEE') {
-            rowsStartIndex = i + 3; // Data typically starts 3 rows after header
+            rowsStartIndex = i + 2; // Skip blank row and pay period row
             break;
           }
         }
@@ -456,33 +331,19 @@ const PayrollManagement = () => {
           const row = rawData[i];
           if (row[0] && typeof row[0] === 'string' && !row[0].includes('TOTAL HOURS')) {
             const employeeName = row[0].trim();
-            const hours = row[1];
-            const apptOT = row[3] || 0;
-            const fieldOT = row[4] || 0;
-            const total = row[5] || 0;
-            const comments = row[6] || '';
-            
-            // Check formula in total column
-            const totalCell = firstSheet[`F${i+1}`];
-            if (totalCell && typeof total === 'number' && total === 0 && !totalCell.f) {
-              formulaIssues.push({
-                row: i+1,
-                employee: employeeName
-              });
-            }
-            
-            const dbEmployee = employees.find(emp => {
-              const dbName = `${emp.last_name}, ${emp.first_name}`;
-              const altDbName = `${emp.first_name} ${emp.last_name}`;
-              return dbName.toLowerCase() === employeeName.toLowerCase() ||
-                     altDbName.toLowerCase() === employeeName.toLowerCase() ||
-                     employeeName.toLowerCase().includes(emp.last_name.toLowerCase());
-            });
+            const initials = row[1] || null; // INITIALS column
+            const hours = row[2]; // HOURS column (was row[1])
+            const timeOff = row[3] || '';
+            const apptOT = row[4] || 0;
+            const fieldOT = row[5] || 0;
+            const total = row[6] || 0;
+            const comments = row[7] || '';
             
             const empData = {
               worksheetName: employeeName,
-              dbEmployee: dbEmployee,
+              initials: initials,
               hours: hours,
+              timeOff: timeOff,
               apptOT: apptOT,
               fieldOT: fieldOT,
               total: total,
@@ -490,22 +351,15 @@ const PayrollManagement = () => {
               issues: []
             };
             
-            if (!dbEmployee) {
-              empData.issues.push(`No database match found`);
-            } else {
-              if (typeof hours === 'number') {
-                totalHoursSum += hours;
-                
-                if (!comments.toLowerCase().includes('part time') && 
-                    !comments.toLowerCase().includes('pto') &&
-                    hours !== payrollPeriod.expectedHours &&
-                    Math.abs(hours - payrollPeriod.expectedHours) > 8) {
-                  empData.issues.push(`Expected ${payrollPeriod.expectedHours} hours, showing ${hours}`);
-                }
-                
-                if (hours < 40 && !comments.toLowerCase().includes('part time')) {
-                  empData.issues.push(`Low hours: ${hours} - please verify`);
-                }
+            // Only check hours for numeric values (not 'same' or 'Salary')
+            if (typeof hours === 'number') {
+              totalHoursSum += hours;
+              
+              if (!comments.toLowerCase().includes('part time') && 
+                  !timeOff.toLowerCase().includes('pto') &&
+                  hours !== payrollPeriod.expectedHours &&
+                  Math.abs(hours - payrollPeriod.expectedHours) > 8) {
+                empData.issues.push(`Expected ${payrollPeriod.expectedHours} hours, showing ${hours}`);
               }
             }
             
@@ -517,15 +371,15 @@ const PayrollManagement = () => {
           }
         }
         
-        // Check totals
+        // Check totals - MOVED AFTER employee processing
         const totalsRowIndex = rawData.findIndex(row => 
           row[0] && row[0].toString().includes('TOTAL HOURS')
         );
         
         if (totalsRowIndex > -1) {
           const totalsRow = rawData[totalsRowIndex];
-          const sheetTotalHours = totalsRow[1] || 0;
-          const sheetApptOT = totalsRow[3] || 0;
+          const sheetTotalHours = totalsRow[2] || 0; // Column 2 now (was 1)
+          const sheetApptOT = totalsRow[4] || 0; // Column 4 now (was 3)
           
           if (Math.abs(sheetTotalHours - totalHoursSum) > 0.01) {
             issues.push({
@@ -533,40 +387,6 @@ const PayrollManagement = () => {
               message: `Total hours shows ${sheetTotalHours}, but individual hours add up to ${totalHoursSum}`,
               emailText: `Quick note: The total hours row shows ${sheetTotalHours}, but when I add up the individual hours I get ${totalHoursSum}. Might want to double-check the SUM formula.`
             });
-          }
-        }
-        
-        // Add formula issues if any
-        if (formulaIssues.length > 0) {
-          const issueList = formulaIssues.map(f => `Row ${f.row}: ${f.employee}`).join('\n');
-          issues.push({
-            type: 'suggestion',
-            message: `Found ${formulaIssues.length} rows with hardcoded zeros in the total column`,
-            emailText: `I noticed ${formulaIssues.length} rows have hardcoded zeros in the Total column instead of formulas:\n\n${issueList}\n\nThese should have the formula =D+E to automatically calculate totals.`,
-            details: formulaIssues
-          });
-        }
-        
-        // Check period in worksheet
-        if (rawData[4] && rawData[4][0]) {
-          const periodText = rawData[4][0];
-          const periodMatch = periodText.match(/(\d{2}\/\d{2}\/\d{4})\s*-\s*(\d{2}\/\d{2}\/\d{4})/);
-          if (periodMatch) {
-            const sheetEndDate = periodMatch[2];
-            const expectedPeriod = getPayrollPeriod(payrollPeriod.endDate);
-            
-            // Don't flag if it's just a formatting difference
-            const sheetEnd = new Date(sheetEndDate);
-            const expectedEnd = new Date(payrollPeriod.endDate);
-            if (sheetEnd.getTime() === expectedEnd.getTime()) {
-              // Dates match, just formatted differently
-            } else {
-              issues.push({
-                type: 'info',
-                message: `Worksheet shows period ending ${sheetEndDate}`,
-                emailText: `The worksheet shows period ending ${sheetEndDate}. Just confirming this matches what you intended.`
-              });
-            }
           }
         }
         
@@ -596,13 +416,11 @@ const PayrollManagement = () => {
       let bonus = 0;
       let inspections = 0;
       
-      if (emp.dbEmployee) {
-        const employeeName = `${emp.dbEmployee.first_name} ${emp.dbEmployee.last_name}`;
-        const bonusData = inspectionBonuses[employeeName];
-        if (bonusData) {
-          bonus = bonusData.bonus;
-          inspections = bonusData.inspections;
-        }
+      // Use initials directly from the worksheet
+      if (emp.initials && inspectionBonuses[emp.initials]) {
+        const bonusData = inspectionBonuses[emp.initials];
+        bonus = bonusData.bonus;
+        inspections = bonusData.inspections;
       }
       
       const newTotal = (emp.apptOT || 0) + bonus;
@@ -625,7 +443,7 @@ const PayrollManagement = () => {
     let totalOT = 0;
     
     mergedData.forEach(emp => {
-      const hours = emp.hours === 'same' ? 'same' : emp.hours;
+      const hours = emp.hours === 'same' || emp.hours === 'Salary' ? 'same' : emp.hours;
       const apptOT = emp.apptOT || 0;
       const fieldBonus = emp.calculatedFieldOT || 0;
       const total = apptOT + fieldBonus;
@@ -745,14 +563,17 @@ const PayrollManagement = () => {
       
       // Save individual entries to payroll_entries
       for (const emp of mergedData) {
-        if (emp.dbEmployee) {
+        // Find matching employee by initials
+        const matchedEmployee = employees.find(e => e.initials === emp.initials);
+        
+        if (matchedEmployee) {
           const { error: entryError } = await supabase
             .from('payroll_entries')
             .insert({
               payroll_period_id: periodData.id,
-              employee_id: emp.dbEmployee.id,
+              employee_id: matchedEmployee.id,
               hours: typeof emp.hours === 'number' ? emp.hours : null,
-              hours_type: emp.hours === 'same' ? 'salary' : 'regular',
+              hours_type: (emp.hours === 'same' || emp.hours === 'Salary') ? 'salary' : 'regular',
               appt_ot: emp.apptOT || 0,
               field_bonus: emp.calculatedFieldOT || 0,
               total_ot: emp.calculatedTotal || 0,
@@ -810,14 +631,6 @@ const PayrollManagement = () => {
     
     worksheetIssues.forEach((issue, index) => {
       email += `${index + 1}. ${issue.emailText}\n\n`;
-      if (issue.details && issue.type === 'suggestion') {
-        // For formula issues, list all affected rows
-        const details = issue.details;
-        details.forEach(d => {
-          email += `   - Row ${d.row}: ${d.employee}\n`;
-        });
-        email += '\n';
-      }
     });
     
     email += `Let me know if you have any questions!\n\nThanks`;
@@ -1022,13 +835,6 @@ const PayrollManagement = () => {
                         : 'bg-gray-50 text-gray-800 border-gray-200'
                     }`}>
                       <p className="font-medium">{issue.message}</p>
-                      {issue.details && (
-                        <div className="mt-2 text-sm">
-                          {issue.details.map((detail, idx) => (
-                            <div key={idx}>• Row {detail.row}: {detail.employee}</div>
-                          ))}
-                        </div>
-                      )}
                     </div>
                   ))}
                 </div>
@@ -1151,7 +957,10 @@ const PayrollManagement = () => {
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee</th>
                       {payrollData.length > 0 && (
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hours</th>
+                        <>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Initials</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hours</th>
+                        </>
                       )}
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         {payrollData.length > 0 ? 'Appt OT' : 'Initials'}
@@ -1175,7 +984,10 @@ const PayrollManagement = () => {
                             {employee.worksheetName}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {employee.hours === 'same' ? (
+                            {employee.initials || '-'}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {employee.hours === 'same' || employee.hours === 'Salary' ? (
                               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                                 Salary
                               </span>
@@ -1188,6 +1000,9 @@ const PayrollManagement = () => {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600 font-mono">
                             ${employee.calculatedFieldOT.toFixed(2)}
+                            {employee.inspectionCount > 0 && (
+                              <span className="text-xs text-gray-500 ml-1">({employee.inspectionCount})</span>
+                            )}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-indigo-600 bg-indigo-50 font-mono">
                             ${employee.calculatedTotal.toFixed(2)}
@@ -1199,14 +1014,14 @@ const PayrollManagement = () => {
                       ))
                     ) : (
                       Object.entries(inspectionBonuses)
-                        .sort((a, b) => a[0].localeCompare(b[0]))
-                        .map(([name, data], index) => (
+                        .sort((a, b) => b[1].inspections - a[1].inspections)
+                        .map(([initials, data], index) => (
                           <tr key={index} className="hover:bg-gray-50">
                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                              {name}
+                              Inspector {initials}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                              {data.initials}
+                              {initials}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-mono">
                               {data.inspections}
