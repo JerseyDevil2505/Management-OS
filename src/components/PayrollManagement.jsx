@@ -493,7 +493,7 @@ const PayrollManagement = () => {
             if (!dbEmployee) {
               empData.issues.push(`No database match found`);
             } else {
-              if (hours !== 'same' && typeof hours === 'number') {
+              if (typeof hours === 'number') {
                 totalHoursSum += hours;
                 
                 if (!comments.toLowerCase().includes('part time') && 
