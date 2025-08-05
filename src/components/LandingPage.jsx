@@ -48,12 +48,25 @@ const LandingPage = ({ onLogin }) => {
     }
   };
 
+  // Logo SVG component
+  const LogoSVG = () => (
+    <svg width="50" height="50" viewBox="0 0 800 800" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="473.333" y="366.667" width="266.667" height="266.667" transform="rotate(-15 473.333 366.667)" fill="#52B5E8" stroke="#52B5E8" strokeWidth="60"/>
+      <rect x="133.333" y="266.667" width="266.667" height="266.667" transform="rotate(-45 133.333 266.667)" fill="#52B5E8" stroke="#52B5E8" strokeWidth="60"/>
+    </svg>
+  );
+
   return (
     <div className="landing-container">
       <header className="landing-header">
         <div className="header-content">
-          <h1>LOJIK</h1>
-          <p className="tagline">Professional Property Appraisers Inc.</p>
+          <div className="logo-title-group">
+            <LogoSVG />
+            <div className="title-group">
+              <h1>LOJIK</h1>
+              <p className="tagline">For<br />Professional Property Appraisers</p>
+            </div>
+          </div>
         </div>
       </header>
 
@@ -68,7 +81,7 @@ const LandingPage = ({ onLogin }) => {
 
           <div className="login-card">
             <h3>Sign In</h3>
-            <form onSubmit={handleLogin}>
+            <div>
               <div className="form-group">
                 <label htmlFor="email">Email</label>
                 <input
@@ -79,6 +92,7 @@ const LandingPage = ({ onLogin }) => {
                   placeholder="Enter your email"
                   required
                   disabled={loading}
+                  onKeyPress={(e) => e.key === 'Enter' && password && handleLogin(e)}
                 />
               </div>
 
@@ -92,15 +106,20 @@ const LandingPage = ({ onLogin }) => {
                   placeholder="Enter your password"
                   required
                   disabled={loading}
+                  onKeyPress={(e) => e.key === 'Enter' && email && handleLogin(e)}
                 />
               </div>
 
               {error && <div className="error-message">{error}</div>}
 
-              <button type="submit" className="login-button" disabled={loading}>
+              <button 
+                className="login-button" 
+                disabled={loading || !email || !password}
+                onClick={handleLogin}
+              >
                 {loading ? 'Signing in...' : 'Sign In'}
               </button>
-            </form>
+            </div>
 
             <div className="login-footer">
               <p>Need help? Contact your system administrator</p>
@@ -110,18 +129,22 @@ const LandingPage = ({ onLogin }) => {
           <section className="features-section">
             <div className="features-grid">
               <div className="feature-card">
+                <div className="feature-icon">📋</div>
                 <h4>Job Management</h4>
                 <p>Track and manage property assessment jobs from creation to completion</p>
               </div>
               <div className="feature-card">
+                <div className="feature-icon">📊</div>
                 <h4>Production Tracking</h4>
                 <p>Real-time analytics and validation for inspection data</p>
               </div>
               <div className="feature-card">
+                <div className="feature-icon">🔄</div>
                 <h4>Workflow Automation</h4>
                 <p>Streamlined processes with automated checklist management</p>
               </div>
               <div className="feature-card">
+                <div className="feature-icon">💰</div>
                 <h4>Financial Operations</h4>
                 <p>Comprehensive billing and payroll management</p>
               </div>
