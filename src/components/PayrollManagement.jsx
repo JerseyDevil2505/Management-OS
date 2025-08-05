@@ -542,6 +542,9 @@ const PayrollManagement = () => {
       // Get current user
       const { data: { user } } = await supabase.auth.getUser();
       
+      // Use hardcoded UUID if user is not authenticated (temporary for testing)
+      const userId = user?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad';
+      
       // Save to payroll_periods
       const { data: periodData, error: periodError } = await supabase
         .from('payroll_periods')
@@ -564,14 +567,13 @@ const PayrollManagement = () => {
             employee_count: mergedData.length,
             worksheet_issues: worksheetIssues
           },
-          created_by: user?.id || null
+          created_by: userId
         })
         .select()
         .single();
       
       if (periodError) throw periodError;
- 
-     
+      
       // Save processing info to localStorage (for backwards compatibility)
       const processInfo = {
         startDate: payrollPeriod.startDate,
