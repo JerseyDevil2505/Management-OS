@@ -561,27 +561,7 @@ const PayrollManagement = () => {
       
       if (periodError) throw periodError;
       
-      // Save individual entries to payroll_entries
-      for (const emp of mergedData) {
-        // Find matching employee by initials
-        const matchedEmployee = employees.find(e => e.initials === emp.initials);
-        
-        if (matchedEmployee) {
-          const { error: entryError } = await supabase
-            .from('payroll_entries')
-            .insert({
-              payroll_period_id: periodData.id,
-              employee_id: matchedEmployee.id,
-              hours: typeof emp.hours === 'number' ? emp.hours : null,
-              hours_type: (emp.hours === 'same' || emp.hours === 'Salary') ? 'salary' : 'regular',
-              appt_ot: emp.apptOT || 0,
-              field_bonus: emp.calculatedFieldOT || 0,
-              total_ot: emp.calculatedTotal || 0,
-              inspection_count: emp.inspectionCount || 0,
-              amount: emp.calculatedTotal || 0, // For compatibility
-              bonus_amount: emp.calculatedFieldOT || 0, // For compatibility
-              final_amount: emp.calculatedTotal || 0, // For compatibility
-              notes: emp.issues.length > 0 ? emp.issues.join('; ') : null
+.join('; ') : null
             });
           
           if (entryError) {
