@@ -1,9 +1,4 @@
-reader.onload = async (e) => {
-        console.log('FileReader loaded, starting to parse Excel...');
-        
-        const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, { 
-          type: 'array',import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase, employeeService, jobService } from '../lib/supabaseClient';
 import * as XLSX from 'xlsx';
 
@@ -124,11 +119,11 @@ const PayrollManagement = () => {
   }, []);
 
   useEffect(() => {
-    if (payrollPeriod.endDate) {
-      const hours = getStandardExpectedHours(payrollPeriod.endDate);
+    if (payrollPeriod.startDate && payrollPeriod.endDate) {
+      const hours = calculateExpectedHours(payrollPeriod.startDate, payrollPeriod.endDate);
       setPayrollPeriod(prev => ({ ...prev, expectedHours: hours }));
     }
-  }, [payrollPeriod.endDate]);
+  }, [payrollPeriod.startDate, payrollPeriod.endDate]);
 
   const loadInitialData = async () => {
     try {
@@ -296,6 +291,8 @@ const PayrollManagement = () => {
     try {
       const reader = new FileReader();
       reader.onload = async (e) => {
+        console.log('FileReader loaded, starting to parse Excel...');
+        
         const data = new Uint8Array(e.target.result);
         const workbook = XLSX.read(data, { 
           type: 'array', 
@@ -305,6 +302,8 @@ const PayrollManagement = () => {
         
         const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
         const rawData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+        
+        console.log('Excel parsed, total rows:', rawData.length);
         
         const issues = [];
         const parsedData = [];
@@ -323,9 +322,6 @@ const PayrollManagement = () => {
           }
         }
         
-        console.log('About to process employees, rowsStartIndex:', rowsStartIndex);
-        console.log('Total rows in data:', rawData.length);
-        
         if (rowsStartIndex === -1) {
           issues.push({
             type: 'error',
@@ -337,23 +333,22 @@ const PayrollManagement = () => {
           return;
         }
         
-        // Process employee rows
-        console.log(`Starting to process employees from row ${rowsStartIndex} to ${rawData.length}`);
+        console.log(`Processing employees from row ${rowsStartIndex} to ${rawData.length}`);
         
+        // Process employee rows
         for (let i = rowsStartIndex; i < rawData.length; i++) {
           const row = rawData[i];
-          if (i === rowsStartIndex) {
-            console.log('First employee row:', row);
-          }
           if (row[0] && typeof row[0] === 'string' && !row[0].includes('TOTAL HOURS')) {
             const employeeName = row[0].trim();
             const initials = row[1] || null; // INITIALS column
-            const hours = row[2]; // HOURS column (was row[1])
+            const hours = row[2]; // HOURS column
             const timeOff = row[3] || '';
             const apptOT = row[4] || 0;
             const fieldOT = row[5] || 0;
             const total = row[6] || 0;
             const comments = row[7] || '';
+            
+            console.log(`Processing ${employeeName}: hours=${hours} (type: ${typeof hours})`);
             
             const empData = {
               worksheetName: employeeName,
@@ -367,9 +362,41 @@ const PayrollManagement = () => {
               issues: []
             };
             
-
+            // Check for formula issues in TOTAL column
+            const calculatedTotal = (typeof apptOT === 'number' ? apptOT : 0) + (typeof fieldOT === 'number' ? fieldOT : 0);
+            if (typeof total === 'number' && Math.abs(total - calculatedTotal) > 0.01) {
+              empData.issues.push(`TOTAL formula error: Shows $${total} but should be $${calculatedTotal} (${apptOT} + ${fieldOT})`);
+            }
             
-            if (typeof apptOT === 'number') {
+            // Only check hours for numeric values (not 'same' or 'Salary')
+            if (typeof hours === 'number' && !isNaN(hours)) {
+              totalHoursSum += hours;
+              console.log(`  Added ${hours} to total, new sum: ${totalHoursSum}`);
+              
+              // Enhanced validation logic
+              const isPartTime = comments.toLowerCase().includes('part');
+              const hasPTO = timeOff.toLowerCase().includes('pto') && !timeOff.toLowerCase().includes('without pto');
+              const hasUnpaidTimeOff = timeOff.toLowerCase().includes('without pto') || 
+                                       timeOff.toLowerCase().includes('unpaid');
+              
+              // Check for various issues
+              if (hours !== payrollPeriod.expectedHours && !isPartTime) {
+                if (hasUnpaidTimeOff) {
+                  empData.issues.push(`Has unpaid time off - ${hours} hours instead of ${payrollPeriod.expectedHours}`);
+                } else if (!hasPTO && Math.abs(hours - payrollPeriod.expectedHours) > 8) {
+                  empData.issues.push(`Expected ${payrollPeriod.expectedHours} hours, showing ${hours}`);
+                } else if (hasPTO && hours > payrollPeriod.expectedHours) {
+                  empData.issues.push(`Has PTO but worked ${hours} hours (overtime?)`);
+                }
+              }
+              
+              // Flag zero hours
+              if (hours === 0 && !timeOff.toLowerCase().includes('start date')) {
+                empData.issues.push(`Zero hours recorded`);
+              }
+            }
+            
+            if (typeof apptOT === 'number' && !isNaN(apptOT)) {
               apptOTSum += apptOT;
             }
             
@@ -377,7 +404,10 @@ const PayrollManagement = () => {
           }
         }
         
-        // Check totals - MOVED AFTER employee processing
+        console.log(`Final totalHoursSum: ${totalHoursSum}`);
+        console.log(`Final apptOTSum: ${apptOTSum}`);
+        
+        // Check totals
         const totalsRowIndex = rawData.findIndex(row => 
           row[0] && row[0].toString().includes('TOTAL HOURS')
         );
@@ -386,11 +416,16 @@ const PayrollManagement = () => {
           const totalsRow = rawData[totalsRowIndex];
           const sheetTotalHours = totalsRow[2] || 0; // Column 2 (HOURS)
           const sheetApptOT = totalsRow[4] || 0; // Column 4 (APPT OT)
-          const sheetFieldOT = totalsRow[5] || 0; // Column 5 (FIELD OT)
-          const sheetTotal = totalsRow[6] || 0; // Column 6 (TOTAL)
+          
+          console.log('Totals validation:', {
+            sheetTotalHours,
+            totalHoursSum,
+            sheetApptOT,
+            apptOTSum
+          });
           
           // Check if HOURS total matches sum
-          if (Math.abs(sheetTotalHours - totalHoursSum) > 0.01) {
+          if (totalHoursSum > 0 && Math.abs(sheetTotalHours - totalHoursSum) > 0.01) {
             issues.push({
               type: 'warning',
               message: `Total hours shows ${sheetTotalHours}, but individual hours add up to ${totalHoursSum}`,
@@ -402,8 +437,8 @@ const PayrollManagement = () => {
           if (Math.abs(sheetApptOT - apptOTSum) > 0.01) {
             issues.push({
               type: 'warning',
-              message: `Total Appt OT shows ${sheetApptOT}, but individual amounts add up to ${apptOTSum}`,
-              emailText: `The Appt OT total shows ${sheetApptOT}, but individual amounts sum to ${apptOTSum}. Please check the SUM formula.`
+              message: `Total Appt OT shows $${sheetApptOT}, but individual amounts add up to $${apptOTSum}`,
+              emailText: `The Appt OT total shows $${sheetApptOT}, but individual amounts sum to $${apptOTSum}. Please check the SUM formula.`
             });
           }
         }
@@ -411,10 +446,13 @@ const PayrollManagement = () => {
         setWorksheetIssues(issues);
         setPayrollData(parsedData);
         
-        if (issues.length === 0) {
+        const employeesWithIssues = parsedData.filter(emp => emp.issues.length > 0).length;
+        console.log(`Validation complete: ${parsedData.length} employees processed, ${employeesWithIssues} have issues`);
+        
+        if (issues.length === 0 && employeesWithIssues === 0) {
           setSuccessMessage(`Processed ${parsedData.length} employees successfully - worksheet looks good!`);
         } else {
-          setSuccessMessage(`Processed ${parsedData.length} employees. Found ${issues.length} items to review.`);
+          setSuccessMessage(`Processed ${parsedData.length} employees. Found ${issues.length + employeesWithIssues} items to review.`);
         }
       };
       
