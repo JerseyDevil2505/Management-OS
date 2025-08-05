@@ -123,6 +123,9 @@ const PayrollManagement = () => {
       const hours = getStandardExpectedHours(payrollPeriod.endDate);
       setPayrollPeriod(prev => ({ ...prev, expectedHours: hours }));
     }
+  }, [payrollPeriod.endDate]););
+      setPayrollPeriod(prev => ({ ...prev, expectedHours: hours }));
+    }
   }, [payrollPeriod.endDate]);
 
   const loadInitialData = async () => {
