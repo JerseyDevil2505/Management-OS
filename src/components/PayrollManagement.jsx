@@ -123,9 +123,6 @@ const PayrollManagement = () => {
       const hours = getStandardExpectedHours(payrollPeriod.endDate);
       setPayrollPeriod(prev => ({ ...prev, expectedHours: hours }));
     }
-  }, [payrollPeriod.endDate]););
-      setPayrollPeriod(prev => ({ ...prev, expectedHours: hours }));
-    }
   }, [payrollPeriod.endDate]);
 
   const loadInitialData = async () => {
@@ -672,13 +669,31 @@ const PayrollManagement = () => {
   };
 
   const generateEmailFeedback = () => {
-    if (worksheetIssues.length === 0) return '';
+    if (worksheetIssues.length === 0 && !payrollData.some(emp => emp.issues.length > 0)) {
+      return '';
+    }
     
     let email = `Hi,\n\nI've reviewed the payroll worksheet and found a few items:\n\n`;
     
-    worksheetIssues.forEach((issue, index) => {
-      email += `${index + 1}. ${issue.emailText}\n\n`;
-    });
+    // Add worksheet-level issues
+    if (worksheetIssues.length > 0) {
+      worksheetIssues.forEach((issue, index) => {
+        email += `${index + 1}. ${issue.emailText}\n\n`;
+      });
+    }
+    
+    // Add employee-specific issues
+    const employeesWithIssues = payrollData.filter(emp => emp.issues.length > 0);
+    if (employeesWithIssues.length > 0) {
+      email += `Employee-specific issues:\n\n`;
+      employeesWithIssues.forEach(emp => {
+        email += `${emp.worksheetName}:\n`;
+        emp.issues.forEach(issue => {
+          email += `  - ${issue}\n`;
+        });
+        email += '\n';
+      });
+    }
     
     email += `Let me know if you have any questions!\n\nThanks`;
     
