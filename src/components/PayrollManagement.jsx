@@ -570,16 +570,8 @@ const PayrollManagement = () => {
         .single();
       
       if (periodError) throw periodError;
-      
-.join('; ') : null
-            });
-          
-          if (entryError) {
-            console.error('Error saving payroll entry:', entryError);
-          }
-        }
-      }
-      
+ 
+     
       // Save processing info to localStorage (for backwards compatibility)
       const processInfo = {
         startDate: payrollPeriod.startDate,
