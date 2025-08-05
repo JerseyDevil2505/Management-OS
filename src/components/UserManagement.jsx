@@ -16,7 +16,7 @@ const UserManagement = () => {
     email: '',
     password: '',
     confirmPassword: '',
-    role: 'inspector'
+    role: 'Management'
   });
   const [resetPassword, setResetPassword] = useState('');
   const [confirmResetPassword, setConfirmResetPassword] = useState('');
@@ -31,6 +31,8 @@ const UserManagement = () => {
       const { data, error } = await supabase
         .from('employees')
         .select('*')
+        .eq('employment_status', 'Full Time')  // Only full-time employees
+        .in('role', ['Management', 'Admin'])   // Only Management and Admin roles
         .order('last_name');
 
       if (error) throw error;
@@ -59,10 +61,10 @@ const UserManagement = () => {
     }
 
     try {
-      // Check if employee exists
+      // Check if employee exists and get their full data
       const { data: existingEmployee } = await supabase
         .from('employees')
-        .select('id')
+        .select('*')  // Get all fields including first_name and last_name
         .eq('email', newUser.email.toLowerCase())
         .single();
 
@@ -71,10 +73,15 @@ const UserManagement = () => {
         return;
       }
 
-      // Create auth user using regular signUp
+      // Create auth user with metadata for profiles table
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: newUser.email,
-        password: newUser.password
+        password: newUser.password,
+        options: {
+          data: {
+            full_name: `${existingEmployee.first_name} ${existingEmployee.last_name}`
+          }
+        }
       });
 
       if (authError) throw authError;
@@ -92,7 +99,7 @@ const UserManagement = () => {
 
       setSuccessMessage('User created successfully. They should check their email to confirm.');
       setShowCreateModal(false);
-      setNewUser({ email: '', password: '', confirmPassword: '', role: 'inspector' });
+      setNewUser({ email: '', password: '', confirmPassword: '', role: 'Management' });
       loadUsers();
     } catch (err) {
       console.error('Error creating user:', err);
@@ -143,8 +150,8 @@ const UserManagement = () => {
 
   const getRoleBadgeClass = (role) => {
     switch (role) {
-      case 'admin': return 'badge-admin';
-      case 'manager': return 'badge-manager';
+      case 'Admin': return 'badge-admin';
+      case 'Management': return 'badge-manager';
       default: return 'badge-inspector';
     }
   };
@@ -169,16 +176,6 @@ const UserManagement = () => {
         <div className="um-success">{successMessage}</div>
       )}
 
-      <div className="um-instructions">
-        <p><strong>Instructions:</strong></p>
-        <ul>
-          <li>Only employees already in the system can have user accounts created</li>
-          <li>Admins have full access to all features including billing and payroll</li>
-          <li>Managers cannot access billing and payroll modules</li>
-          <li>Inspectors have limited access to their assigned jobs only</li>
-        </ul>
-      </div>
-
       {loading ? (
         <div className="um-loading">Loading users...</div>
       ) : (
@@ -202,13 +199,12 @@ const UserManagement = () => {
                   <td>{user.email}</td>
                   <td>
                     <select
-                      value={user.role || 'inspector'}
+                      value={user.role || 'Management'}
                       onChange={(e) => handleRoleChange(user.id, e.target.value)}
                       className={`role-select ${getRoleBadgeClass(user.role)}`}
                     >
-                      <option value="admin">Admin</option>
-                      <option value="manager">Manager</option>
-                      <option value="inspector">Inspector</option>
+                      <option value="Admin">Admin</option>
+                      <option value="Management">Management</option>
                     </select>
                   </td>
                   <td>{user.inspector_type || '-'}</td>
@@ -286,9 +282,8 @@ const UserManagement = () => {
                   value={newUser.role}
                   onChange={(e) => setNewUser({...newUser, role: e.target.value})}
                 >
-                  <option value="admin">Admin</option>
-                  <option value="manager">Manager</option>
-                  <option value="inspector">Inspector</option>
+                  <option value="Admin">Admin</option>
+                  <option value="Management">Management</option>
                 </select>
               </div>
 
