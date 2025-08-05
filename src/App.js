@@ -384,16 +384,56 @@ function App() {
 
   const renderTabs = () => {
     const tabs = [
-      { id: 'employees', label: '👥 Employee Management' },
-      { id: 'jobs', label: '📋 Current Jobs' }
+      { 
+        id: 'employees', 
+        label: 'Employee Management',
+        icon: (
+          <svg className="w-4 h-4 inline-block mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+          </svg>
+        )
+      },
+      { 
+        id: 'jobs', 
+        label: 'Current Jobs',
+        icon: (
+          <svg className="w-4 h-4 inline-block mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+          </svg>
+        )
+      }
     ];
 
     // Only show billing and payroll tabs for admins
     if (user?.role === 'admin') {
       tabs.push(
-        { id: 'billing', label: '💰 Billing Management' },
-        { id: 'payroll', label: '📊 Payroll Management' },
-        { id: 'users', label: '🔐 User Management' }
+        { 
+          id: 'billing', 
+          label: 'Billing Management',
+          icon: (
+            <svg className="w-4 h-4 inline-block mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          )
+        },
+        { 
+          id: 'payroll', 
+          label: 'Payroll Management',
+          icon: (
+            <svg className="w-4 h-4 inline-block mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+          )
+        },
+        { 
+          id: 'users', 
+          label: 'User Management',
+          icon: (
+            <svg className="w-4 h-4 inline-block mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+          )
+        }
       );
     }
 
@@ -431,26 +471,26 @@ function App() {
 
   return (
     <div className="App">
-      {/* Top Navigation */}
-      <div className="bg-gray-900 text-white p-4 mb-6">
-        <div className="max-w-6xl mx-auto">
+      {/* Top Navigation - Updated with Management OS styling */}
+      <div className="app-header">
+        <div className="max-w-6xl mx-auto px-4 py-4">
           <div className="flex justify-between items-center mb-4">
-            <h1 className="text-2xl font-bold">
+            <h1 className="text-3xl font-bold text-white flex items-center">
               Management OS
               {isLoadingWorkflowStats && (
-                <span className="ml-3 text-sm text-gray-300">
-                  <div className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-gray-300 mr-2"></div>
+                <span className="ml-3 text-sm opacity-90">
+                  <div className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
                   Loading analytics...
                 </span>
               )}
             </h1>
             <div className="flex items-center gap-4">
-              <span className="text-sm text-gray-300">
+              <span className="text-sm text-white opacity-95">
                 {user.employeeData?.name || user.email} ({user.role})
               </span>
               <button
                 onClick={handleLogout}
-                className="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm"
+                className="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 backdrop-blur-sm rounded-lg text-white font-medium transition-all duration-200"
               >
                 Logout
               </button>
@@ -459,20 +499,20 @@ function App() {
           
           {/* Only show main navigation when NOT in job-specific modules */}
           {activeModule !== 'job-modules' && (
-            <nav className="flex space-x-6">
+            <nav className="flex space-x-4">
               {renderTabs().map(tab => (
                 <button
                   key={tab.id}
                   onClick={() => setActiveModule(tab.id)}
-                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                  className={`px-5 py-2.5 rounded-lg font-medium transition-all duration-200 ${
                     activeModule === tab.id
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                      ? 'bg-white text-blue-600 shadow-lg transform scale-105'
+                      : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm'
                   }`}
                 >
                   {tab.label}
                   {tab.id === 'jobs' && Object.values(getAllJobMetrics()).filter(m => m.isProcessed).length > 0 && (
-                    <span className="ml-2 text-xs bg-green-500 text-white px-2 py-1 rounded-full">
+                    <span className="ml-2 text-xs bg-gradient-to-r from-green-500 to-emerald-500 text-white px-2 py-1 rounded-full shadow-sm">
                       {Object.values(getAllJobMetrics()).filter(m => m.isProcessed).length}
                     </span>
                   )}
@@ -486,12 +526,12 @@ function App() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-6">
                 <div>
-                  <p className="text-sm text-gray-300">Working on:</p>
-                  <p className="text-lg font-semibold">{selectedJob.job_name}</p>
+                  <p className="text-sm text-white opacity-75">Working on:</p>
+                  <p className="text-lg font-semibold text-white">{selectedJob.job_name}</p>
                 </div>
                 
                 {/* File Upload Controls */}
-                <div className="border-l border-gray-700 pl-6">
+                <div className="border-l border-white border-opacity-30 pl-6">
                   <FileUploadButton 
                     job={selectedJob} 
                     onFileProcessed={handleFileProcessed} 
@@ -501,7 +541,7 @@ function App() {
               
               <button
                 onClick={handleBackToJobs}
-                className="px-4 py-2 bg-gray-700 text-gray-300 hover:bg-gray-600 rounded-lg font-medium transition-colors"
+                className="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 backdrop-blur-sm rounded-lg text-white font-medium transition-all duration-200"
               >
                 ← Back to Jobs
               </button>
@@ -511,7 +551,7 @@ function App() {
       </div>
 
       {/* Module Content */}
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
         {activeModule === 'employees' && <EmployeeManagement />}
         
         {activeModule === 'jobs' && (
