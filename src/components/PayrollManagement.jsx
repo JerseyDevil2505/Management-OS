@@ -338,8 +338,13 @@ const PayrollManagement = () => {
         }
         
         // Process employee rows
+        console.log(`Starting to process employees from row ${rowsStartIndex} to ${rawData.length}`);
+        
         for (let i = rowsStartIndex; i < rawData.length; i++) {
           const row = rawData[i];
+          if (i === rowsStartIndex) {
+            console.log('First employee row:', row);
+          }
           if (row[0] && typeof row[0] === 'string' && !row[0].includes('TOTAL HOURS')) {
             const employeeName = row[0].trim();
             const initials = row[1] || null; // INITIALS column
