@@ -119,11 +119,11 @@ const PayrollManagement = () => {
   }, []);
 
   useEffect(() => {
-    if (payrollPeriod.startDate && payrollPeriod.endDate) {
-      const hours = calculateExpectedHours(payrollPeriod.startDate, payrollPeriod.endDate);
+    if (payrollPeriod.endDate) {
+      const hours = getStandardExpectedHours(payrollPeriod.endDate);
       setPayrollPeriod(prev => ({ ...prev, expectedHours: hours }));
     }
-  }, [payrollPeriod.startDate, payrollPeriod.endDate]);
+  }, [payrollPeriod.endDate]);
 
   const loadInitialData = async () => {
     try {
@@ -448,6 +448,10 @@ const PayrollManagement = () => {
         
         const employeesWithIssues = parsedData.filter(emp => emp.issues.length > 0).length;
         console.log(`Validation complete: ${parsedData.length} employees processed, ${employeesWithIssues} have issues`);
+        console.log('Employees with issues:', parsedData.filter(emp => emp.issues.length > 0).map(emp => ({
+          name: emp.worksheetName,
+          issues: emp.issues
+        })));
         
         if (issues.length === 0 && employeesWithIssues === 0) {
           setSuccessMessage(`Processed ${parsedData.length} employees successfully - worksheet looks good!`);
@@ -852,7 +856,7 @@ const PayrollManagement = () => {
             </div>
             
             {/* Worksheet Feedback */}
-            {worksheetIssues.length > 0 && (
+            {(worksheetIssues.length > 0 || payrollData.some(emp => emp.issues.length > 0)) && (
               <div className="mt-6">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-sm font-medium text-gray-900">Worksheet Review</h3>
@@ -877,6 +881,25 @@ const PayrollManagement = () => {
                       <p className="font-medium">{issue.message}</p>
                     </div>
                   ))}
+                  
+                  {/* Show employee-specific issues */}
+                  {payrollData.filter(emp => emp.issues.length > 0).length > 0 && (
+                    <div className="mt-4">
+                      <h4 className="text-sm font-medium text-gray-700 mb-2">Employee Issues Found:</h4>
+                      <div className="space-y-2">
+                        {payrollData.filter(emp => emp.issues.length > 0).map((emp, index) => (
+                          <div key={index} className="p-3 bg-amber-50 text-amber-800 border border-amber-200 rounded-md">
+                            <p className="font-medium">{emp.worksheetName}:</p>
+                            <ul className="list-disc list-inside text-sm mt-1">
+                              {emp.issues.map((issue, issueIndex) => (
+                                <li key={issueIndex}>{issue}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
