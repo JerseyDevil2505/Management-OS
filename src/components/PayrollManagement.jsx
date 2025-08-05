@@ -511,7 +511,13 @@ const PayrollManagement = () => {
       }
       
       // Update inspections with period end and processed date
-      const batchSize = 1000;
+      console.log('Inspection IDs to update:', allInspectionIds.length, 'First few:', allInspectionIds.slice(0, 5));
+      console.log('Dates being set:', { 
+        payroll_period_end: payrollPeriod.endDate,
+        payroll_processed_date: payrollPeriod.processedDate 
+      });
+      
+      const batchSize = 500;
       for (let i = 0; i < allInspectionIds.length; i += batchSize) {
         const batch = allInspectionIds.slice(i, i + batchSize);
         
