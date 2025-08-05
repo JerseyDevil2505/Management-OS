@@ -81,7 +81,7 @@ const LandingPage = ({ onLogin }) => {
 
           <div className="login-card">
             <h3>Sign In</h3>
-            <div>
+            <form onSubmit={handleLogin}>
               <div className="form-group">
                 <label htmlFor="email">Email</label>
                 <input
@@ -92,7 +92,6 @@ const LandingPage = ({ onLogin }) => {
                   placeholder="Enter your email"
                   required
                   disabled={loading}
-                  onKeyPress={(e) => e.key === 'Enter' && password && handleLogin(e)}
                 />
               </div>
 
@@ -106,20 +105,15 @@ const LandingPage = ({ onLogin }) => {
                   placeholder="Enter your password"
                   required
                   disabled={loading}
-                  onKeyPress={(e) => e.key === 'Enter' && email && handleLogin(e)}
                 />
               </div>
 
               {error && <div className="error-message">{error}</div>}
 
-              <button 
-                className="login-button" 
-                disabled={loading || !email || !password}
-                onClick={handleLogin}
-              >
+              <button type="submit" className="login-button" disabled={loading}>
                 {loading ? 'Signing in...' : 'Sign In'}
               </button>
-            </div>
+            </form>
 
             <div className="login-footer">
               <p>Need help? Contact your system administrator</p>
