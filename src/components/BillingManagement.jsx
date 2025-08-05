@@ -49,8 +49,8 @@ const BillingManagement = () => {
   const [reminderMessage, setReminderMessage] = useState('');
   
   const [reserveSettings, setReserveSettings] = useState({
-    operatingReserveMonths: 2, // 0, 1, or 2
-    cashReserve: 200000
+    operatingReserveMonths: 1, // 0, 1, or 2
+    cashReserve: 125000
   });
 
   //Invoice aging helpers
