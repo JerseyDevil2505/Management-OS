@@ -1,4 +1,9 @@
-import React, { useState, useEffect } from 'react';
+reader.onload = async (e) => {
+        console.log('FileReader loaded, starting to parse Excel...');
+        
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { 
+          type: 'array',import React, { useState, useEffect } from 'react';
 import { supabase, employeeService, jobService } from '../lib/supabaseClient';
 import * as XLSX from 'xlsx';
 
@@ -282,6 +287,8 @@ const PayrollManagement = () => {
   const processUploadedFile = async (file) => {
     if (!file) return;
     
+    console.log('Starting file processing...', file.name);
+    
     setIsProcessing(true);
     setError(null);
     setWorksheetIssues([]);
@@ -311,9 +318,13 @@ const PayrollManagement = () => {
         for (let i = 0; i < Math.min(10, rawData.length); i++) {
           if (rawData[i] && rawData[i][0] === 'EMPLOYEE') {
             rowsStartIndex = i + 2; // Skip blank row and pay period row
+            console.log(`Found EMPLOYEE header at row ${i}, data will start at row ${rowsStartIndex}`);
             break;
           }
         }
+        
+        console.log('About to process employees, rowsStartIndex:', rowsStartIndex);
+        console.log('Total rows in data:', rawData.length);
         
         if (rowsStartIndex === -1) {
           issues.push({
