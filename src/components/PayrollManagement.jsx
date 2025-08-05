@@ -608,7 +608,7 @@ const PayrollManagement = () => {
           total_ot: totalOT,
           inspection_count: allInspectionIds.length,
           expected_hours: payrollPeriod.expectedHours,
-          status: 'completed',
+          status: 'processed',
           total_amount: totalOT, // For compatibility with existing columns
           processing_settings: {
             bonus_rate: bonusRate,
