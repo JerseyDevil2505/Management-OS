@@ -351,17 +351,7 @@ const PayrollManagement = () => {
               issues: []
             };
             
-            // Only check hours for numeric values (not 'same' or 'Salary')
-            if (typeof hours === 'number') {
-              totalHoursSum += hours;
-              
-              if (!comments.toLowerCase().includes('part time') && 
-                  !timeOff.toLowerCase().includes('pto') &&
-                  hours !== payrollPeriod.expectedHours &&
-                  Math.abs(hours - payrollPeriod.expectedHours) > 8) {
-                empData.issues.push(`Expected ${payrollPeriod.expectedHours} hours, showing ${hours}`);
-              }
-            }
+
             
             if (typeof apptOT === 'number') {
               apptOTSum += apptOT;
@@ -378,14 +368,26 @@ const PayrollManagement = () => {
         
         if (totalsRowIndex > -1) {
           const totalsRow = rawData[totalsRowIndex];
-          const sheetTotalHours = totalsRow[2] || 0; // Column 2 now (was 1)
-          const sheetApptOT = totalsRow[4] || 0; // Column 4 now (was 3)
+          const sheetTotalHours = totalsRow[2] || 0; // Column 2 (HOURS)
+          const sheetApptOT = totalsRow[4] || 0; // Column 4 (APPT OT)
+          const sheetFieldOT = totalsRow[5] || 0; // Column 5 (FIELD OT)
+          const sheetTotal = totalsRow[6] || 0; // Column 6 (TOTAL)
           
+          // Check if HOURS total matches sum
           if (Math.abs(sheetTotalHours - totalHoursSum) > 0.01) {
             issues.push({
               type: 'warning',
               message: `Total hours shows ${sheetTotalHours}, but individual hours add up to ${totalHoursSum}`,
               emailText: `Quick note: The total hours row shows ${sheetTotalHours}, but when I add up the individual hours I get ${totalHoursSum}. Might want to double-check the SUM formula.`
+            });
+          }
+          
+          // Check if APPT OT total matches sum
+          if (Math.abs(sheetApptOT - apptOTSum) > 0.01) {
+            issues.push({
+              type: 'warning',
+              message: `Total Appt OT shows ${sheetApptOT}, but individual amounts add up to ${apptOTSum}`,
+              emailText: `The Appt OT total shows ${sheetApptOT}, but individual amounts sum to ${apptOTSum}. Please check the SUM formula.`
             });
           }
         }
