@@ -388,8 +388,11 @@ function App() {
         id: 'employees', 
         label: 'Employee Management',
         icon: (
-          <svg className="w-4 h-4 inline-block mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+          <svg className="w-5 h-5 inline-block mr-2" viewBox="0 0 24 24" fill="none">
+            <circle cx="9" cy="7" r="3" fill="currentColor" opacity="0.3"/>
+            <circle cx="15" cy="7" r="2.5" fill="currentColor" opacity="0.2"/>
+            <path d="M3 18C3 15.2386 5.23858 13 8 13H10C12.7614 13 15 15.2386 15 18V21H3V18Z" fill="currentColor"/>
+            <path d="M15 14C17.2091 14 19 15.3431 19 17V20H15V18C15 16.5 15 15 15 14Z" fill="currentColor" opacity="0.5"/>
           </svg>
         )
       },
@@ -397,8 +400,13 @@ function App() {
         id: 'jobs', 
         label: 'Current Jobs',
         icon: (
-          <svg className="w-4 h-4 inline-block mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+          <svg className="w-5 h-5 inline-block mr-2" viewBox="0 0 24 24" fill="none">
+            <rect x="5" y="4" width="14" height="16" rx="2" fill="currentColor" opacity="0.2"/>
+            <rect x="5" y="4" width="14" height="4" rx="2" fill="currentColor"/>
+            <rect x="8" y="11" width="8" height="2" rx="0.5" fill="currentColor" opacity="0.6"/>
+            <rect x="8" y="15" width="5" height="2" rx="0.5" fill="currentColor" opacity="0.6"/>
+            <circle cx="9" cy="2" r="1" fill="currentColor"/>
+            <circle cx="15" cy="2" r="1" fill="currentColor"/>
           </svg>
         )
       }
@@ -411,8 +419,11 @@ function App() {
           id: 'billing', 
           label: 'Billing Management',
           icon: (
-            <svg className="w-4 h-4 inline-block mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            <svg className="w-5 h-5 inline-block mr-2" viewBox="0 0 24 24" fill="none">
+              <rect x="2" y="6" width="20" height="12" rx="2" fill="currentColor" opacity="0.2"/>
+              <circle cx="12" cy="12" r="4" fill="currentColor"/>
+              <path d="M12 10V8M12 16V14" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+              <path d="M6 6V4M18 6V4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
             </svg>
           )
         },
@@ -420,8 +431,12 @@ function App() {
           id: 'payroll', 
           label: 'Payroll Management',
           icon: (
-            <svg className="w-4 h-4 inline-block mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            <svg className="w-5 h-5 inline-block mr-2" viewBox="0 0 24 24" fill="none">
+              <rect x="3" y="14" width="5" height="7" fill="currentColor" opacity="0.5"/>
+              <rect x="10" y="10" width="5" height="11" fill="currentColor" opacity="0.7"/>
+              <rect x="17" y="6" width="5" height="15" fill="currentColor"/>
+              <path d="M3 11L8 7L13 9L22 2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <circle cx="22" cy="2" r="2" fill="currentColor"/>
             </svg>
           )
         },
@@ -429,8 +444,11 @@ function App() {
           id: 'users', 
           label: 'User Management',
           icon: (
-            <svg className="w-4 h-4 inline-block mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            <svg className="w-5 h-5 inline-block mr-2" viewBox="0 0 24 24" fill="none">
+              <rect x="4" y="10" width="16" height="10" rx="2" fill="currentColor" opacity="0.3"/>
+              <path d="M8 10V7C8 4.79086 9.79086 3 12 3C14.2091 3 16 4.79086 16 7V10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              <circle cx="12" cy="14" r="2" fill="currentColor"/>
+              <rect x="11" y="15" width="2" height="3" fill="currentColor"/>
             </svg>
           )
         }
@@ -475,7 +493,7 @@ function App() {
       <div className="app-header">
         <div className="max-w-6xl mx-auto px-4 py-4">
           <div className="flex justify-between items-center mb-4">
-            <h1 className="text-3xl font-bold text-white flex items-center">
+            <h1 className="text-4xl font-bold text-white flex items-center" style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", letterSpacing: '-0.02em', textShadow: '0 2px 10px rgba(0,0,0,0.2)' }}>
               Management OS
               {isLoadingWorkflowStats && (
                 <span className="ml-3 text-sm opacity-90">
@@ -504,12 +522,13 @@ function App() {
                 <button
                   key={tab.id}
                   onClick={() => setActiveModule(tab.id)}
-                  className={`px-5 py-2.5 rounded-lg font-medium transition-all duration-200 ${
+                  className={`px-5 py-2.5 rounded-xl font-medium transition-all duration-200 flex items-center border ${
                     activeModule === tab.id
-                      ? 'bg-white text-blue-600 shadow-lg transform scale-105'
-                      : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm'
+                      ? 'bg-white text-blue-600 shadow-lg transform scale-105 border-white'
+                      : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm border-white border-opacity-30 hover:border-opacity-50'
                   }`}
                 >
+                  {tab.icon}
                   {tab.label}
                   {tab.id === 'jobs' && Object.values(getAllJobMetrics()).filter(m => m.isProcessed).length > 0 && (
                     <span className="ml-2 text-xs bg-gradient-to-r from-green-500 to-emerald-500 text-white px-2 py-1 rounded-full shadow-sm">
