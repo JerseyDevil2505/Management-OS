@@ -16,6 +16,8 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
   const [comparisonResults, setComparisonResults] = useState(null);
   const [salesDecisions, setSalesDecisions] = useState(new Map());
   const [sourceFileVersion, setSourceFileVersion] = useState(1);
+  const [lastSourceProcessedDate, setLastSourceProcessedDate] = useState(null);
+  const [lastCodeProcessedDate, setLastCodeProcessedDate] = useState(null);
   
   // NEW: Batch processing modal state
   const [showBatchModal, setShowBatchModal] = useState(false);
@@ -308,6 +310,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       }
 
       addNotification(`✅ Successfully updated ${codeCount} code definitions for ${detectedVendor}`, 'success');
+      setLastCodeProcessedDate(new Date().toISOString());  // Track code file update date
       
       // Clear code file selection
       setCodeFile(null);
@@ -1246,6 +1249,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       // CRITICAL FIX: Update banner state immediately
       addBatchLog('🔄 Refreshing UI state...', 'info');
       setSourceFileVersion(newFileVersion);  // Use the newFileVersion we already calculated
+      setLastSourceProcessedDate(new Date().toISOString());  // Track our own date!
       addBatchLog('✅ UI state refreshed successfully', 'success');
       
       setBatchComplete(true);
@@ -2073,21 +2077,23 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     fetchSourceFileVersion();
   }, [job?.id]);
 
-  // UPDATED: Use fetched source file version for banner
   const getFileStatusWithRealVersion = (timestamp, type) => {
     if (!timestamp) return 'Never';
     
-    
     if (type === 'source') {
+      // Use our local date if we just processed, otherwise use job date
+      const displayDate = lastSourceProcessedDate || timestamp;
       const result = sourceFileVersion === 1 
-        ? `Imported at Job Creation (${formatDate(timestamp)})`
-        : `Updated via FileUpload (${formatDate(timestamp)})`;
+        ? `Imported at Job Creation (${formatDate(displayDate)})`
+        : `Updated via FileUpload (${formatDate(displayDate)})`;
       return result;
     } else if (type === 'code') {
+      // Use our local date if we just processed, otherwise use job date
+      const displayDate = lastCodeProcessedDate || timestamp;
       const codeVersion = job.code_file_version || 1;
       const result = codeVersion === 1 
-        ? `Imported at Job Creation (${formatDate(timestamp)})`
-        : `Updated via FileUpload (${formatDate(timestamp)})`;
+        ? `Imported at Job Creation (${formatDate(displayDate)})`
+        : `Updated via FileUpload (${formatDate(displayDate)})`;
       return result;
     }
     
