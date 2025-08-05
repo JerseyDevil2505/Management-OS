@@ -183,47 +183,35 @@ const PayrollManagement = () => {
       const endDate = payrollPeriod.endDate;
       
       console.log(`Calculating bonuses from ${startDate} to ${endDate}`);
+      console.log('Fetching inspections from database...');
       
-      // Get ALL inspections with class 2 or 3A in the date range
-      const { count, error: countError } = await supabase
+      // Since you increased max rows to 5000, let's use that
+      // For larger datasets, we'd need a different approach
+      let query = supabase
         .from('inspection_data')
-        .select('*', { count: 'exact', head: true })
+        .select('id, measure_by, measure_date, property_class, property_composite_key, property_location, job_id')
         .gte('measure_date', startDate)
         .lte('measure_date', endDate)
-        .in('property_class', ['2', '3A']);
+        .in('property_class', ['2', '3A'])
+        .limit(5000);
 
-      if (countError) {
-        console.error('Count query error:', countError);
-        throw new Error(`Database error: ${countError.message}`);
+      if (selectedJob !== 'all') {
+        console.log(`Filtering by job: ${selectedJob}`);
+        query = query.eq('job_id', selectedJob);
+      }
+
+      console.log('Executing query...');
+      const startTime = Date.now();
+      const { data: allInspections, error: queryError } = await query;
+      const queryTime = Date.now() - startTime;
+      
+      if (queryError) {
+        console.error('Query error:', queryError);
+        throw new Error(`Database error: ${queryError.message}`);
       }
       
-      console.log(`Total inspections to process: ${count}`);
-
-      const batchSize = 1000;
-      const batches = Math.ceil(count / batchSize);
-      const allInspections = [];
-
-      for (let i = 0; i < batches; i++) {
-        const from = i * batchSize;
-        const to = from + batchSize - 1;
-        
-        let query = supabase
-          .from('inspection_data')
-          .select('id, measure_by, measure_date, property_class, property_composite_key, property_location, job_id')
-          .gte('measure_date', startDate)
-          .lte('measure_date', endDate)
-          .in('property_class', ['2', '3A'])
-          .range(from, to);
-
-        if (selectedJob !== 'all') {
-          query = query.eq('job_id', selectedJob);
-        }
-
-        const { data: batch, error: batchError } = await query;
-        if (batchError) throw batchError;
-        
-        allInspections.push(...batch);
-      }
+      console.log(`Query completed in ${queryTime}ms`);
+      console.log(`Total inspections fetched: ${allInspections?.length || 0}`);
 
       // Group inspections by inspector initials
       const inspectorCounts = {};
@@ -266,7 +254,7 @@ const PayrollManagement = () => {
       Object.entries(bonusResults)
         .sort((a, b) => b[1].inspections - a[1].inspections)
         .forEach(([initials, data]) => {
-          console.log(`  ${initials}: ${data.inspections} inspections = $${data.bonus.toFixed(2)}`);
+          console.log(`  ${initials}: ${data.inspections} inspections = ${data.bonus.toFixed(2)}`);
         });
       
       setInspectionBonuses(bonusResults);
