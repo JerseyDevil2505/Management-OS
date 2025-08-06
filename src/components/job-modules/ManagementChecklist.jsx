@@ -716,80 +716,31 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
       
       // Transform data for Excel
       const excelData = filteredData.map(record => ({
-        'Block': record.property_block || '',
-        'Lot': record.property_lot || '',
+        'Block': record.property_block,
+        'Lot': record.property_lot,
         'Qualifier': record.property_qualifier || '',
-        'Property Class': record.property_m4_class || '',
-        'Property Location': record.property_location || '',
-        'Owner Name': record.owner_name || '',
-        'Mailing Street': record.owner_street || '',
-        'City/State/Zip': record.owner_csz || ''
+        'Property Class': record.property_m4_class,
+        'Location': record.property_location,
+        'Owner': record.owner_name,
+        'Mailing Address': `${record.owner_street || ''} ${record.owner_csz || ''}`.trim()
       }));
       
       // Create workbook and worksheet
       const ws = XLSX.utils.json_to_sheet(excelData);
       const wb = XLSX.utils.book_new();
-      
-      // Apply header styling
-      const range = XLSX.utils.decode_range(ws['!ref']);
-      
-      // Style headers
-      for (let col = range.s.c; col <= range.e.c; col++) {
-        const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
-        if (!ws[cellAddress]) continue;
-        
-        ws[cellAddress].s = {
-          font: { bold: true, sz: 12 },
-          fill: { fgColor: { rgb: "E7F3FF" } },
-          alignment: { horizontal: "center", vertical: "center", wrapText: false },
-          border: {
-            top: { style: "thin", color: { rgb: "000000" } },
-            bottom: { style: "thin", color: { rgb: "000000" } },
-            left: { style: "thin", color: { rgb: "000000" } },
-            right: { style: "thin", color: { rgb: "000000" } }
-          }
-        };
-      }
-      
-      // Auto-size columns with better widths
-      const colWidths = [
-        { wch: 8 },   // Block - narrower
-        { wch: 10 },  // Lot - moderate
-        { wch: 10 },  // Qualifier - moderate
-        { wch: 12 },  // Property Class - moderate
-        { wch: 40 },  // Property Location - wider for addresses
-        { wch: 30 },  // Owner Name - good width for names
-        { wch: 35 },  // Mailing Street - good width for street addresses
-        { wch: 25 }   // City/State/Zip - moderate
-      ];
-      ws['!cols'] = colWidths;
-      
-      // Set row height for headers
-      ws['!rows'] = [{ hpt: 20 }]; // Header row height
-      
-      // Add autofilter
-      ws['!autofilter'] = { ref: XLSX.utils.encode_range(range) };
-      
-      // Freeze the header row
-      ws['!freeze'] = { xSplit: 0, ySplit: 1, topLeftCell: "A2", state: "frozen" };
-      
       XLSX.utils.book_append_sheet(wb, ws, 'Mailing List');
       
-      // Add a summary sheet with counts
-      const summaryData = [
-        { 'Summary': 'Initial Mailing List Summary', 'Count': '' },
-        { 'Summary': '', 'Count': '' },
-        { 'Summary': 'Total Properties', 'Count': filteredData.length },
-        { 'Summary': 'Residential (Class 1-4)', 'Count': filteredData.filter(r => ['1', '2', '3A', '3B', '4A', '4B', '4C'].includes(r['Property Class'])).length },
-        { 'Summary': 'Exempt Properties (Class 15)', 'Count': filteredData.filter(r => (r['Property Class'] || '').startsWith('15')).length },
-        { 'Summary': '', 'Count': '' },
-        { 'Summary': 'Generated Date', 'Count': new Date().toLocaleDateString() },
-        { 'Summary': 'Job Name', 'Count': jobData.job_name }
+      // Set column widths to fit content properly
+      const colWidths = [
+        { wch: 12 }, // Block
+        { wch: 15 }, // Lot
+        { wch: 12 }, // Qualifier
+        { wch: 15 }, // Property Class
+        { wch: 45 }, // Location - wider for full addresses
+        { wch: 35 }, // Owner - good width for names
+        { wch: 50 }  // Mailing Address - wide for full addresses
       ];
-      
-      const wsSummary = XLSX.utils.json_to_sheet(summaryData);
-      wsSummary['!cols'] = [{ wch: 30 }, { wch: 15 }];
-      XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary');
+      ws['!cols'] = colWidths;
       
       // Generate Excel file and download
       XLSX.writeFile(wb, `${jobData.job_name}_Initial_Mailing_List.xlsx`);
@@ -875,10 +826,11 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
         return {
           'Block': property.property_block,
           'Lot': property.property_lot,
+          'Qualifier': property.property_qualifier || '',
           'Property Class': property.property_m4_class,
           'Location': property.property_location,
           'Owner': property.owner_name,
-          'Mailing Address': `${property.owner_street} ${property.owner_csz}`.trim(),
+          'Mailing Address': `${property.owner_street || ''} ${property.owner_csz || ''}`.trim(),
           'Reason': reason
         };
       });
@@ -888,14 +840,15 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, '2nd Attempt Mailer');
       
-      // Auto-size columns
+      // Set column widths to fit content properly
       const colWidths = [
-        { wch: 10 }, // Block
-        { wch: 10 }, // Lot
+        { wch: 12 }, // Block
+        { wch: 15 }, // Lot
+        { wch: 12 }, // Qualifier
         { wch: 15 }, // Property Class
-        { wch: 30 }, // Location
-        { wch: 25 }, // Owner
-        { wch: 35 }, // Mailing Address
+        { wch: 45 }, // Location
+        { wch: 35 }, // Owner
+        { wch: 50 }, // Mailing Address
         { wch: 20 }  // Reason
       ];
       ws['!cols'] = colWidths;
@@ -983,10 +936,11 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
         return {
           'Block': property.property_block,
           'Lot': property.property_lot,
+          'Qualifier': property.property_qualifier || '',
           'Property Class': property.property_m4_class,
           'Location': property.property_location,
           'Owner': property.owner_name,
-          'Mailing Address': `${property.owner_street} ${property.owner_csz}`.trim(),
+          'Mailing Address': `${property.owner_street || ''} ${property.owner_csz || ''}`.trim(),
           'Reason': reason
         };
       });
@@ -996,14 +950,15 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, '3rd Attempt Mailer');
       
-      // Auto-size columns
+      // Set column widths to fit content properly
       const colWidths = [
-        { wch: 10 }, // Block
-        { wch: 10 }, // Lot
+        { wch: 12 }, // Block
+        { wch: 15 }, // Lot
+        { wch: 12 }, // Qualifier
         { wch: 15 }, // Property Class
-        { wch: 30 }, // Location
-        { wch: 25 }, // Owner
-        { wch: 35 }, // Mailing Address
+        { wch: 45 }, // Location
+        { wch: 35 }, // Owner
+        { wch: 50 }, // Mailing Address
         { wch: 20 }  // Reason
       ];
       ws['!cols'] = colWidths;
