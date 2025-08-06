@@ -9,9 +9,9 @@ import { supabase, checklistService } from '../../lib/supabaseClient';
 import * as XLSX from 'xlsx';
 
 const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checklist', onSubModuleChange }) => {
-  const [editableClientName, setEditableClientName] = useState(jobData?.client_name || '');
+  const [editableAssessorName, setEditableAssessorName] = useState(jobData?.assessor_name || '');
   const [editableAssessorEmail, setEditableAssessorEmail] = useState(jobData?.assessor_email || '');
-  const [hasClientNameChanges, setHasClientNameChanges] = useState(false);
+  const [hasAssessorNameChanges, setHasAssessorNameChanges] = useState(false);
   const [hasAssessorEmailChanges, setHasAssessorEmailChanges] = useState(false);
   const [checklistType, setChecklistType] = useState('revaluation');
   const [checklistItems, setChecklistItems] = useState([]);
@@ -45,29 +45,24 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
   };
 
   useEffect(() => {
-    const getCurrentUser = async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          // Using your UUID for now
-          setCurrentUser({
-            id: '5df85ca3-7a54-4798-a665-c31da8d9caad',
-            email: 'ppalead1@gmail.com',
-            name: 'Jim Duda'
-          });
+    const loadJobDetails = async () => {
+      if (jobData?.id) {
+        // Fetch the latest job data to get saved assessor info
+        const { data, error } = await supabase
+          .from('jobs')
+          .select('assessor_name, assessor_email')
+          .eq('id', jobData.id)
+          .single();
+        
+        if (data && !error) {
+          setEditableAssessorName(data.assessor_name || '');
+          setEditableAssessorEmail(data.assessor_email || '');
         }
-      } catch (error) {
-        console.error('Error getting current user:', error);
-        // Fallback to your UUID
-        setCurrentUser({
-          id: '5df85ca3-7a54-4798-a665-c31da8d9caad',
-          email: 'ppalead1@gmail.com',
-          name: 'Jim Duda'
-        });
       }
     };
-    getCurrentUser();
-  }, []);
+    
+    loadJobDetails();
+  }, [jobData?.id]);
 
   useEffect(() => {
     if (jobData) {
@@ -141,12 +136,14 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
         .select(`
           property_block,
           property_lot,
+          property_qualifier,
           property_m4_class,
           property_location,
           property_facility,
           owner_name,
           owner_street,
           owner_csz,
+          property_composite_key,
           inspection_info_by
         `)
         .eq('job_id', jobId)
@@ -203,6 +200,8 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
         .select(`
           block,
           lot,
+          qualifier,
+          property_composite_key,
           info_by_code,
           list_by,
           measure_date,
@@ -236,11 +235,23 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
     try {
       setIsLoadingItems(true);
       
-      // First, try to load existing items from checklist_items
-      let items = await checklistService.getChecklistItems(jobData.id);
+      // First, try to load existing items from checklist_items - ensure DISTINCT results
+      let { data: items, error: itemsError } = await supabase
+        .from('checklist_items')
+        .select('*')
+        .eq('job_id', jobData.id)
+        .order('item_order');
+      
+      if (itemsError) {
+        console.error('Error loading checklist items:', itemsError);
+        items = [];
+      }
+      
+      // Remove any duplicates based on id (in case of data issues)
+      const uniqueItems = items ? Array.from(new Map(items.map(item => [item.id, item])).values()) : [];
       
       // If no items exist, create them from template
-      if (!items || items.length === 0) {
+      if (!uniqueItems || uniqueItems.length === 0) {
         
         // Get the standard revaluation template
         const { data: template, error: templateError } = await supabase
@@ -291,6 +302,8 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
         }
 
         items = createdItems;
+      } else {
+        items = uniqueItems;
       }
       
       // Load all documents for items that can have multiple files
@@ -369,8 +382,8 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
   };
 
   useEffect(() => {
-    setHasClientNameChanges(editableClientName !== jobData?.client_name);
-  }, [editableClientName, jobData?.client_name]);
+    setHasAssessorNameChanges(editableAssessorName !== jobData?.assessor_name);
+  }, [editableAssessorName, jobData?.assessor_name]);
 
   useEffect(() => {
     setHasAssessorEmailChanges(editableAssessorEmail !== jobData?.assessor_email);
@@ -585,26 +598,32 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
     fileInput.click();
   };
 
-  const saveClientName = async () => {
+  const saveAssessorName = async () => {
     try {
-      // Save to database
-      await checklistService.updateClientName(jobData.id, editableClientName);
+      // Save to database - update assessor_name field
+      await supabase
+        .from('jobs')
+        .update({ assessor_name: editableAssessorName })
+        .eq('id', jobData.id);
       
       // Update local state
-      setHasClientNameChanges(false);
+      setHasAssessorNameChanges(false);
       
       // Success feedback
-      alert('Client/Assessor name updated successfully!');
+      alert('Assessor name updated successfully!');
     } catch (error) {
-      console.error('Error saving client name:', error);
-      alert('Failed to save client name. Please try again.');
+      console.error('Error saving assessor name:', error);
+      alert('Failed to save assessor name. Please try again.');
     }
   };
 
   const saveAssessorEmail = async () => {
     try {
-      // Save to database
-      await checklistService.updateAssessorEmail(jobData.id, editableAssessorEmail);
+      // Save to database - update assessor_email field
+      await supabase
+        .from('jobs')
+        .update({ assessor_email: editableAssessorEmail })
+        .eq('id', jobData.id);
       
       // Update local state
       setHasAssessorEmailChanges(false);
@@ -808,18 +827,21 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
       // Get ALL inspection data with pagination
       const inspectionData = await getAllInspectionData(jobData.id);
       
-      // Create a map of inspection data by property key (block-lot)
+      // Create a map of inspection data by composite key
       const inspectionMap = new Map();
       inspectionData.forEach(inspection => {
-        const key = `${inspection.block}-${inspection.lot}`;
-        inspectionMap.set(key, inspection);
+        // Use the existing composite key from the database
+        if (inspection.property_composite_key) {
+          inspectionMap.set(inspection.property_composite_key, inspection);
+        }
       });
       
       // Filter properties for 3rd attempt (same logic as 2nd for now)
       const thirdAttemptProperties = propertyData.filter(property => {
         const propClass = property.property_m4_class?.toUpperCase() || '';
-        const propertyKey = `${property.property_block}-${property.property_lot}`;
-        const inspection = inspectionMap.get(propertyKey);
+        // Use the property's composite key to find matching inspection
+        const inspection = property.property_composite_key ? 
+          inspectionMap.get(property.property_composite_key) : null;
         
         // Check if it's a refusal based on job config
         if (inspection && refusalCategories.includes(inspection.info_by_code)) {
@@ -847,7 +869,7 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
         'Location': property.property_location,
         'Owner': property.owner_name,
         'Mailing Address': `${property.owner_street} ${property.owner_csz}`.trim(),
-        'Reason': inspectionMap.get(`${property.property_block}-${property.property_lot}`)?.info_by_code || 'Not Inspected'
+        'Reason': property.property_composite_key && inspectionMap.get(property.property_composite_key)?.info_by_code || 'Not Inspected'
       }));
       
       // Create workbook and worksheet
@@ -966,18 +988,18 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
             <h2 className="text-2xl font-bold text-gray-800 mb-4">{jobData.job_name}</h2>
             <div className="space-y-3">
               <div className="flex items-center gap-3">
-                <label className="text-sm font-medium text-gray-700 w-32">Client/Assessor:</label>
+                <label className="text-sm font-medium text-gray-700 w-32">Assessor Name:</label>
                 <div className="flex items-center gap-2 flex-1">
                   <input
                     type="text"
-                    value={editableClientName}
-                    onChange={(e) => setEditableClientName(e.target.value)}
+                    value={editableAssessorName}
+                    onChange={(e) => setEditableAssessorName(e.target.value)}
                     className="px-3 py-2 border border-gray-300 rounded-md text-sm flex-1"
-                    placeholder="Enter client/assessor name"
+                    placeholder="Enter assessor name"
                   />
-                  {hasClientNameChanges && (
+                  {hasAssessorNameChanges && (
                     <button
-                      onClick={saveClientName}
+                      onClick={saveAssessorName}
                       className="px-3 py-2 bg-blue-500 text-white rounded-md text-sm hover:bg-blue-600 flex items-center gap-1"
                     >
                       <Save className="w-4 h-4" />
@@ -1201,7 +1223,7 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
                     </div>
                     {item.completed_at && (
                       <div className="text-sm text-gray-500 mb-2">
-                        Completed on {new Date(item.completed_at).toLocaleDateString()} by {item.completed_by}
+                        Completed on {new Date(item.completed_at).toLocaleDateString()}
                       </div>
                     )}
                     {item.client_approved === true && item.client_approved_at && (
