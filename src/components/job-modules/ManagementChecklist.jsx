@@ -230,28 +230,77 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
     return allRecords;
   };
 
+  // Define the checklist template locally in code
+  const CHECKLIST_TEMPLATE = [
+    { id: 'contract-signed-client', item_text: 'Contract Signed by Client', item_order: 1, category: 'setup', requires_client_approval: false, allows_file_upload: true },
+    { id: 'contract-signed-state', item_text: 'Contract Signed/Approved by State', item_order: 2, category: 'setup', requires_client_approval: false, allows_file_upload: true },
+    { id: 'tax-maps-approved', item_text: 'Tax Maps Approved', item_order: 3, category: 'setup', requires_client_approval: true, allows_file_upload: false },
+    { id: 'tax-map-upload', item_text: 'Tax Map Upload', item_order: 4, category: 'setup', requires_client_approval: false, allows_file_upload: true },
+    { id: 'zoning-map-upload', item_text: 'Zoning Map Upload', item_order: 5, category: 'setup', requires_client_approval: false, allows_file_upload: true },
+    { id: 'zoning-regulations-upload', item_text: 'Zoning Bulk and Use Regulations Upload', item_order: 6, category: 'setup', requires_client_approval: false, allows_file_upload: true },
+    { id: 'ppa-website-updated', item_text: 'PPA Website Updated', item_order: 7, category: 'setup', requires_client_approval: false, allows_file_upload: false },
+    { id: 'data-collection-params', item_text: 'Data Collection Parameters', item_order: 8, category: 'setup', requires_client_approval: true, allows_file_upload: false },
+    { id: 'initial-mailing-list', item_text: 'Initial Mailing List', item_order: 9, category: 'inspection', requires_client_approval: false, allows_file_upload: false, special_action: 'generate_mailing_list' },
+    { id: 'initial-letter-brochure', item_text: 'Initial Letter and Brochure', item_order: 10, category: 'inspection', requires_client_approval: false, allows_file_upload: true },
+    { id: 'initial-mailing-sent', item_text: 'Initial Mailing Sent', item_order: 11, category: 'inspection', requires_client_approval: false, allows_file_upload: false },
+    { id: 'first-attempt', item_text: 'First Attempt Inspections', item_order: 12, category: 'inspection', requires_client_approval: false, allows_file_upload: false },
+    { id: 'second-attempt', item_text: 'Second Attempt Inspections', item_order: 13, category: 'inspection', requires_client_approval: false, allows_file_upload: false, special_action: 'generate_second_attempt_mailer' },
+    { id: 'third-attempt', item_text: 'Third Attempt Inspections', item_order: 14, category: 'inspection', requires_client_approval: false, allows_file_upload: false, special_action: 'generate_third_attempt_mailer' },
+    { id: 'error-management', item_text: 'Error Management/Quality Control', item_order: 15, category: 'inspection', requires_client_approval: false, allows_file_upload: false },
+    { id: 'market-analysis', item_text: 'Market Analysis', item_order: 16, category: 'analysis', requires_client_approval: false, allows_file_upload: false, is_analysis_item: true, sync_from_component: true },
+    { id: 'page-by-page', item_text: 'Page by Page Analysis', item_order: 17, category: 'analysis', requires_client_approval: false, allows_file_upload: false },
+    { id: 'lot-sizing', item_text: 'Lot Sizing Completed', item_order: 18, category: 'analysis', requires_client_approval: false, allows_file_upload: false },
+    { id: 'lot-sizing-questions', item_text: 'Lot Sizing Questions Complete', item_order: 19, category: 'analysis', requires_client_approval: false, allows_file_upload: false },
+    { id: 'vcs-reviewed', item_text: 'VCS Reviewed/Reset', item_order: 20, category: 'analysis', requires_client_approval: false, allows_file_upload: false },
+    { id: 'land-value-tables', item_text: 'Land Value Tables Built', item_order: 21, category: 'analysis', requires_client_approval: false, allows_file_upload: false, is_analysis_item: true, sync_from_component: true },
+    { id: 'land-values-entered', item_text: 'Land Values Entered', item_order: 22, category: 'analysis', requires_client_approval: false, allows_file_upload: false, is_analysis_item: true, sync_from_component: true },
+    { id: 'economic-obsolescence', item_text: 'Economic Obsolescence Study', item_order: 23, category: 'analysis', requires_client_approval: false, allows_file_upload: false },
+    { id: 'cost-conversion', item_text: 'Cost Conversion Factor Set', item_order: 24, category: 'analysis', requires_client_approval: false, allows_file_upload: false, is_analysis_item: true, sync_from_component: true },
+    { id: 'building-class-review', item_text: 'Building Class Review/Updated', item_order: 25, category: 'analysis', requires_client_approval: false, allows_file_upload: false },
+    { id: 'effective-age', item_text: 'Effective Age Loaded/Set', item_order: 26, category: 'analysis', requires_client_approval: false, allows_file_upload: false },
+    { id: 'final-values', item_text: 'Final Values Ready', item_order: 27, category: 'completion', requires_client_approval: true, allows_file_upload: false, is_analysis_item: true, sync_from_component: true },
+    { id: 'turnover-document', item_text: 'Generate Turnover Document', item_order: 29, category: 'completion', requires_client_approval: false, allows_file_upload: false, special_action: 'generate_turnover_pdf' },
+    { id: 'turnover-date', item_text: 'Turnover Date', item_order: 30, category: 'completion', requires_client_approval: false, allows_file_upload: false, input_type: 'date', special_action: 'archive_trigger' }
+  ];
+
   // Load checklist items from database
   const loadChecklistItems = async () => {
     try {
       setIsLoadingItems(true);
       
-      // First, try to load existing items from checklist_items - ensure DISTINCT results
-      let { data: items, error: itemsError } = await supabase
-        .from('checklist_items')
+      // Load the status data from the database (what's been completed, approved, etc.)
+      const { data: statusData, error: statusError } = await supabase
+        .from('checklist_status')
         .select('*')
-        .eq('job_id', jobData.id)
-        .order('item_order');
+        .eq('job_id', jobData.id);
       
-      if (itemsError) {
-        console.error('Error loading checklist items:', itemsError);
-        items = [];
+      if (statusError) {
+        console.error('Error loading checklist status:', statusError);
       }
       
-      // Remove any duplicates based on id (in case of data issues)
-      const uniqueItems = items ? Array.from(new Map(items.map(item => [item.id, item])).values()) : [];
+      // Create a map of status data by item_id
+      const statusMap = new Map();
+      if (statusData) {
+        statusData.forEach(status => {
+          statusMap.set(status.item_id, status);
+        });
+      }
       
-      // If no items exist, create them from template
-      if (!uniqueItems || uniqueItems.length === 0) {
+      // Merge template with status data
+      const items = CHECKLIST_TEMPLATE.map(templateItem => {
+        const status = statusMap.get(templateItem.id) || {};
+        return {
+          ...templateItem,
+          status: status.status || 'pending',
+          completed_at: status.completed_at,
+          completed_by: status.completed_by,
+          client_approved: status.client_approved || false,
+          client_approved_at: status.client_approved_at,
+          client_approved_by: status.client_approved_by,
+          file_attachment_path: status.file_attachment_path,
+          notes: status.notes
+        };
+      });
         
         // Get the standard revaluation template
         const { data: template, error: templateError } = await supabase
@@ -291,15 +340,33 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
           created_at: new Date().toISOString()
         }));
 
+        // Use upsert with conflict handling to prevent duplicates
         const { data: createdItems, error: createError } = await supabase
           .from('checklist_items')
-          .insert(itemsToCreate)
+          .upsert(itemsToCreate, { 
+            onConflict: 'job_id,item_text,item_order',
+            ignoreDuplicates: true 
+          })
           .select();
 
         if (createError) {
-          console.error('Error creating checklist items:', createError);
-          throw createError;
+          // If we get a unique constraint error, just reload the items
+          if (createError.code === '23505') {
+            console.log('Items were created by another user, reloading...');
+            const { data: reloadedItems } = await supabase
+              .from('checklist_items')
+              .select('*')
+              .eq('job_id', jobData.id)
+              .order('item_order');
+            items = reloadedItems;
+          } else {
+            console.error('Error creating checklist items:', createError);
+            throw createError;
+          }
+        } else {
+          items = createdItems;
         }
+      }
 
         items = createdItems;
       } else {
@@ -432,16 +499,30 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
 
   const handleItemStatusChange = async (itemId, newStatus) => {
     try {
-      // Update in database first
-      const updatedItem = await checklistService.updateItemStatus(
-        itemId, 
-        newStatus, 
-        currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad'
-      );
+      // Save to checklist_status table (upsert)
+      const { error } = await supabase
+        .from('checklist_status')
+        .upsert({
+          job_id: jobData.id,
+          item_id: itemId,
+          status: newStatus,
+          completed_at: newStatus === 'completed' ? new Date().toISOString() : null,
+          completed_by: newStatus === 'completed' ? (currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad') : null,
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'job_id,item_id'
+        });
       
-      // Then update local state with the response
+      if (error) throw error;
+      
+      // Update local state
       setChecklistItems(items => items.map(item => 
-        item.id === itemId ? { ...item, ...updatedItem } : item
+        item.id === itemId ? { 
+          ...item, 
+          status: newStatus,
+          completed_at: newStatus === 'completed' ? new Date().toISOString() : null,
+          completed_by: newStatus === 'completed' ? (currentUser?.name || 'Jim Duda') : null
+        } : item
       ));
 
     } catch (error) {
@@ -457,34 +538,31 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
       
       console.log(`Client approval change for item ${itemId}: ${approved ? 'APPROVED' : 'NOT APPROVED'}`);
       
-      // Update in database first
-      const updatedItem = await checklistService.updateClientApproval(
-        itemId, 
-        approved, 
-        currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad'
-      );
-      
-      console.log('Updated item from service:', updatedItem);
-      
-      // Then update local state with the response
-      setChecklistItems(items => {
-        const newItems = items.map(item => {
-          if (item.id === itemId) {
-            // Ensure we're properly updating the client_approved field
-            const updated = { 
-              ...item, 
-              ...updatedItem,
-              client_approved: approved, // Explicitly set this
-              client_approved_at: approved ? new Date().toISOString() : null,
-              client_approved_by: approved ? (currentUser?.name || 'Jim Duda') : null
-            };
-            console.log('Local state update for item:', updated);
-            return updated;
-          }
-          return item;
+      // Save to checklist_status table (upsert)
+      const { error } = await supabase
+        .from('checklist_status')
+        .upsert({
+          job_id: jobData.id,
+          item_id: itemId,
+          client_approved: approved,
+          client_approved_at: approved ? new Date().toISOString() : null,
+          client_approved_by: approved ? (currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad') : null,
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'job_id,item_id'
         });
-        return newItems;
-      });
+      
+      if (error) throw error;
+      
+      // Update local state
+      setChecklistItems(items => items.map(item => 
+        item.id === itemId ? { 
+          ...item, 
+          client_approved: approved,
+          client_approved_at: approved ? new Date().toISOString() : null,
+          client_approved_by: approved ? (currentUser?.name || 'Jim Duda') : null
+        } : item
+      ));
 
     } catch (error) {
       console.error('Error updating client approval:', error);
