@@ -23,13 +23,39 @@ const PayrollManagement = () => {
   });
   const [lastProcessedInfo, setLastProcessedInfo] = useState(null);
   const [archivedPeriods, setArchivedPeriods] = useState([]);
+  const [dataRecencyInfo, setDataRecencyInfo] = useState([]);
+  const [isLoadingRecency, setIsLoadingRecency] = useState(false);
+
+  // Helper function to safely parse dates without timezone issues
+  const parseLocalDate = (dateString) => {
+    if (!dateString) return null;
+    
+    // Extract just the date part (YYYY-MM-DD) if it includes time
+    const datePart = dateString.split('T')[0];
+    const [year, month, day] = datePart.split('-');
+    
+    // Create date at noon to avoid timezone shifts
+    return new Date(parseInt(year), parseInt(month) - 1, parseInt(day), 12, 0, 0);
+  };
+
+  // Helper function to format date for display
+  const formatDateForDisplay = (dateString) => {
+    if (!dateString) return 'Not available';
+    
+    const localDate = parseLocalDate(dateString);
+    return localDate.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
+  };
 
   // Helper functions
   const calculateExpectedHours = (startDate, endDate) => {
     if (!startDate || !endDate) return 0;
     
-    let start = new Date(startDate);
-    let end = new Date(endDate);
+    let start = parseLocalDate(startDate);
+    let end = parseLocalDate(endDate);
     let weekdays = 0;
     
     while (start <= end) {
@@ -46,7 +72,7 @@ const PayrollManagement = () => {
   const getStandardExpectedHours = (endDate) => {
     if (!endDate) return 0;
     
-    const end = new Date(endDate);
+    const end = parseLocalDate(endDate);
     const day = end.getDate();
     const month = end.getMonth();
     const year = end.getFullYear();
@@ -54,19 +80,22 @@ const PayrollManagement = () => {
     let periodStart, periodEnd;
     
     if (day <= 15) {
-      periodStart = new Date(year, month, 1);
-      periodEnd = new Date(year, month, 15);
+      periodStart = new Date(year, month, 1, 12, 0, 0);
+      periodEnd = new Date(year, month, 15, 12, 0, 0);
     } else {
-      periodStart = new Date(year, month, 16);
-      periodEnd = new Date(year, month + 1, 0);
+      periodStart = new Date(year, month, 16, 12, 0, 0);
+      periodEnd = new Date(year, month + 1, 0, 12, 0, 0);
     }
     
-    return calculateExpectedHours(periodStart, periodEnd);
+    return calculateExpectedHours(
+      periodStart.toISOString().split('T')[0], 
+      periodEnd.toISOString().split('T')[0]
+    );
   };
 
   // Helper function to get next payroll period
   const getNextPayrollPeriod = (currentEndDate) => {
-    const end = new Date(currentEndDate);
+    const end = parseLocalDate(currentEndDate);
     const day = end.getDate();
     const month = end.getMonth();
     const year = end.getFullYear();
@@ -75,18 +104,21 @@ const PayrollManagement = () => {
     
     if (day <= 15) {
       // Current period was 1-15, next is 16-end
-      nextStart = new Date(year, month, 16);
-      nextEnd = new Date(year, month + 1, 0); // Last day of month
+      nextStart = new Date(year, month, 16, 12, 0, 0);
+      nextEnd = new Date(year, month + 1, 0, 12, 0, 0); // Last day of month
     } else {
       // Current period was 16-end, next is 1-15 of next month
-      nextStart = new Date(year, month + 1, 1);
-      nextEnd = new Date(year, month + 1, 15);
+      nextStart = new Date(year, month + 1, 1, 12, 0, 0);
+      nextEnd = new Date(year, month + 1, 15, 12, 0, 0);
     }
     
     return {
       startDate: nextStart.toISOString().split('T')[0],
       endDate: nextEnd.toISOString().split('T')[0],
-      expectedHours: calculateExpectedHours(nextStart, nextEnd)
+      expectedHours: calculateExpectedHours(
+        nextStart.toISOString().split('T')[0], 
+        nextEnd.toISOString().split('T')[0]
+      )
     };
   };
 
@@ -94,7 +126,7 @@ const PayrollManagement = () => {
   const getPayrollPeriod = (endDate) => {
     if (!endDate) return '';
     
-    const end = new Date(endDate);
+    const end = parseLocalDate(endDate);
     const day = end.getDate();
     const month = end.getMonth();
     const year = end.getFullYear();
@@ -102,9 +134,9 @@ const PayrollManagement = () => {
     let periodStart;
     
     if (day <= 15) {
-      periodStart = new Date(year, month, 1);
+      periodStart = new Date(year, month, 1, 12, 0, 0);
     } else {
-      periodStart = new Date(year, month, 16);
+      periodStart = new Date(year, month, 16, 12, 0, 0);
     }
     
     // Format as MM/DD/YYYY - MM/DD/YYYY
@@ -114,9 +146,86 @@ const PayrollManagement = () => {
     return `${startStr} - ${endStr}`;
   };
 
+  // Add function to fetch data recency
+  const fetchDataRecency = async () => {
+    try {
+      setIsLoadingRecency(true);
+      
+      // Get all current (non-archived) jobs
+      const { data: currentJobs, error: jobsError } = await supabase
+        .from('jobs')
+        .select('id, job_name')
+        .or('status.eq.active,status.is.null,archived.eq.false,archived.is.null')
+        .order('job_name');
+      
+      if (jobsError) {
+        console.error('Error fetching jobs:', jobsError);
+        throw jobsError;
+      }
+      
+      // For each job, get the most recent upload_date from inspection_data
+      const recencyData = await Promise.all(
+        currentJobs.map(async (job) => {
+          // Get the most recent upload date
+          const { data: inspectionData, error: inspectionError } = await supabase
+            .from('inspection_data')
+            .select('upload_date')
+            .eq('job_id', job.id)
+            .order('upload_date', { ascending: false })
+            .limit(1);
+          
+          // Handle both single result and array result
+          const latestUpload = inspectionData && inspectionData.length > 0 
+            ? inspectionData[0] 
+            : null;
+          
+          // Calculate days ago with proper date parsing
+          let daysAgo = null;
+          if (latestUpload?.upload_date) {
+            const uploadDate = parseLocalDate(latestUpload.upload_date);
+            const today = new Date();
+            today.setHours(12, 0, 0, 0); // Set to noon for consistent comparison
+            daysAgo = Math.floor((today - uploadDate) / (1000 * 60 * 60 * 24));
+          }
+          
+          return {
+            jobId: job.id,
+            jobName: job.job_name,
+            lastUploadDate: latestUpload?.upload_date || null,
+            daysAgo: daysAgo
+          };
+        })
+      );
+      
+      // Sort by most recent upload first, then by job name
+      recencyData.sort((a, b) => {
+        if (!a.lastUploadDate && !b.lastUploadDate) {
+          return a.jobName.localeCompare(b.jobName);
+        }
+        if (!a.lastUploadDate) return 1;
+        if (!b.lastUploadDate) return -1;
+        return new Date(b.lastUploadDate) - new Date(a.lastUploadDate);
+      });
+      
+      setDataRecencyInfo(recencyData);
+    } catch (error) {
+      console.error('Error fetching data recency:', error);
+      alert('Failed to load data recency information. Please try again.');
+      setDataRecencyInfo([]);
+    } finally {
+      setIsLoadingRecency(false);
+    }
+  };
+
   useEffect(() => {
     loadInitialData();
   }, []);
+
+  useEffect(() => {
+    if (activeTab === 'dataRecency') {
+      fetchDataRecency();
+    }
+  }, [activeTab]);
 
   useEffect(() => {
     if (payrollPeriod.endDate) {
@@ -185,8 +294,6 @@ const PayrollManagement = () => {
       console.log(`Calculating bonuses from ${startDate} to ${endDate}`);
       console.log('Fetching inspections from database...');
       
-      // Since you increased max rows to 5000, let's use that
-      // For larger datasets, we'd need a different approach
       let query = supabase
         .from('inspection_data')
         .select('id, measure_by, measure_date, property_class, property_composite_key, property_location, job_id')
@@ -726,7 +833,7 @@ const PayrollManagement = () => {
         </div>
       )}
 
-      {/* Last Processed Info */}
+      {/* Last Processed Info - WITH DATE FIXES */}
       {lastProcessedInfo && (
         <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
           <h3 className="text-sm font-medium text-blue-900 mb-2">Last Payroll Processed:</h3>
@@ -734,13 +841,13 @@ const PayrollManagement = () => {
             <div>
               <span className="text-blue-700">Period:</span>
               <span className="ml-2 font-medium text-blue-900">
-                {new Date(lastProcessedInfo.startDate).toLocaleDateString()} - {new Date(lastProcessedInfo.endDate).toLocaleDateString()}
+                {formatDateForDisplay(lastProcessedInfo.startDate)} - {formatDateForDisplay(lastProcessedInfo.endDate)}
               </span>
             </div>
             <div>
               <span className="text-blue-700">Processed on:</span>
               <span className="ml-2 font-medium text-blue-900">
-                {new Date(lastProcessedInfo.processedDate).toLocaleDateString()}
+                {formatDateForDisplay(lastProcessedInfo.processedDate)}
               </span>
             </div>
             <div>
@@ -751,7 +858,7 @@ const PayrollManagement = () => {
         </div>
       )}
 
-      {/* Tab Navigation */}
+      {/* Tab Navigation - UPDATED WITH DATA RECENCY */}
       <div className="border-b border-gray-200 mb-6">
         <nav className="-mb-px flex space-x-8">
           <button
@@ -763,6 +870,16 @@ const PayrollManagement = () => {
             }`}
           >
             Current Payroll
+          </button>
+          <button
+            onClick={() => setActiveTab('dataRecency')}
+            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+              activeTab === 'dataRecency'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            Data Recency
           </button>
           <button
             onClick={() => setActiveTab('archive')}
@@ -1150,7 +1267,210 @@ const PayrollManagement = () => {
       </div>
       )}
 
-      {/* Archive Tab */}
+      {/* Data Recency Tab */}
+      {activeTab === 'dataRecency' && (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div className="flex justify-between items-center mb-6">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-800">Data Recency Monitor</h2>
+              <p className="text-gray-600 mt-1">Track the freshness of inspection data across all active jobs</p>
+            </div>
+            <button
+              onClick={fetchDataRecency}
+              disabled={isLoadingRecency}
+              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-gray-400 flex items-center gap-2 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              {isLoadingRecency ? 'Refreshing...' : 'Refresh Data'}
+            </button>
+          </div>
+
+          {isLoadingRecency ? (
+            <div className="text-center py-12">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+              <p className="text-gray-600">Loading data recency information...</p>
+            </div>
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr className="bg-gray-50 border-b-2 border-gray-200">
+                      <th className="text-left p-3 font-semibold text-gray-700">Job Name</th>
+                      <th className="text-left p-3 font-semibold text-gray-700">Last Upload Date</th>
+                      <th className="text-left p-3 font-semibold text-gray-700">Days Ago</th>
+                      <th className="text-center p-3 font-semibold text-gray-700">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dataRecencyInfo.length === 0 ? (
+                      <tr>
+                        <td colSpan="4" className="text-center p-8 text-gray-500">
+                          <svg className="w-12 h-12 mx-auto mb-3 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                          </svg>
+                          <p>No active jobs found or no data uploaded yet</p>
+                        </td>
+                      </tr>
+                    ) : (
+                      dataRecencyInfo.map((job) => {
+                        // Determine status color based on days ago
+                        const getStatusInfo = () => {
+                          if (!job.lastUploadDate) return { color: 'gray', label: 'No Data' };
+                          if (job.daysAgo <= 7) return { color: 'green', label: 'Current' };
+                          if (job.daysAgo <= 30) return { color: 'yellow', label: 'Aging' };
+                          return { color: 'red', label: 'Stale' };
+                        };
+                        
+                        const statusInfo = getStatusInfo();
+                        
+                        return (
+                          <tr key={job.jobId} className="border-b hover:bg-gray-50 transition-colors">
+                            <td className="p-3 font-medium text-gray-800">{job.jobName}</td>
+                            <td className="p-3 text-gray-600">
+                              {job.lastUploadDate ? (
+                                formatDateForDisplay(job.lastUploadDate)
+                              ) : (
+                                <span className="text-gray-400">No data uploaded</span>
+                              )}
+                            </td>
+                            <td className="p-3">
+                              {job.daysAgo !== null ? (
+                                <span className={`font-semibold ${
+                                  statusInfo.color === 'green' ? 'text-green-600' :
+                                  statusInfo.color === 'yellow' ? 'text-yellow-600' :
+                                  statusInfo.color === 'red' ? 'text-red-600' :
+                                  'text-gray-400'
+                                }`}>
+                                  {job.daysAgo === 0 ? 'Today' :
+                                   job.daysAgo === 1 ? 'Yesterday' :
+                                   `${job.daysAgo} days`}
+                                </span>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
+                            </td>
+                            <td className="p-3 text-center">
+                              <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium ${
+                                statusInfo.color === 'green' ? 'bg-green-100 text-green-700' :
+                                statusInfo.color === 'yellow' ? 'bg-yellow-100 text-yellow-700' :
+                                statusInfo.color === 'red' ? 'bg-red-100 text-red-700' :
+                                'bg-gray-100 text-gray-700'
+                              }`}>
+                                <div className={`w-2 h-2 rounded-full ${
+                                  statusInfo.color === 'green' ? 'bg-green-500' :
+                                  statusInfo.color === 'yellow' ? 'bg-yellow-500' :
+                                  statusInfo.color === 'red' ? 'bg-red-500' :
+                                  'bg-gray-500'
+                                }`}></div>
+                                {statusInfo.label}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              
+              {dataRecencyInfo.length > 0 && (
+                <>
+                  {/* Summary Statistics */}
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6 mb-4">
+                    <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm text-green-600">Current</p>
+                          <p className="text-2xl font-bold text-green-700">
+                            {dataRecencyInfo.filter(j => j.daysAgo !== null && j.daysAgo <= 7).length}
+                          </p>
+                        </div>
+                        <svg className="w-8 h-8 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
+                    </div>
+                    <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm text-yellow-600">Aging</p>
+                          <p className="text-2xl font-bold text-yellow-700">
+                            {dataRecencyInfo.filter(j => j.daysAgo !== null && j.daysAgo > 7 && j.daysAgo <= 30).length}
+                          </p>
+                        </div>
+                        <svg className="w-8 h-8 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
+                    </div>
+                    <div className="bg-red-50 p-4 rounded-lg border border-red-200">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm text-red-600">Stale</p>
+                          <p className="text-2xl font-bold text-red-700">
+                            {dataRecencyInfo.filter(j => j.daysAgo !== null && j.daysAgo > 30).length}
+                          </p>
+                        </div>
+                        <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                      </div>
+                    </div>
+                    <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm text-gray-600">No Data</p>
+                          <p className="text-2xl font-bold text-gray-700">
+                            {dataRecencyInfo.filter(j => j.lastUploadDate === null).length}
+                          </p>
+                        </div>
+                        <svg className="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                        </svg>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Legend */}
+                  <div className="mt-4 p-4 bg-blue-50 rounded-lg">
+                    <div className="flex items-start gap-2">
+                      <svg className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <div className="text-sm text-gray-700">
+                        <p className="font-semibold mb-2">Data Freshness Guidelines:</p>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                          <span className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                            <span><strong>Current:</strong> ≤7 days</span>
+                          </span>
+                          <span className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+                            <span><strong>Aging:</strong> 8-30 days</span>
+                          </span>
+                          <span className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                            <span><strong>Stale:</strong> >30 days</span>
+                          </span>
+                          <span className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded-full bg-gray-500"></div>
+                            <span><strong>No Data:</strong> Never uploaded</span>
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Archive Tab - WITH DATE FIXES */}
       {activeTab === 'archive' && (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <h2 className="text-xl font-semibold text-gray-900 mb-4">Payroll Archive</h2>
@@ -1176,10 +1496,10 @@ const PayrollManagement = () => {
                   {archivedPeriods.map((period) => (
                     <tr key={period.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {period.period_name || `${new Date(period.start_date).toLocaleDateString()} - ${new Date(period.end_date).toLocaleDateString()}`}
+                        {period.period_name || `${formatDateForDisplay(period.start_date)} - ${formatDateForDisplay(period.end_date)}`}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {new Date(period.processed_date).toLocaleDateString()}
+                        {formatDateForDisplay(period.processed_date)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         {period.processing_settings?.employee_count || '-'}
