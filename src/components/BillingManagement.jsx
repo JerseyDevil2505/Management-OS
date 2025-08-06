@@ -227,14 +227,6 @@ Thank you for your immediate attention to this matter.`;
     if (activeTab === 'distributions') {
       loadDistributions();
     }
-  }, [activeTab]);
-    if (activeTab === 'receivables') {
-      loadOfficeReceivables();
-    }
-    if (activeTab === 'distributions') {
-      loadDistributions();
-    }
-  }, [activeTab]);
   useEffect(() => {
     if (activeTab === 'distributions' && globalMetrics.totalPaid > 0) {
       calculateDistributionMetrics();
