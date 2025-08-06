@@ -18,15 +18,18 @@ const EmployeeManagement = () => {
   const [editingEmployee, setEditingEmployee] = useState(null);
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [emailModalData, setEmailModalData] = useState({ emails: [], title: '' });
+  const [analyticsCache, setAnalyticsCache] = useState(null);
+  const [cacheTimestamp, setCacheTimestamp] = useState(null);
+
 
   // Global Analytics State
   const [globalAnalytics, setGlobalAnalytics] = useState(null);
   const [isLoadingAnalytics, setIsLoadingAnalytics] = useState(false);
+  const [analyticsLoadProgress, setAnalyticsLoadProgress] = useState({ loaded: 0, total: 0, retries: 0 });
   const [analyticsFilter, setAnalyticsFilter] = useState({
-    inspectorType: 'all',
     region: 'all',
-    dateRange: 'all',
-    employmentStatus: 'all'  // Default to all employees
+    quarter: 'all', // New quarter filter
+    employmentStatus: 'all'
   });
 
   // Load employees from database on component mount
@@ -77,6 +80,17 @@ const EmployeeManagement = () => {
 
   // Fixed Global Analytics Functions
   const loadGlobalAnalytics = async () => {
+    // Check if we have cached data less than 5 minutes old
+    const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes in milliseconds
+    const now = Date.now();
+    
+    if (analyticsCache && cacheTimestamp && (now - cacheTimestamp) < CACHE_DURATION) {
+      console.log('📦 Using cached analytics data');
+      setGlobalAnalytics(analyticsCache);
+      return; // Use cached data instead of reloading
+    }
+    
+    console.log('🔄 Loading fresh analytics data...');
     setIsLoadingAnalytics(true);
     try {
       // First, get all jobs to get their InfoBy category configs and vendor type
@@ -99,36 +113,90 @@ const EmployeeManagement = () => {
         }
       });
 
-      // Get ALL inspection data using pagination
-      let allInspectionData = [];
-      let page = 0;
-      const pageSize = 1000;
-      let hasMore = true;
+    // Get ALL inspection data using pagination
+    let allInspectionData = [];
+    let page = 0;
+    const pageSize = 1000;
+    let hasMore = true;
+    const maxRetries = 3;
+    const retryDelay = 1000; // 1 second
 
-      while (hasMore) {
-        const { data: pageData, error: pageError, count } = await supabase
-          .from('inspection_data')
-          .select('*', { count: 'exact' })
-          .range(page * pageSize, (page + 1) * pageSize - 1);
+    // First, get the total count for progress tracking
+    const { count: totalCount } = await supabase
+      .from('inspection_data')
+      .select('*', { count: 'exact', head: true });
 
-        if (pageError) throw pageError;
+    console.log(`🔍 Total inspection records in database: ${totalCount}`);
+    setAnalyticsLoadProgress({ loaded: 0, total: totalCount || 0, retries: 0 });
 
-        if (pageData && pageData.length > 0) {
-          allInspectionData = [...allInspectionData, ...pageData];
-          page++;
-          hasMore = pageData.length === pageSize;
-        } else {
-          hasMore = false;
+    while (hasMore) {
+      let retries = 0;
+      let pageData = null;
+      let pageError = null;
+      
+      // Retry logic for each page
+      while (retries < maxRetries) {
+        try {
+          const { data, error } = await supabase
+            .from('inspection_data')
+            .select('*')
+            .range(page * pageSize, (page + 1) * pageSize - 1);
+          
+          pageData = data;
+          pageError = error;
+          
+          if (!error) {
+            break; // Success! Exit retry loop
+          }
+          
+          retries++;
+          console.log(`⚠️ Retry ${retries}/${maxRetries} for page ${page + 1} after error:`, error);
+          
+          if (retries < maxRetries) {
+            // Wait before retrying
+            await new Promise(resolve => setTimeout(resolve, retryDelay * retries));
+          }
+          
+        } catch (err) {
+          retries++;
+          console.log(`⚠️ Retry ${retries}/${maxRetries} for page ${page + 1} after error:`, err);
+          
+          if (retries < maxRetries) {
+            await new Promise(resolve => setTimeout(resolve, retryDelay * retries));
+          } else {
+            pageError = err;
+          }
         }
-
-        // Log progress
-        if (page === 1) {
-          console.log(`🔍 Total inspection records in database: ${count}`);
-        }
-        console.log(`🔍 Loaded page ${page}: ${pageData?.length} records (total so far: ${allInspectionData.length})`);
+      }
+      
+      // If still error after all retries, throw
+      if (pageError) {
+        console.error(`❌ Failed to load page ${page + 1} after ${maxRetries} retries`);
+        throw pageError;
       }
 
-      console.log('🔍 INSPECTION DATA:', allInspectionData.length, 'total records loaded');
+      if (pageData && pageData.length > 0) {
+        allInspectionData = [...allInspectionData, ...pageData];
+        page++;
+        hasMore = pageData.length === pageSize;
+        
+        // Update progress
+        setAnalyticsLoadProgress(prev => ({ 
+          loaded: allInspectionData.length, 
+          total: totalCount || 0,
+          retries: prev.retries + retries
+        }));
+        
+        // Log progress every 5 pages or on first/last page
+        if (page === 1 || page % 5 === 0 || !hasMore) {
+          console.log(`🔍 Progress: ${allInspectionData.length} / ${totalCount} records loaded (${Math.round((allInspectionData.length / totalCount) * 100)}%)`);
+        }
+      } else {
+        hasMore = false;
+      }
+    }
+
+    console.log('🔍 INSPECTION DATA:', allInspectionData.length, 'total records loaded');
       console.log('🔍 Sample inspection record:', allInspectionData[0]);
 
       // Get ONLY inspector employees (Residential and Commercial - exclude Management)
@@ -223,6 +291,11 @@ const EmployeeManagement = () => {
       processedAnalytics.summary.totalInspections = allInspectionData.length;
       setGlobalAnalytics(processedAnalytics);
 
+      // Cache the results
+      setAnalyticsCache(processedAnalytics);
+      setCacheTimestamp(Date.now());
+      console.log('💾 Analytics data cached');
+
     } catch (error) {
       console.error('Error loading global analytics:', error);
       setGlobalAnalytics({
@@ -232,17 +305,42 @@ const EmployeeManagement = () => {
       });
     } finally {
       setIsLoadingAnalytics(false);
+      setAnalyticsLoadProgress({ loaded: 0, total: 0, retries: 0 });
     }
   };
 
   const processGlobalInspectionData = (data, filter, totalRecordCount) => {
     // Filter data based on current filters
     let filteredData = data.filter(record => {
-      const matchesType = filter.inspectorType === 'all' || record.employee.inspector_type === filter.inspectorType;
+      // Skip records without an employee
+      if (!record.employee) return false;
+      
       const matchesRegion = filter.region === 'all' || record.employee.region === filter.region;
-      return matchesType && matchesRegion;
+      
+      // Quarter filtering
+      let matchesQuarter = true;
+      if (filter.quarter !== 'all') {
+        const measureDate = record.measure_date;
+        if (!measureDate) {
+          matchesQuarter = false;
+        } else {
+          const recordDate = new Date(measureDate);
+          const [quarter, year] = filter.quarter.split('-');
+          const recordYear = recordDate.getFullYear();
+          const recordMonth = recordDate.getMonth() + 1; // JavaScript months are 0-indexed
+          
+          if (recordYear.toString() !== year) {
+            matchesQuarter = false;
+          } else {
+            const recordQuarter = Math.ceil(recordMonth / 3);
+            matchesQuarter = `Q${recordQuarter}` === quarter;
+          }
+        }
+      }
+      
+      return matchesRegion && matchesQuarter;
     });
-
+    
     // Create employee lookup map
     const employeeMap = {};
     filteredData.forEach(record => {
@@ -250,7 +348,6 @@ const EmployeeManagement = () => {
         employeeMap[record.employee.initials] = record.employee;
       }
     });
-
     // STEP 1: Calculate Global Totals (KISS method)
     // Total inspections = count all 2, 3A, 4A, 4B, 4C records
     const validPropertyClasses = ['2', '3A', '4A', '4B', '4C'];
@@ -1335,9 +1432,31 @@ const EmployeeManagement = () => {
                 </div>
 
                 {isLoadingAnalytics ? (
-                  <div className="flex items-center justify-center py-12">
-                    <Loader className="w-8 h-8 animate-spin text-indigo-600 mr-3" />
-                    <span className="text-gray-600">Loading global analytics...</span>
+                  <div className="flex flex-col items-center justify-center py-12">
+                    <Loader className="w-8 h-8 animate-spin text-indigo-600 mb-3" />
+                    <span className="text-gray-600 text-lg font-medium mb-3">Loading global analytics...</span>
+                    
+                    {analyticsLoadProgress.total > 0 && (
+                      <>
+                        <div className="w-80 bg-gray-200 rounded-full h-3 mb-3 overflow-hidden">
+                          <div 
+                            className="bg-gradient-to-r from-indigo-500 to-indigo-600 h-3 rounded-full transition-all duration-500 ease-out"
+                            style={{ width: `${Math.min(100, (analyticsLoadProgress.loaded / analyticsLoadProgress.total) * 100)}%` }}
+                          />
+                        </div>
+                        <span className="text-sm font-medium text-gray-700">
+                          {analyticsLoadProgress.loaded.toLocaleString()} / {analyticsLoadProgress.total.toLocaleString()} records
+                        </span>
+                        <span className="text-xs text-gray-500 mt-1">
+                          {Math.round((analyticsLoadProgress.loaded / analyticsLoadProgress.total) * 100)}% complete
+                        </span>
+                        {analyticsLoadProgress.retries > 0 && (
+                          <span className="text-xs text-orange-600 mt-1">
+                            ⚠️ {analyticsLoadProgress.retries} retries needed
+                          </span>
+                        )}
+                      </>
+                    )}
                   </div>
                 ) : globalAnalytics ? (
                   <>
@@ -1350,13 +1469,19 @@ const EmployeeManagement = () => {
                         </div>
                         
                         <select
-                          value={analyticsFilter.inspectorType}
-                          onChange={(e) => handleFilterChange('inspectorType', e.target.value)}
+                          value={analyticsFilter.quarter}
+                          onChange={(e) => handleFilterChange('quarter', e.target.value)}
                           className="px-3 py-1 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
                         >
-                          <option value="all">All Inspector Types</option>
-                          <option value="Residential">Residential Only</option>
-                          <option value="Commercial">Commercial Only</option>
+                          <option value="all">All Time</option>
+                          <option value="Q1-2024">Q1 2024 (Jan-Mar)</option>
+                          <option value="Q2-2024">Q2 2024 (Apr-Jun)</option>
+                          <option value="Q3-2024">Q3 2024 (Jul-Sep)</option>
+                          <option value="Q4-2024">Q4 2024 (Oct-Dec)</option>
+                          <option value="Q1-2025">Q1 2025 (Jan-Mar)</option>
+                          <option value="Q2-2025">Q2 2025 (Apr-Jun)</option>
+                          <option value="Q3-2025">Q3 2025 (Jul-Sep)</option>
+                          <option value="Q4-2025">Q4 2025 (Oct-Dec)</option>
                         </select>
 
                         <select
@@ -1380,7 +1505,11 @@ const EmployeeManagement = () => {
                         </select>
 
                         <button
-                          onClick={loadGlobalAnalytics}
+                          onClick={() => {
+                            setAnalyticsCache(null); // Clear cache
+                            setCacheTimestamp(null);
+                            loadGlobalAnalytics();
+                          }}
                           className="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-lg text-sm hover:bg-indigo-200 transition-colors"
                         >
                           🔄 Refresh
