@@ -270,7 +270,7 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
       
       // Load the status data from the database (what's been completed, approved, etc.)
       const { data: statusData, error: statusError } = await supabase
-        .from('checklist_status')
+        .from('checklist_item_status')
         .select('*')
         .eq('job_id', jobData.id);
       
@@ -295,7 +295,7 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
           completed_at: status.completed_at,
           completed_by: status.completed_by,
           client_approved: status.client_approved || false,
-          client_approved_at: status.client_approved_at,
+          client_approved_date: status.client_approved_date,
           client_approved_by: status.client_approved_by,
           file_attachment_path: status.file_attachment_path,
           notes: status.notes
@@ -499,9 +499,9 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
 
   const handleItemStatusChange = async (itemId, newStatus) => {
     try {
-      // Save to checklist_status table (upsert)
+      // Save to checklist_item_status table (upsert)
       const { error } = await supabase
-        .from('checklist_status')
+        .from('checklist_item_status')
         .upsert({
           job_id: jobData.id,
           item_id: itemId,
@@ -538,14 +538,14 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
       
       console.log(`Client approval change for item ${itemId}: ${approved ? 'APPROVED' : 'NOT APPROVED'}`);
       
-      // Save to checklist_status table (upsert)
+      // Save to checklist_item_status table (upsert)
       const { error } = await supabase
-        .from('checklist_status')
+        .from('checklist_item_status')
         .upsert({
           job_id: jobData.id,
           item_id: itemId,
           client_approved: approved,
-          client_approved_at: approved ? new Date().toISOString() : null,
+          client_approved_date: approved ? new Date().toISOString() : null,
           client_approved_by: approved ? (currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad') : null,
           updated_at: new Date().toISOString()
         }, {
@@ -559,7 +559,7 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
         item.id === itemId ? { 
           ...item, 
           client_approved: approved,
-          client_approved_at: approved ? new Date().toISOString() : null,
+          client_approved_date: approved ? new Date().toISOString() : null,
           client_approved_by: approved ? (currentUser?.name || 'Jim Duda') : null
         } : item
       ));
@@ -1304,9 +1304,9 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
                         Completed on {new Date(item.completed_at).toLocaleDateString()}
                       </div>
                     )}
-                    {item.client_approved === true && item.client_approved_at && (
+                    {item.client_approved === true && item.client_approved_date && (
                       <div className="text-sm text-purple-600 bg-purple-50 px-2 py-1 rounded mb-2 inline-block">
-                        ✓ Client approved on {new Date(item.client_approved_at).toLocaleDateString()} by {item.client_approved_by || 'Unknown'}
+                        ✓ Client approved on {new Date(item.client_approved_date).toLocaleDateString()} by {item.client_approved_by || 'Unknown'}
                       </div>
                     )}
                     {hasValidFile && (
