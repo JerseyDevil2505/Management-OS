@@ -3,7 +3,74 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = process.env.REACT_APP_SUPABASE_URL || 'https://zxvavttfvpsagzluqqwn.supabase.co';
 const supabaseKey = process.env.REACT_APP_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp4dmF2dHRmdnBzYWd6bHVxcXduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIzNDA4NjcsImV4cCI6MjA2NzkxNjg2N30.Rrn2pTnImCpBIoKPcdlzzZ9hMwnYtIO5s7i1ejwQReg';
 
-export const supabase = createClient(supabaseUrl, supabaseKey);
+// Enhanced Supabase client with custom fetch options for better timeout handling
+export const supabase = createClient(supabaseUrl, supabaseKey, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+  },
+  global: {
+    headers: {
+      'x-client-info': 'property-app'
+    },
+    // Custom fetch with timeout and retry logic
+    fetch: async (url, options = {}) => {
+      const timeout = options.timeout || 60000; // Default 60 seconds, can be overridden
+      const maxRetries = 3;
+      
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          // Create an AbortController for timeout
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), timeout);
+          
+          const response = await fetch(url, {
+            ...options,
+            signal: controller.signal
+          });
+          
+          clearTimeout(timeoutId);
+          
+          // If response is ok, return it
+          if (response.ok) {
+            return response;
+          }
+          
+          // If it's a server error (5xx), retry
+          if (response.status >= 500 && attempt < maxRetries) {
+            console.log(`🔄 Server error (${response.status}), retrying attempt ${attempt + 1}/${maxRetries}...`);
+            await new Promise(resolve => setTimeout(resolve, 1000 * attempt)); // Exponential backoff
+            continue;
+          }
+          
+          // For client errors (4xx), don't retry
+          return response;
+          
+        } catch (error) {
+          // If it's an abort error (timeout), retry if we have attempts left
+          if (error.name === 'AbortError' && attempt < maxRetries) {
+            console.log(`⏱️ Request timeout, retrying attempt ${attempt + 1}/${maxRetries}...`);
+            await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+            continue;
+          }
+          
+          // If it's a network error and we have retries left, try again
+          if (error.name === 'TypeError' && error.message === 'Failed to fetch' && attempt < maxRetries) {
+            console.log(`🌐 Network error, retrying attempt ${attempt + 1}/${maxRetries}...`);
+            await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+            continue;
+          }
+          
+          // If we're out of retries or it's a different error, throw it
+          if (attempt === maxRetries) {
+            console.error(`❌ Failed after ${maxRetries} attempts:`, error);
+          }
+          throw error;
+        }
+      }
+    }
+  }
+});
 
 // Define fields that must be preserved during file updates
 const PRESERVED_FIELDS = [
