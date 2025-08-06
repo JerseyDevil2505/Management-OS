@@ -570,7 +570,7 @@ Thank you for your immediate attention to this matter.`;
     }
   };  
 
-  const generateBondLetter = async () => {
+const generateBondLetter = async () => {
     try {
       // Load jsPDF from CDN if not already loaded
       if (!window.jspdf) {
@@ -599,7 +599,7 @@ Thank you for your immediate attention to this matter.`;
       const { data: planningJobsData, error: planningError } = await supabase
         .from('planning_jobs')
         .select('*')
-        .gt('contract_amount', 0);  // Just this - if it's greater than 0, include it!
+        .gt('contract_amount', 0);
 
       if (planningError) {
         console.error('Error fetching planning jobs:', planningError);
@@ -645,15 +645,19 @@ Thank you for your immediate attention to this matter.`;
           }
           
           if (contract && parcels > 0) {
+            // Corrected year calculation - use current year if no end_date
+            const dueYear = job.end_date ? new Date(job.end_date).getFullYear() : new Date().getFullYear();
+            
             allJobs.push({
               municipality: job.job_name,
-              completionYear: job.end_date ? new Date(job.end_date).getFullYear() : new Date().getFullYear() + 1,
+              dueYear: dueYear,
               contractStatus: 'YES',
               parcels: parcels,
               amount: contract.contract_amount,
               pricePerParcel: (contract.contract_amount / parcels).toFixed(2),
               percentComplete: percentComplete,
-              percentBilled: percentBilled
+              percentBilled: percentBilled,
+              isPending: false
             });
           }
         });
@@ -662,28 +666,31 @@ Thank you for your immediate attention to this matter.`;
       // Process planning jobs
       if (planningJobsData && planningJobsData.length > 0) {
         planningJobsData.forEach(job => {
-          // Simple check - just need a contract amount
           if (job.contract_amount > 0) {
             const parcels = job.total_properties || 
                            ((job.residential_properties || 0) + (job.commercial_properties || 0)) || 
                            0;
             
+            // Corrected year calculation for planning jobs
+            const dueYear = job.end_date ? new Date(job.end_date).getFullYear() : new Date().getFullYear() + 1;
+            
             allJobs.push({
-              municipality: job.municipality || job.job_name || 'Unknown',
-              completionYear: job.end_date ? new Date(job.end_date).getFullYear() : new Date().getFullYear() + 2,
+              municipality: (job.municipality || job.job_name || 'Unknown') + '*', // Add asterisk for pending
+              dueYear: dueYear,
               contractStatus: 'PENDING',
               parcels: parcels,
               amount: job.contract_amount,
               pricePerParcel: parcels > 0 ? (job.contract_amount / parcels).toFixed(2) : '0.00',
               percentComplete: '0.0',
-              percentBilled: '0.0'
+              percentBilled: '0.0',
+              isPending: true
             });
           }
         });
       }
       
-      // Sort by municipality name
-      allJobs.sort((a, b) => a.municipality.localeCompare(b.municipality));
+      // Sort by percent billed (highest to lowest)
+      allJobs.sort((a, b) => parseFloat(b.percentBilled) - parseFloat(a.percentBilled));
       
       // Calculate totals
       const totalParcels = allJobs.reduce((sum, job) => sum + job.parcels, 0);
@@ -712,7 +719,7 @@ Thank you for your immediate attention to this matter.`;
     }
     
     .container {
-      max-width: 1200px;
+      max-width: 1400px;
       margin: 0 auto;
       background: white;
       border-radius: 12px;
@@ -815,7 +822,7 @@ Thank you for your immediate attention to this matter.`;
       padding: 24px;
       border-radius: 12px;
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
+      grid-template-columns: repeat(5, 1fr);
       gap: 20px;
       text-align: center;
     }
@@ -847,14 +854,14 @@ Thank you for your immediate attention to this matter.`;
   <div class="container">
     <div class="header">
       <h1>PROFESSIONAL PROPERTY APPRAISERS</h1>
-      <h2>Contract Status Report - ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</h2>
+      <h2>Bonding Status Report - ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</h2>
     </div>
     
     <table>
       <thead>
         <tr>
           <th style="text-align: left;">Municipality</th>
-          <th>Completion<br>Year</th>
+          <th>Due<br>Year</th>
           <th>Fully<br>Executed</th>
           <th>Parcels</th>
           <th>Contract<br>Amount</th>
@@ -867,7 +874,7 @@ Thank you for your immediate attention to this matter.`;
         ${allJobs.map((job, index) => `
           <tr>
             <td class="municipality">${job.municipality}</td>
-            <td class="number">${job.completionYear}</td>
+            <td class="number">${job.dueYear}</td>
             <td>
               <span class="${job.contractStatus === 'YES' ? 'status-yes' : 'status-pending'}">
                 ${job.contractStatus}
@@ -900,6 +907,10 @@ Thank you for your immediate attention to this matter.`;
         <div class="summary-label">Avg $/Parcel</div>
         <div class="summary-value">$${avgPricePerParcel}</div>
       </div>
+      <div class="summary-item">
+        <div class="summary-label">Pending Jobs</div>
+        <div class="summary-value">${allJobs.filter(j => j.isPending).length}</div>
+      </div>
     </div>
   </div>
   <div class="text-center mt-6 text-xs text-gray-500 italic" style="margin-top: 24px; text-align: center; font-size: 12px; color: #6b7280; font-style: italic;">
@@ -909,44 +920,44 @@ Thank you for your immediate attention to this matter.`;
 </html>
       `;
       
-      // Generate PDF using jsPDF
+      // Generate PDF using jsPDF - LANDSCAPE orientation
       const { jsPDF } = window.jspdf;
-      const doc = new jsPDF();
+      const doc = new jsPDF('landscape');
       
-      // Add content as text (simpler approach for web editor)
+      // Add content as text
       doc.setFontSize(16);
-      doc.text('PROFESSIONAL PROPERTY APPRAISERS', 105, 20, { align: 'center' });
+      doc.text('PROFESSIONAL PROPERTY APPRAISERS', 148, 20, { align: 'center' });
       doc.setFontSize(12);
-      doc.text('Bonding Status Report', 105, 30, { align: 'center' });
-      doc.text(new Date().toLocaleDateString(), 105, 36, { align: 'center' });
+      doc.text('Bonding Status Report', 148, 30, { align: 'center' });
+      doc.text(new Date().toLocaleDateString(), 148, 36, { align: 'center' });
       
       // Add table headers
       let y = 50;
       doc.setFontSize(10);
       doc.text('Municipality', 10, y);
-      doc.text('Year', 60, y);
-      doc.text('Status', 80, y);
-      doc.text('Parcels', 100, y);
-      doc.text('Amount', 120, y);
-      doc.text('$/Parcel', 150, y);
-      doc.text('Complete', 170, y);
-      doc.text('Billed', 190, y);
+      doc.text('Due Year', 70, y);
+      doc.text('Status', 95, y);
+      doc.text('Parcels', 120, y);
+      doc.text('Amount', 145, y);
+      doc.text('$/Parcel', 180, y);
+      doc.text('Complete %', 210, y);
+      doc.text('Billed %', 245, y);
       
       // Add jobs
       y += 10;
       allJobs.forEach(job => {
-        if (y > 270) { // New page if needed
+        if (y > 190) { // New page if needed (adjusted for landscape)
           doc.addPage();
           y = 20;
         }
-        doc.text(job.municipality.substring(0, 20), 10, y);
-        doc.text(job.completionYear.toString(), 60, y);
-        doc.text(job.contractStatus, 80, y);
-        doc.text(job.parcels.toString(), 100, y);
-        doc.text(`$${parseInt(job.amount).toLocaleString()}`, 120, y);
-        doc.text(`$${job.pricePerParcel}`, 150, y);
-        doc.text(`${job.percentComplete}%`, 170, y);
-        doc.text(`${job.percentBilled}%`, 190, y);
+        doc.text(job.municipality.substring(0, 30), 10, y);
+        doc.text(job.dueYear.toString(), 70, y);
+        doc.text(job.contractStatus, 95, y);
+        doc.text(job.parcels.toLocaleString(), 120, y);
+        doc.text(`$${parseFloat(job.amount).toLocaleString()}`, 145, y);
+        doc.text(`$${job.pricePerParcel}`, 180, y);
+        doc.text(`${job.percentComplete}%`, 210, y);
+        doc.text(`${job.percentBilled}%`, 245, y);
         y += 7;
       });
       
@@ -958,10 +969,12 @@ Thank you for your immediate attention to this matter.`;
       doc.text(`Total Parcels: ${totalParcels.toLocaleString()}`, 10, y);
       y += 7;
       doc.text(`Total Amount: $${totalAmount.toLocaleString()}`, 10, y);
+      y += 7;
+      doc.text(`Overall Avg $/Parcel: $${avgPricePerParcel}`, 10, y);
       
       // Add footnote
       doc.setFontSize(8);
-      doc.text('*Planned jobs have been awarded but not yet moved to active jobs', 105, 280, { align: 'center' });
+      doc.text('*Planned jobs have been awarded but not yet moved to active jobs', 148, 200, { align: 'center' });
       
       // Save PDF
       doc.save(`PPA_Bonding_Report_${new Date().toISOString().split('T')[0]}.pdf`);
