@@ -227,7 +227,7 @@ Thank you for your immediate attention to this matter.`;
     if (activeTab === 'distributions') {
       loadDistributions();
     }
-  },
+  }, [activeTab]);
 
   useEffect(() => {
     if (activeTab === 'distributions' && globalMetrics.totalPaid > 0) {
