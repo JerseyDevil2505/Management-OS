@@ -435,10 +435,14 @@ function App() {
       <div className="app-header">
         <div className="max-w-6xl mx-auto px-4 py-4">
           <div className="flex justify-between items-center mb-4">
-            <h1 className="text-4xl font-bold flex items-center" style={{ 
-              color: 'white',
+            <h1 style={{ 
+              color: '#FFFFFF',
+              fontSize: '2rem',
+              fontWeight: 'bold',
               fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", 
-              letterSpacing: '-0.02em'
+              letterSpacing: '-0.02em',
+              display: 'flex',
+              alignItems: 'center'
             }}>
               Management OS
               {isLoadingWorkflowStats && (
@@ -468,9 +472,9 @@ function App() {
                 <button
                   key={tab.id}
                   onClick={() => setActiveModule(tab.id)}
-                  className={`px-4 py-2 rounded-xl font-medium transition-all duration-200 text-sm border ${
+                  className={`px-4 py-2 rounded-xl font-medium text-sm border ${
                     activeModule === tab.id
-                      ? 'bg-white text-blue-600 shadow-lg transform scale-105 border-white'
+                      ? 'bg-white text-blue-600 shadow-lg border-white'
                       : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm border-white border-opacity-30 hover:border-opacity-50'
                   }`}
                 >
