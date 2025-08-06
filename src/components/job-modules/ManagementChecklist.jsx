@@ -3,9 +3,10 @@ import {
   CheckCircle, Clock, AlertCircle, Users, Calendar, FileText, Settings, Database, 
   Plus, Edit3, Trash2, ArrowLeft, Download, Upload, Filter, Search, Eye, UserCheck, 
   Building, MapPin, Mail, FileCheck, Target, ExternalLink, FileUp, CheckSquare, 
-  Square, FileDown, Printer, Archive, Save, X
+  Square, FileDown, Printer, Archive, Save, X, XCircle, ArrowRight
 } from 'lucide-react';
 import { supabase, checklistService } from '../../lib/supabaseClient';
+import * as XLSX from 'xlsx';
 
 const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checklist', onSubModuleChange }) => {
   const [editableClientName, setEditableClientName] = useState(jobData?.client_name || '');
@@ -18,13 +19,13 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
   const [showCompleted, setShowCompleted] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
-  const [mailingListPreview, setMailingListPreview] = useState(null);
   const [uploadingItems, setUploadingItems] = useState({});
   const [currentUser, setCurrentUser] = useState(null);
   const [isLoadingItems, setIsLoadingItems] = useState(true);
   const [validFiles, setValidFiles] = useState({}); // Track which files actually exist
   const [checklistDocuments, setChecklistDocuments] = useState({}); // Track multiple documents per item
   const [isGeneratingList, setIsGeneratingList] = useState(false); // Loading state for list generation
+  const [processingApprovals, setProcessingApprovals] = useState({}); // Track which approvals are being processed
 
   // Extract year from end_date - just grab first 4 characters to avoid timezone issues
   const dueYear = jobData?.end_date ? jobData.end_date.substring(0, 4) : 'TBD';
@@ -105,6 +106,106 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
     setValidFiles(fileChecks);
   };
 
+  // Enhanced function to get ALL property records with pagination
+  const getAllPropertyRecords = async (jobId) => {
+    console.log('📊 Fetching all property records for job:', jobId);
+    let allRecords = [];
+    let offset = 0;
+    const limit = 1000;
+    let hasMore = true;
+    
+    // First, get the latest version number
+    const { data: versionData, error: versionError } = await supabase
+      .from('property_records')
+      .select('version_number')
+      .eq('job_id', jobId)
+      .order('version_number', { ascending: false })
+      .limit(1);
+    
+    if (versionError || !versionData || versionData.length === 0) {
+      console.error('Error getting version number:', versionError);
+      return [];
+    }
+    
+    const latestVersion = versionData[0].version_number;
+    console.log('📌 Latest version number:', latestVersion);
+    
+    // Now fetch all records with pagination
+    while (hasMore) {
+      const { data, error } = await supabase
+        .from('property_records')
+        .select(`
+          property_block,
+          property_lot,
+          property_m4_class,
+          property_location,
+          property_facility,
+          owner_name,
+          owner_street,
+          owner_csz,
+          inspection_info_by
+        `)
+        .eq('job_id', jobId)
+        .eq('version_number', latestVersion)
+        .range(offset, offset + limit - 1);
+      
+      if (error) {
+        console.error('Error fetching property records:', error);
+        break;
+      }
+      
+      if (data && data.length > 0) {
+        allRecords = [...allRecords, ...data];
+        console.log(`📦 Fetched ${data.length} records (total so far: ${allRecords.length})`);
+        hasMore = data.length === limit;
+        offset += limit;
+      } else {
+        hasMore = false;
+      }
+    }
+    
+    console.log(`✅ Total property records fetched: ${allRecords.length}`);
+    return allRecords;
+  };
+
+  // Enhanced function to get ALL inspection data with pagination
+  const getAllInspectionData = async (jobId) => {
+    console.log('🔍 Fetching all inspection data for job:', jobId);
+    let allRecords = [];
+    let offset = 0;
+    const limit = 1000;
+    let hasMore = true;
+    
+    while (hasMore) {
+      const { data, error } = await supabase
+        .from('inspection_data')
+        .select(`
+          property_block,
+          property_lot,
+          inspection_info_by,
+          inspection_date
+        `)
+        .eq('job_id', jobId)
+        .range(offset, offset + limit - 1);
+      
+      if (error) {
+        console.error('Error fetching inspection data:', error);
+        break;
+      }
+      
+      if (data && data.length > 0) {
+        allRecords = [...allRecords, ...data];
+        hasMore = data.length === limit;
+        offset += limit;
+      } else {
+        hasMore = false;
+      }
+    }
+    
+    console.log(`✅ Total inspection records fetched: ${allRecords.length}`);
+    return allRecords;
+  };
+
   // Load checklist items from database
   const loadChecklistItems = async () => {
     try {
@@ -143,7 +244,7 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
         // Create checklist items for this job based on template
         const itemsToCreate = templateItems.map(templateItem => ({
           job_id: jobData.id,
-          template_item_id: templateItem.id, // NOW WE SET THIS!
+          template_item_id: templateItem.id,
           item_text: templateItem.item_text,
           item_order: templateItem.item_order,
           category: templateItem.category,
@@ -187,17 +288,27 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
       
       // Add special action flags based on item text
       items = items.map(item => {
+        // Check if this is an analysis phase item that should be synced
+        const analysisItems = [
+          'Cost Conversion Factor',
+          'Land Value Analysis',
+          'Market Analysis',
+          'Depreciation Analysis',
+          'Final Value Review'
+        ];
+        
+        if (analysisItems.includes(item.item_text)) {
+          item.is_analysis_item = true;
+          item.sync_from_component = true;
+        }
+        
         // Add special actions based on item text
         if (item.item_text === 'Initial Mailing List') {
           item.special_action = 'generate_mailing_list';
-        } else if (item.item_text === 'Initial Letter and Brochure') {
-          item.special_action = 'generate_brochure';
         } else if (item.item_text === 'Second Attempt Inspections') {
           item.special_action = 'generate_second_attempt_mailer';
         } else if (item.item_text === 'Third Attempt Inspections') {
           item.special_action = 'generate_third_attempt_mailer';
-        } else if (item.item_text === 'View Value Mailer') {
-          item.special_action = 'view_impact_letter';
         } else if (item.item_text === 'Generate Turnover Document') {
           item.special_action = 'generate_turnover_pdf';
         } else if (item.item_text === 'Turnover Date') {
@@ -283,7 +394,7 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
 
   const handleItemStatusChange = async (itemId, newStatus) => {
     try {
-      // Update in database first - PASS UUID NOT NAME!
+      // Update in database first
       const updatedItem = await checklistService.updateItemStatus(
         itemId, 
         newStatus, 
@@ -303,25 +414,50 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
 
   const handleClientApproval = async (itemId, approved) => {
     try {
-      // Update in database first - PASS UUID NOT NAME!
+      // Set processing state to prevent double-clicks
+      setProcessingApprovals(prev => ({ ...prev, [itemId]: true }));
+      
+      console.log(`Client approval change for item ${itemId}: ${approved ? 'APPROVED' : 'NOT APPROVED'}`);
+      
+      // Update in database first
       const updatedItem = await checklistService.updateClientApproval(
         itemId, 
         approved, 
         currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad'
       );
       
+      console.log('Updated item from service:', updatedItem);
+      
       // Then update local state with the response
-      setChecklistItems(items => items.map(item => 
-        item.id === itemId ? { ...item, ...updatedItem } : item
-      ));
+      setChecklistItems(items => {
+        const newItems = items.map(item => {
+          if (item.id === itemId) {
+            // Ensure we're properly updating the client_approved field
+            const updated = { 
+              ...item, 
+              ...updatedItem,
+              client_approved: approved, // Explicitly set this
+              client_approved_at: approved ? new Date().toISOString() : null,
+              client_approved_by: approved ? (currentUser?.name || 'Jim Duda') : null
+            };
+            console.log('Local state update for item:', updated);
+            return updated;
+          }
+          return item;
+        });
+        return newItems;
+      });
 
     } catch (error) {
       console.error('Error updating client approval:', error);
       alert('Failed to update approval. Please try again.');
+    } finally {
+      // Clear processing state
+      setProcessingApprovals(prev => ({ ...prev, [itemId]: false }));
     }
   };
 
-  // NEW APPROACH: Direct file handler without hidden inputs
+  // Direct file handler
   const handleFileSelect = async (itemId, itemText) => {
     console.log(`📁 Opening file selector for item: ${itemText} (ID: ${itemId})`);
     
@@ -456,10 +592,14 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
     }
   };
 
-  const generateMailingList = async () => {
+  // ENHANCED: Direct Excel download for Initial Mailing List
+  const generateMailingListExcel = async () => {
     try {
       setIsGeneratingList(true);
-      const mailingData = await checklistService.generateMailingList(jobData.id);
+      console.log('📊 Generating Initial Mailing List as Excel...');
+      
+      // Get ALL property records with pagination
+      const mailingData = await getAllPropertyRecords(jobData.id);
       
       // Filter for residential properties and specific class 15s
       const filteredData = mailingData.filter(record => {
@@ -483,17 +623,39 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
         return false;
       });
       
-      // Transform data for display
-      const formattedData = filteredData.map(record => ({
-        block: record.property_block,
-        lot: record.property_lot,
-        propertyClass: record.property_m4_class,
-        location: record.property_location,
-        owner: record.owner_name,
-        address: `${record.owner_street} ${record.owner_csz}`.trim()
+      console.log(`✅ Filtered to ${filteredData.length} residential properties`);
+      
+      // Transform data for Excel
+      const excelData = filteredData.map(record => ({
+        'Block': record.property_block,
+        'Lot': record.property_lot,
+        'Property Class': record.property_m4_class,
+        'Location': record.property_location,
+        'Owner': record.owner_name,
+        'Mailing Address': `${record.owner_street} ${record.owner_csz}`.trim()
       }));
       
-      setMailingListPreview(formattedData);
+      // Create workbook and worksheet
+      const ws = XLSX.utils.json_to_sheet(excelData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Mailing List');
+      
+      // Auto-size columns
+      const colWidths = [
+        { wch: 10 }, // Block
+        { wch: 10 }, // Lot
+        { wch: 15 }, // Property Class
+        { wch: 30 }, // Location
+        { wch: 25 }, // Owner
+        { wch: 35 }  // Mailing Address
+      ];
+      ws['!cols'] = colWidths;
+      
+      // Generate Excel file and download
+      XLSX.writeFile(wb, `${jobData.job_name}_Initial_Mailing_List.xlsx`);
+      
+      console.log(`✅ Excel file downloaded with ${excelData.length} properties`);
+      
     } catch (error) {
       console.error('Error generating mailing list:', error);
       alert('Failed to generate mailing list. Please ensure property data is loaded.');
@@ -502,12 +664,13 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
     }
   };
 
-  const generateSecondAttemptMailer = async () => {
+  // ENHANCED: Direct Excel download for 2nd Attempt Mailer
+  const generateSecondAttemptMailerExcel = async () => {
     try {
       setIsGeneratingList(true);
-      console.log('🔄 Generating 2nd attempt mailer list...');
+      console.log('🔄 Generating 2nd attempt mailer as Excel...');
       
-      // First, get the job's refusal configuration
+      // Get the job's refusal configuration
       const { data: jobConfig, error: jobError } = await supabase
         .from('jobs')
         .select('infoby_category_config')
@@ -516,15 +679,14 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
       
       if (jobError) throw jobError;
       
-      // Get refusal categories from config (assuming it's a JSON object)
       const refusalCategories = jobConfig?.infoby_category_config?.refusal_categories || [];
       console.log('📋 Refusal categories:', refusalCategories);
       
-      // Get all property records for this job
-      const propertyData = await checklistService.generateMailingList(jobData.id);
+      // Get ALL property records with pagination
+      const propertyData = await getAllPropertyRecords(jobData.id);
       
-      // Get all inspection data for this job
-      const inspectionData = await checklistService.getAllInspectionData(jobData.id);
+      // Get ALL inspection data with pagination
+      const inspectionData = await getAllInspectionData(jobData.id);
       
       // Create a map of inspection data by property key (block-lot)
       const inspectionMap = new Map();
@@ -546,7 +708,6 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
         
         // Check if it's class 2 or 3A with no inspection
         if (['2', '3A'].includes(propClass)) {
-          // Check both property_records and inspection_data for info_by
           const hasInspection = property.inspection_info_by || inspection?.inspection_info_by;
           if (!hasInspection || hasInspection.trim() === '') {
             return true;
@@ -556,19 +717,40 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
         return false;
       });
       
-      // Transform data for display
-      const formattedData = secondAttemptProperties.map(property => ({
-        block: property.property_block,
-        lot: property.property_lot,
-        propertyClass: property.property_m4_class,
-        location: property.property_location,
-        owner: property.owner_name,
-        address: `${property.owner_street} ${property.owner_csz}`.trim(),
-        reason: inspectionMap.get(`${property.property_block}-${property.property_lot}`)?.inspection_info_by || 'Not Inspected'
+      console.log(`✅ Found ${secondAttemptProperties.length} properties for 2nd attempt`);
+      
+      // Transform data for Excel
+      const excelData = secondAttemptProperties.map(property => ({
+        'Block': property.property_block,
+        'Lot': property.property_lot,
+        'Property Class': property.property_m4_class,
+        'Location': property.property_location,
+        'Owner': property.owner_name,
+        'Mailing Address': `${property.owner_street} ${property.owner_csz}`.trim(),
+        'Reason': inspectionMap.get(`${property.property_block}-${property.property_lot}`)?.inspection_info_by || 'Not Inspected'
       }));
       
-      console.log(`✅ Found ${formattedData.length} properties for 2nd attempt`);
-      setMailingListPreview(formattedData);
+      // Create workbook and worksheet
+      const ws = XLSX.utils.json_to_sheet(excelData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, '2nd Attempt Mailer');
+      
+      // Auto-size columns
+      const colWidths = [
+        { wch: 10 }, // Block
+        { wch: 10 }, // Lot
+        { wch: 15 }, // Property Class
+        { wch: 30 }, // Location
+        { wch: 25 }, // Owner
+        { wch: 35 }, // Mailing Address
+        { wch: 20 }  // Reason
+      ];
+      ws['!cols'] = colWidths;
+      
+      // Generate Excel file and download
+      XLSX.writeFile(wb, `${jobData.job_name}_2nd_Attempt_Mailer.xlsx`);
+      
+      console.log(`✅ Excel file downloaded with ${excelData.length} properties`);
       
     } catch (error) {
       console.error('Error generating 2nd attempt mailer:', error);
@@ -578,10 +760,11 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
     }
   };
 
-  const generateThirdAttemptMailer = async () => {
+  // ENHANCED: Direct Excel download for 3rd Attempt Mailer
+  const generateThirdAttemptMailerExcel = async () => {
     try {
       setIsGeneratingList(true);
-      console.log('🔄 Generating 3rd attempt mailer list...');
+      console.log('🔄 Generating 3rd attempt mailer as Excel...');
       
       // Get the job's refusal configuration
       const { data: jobConfig, error: jobError } = await supabase
@@ -594,11 +777,11 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
       
       const refusalCategories = jobConfig?.infoby_category_config?.refusal_categories || [];
       
-      // Get all property records for this job
-      const propertyData = await checklistService.generateMailingList(jobData.id);
+      // Get ALL property records with pagination
+      const propertyData = await getAllPropertyRecords(jobData.id);
       
-      // Get all inspection data for this job
-      const inspectionData = await checklistService.getAllInspectionData(jobData.id);
+      // Get ALL inspection data with pagination
+      const inspectionData = await getAllInspectionData(jobData.id);
       
       // Create a map of inspection data by property key (block-lot)
       const inspectionMap = new Map();
@@ -607,8 +790,7 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
         inspectionMap.set(key, inspection);
       });
       
-      // For 3rd attempt, we use same logic as 2nd attempt but could add additional filters
-      // For now, using same logic - you can customize this based on your needs
+      // Filter properties for 3rd attempt (same logic as 2nd for now)
       const thirdAttemptProperties = propertyData.filter(property => {
         const propClass = property.property_m4_class?.toUpperCase() || '';
         const propertyKey = `${property.property_block}-${property.property_lot}`;
@@ -630,19 +812,40 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
         return false;
       });
       
-      // Transform data for display
-      const formattedData = thirdAttemptProperties.map(property => ({
-        block: property.property_block,
-        lot: property.property_lot,
-        propertyClass: property.property_m4_class,
-        location: property.property_location,
-        owner: property.owner_name,
-        address: `${property.owner_street} ${property.owner_csz}`.trim(),
-        reason: inspectionMap.get(`${property.property_block}-${property.property_lot}`)?.inspection_info_by || 'Not Inspected'
+      console.log(`✅ Found ${thirdAttemptProperties.length} properties for 3rd attempt`);
+      
+      // Transform data for Excel
+      const excelData = thirdAttemptProperties.map(property => ({
+        'Block': property.property_block,
+        'Lot': property.property_lot,
+        'Property Class': property.property_m4_class,
+        'Location': property.property_location,
+        'Owner': property.owner_name,
+        'Mailing Address': `${property.owner_street} ${property.owner_csz}`.trim(),
+        'Reason': inspectionMap.get(`${property.property_block}-${property.property_lot}`)?.inspection_info_by || 'Not Inspected'
       }));
       
-      console.log(`✅ Found ${formattedData.length} properties for 3rd attempt`);
-      setMailingListPreview(formattedData);
+      // Create workbook and worksheet
+      const ws = XLSX.utils.json_to_sheet(excelData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, '3rd Attempt Mailer');
+      
+      // Auto-size columns
+      const colWidths = [
+        { wch: 10 }, // Block
+        { wch: 10 }, // Lot
+        { wch: 15 }, // Property Class
+        { wch: 30 }, // Location
+        { wch: 25 }, // Owner
+        { wch: 35 }, // Mailing Address
+        { wch: 20 }  // Reason
+      ];
+      ws['!cols'] = colWidths;
+      
+      // Generate Excel file and download
+      XLSX.writeFile(wb, `${jobData.job_name}_3rd_Attempt_Mailer.xlsx`);
+      
+      console.log(`✅ Excel file downloaded with ${excelData.length} properties`);
       
     } catch (error) {
       console.error('Error generating 3rd attempt mailer:', error);
@@ -650,33 +853,6 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
     } finally {
       setIsGeneratingList(false);
     }
-  };
-
-  const downloadMailingList = () => {
-    // Check if we have the reason column (for 2nd/3rd attempts)
-    const hasReason = mailingListPreview[0]?.reason !== undefined;
-    
-    const headers = hasReason 
-      ? ['Block', 'Lot', 'Class', 'Location', 'Owner', 'Mailing Address', 'Reason']
-      : ['Block', 'Lot', 'Class', 'Location', 'Owner', 'Mailing Address'];
-    
-    const csvContent = [
-      headers,
-      ...mailingListPreview.map(item => 
-        hasReason 
-          ? [item.block, item.lot, item.propertyClass, item.location, item.owner, item.address, item.reason]
-          : [item.block, item.lot, item.propertyClass, item.location, item.owner, item.address]
-      )
-    ].map(row => row.join(',')).join('\n');
-    
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${jobData.job_name}_mailing_list.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    setMailingListPreview(null);
   };
 
   const handleTurnoverDate = async (itemId, date) => {
@@ -722,6 +898,14 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
       console.error('Error archiving job:', error);
       alert('Failed to archive job. Please try again.');
     }
+  };
+
+  // Navigate to analysis section (placeholder - implement based on your navigation)
+  const navigateToAnalysisSection = (sectionName) => {
+    console.log(`Navigate to analysis section: ${sectionName}`);
+    // TODO: Implement navigation to the specific analysis component
+    // This might use onSubModuleChange or a router
+    alert(`This will navigate to the ${sectionName} section when implemented`);
   };
 
   if (!jobData) {
@@ -888,7 +1072,7 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
               <div>
                 <p className="text-sm text-gray-600">Client Approvals</p>
                 <p className="text-2xl font-bold text-purple-600">
-                  {checklistItems.filter(item => item.client_approved).length}
+                  {checklistItems.filter(item => item.client_approved === true).length}
                 </p>
               </div>
               <UserCheck className="w-8 h-8 text-purple-500" />
@@ -964,6 +1148,7 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
           const categoryColor = getCategoryColor(item.category);
           const statusColor = getStatusColor(item.status);
           const hasValidFile = item.file_attachment_path && validFiles[item.id];
+          const isProcessingApproval = processingApprovals[item.id];
 
           return (
             <div key={item.id} className={`bg-white border rounded-lg p-4 hover:shadow-md transition-shadow ${
@@ -977,9 +1162,10 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
                       <h3 className="font-medium text-gray-800">{item.item_text}</h3>
-                      {item.auto_update_source && (
-                        <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-full">
-                          Auto-update from {item.auto_update_source}
+                      {/* Analysis items show sync badge instead of auto-update */}
+                      {item.is_analysis_item && (
+                        <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded-full">
+                          Synced from Analysis
                         </span>
                       )}
                     </div>
@@ -991,6 +1177,11 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
                     {item.completed_at && (
                       <div className="text-sm text-gray-500 mb-2">
                         Completed on {new Date(item.completed_at).toLocaleDateString()} by {item.completed_by}
+                      </div>
+                    )}
+                    {item.client_approved === true && item.client_approved_at && (
+                      <div className="text-sm text-purple-600 bg-purple-50 px-2 py-1 rounded mb-2 inline-block">
+                        ✓ Client approved on {new Date(item.client_approved_at).toLocaleDateString()} by {item.client_approved_by || 'Unknown'}
                       </div>
                     )}
                     {hasValidFile && (
@@ -1040,31 +1231,70 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
                   </div>
                 </div>
                 <div className="flex flex-col gap-2 ml-4">
-                  <button
-                    onClick={() => handleItemStatusChange(item.id, 
-                      item.status === 'completed' ? 'pending' : 'completed'
-                    )}
-                    className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
-                      item.status === 'completed'
-                        ? 'bg-green-500 text-white hover:bg-green-600'
-                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                    }`}
-                  >
-                    {item.status === 'completed' ? 'Completed' : 'Mark Complete'}
-                  </button>
+                  {/* Don't show Mark Complete button for analysis items that sync from other components */}
+                  {!item.is_analysis_item && (
+                    <button
+                      onClick={() => handleItemStatusChange(item.id, 
+                        item.status === 'completed' ? 'pending' : 'completed'
+                      )}
+                      className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
+                        item.status === 'completed'
+                          ? 'bg-green-500 text-white hover:bg-green-600'
+                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                      }`}
+                    >
+                      {item.status === 'completed' ? 'Completed' : 'Mark Complete'}
+                    </button>
+                  )}
+                  
+                  {/* Show Go to Section button for analysis items */}
+                  {item.is_analysis_item && (
+                    <button
+                      onClick={() => navigateToAnalysisSection(item.item_text)}
+                      className="px-3 py-1 bg-purple-500 text-white rounded-md text-sm hover:bg-purple-600 flex items-center gap-1"
+                    >
+                      <ArrowRight className="w-4 h-4" />
+                      Go to Section
+                    </button>
+                  )}
+                  
                   {item.requires_client_approval && (
                     <button
                       onClick={() => handleClientApproval(item.id, !item.client_approved)}
-                      className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
-                        item.client_approved
+                      disabled={isProcessingApproval}
+                      className={`px-3 py-1 rounded-md text-sm font-medium transition-colors flex items-center gap-1 justify-center ${
+                        item.client_approved === true
                           ? 'bg-purple-500 text-white hover:bg-purple-600'
                           : 'bg-purple-200 text-purple-700 hover:bg-purple-300'
-                      }`}
+                      } ${isProcessingApproval ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      title={item.client_approved === true ? 'Click to remove approval' : 'Click to approve'}
                     >
-                      {item.client_approved ? '✓ Client Approved' : 'Client Approval'}
+                      {isProcessingApproval ? (
+                        <>Processing...</>
+                      ) : item.client_approved === true ? (
+                        <>
+                          <UserCheck className="w-4 h-4" />
+                          Approved
+                        </>
+                      ) : (
+                        <>
+                          <XCircle className="w-4 h-4" />
+                          Not Approved
+                        </>
+                      )}
                     </button>
                   )}
-                  {item.allows_file_upload && (
+                  {item.allows_file_upload && item.item_text === 'Initial Letter and Brochure' && (
+                    <button
+                      onClick={() => handleFileSelect(item.id, item.item_text)}
+                      disabled={uploadingItems[item.id]}
+                      className="px-3 py-1 bg-blue-500 text-white rounded-md text-sm hover:bg-blue-600 disabled:bg-gray-400 flex items-center gap-1"
+                    >
+                      <Upload className="w-4 h-4" />
+                      {uploadingItems[item.id] ? 'Uploading...' : 'Upload Files'}
+                    </button>
+                  )}
+                  {item.allows_file_upload && item.item_text !== 'Initial Letter and Brochure' && (
                     <button
                       onClick={() => handleFileSelect(item.id, item.item_text)}
                       disabled={uploadingItems[item.id]}
@@ -1076,44 +1306,32 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
                   )}
                   {item.special_action === 'generate_mailing_list' && (
                     <button
-                      onClick={generateMailingList}
+                      onClick={generateMailingListExcel}
                       disabled={isGeneratingList}
                       className="px-3 py-1 bg-green-500 text-white rounded-md text-sm hover:bg-green-600 disabled:bg-gray-400 flex items-center gap-1"
                     >
-                      <Mail className="w-4 h-4" />
-                      {isGeneratingList ? 'Generating...' : 'Generate List'}
-                    </button>
-                  )}
-                  {item.special_action === 'generate_brochure' && (
-                    <button className="px-3 py-1 bg-blue-500 text-white rounded-md text-sm hover:bg-blue-600 flex items-center gap-1">
-                      <FileText className="w-4 h-4" />
-                      Generate Brochure
+                      <Download className="w-4 h-4" />
+                      {isGeneratingList ? 'Generating...' : 'Download Excel'}
                     </button>
                   )}
                   {item.special_action === 'generate_second_attempt_mailer' && (
                     <button 
-                      onClick={generateSecondAttemptMailer}
+                      onClick={generateSecondAttemptMailerExcel}
                       disabled={isGeneratingList}
                       className="px-3 py-1 bg-yellow-500 text-white rounded-md text-sm hover:bg-yellow-600 disabled:bg-gray-400 flex items-center gap-1"
                     >
-                      <Mail className="w-4 h-4" />
-                      {isGeneratingList ? 'Generating...' : '2nd Attempt Mailer'}
+                      <Download className="w-4 h-4" />
+                      {isGeneratingList ? 'Generating...' : '2nd Attempt Excel'}
                     </button>
                   )}
                   {item.special_action === 'generate_third_attempt_mailer' && (
                     <button 
-                      onClick={generateThirdAttemptMailer}
+                      onClick={generateThirdAttemptMailerExcel}
                       disabled={isGeneratingList}
                       className="px-3 py-1 bg-red-500 text-white rounded-md text-sm hover:bg-red-600 disabled:bg-gray-400 flex items-center gap-1"
                     >
-                      <Mail className="w-4 h-4" />
-                      {isGeneratingList ? 'Generating...' : '3rd Attempt Mailer'}
-                    </button>
-                  )}
-                  {item.special_action === 'view_impact_letter' && (
-                    <button className="px-3 py-1 bg-purple-500 text-white rounded-md text-sm hover:bg-purple-600 flex items-center gap-1">
-                      <Eye className="w-4 h-4" />
-                      View Mailer
+                      <Download className="w-4 h-4" />
+                      {isGeneratingList ? 'Generating...' : '3rd Attempt Excel'}
                     </button>
                   )}
                   {item.special_action === 'generate_turnover_pdf' && (
@@ -1136,73 +1354,6 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
           );
         })}
       </div>
-
-      {/* Mailing List Preview Modal */}
-      {mailingListPreview && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-6 max-w-6xl w-full max-h-[90vh] flex flex-col">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold">
-                {mailingListPreview[0]?.reason !== undefined ? 'Attempt Mailer List Preview' : 'Initial Mailing List Preview'}
-                <span className="text-sm font-normal text-gray-600 ml-2">({mailingListPreview.length} properties)</span>
-              </h3>
-              <button
-                onClick={() => setMailingListPreview(null)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-            <div className="overflow-auto flex-1 mb-4">
-              <table className="w-full border-collapse border border-gray-300">
-                <thead>
-                  <tr className="bg-gray-100 sticky top-0">
-                    <th className="border border-gray-300 p-2 text-left">Block</th>
-                    <th className="border border-gray-300 p-2 text-left">Lot</th>
-                    <th className="border border-gray-300 p-2 text-left">Class</th>
-                    <th className="border border-gray-300 p-2 text-left">Location</th>
-                    <th className="border border-gray-300 p-2 text-left">Owner</th>
-                    <th className="border border-gray-300 p-2 text-left">Mailing Address</th>
-                    {mailingListPreview[0]?.reason !== undefined && (
-                      <th className="border border-gray-300 p-2 text-left">Reason</th>
-                    )}
-                  </tr>
-                </thead>
-                <tbody>
-                  {mailingListPreview.map((item, index) => (
-                    <tr key={index} className="hover:bg-gray-50">
-                      <td className="border border-gray-300 p-2">{item.block}</td>
-                      <td className="border border-gray-300 p-2">{item.lot}</td>
-                      <td className="border border-gray-300 p-2">{item.propertyClass}</td>
-                      <td className="border border-gray-300 p-2">{item.location}</td>
-                      <td className="border border-gray-300 p-2">{item.owner}</td>
-                      <td className="border border-gray-300 p-2">{item.address}</td>
-                      {item.reason !== undefined && (
-                        <td className="border border-gray-300 p-2">{item.reason}</td>
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="flex justify-end gap-4 pt-4 border-t">
-              <button
-                onClick={() => setMailingListPreview(null)}
-                className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={downloadMailingList}
-                className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 flex items-center gap-2"
-              >
-                <Download className="w-4 h-4" />
-                Download CSV
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Archive Confirmation Modal */}
       {showArchiveConfirm && (
