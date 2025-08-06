@@ -1020,10 +1020,6 @@ Thank you for your immediate attention to this matter.`;
   const loadJobs = async () => {
     try {
       setLoading(true);
-
-  const loadJobs = async () => {
-    try {
-      setLoading(true);
       
       if (activeTab === 'active') {
         // Load ALL active jobs (no filter on job names)
