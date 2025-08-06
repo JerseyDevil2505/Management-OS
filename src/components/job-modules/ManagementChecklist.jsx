@@ -91,9 +91,10 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
             fileChecks[item.id] = false;
             // If file doesn't exist, clear it from the database
             await supabase
-              .from('checklist_items')
+              .from('checklist_item_status')
               .update({ file_attachment_path: null })
-              .eq('id', item.id);
+              .eq('job_id', jobData.id)
+              .eq('item_id', item.id);
           }
         } catch (err) {
           console.error('Error checking file:', err);
@@ -301,77 +302,6 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
           notes: status.notes
         };
       });
-        
-        // Get the standard revaluation template
-        const { data: template, error: templateError } = await supabase
-          .from('checklist_templates')
-          .select('id')
-          .eq('name', 'Standard Revaluation Checklist')
-          .single();
-
-        if (templateError || !template) {
-          console.error('Template not found:', templateError);
-          throw new Error('Checklist template not found');
-        }
-
-        // Get all template items
-        const { data: templateItems, error: templateItemsError } = await supabase
-          .from('checklist_template_items')
-          .select('*')
-          .eq('template_id', template.id)
-          .order('item_order');
-
-        if (templateItemsError || !templateItems) {
-          console.error('Template items not found:', templateItemsError);
-          throw new Error('Template items not found');
-        }
-
-        // Create checklist items for this job based on template
-        const itemsToCreate = templateItems.map(templateItem => ({
-          job_id: jobData.id,
-          template_item_id: templateItem.id,
-          item_text: templateItem.item_text,
-          item_order: templateItem.item_order,
-          category: templateItem.category,
-          status: 'pending',
-          requires_client_approval: templateItem.requires_client_approval || false,
-          allows_file_upload: templateItem.allows_file_upload || false,
-          auto_update_source: templateItem.auto_update_source,
-          created_at: new Date().toISOString()
-        }));
-
-        // Use upsert with conflict handling to prevent duplicates
-        const { data: createdItems, error: createError } = await supabase
-          .from('checklist_items')
-          .upsert(itemsToCreate, { 
-            onConflict: 'job_id,item_text,item_order',
-            ignoreDuplicates: true 
-          })
-          .select();
-
-        if (createError) {
-          // If we get a unique constraint error, just reload the items
-          if (createError.code === '23505') {
-            console.log('Items were created by another user, reloading...');
-            const { data: reloadedItems } = await supabase
-              .from('checklist_items')
-              .select('*')
-              .eq('job_id', jobData.id)
-              .order('item_order');
-            items = reloadedItems;
-          } else {
-            console.error('Error creating checklist items:', createError);
-            throw createError;
-          }
-        } else {
-          items = createdItems;
-        }
-      }
-
-        items = createdItems;
-      } else {
-        items = uniqueItems;
-      }
       
       // Load all documents for items that can have multiple files
       const { data: documents, error: docsError } = await supabase
@@ -390,39 +320,6 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
         }, {});
         setChecklistDocuments(docsByItem);
       }
-      
-      // Add special action flags based on item text
-      items = items.map(item => {
-        // Check if this is an analysis phase item that should be synced
-        const analysisItems = [
-          'Cost Conversion Factor',
-          'Land Value Analysis',
-          'Market Analysis',
-          'Depreciation Analysis',
-          'Final Value Review'
-        ];
-        
-        if (analysisItems.includes(item.item_text)) {
-          item.is_analysis_item = true;
-          item.sync_from_component = true;
-        }
-        
-        // Add special actions based on item text
-        if (item.item_text === 'Initial Mailing List') {
-          item.special_action = 'generate_mailing_list';
-        } else if (item.item_text === 'Second Attempt Inspections') {
-          item.special_action = 'generate_second_attempt_mailer';
-        } else if (item.item_text === 'Third Attempt Inspections') {
-          item.special_action = 'generate_third_attempt_mailer';
-        } else if (item.item_text === 'Generate Turnover Document') {
-          item.special_action = 'generate_turnover_pdf';
-        } else if (item.item_text === 'Turnover Date') {
-          item.input_type = 'date';
-          item.special_action = 'archive_trigger';
-        }
-        
-        return item;
-      });
       
       // Update First Attempt Inspections item with workflow stats if available
       if (jobData?.workflow_stats?.validInspections) {
@@ -801,37 +698,38 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
       
       if (jobError) throw jobError;
       
-      const refusalCategories = jobConfig?.infoby_category_config?.refusal_categories || [];
-      console.log('📋 Refusal categories:', refusalCategories);
+      const refusalCategories = jobConfig?.infoby_category_config?.refusal || [];
+      console.log('📋 Refusal codes for this job:', refusalCategories);
       
       // Get ALL property records with pagination
       const propertyData = await getAllPropertyRecords(jobData.id);
       
       // Get ALL inspection data with pagination
       const inspectionData = await getAllInspectionData(jobData.id);
+      console.log(`🔍 Found ${inspectionData.length} inspection records`);
       
-      // Create a map of inspection data by property key (block-lot)
+      // Create a map of inspection data by composite key
       const inspectionMap = new Map();
       inspectionData.forEach(inspection => {
-        const key = `${inspection.property_block}-${inspection.property_lot}`;
-        inspectionMap.set(key, inspection);
+        if (inspection.property_composite_key) {
+          inspectionMap.set(inspection.property_composite_key, inspection);
+        }
       });
       
       // Filter properties for 2nd attempt
       const secondAttemptProperties = propertyData.filter(property => {
         const propClass = property.property_m4_class?.toUpperCase() || '';
-        const propertyKey = `${property.property_block}-${property.property_lot}`;
-        const inspection = inspectionMap.get(propertyKey);
+        const inspection = property.property_composite_key ? 
+          inspectionMap.get(property.property_composite_key) : null;
         
         // Check if it's a refusal based on job config
-        if (inspection && refusalCategories.includes(inspection.inspection_info_by)) {
+        if (inspection && refusalCategories.includes(inspection.info_by_code)) {
           return true;
         }
         
-        // Check if it's class 2 or 3A with no inspection
+        // Check if it's class 2 or 3A with no inspection (list_by is null or empty)
         if (['2', '3A'].includes(propClass)) {
-          const hasInspection = property.inspection_info_by || inspection?.inspection_info_by;
-          if (!hasInspection || hasInspection.trim() === '') {
+          if (!inspection || !inspection.list_by || inspection.list_by.trim() === '') {
             return true;
           }
         }
@@ -842,15 +740,27 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
       console.log(`✅ Found ${secondAttemptProperties.length} properties for 2nd attempt`);
       
       // Transform data for Excel
-      const excelData = secondAttemptProperties.map(property => ({
-        'Block': property.property_block,
-        'Lot': property.property_lot,
-        'Property Class': property.property_m4_class,
-        'Location': property.property_location,
-        'Owner': property.owner_name,
-        'Mailing Address': `${property.owner_street} ${property.owner_csz}`.trim(),
-        'Reason': inspectionMap.get(`${property.property_block}-${property.property_lot}`)?.inspection_info_by || 'Not Inspected'
-      }));
+      const excelData = secondAttemptProperties.map(property => {
+        const inspection = property.property_composite_key ? 
+          inspectionMap.get(property.property_composite_key) : null;
+        
+        let reason = 'Not Inspected';
+        if (inspection) {
+          if (refusalCategories.includes(inspection.info_by_code)) {
+            reason = inspection.info_by_code;
+          }
+        }
+        
+        return {
+          'Block': property.property_block,
+          'Lot': property.property_lot,
+          'Property Class': property.property_m4_class,
+          'Location': property.property_location,
+          'Owner': property.owner_name,
+          'Mailing Address': `${property.owner_street} ${property.owner_csz}`.trim(),
+          'Reason': reason
+        };
+      });
       
       // Create workbook and worksheet
       const ws = XLSX.utils.json_to_sheet(excelData);
@@ -897,7 +807,8 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
       
       if (jobError) throw jobError;
       
-      const refusalCategories = jobConfig?.infoby_category_config?.refusal_categories || [];
+      const refusalCategories = jobConfig?.infoby_category_config?.refusal || [];
+      console.log('📋 Refusal codes for this job:', refusalCategories);
       
       // Get ALL property records with pagination
       const propertyData = await getAllPropertyRecords(jobData.id);
@@ -908,7 +819,6 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
       // Create a map of inspection data by composite key
       const inspectionMap = new Map();
       inspectionData.forEach(inspection => {
-        // Use the existing composite key from the database
         if (inspection.property_composite_key) {
           inspectionMap.set(inspection.property_composite_key, inspection);
         }
@@ -917,7 +827,6 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
       // Filter properties for 3rd attempt (same logic as 2nd for now)
       const thirdAttemptProperties = propertyData.filter(property => {
         const propClass = property.property_m4_class?.toUpperCase() || '';
-        // Use the property's composite key to find matching inspection
         const inspection = property.property_composite_key ? 
           inspectionMap.get(property.property_composite_key) : null;
         
@@ -926,10 +835,9 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
           return true;
         }
         
-        // Check if it's class 2 or 3A with no inspection
+        // Check if it's class 2 or 3A with no inspection (list_by is null or empty)
         if (['2', '3A'].includes(propClass)) {
-          const hasInspection = property.inspection_info_by || inspection?.info_by_code;
-          if (!hasInspection || hasInspection.trim() === '') {
+          if (!inspection || !inspection.list_by || inspection.list_by.trim() === '') {
             return true;
           }
         }
@@ -940,15 +848,27 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
       console.log(`✅ Found ${thirdAttemptProperties.length} properties for 3rd attempt`);
       
       // Transform data for Excel
-      const excelData = thirdAttemptProperties.map(property => ({
-        'Block': property.property_block,
-        'Lot': property.property_lot,
-        'Property Class': property.property_m4_class,
-        'Location': property.property_location,
-        'Owner': property.owner_name,
-        'Mailing Address': `${property.owner_street} ${property.owner_csz}`.trim(),
-        'Reason': property.property_composite_key && inspectionMap.get(property.property_composite_key)?.info_by_code || 'Not Inspected'
-      }));
+      const excelData = thirdAttemptProperties.map(property => {
+        const inspection = property.property_composite_key ? 
+          inspectionMap.get(property.property_composite_key) : null;
+        
+        let reason = 'Not Inspected';
+        if (inspection) {
+          if (refusalCategories.includes(inspection.info_by_code)) {
+            reason = inspection.info_by_code;
+          }
+        }
+        
+        return {
+          'Block': property.property_block,
+          'Lot': property.property_lot,
+          'Property Class': property.property_m4_class,
+          'Location': property.property_location,
+          'Owner': property.owner_name,
+          'Mailing Address': `${property.owner_street} ${property.owner_csz}`.trim(),
+          'Reason': reason
+        };
+      });
       
       // Create workbook and worksheet
       const ws = XLSX.utils.json_to_sheet(excelData);
@@ -1306,7 +1226,7 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
                     )}
                     {item.client_approved === true && item.client_approved_date && (
                       <div className="text-sm text-purple-600 bg-purple-50 px-2 py-1 rounded mb-2 inline-block">
-                        ✓ Client approved on {new Date(item.client_approved_date).toLocaleDateString()} by {item.client_approved_by || 'Unknown'}
+                        ✓ Client approved on {new Date(item.client_approved_date).toLocaleDateString()}
                       </div>
                     )}
                     {hasValidFile && (
