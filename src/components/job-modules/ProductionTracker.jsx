@@ -2535,8 +2535,18 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
             <div className="bg-white p-4 rounded-lg border shadow-sm">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-gray-600">Total Properties</p>
-                  <p className="text-2xl font-bold text-blue-600">{propertyRecordsCount?.toLocaleString() || analytics.totalRecords.toLocaleString()}</p>
+                  <p className="text-sm text-gray-600">
+                    Total Properties
+                    {jobData.has_property_assignments && (
+                      <span className="ml-1 text-xs text-purple-600">(Assigned)</span>
+                    )}
+                  </p>
+                  <p className="text-2xl font-bold text-blue-600">
+                    {jobData.has_property_assignments 
+                      ? (jobData.assignedPropertyCount?.toLocaleString() || '0')
+                      : (propertyRecordsCount?.toLocaleString() || analytics.totalRecords.toLocaleString())
+                    }
+                  </p>
                 </div>
                 <TrendingUp className="w-8 h-8 text-blue-500" />
               </div>
