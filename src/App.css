@@ -21,47 +21,11 @@
   --shadow-primary: 0 4px 20px rgba(37, 99, 235, 0.25);
 }
 
-/* Enhanced App Header/Banner - Fixing the black banner issue */
-.app-header, 
-.banner,
-.top-banner,
-.header {
-  background: var(--gradient-primary) !important;
-  color: white !important;
+/* Simple App Header - No effects, just gradient background */
+.app-header {
+  background: var(--gradient-primary);
+  color: white;
   box-shadow: var(--shadow-primary);
-  position: relative;
-  overflow: hidden;
-}
-
-/* Add subtle pattern overlay to headers */
-.app-header::before,
-.banner::before,
-.top-banner::before,
-.header::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-image: repeating-linear-gradient(
-    45deg,
-    transparent,
-    transparent 35px,
-    rgba(255, 255, 255, 0.05) 35px,
-    rgba(255, 255, 255, 0.05) 70px
-  );
-  pointer-events: none;
-  z-index: 1;
-}
-
-/* Ensure header content is above the pattern */
-.app-header > *,
-.banner > *,
-.top-banner > *,
-.header > * {
-  position: relative;
-  z-index: 2;
 }
 
 /* Loading Container - Enhanced with Management OS colors */
@@ -92,47 +56,6 @@
   color: #475569;
   font-size: 1.1rem;
   font-weight: 500;
-}
-
-/* Enhanced Button Styles with Management OS theme */
-button:not(.btn-unstyled),
-.button,
-.btn {
-  background: var(--gradient-primary-simple) !important;
-  color: white !important;
-  border: none;
-  transition: all 0.3s ease;
-  position: relative;
-  overflow: hidden;
-}
-
-button:not(.btn-unstyled)::before,
-.button::before,
-.btn::before {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 0;
-  height: 0;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.3);
-  transform: translate(-50%, -50%);
-  transition: width 0.6s, height 0.6s;
-}
-
-button:not(.btn-unstyled):hover:not(:disabled),
-.button:hover:not(:disabled),
-.btn:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 16px rgba(37, 99, 235, 0.3);
-}
-
-button:not(.btn-unstyled):hover:not(:disabled)::before,
-.button:hover:not(:disabled)::before,
-.btn:hover:not(:disabled)::before {
-  width: 300px;
-  height: 300px;
 }
 
 /* Primary colored elements */
@@ -235,24 +158,16 @@ h3, h4, h5, h6 {
   border-color: #bfdbfe;
 }
 
-/* Navigation items */
-.nav-link,
-.nav-item {
-  color: white;
-  transition: all 0.2s ease;
+/* Active tab styling - Override Tailwind's bg-blue-600 */
+.bg-blue-600 {
+  background: var(--gradient-primary-simple) !important;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3) !important;
 }
 
-.nav-link:hover,
-.nav-item:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: white;
-}
-
-.nav-link.active,
-.nav-item.active {
-  background: rgba(255, 255, 255, 0.2);
-  color: white;
-  font-weight: 600;
+/* Enhance the job count badge */
+.bg-green-500 {
+  background: linear-gradient(135deg, #10b981 0%, #34d399 100%) !important;
+  box-shadow: 0 2px 4px rgba(16, 185, 129, 0.3) !important;
 }
 
 /* Scrollbar styling for webkit browsers */
