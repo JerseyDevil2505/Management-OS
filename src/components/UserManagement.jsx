@@ -61,11 +61,14 @@ const UserManagement = () => {
     }
 
     try {
-      // Check if employee exists and get their full data
+      // Just trim the email, don't force lowercase - keep it exactly as entered
+      const emailToSearch = newUser.email.trim();
+      
+      // Check if employee exists using case-insensitive search
       const { data: existingEmployee } = await supabase
         .from('employees')
-        .select('*')  // Get all fields including first_name and last_name
-        .eq('email', newUser.email.toLowerCase())
+        .select('*')
+        .ilike('email', emailToSearch)  // Use ilike for case-insensitive search
         .single();
 
       if (!existingEmployee) {
@@ -75,7 +78,7 @@ const UserManagement = () => {
 
       // Create auth user with metadata for profiles table
       const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: newUser.email,
+        email: emailToSearch,  // Use the email as entered
         password: newUser.password,
         options: {
           data: {
@@ -86,14 +89,14 @@ const UserManagement = () => {
 
       if (authError) throw authError;
 
-      // Update employee role and has_account flag
+      // Update employee role and has_account flag using the ID (more reliable than email)
       const { error: updateError } = await supabase
         .from('employees')
         .update({ 
           role: newUser.role,
           has_account: true 
         })
-        .eq('email', newUser.email.toLowerCase());
+        .eq('id', existingEmployee.id);  // Use ID instead of email for update
 
       if (updateError) throw updateError;
 
