@@ -699,8 +699,8 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
           return true;
         }
         
-        // Include class 15 with specific facility names
-        if (propClass === '15' && record.property_facility) {
+        // Include class 15 variants (15A, 15B, 15C, 15D, 15E, 15F) with specific facility names
+        if (propClass.startsWith('15') && record.property_facility) {
           const facilityLower = record.property_facility.toLowerCase();
           return facilityLower.includes('residence') ||
                  facilityLower.includes('vet') ||
