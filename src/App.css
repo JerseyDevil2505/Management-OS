@@ -5,21 +5,44 @@
 /* Add Tailwind CSS via CDN */
 @import url('https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css');
 
-/* Loading Container */
+/* Management OS Color Variables */
+:root {
+  /* Primary Blues from Management OS */
+  --primary-blue-dark: #1e40af;
+  --primary-blue-main: #2563eb;
+  --primary-blue-light: #52B5E8;
+  
+  /* Gradients */
+  --gradient-primary: linear-gradient(135deg, #2563eb 0%, #52B5E8 50%, #1e40af 100%);
+  --gradient-primary-simple: linear-gradient(135deg, #2563eb 0%, #52B5E8 100%);
+  --gradient-dark: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+  
+  /* Shadows */
+  --shadow-primary: 0 4px 20px rgba(37, 99, 235, 0.25);
+}
+
+/* Simple App Header - No effects, just gradient background */
+.app-header {
+  background: var(--gradient-primary);
+  color: white;
+  box-shadow: var(--shadow-primary);
+}
+
+/* Loading Container - Enhanced with Management OS colors */
 .loading-container {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   min-height: 100vh;
-  background-color: #f5f7fa;
+  background: linear-gradient(135deg, #f5f7fa 0%, #e9ecef 100%);
 }
 
 .loading-spinner {
   width: 50px;
   height: 50px;
   border: 3px solid #e2e8f0;
-  border-top-color: #2a5298;
+  border-top-color: var(--primary-blue-light);
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }
@@ -30,6 +53,154 @@
 
 .loading-container p {
   margin-top: 1rem;
-  color: #4a5568;
+  color: #475569;
   font-size: 1.1rem;
+  font-weight: 500;
+}
+
+/* Active tab styling - Override Tailwind's bg-blue-600 */
+.bg-blue-600 {
+  background: var(--gradient-primary-simple) !important;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3) !important;
+}
+
+/* Enhance the job count badge */
+.bg-green-500 {
+  background: linear-gradient(135deg, #10b981 0%, #34d399 100%) !important;
+  box-shadow: 0 2px 4px rgba(16, 185, 129, 0.3) !important;
+}
+
+/* Primary colored elements */
+.primary,
+.text-primary {
+  color: var(--primary-blue-main) !important;
+}
+
+.bg-primary {
+  background: var(--gradient-primary-simple) !important;
+}
+
+/* Links with Management OS blue */
+a {
+  color: var(--primary-blue-main);
+  transition: color 0.2s ease;
+}
+
+a:hover {
+  color: var(--primary-blue-light);
+}
+
+/* Cards/Panels enhancement */
+.card,
+.panel,
+.box {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1),
+              0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  transition: all 0.3s ease;
+}
+
+.card:hover,
+.panel:hover,
+.box:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.12),
+              0 4px 6px -2px rgba(0, 0, 0, 0.08),
+              0 20px 25px -5px rgba(82, 181, 232, 0.15);
+}
+
+/* Form inputs with Management OS style */
+input:not([type="checkbox"]):not([type="radio"]),
+textarea,
+select {
+  border: 2px solid #e2e8f0 !important;
+  background-color: #f8fafc !important;
+  transition: all 0.2s ease;
+}
+
+input:not([type="checkbox"]):not([type="radio"]):focus,
+textarea:focus,
+select:focus {
+  outline: none !important;
+  border-color: var(--primary-blue-light) !important;
+  background-color: white !important;
+  box-shadow: 0 0 0 3px rgba(82, 181, 232, 0.1) !important;
+}
+
+/* Headings - Simple solid colors */
+h1, h2 {
+  font-weight: 700;
+}
+
+h3, h4, h5, h6 {
+  color: var(--primary-blue-dark);
+  font-weight: 600;
+}
+
+/* Footer enhancement */
+.footer,
+.app-footer {
+  background: var(--gradient-dark) !important;
+  color: #94a3b8 !important;
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+}
+
+/* Success/Error/Info states with Management OS colors */
+.success {
+  color: #16a34a;
+  background-color: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.error {
+  color: #dc2626;
+  background-color: #fef2f2;
+  border-color: #fecaca;
+}
+
+.info {
+  color: var(--primary-blue-main);
+  background-color: #eff6ff;
+  border-color: #bfdbfe;
+}
+
+/* Navigation items */
+.nav-link,
+.nav-item {
+  color: white;
+  transition: all 0.2s ease;
+}
+
+.nav-link:hover,
+.nav-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+}
+
+.nav-link.active,
+.nav-item.active {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  font-weight: 600;
+}
+
+/* Scrollbar styling for webkit browsers */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--gradient-primary-simple);
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--primary-blue-dark);
 }

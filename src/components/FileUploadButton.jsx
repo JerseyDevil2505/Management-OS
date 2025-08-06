@@ -16,6 +16,8 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
   const [comparisonResults, setComparisonResults] = useState(null);
   const [salesDecisions, setSalesDecisions] = useState(new Map());
   const [sourceFileVersion, setSourceFileVersion] = useState(1);
+  const [lastSourceProcessedDate, setLastSourceProcessedDate] = useState(null);
+  const [lastCodeProcessedDate, setLastCodeProcessedDate] = useState(null);
   
   // NEW: Batch processing modal state
   const [showBatchModal, setShowBatchModal] = useState(false);
@@ -308,6 +310,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       }
 
       addNotification(`✅ Successfully updated ${codeCount} code definitions for ${detectedVendor}`, 'success');
+      setLastCodeProcessedDate(new Date().toISOString());  // Track code file update date
       
       // Clear code file selection
       setCodeFile(null);
@@ -1246,6 +1249,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       // CRITICAL FIX: Update banner state immediately
       addBatchLog('🔄 Refreshing UI state...', 'info');
       setSourceFileVersion(newFileVersion);  // Use the newFileVersion we already calculated
+      setLastSourceProcessedDate(new Date().toISOString());  // Track our own date!
       addBatchLog('✅ UI state refreshed successfully', 'success');
       
       setBatchComplete(true);
@@ -1394,14 +1398,14 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
               <div className="mb-4 bg-purple-50 border border-purple-200 rounded-lg p-4">
                 <div className="flex items-center mb-2">
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-600 mr-2"></div>
-                  <h4 className="font-medium text-purple-800">Database Batch Insert Progress</h4>
+                  <h4 className="font-medium text-gray-900">Database Batch Insert Progress</h4>
                 </div>
                 
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
-                    <span className="text-purple-700">{batchInsertProgress.currentOperation}</span>
+                    <span className="text-gray-900">{batchInsertProgress.currentOperation}</span>
                     {batchInsertProgress.totalBatches > 0 && (
-                      <span className="text-purple-800 font-medium">
+                      <span className="text-gray-900 font-medium">
                         Batch {batchInsertProgress.currentBatch} of {batchInsertProgress.totalBatches}
                       </span>
                     )}
@@ -1419,7 +1423,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                   {/* Batch Insert Attempts Log */}
                   {batchInsertProgress.insertAttempts.length > 0 && (
                     <div className="mt-3 max-h-32 overflow-y-auto">
-                      <div className="text-xs font-medium text-purple-700 mb-1">Batch Insert Log:</div>
+                      <div className="text-xs font-medium text-gray-900 mb-1">Batch Insert Log:</div>
                       <div className="space-y-1">
                         {batchInsertProgress.insertAttempts.map((attempt, idx) => (
                           <div key={idx} className="text-xs flex items-center justify-between bg-white rounded px-2 py-1">
@@ -1427,7 +1431,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                             <span className={`flex items-center ${
                               attempt.status === 'success' ? 'text-green-600' :
                               attempt.status === 'retrying' ? 'text-yellow-600' :
-                              attempt.status === 'attempting' ? 'text-purple-600' :
+                              attempt.status === 'attempting' ? 'text-gray-900' :
                               attempt.status === 'failed' ? 'text-red-600' :
                               'text-gray-600'
                             }`}>
@@ -1598,7 +1602,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
 
               {/* Class Changes */}
               <div className={`p-4 rounded-lg border-2 text-center ${hasClassChanges ? 'border-purple-400 bg-purple-50' : 'border-gray-200 bg-gray-50'}`}>
-                <div className={`text-2xl font-bold ${hasClassChanges ? 'text-purple-600' : 'text-gray-500'}`}>
+                <div className={`text-2xl font-bold ${hasClassChanges ? 'text-gray-900' : 'text-gray-500'}`}>
                   {summary.classChanges || 0}
                 </div>
                 <div className="text-sm text-gray-600">Class Changes</div>
@@ -2073,21 +2077,23 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     fetchSourceFileVersion();
   }, [job?.id]);
 
-  // UPDATED: Use fetched source file version for banner
   const getFileStatusWithRealVersion = (timestamp, type) => {
     if (!timestamp) return 'Never';
     
-    
     if (type === 'source') {
+      // Use our local date if we just processed, otherwise use job date
+      const displayDate = lastSourceProcessedDate || timestamp;
       const result = sourceFileVersion === 1 
-        ? `Imported at Job Creation (${formatDate(timestamp)})`
-        : `Updated via FileUpload (${formatDate(timestamp)})`;
+        ? `Imported at Job Creation (${formatDate(displayDate)})`
+        : `Updated via FileUpload (${formatDate(displayDate)})`;
       return result;
     } else if (type === 'code') {
+      // Use our local date if we just processed, otherwise use job date
+      const displayDate = lastCodeProcessedDate || timestamp;
       const codeVersion = job.code_file_version || 1;
       const result = codeVersion === 1 
-        ? `Imported at Job Creation (${formatDate(timestamp)})`
-        : `Updated via FileUpload (${formatDate(timestamp)})`;
+        ? `Imported at Job Creation (${formatDate(displayDate)})`
+        : `Updated via FileUpload (${formatDate(displayDate)})`;
       return result;
     }
     

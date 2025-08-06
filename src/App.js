@@ -431,26 +431,34 @@ function App() {
 
   return (
     <div className="App">
-      {/* Top Navigation */}
-      <div className="bg-gray-900 text-white p-4 mb-6">
-        <div className="max-w-6xl mx-auto">
+      {/* Top Navigation - Updated with Management OS styling */}
+      <div className="app-header">
+        <div className="max-w-6xl mx-auto px-4 py-4">
           <div className="flex justify-between items-center mb-4">
-            <h1 className="text-2xl font-bold">
+            <h1 style={{ 
+              color: '#FFFFFF',
+              fontSize: '2rem',
+              fontWeight: 'bold',
+              fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", 
+              letterSpacing: '-0.02em',
+              display: 'flex',
+              alignItems: 'center'
+            }}>
               Management OS
               {isLoadingWorkflowStats && (
-                <span className="ml-3 text-sm text-gray-300">
-                  <div className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-gray-300 mr-2"></div>
+                <span className="ml-3 text-sm opacity-90">
+                  <div className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
                   Loading analytics...
                 </span>
               )}
             </h1>
             <div className="flex items-center gap-4">
-              <span className="text-sm text-gray-300">
+              <span className="text-sm text-white opacity-95">
                 {user.employeeData?.name || user.email} ({user.role})
               </span>
               <button
                 onClick={handleLogout}
-                className="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm"
+                className="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 backdrop-blur-sm rounded-lg text-white font-medium transition-all duration-200"
               >
                 Logout
               </button>
@@ -459,20 +467,25 @@ function App() {
           
           {/* Only show main navigation when NOT in job-specific modules */}
           {activeModule !== 'job-modules' && (
-            <nav className="flex space-x-6">
+            <nav className="flex space-x-4">
               {renderTabs().map(tab => (
                 <button
                   key={tab.id}
                   onClick={() => setActiveModule(tab.id)}
-                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                  className={`px-4 py-2 rounded-xl font-medium text-sm border ${
                     activeModule === tab.id
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                      ? 'text-blue-600 shadow-lg border-white'
+                      : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm border-white border-opacity-30 hover:border-opacity-50'
                   }`}
+                  style={activeModule === tab.id ? { 
+                    backgroundColor: '#FFFFFF',
+                    opacity: 1,
+                    backdropFilter: 'none'
+                  } : {}}
                 >
                   {tab.label}
                   {tab.id === 'jobs' && Object.values(getAllJobMetrics()).filter(m => m.isProcessed).length > 0 && (
-                    <span className="ml-2 text-xs bg-green-500 text-white px-2 py-1 rounded-full">
+                    <span className="ml-2 text-xs bg-gradient-to-r from-green-500 to-emerald-500 text-white px-2 py-1 rounded-full shadow-sm">
                       {Object.values(getAllJobMetrics()).filter(m => m.isProcessed).length}
                     </span>
                   )}
@@ -486,12 +499,12 @@ function App() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-6">
                 <div>
-                  <p className="text-sm text-gray-300">Working on:</p>
-                  <p className="text-lg font-semibold">{selectedJob.job_name}</p>
+                  <p className="text-sm text-white opacity-75">Working on:</p>
+                  <p className="text-lg font-semibold text-white">{selectedJob.job_name}</p>
                 </div>
                 
                 {/* File Upload Controls */}
-                <div className="border-l border-gray-700 pl-6">
+                <div className="border-l border-white border-opacity-30 pl-6">
                   <FileUploadButton 
                     job={selectedJob} 
                     onFileProcessed={handleFileProcessed} 
@@ -501,7 +514,7 @@ function App() {
               
               <button
                 onClick={handleBackToJobs}
-                className="px-4 py-2 bg-gray-700 text-gray-300 hover:bg-gray-600 rounded-lg font-medium transition-colors"
+                className="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 backdrop-blur-sm rounded-lg text-white font-medium transition-all duration-200"
               >
                 ← Back to Jobs
               </button>
@@ -511,7 +524,7 @@ function App() {
       </div>
 
       {/* Module Content */}
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
         {activeModule === 'employees' && <EmployeeManagement />}
         
         {activeModule === 'jobs' && (

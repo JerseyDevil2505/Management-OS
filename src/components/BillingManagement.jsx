@@ -7,6 +7,12 @@ const BillingManagement = () => {
   const [jobs, setJobs] = useState([]);
   const [legacyJobs, setLegacyJobs] = useState([]);
   const [planningJobs, setPlanningJobs] = useState([]);
+  // Add state to track counts for all job types
+  const [jobCounts, setJobCounts] = useState({
+    active: 0,
+    planned: 0,
+    legacy: 0
+  });
   const [expenses, setExpenses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showContractSetup, setShowContractSetup] = useState(false);
@@ -204,8 +210,14 @@ Thank you for your immediate attention to this matter.`;
   });
 
   useEffect(() => {
-    loadJobs();
+    // Load job counts on initial mount
+    loadJobCounts();
     calculateGlobalMetrics();
+  }, []);
+
+  useEffect(() => {
+    // Load specific data when tab changes
+    loadJobs();
     if (activeTab === 'expenses') {
       loadExpenses();
     }
@@ -216,6 +228,7 @@ Thank you for your immediate attention to this matter.`;
       loadDistributions();
     }
   }, [activeTab]);
+
   useEffect(() => {
     if (activeTab === 'distributions' && globalMetrics.totalPaid > 0) {
       calculateDistributionMetrics();
@@ -559,6 +572,14 @@ Thank you for your immediate attention to this matter.`;
 
   const generateBondLetter = async () => {
     try {
+      // Load jsPDF from CDN if not already loaded
+      if (!window.jspdf) {
+        const script = document.createElement('script');
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+        document.head.appendChild(script);
+        await new Promise(resolve => script.onload = resolve);
+      }
+      
       // Always fetch fresh data directly from database
       const { data: activeJobsData, error: activeError } = await supabase
         .from('jobs')
@@ -578,9 +599,7 @@ Thank you for your immediate attention to this matter.`;
       const { data: planningJobsData, error: planningError } = await supabase
         .from('planning_jobs')
         .select('*')
-        .not('contract_amount', 'is', null)
-        .gt('contract_amount', 0)
-        .eq('is_archived', false);
+        .gt('contract_amount', 0);  // Just this - if it's greater than 0, include it!
 
       if (planningError) {
         console.error('Error fetching planning jobs:', planningError);
@@ -643,20 +662,19 @@ Thank you for your immediate attention to this matter.`;
       // Process planning jobs
       if (planningJobsData && planningJobsData.length > 0) {
         planningJobsData.forEach(job => {
-          const parcels = job.total_properties || 
-                         ((job.residential_properties || 0) + (job.commercial_properties || 0)) || 
-                         0;
-          
-          console.log(`Planning job ${job.municipality}: parcels=${parcels}, amount=${job.contract_amount}`);
-          
-          if (parcels > 0 && job.contract_amount > 0) {
+          // Simple check - just need a contract amount
+          if (job.contract_amount > 0) {
+            const parcels = job.total_properties || 
+                           ((job.residential_properties || 0) + (job.commercial_properties || 0)) || 
+                           0;
+            
             allJobs.push({
               municipality: job.municipality || job.job_name || 'Unknown',
               completionYear: job.end_date ? new Date(job.end_date).getFullYear() : new Date().getFullYear() + 2,
               contractStatus: 'PENDING',
               parcels: parcels,
               amount: job.contract_amount,
-              pricePerParcel: (job.contract_amount / parcels).toFixed(2),
+              pricePerParcel: parcels > 0 ? (job.contract_amount / parcels).toFixed(2) : '0.00',
               percentComplete: '0.0',
               percentBilled: '0.0'
             });
@@ -884,27 +902,77 @@ Thank you for your immediate attention to this matter.`;
       </div>
     </div>
   </div>
+  <div class="text-center mt-6 text-xs text-gray-500 italic" style="margin-top: 24px; text-align: center; font-size: 12px; color: #6b7280; font-style: italic;">
+    *Planned jobs have been awarded but not yet moved to active jobs
+  </div>
 </body>
 </html>
       `;
       
-      // Create blob and download as HTML
-      const blob = new Blob([reportHTML], { type: 'text/html' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `PPA_Contract_Report_${new Date().toISOString().split('T')[0]}.html`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
+      // Generate PDF using jsPDF
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
       
-      alert('Contract report generated successfully!');
+      // Add content as text (simpler approach for web editor)
+      doc.setFontSize(16);
+      doc.text('PROFESSIONAL PROPERTY APPRAISERS', 105, 20, { align: 'center' });
+      doc.setFontSize(12);
+      doc.text('Bonding Status Report', 105, 30, { align: 'center' });
+      doc.text(new Date().toLocaleDateString(), 105, 36, { align: 'center' });
+      
+      // Add table headers
+      let y = 50;
+      doc.setFontSize(10);
+      doc.text('Municipality', 10, y);
+      doc.text('Year', 60, y);
+      doc.text('Status', 80, y);
+      doc.text('Parcels', 100, y);
+      doc.text('Amount', 120, y);
+      doc.text('$/Parcel', 150, y);
+      doc.text('Complete', 170, y);
+      doc.text('Billed', 190, y);
+      
+      // Add jobs
+      y += 10;
+      allJobs.forEach(job => {
+        if (y > 270) { // New page if needed
+          doc.addPage();
+          y = 20;
+        }
+        doc.text(job.municipality.substring(0, 20), 10, y);
+        doc.text(job.completionYear.toString(), 60, y);
+        doc.text(job.contractStatus, 80, y);
+        doc.text(job.parcels.toString(), 100, y);
+        doc.text(`$${parseInt(job.amount).toLocaleString()}`, 120, y);
+        doc.text(`$${job.pricePerParcel}`, 150, y);
+        doc.text(`${job.percentComplete}%`, 170, y);
+        doc.text(`${job.percentBilled}%`, 190, y);
+        y += 7;
+      });
+      
+      // Add totals
+      y += 10;
+      doc.setFontSize(11);
+      doc.text(`Total Contracts: ${allJobs.length}`, 10, y);
+      y += 7;
+      doc.text(`Total Parcels: ${totalParcels.toLocaleString()}`, 10, y);
+      y += 7;
+      doc.text(`Total Amount: $${totalAmount.toLocaleString()}`, 10, y);
+      
+      // Add footnote
+      doc.setFontSize(8);
+      doc.text('*Planned jobs have been awarded but not yet moved to active jobs', 105, 280, { align: 'center' });
+      
+      // Save PDF
+      doc.save(`PPA_Bonding_Report_${new Date().toISOString().split('T')[0]}.pdf`);
+      
+      alert('Bonding report PDF generated successfully!');
     } catch (error) {
       console.error('Error generating report:', error);
       alert('Error generating report: ' + error.message);
     }
   };
+
   const calculateBillingTotals = (job) => {
     if (!job.job_contracts?.[0] || !job.billing_events) return null;
     
@@ -927,6 +995,36 @@ Thank you for your immediate attention to this matter.`;
       isComplete: Math.round(totalPercentageBilled * 10000) / 10000 >= 1.0
     };
   };
+  
+  const loadJobCounts = async () => {
+    try {
+      // Load active jobs count
+      const { data: activeJobsData, error: activeError } = await supabase
+        .from('jobs')
+        .select('id', { count: 'exact' })
+        .eq('job_type', 'standard');
+
+      // Load planned jobs count
+      const { data: planningData, error: planningError } = await supabase
+        .from('planning_jobs')
+        .select('id', { count: 'exact' })
+        .or('is_archived.eq.false,is_archived.is.null');
+
+      // Load legacy jobs count
+      const { data: legacyData, error: legacyError } = await supabase
+        .from('jobs')
+        .select('id', { count: 'exact' })
+        .eq('job_type', 'legacy_billing');
+
+      setJobCounts({
+        active: activeJobsData?.length || 0,
+        planned: planningData?.length || 0,
+        legacy: legacyData?.length || 0
+      });
+    } catch (error) {
+      console.error('Error loading job counts:', error);
+    }
+  };
 
   const loadJobs = async () => {
     try {
@@ -947,6 +1045,8 @@ Thank you for your immediate attention to this matter.`;
 
         if (jobsError) throw jobsError;
         setJobs(jobsData || []);
+        // Update count after loading
+        setJobCounts(prev => ({ ...prev, active: jobsData?.length || 0 }));
       } else if (activeTab === 'planned') {
         // Load planning jobs
         const { data: planningData, error: planningError } = await supabase
@@ -956,6 +1056,8 @@ Thank you for your immediate attention to this matter.`;
 
         if (planningError) throw planningError;
         setPlanningJobs(planningData || []);
+        // Update count after loading
+        setJobCounts(prev => ({ ...prev, planned: planningData?.length || 0 }));
       } else if (activeTab === 'legacy') {
         // Load legacy billing-only jobs
         const { data: legacyData, error: legacyError } = await supabase
@@ -969,6 +1071,8 @@ Thank you for your immediate attention to this matter.`;
 
         if (legacyError) throw legacyError;
         setLegacyJobs(legacyData || []);
+        // Update count after loading
+        setJobCounts(prev => ({ ...prev, legacy: legacyData?.length || 0 }));
       }
     } catch (error) {
       console.error('Error loading jobs:', error);
@@ -1562,6 +1666,7 @@ Thank you for your immediate attention to this matter.`;
       alert(`Successfully rolled over "${planningJob.job_name || planningJob.municipality}" to active jobs!`);
       setActiveTab('active');
       loadJobs();
+      loadJobCounts(); // Refresh counts after rollover
     } catch (error) {
       console.error('Error rolling over planning job:', error);
       alert('Error rolling over job: ' + error.message);
@@ -1710,6 +1815,7 @@ Thank you for your immediate attention to this matter.`;
       });
       setActiveTab('legacy');
       loadJobs();
+      loadJobCounts(); // Refresh counts after creating legacy job
     } catch (error) {
       console.error('Error creating legacy job:', error);
     }
@@ -1965,7 +2071,7 @@ Thank you for your immediate attention to this matter.`;
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
-          <span>Generate Contract Report</span>
+          <span>Generate Bonding Status Report</span>
         </button>
       </div>
 
@@ -1980,7 +2086,7 @@ Thank you for your immediate attention to this matter.`;
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
-            Active Jobs ({jobs.filter(j => j.job_type === 'standard').length})
+            Active Jobs ({jobCounts.active})
           </button>
           <button
             onClick={() => setActiveTab('planned')}
@@ -1990,7 +2096,7 @@ Thank you for your immediate attention to this matter.`;
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
-            Planned Jobs ({planningJobs.filter(job => !job.is_archived).length})
+            Planned Jobs ({jobCounts.planned})
           </button>
           <button
             onClick={() => setActiveTab('legacy')}
@@ -2000,7 +2106,7 @@ Thank you for your immediate attention to this matter.`;
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
-            Legacy Jobs ({legacyJobs.length})
+            Legacy Jobs ({jobCounts.legacy})
           </button>
           <button
             onClick={() => setActiveTab('expenses')}
@@ -2448,9 +2554,10 @@ Thank you for your immediate attention to this matter.`;
                                   
                                   if (error) throw error;
                                   
-                                  alert('Legacy job deleted successfully');
-                                  loadJobs();
-                                  calculateGlobalMetrics();
+                  alert('Legacy job deleted successfully');
+                  loadJobs();
+                  loadJobCounts(); // Refresh counts after deletion
+                  calculateGlobalMetrics();    
                                 } catch (error) {
                                   console.error('Error deleting legacy job:', error);
                                   alert('Error deleting job: ' + error.message);

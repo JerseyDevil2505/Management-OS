@@ -133,8 +133,13 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
     if (!dateString) return 999;
     const date = new Date(dateString);
     const now = new Date();
-    const diffTime = Math.abs(now - date);
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    // Reset times to midnight for accurate day comparison
+    const dateDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const nowDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    
+    const diffTime = Math.abs(nowDay - dateDay);
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
     return diffDays;
   };
 
@@ -2287,46 +2292,6 @@ useEffect(() => {
       {/* Active Jobs Tab with LIVE METRICS */}
       {activeTab === 'jobs' && (
         <div className="space-y-6">
-          {/* Payroll/Billing Update Alert */}
-          {getJobsNeedingUpdates().length > 0 && (
-            <div className="mb-4 p-4 bg-yellow-50 border-l-4 border-yellow-400 rounded-lg shadow-md">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <AlertTriangle className="w-6 h-6 text-yellow-600" />
-                  <div className="flex-1">
-                    <h4 className="font-bold text-yellow-900">
-                      {isPayrollPeriod() ? '💰 Payroll Period - Updates Required' : '📊 Production Updates Needed'}
-                    </h4>
-                    <p className="text-sm text-yellow-700 mt-1">
-                      {getJobsNeedingUpdates().length} job{getJobsNeedingUpdates().length > 1 ? 's' : ''} need ProductionTracker updates
-                    </p>
-                    <div className="text-xs text-yellow-600 mt-2">
-                      <details className="cursor-pointer">
-                        <summary className="font-medium hover:text-yellow-800">
-                          Click to see jobs needing updates
-                        </summary>
-                        <div className="mt-2 p-2 bg-yellow-100 rounded space-y-1">
-                          {getJobsNeedingUpdates().map(job => (
-                            <div key={job.id} className="flex items-center justify-between">
-                              <span>• {job.municipality}</span>
-                              <span className="text-yellow-700 ml-2">
-                                (Last run: {formatTimeAgo(jobFreshness[job.id]?.lastProductionRun)})
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </details>
-                    </div>
-                  </div>
-                </div>
-                <div className="text-right ml-4">
-                  <div className="text-sm text-yellow-700 font-medium">Run ProductionTracker</div>
-                  <div className="text-xs text-yellow-600 mt-1">for accurate payroll/billing</div>
-                </div>
-              </div>
-            </div>
-          )}
-
           <div className="bg-gradient-to-r from-blue-50 to-green-50 rounded-lg border-2 border-blue-200 p-6">
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center">
