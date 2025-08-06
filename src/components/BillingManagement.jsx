@@ -570,7 +570,7 @@ Thank you for your immediate attention to this matter.`;
     }
   };  
 
-const generateBondLetter = async () => {
+  const generateBondLetter = async () => {
     try {
       // Load jsPDF from CDN if not already loaded
       if (!window.jspdf) {
@@ -645,8 +645,8 @@ const generateBondLetter = async () => {
           }
           
           if (contract && parcels > 0) {
-            // Corrected year calculation - use current year if no end_date
-            const dueYear = job.end_date ? new Date(job.end_date).getFullYear() : new Date().getFullYear();
+            // Fix timezone issue - parse date string directly
+            const dueYear = job.end_date ? parseInt(job.end_date.substring(0, 4)) : new Date().getFullYear();
             
             allJobs.push({
               municipality: job.job_name,
@@ -671,8 +671,8 @@ const generateBondLetter = async () => {
                            ((job.residential_properties || 0) + (job.commercial_properties || 0)) || 
                            0;
             
-            // Corrected year calculation for planning jobs
-            const dueYear = job.end_date ? new Date(job.end_date).getFullYear() : new Date().getFullYear() + 1;
+            // Fix timezone issue for planning jobs too
+            const dueYear = job.end_date ? parseInt(job.end_date.substring(0, 4)) : new Date().getFullYear() + 1;
             
             allJobs.push({
               municipality: (job.municipality || job.job_name || 'Unknown') + '*', // Add asterisk for pending
@@ -706,285 +706,108 @@ const generateBondLetter = async () => {
       console.log('Total amount:', totalAmount);
       console.log('Total parcels:', totalParcels);
       
-      // Generate HTML report
-      const reportHTML = `
-<!DOCTYPE html>
-<html>
-<head>
-  <title>PPA Contract Status Report</title>
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-    
-    body { 
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; 
-      margin: 0;
-      padding: 30px;
-      background-color: #f9fafb;
-      color: #111827;
-    }
-    
-    .container {
-      max-width: 1400px;
-      margin: 0 auto;
-      background: white;
-      border-radius: 12px;
-      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
-      padding: 40px;
-    }
-    
-    .header {
-      text-align: center;
-      margin-bottom: 40px;
-      border-bottom: 2px solid #e5e7eb;
-      padding-bottom: 20px;
-    }
-    
-    h1 { 
-      font-size: 28px; 
-      font-weight: 700;
-      margin: 0 0 8px 0;
-      color: #1f2937;
-      letter-spacing: -0.5px;
-    }
-    
-    h2 { 
-      font-size: 16px; 
-      font-weight: 400;
-      margin: 0;
-      color: #6b7280;
-    }
-    
-    table { 
-      border-collapse: collapse; 
-      width: 100%; 
-      margin-bottom: 30px;
-      border-radius: 8px;
-      overflow: hidden;
-      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
-    }
-    
-    th { 
-      background: linear-gradient(to bottom, #f9fafb, #f3f4f6);
-      font-weight: 600;
-      font-size: 12px;
-      color: #374151;
-      padding: 12px 16px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      border-bottom: 1px solid #e5e7eb;
-      text-align: center;
-    }
-    
-    td { 
-      font-size: 13px;
-      padding: 12px 16px;
-      border-bottom: 1px solid #f3f4f6;
-      text-align: center;
-    }
-    
-    tr:hover {
-      background-color: #f9fafb;
-    }
-    
-    tr:last-child td {
-      border-bottom: none;
-    }
-    
-    .municipality {
-      text-align: left;
-      font-weight: 500;
-      color: #1f2937;
-    }
-    
-    .number { 
-      font-variant-numeric: tabular-nums;
-      color: #374151;
-    }
-    
-    .status-yes {
-      display: inline-block;
-      padding: 4px 12px;
-      background-color: #d1fae5;
-      color: #065f46;
-      border-radius: 12px;
-      font-size: 11px;
-      font-weight: 600;
-    }
-    
-    .status-pending {
-      display: inline-block;
-      padding: 4px 12px;
-      background-color: #fef3c7;
-      color: #92400e;
-      border-radius: 12px;
-      font-size: 11px;
-      font-weight: 600;
-    }
-    
-    .summary {
-      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-      color: white;
-      padding: 24px;
-      border-radius: 12px;
-      display: grid;
-      grid-template-columns: repeat(5, 1fr);
-      gap: 20px;
-      text-align: center;
-    }
-    
-    .summary-item {
-      padding: 10px;
-    }
-    
-    .summary-label {
-      font-size: 12px;
-      opacity: 0.9;
-      margin-bottom: 4px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-    
-    .summary-value {
-      font-size: 24px;
-      font-weight: 700;
-    }
-    
-    @media print {
-      body { background: white; padding: 20px; }
-      .container { box-shadow: none; padding: 0; }
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="header">
-      <h1>PROFESSIONAL PROPERTY APPRAISERS</h1>
-      <h2>Bonding Status Report - ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</h2>
-    </div>
-    
-    <table>
-      <thead>
-        <tr>
-          <th style="text-align: left;">Municipality</th>
-          <th>Due<br>Year</th>
-          <th>Fully<br>Executed</th>
-          <th>Parcels</th>
-          <th>Contract<br>Amount</th>
-          <th>Price per<br>Parcel</th>
-          <th>%<br>Complete</th>
-          <th>%<br>Billed</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${allJobs.map((job, index) => `
-          <tr>
-            <td class="municipality">${job.municipality}</td>
-            <td class="number">${job.dueYear}</td>
-            <td>
-              <span class="${job.contractStatus === 'YES' ? 'status-yes' : 'status-pending'}">
-                ${job.contractStatus}
-              </span>
-            </td>
-            <td class="number">${job.parcels.toLocaleString()}</td>
-            <td class="number">$${parseFloat(job.amount).toLocaleString()}</td>
-            <td class="number">$${job.pricePerParcel}</td>
-            <td class="number">${job.percentComplete}%</td>
-            <td class="number">${job.percentBilled}%</td>
-          </tr>
-        `).join('')}
-      </tbody>
-    </table>
-    
-    <div class="summary">
-      <div class="summary-item">
-        <div class="summary-label">Total Contracts</div>
-        <div class="summary-value">${allJobs.length}</div>
-      </div>
-      <div class="summary-item">
-        <div class="summary-label">Total Parcels</div>
-        <div class="summary-value">${totalParcels.toLocaleString()}</div>
-      </div>
-      <div class="summary-item">
-        <div class="summary-label">Contract Value</div>
-        <div class="summary-value">$${totalAmount.toLocaleString()}</div>
-      </div>
-      <div class="summary-item">
-        <div class="summary-label">Avg $/Parcel</div>
-        <div class="summary-value">$${avgPricePerParcel}</div>
-      </div>
-      <div class="summary-item">
-        <div class="summary-label">Pending Jobs</div>
-        <div class="summary-value">${allJobs.filter(j => j.isPending).length}</div>
-      </div>
-    </div>
-  </div>
-  <div class="text-center mt-6 text-xs text-gray-500 italic" style="margin-top: 24px; text-align: center; font-size: 12px; color: #6b7280; font-style: italic;">
-    *Planned jobs have been awarded but not yet moved to active jobs
-  </div>
-</body>
-</html>
-      `;
-      
       // Generate PDF using jsPDF - LANDSCAPE orientation
       const { jsPDF } = window.jspdf;
-      const doc = new jsPDF('landscape');
-      
-      // Add content as text
-      doc.setFontSize(16);
-      doc.text('PROFESSIONAL PROPERTY APPRAISERS', 148, 20, { align: 'center' });
-      doc.setFontSize(12);
-      doc.text('Bonding Status Report', 148, 30, { align: 'center' });
-      doc.text(new Date().toLocaleDateString(), 148, 36, { align: 'center' });
-      
-      // Add table headers
-      let y = 50;
-      doc.setFontSize(10);
-      doc.text('Municipality', 10, y);
-      doc.text('Due Year', 70, y);
-      doc.text('Status', 95, y);
-      doc.text('Parcels', 120, y);
-      doc.text('Amount', 145, y);
-      doc.text('$/Parcel', 180, y);
-      doc.text('Complete %', 210, y);
-      doc.text('Billed %', 245, y);
-      
-      // Add jobs
-      y += 10;
-      allJobs.forEach(job => {
-        if (y > 190) { // New page if needed (adjusted for landscape)
-          doc.addPage();
-          y = 20;
-        }
-        doc.text(job.municipality.substring(0, 30), 10, y);
-        doc.text(job.dueYear.toString(), 70, y);
-        doc.text(job.contractStatus, 95, y);
-        doc.text(job.parcels.toLocaleString(), 120, y);
-        doc.text(`$${parseFloat(job.amount).toLocaleString()}`, 145, y);
-        doc.text(`$${job.pricePerParcel}`, 180, y);
-        doc.text(`${job.percentComplete}%`, 210, y);
-        doc.text(`${job.percentBilled}%`, 245, y);
-        y += 7;
+      const doc = new jsPDF({
+        orientation: 'landscape',
+        unit: 'mm',
+        format: 'letter'
       });
       
-      // Add totals with emphasis on average - CENTERED
-      y += 10;
+      // Add content with adjusted positions for landscape
+      doc.setFontSize(14);
+      doc.text('PROFESSIONAL PROPERTY APPRAISERS', 140, 15, { align: 'center' });
       doc.setFontSize(11);
-      doc.text(`Total Contracts: ${allJobs.length}`, 148, y, { align: 'center' });
-      y += 7;
-      doc.text(`Total Parcels: ${totalParcels.toLocaleString()}`, 148, y, { align: 'center' });
-      y += 7;
-      doc.text(`Total Amount: $${totalAmount.toLocaleString()}`, 148, y, { align: 'center' });
+      doc.text('Bonding Status Report', 140, 22, { align: 'center' });
+      doc.text(new Date().toLocaleDateString(), 140, 28, { align: 'center' });
       
-      // Add Overall Average with bold emphasis - CENTERED
+      // Add table headers with better spacing for landscape
+      let y = 40;
+      doc.setFontSize(9);
+      doc.text('Municipality', 10, y);
+      doc.text('Due Year', 65, y);
+      doc.text('Contract Status', 85, y);
+      doc.text('Parcels', 115, y);
+      doc.text('Amount', 135, y);
+      doc.text('$/Parcel', 165, y);
+      doc.text('Complete %', 185, y);
+      doc.text('Billed %', 215, y);
+      
+      // Add jobs with adjusted spacing
+      y += 8;
+      doc.setFontSize(8);
+      
+      let currentPage = 1;
+      allJobs.forEach(job => {
+        if (y > 185) { // New page if needed
+          doc.addPage();
+          currentPage++;
+          y = 20;
+          // Repeat headers on new page
+          doc.setFontSize(9);
+          doc.text('Municipality', 10, y);
+          doc.text('Due Year', 65, y);
+          doc.text('Contract Status', 85, y);
+          doc.text('Parcels', 115, y);
+          doc.text('Amount', 135, y);
+          doc.text('$/Parcel', 165, y);
+          doc.text('Complete %', 185, y);
+          doc.text('Billed %', 215, y);
+          y += 8;
+          doc.setFontSize(8);
+        }
+        
+        // Municipality name
+        doc.text(job.municipality.substring(0, 35), 10, y);
+        
+        // Due Year
+        doc.text(job.dueYear.toString(), 65, y);
+        
+        // Contract Status with color
+        if (job.contractStatus === 'YES') {
+          doc.setTextColor(6, 95, 70); // Green for Fully Executed
+          doc.text('Fully Executed', 85, y);
+        } else {
+          doc.setTextColor(146, 64, 14); // Amber for Awarded
+          doc.text('Awarded', 85, y);
+        }
+        doc.setTextColor(0, 0, 0); // Back to black
+        
+        // Parcels (right-aligned)
+        doc.text(job.parcels.toLocaleString(), 125, y, { align: 'right' });
+        
+        // Amount (right-aligned)
+        doc.text(`$${parseFloat(job.amount).toLocaleString()}`, 155, y, { align: 'right' });
+        
+        // $/Parcel (right-aligned)
+        doc.text(`$${job.pricePerParcel}`, 175, y, { align: 'right' });
+        
+        // Complete % (right-aligned)
+        doc.text(`${job.percentComplete}%`, 205, y, { align: 'right' });
+        
+        // Billed % (right-aligned)
+        doc.text(`${job.percentBilled}%`, 235, y, { align: 'right' });
+        
+        y += 6;
+      });
+      
+      // Add totals - left aligned, all bold, no spacing
       y += 10;
-      doc.setFontSize(12);
+      doc.setFontSize(10);
       doc.setFont(undefined, 'bold');
-      doc.text(`Overall Avg $/Parcel: $${avgPricePerParcel}`, 148, y, { align: 'center' });
+      doc.text(`Total Contracts: ${allJobs.length}`, 10, y);
+      y += 5;
+      doc.text(`Total Parcels: ${totalParcels.toLocaleString()}`, 10, y);
+      y += 5;
+      doc.text(`Total Amount: $${totalAmount.toLocaleString()}`, 10, y);
+      y += 5;
+      doc.setFontSize(11);
+      doc.text(`Overall Avg $/Parcel: $${avgPricePerParcel}`, 10, y);
       doc.setFont(undefined, 'normal');
       
-      // Add footnote - already centered
+      // Add footnote centered at bottom
       doc.setFontSize(8);
-      doc.text('*Planned jobs have been awarded but not yet moved to active jobs', 148, 200, { align: 'center' });
+      doc.text('*Awarded jobs have been awarded but not yet moved to active jobs', 140, 195, { align: 'center' });
       
       // Save PDF
       doc.save(`PPA_Bonding_Report_${new Date().toISOString().split('T')[0]}.pdf`);
