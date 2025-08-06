@@ -23,31 +23,23 @@ const PayrollManagement = () => {
   });
   const [lastProcessedInfo, setLastProcessedInfo] = useState(null);
   const [archivedPeriods, setArchivedPeriods] = useState([]);
-  const [dataRecencyInfo, setDataRecencyInfo] = useState([]);
+  const [dataRecency, setDataRecency] = useState([]);
   const [isLoadingRecency, setIsLoadingRecency] = useState(false);
 
-  // Helper function to safely parse dates without timezone issues
-  const parseLocalDate = (dateString) => {
-    if (!dateString) return null;
-    
-    // Extract just the date part (YYYY-MM-DD) if it includes time
-    const datePart = dateString.split('T')[0];
-    const [year, month, day] = datePart.split('-');
-    
-    // Create date at noon to avoid timezone shifts
-    return new Date(parseInt(year), parseInt(month) - 1, parseInt(day), 12, 0, 0);
+  // Helper function to parse dates properly (avoiding timezone issues)
+  const parseLocalDate = (dateStr) => {
+    if (!dateStr) return null;
+    const [year, month, day] = dateStr.split('-').map(Number);
+    // Create date at noon to avoid timezone issues
+    return new Date(year, month - 1, day, 12, 0, 0);
   };
 
-  // Helper function to format date for display
-  const formatDateForDisplay = (dateString) => {
-    if (!dateString) return 'Not available';
-    
-    const localDate = parseLocalDate(dateString);
-    return localDate.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit'
-    });
+  // Helper function to format dates for display
+  const formatDateForDisplay = (dateStr) => {
+    if (!dateStr) return '';
+    const date = parseLocalDate(dateStr);
+    if (!date) return '';
+    return date.toLocaleDateString('en-US');
   };
 
   // Helper functions
@@ -103,11 +95,9 @@ const PayrollManagement = () => {
     let nextEnd, nextStart;
     
     if (day <= 15) {
-      // Current period was 1-15, next is 16-end
       nextStart = new Date(year, month, 16, 12, 0, 0);
-      nextEnd = new Date(year, month + 1, 0, 12, 0, 0); // Last day of month
+      nextEnd = new Date(year, month + 1, 0, 12, 0, 0);
     } else {
-      // Current period was 16-end, next is 1-15 of next month
       nextStart = new Date(year, month + 1, 1, 12, 0, 0);
       nextEnd = new Date(year, month + 1, 15, 12, 0, 0);
     }
@@ -115,10 +105,7 @@ const PayrollManagement = () => {
     return {
       startDate: nextStart.toISOString().split('T')[0],
       endDate: nextEnd.toISOString().split('T')[0],
-      expectedHours: calculateExpectedHours(
-        nextStart.toISOString().split('T')[0], 
-        nextEnd.toISOString().split('T')[0]
-      )
+      expectedHours: calculateExpectedHours(nextStart.toISOString().split('T')[0], nextEnd.toISOString().split('T')[0])
     };
   };
 
@@ -139,79 +126,87 @@ const PayrollManagement = () => {
       periodStart = new Date(year, month, 16, 12, 0, 0);
     }
     
-    // Format as MM/DD/YYYY - MM/DD/YYYY
     const startStr = periodStart.toLocaleDateString('en-US');
     const endStr = end.toLocaleDateString('en-US');
     
     return `${startStr} - ${endStr}`;
   };
 
-  // Add function to fetch data recency
+  // Fetch data recency for all active jobs
   const fetchDataRecency = async () => {
+    setIsLoadingRecency(true);
+    setError(null);
+    
     try {
-      setIsLoadingRecency(true);
-      
-      // Get all current (non-archived) jobs
-      const { data: currentJobs, error: jobsError } = await supabase
+      // Get all active jobs - SIMPLE QUERY, NO ARCHIVED CHECK
+      const { data: activeJobs, error: jobsError } = await supabase
         .from('jobs')
-        .select('id, job_name')
-        .or('status.eq.active,status.is.null,archived.eq.false,archived.is.null')
+        .select('id, job_name, ccdd')
+        .eq('status', 'active')
         .order('job_name');
       
-      if (jobsError) {
-        console.error('Error fetching jobs:', jobsError);
-        throw jobsError;
+      if (jobsError) throw jobsError;
+      
+      if (!activeJobs || activeJobs.length === 0) {
+        setDataRecency([]);
+        return;
       }
       
-      // For each job, get the most recent upload_date from inspection_data
+      // Get latest upload date for each job
       const recencyData = await Promise.all(
-        currentJobs.map(async (job) => {
-          // Get the most recent upload date
-          const { data: inspectionData, error: inspectionError } = await supabase
+        activeJobs.map(async (job) => {
+          const { data: latestUpload, error: uploadError } = await supabase
             .from('inspection_data')
             .select('upload_date')
             .eq('job_id', job.id)
             .order('upload_date', { ascending: false })
-            .limit(1);
+            .limit(1)
+            .single();
           
-          // Handle both single result and array result
-          const latestUpload = inspectionData && inspectionData.length > 0 
-            ? inspectionData[0] 
-            : null;
-          
-          // Calculate days ago with proper date parsing
+          let lastUploadDate = null;
           let daysAgo = null;
-          if (latestUpload?.upload_date) {
-            const uploadDate = parseLocalDate(latestUpload.upload_date);
+          let status = 'no-data';
+          
+          if (!uploadError && latestUpload?.upload_date) {
+            lastUploadDate = latestUpload.upload_date;
+            const uploadDate = parseLocalDate(lastUploadDate);
             const today = new Date();
-            today.setHours(12, 0, 0, 0); // Set to noon for consistent comparison
+            today.setHours(12, 0, 0, 0);
             daysAgo = Math.floor((today - uploadDate) / (1000 * 60 * 60 * 24));
+            
+            if (daysAgo <= 7) {
+              status = 'current';
+            } else if (daysAgo <= 30) {
+              status = 'aging';
+            } else {
+              status = 'stale';
+            }
           }
           
           return {
-            jobId: job.id,
+            id: job.id,
             jobName: job.job_name,
-            lastUploadDate: latestUpload?.upload_date || null,
-            daysAgo: daysAgo
+            ccdd: job.ccdd,
+            lastUploadDate,
+            daysAgo,
+            status
           };
         })
       );
       
-      // Sort by most recent upload first, then by job name
+      // Sort by most recent first, then no data at the end
       recencyData.sort((a, b) => {
-        if (!a.lastUploadDate && !b.lastUploadDate) {
-          return a.jobName.localeCompare(b.jobName);
-        }
-        if (!a.lastUploadDate) return 1;
-        if (!b.lastUploadDate) return -1;
-        return new Date(b.lastUploadDate) - new Date(a.lastUploadDate);
+        if (a.status === 'no-data' && b.status !== 'no-data') return 1;
+        if (a.status !== 'no-data' && b.status === 'no-data') return -1;
+        if (a.daysAgo === null) return 1;
+        if (b.daysAgo === null) return -1;
+        return a.daysAgo - b.daysAgo;
       });
       
-      setDataRecencyInfo(recencyData);
+      setDataRecency(recencyData);
     } catch (error) {
       console.error('Error fetching data recency:', error);
-      alert('Failed to load data recency information. Please try again.');
-      setDataRecencyInfo([]);
+      setError('Failed to load data recency information. Please try again.');
     } finally {
       setIsLoadingRecency(false);
     }
@@ -222,7 +217,7 @@ const PayrollManagement = () => {
   }, []);
 
   useEffect(() => {
-    if (activeTab === 'dataRecency') {
+    if (activeTab === 'recency') {
       fetchDataRecency();
     }
   }, [activeTab]);
@@ -246,7 +241,6 @@ const PayrollManagement = () => {
       const jobData = await jobService.getAll();
       setJobs(jobData.filter(job => job.status === 'active'));
 
-      // Get last processed info
       const { data: lastInspection, error } = await supabase
         .from('inspection_data')
         .select('payroll_period_end, payroll_processed_date')
@@ -256,7 +250,6 @@ const PayrollManagement = () => {
         .single();
       
       if (!error && lastInspection) {
-        // Try to get the processing date from localStorage
         const storedInfo = localStorage.getItem('lastPayrollProcessed');
         if (storedInfo) {
           const parsed = JSON.parse(storedInfo);
@@ -266,12 +259,11 @@ const PayrollManagement = () => {
         }
       }
       
-      // Load archived periods
       const { data: archived, error: archiveError } = await supabase
         .from('payroll_periods')
         .select('*')
         .order('end_date', { ascending: false })
-        .limit(12); // Last 12 periods
+        .limit(12);
       
       if (!archiveError && archived) {
         setArchivedPeriods(archived);
@@ -320,7 +312,6 @@ const PayrollManagement = () => {
       console.log(`Query completed in ${queryTime}ms`);
       console.log(`Total inspections fetched: ${allInspections?.length || 0}`);
 
-      // Group inspections by inspector initials
       const inspectorCounts = {};
       
       allInspections.forEach(inspection => {
@@ -344,7 +335,6 @@ const PayrollManagement = () => {
         });
       });
 
-      // Calculate bonuses by initials
       const bonusResults = {};
       
       Object.entries(inspectorCounts).forEach(([initials, data]) => {
@@ -403,15 +393,13 @@ const PayrollManagement = () => {
         const issues = [];
         const parsedData = [];
         
-        // Parse employee data
         let totalHoursSum = 0;
         let apptOTSum = 0;
         let rowsStartIndex = -1;
         
-        // Find where employee data starts (look for EMPLOYEE header)
         for (let i = 0; i < Math.min(10, rawData.length); i++) {
           if (rawData[i] && rawData[i][0] === 'EMPLOYEE') {
-            rowsStartIndex = i + 2; // Skip blank row and pay period row
+            rowsStartIndex = i + 2;
             console.log(`Found EMPLOYEE header at row ${i}, data will start at row ${rowsStartIndex}`);
             break;
           }
@@ -430,13 +418,12 @@ const PayrollManagement = () => {
         
         console.log(`Processing employees from row ${rowsStartIndex} to ${rawData.length}`);
         
-        // Process employee rows
         for (let i = rowsStartIndex; i < rawData.length; i++) {
           const row = rawData[i];
           if (row[0] && typeof row[0] === 'string' && !row[0].includes('TOTAL HOURS')) {
             const employeeName = row[0].trim();
-            const initials = row[1] || null; // INITIALS column
-            const hours = row[2]; // HOURS column
+            const initials = row[1] || null;
+            const hours = row[2];
             const timeOff = row[3] || '';
             const apptOT = row[4] || 0;
             const fieldOT = row[5] || 0;
@@ -457,24 +444,20 @@ const PayrollManagement = () => {
               issues: []
             };
             
-            // Check for formula issues in TOTAL column
             const calculatedTotal = (typeof apptOT === 'number' ? apptOT : 0) + (typeof fieldOT === 'number' ? fieldOT : 0);
             if (typeof total === 'number' && Math.abs(total - calculatedTotal) > 0.01) {
               empData.issues.push(`TOTAL formula error: Shows $${total} but should be $${calculatedTotal} (${apptOT} + ${fieldOT})`);
             }
             
-            // Only check hours for numeric values (not 'same' or 'Salary')
             if (typeof hours === 'number' && !isNaN(hours)) {
               totalHoursSum += hours;
               console.log(`  Added ${hours} to total, new sum: ${totalHoursSum}`);
               
-              // Enhanced validation logic
               const isPartTime = comments.toLowerCase().includes('part');
               const hasPTO = timeOff.toLowerCase().includes('pto') && !timeOff.toLowerCase().includes('without pto');
               const hasUnpaidTimeOff = timeOff.toLowerCase().includes('without pto') || 
                                        timeOff.toLowerCase().includes('unpaid');
               
-              // Check for various issues
               if (hours !== payrollPeriod.expectedHours && !isPartTime) {
                 if (hasUnpaidTimeOff) {
                   empData.issues.push(`Has unpaid time off - ${hours} hours instead of ${payrollPeriod.expectedHours}`);
@@ -485,7 +468,6 @@ const PayrollManagement = () => {
                 }
               }
               
-              // Flag zero hours
               if (hours === 0 && !timeOff.toLowerCase().includes('start date')) {
                 empData.issues.push(`Zero hours recorded`);
               }
@@ -502,15 +484,14 @@ const PayrollManagement = () => {
         console.log(`Final totalHoursSum: ${totalHoursSum}`);
         console.log(`Final apptOTSum: ${apptOTSum}`);
         
-        // Check totals
         const totalsRowIndex = rawData.findIndex(row => 
           row[0] && row[0].toString().includes('TOTAL HOURS')
         );
         
         if (totalsRowIndex > -1) {
           const totalsRow = rawData[totalsRowIndex];
-          const sheetTotalHours = totalsRow[2] || 0; // Column 2 (HOURS)
-          const sheetApptOT = totalsRow[4] || 0; // Column 4 (APPT OT)
+          const sheetTotalHours = totalsRow[2] || 0;
+          const sheetApptOT = totalsRow[4] || 0;
           
           console.log('Totals validation:', {
             sheetTotalHours,
@@ -519,7 +500,6 @@ const PayrollManagement = () => {
             apptOTSum
           });
           
-          // Check if HOURS total matches sum
           if (totalHoursSum > 0 && Math.abs(sheetTotalHours - totalHoursSum) > 0.01) {
             issues.push({
               type: 'warning',
@@ -528,7 +508,6 @@ const PayrollManagement = () => {
             });
           }
           
-          // Check if APPT OT total matches sum
           if (Math.abs(sheetApptOT - apptOTSum) > 0.01) {
             issues.push({
               type: 'warning',
@@ -571,7 +550,6 @@ const PayrollManagement = () => {
       let bonus = 0;
       let inspections = 0;
       
-      // Use initials directly from the worksheet
       if (emp.initials && inspectionBonuses[emp.initials]) {
         const bonusData = inspectionBonuses[emp.initials];
         bonus = bonusData.bonus;
@@ -665,7 +643,6 @@ const PayrollManagement = () => {
         return;
       }
       
-      // Update inspections with period end and processed date
       console.log('Inspection IDs to update:', allInspectionIds.length, 'First few:', allInspectionIds.slice(0, 5));
       console.log('Dates being set:', { 
         payroll_period_end: payrollPeriod.endDate,
@@ -687,20 +664,15 @@ const PayrollManagement = () => {
         if (error) throw error;
       }
       
-      // Calculate totals for archiving
       const mergedData = mergePayrollWithBonuses();
       const totalHours = mergedData.reduce((sum, emp) => sum + (typeof emp.hours === 'number' ? emp.hours : 0), 0);
       const totalApptOT = mergedData.reduce((sum, emp) => sum + (emp.apptOT || 0), 0);
       const totalFieldBonus = mergedData.reduce((sum, emp) => sum + emp.calculatedFieldOT, 0);
       const totalOT = mergedData.reduce((sum, emp) => sum + emp.calculatedTotal, 0);
       
-      // Get current user
       const { data: { user } } = await supabase.auth.getUser();
-      
-      // Use hardcoded UUID if user is not authenticated (temporary for testing)
       const userId = user?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad';
       
-      // Save to payroll_periods
       const { data: periodData, error: periodError } = await supabase
         .from('payroll_periods')
         .insert({
@@ -716,7 +688,7 @@ const PayrollManagement = () => {
           inspection_count: allInspectionIds.length,
           expected_hours: payrollPeriod.expectedHours,
           status: 'processed',
-          total_amount: totalOT, // For compatibility with existing columns
+          total_amount: totalOT,
           processing_settings: {
             bonus_rate: bonusRate,
             employee_count: mergedData.length,
@@ -729,7 +701,6 @@ const PayrollManagement = () => {
       
       if (periodError) throw periodError;
       
-      // Save processing info to localStorage (for backwards compatibility)
       const processInfo = {
         startDate: payrollPeriod.startDate,
         endDate: payrollPeriod.endDate,
@@ -740,22 +711,19 @@ const PayrollManagement = () => {
       
       setSuccessMessage(`Successfully marked ${allInspectionIds.length} inspections as processed for period ending ${payrollPeriod.endDate}`);
       
-      // Auto-populate next period
       const nextPeriod = getNextPayrollPeriod(payrollPeriod.endDate);
       setPayrollPeriod({
-        startDate: payrollPeriod.processedDate, // Start from when we processed
+        startDate: payrollPeriod.processedDate,
         endDate: nextPeriod.endDate,
-        processedDate: new Date().toISOString().split('T')[0], // Today
+        processedDate: new Date().toISOString().split('T')[0],
         expectedHours: nextPeriod.expectedHours
       });
       
-      // Clear current data for next run
       setPayrollData([]);
       setInspectionBonuses({});
       setWorksheetIssues([]);
       setUploadedFile(null);
       
-      // Reload to show archive
       loadInitialData();
     } catch (error) {
       console.error('Error marking inspections as processed:', error);
@@ -770,14 +738,12 @@ const PayrollManagement = () => {
     
     let email = `Hi,\n\nI've reviewed the payroll worksheet and found a few items:\n\n`;
     
-    // Add worksheet-level issues
     if (worksheetIssues.length > 0) {
       worksheetIssues.forEach((issue, index) => {
         email += `${index + 1}. ${issue.emailText}\n\n`;
       });
     }
     
-    // Add employee-specific issues
     const employeesWithIssues = payrollData.filter(emp => emp.issues.length > 0);
     if (employeesWithIssues.length > 0) {
       email += `Employee-specific issues:\n\n`;
@@ -804,6 +770,36 @@ const PayrollManagement = () => {
   const getRowColor = (employee) => {
     if (employee.issues?.length > 0) return 'bg-amber-50';
     return '';
+  };
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'current':
+        return 'bg-green-100 text-green-800';
+      case 'aging':
+        return 'bg-yellow-100 text-yellow-800';
+      case 'stale':
+        return 'bg-red-100 text-red-800';
+      case 'no-data':
+        return 'bg-gray-100 text-gray-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const getStatusIcon = (status) => {
+    switch (status) {
+      case 'current':
+        return '✓';
+      case 'aging':
+        return '⚠';
+      case 'stale':
+        return '✗';
+      case 'no-data':
+        return '—';
+      default:
+        return '?';
+    }
   };
 
   return (
@@ -833,7 +829,7 @@ const PayrollManagement = () => {
         </div>
       )}
 
-      {/* Last Processed Info - WITH DATE FIXES */}
+      {/* Last Processed Info */}
       {lastProcessedInfo && (
         <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
           <h3 className="text-sm font-medium text-blue-900 mb-2">Last Payroll Processed:</h3>
@@ -858,7 +854,7 @@ const PayrollManagement = () => {
         </div>
       )}
 
-      {/* Tab Navigation - UPDATED WITH DATA RECENCY */}
+      {/* Tab Navigation */}
       <div className="border-b border-gray-200 mb-6">
         <nav className="-mb-px flex space-x-8">
           <button
@@ -872,9 +868,9 @@ const PayrollManagement = () => {
             Current Payroll
           </button>
           <button
-            onClick={() => setActiveTab('dataRecency')}
+            onClick={() => setActiveTab('recency')}
             className={`py-2 px-1 border-b-2 font-medium text-sm ${
-              activeTab === 'dataRecency'
+              activeTab === 'recency'
                 ? 'border-blue-500 text-blue-600'
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
@@ -897,580 +893,503 @@ const PayrollManagement = () => {
       {/* Current Payroll Tab */}
       {activeTab === 'current' && (
         <div className="space-y-6">
-        {/* Payroll Period Setup */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Payroll Period Setup</h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-            <div className="md:col-span-2">
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Bonus Calculation Dates</p>
-              <div className="flex items-center space-x-2">
-                <div>
-                  <label className="text-xs text-gray-500">Start</label>
-                  <input 
-                    type="date" 
-                    value={payrollPeriod.startDate}
-                    onChange={(e) => setPayrollPeriod(prev => ({ ...prev, startDate: e.target.value }))}
-                    className="block px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-gray-500">End</label>
-                  <input 
-                    type="date" 
-                    value={payrollPeriod.endDate}
-                    onChange={(e) => setPayrollPeriod(prev => ({ ...prev, endDate: e.target.value }))}
-                    className="block px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-              </div>
-            </div>
-            <div className="space-y-1">
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Processing Date</p>
-              <input 
-                type="date" 
-                value={payrollPeriod.processedDate}
-                onChange={(e) => setPayrollPeriod(prev => ({ ...prev, processedDate: e.target.value }))}
-                className="block px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-              />
-              <p className="text-xs text-gray-500">When you run payroll</p>
-            </div>
-            <div className="space-y-1">
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Payroll Period</p>
-              <p className="text-base font-semibold text-gray-900">
-                {getPayrollPeriod(payrollPeriod.endDate) || 'Set end date'}
-              </p>
-            </div>
-            <div className="space-y-1">
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Expected Hours</p>
-              <p className="text-base font-semibold text-gray-900">{payrollPeriod.expectedHours}</p>
-              <p className="text-xs text-gray-500">Full-time employees</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Step 1: Upload Worksheet */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-          <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
-            <div className="flex items-center">
-              <div className="flex-shrink-0 w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white font-semibold">
-                1
-              </div>
-              <h2 className="ml-3 text-lg font-semibold text-gray-900">Upload Payroll Worksheet</h2>
-            </div>
-          </div>
-          
-          <div className="p-6">
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-gray-400 transition-colors">
-              <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-              </svg>
-              <p className="mt-2 text-sm text-gray-600">Drop Excel file here or click to browse</p>
-              <input
-                type="file"
-                accept=".xlsx,.xls"
-                onChange={(e) => {
-                  const file = e.target.files[0];
-                  setUploadedFile(file);
-                  if (file) processUploadedFile(file);
-                }}
-                className="mt-4 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
-              />
-            </div>
+          {/* Payroll Period Setup */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">Payroll Period Setup</h2>
             
-            {/* Worksheet Feedback */}
-            {(worksheetIssues.length > 0 || payrollData.some(emp => emp.issues.length > 0)) && (
-              <div className="mt-6">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-medium text-gray-900">Worksheet Review</h3>
-                  <button
-                    onClick={copyEmailToClipboard}
-                    className="text-sm text-blue-600 hover:text-blue-500"
-                  >
-                    Copy as Email
-                  </button>
-                </div>
-                <div className="space-y-3">
-                  {worksheetIssues.map((issue, index) => (
-                    <div key={index} className={`p-4 rounded-lg border ${
-                      issue.type === 'error' 
-                        ? 'bg-red-50 text-red-800 border-red-200' 
-                        : issue.type === 'warning'
-                        ? 'bg-amber-50 text-amber-800 border-amber-200'
-                        : issue.type === 'suggestion'
-                        ? 'bg-blue-50 text-blue-800 border-blue-200'
-                        : 'bg-gray-50 text-gray-800 border-gray-200'
-                    }`}>
-                      <p className="font-medium">{issue.message}</p>
-                    </div>
-                  ))}
-                  
-                  {/* Show employee-specific issues */}
-                  {payrollData.filter(emp => emp.issues.length > 0).length > 0 && (
-                    <div className="mt-4">
-                      <h4 className="text-sm font-medium text-gray-700 mb-2">Employee Issues Found:</h4>
-                      <div className="space-y-2">
-                        {payrollData.filter(emp => emp.issues.length > 0).map((emp, index) => (
-                          <div key={index} className="p-3 bg-amber-50 text-amber-800 border border-amber-200 rounded-md">
-                            <p className="font-medium">{emp.worksheetName}:</p>
-                            <ul className="list-disc list-inside text-sm mt-1">
-                              {emp.issues.map((issue, issueIndex) => (
-                                <li key={issueIndex}>{issue}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+              <div className="md:col-span-2">
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Bonus Calculation Dates</p>
+                <div className="flex items-center space-x-2">
+                  <div>
+                    <label className="text-xs text-gray-500">Start</label>
+                    <input 
+                      type="date" 
+                      value={payrollPeriod.startDate}
+                      onChange={(e) => setPayrollPeriod(prev => ({ ...prev, startDate: e.target.value }))}
+                      className="block px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500">End</label>
+                    <input 
+                      type="date" 
+                      value={payrollPeriod.endDate}
+                      onChange={(e) => setPayrollPeriod(prev => ({ ...prev, endDate: e.target.value }))}
+                      className="block px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
                 </div>
               </div>
-            )}
-          </div>
-        </div>
-
-        {/* Step 2: Calculate Bonuses - ALWAYS VISIBLE */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-          <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
-            <div className="flex items-center">
-              <div className="flex-shrink-0 w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white font-semibold">
-                2
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Processing Date</p>
+                <input 
+                  type="date" 
+                  value={payrollPeriod.processedDate}
+                  onChange={(e) => setPayrollPeriod(prev => ({ ...prev, processedDate: e.target.value }))}
+                  className="block px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                />
+                <p className="text-xs text-gray-500">When you run payroll</p>
               </div>
-              <h2 className="ml-3 text-lg font-semibold text-gray-900">Calculate Field Bonuses</h2>
-            </div>
-          </div>
-          
-          <div className="p-6">
-            {!payrollData.length && (
-              <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
-                <p className="text-sm text-blue-800">
-                  <span className="font-medium">Tip:</span> You can calculate bonuses before uploading the worksheet to preview the amounts
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Payroll Period</p>
+                <p className="text-base font-semibold text-gray-900">
+                  {getPayrollPeriod(payrollPeriod.endDate) || 'Set end date'}
                 </p>
               </div>
-            )}
-            
-            <div className="flex items-center space-x-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Job Filter</label>
-                <select
-                  value={selectedJob}
-                  onChange={(e) => setSelectedJob(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-md"
-                >
-                  <option value="all">All Active Jobs</option>
-                  {jobs.map(job => (
-                    <option key={job.id} value={job.id}>
-                      {job.ccdd} - {job.job_name}
-                    </option>
-                  ))}
-                </select>
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Expected Hours</p>
+                <p className="text-base font-semibold text-gray-900">{payrollPeriod.expectedHours}</p>
+                <p className="text-xs text-gray-500">Full-time employees</p>
               </div>
-              
-              <button
-                onClick={calculateInspectionBonuses}
-                disabled={isProcessing || !payrollPeriod.startDate || !payrollPeriod.endDate}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
-              >
-                {isProcessing ? 'Calculating...' : `Calculate Bonuses ($${bonusRate}/inspection)`}
-              </button>
             </div>
           </div>
-        </div>
 
-        {/* Step 3: Review and Export - ALWAYS VISIBLE when bonuses calculated */}
-        {Object.keys(inspectionBonuses).length > 0 && (
+          {/* Step 1: Upload Worksheet */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
             <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
               <div className="flex items-center">
                 <div className="flex-shrink-0 w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white font-semibold">
-                  3
+                  1
                 </div>
-                <h2 className="ml-3 text-lg font-semibold text-gray-900">
-                  {payrollData.length > 0 ? 'Review and Export' : 'Bonus Preview'}
-                </h2>
+                <h2 className="ml-3 text-lg font-semibold text-gray-900">Upload Payroll Worksheet</h2>
               </div>
             </div>
             
             <div className="p-6">
-              {/* Summary Stats */}
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-                <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 rounded-lg border border-blue-200">
-                  <p className="text-xs font-medium text-blue-600 uppercase tracking-wider">Employees</p>
-                  <p className="mt-1 text-2xl font-bold text-blue-900">{payrollData.length || Object.keys(inspectionBonuses).length}</p>
-                </div>
-                <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-4 rounded-lg border border-purple-200">
-                  <p className="text-xs font-medium text-purple-600 uppercase tracking-wider">Total Hours</p>
-                  <p className="mt-1 text-2xl font-bold text-purple-900">
-                    {payrollData.length > 0 
-                      ? mergePayrollWithBonuses().reduce((sum, emp) => sum + (typeof emp.hours === 'number' ? emp.hours : 0), 0)
-                      : '-'
-                    }
-                  </p>
-                </div>
-                <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-4 rounded-lg border border-orange-200">
-                  <p className="text-xs font-medium text-orange-600 uppercase tracking-wider">Appt OT</p>
-                  <p className="mt-1 text-2xl font-bold text-orange-900">
-                    {payrollData.length > 0 
-                      ? `$${mergePayrollWithBonuses().reduce((sum, emp) => sum + (emp.apptOT || 0), 0).toFixed(2)}`
-                      : '-'
-                    }
-                  </p>
-                </div>
-                <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded-lg border border-green-200">
-                  <p className="text-xs font-medium text-green-600 uppercase tracking-wider">Field Bonus</p>
-                  <p className="mt-1 text-2xl font-bold text-green-900">
-                    ${payrollData.length > 0 
-                      ? mergePayrollWithBonuses().reduce((sum, emp) => sum + emp.calculatedFieldOT, 0).toFixed(2)
-                      : Object.values(inspectionBonuses).reduce((sum, emp) => sum + emp.bonus, 0).toFixed(2)
-                    }
-                  </p>
-                </div>
-                <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 p-4 rounded-lg border border-indigo-200">
-                  <p className="text-xs font-medium text-indigo-600 uppercase tracking-wider">TOTAL OT</p>
-                  <p className="mt-1 text-2xl font-bold text-indigo-900">
-                    {payrollData.length > 0 
-                      ? `$${mergePayrollWithBonuses().reduce((sum, emp) => sum + emp.calculatedTotal, 0).toFixed(2)}`
-                      : `$${Object.values(inspectionBonuses).reduce((sum, emp) => sum + emp.bonus, 0).toFixed(2)}`
-                    }
-                  </p>
-                </div>
-              </div>
-
-              {/* Employee Data Table */}
-              <div className="overflow-hidden shadow ring-1 ring-black ring-opacity-5 md:rounded-lg">
-                <table className="min-w-full divide-y divide-gray-300">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee</th>
-                      {payrollData.length > 0 && (
-                        <>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Initials</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hours</th>
-                        </>
-                      )}
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        {payrollData.length > 0 ? 'Appt OT' : 'Initials'}
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        {payrollData.length > 0 ? 'Field Bonus' : 'Inspections'}
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-indigo-50">
-                        {payrollData.length > 0 ? 'TOTAL OT' : 'Field Bonus'}
-                      </th>
-                      {payrollData.length > 0 && (
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notes</th>
-                      )}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200 bg-white">
-                    {payrollData.length > 0 ? (
-                      mergePayrollWithBonuses().map((employee, index) => (
-                        <tr key={index} className={`hover:bg-gray-50 ${getRowColor(employee)}`}>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                            {employee.worksheetName}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {employee.initials || '-'}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {employee.hours === 'same' || employee.hours === 'Salary' ? (
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                Salary
-                              </span>
-                            ) : (
-                              <span className="font-mono">{employee.hours}</span>
-                            )}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-mono">
-                            ${(employee.apptOT || 0).toFixed(2)}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600 font-mono">
-                            ${employee.calculatedFieldOT.toFixed(2)}
-                            {employee.inspectionCount > 0 && (
-                              <span className="text-xs text-gray-500 ml-1">({employee.inspectionCount})</span>
-                            )}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-indigo-600 bg-indigo-50 font-mono">
-                            ${employee.calculatedTotal.toFixed(2)}
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-600">
-                            {employee.issues.join('; ')}
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      Object.entries(inspectionBonuses)
-                        .sort((a, b) => b[1].inspections - a[1].inspections)
-                        .map(([initials, data], index) => (
-                          <tr key={index} className="hover:bg-gray-50">
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                              Inspector {initials}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                              {initials}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-mono">
-                              {data.inspections}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-green-600 bg-green-50 font-mono">
-                              ${data.bonus.toFixed(2)}
-                            </td>
-                          </tr>
-                        ))
-                    )}
-                  </tbody>
-                </table>
+              <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-gray-400 transition-colors">
+                <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+                <p className="mt-2 text-sm text-gray-600">Drop Excel file here or click to browse</p>
+                <input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  onChange={(e) => {
+                    const file = e.target.files[0];
+                    setUploadedFile(file);
+                    if (file) processUploadedFile(file);
+                  }}
+                  className="mt-4 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
+                />
               </div>
               
-              <div className="mt-6 flex items-center justify-between">
-                <div className="flex space-x-3">
-                  {payrollData.length > 0 ? (
-                    <>
-                      <button
-                        onClick={exportToADP}
-                        className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
-                      >
-                        <svg className="mr-2 -ml-1 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                        </svg>
-                        Export to ADP
-                      </button>
-                      <button
-                        onClick={markInspectionsProcessed}
-                        className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-purple-700 bg-purple-100 hover:bg-purple-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500"
-                      >
-                        <svg className="mr-2 -ml-1 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        Mark as Processed
-                      </button>
-                    </>
-                  ) : (
-                    <div className="text-sm text-gray-600">
-                      <svg className="inline-block w-4 h-4 mr-1 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      Upload worksheet to export and process payroll
-                    </div>
-                  )}
+              {/* Worksheet Feedback */}
+              {(worksheetIssues.length > 0 || payrollData.some(emp => emp.issues.length > 0)) && (
+                <div className="mt-6">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-medium text-gray-900">Worksheet Review</h3>
+                    <button
+                      onClick={copyEmailToClipboard}
+                      className="text-sm text-blue-600 hover:text-blue-500"
+                    >
+                      Copy as Email
+                    </button>
+                  </div>
+                  <div className="space-y-3">
+                    {worksheetIssues.map((issue, index) => (
+                      <div key={index} className={`p-4 rounded-lg border ${
+                        issue.type === 'error' 
+                          ? 'bg-red-50 text-red-800 border-red-200' 
+                          : issue.type === 'warning'
+                          ? 'bg-amber-50 text-amber-800 border-amber-200'
+                          : issue.type === 'suggestion'
+                          ? 'bg-blue-50 text-blue-800 border-blue-200'
+                          : 'bg-gray-50 text-gray-800 border-gray-200'
+                      }`}>
+                        <p className="font-medium">{issue.message}</p>
+                      </div>
+                    ))}
+                    
+                    {payrollData.filter(emp => emp.issues.length > 0).length > 0 && (
+                      <div className="mt-4">
+                        <h4 className="text-sm font-medium text-gray-700 mb-2">Employee Issues Found:</h4>
+                        <div className="space-y-2">
+                          {payrollData.filter(emp => emp.issues.length > 0).map((emp, index) => (
+                            <div key={index} className="p-3 bg-amber-50 text-amber-800 border border-amber-200 rounded-md">
+                              <p className="font-medium">{emp.worksheetName}:</p>
+                              <ul className="list-disc list-inside text-sm mt-1">
+                                {emp.issues.map((issue, issueIndex) => (
+                                  <li key={issueIndex}>{issue}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <p className="text-sm text-gray-500">
-                  {payrollData.length > 0 
-                    ? <><span className="font-medium">Remember:</span> Enter TOTAL OT column into ADP</>
-                    : `Total Field Bonuses: $${Object.values(inspectionBonuses).reduce((sum, emp) => sum + emp.bonus, 0).toFixed(2)}`
-                  }
-                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Step 2: Calculate Bonuses */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
+              <div className="flex items-center">
+                <div className="flex-shrink-0 w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white font-semibold">
+                  2
+                </div>
+                <h2 className="ml-3 text-lg font-semibold text-gray-900">Calculate Field Bonuses</h2>
+              </div>
+            </div>
+            
+            <div className="p-6">
+              {!payrollData.length && (
+                <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                  <p className="text-sm text-blue-800">
+                    <span className="font-medium">Tip:</span> You can calculate bonuses before uploading the worksheet to preview the amounts
+                  </p>
+                </div>
+              )}
+              
+              <div className="flex items-center space-x-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Job Filter</label>
+                  <select
+                    value={selectedJob}
+                    onChange={(e) => setSelectedJob(e.target.value)}
+                    className="px-3 py-2 border border-gray-300 rounded-md"
+                  >
+                    <option value="all">All Active Jobs</option>
+                    {jobs.map(job => (
+                      <option key={job.id} value={job.id}>
+                        {job.ccdd} - {job.job_name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                
+                <button
+                  onClick={calculateInspectionBonuses}
+                  disabled={isProcessing || !payrollPeriod.startDate || !payrollPeriod.endDate}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {isProcessing ? 'Calculating...' : `Calculate Bonuses ($${bonusRate}/inspection)`}
+                </button>
               </div>
             </div>
           </div>
-        )}
-      </div>
+
+          {/* Step 3: Review and Export */}
+          {Object.keys(inspectionBonuses).length > 0 && (
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+              <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0 w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white font-semibold">
+                    3
+                  </div>
+                  <h2 className="ml-3 text-lg font-semibold text-gray-900">
+                    {payrollData.length > 0 ? 'Review and Export' : 'Bonus Preview'}
+                  </h2>
+                </div>
+              </div>
+              
+              <div className="p-6">
+                {/* Summary Stats */}
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+                  <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 rounded-lg border border-blue-200">
+                    <p className="text-xs font-medium text-blue-600 uppercase tracking-wider">Employees</p>
+                    <p className="mt-1 text-2xl font-bold text-blue-900">{payrollData.length || Object.keys(inspectionBonuses).length}</p>
+                  </div>
+                  <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-4 rounded-lg border border-purple-200">
+                    <p className="text-xs font-medium text-purple-600 uppercase tracking-wider">Total Hours</p>
+                    <p className="mt-1 text-2xl font-bold text-purple-900">
+                      {payrollData.length > 0 
+                        ? mergePayrollWithBonuses().reduce((sum, emp) => sum + (typeof emp.hours === 'number' ? emp.hours : 0), 0)
+                        : '-'
+                      }
+                    </p>
+                  </div>
+                  <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-4 rounded-lg border border-orange-200">
+                    <p className="text-xs font-medium text-orange-600 uppercase tracking-wider">Appt OT</p>
+                    <p className="mt-1 text-2xl font-bold text-orange-900">
+                      {payrollData.length > 0 
+                        ? `$${mergePayrollWithBonuses().reduce((sum, emp) => sum + (emp.apptOT || 0), 0).toFixed(2)}`
+                        : '-'
+                      }
+                    </p>
+                  </div>
+                  <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded-lg border border-green-200">
+                    <p className="text-xs font-medium text-green-600 uppercase tracking-wider">Field Bonus</p>
+                    <p className="mt-1 text-2xl font-bold text-green-900">
+                      ${payrollData.length > 0 
+                        ? mergePayrollWithBonuses().reduce((sum, emp) => sum + emp.calculatedFieldOT, 0).toFixed(2)
+                        : Object.values(inspectionBonuses).reduce((sum, emp) => sum + emp.bonus, 0).toFixed(2)
+                      }
+                    </p>
+                  </div>
+                  <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 p-4 rounded-lg border border-indigo-200">
+                    <p className="text-xs font-medium text-indigo-600 uppercase tracking-wider">TOTAL OT</p>
+                    <p className="mt-1 text-2xl font-bold text-indigo-900">
+                      {payrollData.length > 0 
+                        ? `$${mergePayrollWithBonuses().reduce((sum, emp) => sum + emp.calculatedTotal, 0).toFixed(2)}`
+                        : `$${Object.values(inspectionBonuses).reduce((sum, emp) => sum + emp.bonus, 0).toFixed(2)}`
+                      }
+                    </p>
+                  </div>
+                </div>
+
+                {/* Employee Data Table */}
+                <div className="overflow-hidden shadow ring-1 ring-black ring-opacity-5 md:rounded-lg">
+                  <table className="min-w-full divide-y divide-gray-300">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee</th>
+                        {payrollData.length > 0 && (
+                          <>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Initials</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hours</th>
+                          </>
+                        )}
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          {payrollData.length > 0 ? 'Appt OT' : 'Initials'}
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          {payrollData.length > 0 ? 'Field Bonus' : 'Inspections'}
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-indigo-50">
+                          {payrollData.length > 0 ? 'TOTAL OT' : 'Field Bonus'}
+                        </th>
+                        {payrollData.length > 0 && (
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notes</th>
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200 bg-white">
+                      {payrollData.length > 0 ? (
+                        mergePayrollWithBonuses().map((employee, index) => (
+                          <tr key={index} className={`hover:bg-gray-50 ${getRowColor(employee)}`}>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                              {employee.worksheetName}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {employee.initials || '-'}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {employee.hours === 'same' || employee.hours === 'Salary' ? (
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                  Salary
+                                </span>
+                              ) : (
+                                <span className="font-mono">{employee.hours}</span>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-mono">
+                              ${(employee.apptOT || 0).toFixed(2)}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600 font-mono">
+                              ${employee.calculatedFieldOT.toFixed(2)}
+                              {employee.inspectionCount > 0 && (
+                                <span className="text-xs text-gray-500 ml-1">({employee.inspectionCount})</span>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-indigo-600 bg-indigo-50 font-mono">
+                              ${employee.calculatedTotal.toFixed(2)}
+                            </td>
+                            <td className="px-6 py-4 text-sm text-gray-600">
+                              {employee.issues.join('; ')}
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        Object.entries(inspectionBonuses)
+                          .sort((a, b) => b[1].inspections - a[1].inspections)
+                          .map(([initials, data], index) => (
+                            <tr key={index} className="hover:bg-gray-50">
+                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                Inspector {initials}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                {initials}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-mono">
+                                {data.inspections}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-green-600 bg-green-50 font-mono">
+                                ${data.bonus.toFixed(2)}
+                              </td>
+                            </tr>
+                          ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                
+                <div className="mt-6 flex items-center justify-between">
+                  <div className="flex space-x-3">
+                    {payrollData.length > 0 ? (
+                      <>
+                        <button
+                          onClick={exportToADP}
+                          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                        >
+                          <svg className="mr-2 -ml-1 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          Export to ADP
+                        </button>
+                        <button
+                          onClick={markInspectionsProcessed}
+                          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-purple-700 bg-purple-100 hover:bg-purple-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500"
+                        >
+                          <svg className="mr-2 -ml-1 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          Mark as Processed
+                        </button>
+                      </>
+                    ) : (
+                      <div className="text-sm text-gray-600">
+                        <svg className="inline-block w-4 h-4 mr-1 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Upload worksheet to export and process payroll
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-sm text-gray-500">
+                    {payrollData.length > 0 
+                      ? <><span className="font-medium">Remember:</span> Enter TOTAL OT column into ADP</>
+                      : `Total Field Bonuses: $${Object.values(inspectionBonuses).reduce((sum, emp) => sum + emp.bonus, 0).toFixed(2)}`
+                    }
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
       {/* Data Recency Tab */}
-      {activeTab === 'dataRecency' && (
+      {activeTab === 'recency' && (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex justify-between items-center mb-6">
-            <div>
-              <h2 className="text-2xl font-bold text-gray-800">Data Recency Monitor</h2>
-              <p className="text-gray-600 mt-1">Track the freshness of inspection data across all active jobs</p>
-            </div>
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-semibold text-gray-900">Job Data Upload Recency</h2>
             <button
               onClick={fetchDataRecency}
               disabled={isLoadingRecency}
-              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-gray-400 flex items-center gap-2 transition-colors"
+              className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="mr-2 -ml-0.5 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
-              {isLoadingRecency ? 'Refreshing...' : 'Refresh Data'}
+              {isLoadingRecency ? 'Refreshing...' : 'Refresh'}
             </button>
           </div>
 
           {isLoadingRecency ? (
+            <div className="flex justify-center items-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            </div>
+          ) : dataRecency.length === 0 ? (
             <div className="text-center py-12">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-              <p className="text-gray-600">Loading data recency information...</p>
+              <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+              </svg>
+              <p className="mt-2 text-gray-500">No active jobs found</p>
             </div>
           ) : (
             <>
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse">
-                  <thead>
-                    <tr className="bg-gray-50 border-b-2 border-gray-200">
-                      <th className="text-left p-3 font-semibold text-gray-700">Job Name</th>
-                      <th className="text-left p-3 font-semibold text-gray-700">Last Upload Date</th>
-                      <th className="text-left p-3 font-semibold text-gray-700">Days Ago</th>
-                      <th className="text-center p-3 font-semibold text-gray-700">Status</th>
+              {/* Status Legend */}
+              <div className="mb-4 flex items-center space-x-6 text-sm">
+                <div className="flex items-center">
+                  <span className="inline-block w-3 h-3 mr-2 bg-green-500 rounded-full"></span>
+                  <span className="text-gray-600">Current (≤7 days)</span>
+                </div>
+                <div className="flex items-center">
+                  <span className="inline-block w-3 h-3 mr-2 bg-yellow-500 rounded-full"></span>
+                  <span className="text-gray-600">Aging (8-30 days)</span>
+                </div>
+                <div className="flex items-center">
+                  <span className="inline-block w-3 h-3 mr-2 bg-red-500 rounded-full"></span>
+                  <span className="text-gray-600">Stale (>30 days)</span>
+                </div>
+                <div className="flex items-center">
+                  <span className="inline-block w-3 h-3 mr-2 bg-gray-400 rounded-full"></span>
+                  <span className="text-gray-600">No Data</span>
+                </div>
+              </div>
+
+              {/* Data Table */}
+              <div className="overflow-hidden shadow ring-1 ring-black ring-opacity-5 md:rounded-lg">
+                <table className="min-w-full divide-y divide-gray-300">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Job Name
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Last Upload Date
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Days Ago
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Status
+                      </th>
                     </tr>
                   </thead>
-                  <tbody>
-                    {dataRecencyInfo.length === 0 ? (
-                      <tr>
-                        <td colSpan="4" className="text-center p-8 text-gray-500">
-                          <svg className="w-12 h-12 mx-auto mb-3 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-                          </svg>
-                          <p>No active jobs found or no data uploaded yet</p>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {dataRecency.map((job) => (
+                      <tr key={job.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {job.jobName}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {job.lastUploadDate ? formatDateForDisplay(job.lastUploadDate) : 'Never'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {job.daysAgo !== null ? `${job.daysAgo} days` : '-'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(job.status)}`}>
+                            <span className="mr-1">{getStatusIcon(job.status)}</span>
+                            {job.status === 'current' ? 'Current' :
+                             job.status === 'aging' ? 'Aging' :
+                             job.status === 'stale' ? 'Stale' : 'No Data'}
+                          </span>
                         </td>
                       </tr>
-                    ) : (
-                      dataRecencyInfo.map((job) => {
-                        // Determine status color based on days ago
-                        const getStatusInfo = () => {
-                          if (!job.lastUploadDate) return { color: 'gray', label: 'No Data' };
-                          if (job.daysAgo <= 7) return { color: 'green', label: 'Current' };
-                          if (job.daysAgo <= 30) return { color: 'yellow', label: 'Aging' };
-                          return { color: 'red', label: 'Stale' };
-                        };
-                        
-                        const statusInfo = getStatusInfo();
-                        
-                        return (
-                          <tr key={job.jobId} className="border-b hover:bg-gray-50 transition-colors">
-                            <td className="p-3 font-medium text-gray-800">{job.jobName}</td>
-                            <td className="p-3 text-gray-600">
-                              {job.lastUploadDate ? (
-                                formatDateForDisplay(job.lastUploadDate)
-                              ) : (
-                                <span className="text-gray-400">No data uploaded</span>
-                              )}
-                            </td>
-                            <td className="p-3">
-                              {job.daysAgo !== null ? (
-                                <span className={`font-semibold ${
-                                  statusInfo.color === 'green' ? 'text-green-600' :
-                                  statusInfo.color === 'yellow' ? 'text-yellow-600' :
-                                  statusInfo.color === 'red' ? 'text-red-600' :
-                                  'text-gray-400'
-                                }`}>
-                                  {job.daysAgo === 0 ? 'Today' :
-                                   job.daysAgo === 1 ? 'Yesterday' :
-                                   `${job.daysAgo} days`}
-                                </span>
-                              ) : (
-                                <span className="text-gray-400">-</span>
-                              )}
-                            </td>
-                            <td className="p-3 text-center">
-                              <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium ${
-                                statusInfo.color === 'green' ? 'bg-green-100 text-green-700' :
-                                statusInfo.color === 'yellow' ? 'bg-yellow-100 text-yellow-700' :
-                                statusInfo.color === 'red' ? 'bg-red-100 text-red-700' :
-                                'bg-gray-100 text-gray-700'
-                              }`}>
-                                <div className={`w-2 h-2 rounded-full ${
-                                  statusInfo.color === 'green' ? 'bg-green-500' :
-                                  statusInfo.color === 'yellow' ? 'bg-yellow-500' :
-                                  statusInfo.color === 'red' ? 'bg-red-500' :
-                                  'bg-gray-500'
-                                }`}></div>
-                                {statusInfo.label}
-                              </span>
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
+                    ))}
                   </tbody>
                 </table>
               </div>
-              
-              {dataRecencyInfo.length > 0 && (
-                <>
-                  {/* Summary Statistics */}
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6 mb-4">
-                    <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm text-green-600">Current</p>
-                          <p className="text-2xl font-bold text-green-700">
-                            {dataRecencyInfo.filter(j => j.daysAgo !== null && j.daysAgo <= 7).length}
-                          </p>
-                        </div>
-                        <svg className="w-8 h-8 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                      </div>
-                    </div>
-                    <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm text-yellow-600">Aging</p>
-                          <p className="text-2xl font-bold text-yellow-700">
-                            {dataRecencyInfo.filter(j => j.daysAgo !== null && j.daysAgo > 7 && j.daysAgo <= 30).length}
-                          </p>
-                        </div>
-                        <svg className="w-8 h-8 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                      </div>
-                    </div>
-                    <div className="bg-red-50 p-4 rounded-lg border border-red-200">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm text-red-600">Stale</p>
-                          <p className="text-2xl font-bold text-red-700">
-                            {dataRecencyInfo.filter(j => j.daysAgo !== null && j.daysAgo > 30).length}
-                          </p>
-                        </div>
-                        <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                        </svg>
-                      </div>
-                    </div>
-                    <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm text-gray-600">No Data</p>
-                          <p className="text-2xl font-bold text-gray-700">
-                            {dataRecencyInfo.filter(j => j.lastUploadDate === null).length}
-                          </p>
-                        </div>
-                        <svg className="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-                        </svg>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {/* Legend */}
-                  <div className="mt-4 p-4 bg-blue-50 rounded-lg">
-                    <div className="flex items-start gap-2">
-                      <svg className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <div className="text-sm text-gray-700">
-                        <p className="font-semibold mb-2">Data Freshness Guidelines:</p>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                          <span className="flex items-center gap-2">
-                            <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                            <span><strong>Current:</strong> ≤7 days</span>
-                          </span>
-                          <span className="flex items-center gap-2">
-                            <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
-                            <span><strong>Aging:</strong> 8-30 days</span>
-                          </span>
-                          <span className="flex items-center gap-2">
-                            <div className="w-3 h-3 rounded-full bg-red-500"></div>
-                            <span><strong>Stale:</strong> >30 days</span>
-                          </span>
-                          <span className="flex items-center gap-2">
-                            <div className="w-3 h-3 rounded-full bg-gray-500"></div>
-                            <span><strong>No Data:</strong> Never uploaded</span>
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </>
-              )}
+
+              {/* Summary Cards */}
+              <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-4">
+                <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                  <p className="text-xs font-medium text-green-600 uppercase tracking-wider">Current</p>
+                  <p className="mt-1 text-2xl font-bold text-green-900">
+                    {dataRecency.filter(j => j.status === 'current').length}
+                  </p>
+                </div>
+                <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+                  <p className="text-xs font-medium text-yellow-600 uppercase tracking-wider">Aging</p>
+                  <p className="mt-1 text-2xl font-bold text-yellow-900">
+                    {dataRecency.filter(j => j.status === 'aging').length}
+                  </p>
+                </div>
+                <div className="bg-red-50 p-4 rounded-lg border border-red-200">
+                  <p className="text-xs font-medium text-red-600 uppercase tracking-wider">Stale</p>
+                  <p className="mt-1 text-2xl font-bold text-red-900">
+                    {dataRecency.filter(j => j.status === 'stale').length}
+                  </p>
+                </div>
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <p className="text-xs font-medium text-gray-600 uppercase tracking-wider">No Data</p>
+                  <p className="mt-1 text-2xl font-bold text-gray-900">
+                    {dataRecency.filter(j => j.status === 'no-data').length}
+                  </p>
+                </div>
+              </div>
             </>
           )}
         </div>
       )}
 
-      {/* Archive Tab - WITH DATE FIXES */}
+      {/* Archive Tab */}
       {activeTab === 'archive' && (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <h2 className="text-xl font-semibold text-gray-900 mb-4">Payroll Archive</h2>
