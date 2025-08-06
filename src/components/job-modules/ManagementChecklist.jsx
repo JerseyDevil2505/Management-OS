@@ -47,6 +47,9 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
   useEffect(() => {
     const loadJobDetails = async () => {
       if (jobData?.id) {
+        // Scroll to top when component loads
+        window.scrollTo(0, 0);
+        
         // Fetch the latest job data to get saved assessor info
         const { data, error } = await supabase
           .from('jobs')
@@ -66,6 +69,8 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
 
   useEffect(() => {
     if (jobData) {
+      // Scroll to top when checklist items are loaded
+      window.scrollTo(0, 0);
       loadChecklistItems();
     }
   }, [jobData, checklistType]);
@@ -743,7 +748,10 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
       ws['!cols'] = colWidths;
       
       // Generate Excel file and download
-      XLSX.writeFile(wb, `${jobData.job_name}_Initial_Mailing_List.xlsx`);
+      const fileName = jobData?.job_name ? 
+        `${jobData.job_name.replace(/[^a-z0-9]/gi, '_')}_Initial_Mailing_List.xlsx` : 
+        `Initial_Mailing_List_${new Date().toISOString().split('T')[0]}.xlsx`;
+      XLSX.writeFile(wb, fileName);
       
       console.log(`✅ Excel file downloaded with ${excelData.length} properties`);
       
