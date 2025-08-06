@@ -269,6 +269,47 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
     try {
       setIsLoadingItems(true);
       
+      // First, check if we need to migrate data from old checklist_items table
+      const { data: oldItems, error: oldError } = await supabase
+        .from('checklist_items')
+        .select('*')
+        .eq('job_id', jobData.id);
+      
+      if (oldItems && oldItems.length > 0) {
+        console.log('Migrating data from old checklist_items table...');
+        
+        // Migrate old data to new table
+        for (const oldItem of oldItems) {
+          // Convert item_text to id format (matching our template IDs)
+          const templateItem = CHECKLIST_TEMPLATE.find(t => t.item_text === oldItem.item_text);
+          if (templateItem) {
+            // Only migrate if there's actual data to preserve
+            if (oldItem.status !== 'pending' || oldItem.client_approved || oldItem.file_attachment_path) {
+              await supabase
+                .from('checklist_item_status')
+                .upsert({
+                  job_id: jobData.id,
+                  item_id: templateItem.id,
+                  status: oldItem.status || 'pending',
+                  completed_at: oldItem.completed_at,
+                  completed_by: oldItem.completed_by,
+                  client_approved: oldItem.client_approved || false,
+                  client_approved_date: oldItem.client_approved_date,
+                  client_approved_by: oldItem.client_approved_by,
+                  file_attachment_path: oldItem.file_attachment_path,
+                  notes: oldItem.notes,
+                  created_at: oldItem.created_at,
+                  updated_at: oldItem.updated_at
+                }, {
+                  onConflict: 'job_id,item_id',
+                  ignoreDuplicates: false // Overwrite if exists
+                });
+            }
+          }
+        }
+        console.log('Migration complete');
+      }
+      
       // Load the status data from the database (what's been completed, approved, etc.)
       const { data: statusData, error: statusError } = await supabase
         .from('checklist_item_status')
@@ -500,17 +541,32 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
         try {
           console.log(`⬆️ Starting multiple file upload for item ${itemId}: ${itemText}`);
           
-          // Upload all files
-          const uploadPromises = files.map(file => 
-            checklistService.uploadFile(
-              itemId, 
-              jobData.id, 
-              file, 
-              currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad'
-            )
-          );
-          
-          await Promise.all(uploadPromises);
+          // Upload files to storage bucket
+          const uploadedPaths = [];
+          for (const file of files) {
+            const fileName = `${Date.now()}_${file.name}`;
+            const filePath = `${jobData.id}/${itemId}/${fileName}`;
+            
+            const { data, error } = await supabase.storage
+              .from('checklist-documents')
+              .upload(filePath, file);
+            
+            if (error) throw error;
+            
+            uploadedPaths.push(filePath);
+            
+            // Save to checklist_documents table for multiple files
+            await supabase
+              .from('checklist_documents')
+              .insert({
+                job_id: jobData.id,
+                checklist_item_id: itemId,
+                file_path: filePath,
+                file_name: file.name,
+                uploaded_by: currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad',
+                uploaded_at: new Date().toISOString()
+              });
+          }
           
           console.log(`✅ All uploads complete for ${itemText}`);
           
@@ -526,7 +582,7 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
           setUploadingItems(prev => ({ ...prev, [itemId]: false }));
         }
       } else {
-        // Single file upload (existing logic)
+        // Single file upload
         const file = files[0];
         console.log(`📄 File selected for ${itemText}: ${file.name}`);
         
@@ -540,19 +596,33 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
         try {
           console.log(`⬆️ Starting upload for item ${itemId}: ${itemText}`);
           
-          // Upload file and update item
-          const updatedItem = await checklistService.uploadFile(
-            itemId, 
-            jobData.id, 
-            file, 
-            currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad'
-          );
+          // Upload file to storage bucket
+          const fileName = `${Date.now()}_${file.name}`;
+          const filePath = `${jobData.id}/${itemId}/${fileName}`;
           
-          console.log(`✅ Upload complete for ${itemText}`, updatedItem);
+          const { data, error } = await supabase.storage
+            .from('checklist-documents')
+            .upload(filePath, file);
+          
+          if (error) throw error;
+          
+          console.log(`✅ Upload complete for ${itemText}`, filePath);
+          
+          // Update checklist_item_status table with file path
+          await supabase
+            .from('checklist_item_status')
+            .upsert({
+              job_id: jobData.id,
+              item_id: itemId,
+              file_attachment_path: filePath,
+              updated_at: new Date().toISOString()
+            }, {
+              onConflict: 'job_id,item_id'
+            });
           
           // Update local state
           setChecklistItems(items => items.map(item => 
-            item.id === itemId ? { ...item, ...updatedItem } : item
+            item.id === itemId ? { ...item, file_attachment_path: filePath } : item
           ));
           
           // Mark this file as valid
@@ -912,20 +982,56 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
 
   const downloadFile = async (filePath, fileName) => {
     try {
-      // Get public URL for the file
-      const { data } = supabase.storage
+      console.log('Attempting to download file:', filePath);
+      
+      // Method 1: Try to create a signed URL for download (more secure)
+      const { data: signedUrlData, error: signedUrlError } = await supabase.storage
+        .from('checklist-documents')
+        .createSignedUrl(filePath, 3600); // URL valid for 1 hour
+      
+      if (signedUrlData?.signedUrl) {
+        // Create a temporary anchor element to trigger download
+        const link = document.createElement('a');
+        link.href = signedUrlData.signedUrl;
+        link.download = fileName || filePath.split('/').pop();
+        link.target = '_blank';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        return;
+      }
+      
+      // Method 2: If signed URL fails, try direct download
+      const { data: downloadData, error: downloadError } = await supabase.storage
+        .from('checklist-documents')
+        .download(filePath);
+      
+      if (downloadData) {
+        // Create blob URL and trigger download
+        const url = URL.createObjectURL(downloadData);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName || filePath.split('/').pop();
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        return;
+      }
+      
+      // If both methods fail, try public URL as last resort
+      const { data: publicUrlData } = supabase.storage
         .from('checklist-documents')
         .getPublicUrl(filePath);
       
-      if (data?.publicUrl) {
-        // Open in new tab or trigger download
-        window.open(data.publicUrl, '_blank');
+      if (publicUrlData?.publicUrl) {
+        window.open(publicUrlData.publicUrl, '_blank');
       } else {
-        throw new Error('Could not get file URL');
+        throw new Error('Could not download file - all methods failed');
       }
     } catch (error) {
       console.error('Error downloading file:', error);
-      alert('Failed to download file. Please try again.');
+      alert('Failed to download file. The file may not exist or you may not have permission to access it.');
     }
   };
 
