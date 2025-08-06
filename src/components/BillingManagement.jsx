@@ -692,10 +692,15 @@ const generateBondLetter = async () => {
       // Sort by percent billed (highest to lowest)
       allJobs.sort((a, b) => parseFloat(b.percentBilled) - parseFloat(a.percentBilled));
       
-      // Calculate totals
+      // Calculate totals - exclude jobs with 0 parcels from average calculation
       const totalParcels = allJobs.reduce((sum, job) => sum + job.parcels, 0);
       const totalAmount = allJobs.reduce((sum, job) => sum + parseFloat(job.amount), 0);
-      const avgPricePerParcel = totalParcels > 0 ? (totalAmount / totalParcels).toFixed(2) : '0.00';
+      
+      // Calculate average only for jobs WITH parcels
+      const jobsWithParcels = allJobs.filter(job => job.parcels > 0);
+      const parcelsForAvg = jobsWithParcels.reduce((sum, job) => sum + job.parcels, 0);
+      const amountForAvg = jobsWithParcels.reduce((sum, job) => sum + parseFloat(job.amount), 0);
+      const avgPricePerParcel = parcelsForAvg > 0 ? (amountForAvg / parcelsForAvg).toFixed(2) : '0.00';
       
       console.log('Total jobs in report:', allJobs.length);
       console.log('Total amount:', totalAmount);
@@ -961,18 +966,23 @@ const generateBondLetter = async () => {
         y += 7;
       });
       
-      // Add totals
+      // Add totals with emphasis on average - CENTERED
       y += 10;
       doc.setFontSize(11);
-      doc.text(`Total Contracts: ${allJobs.length}`, 10, y);
+      doc.text(`Total Contracts: ${allJobs.length}`, 148, y, { align: 'center' });
       y += 7;
-      doc.text(`Total Parcels: ${totalParcels.toLocaleString()}`, 10, y);
+      doc.text(`Total Parcels: ${totalParcels.toLocaleString()}`, 148, y, { align: 'center' });
       y += 7;
-      doc.text(`Total Amount: $${totalAmount.toLocaleString()}`, 10, y);
-      y += 7;
-      doc.text(`Overall Avg $/Parcel: $${avgPricePerParcel}`, 10, y);
+      doc.text(`Total Amount: $${totalAmount.toLocaleString()}`, 148, y, { align: 'center' });
       
-      // Add footnote
+      // Add Overall Average with bold emphasis - CENTERED
+      y += 10;
+      doc.setFontSize(12);
+      doc.setFont(undefined, 'bold');
+      doc.text(`Overall Avg $/Parcel: $${avgPricePerParcel}`, 148, y, { align: 'center' });
+      doc.setFont(undefined, 'normal');
+      
+      // Add footnote - already centered
       doc.setFontSize(8);
       doc.text('*Planned jobs have been awarded but not yet moved to active jobs', 148, 200, { align: 'center' });
       
