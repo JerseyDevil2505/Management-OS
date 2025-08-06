@@ -37,8 +37,25 @@ const PayrollManagement = () => {
   // Helper function to format dates for display
   const formatDateForDisplay = (dateStr) => {
     if (!dateStr) return '';
-    const date = parseLocalDate(dateStr);
-    if (!date) return '';
+    
+    let date;
+    // Handle different date formats
+    if (typeof dateStr === 'string' && dateStr.includes(' ')) {
+      // PostgreSQL timestamp format: "2025-08-04 17:00:00.968"
+      // Replace space with 'T' to make it ISO format
+      date = new Date(dateStr.replace(' ', 'T'));
+    } else if (typeof dateStr === 'string' && dateStr.includes('T')) {
+      // ISO timestamp like 2025-01-15T12:00:00
+      date = new Date(dateStr);
+    } else if (typeof dateStr === 'string' && dateStr.includes('-')) {
+      // Date string like 2025-01-15
+      date = parseLocalDate(dateStr);
+    } else {
+      // Fallback to direct parsing
+      date = new Date(dateStr);
+    }
+    
+    if (!date || isNaN(date.getTime())) return 'Invalid Date';
     return date.toLocaleDateString('en-US');
   };
 
@@ -169,7 +186,19 @@ const PayrollManagement = () => {
           
           if (!uploadError && latestUpload?.upload_date) {
             lastUploadDate = latestUpload.upload_date;
-            const uploadDate = parseLocalDate(lastUploadDate);
+            // Handle different date formats - upload_date might be YYYY-MM-DD or a timestamp
+            let uploadDate;
+            if (lastUploadDate.includes('T')) {
+              // It's a timestamp like 2025-01-15T12:00:00
+              uploadDate = new Date(lastUploadDate);
+            } else if (lastUploadDate.includes('-')) {
+              // It's a date string like 2025-01-15
+              uploadDate = parseLocalDate(lastUploadDate);
+            } else {
+              // Fallback to direct parsing
+              uploadDate = new Date(lastUploadDate);
+            }
+            
             const today = new Date();
             today.setHours(12, 0, 0, 0);
             daysAgo = Math.floor((today - uploadDate) / (1000 * 60 * 60 * 24));
