@@ -114,21 +114,21 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
     const limit = 1000;
     let hasMore = true;
     
-    // First, get the latest version number
+    // First, get the latest file_version
     const { data: versionData, error: versionError } = await supabase
       .from('property_records')
-      .select('version_number')
+      .select('file_version')
       .eq('job_id', jobId)
-      .order('version_number', { ascending: false })
+      .order('file_version', { ascending: false })
       .limit(1);
     
     if (versionError || !versionData || versionData.length === 0) {
-      console.error('Error getting version number:', versionError);
+      console.error('Error getting file version:', versionError);
       return [];
     }
     
-    const latestVersion = versionData[0].version_number;
-    console.log('📌 Latest version number:', latestVersion);
+    const latestVersion = versionData[0].file_version;
+    console.log('📌 Latest file version:', latestVersion);
     
     // Now fetch all records with pagination
     while (hasMore) {
@@ -146,7 +146,7 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
           inspection_info_by
         `)
         .eq('job_id', jobId)
-        .eq('version_number', latestVersion)
+        .eq('file_version', latestVersion)
         .range(offset, offset + limit - 1);
       
       if (error) {
@@ -176,6 +176,23 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
     const limit = 1000;
     let hasMore = true;
     
+    // First, get the latest file_version for inspection data
+    const { data: versionData, error: versionError } = await supabase
+      .from('inspection_data')
+      .select('file_version')
+      .eq('job_id', jobId)
+      .order('file_version', { ascending: false })
+      .limit(1);
+    
+    if (versionError || !versionData || versionData.length === 0) {
+      console.error('Error getting inspection file version:', versionError);
+      // Return empty array if no inspection data exists yet
+      return [];
+    }
+    
+    const latestVersion = versionData[0].file_version;
+    console.log('📌 Latest inspection file version:', latestVersion);
+    
     while (hasMore) {
       const { data, error } = await supabase
         .from('inspection_data')
@@ -186,6 +203,7 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
           inspection_date
         `)
         .eq('job_id', jobId)
+        .eq('file_version', latestVersion)
         .range(offset, offset + limit - 1);
       
       if (error) {
