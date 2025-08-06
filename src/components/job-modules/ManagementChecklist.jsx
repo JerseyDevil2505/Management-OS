@@ -24,7 +24,11 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
   const [isLoadingItems, setIsLoadingItems] = useState(true);
   const [validFiles, setValidFiles] = useState({}); // Track which files actually exist
   const [checklistDocuments, setChecklistDocuments] = useState({}); // Track multiple documents per item
-  const [isGeneratingList, setIsGeneratingList] = useState(false); // Loading state for list generation
+  const [generatingLists, setGeneratingLists] = useState({
+    initial: false,
+    second: false,
+    third: false
+  }); // Separate loading states for each list
   const [processingApprovals, setProcessingApprovals] = useState({}); // Track which approvals are being processed
 
   // Extract year from end_date - just grab first 4 characters to avoid timezone issues
@@ -200,6 +204,7 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
           block,
           lot,
           info_by_code,
+          list_by,
           measure_date,
           list_date
         `)
@@ -615,7 +620,7 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
   // ENHANCED: Direct Excel download for Initial Mailing List
   const generateMailingListExcel = async () => {
     try {
-      setIsGeneratingList(true);
+      setGeneratingLists(prev => ({ ...prev, initial: true }));
       console.log('📊 Generating Initial Mailing List as Excel...');
       
       // Get ALL property records with pagination
@@ -680,14 +685,14 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
       console.error('Error generating mailing list:', error);
       alert('Failed to generate mailing list. Please ensure property data is loaded.');
     } finally {
-      setIsGeneratingList(false);
+      setGeneratingLists(prev => ({ ...prev, initial: false }));
     }
   };
 
   // ENHANCED: Direct Excel download for 2nd Attempt Mailer
   const generateSecondAttemptMailerExcel = async () => {
     try {
-      setIsGeneratingList(true);
+      setGeneratingLists(prev => ({ ...prev, second: true }));
       console.log('🔄 Generating 2nd attempt mailer as Excel...');
       
       // Get the job's refusal configuration
@@ -776,14 +781,14 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
       console.error('Error generating 2nd attempt mailer:', error);
       alert('Failed to generate 2nd attempt mailer list.');
     } finally {
-      setIsGeneratingList(false);
+      setGeneratingLists(prev => ({ ...prev, second: false }));
     }
   };
 
   // ENHANCED: Direct Excel download for 3rd Attempt Mailer
   const generateThirdAttemptMailerExcel = async () => {
     try {
-      setIsGeneratingList(true);
+      setGeneratingLists(prev => ({ ...prev, third: true }));
       console.log('🔄 Generating 3rd attempt mailer as Excel...');
       
       // Get the job's refusal configuration
@@ -871,7 +876,7 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
       console.error('Error generating 3rd attempt mailer:', error);
       alert('Failed to generate 3rd attempt mailer list.');
     } finally {
-      setIsGeneratingList(false);
+      setGeneratingLists(prev => ({ ...prev, third: false }));
     }
   };
 
@@ -1327,31 +1332,31 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
                   {item.special_action === 'generate_mailing_list' && (
                     <button
                       onClick={generateMailingListExcel}
-                      disabled={isGeneratingList}
+                      disabled={generatingLists.initial}
                       className="px-3 py-1 bg-green-500 text-white rounded-md text-sm hover:bg-green-600 disabled:bg-gray-400 flex items-center gap-1"
                     >
                       <Download className="w-4 h-4" />
-                      {isGeneratingList ? 'Generating...' : 'Download Excel'}
+                      {generatingLists.initial ? 'Generating...' : 'Download Excel'}
                     </button>
                   )}
                   {item.special_action === 'generate_second_attempt_mailer' && (
                     <button 
                       onClick={generateSecondAttemptMailerExcel}
-                      disabled={isGeneratingList}
+                      disabled={generatingLists.second}
                       className="px-3 py-1 bg-yellow-500 text-white rounded-md text-sm hover:bg-yellow-600 disabled:bg-gray-400 flex items-center gap-1"
                     >
                       <Download className="w-4 h-4" />
-                      {isGeneratingList ? 'Generating...' : '2nd Attempt Excel'}
+                      {generatingLists.second ? 'Generating...' : '2nd Attempt Excel'}
                     </button>
                   )}
                   {item.special_action === 'generate_third_attempt_mailer' && (
                     <button 
                       onClick={generateThirdAttemptMailerExcel}
-                      disabled={isGeneratingList}
+                      disabled={generatingLists.third}
                       className="px-3 py-1 bg-red-500 text-white rounded-md text-sm hover:bg-red-600 disabled:bg-gray-400 flex items-center gap-1"
                     >
                       <Download className="w-4 h-4" />
-                      {isGeneratingList ? 'Generating...' : '3rd Attempt Excel'}
+                      {generatingLists.third ? 'Generating...' : '3rd Attempt Excel'}
                     </button>
                   )}
                   {item.special_action === 'generate_turnover_pdf' && (
