@@ -197,10 +197,11 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
       const { data, error } = await supabase
         .from('inspection_data')
         .select(`
-          property_block,
-          property_lot,
-          inspection_info_by,
-          inspection_date
+          block,
+          lot,
+          info_by_code,
+          measure_date,
+          list_date
         `)
         .eq('job_id', jobId)
         .eq('file_version', latestVersion)
@@ -213,6 +214,7 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
       
       if (data && data.length > 0) {
         allRecords = [...allRecords, ...data];
+        console.log(`📦 Fetched ${data.length} inspection records (total so far: ${allRecords.length})`);
         hasMore = data.length === limit;
         offset += limit;
       } else {
@@ -804,7 +806,7 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
       // Create a map of inspection data by property key (block-lot)
       const inspectionMap = new Map();
       inspectionData.forEach(inspection => {
-        const key = `${inspection.property_block}-${inspection.property_lot}`;
+        const key = `${inspection.block}-${inspection.lot}`;
         inspectionMap.set(key, inspection);
       });
       
@@ -815,13 +817,13 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
         const inspection = inspectionMap.get(propertyKey);
         
         // Check if it's a refusal based on job config
-        if (inspection && refusalCategories.includes(inspection.inspection_info_by)) {
+        if (inspection && refusalCategories.includes(inspection.info_by_code)) {
           return true;
         }
         
         // Check if it's class 2 or 3A with no inspection
         if (['2', '3A'].includes(propClass)) {
-          const hasInspection = property.inspection_info_by || inspection?.inspection_info_by;
+          const hasInspection = property.inspection_info_by || inspection?.info_by_code;
           if (!hasInspection || hasInspection.trim() === '') {
             return true;
           }
@@ -840,7 +842,7 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
         'Location': property.property_location,
         'Owner': property.owner_name,
         'Mailing Address': `${property.owner_street} ${property.owner_csz}`.trim(),
-        'Reason': inspectionMap.get(`${property.property_block}-${property.property_lot}`)?.inspection_info_by || 'Not Inspected'
+        'Reason': inspectionMap.get(`${property.property_block}-${property.property_lot}`)?.info_by_code || 'Not Inspected'
       }));
       
       // Create workbook and worksheet
