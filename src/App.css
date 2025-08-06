@@ -1,565 +1,206 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { supabase, jobService } from './lib/supabaseClient';
-import LandingPage from './components/LandingPage';
-import EmployeeManagement from './components/EmployeeManagement';
-import AdminJobManagement from './components/AdminJobManagement';
-import BillingManagement from './components/BillingManagement';
-import PayrollManagement from './components/PayrollManagement';
-import UserManagement from './components/UserManagement';
-import JobContainer from './components/job-modules/JobContainer';
-import FileUploadButton from './components/FileUploadButton';
-import './App.css';
-
-function App() {
-  // Authentication state
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  
-  const [activeModule, setActiveModule] = useState('jobs');
-  const [selectedJob, setSelectedJob] = useState(null);
-
-  // DEBUG: Track what's causing re-renders
-  const renderCount = useRef(0);
-  const prevActiveModule = useRef(activeModule);
-  
-  useEffect(() => {
-    renderCount.current += 1;
-       
-    if (prevActiveModule.current !== activeModule) {
-      console.warn(`⚠️ ACTIVE MODULE CHANGED: ${prevActiveModule.current} → ${activeModule}`);
-      prevActiveModule.current = activeModule;
-    }
-  });
-
-  // Central module state management for ALL jobs using workflow_stats
-  const [jobWorkflowStats, setJobWorkflowStats] = useState({});
-  const [isLoadingWorkflowStats, setIsLoadingWorkflowStats] = useState(false);
-  
-  // ADD: Lock to prevent refreshes during job creation
-  const [isCreatingJob, setIsCreatingJob] = useState(false);
-
-  // 🔧 BACKEND ENHANCEMENT: Add metrics refresh trigger for AdminJobManagement
-  const [metricsRefreshTrigger, setMetricsRefreshTrigger] = useState(0);
-
-  // Check for existing session or dev mode on mount
-  useEffect(() => {
-    checkSession();
-  }, []);
-
-  // Set page title based on environment
-  useEffect(() => {
-    if (window.location.hostname.includes('production-black-seven') || 
-        window.location.hostname === 'localhost' ||
-        window.location.hostname.includes('github.dev') ||
-        window.location.hostname.includes('preview')) {
-      document.title = 'Mgmt OS Development';
-    } else {
-      document.title = 'Mgmt OS Production';
-    }
-  }, []);
-
-  const checkSession = async () => {
-    try {
-      // Development auto-login - check for dev URLs
-      if (window.location.hostname.includes('production-black-seven') || 
-          window.location.hostname === 'localhost' ||
-          window.location.hostname.includes('github.dev') ||
-          window.location.hostname.includes('preview')) {
-        setUser({
-          email: 'dev@lojik.com',
-          role: 'admin',
-          employeeData: { 
-            name: 'Development Mode',
-            role: 'admin'
-          }
-        });
-        setLoading(false);
-        return;
-      }
-
-      // Production - check for real session
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (session) {
-        // Get employee data for role
-        const { data: employee } = await supabase
-          .from('employees')
-          .select('*')
-          .eq('email', session.user.email.toLowerCase())
-          .single();
-
-        if (employee) {
-          setUser({
-            ...session.user,
-            role: employee.role || 'inspector',
-            employeeData: employee
-          });
-        }
-      }
-    } catch (error) {
-      console.error('Session check error:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleLogin = (userData) => {
-    setUser(userData);
-    // Set default tab based on role
-    if (userData.role === 'manager') {
-      setActiveModule('employees');
-    }
-  };
-
-  const handleLogout = async () => {
-    try {
-      await supabase.auth.signOut();
-      setUser(null);
-      setSelectedJob(null);
-      setActiveModule('jobs');
-    } catch (error) {
-      console.error('Logout error:', error);
-    }
-  };
-
-  // Load persisted workflow stats for all active jobs
-  const loadAllJobWorkflowStats = useCallback(async () => {
-    // CRITICAL: Don't refresh while a job is being created
-    if (isCreatingJob) {
-      return;
-    }
-    
-    
-    setIsLoadingWorkflowStats(true);
-    try {
-      // Get all active jobs with their workflow stats
-      const { data: jobs, error } = await supabase
-        .from('jobs')
-        .select('id, workflow_stats')
-        .eq('status', 'active')
-        .order('created_at', { ascending: false });
-
-      if (!error && jobs) {
-        const loadedStats = {};
-        
-        jobs.forEach(job => {
-          if (job.workflow_stats && Object.keys(job.workflow_stats).length > 0) {
-            // Load existing workflow stats
-            loadedStats[job.id] = {
-              ...job.workflow_stats,
-              lastLoaded: new Date().toISOString()
-            };
-          } else {
-            // Initialize empty state for jobs without workflow stats
-            loadedStats[job.id] = {
-              totalRecords: 0,
-              validInspections: 0,
-              jobEntryRate: 0,
-              jobRefusalRate: 0,
-              commercialCompletePercent: 0,
-              pricingCompletePercent: 0,
-              lastProcessed: null,
-              isProcessed: false
-            };
-          }
-        });
-
-        setJobWorkflowStats(loadedStats);
-      }
-    } catch (error) {
-      console.error('❌ Error loading job workflow stats:', error);
-    } finally {
-      setIsLoadingWorkflowStats(false);
-    }
-  }, [isCreatingJob]);
-
-  // Load workflow stats on app startup - DEFERRED
-  useEffect(() => {
-    // Wait a bit before loading heavy workflow stats
-    const timeoutId = setTimeout(() => {
-      loadAllJobWorkflowStats();
-    }, 2000); // Wait 2 seconds
-    
-    return () => clearTimeout(timeoutId);
-  }, []); // Remove loadAllJobWorkflowStats from dependencies
-
-  // 🔧 BACKEND ENHANCEMENT: Enhanced workflow stats update with metrics refresh trigger
-  const handleWorkflowStatsUpdate = async (jobId, newStats, persistToDatabase = true) => {
-    
-    // Check if analytics just completed (isProcessed changed from false to true)
-    const previousStats = jobWorkflowStats[jobId];
-    const analyticsJustCompleted = newStats.isProcessed && !previousStats?.isProcessed;
-
-    // Extract the flat structure from nested analytics if needed
-    const flatStats = newStats.analytics ? {
-      ...newStats.analytics,  // Flatten the analytics object
-      billingAnalytics: newStats.billingAnalytics,
-      validationReport: newStats.validationReport,
-      missingPropertiesReport: newStats.missingPropertiesReport,
-      validationOverrides: newStats.validationOverrides,
-      overrideMap: newStats.overrideMap,
-      lastProcessed: newStats.lastProcessed || new Date().toISOString(),
-      isProcessed: true  // CRITICAL: Preserve the processed flag!
-    } : {
-      ...newStats,
-      isProcessed: true
-    };
-
-    // Update local state immediately for real-time UI
-    setJobWorkflowStats(prev => ({
-      ...prev,
-      [jobId]: {
-        ...prev[jobId],
-        ...flatStats,  // Use the flattened stats
-        isProcessed: true,
-        lastUpdated: new Date().toISOString()
-      }
-    }));
-
-    // 🔧 FIX: Defer metrics refresh to prevent React Error #301
-    if (analyticsJustCompleted) {
-      setTimeout(() => {
-        setMetricsRefreshTrigger(prev => prev + 1);
-      }, 0);
-    }
-
-    // Persist to database for navigation survival
-    if (persistToDatabase) {
-      try {
-        // CRITICAL FIX: Merge properly, don't overwrite!
-        const updatedStats = {
-          ...jobWorkflowStats[jobId],
-          ...flatStats,  // This now includes all the analytics data
-          isProcessed: true,
-          lastUpdated: new Date().toISOString()
-        };
-
-        const { error } = await supabase
-          .from('jobs')
-          .update({ 
-            workflow_stats: updatedStats,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', jobId);
-
-        if (error) {
-          console.error('❌ Error persisting workflow stats:', error);
-        }
-      } catch (error) {
-        console.error('❌ Failed to persist workflow stats:', error);
-      }
-    }
-  };
-
-  // Get workflow stats for a specific job (with defaults)
-  const getJobWorkflowStats = (jobId) => {
-    const defaultStats = {
-      totalRecords: 0,
-      validInspections: 0,
-      jobEntryRate: 0,
-      jobRefusalRate: 0,
-      commercialCompletePercent: 0,
-      pricingCompletePercent: 0,
-      lastProcessed: null,
-      isProcessed: false
-    };
-
-    return jobWorkflowStats[jobId] || defaultStats;
-  };
-
-  // Get all job metrics for AdminJobManagement
-  const getAllJobMetrics = () => {
-    const metrics = {};
-    
-    Object.keys(jobWorkflowStats).forEach(jobId => {
-      const stats = jobWorkflowStats[jobId];
-      
-      if (stats && stats.isProcessed && stats.totalRecords) {
-        metrics[jobId] = {
-          totalProperties: stats.totalRecords || 0,
-          propertiesInspected: stats.validInspections || 0,
-          entryRate: stats.jobEntryRate || 0,
-          refusalRate: stats.jobRefusalRate || 0,
-          commercialComplete: stats.commercialCompletePercent || 0,
-          pricingComplete: stats.pricingCompletePercent || 0,
-          lastProcessed: stats.lastProcessed,
-          isProcessed: true
-        };
-      } else {
-        // Default metrics for unprocessed jobs
-        metrics[jobId] = {
-          totalProperties: 0,
-          propertiesInspected: 0,
-          entryRate: 0,
-          refusalRate: 0,
-          commercialComplete: 0,
-          pricingComplete: 0,
-          lastProcessed: null,
-          isProcessed: false
-        };
-      }
-    });
-
-    return metrics;
-  };
-
-  // Handle job selection from AdminJobManagement
-  const handleJobSelect = (job) => {
-    setSelectedJob(job);
-    setActiveModule('job-modules');
-  };
-
-  // NEW: Refresh selected job data to get latest timestamps
-  const refreshSelectedJob = async () => {
-    if (!selectedJob) return;
-    
-    try {
-      // Get all jobs using the service (which includes field mapping)
-      const jobs = await jobService.getAll();
-      
-      // Find the selected job from the results
-      const refreshedJob = jobs.find(j => j.id === selectedJob.id);
-      
-      if (refreshedJob) {
-        setSelectedJob(refreshedJob);
-      }
-    } catch (error) {
-      console.error('Error refreshing selected job:', error);
-    }
-  };
-
-  // Handle returning to jobs list
-  const handleBackToJobs = () => {
-    setSelectedJob(null);
-    setActiveModule('jobs');
-  };
-
-  // File refresh trigger for JobContainer
-  const [fileRefreshTrigger, setFileRefreshTrigger] = useState(0);
-
-  // 🔧 FIX: Defer file processing state updates to prevent React Error #301
-  const handleFileProcessed = async (result) => {
-    
-    // NEW: Refresh the selected job to get new updated_at timestamp
-    await refreshSelectedJob();
-    
-    // FileUploadButton already handles file versioning and tracking
-    // Just refresh job metadata without touching ProductionTracker analytics
-    await loadAllJobWorkflowStats();
-    
-    // CRITICAL: Defer trigger to prevent render-time state updates
-    setTimeout(() => {
-      setFileRefreshTrigger(prev => prev + 1);
-    }, 0);
-
-    // REMOVED the needsRefresh flag that was causing ProductionTracker to reset!
-    // The ProductionTracker can handle file changes on its own without resetting
-  };
-
-  // 🔧 FIX: Make callback more defensive and properly memoized
-  const handleJobProcessingComplete = useCallback(() => {
-    
-    // Double defer to ensure AdminJobManagement has finished all its state updates
-    requestAnimationFrame(() => {
-      setTimeout(() => {
-        setMetricsRefreshTrigger(prev => prev + 1);
-        // Also refresh the job stats to get the new job
-        loadAllJobWorkflowStats();
-      }, 100); // Give a bit more time for modal cleanup
-    });
-  }, [loadAllJobWorkflowStats]);
-
-  // DEBUG: Job creation handlers
-  const handleJobCreationStart = useCallback(() => {
-    setIsCreatingJob(true);
-  }, []);
-
-  const handleJobCreationEnd = useCallback(() => {
-    setIsCreatingJob(false);
-    // Refresh after creation completes
-    setTimeout(() => {
-      loadAllJobWorkflowStats();
-    }, 500);
-  }, [loadAllJobWorkflowStats]);
-
-  const renderTabs = () => {
-    const tabs = [
-      { id: 'employees', label: '👥 Employee Management' },
-      { id: 'jobs', label: '📋 Current Jobs' }
-    ];
-
-    // Only show billing and payroll tabs for admins
-    if (user?.role === 'admin') {
-      tabs.push(
-        { id: 'billing', label: '💰 Billing Management' },
-        { id: 'payroll', label: '📊 Payroll Management' },
-        { id: 'users', label: '🔐 User Management' }
-      );
-    }
-
-    return tabs;
-  };
-
-  // Show loading state
-  if (loading) {
-    return (
-      <div className="loading-container">
-        <div className="loading-spinner"></div>
-        <p>Loading...</p>
-      </div>
-    );
-  }
-
-  // Show landing page if not authenticated
-  if (!user) {
-    console.log('LandingPage type:', typeof LandingPage);
-    console.log('LandingPage:', LandingPage);
-    
-    if (typeof LandingPage !== 'function') {
-      return (
-        <div style={{ padding: '20px' }}>
-          <h1>Loading Error</h1>
-          <p>LandingPage is not a valid component</p>
-          <p>Type: {typeof LandingPage}</p>
-          <pre>{JSON.stringify(LandingPage, null, 2)}</pre>
-        </div>
-      );
-    }
-    
-    return <LandingPage onLogin={handleLogin} />;
-  }
-
-  return (
-    <div className="App">
-      {/* Top Navigation - Updated with Management OS styling */}
-      <div className="app-header">
-        <div className="max-w-6xl mx-auto px-4 py-4">
-          <div className="flex justify-between items-center mb-4">
-            <h1 style={{ 
-              color: '#FFFFFF',
-              fontSize: '2rem',
-              fontWeight: 'bold',
-              fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", 
-              letterSpacing: '-0.02em',
-              display: 'flex',
-              alignItems: 'center'
-            }}>
-              Management OS
-              {isLoadingWorkflowStats && (
-                <span className="ml-3 text-sm opacity-90">
-                  <div className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  Loading analytics...
-                </span>
-              )}
-            </h1>
-            <div className="flex items-center gap-4">
-              <span className="text-sm text-white opacity-95">
-                {user.employeeData?.name || user.email} ({user.role})
-              </span>
-              <button
-                onClick={handleLogout}
-                className="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 backdrop-blur-sm rounded-lg text-white font-medium transition-all duration-200"
-              >
-                Logout
-              </button>
-            </div>
-          </div>
-          
-          {/* Only show main navigation when NOT in job-specific modules */}
-          {activeModule !== 'job-modules' && (
-            <nav className="flex space-x-4">
-              {renderTabs().map(tab => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveModule(tab.id)}
-                  className={`px-4 py-2 rounded-xl font-medium text-sm border ${
-                    activeModule === tab.id
-                      ? 'text-blue-600 shadow-lg border-white'
-                      : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm border-white border-opacity-30 hover:border-opacity-50'
-                  }`}
-                  style={activeModule === tab.id ? { 
-                    backgroundColor: '#FFFFFF',
-                    opacity: 1,
-                    backdropFilter: 'none'
-                  } : {}}
-                >
-                  {tab.label}
-                  {tab.id === 'jobs' && Object.values(getAllJobMetrics()).filter(m => m.isProcessed).length > 0 && (
-                    <span className="ml-2 text-xs bg-gradient-to-r from-green-500 to-emerald-500 text-white px-2 py-1 rounded-full shadow-sm">
-                      {Object.values(getAllJobMetrics()).filter(m => m.isProcessed).length}
-                    </span>
-                  )}
-                </button>
-              ))}
-            </nav>
-          )}
-          
-          {/* Show job context when in job-specific modules */}
-          {activeModule === 'job-modules' && selectedJob && (
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-6">
-                <div>
-                  <p className="text-sm text-white opacity-75">Working on:</p>
-                  <p className="text-lg font-semibold text-white">{selectedJob.job_name}</p>
-                </div>
-                
-                {/* File Upload Controls */}
-                <div className="border-l border-white border-opacity-30 pl-6">
-                  <FileUploadButton 
-                    job={selectedJob} 
-                    onFileProcessed={handleFileProcessed} 
-                  />
-                </div>
-              </div>
-              
-              <button
-                onClick={handleBackToJobs}
-                className="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 backdrop-blur-sm rounded-lg text-white font-medium transition-all duration-200"
-              >
-                ← Back to Jobs
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Module Content */}
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-        {activeModule === 'employees' && <EmployeeManagement />}
-        
-        {activeModule === 'jobs' && (
-          <AdminJobManagement 
-            onJobSelect={handleJobSelect}
-            jobMetrics={getAllJobMetrics()}
-            isLoadingMetrics={isLoadingWorkflowStats}
-            metricsRefreshTrigger={metricsRefreshTrigger}
-            onJobProcessingComplete={handleJobProcessingComplete}
-            // ADD: Pass creation lock handlers
-            onJobCreationStart={handleJobCreationStart}
-            onJobCreationEnd={handleJobCreationEnd}
-          />
-        )}
-
-        {activeModule === 'billing' && user?.role === 'admin' && <BillingManagement />}
-
-        {activeModule === 'payroll' && user?.role === 'admin' && <PayrollManagement />}
-        
-        {activeModule === 'users' && user?.role === 'admin' && <UserManagement />}
-        
-        {activeModule === 'job-modules' && selectedJob && (
-          <JobContainer 
-            selectedJob={selectedJob} 
-            onBackToJobs={handleBackToJobs}
-            workflowStats={getJobWorkflowStats(selectedJob.id)}
-            onUpdateWorkflowStats={(newStats, persist = true) => 
-              handleWorkflowStatsUpdate(selectedJob.id, newStats, persist)
-            }
-            fileRefreshTrigger={fileRefreshTrigger}
-          />
-        )}
-      </div>
-    </div>
-  );
+.App {
+  text-align: left;
 }
 
-export default App;
+/* Add Tailwind CSS via CDN */
+@import url('https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css');
+
+/* Management OS Color Variables */
+:root {
+  /* Primary Blues from Management OS */
+  --primary-blue-dark: #1e40af;
+  --primary-blue-main: #2563eb;
+  --primary-blue-light: #52B5E8;
+  
+  /* Gradients */
+  --gradient-primary: linear-gradient(135deg, #2563eb 0%, #52B5E8 50%, #1e40af 100%);
+  --gradient-primary-simple: linear-gradient(135deg, #2563eb 0%, #52B5E8 100%);
+  --gradient-dark: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+  
+  /* Shadows */
+  --shadow-primary: 0 4px 20px rgba(37, 99, 235, 0.25);
+}
+
+/* Simple App Header - No effects, just gradient background */
+.app-header {
+  background: var(--gradient-primary);
+  color: white;
+  box-shadow: var(--shadow-primary);
+}
+
+/* Loading Container - Enhanced with Management OS colors */
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f5f7fa 0%, #e9ecef 100%);
+}
+
+.loading-spinner {
+  width: 50px;
+  height: 50px;
+  border: 3px solid #e2e8f0;
+  border-top-color: var(--primary-blue-light);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.loading-container p {
+  margin-top: 1rem;
+  color: #475569;
+  font-size: 1.1rem;
+  font-weight: 500;
+}
+
+/* Active tab styling - Override Tailwind's bg-blue-600 */
+.bg-blue-600 {
+  background: var(--gradient-primary-simple) !important;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3) !important;
+}
+
+/* Enhance the job count badge */
+.bg-green-500 {
+  background: linear-gradient(135deg, #10b981 0%, #34d399 100%) !important;
+  box-shadow: 0 2px 4px rgba(16, 185, 129, 0.3) !important;
+}
+
+/* Primary colored elements */
+.primary,
+.text-primary {
+  color: var(--primary-blue-main) !important;
+}
+
+.bg-primary {
+  background: var(--gradient-primary-simple) !important;
+}
+
+/* Links with Management OS blue */
+a {
+  color: var(--primary-blue-main);
+  transition: color 0.2s ease;
+}
+
+a:hover {
+  color: var(--primary-blue-light);
+}
+
+/* Cards/Panels enhancement */
+.card,
+.panel,
+.box {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1),
+              0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  transition: all 0.3s ease;
+}
+
+.card:hover,
+.panel:hover,
+.box:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.12),
+              0 4px 6px -2px rgba(0, 0, 0, 0.08),
+              0 20px 25px -5px rgba(82, 181, 232, 0.15);
+}
+
+/* Form inputs with Management OS style */
+input:not([type="checkbox"]):not([type="radio"]),
+textarea,
+select {
+  border: 2px solid #e2e8f0 !important;
+  background-color: #f8fafc !important;
+  transition: all 0.2s ease;
+}
+
+input:not([type="checkbox"]):not([type="radio"]):focus,
+textarea:focus,
+select:focus {
+  outline: none !important;
+  border-color: var(--primary-blue-light) !important;
+  background-color: white !important;
+  box-shadow: 0 0 0 3px rgba(82, 181, 232, 0.1) !important;
+}
+
+/* Headings - Simple solid colors */
+h1, h2 {
+  font-weight: 700;
+}
+
+h3, h4, h5, h6 {
+  color: var(--primary-blue-dark);
+  font-weight: 600;
+}
+
+/* Footer enhancement */
+.footer,
+.app-footer {
+  background: var(--gradient-dark) !important;
+  color: #94a3b8 !important;
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+}
+
+/* Success/Error/Info states with Management OS colors */
+.success {
+  color: #16a34a;
+  background-color: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.error {
+  color: #dc2626;
+  background-color: #fef2f2;
+  border-color: #fecaca;
+}
+
+.info {
+  color: var(--primary-blue-main);
+  background-color: #eff6ff;
+  border-color: #bfdbfe;
+}
+
+/* Navigation items */
+.nav-link,
+.nav-item {
+  color: white;
+  transition: all 0.2s ease;
+}
+
+.nav-link:hover,
+.nav-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+}
+
+.nav-link.active,
+.nav-item.active {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  font-weight: 600;
+}
+
+/* Scrollbar styling for webkit browsers */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--gradient-primary-simple);
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--primary-blue-dark);
+}
