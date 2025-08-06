@@ -965,6 +965,12 @@ Thank you for your immediate attention to this matter.`;
       doc.save(`PPA_Bonding_Report_${new Date().toISOString().split('T')[0]}.pdf`);
       
       alert('Bonding report PDF generated successfully!');
+    } catch (error) {
+      console.error('Error generating report:', error);
+      alert('Error generating report: ' + error.message);
+    }
+  };
+
   const calculateBillingTotals = (job) => {
     if (!job.job_contracts?.[0] || !job.billing_events) return null;
     
