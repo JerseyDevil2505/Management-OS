@@ -1350,6 +1350,14 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
               inspector_type: 'external'
             };
           }
+          // Handle "PO" (Per Office) refusals
+          else if (inspector === 'PO' && isPORefusal) {
+            employeeInfo = {
+              name: 'Per Office',
+              fullName: 'Per Office Refusal',
+              inspector_type: 'special'
+            };
+          }
           inspectorStats[inspector] = {
             name: employeeInfo.name || inspector,
             fullName: employeeInfo.fullName || inspector,
