@@ -235,7 +235,7 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
   const CHECKLIST_TEMPLATE = [
     { id: 'contract-signed-client', item_text: 'Contract Signed by Client', item_order: 1, category: 'setup', requires_client_approval: false, allows_file_upload: true },
     { id: 'contract-signed-state', item_text: 'Contract Signed/Approved by State', item_order: 2, category: 'setup', requires_client_approval: false, allows_file_upload: true },
-    { id: 'tax-maps-approved', item_text: 'Tax Maps Approved', item_order: 3, category: 'setup', requires_client_approval: true, allows_file_upload: false },
+    { id: 'tax-maps-approved', item_text: 'Tax Maps Approved', item_order: 3, category: 'setup', requires_client_approval: false, allows_file_upload: false },
     { id: 'tax-map-upload', item_text: 'Tax Map Upload', item_order: 4, category: 'setup', requires_client_approval: false, allows_file_upload: true },
     { id: 'zoning-map-upload', item_text: 'Zoning Map Upload', item_order: 5, category: 'setup', requires_client_approval: false, allows_file_upload: true },
     { id: 'zoning-regulations-upload', item_text: 'Zoning Bulk and Use Regulations Upload', item_order: 6, category: 'setup', requires_client_approval: false, allows_file_upload: true },
@@ -982,14 +982,20 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
 
   const downloadFile = async (filePath, fileName) => {
     try {
-      console.log('Attempting to download file:', filePath);
+      console.log('🔽 Download initiated for:', filePath);
       
       // Method 1: Try to create a signed URL for download (more secure)
+      console.log('Attempting signed URL method...');
       const { data: signedUrlData, error: signedUrlError } = await supabase.storage
         .from('checklist-documents')
         .createSignedUrl(filePath, 3600); // URL valid for 1 hour
       
+      if (signedUrlError) {
+        console.error('Signed URL error:', signedUrlError);
+      }
+      
       if (signedUrlData?.signedUrl) {
+        console.log('✅ Signed URL created successfully');
         // Create a temporary anchor element to trigger download
         const link = document.createElement('a');
         link.href = signedUrlData.signedUrl;
@@ -998,15 +1004,22 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+        console.log('✅ Download triggered via signed URL');
         return;
       }
       
       // Method 2: If signed URL fails, try direct download
+      console.log('Attempting direct download method...');
       const { data: downloadData, error: downloadError } = await supabase.storage
         .from('checklist-documents')
         .download(filePath);
       
+      if (downloadError) {
+        console.error('Direct download error:', downloadError);
+      }
+      
       if (downloadData) {
+        console.log('✅ File downloaded as blob, size:', downloadData.size);
         // Create blob URL and trigger download
         const url = URL.createObjectURL(downloadData);
         const link = document.createElement('a');
@@ -1016,22 +1029,26 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
         link.click();
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
+        console.log('✅ Download triggered via blob');
         return;
       }
       
       // If both methods fail, try public URL as last resort
+      console.log('Attempting public URL method...');
       const { data: publicUrlData } = supabase.storage
         .from('checklist-documents')
         .getPublicUrl(filePath);
       
       if (publicUrlData?.publicUrl) {
+        console.log('✅ Opening public URL:', publicUrlData.publicUrl);
         window.open(publicUrlData.publicUrl, '_blank');
       } else {
         throw new Error('Could not download file - all methods failed');
       }
     } catch (error) {
-      console.error('Error downloading file:', error);
-      alert('Failed to download file. The file may not exist or you may not have permission to access it.');
+      console.error('❌ Error downloading file:', error);
+      console.error('File path was:', filePath);
+      alert(`Failed to download file: ${error.message}\n\nFile path: ${filePath}\n\nCheck the console for more details.`);
     }
   };
 
@@ -1343,33 +1360,39 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
                             checklistDocuments[item.id].map((doc, idx) => (
                               <div key={idx} className="flex items-center gap-2 text-sm text-blue-600">
                                 <FileText className="w-4 h-4" />
-                                <span>{doc.file_name || doc.file_path.split('/').pop()}</span>
-                                <ExternalLink 
-                                  className="w-4 h-4 cursor-pointer hover:text-blue-800" 
+                                <button
                                   onClick={() => downloadFile(doc.file_path, doc.file_name || doc.file_path.split('/').pop())}
-                                />
+                                  className="hover:text-blue-800 hover:underline text-left"
+                                >
+                                  {doc.file_name || doc.file_path.split('/').pop()}
+                                </button>
+                                <ExternalLink className="w-4 h-4" />
                               </div>
                             ))
                           ) : (
                             // Fallback to single file display
                             <div className="flex items-center gap-2 text-sm text-blue-600">
                               <FileText className="w-4 h-4" />
-                              <span>{item.file_attachment_path.split('/').pop()}</span>
-                              <ExternalLink 
-                                className="w-4 h-4 cursor-pointer hover:text-blue-800" 
+                              <button
                                 onClick={() => downloadFile(item.file_attachment_path, item.file_attachment_path.split('/').pop())}
-                              />
+                                className="hover:text-blue-800 hover:underline text-left"
+                              >
+                                {item.file_attachment_path.split('/').pop()}
+                              </button>
+                              <ExternalLink className="w-4 h-4" />
                             </div>
                           )
                         ) : (
                           // Single file display for other items
                           <div className="flex items-center gap-2 text-sm text-blue-600">
                             <FileText className="w-4 h-4" />
-                            <span>{item.file_attachment_path.split('/').pop()}</span>
-                            <ExternalLink 
-                              className="w-4 h-4 cursor-pointer hover:text-blue-800" 
+                            <button
                               onClick={() => downloadFile(item.file_attachment_path, item.file_attachment_path.split('/').pop())}
-                            />
+                              className="hover:text-blue-800 hover:underline text-left"
+                            >
+                              {item.file_attachment_path.split('/').pop()}
+                            </button>
+                            <ExternalLink className="w-4 h-4" />
                           </div>
                         )}
                       </div>
