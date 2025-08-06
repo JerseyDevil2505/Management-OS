@@ -2220,61 +2220,114 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
   const exportValidationReport = () => {
     if (!validationReport || !validationReport.detailed_issues) return;
 
-    let csvContent = "Inspector,Total Issues,Inspector Name\n";
+    let csvContent = "VALIDATION REPORT\n";
+    csvContent += `Job: ${jobData.name || jobData.ccdd}\n`;
+    csvContent += `Generated: ${new Date().toLocaleDateString()}\n`;
+    csvContent += `Total Issues: ${validationReport.summary.total_issues}\n`;
+    csvContent += "\n==================== SUMMARY ====================\n\n";
     
-    validationReport.summary.inspector_breakdown.forEach(inspector => {
-      csvContent += `"${inspector.inspector_code}","${inspector.total_issues}","${inspector.inspector_name}"\n`;
-    });
-
-    csvContent += "\n\nDetailed Issues:\n";
-    csvContent += "Inspector,Block,Lot,Qualifier,Card,Property Location,Warning Message\n";
+    csvContent += "Inspector Code,Inspector Name,Total Issues\n";
     
-    Object.keys(validationReport.detailed_issues).forEach(inspector => {
-      const issues = validationReport.detailed_issues[inspector];
-      issues.forEach(issue => {
-        csvContent += `"${inspector}","${issue.block}","${issue.lot}","${issue.qualifier}","${issue.card}","${issue.property_location}","${issue.warning_message}"\n`;
+    validationReport.summary.inspector_breakdown
+      .sort((a, b) => b.total_issues - a.total_issues)
+      .forEach(inspector => {
+        csvContent += `"${inspector.inspector_code}","${inspector.inspector_name}","${inspector.total_issues}"\n`;
       });
-    });
 
+    csvContent += "\n\n==================== DETAILED ISSUES BY INSPECTOR ====================\n";
+    
+    // Create a section for each inspector
+    Object.keys(validationReport.detailed_issues)
+      .sort((a, b) => validationReport.detailed_issues[b].length - validationReport.detailed_issues[a].length)
+      .forEach(inspector => {
+        const issues = validationReport.detailed_issues[inspector];
+        const inspectorInfo = validationReport.summary.inspector_breakdown.find(i => i.inspector_code === inspector);
+        
+        csvContent += `\n\n========== ${inspector} - ${inspectorInfo?.inspector_name || 'Unknown'} (${issues.length} Issues) ==========\n\n`;
+        csvContent += "Block,Lot,Qualifier,Card,Property Location,Issues,Override Status\n";
+        
+        issues.forEach(issue => {
+          const propertyKey = issue.composite_key || `${issue.block}-${issue.lot}-${issue.qualifier || ''}`;
+          const isOverridden = overrideMap && overrideMap[propertyKey]?.override_applied;
+          const overrideStatus = isOverridden ? `Overridden: ${overrideMap[propertyKey]?.override_reason}` : 'Not Overridden';
+          
+          csvContent += `"${issue.block}","${issue.lot}","${issue.qualifier || ''}","${issue.card || '1'}","${issue.property_location || ''}","${issue.warning_message}","${overrideStatus}"\n`;
+        });
+        
+        // Add summary for this inspector
+        csvContent += `\nSubtotal for ${inspector}: ${issues.length} issues\n`;
+      });
+
+    // Add final summary
+    csvContent += "\n\n==================== FINAL SUMMARY ====================\n";
+    csvContent += `Total Validation Issues: ${validationReport.summary.total_issues}\n`;
+    csvContent += `Total Inspectors with Issues: ${validationReport.summary.total_inspectors}\n`;
+    csvContent += `Manager Overrides Applied: ${validationOverrides.length}\n`;
+    
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `Inspection_Validation_Report_${jobData.ccdd || jobData.ccddCode}_${new Date().toISOString().split('T')[0].replace(/-/g, '')}.csv`;
+    a.download = `Validation_Report_${jobData.ccdd || jobData.ccddCode}_${new Date().toISOString().split('T')[0].replace(/-/g, '')}.csv`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     window.URL.revokeObjectURL(url);
 
-    addNotification('📊 Validation report exported', 'success');
+    addNotification('📊 Enhanced validation report exported', 'success');
   };
 
   const exportMissingPropertiesReport = () => {
     if (!missingPropertiesReport || !missingPropertiesReport.detailed_missing) return;
 
-    let csvContent = "Summary\n";
-    csvContent += `Total Missing Properties,${missingPropertiesReport.summary.total_missing}\n`;
-    csvContent += `Uninspected Count,${missingPropertiesReport.summary.uninspected_count}\n`;
-    csvContent += `Validation Failed Count,${missingPropertiesReport.summary.validation_failed_count}\n\n`;
+    let csvContent = "MISSING PROPERTIES REPORT\n";
+    csvContent += `Job: ${jobData.name || jobData.ccdd}\n`;
+    csvContent += `Generated: ${new Date().toLocaleDateString()}\n`;
+    csvContent += `Total Missing: ${missingPropertiesReport.summary.total_missing}\n`;
+    
+    csvContent += "\n==================== SUMMARY ====================\n\n";
+    csvContent += `Total Missing Properties:,${missingPropertiesReport.summary.total_missing}\n`;
+    csvContent += `Not Yet Inspected:,${missingPropertiesReport.summary.not_yet_inspected}\n`;
+    csvContent += `Old Inspections (Before Project Start):,${missingPropertiesReport.summary.old_inspections}\n`;
+    csvContent += `Validation Failed:,${missingPropertiesReport.summary.validation_failed_count || 0}\n`;
+    csvContent += `Missing Inspector:,${missingPropertiesReport.summary.missing_inspector || 0}\n`;
+    csvContent += `Invalid Employee:,${missingPropertiesReport.summary.invalid_employee || 0}\n`;
 
-    csvContent += "Breakdown by Reason\n";
+    csvContent += "\n\n==================== BREAKDOWN BY REASON ====================\n\n";
     csvContent += "Reason,Count\n";
-    Object.entries(missingPropertiesReport.summary.by_reason).forEach(([reason, count]) => {
-      csvContent += `"${reason}","${count}"\n`;
-    });
+    Object.entries(missingPropertiesReport.summary.by_reason)
+      .sort((a, b) => b[1] - a[1])
+      .forEach(([reason, count]) => {
+        csvContent += `"${reason}",${count}\n`;
+      });
 
-    csvContent += "\nBreakdown by Inspector\n";
+    csvContent += "\n\n==================== BREAKDOWN BY INSPECTOR ====================\n\n";
     csvContent += "Inspector,Count\n";
-    Object.entries(missingPropertiesReport.summary.by_inspector).forEach(([inspector, count]) => {
-      csvContent += `"${inspector}","${count}"\n`;
-    });
+    Object.entries(missingPropertiesReport.summary.by_inspector)
+      .sort((a, b) => b[1] - a[1])
+      .forEach(([inspector, count]) => {
+        csvContent += `"${inspector || 'None'}",${count}\n`;
+      });
 
-    csvContent += "\nDetailed Missing Properties\n";
+    csvContent += "\n\n==================== DETAILED MISSING PROPERTIES ====================\n";
+    csvContent += "*** This list is for distribution to field inspectors ***\n\n";
     csvContent += "Block,Lot,Qualifier,Card,Property Location,Class,Inspector,InfoBy Code,Measure Date,Reason\n";
     
-    missingPropertiesReport.detailed_missing.forEach(property => {
-      csvContent += `"${property.block}","${property.lot}","${property.qualifier}","${property.card || '1'}","${property.property_location}","${property.property_class}","${property.inspector}","${property.info_by_code || ''}","${property.measure_date || ''}","${property.reason}"\n`;
-    });
+    missingPropertiesReport.detailed_missing
+      .sort((a, b) => {
+        // Sort by block, then lot for easier field navigation
+        if (a.block !== b.block) {
+          return parseInt(a.block) - parseInt(b.block) || a.block.localeCompare(b.block);
+        }
+        return parseInt(a.lot) - parseInt(b.lot) || a.lot.localeCompare(b.lot);
+      })
+      .forEach(property => {
+        csvContent += `"${property.block}","${property.lot}","${property.qualifier || ''}","${property.card || '1'}","${property.property_location || ''}","${property.property_class || ''}","${property.inspector || ''}","${property.info_by_code || ''}","${property.measure_date || ''}","${property.reason}"\n`;
+      });
+
+    csvContent += `\n\n==================== END OF REPORT ====================\n`;
+    csvContent += `Total Missing Properties: ${missingPropertiesReport.summary.total_missing}\n`;
+    csvContent += `Report Generated: ${new Date().toLocaleString()}\n`;
 
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
@@ -2286,7 +2339,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
     document.body.removeChild(a);
     window.URL.revokeObjectURL(url);
 
-    addNotification('📊 Missing properties report exported', 'success');
+    addNotification('📊 Enhanced missing properties report exported', 'success');
   };
 
   // Progress bar component
