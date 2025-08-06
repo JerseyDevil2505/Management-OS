@@ -995,6 +995,7 @@ Thank you for your immediate attention to this matter.`;
       isComplete: Math.round(totalPercentageBilled * 10000) / 10000 >= 1.0
     };
   };
+  
   const loadJobCounts = async () => {
     try {
       // Load active jobs count
