@@ -537,7 +537,6 @@ Thank you for your immediate attention to this matter.`;
       const cashReserve = reserveSettings.cashReserve;
       
       // Calculate remaining year expenses
-      const currentMonth = new Date().getMonth() + 1;
       const remainingDaysInYear = (12 - currentMonth + 1) * 21; // Rough estimate
       const remainingYearExpenses = globalMetrics.dailyFringe * remainingDaysInYear;
       
