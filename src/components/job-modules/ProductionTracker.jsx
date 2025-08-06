@@ -1315,8 +1315,12 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         const externalInspectors = externalInspectorsList.split(',').map(code => code.trim()).filter(code => code);
         const isExternalInspector = externalInspectors.includes(inspector);
         
+        // Special case: "PO" (Per Office) is valid for refusals
+        const isPORefusal = inspector === 'PO' && 
+                           (infoByCategoryConfig.refusal || []).includes(actualVendor === 'BRT' ? normalizedInfoBy || infoByCode : infoByCode);
+        
         // Skip inspectors with invalid initials (not in employee database)
-        if (!employeeData[inspector] && !isExternalInspector) {
+        if (!employeeData[inspector] && !isExternalInspector && !isPORefusal) {
           reasonNotAdded = `Inspector ${inspector} not found in employee database`;
           missingProperties.push({
             composite_key: propertyKey,
