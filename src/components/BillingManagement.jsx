@@ -570,7 +570,7 @@ Thank you for your immediate attention to this matter.`;
 
   const generateBondLetter = async () => {
     try {
-       // Load jsPDF from CDN if not already loaded
+      // Load jsPDF from CDN if not already loaded
       if (!window.jspdf) {
         const script = document.createElement('script');
         script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
