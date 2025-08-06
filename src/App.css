@@ -117,12 +117,8 @@ select:focus {
   box-shadow: 0 0 0 3px rgba(82, 181, 232, 0.1) !important;
 }
 
-/* Headings with gradient text effect */
+/* Headings - Simple solid colors */
 h1, h2 {
-  background: linear-gradient(135deg, #1e40af 0%, #52B5E8 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
   font-weight: 700;
 }
 
