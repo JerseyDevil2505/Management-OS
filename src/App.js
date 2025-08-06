@@ -474,9 +474,14 @@ function App() {
                   onClick={() => setActiveModule(tab.id)}
                   className={`px-4 py-2 rounded-xl font-medium text-sm border ${
                     activeModule === tab.id
-                      ? 'bg-white text-blue-600 shadow-lg border-white'
+                      ? 'text-blue-600 shadow-lg border-white'
                       : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm border-white border-opacity-30 hover:border-opacity-50'
                   }`}
+                  style={activeModule === tab.id ? { 
+                    backgroundColor: '#FFFFFF',
+                    opacity: 1,
+                    backdropFilter: 'none'
+                  } : {}}
                 >
                   {tab.label}
                   {tab.id === 'jobs' && Object.values(getAllJobMetrics()).filter(m => m.isProcessed).length > 0 && (
