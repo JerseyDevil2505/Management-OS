@@ -331,7 +331,7 @@ const DataQualityTab = () => (
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h3>Data Quality Analysis</h3>
-          <p className="text-muted">
+          <p style={{ color: '#6b7280' }}>
             Analyzing {properties.length} properties for data integrity issues
           </p>
         </div>
@@ -340,10 +340,15 @@ const DataQualityTab = () => (
             className="btn btn-primary"
             onClick={runQualityChecks}
             disabled={isRunningChecks}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
           >
             {isRunningChecks ? (
               <>
-                <RefreshCw size={16} className="spin" />
+                <RefreshCw size={16} style={{ animation: 'spin 1s linear infinite' }} />
                 Running...
               </>
             ) : (
@@ -356,6 +361,11 @@ const DataQualityTab = () => (
           <button 
             className="btn btn-secondary"
             onClick={() => alert('Excel export would be implemented here')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
           >
             <Download size={16} />
             Export Excel
@@ -372,32 +382,82 @@ const DataQualityTab = () => (
       marginBottom: '30px'
     }}>
       <div className="card">
-        <div className="stat-label">Quality Score</div>
-        <div className="metric-large text-success">
+        <div style={{
+          color: '#6b7280',
+          fontSize: '12px',
+          textTransform: 'uppercase',
+          letterSpacing: '0.5px',
+          marginBottom: '8px'
+        }}>Quality Score</div>
+        <div style={{
+          fontSize: '28px',
+          fontWeight: '600',
+          color: '#10b981'
+        }}>
           {qualityScore ? `${qualityScore}%` : '—'}
         </div>
       </div>
       <div className="card">
-        <div className="stat-label">Total Issues</div>
-        <div className="metric-large">
+        <div style={{
+          color: '#6b7280',
+          fontSize: '12px',
+          textTransform: 'uppercase',
+          letterSpacing: '0.5px',
+          marginBottom: '8px'
+        }}>Total Issues</div>
+        <div style={{
+          fontSize: '28px',
+          fontWeight: '600',
+          color: '#1f2937'
+        }}>
           {issueStats.total}
         </div>
       </div>
       <div className="card">
-        <div className="stat-label">Critical</div>
-        <div className="metric-large text-danger">
+        <div style={{
+          color: '#6b7280',
+          fontSize: '12px',
+          textTransform: 'uppercase',
+          letterSpacing: '0.5px',
+          marginBottom: '8px'
+        }}>Critical</div>
+        <div style={{
+          fontSize: '28px',
+          fontWeight: '600',
+          color: '#ef4444'
+        }}>
           {issueStats.critical}
         </div>
       </div>
       <div className="card">
-        <div className="stat-label">Warnings</div>
-        <div className="metric-large text-warning">
+        <div style={{
+          color: '#6b7280',
+          fontSize: '12px',
+          textTransform: 'uppercase',
+          letterSpacing: '0.5px',
+          marginBottom: '8px'
+        }}>Warnings</div>
+        <div style={{
+          fontSize: '28px',
+          fontWeight: '600',
+          color: '#f59e0b'
+        }}>
           {issueStats.warning}
         </div>
       </div>
       <div className="card">
-        <div className="stat-label">Info</div>
-        <div className="metric-large text-info">
+        <div style={{
+          color: '#6b7280',
+          fontSize: '12px',
+          textTransform: 'uppercase',
+          letterSpacing: '0.5px',
+          marginBottom: '8px'
+        }}>Info</div>
+        <div style={{
+          fontSize: '28px',
+          fontWeight: '600',
+          color: '#3b82f6'
+        }}>
           {issueStats.info}
         </div>
       </div>
@@ -549,7 +609,7 @@ const DataQualityTab = () => (
         borderRadius: '8px',
         color: '#6b7280'
       }}>
-        <AlertCircle size={48} style={{ margin: '0 auto 16px' }} />
+        <AlertCircle size={48} style={{ margin: '0 auto 16px', display: 'block' }} />
         <p>No quality check results yet.</p>
         <p>Click "Run Analysis" to check for data quality issues.</p>
       </div>
