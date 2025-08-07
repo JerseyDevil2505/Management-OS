@@ -17,7 +17,7 @@ import {
   ChevronRight
 } from 'lucide-react';
 
-const MarketLandAnalysis = ({ jobData, onBackToJobs }) => {
+const MarketLandAnalysis = ({ jobData }) => {
   // ==================== STATE MANAGEMENT ====================
   const [activeTab, setActiveTab] = useState('data-quality');
   const [isLoading, setIsLoading] = useState(false);
@@ -907,18 +907,7 @@ const DataQualityTab = () => (
               Last saved: {lastSaved.toLocaleTimeString()}
             </span>
           )}
-          <button
-            onClick={handleSave}
-            disabled={isSaving || !unsavedChanges}
-            className={`btn ${unsavedChanges ? 'btn-primary' : 'btn-disabled'}`}
-          >
-            <Save size={16} />
-            {isSaving ? 'Saving...' : 'Save'}
-          </button>
-          <button
-            onClick={onBackToJobs}
-            className="btn btn-secondary"
-          >
+        </div>
             <ChevronLeft size={16} />
             Back to Jobs
           </button>
