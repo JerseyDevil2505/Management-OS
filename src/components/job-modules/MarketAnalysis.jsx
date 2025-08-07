@@ -2145,4 +2145,5 @@ const MarketLandAnalysis = ({ jobData }) => {
     );
   };
 
+
 export default MarketLandAnalysis;
