@@ -252,3 +252,7 @@ h3, h4, h5, h6 {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--primary-blue-dark);
 }
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
