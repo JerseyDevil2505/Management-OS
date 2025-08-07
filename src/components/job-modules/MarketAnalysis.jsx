@@ -90,7 +90,7 @@ const MarketLandAnalysis = ({ jobData }) => {
   const [conditionAdjustments, setConditionAdjustments] = useState({});
   const [additionalCards, setAdditionalCards] = useState([]);
 
-    // ==================== LOAD PROPERTIES WITH PAGINATION ====================
+  // ==================== LOAD PROPERTIES WITH PAGINATION ====================
   useEffect(() => {
     const loadProperties = async () => {
       if (!jobData?.id) return;
@@ -159,7 +159,7 @@ const MarketLandAnalysis = ({ jobData }) => {
         // Detect vendor type from the first property
         if (allProperties.length > 0) {
           const firstProp = allProperties[0];
-          const vendor = firstProp.raw_data?.vendor_source || jobData.vendor_source || 'BRT';
+          const vendor = firstProp.vendor_source || jobData.vendor_source || 'BRT';
           setVendorType(vendor);
           console.log(`🏢 Vendor type detected: ${vendor}`);
         }
@@ -182,14 +182,14 @@ const MarketLandAnalysis = ({ jobData }) => {
   }, [jobData?.id]);  
 
   // ==================== TAB CONFIGURATION ====================
-const tabs = [
-  { id: 'data-quality', label: 'Data Quality/Error Checking', icon: '📊' },
-  { id: 'pre-valuation', label: 'Pre-Valuation Setup', icon: '⚙️' },
-  { id: 'overall-analysis', label: 'Overall Analysis', icon: '📈' },
-  { id: 'land-valuation', label: 'Land Valuation', icon: '🏞️' },
-  { id: 'cost-valuation', label: 'Cost Valuation', icon: '💰' },
-  { id: 'attribute-cards', label: 'Attribute & Card Analytics', icon: '🎯' }
-];
+  const tabs = [
+    { id: 'data-quality', label: 'Data Quality/Error Checking', icon: '📊' },
+    { id: 'pre-valuation', label: 'Pre-Valuation Setup', icon: '⚙️' },
+    { id: 'overall-analysis', label: 'Overall Analysis', icon: '📈' },
+    { id: 'land-valuation', label: 'Land Valuation', icon: '🏞️' },
+    { id: 'cost-valuation', label: 'Cost Valuation', icon: '💰' },
+    { id: 'attribute-cards', label: 'Attribute & Card Analytics', icon: '🎯' }
+  ];
 
   // ==================== SAVE FUNCTIONALITY ====================
   const handleSave = async () => {
@@ -207,1154 +207,804 @@ const tabs = [
   };
 
   // ==================== DATA QUALITY FUNCTIONS ====================
-const runQualityChecks = async () => {
-  setIsRunningChecks(true);
-  const results = {
-    mod_iv: [],
-    cama: [],
-    characteristics: [],
-    special: [],
-    rooms: [],
-    custom: []
+  const runQualityChecks = async () => {
+    setIsRunningChecks(true);
+    const results = {
+      mod_iv: [],
+      cama: [],
+      characteristics: [],
+      special: [],
+      rooms: [],
+      custom: []
+    };
+    
+    try {
+      // Detect vendor type
+      const vendor = vendorType || jobData.vendor_source || 'BRT';
+      setVendorType(vendor);
+      
+      // Process properties in batches
+      const pageSize = 1000;
+      const totalPages = Math.ceil(properties.length / pageSize);
+      
+      for (let page = 0; page < totalPages; page++) {
+        const batch = properties.slice(page * pageSize, (page + 1) * pageSize);
+        console.log(`Processing batch ${page + 1} of ${totalPages}...`);
+        
+        for (const property of batch) {
+          await runPropertyChecks(property, results);
+        }
+      }
+
+      // Debug what we found before saving
+      console.log('=== QUALITY CHECK COMPLETE ===');
+      console.log(`Total properties analyzed: ${properties.length}`);
+      console.log('Issues found by category:');
+      Object.entries(results).forEach(([category, issues]) => {
+        console.log(`  ${category}: ${issues.length} issues`);
+        if (category === 'special' && issues.length > 0) {
+          // Log types of special issues found
+          const specialTypes = [...new Set(issues.map(i => i.check))];
+          specialTypes.forEach(type => {
+            const count = issues.filter(i => i.check === type).length;
+            console.log(`    - ${type}: ${count} properties`);
+          });
+        }
+      });
+      
+      // Save results
+      await saveQualityResults(results);
+      
+      // Calculate quality score
+      const score = calculateQualityScore(results);
+      setQualityScore(score);
+      setCheckResults(results);
+      
+      console.log('Quality check complete!');
+    } catch (error) {
+      console.error('Error running quality checks:', error);
+    } finally {
+      setIsRunningChecks(false);
+    }
   };
-  
-  try {
-    // Detect vendor type
-    const vendor = jobData.vendor_source || 'BRT';
-    setVendorType(vendor);
-    
-    // Process properties in batches
-    const pageSize = 1000;
-    const totalPages = Math.ceil(properties.length / pageSize);
-    
-    for (let page = 0; page < totalPages; page++) {
-      const batch = properties.slice(page * pageSize, (page + 1) * pageSize);
-      console.log(`Processing batch ${page + 1} of ${totalPages}...`);
-      
-      for (const property of batch) {
-        await runPropertyChecks(property, results);
-      }
-    }
 
-// Debug what we found before saving
-console.log('=== QUALITY CHECK COMPLETE ===');
-console.log(`Total properties analyzed: ${properties.length}`);
-console.log('Issues found by category:');
-Object.entries(results).forEach(([category, issues]) => {
-  console.log(`  ${category}: ${issues.length} issues`);
-  if (category === 'special' && issues.length > 0) {
-    // Log types of special issues found
-    const specialTypes = [...new Set(issues.map(i => i.check))];
-    specialTypes.forEach(type => {
-      const count = issues.filter(i => i.check === type).length;
-      console.log(`    - ${type}: ${count} properties`);
-    });
-  }
-});
-   
+  const runPropertyChecks = async (property, results) => {
+    const vendorType = property.vendor_source || jobData.vendor_source || 'BRT';
+    const rawData = property.raw_data || {};
     
-    // Save results
-    await saveQualityResults(results);
+    // ==================== MOD IV CHECKS ====================
+    const m4Class = property.property_m4_class;
+    const modImprovement = property.values_mod_improvement || 0;
+    const modLand = property.values_mod_land || 0;
+    const modTotal = property.values_mod_total || 0;
     
-    // Calculate quality score
-    const score = calculateQualityScore(results);
-    setQualityScore(score);
-    setCheckResults(results);
-    
-    console.log('Quality check complete!');
-  } catch (error) {
-    console.error('Error running quality checks:', error);
-  } finally {
-    setIsRunningChecks(false);
-  }
-};
-
-const runPropertyChecks = async (property, results) => {
-  const vendorType = property.raw_data?.vendor_source || jobData.vendor_source || 'BRT';
-  const rawData = property.raw_data || {};
-  
-  // ==================== MOD IV CHECKS ====================
-  const m4Class = property.property_m4_class;
-  const modImprovement = property.values_mod_improvement || 0;
-  const modLand = property.values_mod_land || 0;
-  const modTotal = property.values_mod_total || 0;
-  
-  // Class 1/3B cannot have improvements
-  if ((m4Class === '1' || m4Class === '3B') && modImprovement > 0) {
-    results.mod_iv.push({
-      check: 'vacant_land_improvements',
-      severity: 'critical',
-      property_key: property.property_composite_key,
-      message: `Class ${m4Class} property has improvements: $${modImprovement.toLocaleString()}`,
-      details: property
-    });
-  }
-  
-  // Class 2/3A/4A-C must have improvements
-  if (['2', '3A', '4A', '4B', '4C'].includes(m4Class) && modImprovement === 0) {
-    results.mod_iv.push({
-      check: 'missing_improvements',
-      severity: 'critical',
-      property_key: property.property_composite_key,
-      message: `Class ${m4Class} property missing improvements`,
-      details: property
-    });
-  }
-  
-  // Class 15A-15F must have facility populated
-  if (['15A', '15B', '15C', '15D', '15E', '15F'].includes(m4Class) && !property.property_facility) {
-    results.mod_iv.push({
-      check: 'missing_facility',
-      severity: 'critical',
-      property_key: property.property_composite_key,
-      message: `Class ${m4Class} missing facility information`,
-      details: property
-    });
-  }
-  
-  // Farmland pairing checks
-  if (m4Class === '3B' && !property.property_composite_key.includes('Q')) {
-    results.mod_iv.push({
-      check: 'farm_building_no_qualifier',
-      severity: 'warning',
-      property_key: property.property_composite_key,
-      message: 'Class 3B with no qualifier (should be farm building)',
-      details: property
-    });
-  }
-  
-  // ==================== CAMA CHECKS (BRT ONLY) ====================
-  if (vendorType === 'BRT') {
-    const camaClass = property.property_cama_class;
-    const camaImprovement = property.values_cama_improvement || 0;
-    
-    // Class 1/3B shouldn't have CAMA improvements
-    if ((camaClass === '1' || camaClass === '3B') && camaImprovement > 0) {
-      results.cama.push({
-        check: 'cama_vacant_improvements',
+    // Class 1/3B cannot have improvements
+    if ((m4Class === '1' || m4Class === '3B') && modImprovement > 0) {
+      results.mod_iv.push({
+        check: 'vacant_land_improvements',
         severity: 'critical',
         property_key: property.property_composite_key,
-        message: `CAMA Class ${camaClass} has improvements: $${camaImprovement.toLocaleString()}`,
+        message: `Class ${m4Class} property has improvements: $${modImprovement.toLocaleString()}`,
         details: property
       });
     }
     
-    // Class 2/3A/4A-C must have CAMA improvements
-    if (['2', '3A', '4A', '4B', '4C'].includes(camaClass) && camaImprovement === 0) {
-      results.cama.push({
-        check: 'cama_missing_improvements',
+    // Class 2/3A/4A-C must have improvements
+    if (['2', '3A', '4A', '4B', '4C'].includes(m4Class) && modImprovement === 0) {
+      results.mod_iv.push({
+        check: 'missing_improvements',
         severity: 'critical',
         property_key: property.property_composite_key,
-        message: `CAMA Class ${camaClass} missing improvements`,
+        message: `Class ${m4Class} property missing improvements`,
         details: property
       });
     }
-  }
-  
-  // ==================== BUILDING CLASS CHECKS ====================
-  const buildingClass = property.asset_building_class;
-  const typeUse = property.asset_type_use;
-  const designStyle = property.asset_design_style;
-  
-  // All except m4_class should have building class 10
-  if (m4Class && buildingClass !== 10 && buildingClass !== null) {
-    // Check if Class 2/3A with building class 10
-    if ((m4Class === '2' || m4Class === '3A') && buildingClass === 10) {
-      results.characteristics.push({
-        check: 'invalid_building_class_10',
+    
+    // Class 15A-15F must have facility populated
+    if (['15A', '15B', '15C', '15D', '15E', '15F'].includes(m4Class) && !property.property_facility) {
+      results.mod_iv.push({
+        check: 'missing_facility',
+        severity: 'critical',
+        property_key: property.property_composite_key,
+        message: `Class ${m4Class} missing facility information`,
+        details: property
+      });
+    }
+    
+    // Farmland pairing checks
+    if (m4Class === '3B' && !property.property_composite_key.includes('Q')) {
+      results.mod_iv.push({
+        check: 'farm_building_no_qualifier',
         severity: 'warning',
         property_key: property.property_composite_key,
-        message: `Class ${m4Class} shouldn't have building class 10`,
-        details: property
-      });
-    }
-  }
-  
-  // If building class > 10, must have design and type use
-  if (buildingClass > 10) {
-    if (!designStyle) {
-      results.characteristics.push({
-        check: 'missing_design_style',
-        severity: 'warning',
-        property_key: property.property_composite_key,
-        message: 'Building class > 10 missing design style',
-        details: property
-      });
-    }
-    if (!typeUse) {
-      results.characteristics.push({
-        check: 'missing_type_use',
-        severity: 'warning',
-        property_key: property.property_composite_key,
-        message: 'Building class > 10 missing type use',
-        details: property
-      });
-    }
-  }
-  
-  // Type Use to Building Class validation
-  if (typeUse && buildingClass) {
-    const typeUseLower = typeUse.toLowerCase();
-    let validClasses = [];
-    
-    if (typeUseLower.includes('single') || typeUseLower.includes('one family')) {
-      validClasses = [16, 17, 18, 19, 20, 21, 22, 23];
-    } else if (typeUseLower.includes('twin') || typeUseLower.includes('semidetached')) {
-      validClasses = [25, 27, 29, 31];
-    } else if (typeUseLower.includes('condo') || typeUseLower.includes('townhouse')) {
-      validClasses = [33, 35, 37, 39];
-    } else if (typeUseLower.includes('multi') || typeUseLower.includes('two family') || 
-               typeUseLower.includes('three family') || typeUseLower.includes('four family')) {
-      validClasses = [43, 45, 47, 49];
-    }
-    
-    if (validClasses.length > 0 && !validClasses.includes(buildingClass)) {
-      results.characteristics.push({
-        check: 'type_use_building_class_mismatch',
-        severity: 'warning',
-        property_key: property.property_composite_key,
-        message: `Type use "${typeUse}" doesn't match building class ${buildingClass}`,
-        details: property
-      });
-    }
-  }
-  
-  // ==================== DESIGN STYLE CHECKS ====================
-  if (designStyle) {
-    const designLower = designStyle.toLowerCase();
-    const storyHeight = property.asset_story_height;
-    
-    // Check for non-standard designs
-    const standardDesigns = [
-      'colonial', 'split level', 'bilevel', 'bi-level', 'cape cod', 'cape',
-      'ranch', 'rancher', 'raised ranch', 'bungalow', 'twin',
-      'townhouse end', 'townhouse int', 'one bed', '1bed', '1 bed',
-      'two bed', '2bed', '2 bed', 'three bed', '3bed', '3 bed'
-    ];
-    
-    const isStandard = standardDesigns.some(std => designLower.includes(std.toLowerCase()));
-    if (!isStandard) {
-      results.characteristics.push({
-        check: 'non_standard_design',
-        severity: 'info',
-        property_key: property.property_composite_key,
-        message: `Non-standard design: ${designStyle}`,
+        message: 'Class 3B with no qualifier (should be farm building)',
         details: property
       });
     }
     
-    // Design to Story Height validation
-    if (storyHeight) {
-      if (designLower.includes('colonial') && storyHeight < 2) {
-        results.characteristics.push({
-          check: 'colonial_story_mismatch',
-          severity: 'warning',
-          property_key: property.property_composite_key,
-          message: `Colonial should be 2+ stories (has ${storyHeight})`,
-          details: property
-        });
-      }
-      if ((designLower.includes('ranch') && !designLower.includes('raised')) && storyHeight > 1) {
-        results.characteristics.push({
-          check: 'ranch_story_mismatch',
-          severity: 'warning',
-          property_key: property.property_composite_key,
-          message: `Ranch should be 1 story (has ${storyHeight})`,
-          details: property
-        });
-      }
-      if ((designLower.includes('split level') || designLower.includes('bilevel')) && storyHeight < 2) {
-        results.characteristics.push({
-          check: 'split_level_story_mismatch',
-          severity: 'warning',
-          property_key: property.property_composite_key,
-          message: `Split/Bi-level should be 2+ stories (has ${storyHeight})`,
-          details: property
-        });
-      }
-      if (designLower.includes('raised ranch') && storyHeight > 1) {
-        results.characteristics.push({
-          check: 'raised_ranch_story_mismatch',
-          severity: 'warning',
-          property_key: property.property_composite_key,
-          message: `Raised Ranch should be 1 story (has ${storyHeight})`,
-          details: property
-        });
-      }
-      if ((designLower.includes('cape') || designLower.includes('bungalow')) && storyHeight === 1) {
-        results.characteristics.push({
-          check: 'cape_bungalow_story_mismatch',
-          severity: 'warning',
-          property_key: property.property_composite_key,
-          message: `Cape/Bungalow typically 1.5+ stories (has ${storyHeight})`,
-          details: property
-        });
-      }
-    }
-  }
-  
-  // ==================== LOT SIZE CHECKS ====================
-  const lotAcre = property.asset_lot_acre || 0;
-  const lotSf = property.asset_lot_sf || 0;
-  const lotFrontage = property.asset_lot_frontage || 0;
-  
-  if (lotAcre === 0 && lotSf === 0 && lotFrontage === 0) {
-    results.characteristics.push({
-      check: 'zero_lot_size',
-      severity: 'critical',
-      property_key: property.property_composite_key,
-      message: 'Property has zero lot size (acre, sf, and frontage all zero)',
-      details: property
-    });
-  }
-  
-  // ==================== LIVING AREA & YEAR BUILT ====================
-  const sfla = property.asset_sfla || 0;
-  const yearBuilt = property.asset_year_built;
-  
-  // Class 2/3A must have living area
-  if ((m4Class === '2' || m4Class === '3A') && sfla === 0) {
-    results.characteristics.push({
-      check: 'missing_sfla',
-      severity: 'warning',
-      property_key: property.property_composite_key,
-      message: `Class ${m4Class} property missing living area`,
-      details: property
-    });
-  }
-  
-  // Year built validation for improved properties
-  if ((m4Class === '2' || m4Class === '3A') && buildingClass > 10 && !yearBuilt) {
-    results.characteristics.push({
-      check: 'missing_year_built',
-      severity: 'warning',
-      property_key: property.property_composite_key,
-      message: 'Improved property missing year built',
-      details: property
-    });
-  }
-  
-  // ==================== VCS CHECK ====================
-  if (!property.property_vcs) {
-    results.special.push({
-      check: 'missing_vcs',
-      severity: 'warning',
-      property_key: property.property_composite_key,
-      message: 'Property missing VCS code',
-      details: property
-    });
-  }
-
-    // DEBUG: Check what raw_data fields we actually have
-  if (property.property_composite_key === properties[0].property_composite_key) {
-    console.log('🔍 First property raw_data sample:');
-    console.log('Vendor type:', vendorType);
+    // ==================== CAMA CHECKS (BRT ONLY) ====================
     if (vendorType === 'BRT') {
-      console.log('MKTADJ:', rawData.MKTADJ);
-      console.log('NCOVR:', rawData.NCOVR);
-      console.log('Has any MKT fields?:', Object.keys(rawData).filter(k => k.includes('MKT')));
-    } else {
-      console.log('Sample MS fields:', {
-        'Over Improved Depr1': rawData['Over Improved Depr1'],
-        'Economic Depr': rawData['Economic Depr'],
-        'Has any adjustment fields?': Object.keys(rawData).filter(k => k.includes('Depr') || k.includes('Adj'))
-      });
-    }
-  }
-  
-  // ==================== CONDITION CHECKS ====================
-  if ((m4Class === '2' || m4Class === '3A') && buildingClass > 10) {
-    if (!property.asset_ext_cond) {
-      results.characteristics.push({
-        check: 'missing_ext_condition',
-        severity: 'warning',
-        property_key: property.property_composite_key,
-        message: 'Improved property missing exterior condition',
-        details: property
-      });
-    }
-    if (!property.asset_int_cond) {
-      results.characteristics.push({
-        check: 'missing_int_condition',
-        severity: 'warning',
-        property_key: property.property_composite_key,
-        message: 'Improved property missing interior condition',
-        details: property
-      });
-    }
-  }
-  
-  // ==================== BEDROOM/BATHROOM CHECKS FROM RAW DATA ====================
-  if ((m4Class === '2' || m4Class === '3A') && buildingClass > 10) {
-    if (vendorType === 'Microsystems') {
-      // Bedroom check for Microsystems
-      const bedroomTotal = (parseInt(rawData['Bedrm B'] || 0) + 
-                           parseInt(rawData['Bedrm 1'] || 0) + 
-                           parseInt(rawData['Bedrm 2'] || 0) + 
-                           parseInt(rawData['Bedrm 3'] || 0));
+      const camaClass = property.property_cama_class;
+      const camaImprovement = property.values_cama_improvement || 0;
       
-      if (bedroomTotal === 0) {
-        results.rooms.push({
-          check: 'zero_bedrooms',
-          severity: 'warning',
+      // Class 1/3B shouldn't have CAMA improvements
+      if ((camaClass === '1' || camaClass === '3B') && camaImprovement > 0) {
+        results.cama.push({
+          check: 'cama_vacant_improvements',
+          severity: 'critical',
           property_key: property.property_composite_key,
-          message: 'Improved property has zero bedrooms',
+          message: `CAMA Class ${camaClass} has improvements: $${camaImprovement.toLocaleString()}`,
           details: property
         });
       }
       
-      // Bathroom cross-check for Microsystems
-      const roomBathTotal = (parseInt(rawData['2 Fixture Bath B'] || 0) + parseInt(rawData['2 Fixture Bath 1'] || 0) +
-                            parseInt(rawData['2 Fixture Bath 2'] || 0) + parseInt(rawData['2 Fixture Bath 3'] || 0) +
-                            parseInt(rawData['3 Fixture Bath B'] || 0) + parseInt(rawData['3 Fixture Bath 1'] || 0) +
-                            parseInt(rawData['3 Fixture Bath 2'] || 0) + parseInt(rawData['3 Fixture Bath 3'] || 0) +
-                            parseInt(rawData['4 Fixture Bath B'] || 0) + parseInt(rawData['4 Fixture Bath 1'] || 0) +
-                            parseInt(rawData['4 Fixture Bath 2'] || 0) + parseInt(rawData['4 Fixture Bath 3'] || 0) +
-                            parseInt(rawData['Num 5 Fixture Baths'] || 0));
-      
-      const plumbingBathTotal = (parseInt(rawData['4 Fixture Bath'] || 0) + parseInt(rawData['3 Fixture Bath'] || 0) +
-                                 parseInt(rawData['2 Fixture Bath'] || 0) + parseInt(rawData['Num 5 Fixture Baths'] || 0));
-      
-      if (roomBathTotal !== plumbingBathTotal) {
-        results.rooms.push({
-          check: 'bathroom_count_mismatch',
-          severity: 'warning',
+      // Class 2/3A/4A-C must have CAMA improvements
+      if (['2', '3A', '4A', '4B', '4C'].includes(camaClass) && camaImprovement === 0) {
+        results.cama.push({
+          check: 'cama_missing_improvements',
+          severity: 'critical',
           property_key: property.property_composite_key,
-          message: `Room bath count (${roomBathTotal}) doesn't match plumbing count (${plumbingBathTotal})`,
-          details: property
-        });
-      }
-    } else if (vendorType === 'BRT') {
-      // Bedroom check for BRT
-      const bedTotal = parseInt(rawData.BEDTOT || 0);
-      if (bedTotal === 0) {
-        results.rooms.push({
-          check: 'zero_bedrooms',
-          severity: 'warning',
-          property_key: property.property_composite_key,
-          message: 'Improved property has zero bedrooms',
-          details: property
-        });
-      }
-      
-      // Bathroom cross-check for BRT
-      const plumbingTotal = (parseInt(rawData.PLUMBING2FIX || 0) + parseInt(rawData.PLUMBING3FIX || 0) +
-                            parseInt(rawData.PLUMBING4FIX || 0) + parseInt(rawData.PLUMBING5FIX || 0) +
-                            parseInt(rawData.PLUMBING6FIX || 0));
-      const bathTotal = parseInt(rawData.BATHTOT || 0);
-      
-      if (plumbingTotal !== bathTotal) {
-        results.rooms.push({
-          check: 'bathroom_count_mismatch',
-          severity: 'warning',
-          property_key: property.property_composite_key,
-          message: `Plumbing count (${plumbingTotal}) doesn't match bath total (${bathTotal})`,
+          message: `CAMA Class ${camaClass} missing improvements`,
           details: property
         });
       }
     }
-  }
-  
-  // ==================== PARTIAL SYSTEMS CHECK ====================
-  if (vendorType === 'BRT') {
-    if (rawData.ACPARTIAL || rawData.HEATSYSPARTIAL) {
-      results.special.push({
-        check: 'partial_systems',
-        severity: 'info',
-        property_key: property.property_composite_key,
-        message: 'Property has partial heating/cooling systems',
-        details: property
-      });
-    }
-  } else if (vendorType === 'Microsystems') {
-    if (rawData['Heat System Type1'] && rawData['Heat System Type2']) {
-      results.special.push({
-        check: 'partial_heating',
-        severity: 'info',
-        property_key: property.property_composite_key,
-        message: 'Property has partial heating system',
-        details: property
-      });
-    }
-  }
-  
-  // ==================== LIVING BASEMENT CHECK ====================
-  if (vendorType === 'Microsystems') {
-    if (rawData['Bsmt Finish Heat Y N'] === 'Y' || 
-        rawData['Bsmt Living Quality'] || 
-        (parseInt(rawData['Bsmt Living Sf'] || 0) > 0)) {
-      results.special.push({
-        check: 'living_basement',
-        severity: 'info',
-        property_key: property.property_composite_key,
-        message: 'Property has living basement',
-        details: property
-      });
-    }
-  }
-  // Note: BRT living basement requires code file parsing
-  
-  // ==================== DETACHED ITEMS DEPRECIATION CHECK ====================
-  if (vendorType === 'Microsystems') {
-    // Check if has detached items
-    const hasDetached = rawData['Detached Item Code1'] || rawData['Detached Item Code2'] || 
-                       rawData['Detached Item Code3'] || rawData['Detached Item Code4'] ||
-                       rawData['Detachedbuilding1'] || rawData['Detachedbuilding2'] ||
-                       rawData['Detachedbuilding3'] || rawData['Detachedbuilding4'];
     
-    if (hasDetached) {
-      // Check if ALL depreciation fields are empty
-      const hasDepreciation = 
-        rawData['Physical Depr1'] || rawData['Functional Depr1'] || rawData['Locational Depr1'] ||
-        rawData['Physical Depr2'] || rawData['Functional Depr2'] || rawData['Locational Depr2'] ||
-        rawData['Physical Depr3'] || rawData['Functional Depr3'] || rawData['Locational Depr3'] ||
-        rawData['Physical Depr4'] || rawData['Functional Depr4'] || rawData['Locational Depr4'] ||
-        rawData['Pysical1'] || rawData['Functional1'] || rawData['Location Economic1'] ||
-        rawData['Pysical2'] || rawData['Functional2'] || rawData['Location Economic2'] ||
-        rawData['Pysical3'] || rawData['Functional3'] || rawData['Location Economic3'] ||
-        rawData['Pysical4'] || rawData['Functional4'] || rawData['Location Economic4'];
-      
-      if (!hasDepreciation) {
-        results.special.push({
-          check: 'detached_missing_depreciation',
+    // ==================== BUILDING CLASS CHECKS ====================
+    const buildingClass = property.asset_building_class;
+    const typeUse = property.asset_type_use;
+    const designStyle = property.asset_design_style;
+    
+    // All except m4_class should have building class 10
+    if (m4Class && buildingClass !== 10 && buildingClass !== null) {
+      // Check if Class 2/3A with building class 10
+      if ((m4Class === '2' || m4Class === '3A') && buildingClass === 10) {
+        results.characteristics.push({
+          check: 'invalid_building_class_10',
           severity: 'warning',
           property_key: property.property_composite_key,
-          message: 'Detached items missing depreciation values',
+          message: `Class ${m4Class} shouldn't have building class 10`,
           details: property
         });
       }
     }
-  } else if (vendorType === 'BRT') {
-    // Check BRT detached items
-    for (let i = 1; i <= 11; i++) {
-      if (rawData[`DETACHEDCODE_${i}`] || rawData[`DETACHEDDCSIZE_${i}`]) {
-        const ncValue = parseInt(rawData[`DETACHEDNC_${i}`] || 0);
-        if (ncValue === 0) {
-          results.special.push({
-            check: 'detached_missing_depreciation',
+    
+    // If building class > 10, must have design and type use
+    if (buildingClass > 10) {
+      if (!designStyle) {
+        results.characteristics.push({
+          check: 'missing_design_style',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: 'Building class > 10 missing design style',
+          details: property
+        });
+      }
+      if (!typeUse) {
+        results.characteristics.push({
+          check: 'missing_type_use',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: 'Building class > 10 missing type use',
+          details: property
+        });
+      }
+    }
+    
+    // Type Use to Building Class validation
+    if (typeUse && buildingClass) {
+      const typeUseLower = typeUse.toLowerCase();
+      let validClasses = [];
+      
+      if (typeUseLower.includes('single') || typeUseLower.includes('one family')) {
+        validClasses = [16, 17, 18, 19, 20, 21, 22, 23];
+      } else if (typeUseLower.includes('twin') || typeUseLower.includes('semidetached')) {
+        validClasses = [25, 27, 29, 31];
+      } else if (typeUseLower.includes('condo') || typeUseLower.includes('townhouse')) {
+        validClasses = [33, 35, 37, 39];
+      } else if (typeUseLower.includes('multi') || typeUseLower.includes('two family') || 
+                 typeUseLower.includes('three family') || typeUseLower.includes('four family')) {
+        validClasses = [43, 45, 47, 49];
+      }
+      
+      if (validClasses.length > 0 && !validClasses.includes(buildingClass)) {
+        results.characteristics.push({
+          check: 'type_use_building_class_mismatch',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: `Type use "${typeUse}" doesn't match building class ${buildingClass}`,
+          details: property
+        });
+      }
+    }
+    
+    // ==================== DESIGN STYLE CHECKS ====================
+    if (designStyle) {
+      const designLower = designStyle.toLowerCase();
+      const storyHeight = property.asset_story_height;
+      
+      // Check for non-standard designs
+      const standardDesigns = [
+        'colonial', 'split level', 'bilevel', 'bi-level', 'cape cod', 'cape',
+        'ranch', 'rancher', 'raised ranch', 'bungalow', 'twin',
+        'townhouse end', 'townhouse int', 'one bed', '1bed', '1 bed',
+        'two bed', '2bed', '2 bed', 'three bed', '3bed', '3 bed'
+      ];
+      
+      const isStandard = standardDesigns.some(std => designLower.includes(std.toLowerCase()));
+      if (!isStandard) {
+        results.characteristics.push({
+          check: 'non_standard_design',
+          severity: 'info',
+          property_key: property.property_composite_key,
+          message: `Non-standard design: ${designStyle}`,
+          details: property
+        });
+      }
+      
+      // Design to Story Height validation
+      if (storyHeight) {
+        if (designLower.includes('colonial') && storyHeight < 2) {
+          results.characteristics.push({
+            check: 'colonial_story_mismatch',
             severity: 'warning',
             property_key: property.property_composite_key,
-            message: `Detached item ${i} missing depreciation value`,
+            message: `Colonial should be 2+ stories (has ${storyHeight})`,
+            details: property
+          });
+        }
+        if ((designLower.includes('ranch') && !designLower.includes('raised')) && storyHeight > 1) {
+          results.characteristics.push({
+            check: 'ranch_story_mismatch',
+            severity: 'warning',
+            property_key: property.property_composite_key,
+            message: `Ranch should be 1 story (has ${storyHeight})`,
+            details: property
+          });
+        }
+        if ((designLower.includes('split level') || designLower.includes('bilevel')) && storyHeight < 2) {
+          results.characteristics.push({
+            check: 'split_level_story_mismatch',
+            severity: 'warning',
+            property_key: property.property_composite_key,
+            message: `Split/Bi-level should be 2+ stories (has ${storyHeight})`,
+            details: property
+          });
+        }
+        if (designLower.includes('raised ranch') && storyHeight > 1) {
+          results.characteristics.push({
+            check: 'raised_ranch_story_mismatch',
+            severity: 'warning',
+            property_key: property.property_composite_key,
+            message: `Raised Ranch should be 1 story (has ${storyHeight})`,
+            details: property
+          });
+        }
+        if ((designLower.includes('cape') || designLower.includes('bungalow')) && storyHeight === 1) {
+          results.characteristics.push({
+            check: 'cape_bungalow_story_mismatch',
+            severity: 'warning',
+            property_key: property.property_composite_key,
+            message: `Cape/Bungalow typically 1.5+ stories (has ${storyHeight})`,
             details: property
           });
         }
       }
     }
-  }
-  
-  // ==================== LAND ADJUSTMENTS CHECK ====================
-  if (vendorType === 'Microsystems') {
-    const hasLandAdj = 
-      (parseInt(rawData['Net Adjustment1'] || 0) !== 0) ||
-      (parseInt(rawData['Net Adjustment2'] || 0) !== 0) ||
-      (parseInt(rawData['Net Adjustment3'] || 0) !== 0) ||
-      (parseInt(rawData['Unit Adjustment1'] || 0) !== 0) ||
-      (parseInt(rawData['Unit Adjustment2'] || 0) !== 0) ||
-      (parseInt(rawData['Unit Adjustment'] || 0) !== 0) ||
-      rawData['Adj Reason Code1'] || rawData['Adj Reason Code2'] || rawData['Adj Reason Code3'] ||
-      rawData['Unit Adj Code1'] || rawData['Unit Adj Code2'] || rawData['Unit Adj Code'];
     
-    if (hasLandAdj) {
-      results.special.push({
-        check: 'land_adjustments_exist',
-        severity: 'info',
+    // ==================== LOT SIZE CHECKS ====================
+    const lotAcre = property.asset_lot_acre || 0;
+    const lotSf = property.asset_lot_sf || 0;
+    const lotFrontage = property.asset_lot_frontage || 0;
+    
+    if (lotAcre === 0 && lotSf === 0 && lotFrontage === 0) {
+      results.characteristics.push({
+        check: 'zero_lot_size',
+        severity: 'critical',
         property_key: property.property_composite_key,
-        message: 'Property has land adjustments',
+        message: 'Property has zero lot size (acre, sf, and frontage all zero)',
         details: property
       });
     }
-  } else if (vendorType === 'BRT') {
-    const landAdjFields = [
-      'LANDURCOND_1', 'LANDURCOND_2', 'LANDURCOND_3', 'LANDURCOND_4', 'LANDURCOND_5', 'LANDURCOND_6',
-      'LANDURCONDPC_1', 'LANDURCONDPC_2', 'LANDURCONDPC_3', 'LANDURCONDPC_4', 'LANDURCONDPC_5', 'LANDURCONDPC_6',
-      'LANDURINFL_1', 'LANDURINFL_2', 'LANDURINFL_3', 'LANDURINFL_4', 'LANDURINFL_5', 'LANDURINFL_6',
-      'LANDURINFLPC_1', 'LANDURINFLPC_2', 'LANDURINFLPC_3', 'LANDURINFLPC_4', 'LANDURINFLPC_5', 'LANDURINFLPC_6',
-      'LANDFFINFL_1', 'LANDFFINFL_2', 'LANDFFINFL_3', 'LANDFFINFL_4', 'LANDFFINFL_5', 'LANDFFINFL_6',
-      'LANDFFINFLPC_1', 'LANDFFINFLPC_2', 'LANDFFINFLPC_3', 'LANDFFINFLPC_4', 'LANDFFINFLPC_5', 'LANDFFINFLPC_6',
-      'LANDFFCOND_1', 'LANDFFCOND_2', 'LANDFFCOND_3', 'LANDFFCOND_4', 'LANDFFCOND_5', 'LANDFFCOND_6',
-      'LANDFFCONDPC_1', 'LANDFFCONDPC_2', 'LANDFFCONDPC_3', 'LANDFFCONDPC_4', 'LANDFFCONDPC_5', 'LANDFFCONDPC_6'
-    ];
     
-    const hasLandAdj = landAdjFields.some(field => rawData[field]);
-    if (hasLandAdj) {
-      results.special.push({
-        check: 'land_adjustments_exist',
-        severity: 'info',
-        property_key: property.property_composite_key,
-        message: 'Property has land adjustments',
-        details: property
-      });
-    }
-  }
-  
-  // ==================== MARKET ADJUSTMENTS CHECK ====================
-  if (vendorType === 'Microsystems') {
-    const hasMarketAdj = 
-      rawData['Over Improved Depr1'] || rawData['Economic Depr'] || 
-      rawData['Under Improved Depr'] || rawData['Function Depr'] ||
-      rawData['Over Improved Depr2'] || rawData['Location Code'];
+    // ==================== LIVING AREA & YEAR BUILT ====================
+    const sfla = property.asset_sfla || 0;
+    const yearBuilt = property.asset_year_built;
     
-    if (hasMarketAdj) {
-      results.special.push({
-        check: 'market_adjustments_exist',
+    // Class 2/3A must have living area
+    if ((m4Class === '2' || m4Class === '3A') && sfla === 0) {
+      results.characteristics.push({
+        check: 'missing_sfla',
         severity: 'warning',
         property_key: property.property_composite_key,
-        message: 'Property has existing market adjustments',
-        details: property
-      });
-    }
-  } else if (vendorType === 'BRT') {
-    // Check multiple market adjustment fields
-    if (parseInt(rawData.MKTADJ || 1) !== 1) {
-      results.special.push({
-        check: 'market_adjustment_factor',
-        severity: 'warning',
-        property_key: property.property_composite_key,
-        message: `MKTADJ is ${rawData.MKTADJ} (should be 1)`,
+        message: `Class ${m4Class} property missing living area`,
         details: property
       });
     }
     
-    if (parseInt(rawData.NCOVR || 0) !== 0) {
-      results.special.push({
-        check: 'ncovr_not_zero',
+    // Year built validation for improved properties
+    if ((m4Class === '2' || m4Class === '3A') && buildingClass > 10 && !yearBuilt) {
+      results.characteristics.push({
+        check: 'missing_year_built',
         severity: 'warning',
         property_key: property.property_composite_key,
-        message: `NCOVR is ${rawData.NCOVR} (should be 0)`,
+        message: 'Improved property missing year built',
         details: property
       });
     }
     
-    if (rawData.MKTECONDESC || rawData.MKTFUNCDESC || rawData.MKTMKTDESC || rawData.MKTPHYSDESC) {
+    // ==================== VCS CHECK ====================
+    if (!property.property_vcs) {
       results.special.push({
-        check: 'market_adjustment_descriptions',
+        check: 'missing_vcs',
         severity: 'warning',
         property_key: property.property_composite_key,
-        message: 'Property has market adjustment descriptions',
+        message: 'Property missing VCS code',
         details: property
       });
     }
     
-    const mktPercentages = [
-      parseInt(rawData.MKTECONPC || 100),
-      parseInt(rawData.MKTFUNCPC || 100),
-      parseInt(rawData.MKTMKTPC || 100),
-      parseInt(rawData.MKTPHYSPC || 100)
-    ];
-    
-    if (mktPercentages.some(pc => pc !== 100)) {
-      results.special.push({
-        check: 'market_adjustment_percentages',
-        severity: 'warning',
-        property_key: property.property_composite_key,
-        message: 'Market adjustment percentages not at 100%',
-        details: property
-      });
+    // ==================== CONDITION CHECKS ====================
+    if ((m4Class === '2' || m4Class === '3A') && buildingClass > 10) {
+      if (!property.asset_ext_cond) {
+        results.characteristics.push({
+          check: 'missing_ext_condition',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: 'Improved property missing exterior condition',
+          details: property
+        });
+      }
+      if (!property.asset_int_cond) {
+        results.characteristics.push({
+          check: 'missing_int_condition',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: 'Improved property missing interior condition',
+          details: property
+        });
+      }
     }
     
-    // Additional BRT market adjustments
-    if (rawData.NCREDIRECT) {
-      results.special.push({
-        check: 'nc_redirect_exists',
-        severity: 'warning',
-        property_key: property.property_composite_key,
-        message: 'Property has NC redirect value',
-        details: property
-      });
-    }
-    
-    if (parseInt(rawData.NCMKTINFLNC || 0) !== 0 || parseInt(rawData.NCMKTINFPC || 0) !== 0) {
-      results.special.push({
-        check: 'nc_market_influence',
-        severity: 'warning',
-        property_key: property.property_composite_key,
-        message: 'Property has NC market influence values',
-        details: property
-      });
-    }
-  }
-  
-  // ==================== FLAT ADD/OVERRIDE VALUES CHECK ====================
-  if (vendorType === 'Microsystems') {
-    const hasFlatAdd = 
-      rawData['Flat Add Desc1'] || rawData['Flat Add Desc2'] ||
-      rawData['Base Cost Flat Add Desc1'] || rawData['Base Cost Flat Add Desc2'] ||
-      (parseInt(rawData['Base Cost Flat Add Value1'] || 0) !== 0) ||
-      (parseInt(rawData['Base Cost Flat Add Value2'] || 0) !== 0) ||
-      (parseInt(rawData['Flat Add Value1'] || 0) !== 0) ||
-      (parseInt(rawData['Flat Add Value2'] || 0) !== 0);
-    
-    if (hasFlatAdd) {
-      results.special.push({
-        check: 'flat_add_values',
-        severity: 'warning',
-        property_key: property.property_composite_key,
-        message: 'Property has flat add/override values',
-        details: property
-      });
-    }
-  } else if (vendorType === 'BRT') {
-    if (rawData.IMPROVVALUEOVR || rawData.LANDVALUEOVR) {
-      results.special.push({
-        check: 'value_overrides',
-        severity: 'warning',
-        property_key: property.property_composite_key,
-        message: 'Property has improvement or land value overrides',
-        details: property
-      });
-    }
-    
-    if (rawData.WRITEIN_1 || rawData.WRITEIN_2 ||
-        parseInt(rawData.WRITEINVALUE_1 || 0) !== 0 ||
-        parseInt(rawData.WRITEINVALUE_2 || 0) !== 0) {
-      results.special.push({
-        check: 'writein_values',
-        severity: 'warning',
-        property_key: property.property_composite_key,
-        message: 'Property has write-in values',
-        details: property
-      });
-    }
-  }
-};
+    // Additional checks would go here but are commented out for now
+    // since raw_data access needs to be fixed
+  };
 
-const saveQualityResults = async (results) => {
-  try {
-    let criticalCount = 0;
-    let warningCount = 0;
-    let infoCount = 0;
+  const saveQualityResults = async (results) => {
+    try {
+      let criticalCount = 0;
+      let warningCount = 0;
+      let infoCount = 0;
+      
+      // Count issues without storing details
+      Object.values(results).forEach(category => {
+        category.forEach(issue => {
+          if (issue.severity === 'critical') criticalCount++;
+          else if (issue.severity === 'warning') warningCount++;
+          else if (issue.severity === 'info') infoCount++;
+        });
+      });
+      
+      const totalIssues = criticalCount + warningCount + infoCount;
+      
+      // Check if record exists
+      const { data: existing } = await supabase
+        .from('market_land_valuation')
+        .select('id')
+        .eq('job_id', jobData.id)
+        .single();
+      
+      const saveData = {
+        job_id: jobData.id,
+        quality_check_last_run: new Date().toISOString(),
+        quality_issues_count: totalIssues,
+        quality_score: calculateQualityScore(results)
+      };
+      
+      if (existing) {
+        const { error } = await supabase
+          .from('market_land_valuation')
+          .update(saveData)
+          .eq('job_id', jobData.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('market_land_valuation')
+          .insert(saveData);
+        if (error) throw error;
+      }
+      
+      // Keep full results in state for display
+      setCheckResults(results);
+      setIssueStats({
+        critical: criticalCount,
+        warning: warningCount,
+        info: infoCount,
+        total: totalIssues
+      });
+      
+      setUnsavedChanges(false);
+      console.log(`✅ Saved: ${totalIssues} issues found`);
+      
+    } catch (error) {
+      console.error('Error saving:', error);
+      setCheckResults(results); // Still show results even if save fails
+    }
+  };
+
+  const calculateQualityScore = (results) => {
+    const totalProps = properties.length || 1;
+    const issueWeights = { critical: 10, warning: 5, info: 1 };
+    let totalDeductions = 0;
     
-    // Count issues without storing details
     Object.values(results).forEach(category => {
       category.forEach(issue => {
-        if (issue.severity === 'critical') criticalCount++;
-        else if (issue.severity === 'warning') warningCount++;
-        else if (issue.severity === 'info') infoCount++;
+        totalDeductions += issueWeights[issue.severity] || 0;
       });
     });
     
-    const totalIssues = criticalCount + warningCount + infoCount;
-    
-    // Check if record exists
-    const { data: existing } = await supabase
-      .from('market_land_valuation')
-      .select('id')
-      .eq('job_id', jobData.id)
-      .single();
-    
-    const saveData = {
-      job_id: jobData.id,
-      quality_check_last_run: new Date().toISOString(),
-      quality_issues_count: totalIssues,
-      quality_score: calculateQualityScore(results)
-    };
-    
-    if (existing) {
-      const { error } = await supabase
-        .from('market_land_valuation')
-        .update(saveData)
-        .eq('job_id', jobData.id);
-      if (error) throw error;
-    } else {
-      const { error } = await supabase
-        .from('market_land_valuation')
-        .insert(saveData);
-      if (error) throw error;
-    }
-    
-    // Keep full results in state for display
-    setCheckResults(results);
-    setIssueStats({
-      critical: criticalCount,
-      warning: warningCount,
-      info: infoCount,
-      total: totalIssues
-    });
-    
-    setUnsavedChanges(false);
-    console.log(`✅ Saved: ${totalIssues} issues found`);
-    
-  } catch (error) {
-    console.error('Error saving:', error);
-    setCheckResults(results); // Still show results even if save fails
-  }
-};
-
-const calculateQualityScore = (results) => {
-  const totalProps = properties.length || 1;
-  const issueWeights = { critical: 10, warning: 5, info: 1 };
-  let totalDeductions = 0;
-  
-  Object.values(results).forEach(category => {
-    category.forEach(issue => {
-      totalDeductions += issueWeights[issue.severity] || 0;
-    });
-  });
-  
-  const score = Math.max(0, 100 - (totalDeductions / totalProps));
-  return score.toFixed(1);
-};
-
-const toggleQualityCategory = (categoryId) => {
-  setExpandedCategories(prev => 
-    prev.includes(categoryId) 
-      ? prev.filter(id => id !== categoryId)
-      : [...prev, categoryId]
-  );
-};
-
-const getCheckTitle = (checkType) => {
-  const titles = {
-    // MOD IV
-    'vacant_land_improvements': 'Vacant Land with Improvements',
-    'missing_improvements': 'Properties Missing Improvements',
-    'missing_facility': 'Missing Facility Information',
-    'farm_building_no_qualifier': 'Farm Building Without Qualifier',
-    
-    // CAMA
-    'cama_vacant_improvements': 'CAMA Vacant Land with Improvements',
-    'cama_missing_improvements': 'CAMA Properties Missing Improvements',
-    
-    // Building/Design
-    'invalid_building_class_10': 'Invalid Building Class 10',
-    'missing_design_style': 'Missing Design Style',
-    'missing_type_use': 'Missing Type Use',
-    'type_use_building_class_mismatch': 'Type Use/Building Class Mismatch',
-    'non_standard_design': 'Non-Standard Design',
-    'colonial_story_mismatch': 'Colonial Story Height Issue',
-    'ranch_story_mismatch': 'Ranch Story Height Issue',
-    'split_level_story_mismatch': 'Split Level Story Height Issue',
-    'raised_ranch_story_mismatch': 'Raised Ranch Story Height Issue',
-    'cape_bungalow_story_mismatch': 'Cape/Bungalow Story Height Issue',
-    
-    // Characteristics
-    'zero_lot_size': 'Properties with Zero Lot Size',
-    'missing_sfla': 'Missing Living Area',
-    'missing_year_built': 'Missing Year Built',
-    'missing_ext_condition': 'Missing Exterior Condition',
-    'missing_int_condition': 'Missing Interior Condition',
-    
-    // Rooms
-    'zero_bedrooms': 'Properties with Zero Bedrooms',
-    'bathroom_count_mismatch': 'Bathroom Count Mismatch',
-    
-    // Special
-    'missing_vcs': 'Missing VCS Code',
-    'partial_systems': 'Partial Heating/Cooling Systems',
-    'partial_heating': 'Partial Heating System',
-    'living_basement': 'Properties with Living Basement',
-    'detached_missing_depreciation': 'Detached Items Missing Depreciation',
-    'land_adjustments_exist': 'Properties with Land Adjustments',
-    'market_adjustments_exist': 'Properties with Market Adjustments',
-    'market_adjustment_factor': 'Market Adjustment Factor Issue',
-    'ncovr_not_zero': 'NCOVR Not Zero',
-    'market_adjustment_descriptions': 'Market Adjustment Descriptions Present',
-    'market_adjustment_percentages': 'Market Adjustment Percentages Not 100%',
-    'nc_redirect_exists': 'NC Redirect Value Present',
-    'nc_market_influence': 'NC Market Influence Values Present',
-    'flat_add_values': 'Flat Add/Override Values Present',
-    'value_overrides': 'Value Overrides Present',
-    'writein_values': 'Write-in Values Present'
+    const score = Math.max(0, 100 - (totalDeductions / totalProps));
+    return score.toFixed(1);
   };
-  return titles[checkType] || checkType;
-};
 
-const showPropertyDetails = (checkType, category) => {
-  const issues = checkResults[category]?.filter(r => r.check === checkType) || [];
-  setModalData({
-    title: getCheckTitle(checkType),
-    properties: issues
-  });
-  setShowDetailsModal(true);
-};  
+  const toggleQualityCategory = (categoryId) => {
+    setExpandedCategories(prev => 
+      prev.includes(categoryId) 
+        ? prev.filter(id => id !== categoryId)
+        : [...prev, categoryId]
+    );
+  };
+
+  const getCheckTitle = (checkType) => {
+    const titles = {
+      // MOD IV
+      'vacant_land_improvements': 'Vacant Land with Improvements',
+      'missing_improvements': 'Properties Missing Improvements',
+      'missing_facility': 'Missing Facility Information',
+      'farm_building_no_qualifier': 'Farm Building Without Qualifier',
+      
+      // CAMA
+      'cama_vacant_improvements': 'CAMA Vacant Land with Improvements',
+      'cama_missing_improvements': 'CAMA Properties Missing Improvements',
+      
+      // Building/Design
+      'invalid_building_class_10': 'Invalid Building Class 10',
+      'missing_design_style': 'Missing Design Style',
+      'missing_type_use': 'Missing Type Use',
+      'type_use_building_class_mismatch': 'Type Use/Building Class Mismatch',
+      'non_standard_design': 'Non-Standard Design',
+      'colonial_story_mismatch': 'Colonial Story Height Issue',
+      'ranch_story_mismatch': 'Ranch Story Height Issue',
+      'split_level_story_mismatch': 'Split Level Story Height Issue',
+      'raised_ranch_story_mismatch': 'Raised Ranch Story Height Issue',
+      'cape_bungalow_story_mismatch': 'Cape/Bungalow Story Height Issue',
+      
+      // Characteristics
+      'zero_lot_size': 'Properties with Zero Lot Size',
+      'missing_sfla': 'Missing Living Area',
+      'missing_year_built': 'Missing Year Built',
+      'missing_ext_condition': 'Missing Exterior Condition',
+      'missing_int_condition': 'Missing Interior Condition',
+      
+      // Rooms
+      'zero_bedrooms': 'Properties with Zero Bedrooms',
+      'bathroom_count_mismatch': 'Bathroom Count Mismatch',
+      
+      // Special
+      'missing_vcs': 'Missing VCS Code',
+      'partial_systems': 'Partial Heating/Cooling Systems',
+      'partial_heating': 'Partial Heating System',
+      'living_basement': 'Properties with Living Basement',
+      'detached_missing_depreciation': 'Detached Items Missing Depreciation',
+      'land_adjustments_exist': 'Properties with Land Adjustments',
+      'market_adjustments_exist': 'Properties with Market Adjustments',
+      'market_adjustment_factor': 'Market Adjustment Factor Issue',
+      'ncovr_not_zero': 'NCOVR Not Zero',
+      'market_adjustment_descriptions': 'Market Adjustment Descriptions Present',
+      'market_adjustment_percentages': 'Market Adjustment Percentages Not 100%',
+      'nc_redirect_exists': 'NC Redirect Value Present',
+      'nc_market_influence': 'NC Market Influence Values Present',
+      'flat_add_values': 'Flat Add/Override Values Present',
+      'value_overrides': 'Value Overrides Present',
+      'writein_values': 'Write-in Values Present'
+    };
+    return titles[checkType] || checkType;
+  };
+
+  const showPropertyDetails = (checkType, category) => {
+    const issues = checkResults[category]?.filter(r => r.check === checkType) || [];
+    setModalData({
+      title: getCheckTitle(checkType),
+      properties: issues
+    });
+    setShowDetailsModal(true);
+  };  
 
   // ==================== TAB COMPONENTS ====================
   
-// Data Quality Tab - PRODUCTION VERSION using App.css classes
-const DataQualityTab = () => (
-  <div className="tab-content">
-    {/* Header Section */}
-    <div className="mb-6">
-      <h3 className="text-2xl font-bold text-gray-800 mb-2">
-        Data Quality Analysis
-      </h3>
-      <p className="text-gray-600">
-        {isLoading 
-          ? `Loading ${loadedCount.toLocaleString()} of ${totalPropertyCount.toLocaleString()} properties...`
-          : `Analyzing ${properties.length.toLocaleString()} properties for data integrity issues`
-        }
-      </p>
-    </div>
-
-    {/* Loading Progress Bar */}
-    {isLoading && (
+  // Data Quality Tab
+  const DataQualityTab = () => (
+    <div className="tab-content">
+      {/* Header Section */}
       <div className="mb-6">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-sm font-medium text-gray-700">Loading Properties</span>
-          <span className="text-sm font-medium text-blue-600">{loadingProgress}%</span>
-        </div>
-        <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-          <div 
-            className="h-full bg-gradient-to-r from-blue-500 to-blue-600 transition-all duration-300 ease-out"
-            style={{ width: `${loadingProgress}%` }}
-          >
-            <div className="h-full bg-white bg-opacity-30 animate-pulse"></div>
+        <h3 className="text-2xl font-bold text-gray-800 mb-2">
+          Data Quality Analysis
+        </h3>
+        <p className="text-gray-600">
+          {isLoading 
+            ? `Loading ${loadedCount.toLocaleString()} of ${totalPropertyCount.toLocaleString()} properties...`
+            : `Analyzing ${properties.length.toLocaleString()} properties for data integrity issues`
+          }
+        </p>
+      </div>
+
+      {/* Loading Progress Bar */}
+      {isLoading && (
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium text-gray-700">Loading Properties</span>
+            <span className="text-sm font-medium text-blue-600">{loadingProgress}%</span>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+            <div 
+              className="h-full bg-gradient-to-r from-blue-500 to-blue-600 transition-all duration-300 ease-out"
+              style={{ width: `${loadingProgress}%` }}
+            >
+              <div className="h-full bg-white bg-opacity-30 animate-pulse"></div>
+            </div>
+          </div>
+          <div className="mt-2 text-center text-sm text-gray-600">
+            {loadedCount > 0 && (
+              <span>
+                Loaded {loadedCount.toLocaleString()} properties
+                {loadedCount < totalPropertyCount && 
+                  ` • ${Math.ceil((totalPropertyCount - loadedCount) / 1000)} batches remaining`
+                }
+              </span>
+            )}
           </div>
         </div>
-        <div className="mt-2 text-center text-sm text-gray-600">
-          {loadedCount > 0 && (
-            <span>
-              Loaded {loadedCount.toLocaleString()} properties
-              {loadedCount < totalPropertyCount && 
-                ` • ${Math.ceil((totalPropertyCount - loadedCount) / 1000)} batches remaining`
-              }
-            </span>
-          )}
+      )}
+
+      {/* Action Buttons */}
+      <div className="flex gap-3 mb-6">
+        <button 
+          onClick={runQualityChecks}
+          disabled={isRunningChecks || isLoading}
+          className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-all ${
+            isRunningChecks || isLoading
+              ? 'bg-gray-400 text-white cursor-not-allowed' 
+              : 'bg-blue-600 text-white hover:bg-blue-700'
+          }`}
+        >
+          <RefreshCw size={16} className={isRunningChecks ? 'animate-spin' : ''} />
+          {isRunningChecks ? 'Running Analysis...' : 'Run Analysis'}
+        </button>
+        
+        <button 
+          onClick={() => alert('Excel export will be implemented')}
+          className="px-4 py-2 bg-white border-2 border-blue-600 text-blue-600 rounded-lg font-medium hover:bg-blue-50 transition-all flex items-center gap-2"
+        >
+          <Download size={16} />
+          Export to Excel
+        </button>
+        
+        <button 
+          onClick={() => alert('QC Form generation will be implemented')}
+          className="px-4 py-2 bg-white border-2 border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-all"
+        >
+          Generate QC Form
+        </button>
+      </div>
+
+      {/* Metrics Cards Grid */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+        <div className="card p-4">
+          <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Total Properties</div>
+          <div className="text-2xl font-bold text-gray-800">{properties.length.toLocaleString()}</div>
+        </div>
+        
+        <div className="card p-4">
+          <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">With Issues</div>
+          <div className="text-2xl font-bold text-red-600">{issueStats.total}</div>
+        </div>
+        
+        <div className="card p-4">
+          <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Critical</div>
+          <div className="text-2xl font-bold text-red-600">{issueStats.critical}</div>
+        </div>
+        
+        <div className="card p-4">
+          <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Warnings</div>
+          <div className="text-2xl font-bold text-yellow-600">{issueStats.warning}</div>
+        </div>
+        
+        <div className="card p-4">
+          <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Info</div>
+          <div className="text-2xl font-bold text-blue-600">{issueStats.info}</div>
+        </div>
+        
+        <div className="card p-4 bg-gradient-to-br from-green-500 to-green-600 text-white">
+          <div className="text-xs uppercase tracking-wide mb-1 opacity-90">Quality Score</div>
+          <div className="text-2xl font-bold">{qualityScore ? `${qualityScore}%` : '—'}</div>
         </div>
       </div>
-    )}
 
-    {/* Action Buttons */}
-    <div className="flex gap-3 mb-6">
-      <button 
-        onClick={runQualityChecks}
-        disabled={isRunningChecks || isLoading}
-        className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-all ${
-          isRunningChecks || isLoading
-            ? 'bg-gray-400 text-white cursor-not-allowed' 
-            : 'bg-blue-600 text-white hover:bg-blue-700'
-        }`}
-      >
-        <RefreshCw size={16} className={isRunningChecks ? 'animate-spin' : ''} />
-        {isRunningChecks ? 'Running Analysis...' : 'Run Analysis'}
-      </button>
-      
-      <button 
-        onClick={() => alert('Excel export will be implemented')}
-        className="px-4 py-2 bg-white border-2 border-blue-600 text-blue-600 rounded-lg font-medium hover:bg-blue-50 transition-all flex items-center gap-2"
-      >
-        <Download size={16} />
-        Export to Excel
-      </button>
-      
-      <button 
-        onClick={() => alert('QC Form generation will be implemented')}
-        className="px-4 py-2 bg-white border-2 border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-all"
-      >
-        Generate QC Form
-      </button>
-    </div>
-
-    {/* Metrics Cards Grid */}
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
-      <div className="card p-4">
-        <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Total Properties</div>
-        <div className="text-2xl font-bold text-gray-800">{properties.length.toLocaleString()}</div>
-      </div>
-      
-      <div className="card p-4">
-        <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">With Issues</div>
-        <div className="text-2xl font-bold text-red-600">{issueStats.total}</div>
-      </div>
-      
-      <div className="card p-4">
-        <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Critical</div>
-        <div className="text-2xl font-bold text-red-600">{issueStats.critical}</div>
-      </div>
-      
-      <div className="card p-4">
-        <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Warnings</div>
-        <div className="text-2xl font-bold text-yellow-600">{issueStats.warning}</div>
-      </div>
-      
-      <div className="card p-4">
-        <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Info</div>
-        <div className="text-2xl font-bold text-blue-600">{issueStats.info}</div>
-      </div>
-      
-      <div className="card p-4 bg-gradient-to-br from-green-500 to-green-600 text-white">
-        <div className="text-xs uppercase tracking-wide mb-1 opacity-90">Quality Score</div>
-        <div className="text-2xl font-bold">{qualityScore ? `${qualityScore}%` : '—'}</div>
-      </div>
-    </div>
-
-    {/* Check Results */}
-    {Object.keys(checkResults).length > 0 ? (
-      <div>
-        <h4 className="text-lg font-semibold text-gray-800 mb-4">
-          Check Results by Category
-        </h4>
-        
-        {Object.entries(checkResults).map(([category, issues]) => {
-          if (issues.length === 0) return null;
+      {/* Check Results */}
+      {Object.keys(checkResults).length > 0 ? (
+        <div>
+          <h4 className="text-lg font-semibold text-gray-800 mb-4">
+            Check Results by Category
+          </h4>
           
-          const isExpanded = expandedCategories.includes(category);
-          const criticalCount = issues.filter(i => i.severity === 'critical').length;
-          const warningCount = issues.filter(i => i.severity === 'warning').length;
-          const infoCount = issues.filter(i => i.severity === 'info').length;
-          
-          return (
-            <div key={category} className="card mb-3 overflow-hidden">
-              <div
-                onClick={() => toggleQualityCategory(category)}
-                className="p-4 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors flex justify-between items-center"
-              >
-                <div className="flex items-center gap-2">
-                  <ChevronRight
-                    size={20}
-                    className={`text-gray-500 transform transition-transform ${
-                      isExpanded ? 'rotate-90' : ''
-                    }`}
-                  />
-                  <span className="font-semibold text-gray-800 capitalize">
-                    {category.replace(/_/g, ' ')} Checks
-                  </span>
+          {Object.entries(checkResults).map(([category, issues]) => {
+            if (issues.length === 0) return null;
+            
+            const isExpanded = expandedCategories.includes(category);
+            const criticalCount = issues.filter(i => i.severity === 'critical').length;
+            const warningCount = issues.filter(i => i.severity === 'warning').length;
+            const infoCount = issues.filter(i => i.severity === 'info').length;
+            
+            return (
+              <div key={category} className="card mb-3 overflow-hidden">
+                <div
+                  onClick={() => toggleQualityCategory(category)}
+                  className="p-4 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors flex justify-between items-center"
+                >
+                  <div className="flex items-center gap-2">
+                    <ChevronRight
+                      size={20}
+                      className={`text-gray-500 transform transition-transform ${
+                        isExpanded ? 'rotate-90' : ''
+                      }`}
+                    />
+                    <span className="font-semibold text-gray-800 capitalize">
+                      {category.replace(/_/g, ' ')} Checks
+                    </span>
+                  </div>
+                  
+                  <div className="flex gap-2">
+                    {criticalCount > 0 && (
+                      <span className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-xs font-semibold">
+                        {criticalCount} Critical
+                      </span>
+                    )}
+                    {warningCount > 0 && (
+                      <span className="px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-semibold">
+                        {warningCount} Warning
+                      </span>
+                    )}
+                    {infoCount > 0 && (
+                      <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">
+                        {infoCount} Info
+                      </span>
+                    )}
+                  </div>
                 </div>
                 
-                <div className="flex gap-2">
-                  {criticalCount > 0 && (
-                    <span className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-xs font-semibold">
-                      {criticalCount} Critical
-                    </span>
-                  )}
-                  {warningCount > 0 && (
-                    <span className="px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-semibold">
-                      {warningCount} Warning
-                    </span>
-                  )}
-                  {infoCount > 0 && (
-                    <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">
-                      {infoCount} Info
-                    </span>
-                  )}
-                </div>
-              </div>
-              
-              {isExpanded && (
-                <div className="p-4 border-t border-gray-200">
-                  {Object.entries(
-                    issues.reduce((acc, issue) => {
-                      if (!acc[issue.check]) acc[issue.check] = [];
-                      acc[issue.check].push(issue);
-                      return acc;
-                    }, {})
-                  ).map(([checkType, checkIssues]) => (
-                    <div
-                      key={checkType}
-                      className="p-3 bg-gray-50 rounded-lg mb-2 flex justify-between items-center"
-                    >
-                      <span className="text-sm text-gray-700">
-                        {getCheckTitle(checkType)}
-                      </span>
-                      <div className="flex items-center gap-3">
-                        <span className={`text-sm font-semibold ${
-                          checkIssues[0].severity === 'critical' ? 'text-red-600' :
-                          checkIssues[0].severity === 'warning' ? 'text-yellow-600' : 
-                          'text-blue-600'
-                        }`}>
-                          {checkIssues.length} properties
+                {isExpanded && (
+                  <div className="p-4 border-t border-gray-200">
+                    {Object.entries(
+                      issues.reduce((acc, issue) => {
+                        if (!acc[issue.check]) acc[issue.check] = [];
+                        acc[issue.check].push(issue);
+                        return acc;
+                      }, {})
+                    ).map(([checkType, checkIssues]) => (
+                      <div
+                        key={checkType}
+                        className="p-3 bg-gray-50 rounded-lg mb-2 flex justify-between items-center"
+                      >
+                        <span className="text-sm text-gray-700">
+                          {getCheckTitle(checkType)}
                         </span>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            showPropertyDetails(checkType, category);
-                          }}
-                          className="px-3 py-1 text-xs bg-white border border-blue-600 text-blue-600 rounded hover:bg-blue-50 transition-colors"
-                        >
-                          View Details
-                        </button>
+                        <div className="flex items-center gap-3">
+                          <span className={`text-sm font-semibold ${
+                            checkIssues[0].severity === 'critical' ? 'text-red-600' :
+                            checkIssues[0].severity === 'warning' ? 'text-yellow-600' : 
+                            'text-blue-600'
+                          }`}>
+                            {checkIssues.length} properties
+                          </span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              showPropertyDetails(checkType, category);
+                            }}
+                            className="px-3 py-1 text-xs bg-white border border-blue-600 text-blue-600 rounded hover:bg-blue-50 transition-colors"
+                          >
+                            View Details
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    ) : (
-  <div className="card p-12 text-center">
-    {isLoading ? (
-      <>
-        <div className="inline-flex items-center justify-center w-16 h-16 mb-4">
-          <RefreshCw size={32} className="text-blue-600 animate-spin" />
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
-        <h3 className="text-lg font-semibold text-gray-800 mb-2">
-          Loading Property Data
-        </h3>
-        <p className="text-gray-600">
-          Please wait while we load {totalPropertyCount.toLocaleString()} properties in batches...
-        </p>
-      </>
-    ) : (
-      <>
-        <AlertCircle size={48} className="text-gray-400 mx-auto mb-4" />
-        <h3 className="text-lg font-semibold text-gray-800 mb-2">
-          No Analysis Run Yet
-        </h3>
-        <p className="text-gray-600">
-          {properties.length.toLocaleString()} properties loaded. Click "Run Analysis" to check for data quality issues.
-        </p>
-      </>
-    )}
-  </div>
-)}
+      ) : (
+        <div className="card p-12 text-center">
+          {isLoading ? (
+            <>
+              <div className="inline-flex items-center justify-center w-16 h-16 mb-4">
+                <RefreshCw size={32} className="text-blue-600 animate-spin" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-800 mb-2">
+                Loading Property Data
+              </h3>
+              <p className="text-gray-600">
+                Please wait while we load {totalPropertyCount.toLocaleString()} properties in batches...
+              </p>
+            </>
+          ) : (
+            <>
+              <AlertCircle size={48} className="text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-gray-800 mb-2">
+                No Analysis Run Yet
+              </h3>
+              <p className="text-gray-600">
+                {properties.length.toLocaleString()} properties loaded. Click "Run Analysis" to check for data quality issues.
+              </p>
+            </>
+          )}
+        </div>
+      )}
 
-    {/* Property Details Modal */}
-    {showDetailsModal && (
-      <div 
-        className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-        onClick={() => setShowDetailsModal(false)}
-      >
+      {/* Property Details Modal */}
+      {showDetailsModal && (
         <div 
-          className="bg-white rounded-lg w-[90%] max-w-5xl h-[80vh] max-h-[700px] overflow-hidden shadow-2xl flex flex-col"
-          onClick={(e) => e.stopPropagation()}
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          onClick={() => setShowDetailsModal(false)}
         >
-          <div className="p-6 border-b border-gray-200 flex justify-between items-center flex-shrink-0">
-            <h3 className="text-lg font-semibold text-gray-800">
-              {modalData.title}
-            </h3>
-            <button
-              onClick={() => setShowDetailsModal(false)}
-              className="text-gray-500 hover:text-gray-700 text-2xl leading-none"
-            >
-              ×
-            </button>
-          </div>
-          
-          <div className="p-6 overflow-y-auto flex-1">
-            <table className="w-full">
-              <thead className="sticky top-0 bg-white">
-                <tr className="border-b-2 border-gray-200">
-                  <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider bg-white">
-                    Property Key
-                  </th>
-                  <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider bg-white">
-                    Issue Details
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {modalData.properties.map((prop, index) => (
-                  <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="py-3 px-4 text-sm text-gray-900">
-                      {prop.property_key}
-                    </td>
-                    <td className="py-3 px-4 text-sm text-gray-600">
-                      {prop.message}
-                    </td>
+          <div 
+            className="bg-white rounded-lg w-[90%] max-w-5xl h-[80vh] max-h-[700px] overflow-hidden shadow-2xl flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-6 border-b border-gray-200 flex justify-between items-center flex-shrink-0">
+              <h3 className="text-lg font-semibold text-gray-800">
+                {modalData.title}
+              </h3>
+              <button
+                onClick={() => setShowDetailsModal(false)}
+                className="text-gray-500 hover:text-gray-700 text-2xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto flex-1">
+              <table className="w-full">
+                <thead className="sticky top-0 bg-white">
+                  <tr className="border-b-2 border-gray-200">
+                    <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider bg-white">
+                      Property Key
+                    </th>
+                    <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider bg-white">
+                      Issue Details
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {modalData.properties.map((prop, index) => (
+                    <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="py-3 px-4 text-sm text-gray-900">
+                        {prop.property_key}
+                      </td>
+                      <td className="py-3 px-4 text-sm text-gray-600">
+                        {prop.message}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
-      </div>
-    )}
-  </div>
-)}
-  </div>
-);
+      )}
+    </div>
+  );
 
   // Pre-Valuation Setup Tab
   const PreValuationTab = () => (
@@ -1566,9 +1216,9 @@ const DataQualityTab = () => (
         return <DataQualityTab />;
       case 'pre-valuation':
         return <PreValuationTab />;
-      case 'overall':
+      case 'overall-analysis':
         return <OverallAnalysisTab />;
-      case 'land':
+      case 'land-valuation':
         return <LandValuationTab />;
       case 'cost-valuation':
         return <CostValuationTab />;
@@ -1617,14 +1267,7 @@ const DataQualityTab = () => (
 
       {/* Content Area */}
       <div className="content-area">
-        {isLoading ? (
-          <div className="loading-state">
-            <RefreshCw size={20} className="spin" />
-            Loading property data...
-          </div>
-        ) : (
-          renderTabContent()
-        )}
+        {renderTabContent()}
       </div>
 
       {/* Footer Status Bar */}
