@@ -222,6 +222,23 @@ const runQualityChecks = async () => {
         await runPropertyChecks(property, results);
       }
     }
+
+// Debug what we found before saving
+console.log('=== QUALITY CHECK COMPLETE ===');
+console.log(`Total properties analyzed: ${properties.length}`);
+console.log('Issues found by category:');
+Object.entries(results).forEach(([category, issues]) => {
+  console.log(`  ${category}: ${issues.length} issues`);
+  if (category === 'special' && issues.length > 0) {
+    // Log types of special issues found
+    const specialTypes = [...new Set(issues.map(i => i.check))];
+    specialTypes.forEach(type => {
+      const count = issues.filter(i => i.check === type).length;
+      console.log(`    - ${type}: ${count} properties`);
+    });
+  }
+});
+   
     
     // Save results
     await saveQualityResults(results);
