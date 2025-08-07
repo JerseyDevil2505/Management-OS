@@ -178,38 +178,6 @@ const tabs = [
   { id: 'attribute-cards', label: 'Attribute & Card Analytics', icon: '🎯' }
 ];
 
-  // ==================== DATA FETCHING ====================
-  useEffect(() => {
-    if (jobData?.id) {
-      loadInitialData();
-    }
-  }, [jobData?.id]);
-
-  const loadInitialData = async () => {
-    setIsLoading(true);
-    try {
-      // Load properties for this job
-      const { data: propertiesData, error: propertiesError } = await supabase
-        .from('property_records')
-        .select('*')
-        .eq('job_id', jobData.id)
-        .order('block', { ascending: true })
-        .order('lot', { ascending: true });
-
-      if (propertiesError) throw propertiesError;
-      setProperties(propertiesData || []);
-
-      // Load any saved analysis data
-      // TODO: Load saved state from database
-
-      console.log(`Loaded ${propertiesData?.length || 0} properties for analysis`);
-    } catch (error) {
-      console.error('Error loading initial data:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   // ==================== SAVE FUNCTIONALITY ====================
   const handleSave = async () => {
     setIsSaving(true);
