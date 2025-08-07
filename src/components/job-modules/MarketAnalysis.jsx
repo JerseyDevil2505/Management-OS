@@ -896,7 +896,7 @@ const DataQualityTab = () => (
       {/* Header */}
       <div className="module-header">
         <div>
-          <h2 className="module-title"></h2>
+          <h2 className="module-title">Market & Land Analysis</h2>
           <p className="text-muted">
             {jobData?.job_number} - {jobData?.municipality || 'Municipality'} ({jobData?.county || 'County'} County, {jobData?.state || 'State'})
           </p>
@@ -907,10 +907,6 @@ const DataQualityTab = () => (
               Last saved: {lastSaved.toLocaleTimeString()}
             </span>
           )}
-        </div>
-            <ChevronLeft size={16} />
-            Back to Jobs
-          </button>
         </div>
       </div>
 
