@@ -1,46 +1,4 @@
-// ==================== CONDITION CHECKS ====================
-  if ((m4Class === '2' || m4Class === '3A') && buildingClass > 10) {
-    if (!property.asset_ext_cond) {
-      results.characteristics.push({
-        check: 'missing_ext_condition',
-        severity: 'warning',
-        property_key: property.property_composite_key,
-        message: 'Improved property missing exterior condition',
-        details: property
-      });
-    }
-    if (!property.asset_int_cond) {
-      results.characteristics.push({
-        check: 'missing_int_condition',
-        severity: 'warning',
-        property_key: property.property_composite_key,
-        message: 'Improved property missing interior condition',
-        details: property
-      });
-    }
-  }
-  
-  // ==================== PARTIAL HEATING/COOLING SYSTEMS ====================
-  if (vendorType === 'BRT') {
-    // Check for partial AC or heating in BRT
-    if (rawData.ACPARTIAL && rawData.ACPARTIAL.trim() !== '') {
-      results.special.push({
-        check: 'partial_cooling',
-        severity: 'info',
-        property_key: property.property_composite_key,
-        message: 'Property has partial AC system',
-        details: property
-      });
-    }
-    if (rawData.HEATSYSPARTIAL && rawData.HEATSYSPARTIAL.trim() !== '') {
-      results.special.push({
-        check: 'partial_heating',
-        severity: 'info',
-        property_key: property.property_composite_key,
-        message: 'Property has partial heating system',
-        details: property
-      });
-    import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import { 
   AlertCircle, 
@@ -94,7 +52,20 @@ const MarketLandAnalysis = ({ jobData }) => {
   const [expandedCategories, setExpandedCategories] = useState(['mod_iv']);
   const [isRunningChecks, setIsRunningChecks] = useState(false);
 
-  // ==================== LOAD RUN HISTORY ON MOUNT ====================
+  // ESC key handler for modal
+  useEffect(() => {
+    const handleEsc = (event) => {
+      if (event.key === 'Escape') {
+        setShowDetailsModal(false);
+      }
+    };
+    window.addEventListener('keydown', handleEsc);
+    return () => {
+      window.removeEventListener('keydown', handleEsc);
+    };
+  }, []);
+  
+  // Load run history on mount
   useEffect(() => {
     const loadRunHistory = async () => {
       if (!jobData?.id) return;
@@ -690,19 +661,90 @@ const MarketLandAnalysis = ({ jobData }) => {
       }
     }
     
-    // Type Use to Building Class validation
+    // INVERSE CHECK: If design is populated, should have building class > 10 and type use
+    if (designStyle && designStyle.trim() !== '') {
+      if (!buildingClass || buildingClass <= 10) {
+        results.characteristics.push({
+          check: 'design_without_proper_building_class',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: `Has design style "${designStyle}" but building class is ${buildingClass || 'missing'} (should be > 10)`,
+          details: property
+        });
+      }
+      if (!typeUse || typeUse.trim() === '') {
+        results.characteristics.push({
+          check: 'design_without_type_use',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: `Has design style "${designStyle}" but missing type use`,
+          details: property
+        });
+      }
+    }
+    
+    // Type Use to Building Class validation - FIXED with code lookup!
     if (typeUse && buildingClass) {
-      const typeUseLower = typeUse.toLowerCase();
+      let typeUseDescription = typeUse;
+      
+      // Look up the type use code in parsed_code_definitions
+      if (codeDefinitions) {
+        if (vendorType === 'BRT') {
+          // For BRT, need to find the type use section (varies by vendor)
+          // Often in sections like 50 or similar
+          Object.entries(codeDefinitions.sections || {}).forEach(([sectionKey, section]) => {
+            if (section.MAP) {
+              Object.entries(section.MAP).forEach(([key, value]) => {
+                if (value.KEY === typeUse || value.DATA?.KEY === typeUse) {
+                  typeUseDescription = value.DATA?.VALUE || value.VALUE || typeUse;
+                }
+              });
+            }
+          });
+        } else if (vendorType === 'Microsystems') {
+          // For Microsystems, type use codes often have 500 prefix
+          const lookupCode = typeUse.length <= 4 ? `500${typeUse}` : typeUse;
+          if (codeDefinitions[lookupCode]) {
+            typeUseDescription = codeDefinitions[lookupCode];
+          } else if (codeDefinitions[typeUse]) {
+            typeUseDescription = codeDefinitions[typeUse];
+          }
+        }
+      }
+      
+      // Now do fuzzy matching on the description
+      const typeUseLower = typeUseDescription.toLowerCase();
       let validClasses = [];
       
-      if (typeUseLower.includes('single') || typeUseLower.includes('one family')) {
+      // Single Family variations
+      if (typeUseLower.includes('single') || typeUseLower.includes('one family') || 
+          typeUseLower.includes('1 family') || typeUseLower.includes('1family') ||
+          typeUseLower.includes('onefamily') || typeUseLower === 'sf') {
         validClasses = [16, 17, 18, 19, 20, 21, 22, 23];
-      } else if (typeUseLower.includes('twin') || typeUseLower.includes('semidetached')) {
+      } 
+      // Twin/Semi-detached variations
+      else if (typeUseLower.includes('twin') || typeUseLower.includes('semi') || 
+               typeUseLower.includes('semidetached') || typeUseLower.includes('semi-detached') ||
+               typeUseLower.includes('semi detached') || typeUseLower.includes('duplex')) {
         validClasses = [25, 27, 29, 31];
-      } else if (typeUseLower.includes('condo') || typeUseLower.includes('townhouse')) {
+      } 
+      // Condo/Townhouse variations
+      else if (typeUseLower.includes('condo') || typeUseLower.includes('townhouse') || 
+               typeUseLower.includes('townhome') || typeUseLower.includes('town house') ||
+               typeUseLower.includes('row') || typeUseLower.includes('th end') || 
+               typeUseLower.includes('th int') || typeUseLower.includes('end unit') ||
+               typeUseLower.includes('interior unit')) {
         validClasses = [33, 35, 37, 39];
-      } else if (typeUseLower.includes('multi') || typeUseLower.includes('two family') || 
-                 typeUseLower.includes('three family') || typeUseLower.includes('four family')) {
+      } 
+      // Multi-family variations
+      else if (typeUseLower.includes('multi') || typeUseLower.includes('two family') || 
+               typeUseLower.includes('2 family') || typeUseLower.includes('2family') ||
+               typeUseLower.includes('twofamily') || typeUseLower.includes('three family') ||
+               typeUseLower.includes('3 family') || typeUseLower.includes('3family') ||
+               typeUseLower.includes('threefamily') || typeUseLower.includes('four family') ||
+               typeUseLower.includes('4 family') || typeUseLower.includes('4family') ||
+               typeUseLower.includes('fourfamily') || typeUseLower.includes('apartment') ||
+               typeUseLower.includes('triplex') || typeUseLower.includes('quadplex')) {
         validClasses = [43, 45, 47, 49];
       }
       
@@ -711,39 +753,75 @@ const MarketLandAnalysis = ({ jobData }) => {
           check: 'type_use_building_class_mismatch',
           severity: 'warning',
           property_key: property.property_composite_key,
-          message: `Type use "${typeUse}" doesn't match building class ${buildingClass}`,
+          message: `Type use "${typeUseDescription}"${typeUse !== typeUseDescription ? ` (code: ${typeUse})` : ''} doesn't match building class ${buildingClass} (expected: ${validClasses.join(', ')})`,
           details: property
         });
       }
     }
     
-    // ==================== DESIGN STYLE CHECKS ====================
+    // ==================== DESIGN STYLE CHECKS - FIXED! ====================
     if (designStyle) {
-      const designLower = designStyle.toLowerCase();
-      const storyHeight = property.asset_story_height;
+      let designDescription = designStyle;
       
-      // Check for non-standard designs
+      // Try to look up the design code in parsed_code_definitions
+      if (codeDefinitions) {
+        if (vendorType === 'BRT') {
+          // For BRT, look in section 23 (DESIGN)
+          const designSection = codeDefinitions.sections?.['23']?.MAP;
+          if (designSection) {
+            // Check if designStyle is a code that needs lookup
+            Object.entries(designSection).forEach(([key, value]) => {
+              if (value.KEY === designStyle || value.DATA?.KEY === designStyle) {
+                designDescription = value.DATA?.VALUE || value.VALUE || designStyle;
+              }
+            });
+          }
+        } else if (vendorType === 'Microsystems') {
+          // For Microsystems, look for 520 prefix codes (design codes)
+          // The designStyle might be just the suffix (CL) or full code (520CL)
+          const lookupCode = designStyle.length <= 3 ? `520${designStyle}` : designStyle;
+          if (codeDefinitions[lookupCode]) {
+            designDescription = codeDefinitions[lookupCode];
+          } else if (codeDefinitions[designStyle]) {
+            designDescription = codeDefinitions[designStyle];
+          }
+        }
+      }
+      
+      // Now do fuzzy matching against standard designs
+      const designLower = designDescription.toLowerCase();
       const standardDesigns = [
-        'colonial', 'split level', 'bilevel', 'bi-level', 'cape cod', 'cape',
-        'ranch', 'rancher', 'raised ranch', 'bungalow', 'twin',
-        'townhouse end', 'townhouse int', 'one bed', '1bed', '1 bed',
-        'two bed', '2bed', '2 bed', 'three bed', '3bed', '3 bed'
+        'colonial', 'split level', 'split-level', 'bilevel', 'bi-level', 'bi level',
+        'cape cod', 'cape', 'ranch', 'rancher', 'raised ranch', 'bungalow', 
+        'twin', 'townhouse end', 'townhouse int', 'townhouse interior', 'townhouse',
+        'one bed', '1bed', '1 bed', '1 bedroom', 'one bedroom',
+        'two bed', '2bed', '2 bed', '2 bedroom', 'two bedroom',
+        'three bed', '3bed', '3 bed', '3 bedroom', 'three bedroom'
       ];
       
-      const isStandard = standardDesigns.some(std => designLower.includes(std.toLowerCase()));
+      // Fuzzy matching - check if any standard design is contained in the description
+      const isStandard = standardDesigns.some(std => {
+        const stdLower = std.toLowerCase();
+        // Check both ways - if design contains standard OR standard contains design
+        return designLower.includes(stdLower) || stdLower.includes(designLower);
+      });
+      
       if (!isStandard) {
         results.characteristics.push({
           check: 'non_standard_design',
           severity: 'info',
           property_key: property.property_composite_key,
-          message: `Non-standard design: ${designStyle}`,
+          message: `Non-standard design: ${designDescription}${designStyle !== designDescription ? ` (code: ${designStyle})` : ''}`,
           details: property
         });
       }
       
-      // Design to Story Height validation
+      // Design to Story Height validation (using the description we looked up)
+      const storyHeight = property.asset_story_height;
       if (storyHeight) {
-        if (designLower.includes('colonial') && storyHeight < 2) {
+        const designForStoryCheck = (designDescription || designStyle).toLowerCase();
+        
+        if (designForStoryCheck.includes('colonial') && storyHeight < 2) {
           results.characteristics.push({
             check: 'colonial_story_mismatch',
             severity: 'warning',
@@ -752,7 +830,7 @@ const MarketLandAnalysis = ({ jobData }) => {
             details: property
           });
         }
-        if ((designLower.includes('ranch') && !designLower.includes('raised')) && storyHeight > 1) {
+        if ((designForStoryCheck.includes('ranch') && !designForStoryCheck.includes('raised')) && storyHeight > 1) {
           results.characteristics.push({
             check: 'ranch_story_mismatch',
             severity: 'warning',
@@ -761,7 +839,8 @@ const MarketLandAnalysis = ({ jobData }) => {
             details: property
           });
         }
-        if ((designLower.includes('split level') || designLower.includes('bilevel')) && storyHeight < 2) {
+        if ((designForStoryCheck.includes('split level') || designForStoryCheck.includes('bilevel') || 
+             designForStoryCheck.includes('bi-level') || designForStoryCheck.includes('bi level')) && storyHeight < 2) {
           results.characteristics.push({
             check: 'split_level_story_mismatch',
             severity: 'warning',
@@ -770,7 +849,7 @@ const MarketLandAnalysis = ({ jobData }) => {
             details: property
           });
         }
-        if (designLower.includes('raised ranch') && storyHeight > 1) {
+        if (designForStoryCheck.includes('raised ranch') && storyHeight > 1) {
           results.characteristics.push({
             check: 'raised_ranch_story_mismatch',
             severity: 'warning',
@@ -779,7 +858,7 @@ const MarketLandAnalysis = ({ jobData }) => {
             details: property
           });
         }
-        if ((designLower.includes('cape') || designLower.includes('bungalow')) && storyHeight === 1) {
+        if ((designForStoryCheck.includes('cape') || designForStoryCheck.includes('bungalow')) && storyHeight === 1) {
           results.characteristics.push({
             check: 'cape_bungalow_story_mismatch',
             severity: 'warning',
@@ -865,8 +944,466 @@ const MarketLandAnalysis = ({ jobData }) => {
       }
     }
     
-    // Additional checks would go here but are commented out for now
-    // since raw_data access needs to be fixed
+    // ==================== PARTIAL HEATING/COOLING SYSTEMS (RAW_DATA) ====================
+    if (vendorType === 'BRT') {
+      // Check for partial AC or heating in BRT
+      if (rawData.ACPARTIAL && rawData.ACPARTIAL.toString().trim() !== '') {
+        results.special.push({
+          check: 'partial_cooling',
+          severity: 'info',
+          property_key: property.property_composite_key,
+          message: 'Property has partial AC system',
+          details: property
+        });
+      }
+      if (rawData.HEATSYSPARTIAL && rawData.HEATSYSPARTIAL.toString().trim() !== '') {
+        results.special.push({
+          check: 'partial_heating',
+          severity: 'info',
+          property_key: property.property_composite_key,
+          message: 'Property has partial heating system',
+          details: property
+        });
+      }
+    } else if (vendorType === 'Microsystems') {
+      // For Microsystems, check if BOTH heat system fields have data (partial heating)
+      const heatType1 = rawData['Heat System Type1'] || rawData['Heat Source'];
+      const heatType2 = rawData['Heat System Type2'];
+      if (heatType1 && heatType1.toString().trim() !== '' && 
+          heatType2 && heatType2.toString().trim() !== '') {
+        results.special.push({
+          check: 'partial_heating',
+          severity: 'info',
+          property_key: property.property_composite_key,
+          message: 'Property has partial heating system (multiple heat types)',
+          details: property
+        });
+      }
+    }
+    
+    // ==================== LIVING BASEMENTS (RAW_DATA) ====================
+    if (vendorType === 'BRT') {
+      // For BRT, need to check code file for basement living code (typically "02")
+      // Then check if property has that code in basement fields
+      // This is complex - would need to parse basement section of code file
+      // For now, check common basement finished fields
+      if (rawData.BSMNTFINISH_1 === '02' || rawData.BSMNTFINISH_2 === '02' ||
+          (rawData.BSMNTFINISHAREA_1 && parseInt(rawData.BSMNTFINISHAREA_1) > 0) ||
+          (rawData.BSMNTFINISHAREA_2 && parseInt(rawData.BSMNTFINISHAREA_2) > 0)) {
+        results.special.push({
+          check: 'living_basement',
+          severity: 'info',
+          property_key: property.property_composite_key,
+          message: 'Property has living/finished basement',
+          details: property
+        });
+      }
+    } else if (vendorType === 'Microsystems') {
+      // Check multiple fields for living basement indicators
+      const bsmtHeat = rawData['Bsmt Finish Heat Y N'];
+      const bsmtQuality = rawData['Bsmt Living Quality'];
+      const bsmtSf = rawData['Bsmt Living Sf'];
+      
+      if ((bsmtHeat && bsmtHeat.toString().toUpperCase() === 'Y') ||
+          (bsmtQuality && bsmtQuality.toString().trim() !== '') ||
+          (bsmtSf && parseFloat(bsmtSf) > 0)) {
+        results.special.push({
+          check: 'living_basement',
+          severity: 'info',
+          property_key: property.property_composite_key,
+          message: 'Property has living/finished basement',
+          details: property
+        });
+      }
+    }
+    
+    // ==================== BEDROOM COUNT VALIDATION (RAW_DATA) ====================
+    if ((m4Class === '2' || m4Class === '3A') && buildingClass > 10) {
+      if (vendorType === 'BRT') {
+        const bedTotal = rawData.BEDTOT;
+        if (!bedTotal || parseInt(bedTotal) === 0) {
+          results.rooms.push({
+            check: 'zero_bedrooms',
+            severity: 'warning',
+            property_key: property.property_composite_key,
+            message: 'Residential property has zero bedrooms',
+            details: property
+          });
+        }
+      } else if (vendorType === 'Microsystems') {
+        // Sum all bedroom fields
+        const bedB = parseInt(rawData['Bedrm B'] || 0);
+        const bed1 = parseInt(rawData['Bedrm 1'] || 0);
+        const bed2 = parseInt(rawData['Bedrm 2'] || 0);
+        const bed3 = parseInt(rawData['Bedrm 3'] || 0);
+        const totalBeds = bedB + bed1 + bed2 + bed3;
+        
+        if (totalBeds === 0) {
+          results.rooms.push({
+            check: 'zero_bedrooms',
+            severity: 'warning',
+            property_key: property.property_composite_key,
+            message: 'Residential property has zero bedrooms',
+            details: property
+          });
+        }
+      }
+    }
+    
+    // ==================== BATHROOM COUNT CROSS-CHECK (RAW_DATA) ====================
+    if ((m4Class === '2' || m4Class === '3A') && buildingClass > 10) {
+      if (vendorType === 'BRT') {
+        // Sum plumbing fixtures
+        const plumb2 = parseInt(rawData.PLUMBING2FIX || 0);
+        const plumb3 = parseInt(rawData.PLUMBING3FIX || 0);
+        const plumb4 = parseInt(rawData.PLUMBING4FIX || 0);
+        const plumb5 = parseInt(rawData.PLUMBING5FIX || 0);
+        const plumb6 = parseInt(rawData.PLUMBING6FIX || 0);
+        const plumbTotal = plumb2 + plumb3 + plumb4 + plumb5 + plumb6;
+        
+        const bathTotal = parseInt(rawData.BATHTOT || 0);
+        
+        if (plumbTotal !== bathTotal) {
+          results.rooms.push({
+            check: 'bathroom_count_mismatch',
+            severity: 'warning',
+            property_key: property.property_composite_key,
+            message: `Bathroom count mismatch: Plumbing fixtures total ${plumbTotal}, BATHTOT shows ${bathTotal}`,
+            details: property
+          });
+        }
+      } else if (vendorType === 'Microsystems') {
+        // Room count sum (all the individual bathroom counts by location)
+        const roomBaths = 
+          parseInt(rawData['2 Fixture Bath B'] || 0) + parseInt(rawData['2 Fixture Bath 1'] || 0) +
+          parseInt(rawData['2 Fixture Bath 2'] || 0) + parseInt(rawData['2 Fixture Bath 3'] || 0) +
+          parseInt(rawData['3 Fixture Bath B'] || 0) + parseInt(rawData['3 Fixture Bath 1'] || 0) +
+          parseInt(rawData['3 Fixture Bath 2'] || 0) + parseInt(rawData['3 Fixture Bath 3'] || 0) +
+          parseInt(rawData['4 Fixture Bath B'] || 0) + parseInt(rawData['4 Fixture Bath 1'] || 0) +
+          parseInt(rawData['4 Fixture Bath 2'] || 0) + parseInt(rawData['4 Fixture Bath 3'] || 0) +
+          parseInt(rawData['Num 5 Fixture Baths'] || 0);
+        
+        // Plumbing count sum (the total counts by fixture type)
+        const plumbBaths = 
+          parseInt(rawData['4 Fixture Bath'] || 0) + 
+          parseInt(rawData['3 Fixture Bath'] || 0) +
+          parseInt(rawData['2 Fixture Bath'] || 0) + 
+          parseInt(rawData['Num 5 Fixture Baths'] || 0);
+        
+        if (roomBaths !== plumbBaths) {
+          results.rooms.push({
+            check: 'bathroom_count_mismatch',
+            severity: 'warning',
+            property_key: property.property_composite_key,
+            message: `Bathroom count mismatch: Room count ${roomBaths}, Plumbing count ${plumbBaths}`,
+            details: property
+          });
+        }
+      }
+    }
+    
+    // ==================== DETACHED ITEMS MISSING DEPRECIATION (RAW_DATA) ====================
+    if (vendorType === 'BRT') {
+      // Check if any detached codes exist
+      let hasDetached = false;
+      let missingDepreciation = [];
+      
+      for (let i = 1; i <= 11; i++) {
+        const code = rawData[`DETACHEDCODE_${i}`];
+        const size = rawData[`DETACHEDDCSIZE_${i}`];
+        const nc = rawData[`DETACHEDNC_${i}`];
+        
+        if ((code && code.toString().trim() !== '') || (size && size.toString().trim() !== '')) {
+          hasDetached = true;
+          if (!nc || parseInt(nc) === 0) {
+            missingDepreciation.push(i);
+          }
+        }
+      }
+      
+      if (hasDetached && missingDepreciation.length > 0) {
+        results.special.push({
+          check: 'detached_missing_depreciation',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: `Detached items ${missingDepreciation.join(', ')} missing depreciation (NC value = 0)`,
+          details: property
+        });
+      }
+    } else if (vendorType === 'Microsystems') {
+      // Check if property has detached items
+      let hasDetached = false;
+      for (let i = 1; i <= 4; i++) {
+        const code = rawData[`Detached Item Code${i}`];
+        const building = rawData[`Detachedbuilding${i}`];
+        if ((code && code.toString().trim() !== '') || (building && building.toString().trim() !== '')) {
+          hasDetached = true;
+          break;
+        }
+      }
+      
+      if (hasDetached) {
+        // Check ALL depreciation fields
+        let hasAnyDepreciation = false;
+        for (let i = 1; i <= 4; i++) {
+          // Note the typo in vendor field names!
+          const physicalDepr = rawData[`Physical Depr${i}`] || rawData[`Pysical${i}`];
+          const functionalDepr = rawData[`Functional Depr${i}`] || rawData[`Functional${i}`];
+          const locationalDepr = rawData[`Locational Depr${i}`] || rawData[`Location Economic${i}`];
+          
+          if ((physicalDepr && physicalDepr.toString().trim() !== '') ||
+              (functionalDepr && functionalDepr.toString().trim() !== '') ||
+              (locationalDepr && locationalDepr.toString().trim() !== '')) {
+            hasAnyDepreciation = true;
+            break;
+          }
+        }
+        
+        if (!hasAnyDepreciation) {
+          results.special.push({
+            check: 'detached_missing_depreciation',
+            severity: 'warning',
+            property_key: property.property_composite_key,
+            message: 'Detached items exist but all depreciation fields are blank',
+            details: property
+          });
+        }
+      }
+    }
+    
+    // ==================== LAND ADJUSTMENTS (RAW_DATA) ====================
+    if (vendorType === 'BRT') {
+      // Check for ANY land adjustments in BRT
+      let hasLandAdjustments = false;
+      
+      // Check all urban condition/influence and frontage condition/influence fields
+      for (let i = 1; i <= 6; i++) {
+        if (rawData[`LANDURCOND_${i}`] || rawData[`LANDURCONDPC_${i}`] ||
+            rawData[`LANDURINFL_${i}`] || rawData[`LANDURINFLPC_${i}`] ||
+            rawData[`LANDFFINFL_${i}`] || rawData[`LANDFFINFLPC_${i}`] ||
+            rawData[`LANDFFCOND_${i}`] || rawData[`LANDFFCONDPC_${i}`]) {
+          hasLandAdjustments = true;
+          break;
+        }
+      }
+      
+      if (hasLandAdjustments) {
+        results.special.push({
+          check: 'land_adjustments_exist',
+          severity: 'info',
+          property_key: property.property_composite_key,
+          message: 'Property has land adjustments (condition/influence factors)',
+          details: property
+        });
+      }
+    } else if (vendorType === 'Microsystems') {
+      // Check for non-zero adjustments in Microsystems
+      let hasLandAdjustments = false;
+      
+      // Check Net Adjustments and Reason Codes
+      for (let i = 1; i <= 3; i++) {
+        const netAdj = rawData[`Net Adjustment${i}`];
+        const reasonCode = rawData[`Adj Reason Code${i}`];
+        if ((netAdj && parseFloat(netAdj) !== 0) || (reasonCode && reasonCode.toString().trim() !== '')) {
+          hasLandAdjustments = true;
+          break;
+        }
+      }
+      
+      // Check Unit Adjustments
+      if (!hasLandAdjustments) {
+        const unitAdj1 = rawData['Unit Adjustment1'];
+        const unitAdj2 = rawData['Unit Adjustment2'];
+        const unitAdj = rawData['Unit Adjustment'];
+        const unitCode1 = rawData['Unit Adj Code1'];
+        const unitCode2 = rawData['Unit Adj Code2'];
+        const unitCode = rawData['Unit Adj Code'];
+        
+        if ((unitAdj1 && parseFloat(unitAdj1) !== 0) || (unitAdj2 && parseFloat(unitAdj2) !== 0) ||
+            (unitAdj && parseFloat(unitAdj) !== 0) || 
+            (unitCode1 && unitCode1.toString().trim() !== '') ||
+            (unitCode2 && unitCode2.toString().trim() !== '') ||
+            (unitCode && unitCode.toString().trim() !== '')) {
+          hasLandAdjustments = true;
+        }
+      }
+      
+      if (hasLandAdjustments) {
+        results.special.push({
+          check: 'land_adjustments_exist',
+          severity: 'info',
+          property_key: property.property_composite_key,
+          message: 'Property has land adjustments (net/unit adjustments)',
+          details: property
+        });
+      }
+    }
+    
+    // ==================== MARKET ADJUSTMENTS (RAW_DATA) ====================
+    if (vendorType === 'BRT') {
+      // Check multiple market adjustment indicators
+      const mktAdj = rawData.MKTADJ;
+      const ncovr = rawData.NCOVR;
+      const ncRedirect = rawData.NCREDIRECT;
+      const ncMktInflnc = rawData.NCMKTINFLNC;
+      const ncMktInfpc = rawData.NCMKTINFPC;
+      
+      // Check if MKTADJ != 1
+      if (mktAdj && parseFloat(mktAdj) !== 1) {
+        results.special.push({
+          check: 'market_adjustment_factor',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: `Market adjustment factor is ${mktAdj} (should be 1)`,
+          details: property
+        });
+      }
+      
+      // Check if NCOVR != 0
+      if (ncovr && parseFloat(ncovr) !== 0) {
+        results.special.push({
+          check: 'ncovr_not_zero',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: `NCOVR is ${ncovr} (should be 0)`,
+          details: property
+        });
+      }
+      
+      // Check for NC redirect data
+      if (ncRedirect && ncRedirect.toString().trim() !== '') {
+        results.special.push({
+          check: 'nc_redirect_exists',
+          severity: 'info',
+          property_key: property.property_composite_key,
+          message: 'Property has NC redirect value',
+          details: property
+        });
+      }
+      
+      // Check NC market influence values
+      if ((ncMktInflnc && parseFloat(ncMktInflnc) !== 0) || 
+          (ncMktInfpc && parseFloat(ncMktInfpc) !== 0)) {
+        results.special.push({
+          check: 'nc_market_influence',
+          severity: 'info',
+          property_key: property.property_composite_key,
+          message: 'Property has NC market influence values',
+          details: property
+        });
+      }
+      
+      // Check for description fields
+      if ((rawData.MKTECONDESC && rawData.MKTECONDESC.toString().trim() !== '') ||
+          (rawData.MKTFUNCDESC && rawData.MKTFUNCDESC.toString().trim() !== '') ||
+          (rawData.MKTMKTDESC && rawData.MKTMKTDESC.toString().trim() !== '') ||
+          (rawData.MKTPHYSDESC && rawData.MKTPHYSDESC.toString().trim() !== '')) {
+        results.special.push({
+          check: 'market_adjustment_descriptions',
+          severity: 'info',
+          property_key: property.property_composite_key,
+          message: 'Property has market adjustment descriptions',
+          details: property
+        });
+      }
+      
+      // Check percentage fields (should all be 100)
+      if ((rawData.MKTECONPC && parseFloat(rawData.MKTECONPC) !== 100) ||
+          (rawData.MKTFUNCPC && parseFloat(rawData.MKTFUNCPC) !== 100) ||
+          (rawData.MKTMKTPC && parseFloat(rawData.MKTMKTPC) !== 100) ||
+          (rawData.MKTPHYSPC && parseFloat(rawData.MKTPHYSPC) !== 100)) {
+        results.special.push({
+          check: 'market_adjustment_percentages',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: 'Market adjustment percentages are not 100%',
+          details: property
+        });
+      }
+    } else if (vendorType === 'Microsystems') {
+      // Check for any market adjustment data
+      if ((rawData['Over Improved Depr1'] && rawData['Over Improved Depr1'].toString().trim() !== '') ||
+          (rawData['Economic Depr'] && rawData['Economic Depr'].toString().trim() !== '') ||
+          (rawData['Under Improved Depr'] && rawData['Under Improved Depr'].toString().trim() !== '') ||
+          (rawData['Function Depr'] && rawData['Function Depr'].toString().trim() !== '') ||
+          (rawData['Over Improved Depr2'] && rawData['Over Improved Depr2'].toString().trim() !== '') ||
+          (rawData['Location Code'] && rawData['Location Code'].toString().trim() !== '')) {
+        results.special.push({
+          check: 'market_adjustments_exist',
+          severity: 'info',
+          property_key: property.property_composite_key,
+          message: 'Property has market adjustments (depreciation/location factors)',
+          details: property
+        });
+      }
+    }
+    
+    // ==================== FLAT ADD/OVERRIDE VALUES (RAW_DATA) ====================
+    if (vendorType === 'BRT') {
+      // Check for improvement/land value overrides
+      if ((rawData.IMPROVVALUEOVR && rawData.IMPROVVALUEOVR.toString().trim() !== '') ||
+          (rawData.LANDVALUEOVR && rawData.LANDVALUEOVR.toString().trim() !== '')) {
+        results.special.push({
+          check: 'value_overrides',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: 'Property has improvement or land value overrides',
+          details: property
+        });
+      }
+      
+      // Check for write-in values
+      if ((rawData.WRITEIN_1 && rawData.WRITEIN_1.toString().trim() !== '') ||
+          (rawData.WRITEIN_2 && rawData.WRITEIN_2.toString().trim() !== '')) {
+        results.special.push({
+          check: 'writein_values',
+          severity: 'info',
+          property_key: property.property_composite_key,
+          message: 'Property has write-in descriptions',
+          details: property
+        });
+      }
+      
+      // Check write-in value amounts
+      if ((rawData.WRITEINVALUE_1 && parseFloat(rawData.WRITEINVALUE_1) !== 0) ||
+          (rawData.WRITEINVALUE_2 && parseFloat(rawData.WRITEINVALUE_2) !== 0)) {
+        results.special.push({
+          check: 'writein_values',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: 'Property has non-zero write-in values',
+          details: property
+        });
+      }
+    } else if (vendorType === 'Microsystems') {
+      // Check for flat add descriptions
+      if ((rawData['Flat Add Desc1'] && rawData['Flat Add Desc1'].toString().trim() !== '') ||
+          (rawData['Flat Add Desc2'] && rawData['Flat Add Desc2'].toString().trim() !== '') ||
+          (rawData['Base Cost Flat Add Desc1'] && rawData['Base Cost Flat Add Desc1'].toString().trim() !== '') ||
+          (rawData['Base Cost Flat Add Desc2'] && rawData['Base Cost Flat Add Desc2'].toString().trim() !== '')) {
+        results.special.push({
+          check: 'flat_add_values',
+          severity: 'info',
+          property_key: property.property_composite_key,
+          message: 'Property has flat add descriptions',
+          details: property
+        });
+      }
+      
+      // Check for non-zero flat add values
+      if ((rawData['Base Cost Flat Add Value1'] && parseFloat(rawData['Base Cost Flat Add Value1']) !== 0) ||
+          (rawData['Base Cost Flat Add Value2'] && parseFloat(rawData['Base Cost Flat Add Value2']) !== 0) ||
+          (rawData['Flat Add Value1'] && parseFloat(rawData['Flat Add Value1']) !== 0) ||
+          (rawData['Flat Add Value2'] && parseFloat(rawData['Flat Add Value2']) !== 0)) {
+        results.special.push({
+          check: 'flat_add_values',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: 'Property has non-zero flat add values',
+          details: property
+        });
+      }
+    }
   };
 
   const saveQualityResults = async (results) => {
@@ -989,6 +1526,8 @@ const MarketLandAnalysis = ({ jobData }) => {
       'residential_building_class_10': 'Residential Properties with Building Class 10',
       'missing_design_style': 'Missing Design Style',
       'missing_type_use': 'Missing Type Use',
+      'design_without_proper_building_class': 'Has Design but Wrong Building Class',
+      'design_without_type_use': 'Has Design but Missing Type Use',
       'type_use_building_class_mismatch': 'Type Use/Building Class Mismatch',
       'non_standard_design': 'Non-Standard Design',
       'colonial_story_mismatch': 'Colonial Story Height Issue',
@@ -1010,7 +1549,7 @@ const MarketLandAnalysis = ({ jobData }) => {
       
       // Special
       'missing_vcs': 'Missing VCS Code',
-      'partial_systems': 'Partial Heating/Cooling Systems',
+      'partial_cooling': 'Partial AC System',
       'partial_heating': 'Partial Heating System',
       'living_basement': 'Properties with Living Basement',
       'detached_missing_depreciation': 'Detached Items Missing Depreciation',
@@ -1198,7 +1737,6 @@ const MarketLandAnalysis = ({ jobData }) => {
         
         {activeSubTab === 'standard' && (
           <div>
-
             {/* Check Results */}
             {Object.keys(checkResults).length > 0 ? (
               <div>
@@ -1551,7 +2089,7 @@ const MarketLandAnalysis = ({ jobData }) => {
             </div>
           </div>
         )}
-
+        
         {/* Property Details Modal */}
         {showDetailsModal && (
           <div 
@@ -1606,286 +2144,5 @@ const MarketLandAnalysis = ({ jobData }) => {
       </div>
     );
   };
-
-  // Pre-Valuation Setup Tab
-  const PreValuationTab = () => (
-    <div className="tab-content">
-      {/* Sub-tabs for Normalization and Page by Page */}
-      <div className="sub-tabs">
-        <button className="sub-tab active">
-          Normalization
-        </button>
-        <button className="sub-tab">
-          Page by Page Worksheet
-        </button>
-      </div>
-
-      {/* Normalization Settings */}
-      <div className="card">
-        <h4>Normalization Settings</h4>
-        <div className="form-grid">
-          <div className="form-group">
-            <label>Target Year</label>
-            <input
-              type="number"
-              className="form-input"
-              value={targetYear}
-              onChange={(e) => setTargetYear(parseInt(e.target.value))}
-            />
-          </div>
-          <div className="form-group">
-            <label>Equalization Ratio (%)</label>
-            <input
-              type="number"
-              className="form-input"
-              value={equalizationRatio}
-              onChange={(e) => setEqualizationRatio(parseFloat(e.target.value))}
-              step="0.1"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Action Buttons */}
-      <div className="button-group">
-        <button className="btn btn-primary">
-          <RefreshCw size={16} />
-          Run Normalization
-        </button>
-      </div>
-    </div>
-  );
-
-  // Overall Analysis Tab
-  const OverallAnalysisTab = () => (
-    <div className="tab-content">
-      <div className="tab-header">
-        <h3>Block Value Analysis</h3>
-        <p className="text-muted">
-          Analyzing values by block with color coding for Bluebeam integration
-        </p>
-      </div>
-
-      {/* Color Scale Settings */}
-      <div className="card">
-        <h4>Color Scale Configuration</h4>
-        <div className="form-grid">
-          <div className="form-group">
-            <label>Starting Value</label>
-            <input
-              type="number"
-              className="form-input"
-              value={colorScaleStart}
-              onChange={(e) => setColorScaleStart(parseInt(e.target.value))}
-              step="10000"
-            />
-          </div>
-          <div className="form-group">
-            <label>Increment</label>
-            <input
-              type="number"
-              className="form-input"
-              value={colorScaleIncrement}
-              onChange={(e) => setColorScaleIncrement(parseInt(e.target.value))}
-              step="5000"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Block Analysis Results */}
-      <div className="card">
-        <h4>Block Analysis Results</h4>
-        {/* TODO: Add block analysis grid */}
-        <p className="text-muted">
-          Run normalization first to see block analysis
-        </p>
-      </div>
-    </div>
-  );
-
-  // Land Valuation Tab
-  const LandValuationTab = () => (
-    <div className="tab-content">
-      <div className="tab-header">
-        <h3>Land Valuation System</h3>
-        <p className="text-muted">
-          7-section comprehensive land analysis with economic obsolescence
-        </p>
-      </div>
-
-      {/* Land Analysis Sections */}
-      <div className="card">
-        <h4>Analysis Sections</h4>
-        <div className="section-list">
-          {[
-            'Data Preparation & Import',
-            'Raw Land Rate Determination',
-            'Land Allocation Validation',
-            'Special Condition Rates',
-            'VCS Site Value Framework',
-            'Economic Obsolescence Analysis',
-            'Site Value Calculator'
-          ].map((section, index) => (
-            <div key={index} className="section-item">
-              {index + 1}. {section}
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-
-  // Cost Valuation Tab
-  const CostValuationTab = () => (
-    <div className="tab-content">
-      <div className="tab-header">
-        <h3>Cost Approach Valuation</h3>
-        <p className="text-muted">
-          New construction analysis and cost conversion factors
-        </p>
-      </div>
-
-      {/* Cost Conversion Settings */}
-      <div className="card">
-        <h4>Cost Conversion Factor</h4>
-        <div className="form-group">
-          <label>Conversion Factor</label>
-          <input
-            type="number"
-            className="form-input small"
-            value={costConversionFactor}
-            onChange={(e) => setCostConversionFactor(parseFloat(e.target.value))}
-            step="0.01"
-          />
-        </div>
-      </div>
-
-      {/* New Construction Analysis */}
-      <div className="card">
-        <h4>New Construction Properties</h4>
-        {/* TODO: Add new construction grid */}
-        <p className="text-muted">
-          No new construction properties identified
-        </p>
-      </div>
-    </div>
-  );
-
-  // Attribute & Card Analytics Tab
-  const AttributeCardsTab = () => (
-    <div className="tab-content">
-      <div className="tab-header">
-        <h3>Attribute & Card Analytics</h3>
-        <p className="text-muted">
-          Condition adjustments and multi-card property analysis
-        </p>
-      </div>
-
-      {/* Condition Adjustments */}
-      <div className="card">
-        <h4>Condition Adjustments</h4>
-        <div className="condition-grid">
-          {['Excellent', 'Good', 'Average', 'Fair', 'Poor'].map(condition => (
-            <div key={condition} className="condition-item">
-              <span className="text-muted">{condition}:</span>
-              <input
-                type="number"
-                className="form-input inline small"
-                placeholder="0%"
-              />
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Additional Cards Analysis */}
-      <div className="card">
-        <h4>Multi-Card Properties</h4>
-        {/* TODO: Add additional cards grid */}
-        <p className="text-muted">
-          {additionalCards.length} properties with multiple cards identified
-        </p>
-      </div>
-    </div>
-  );
-
-  // ==================== TAB CONTENT RENDERER ====================
-  const renderTabContent = () => {
-    switch (activeTab) {
-      case 'data-quality':
-        return <DataQualityTab />;
-      case 'pre-valuation':
-        return <PreValuationTab />;
-      case 'overall-analysis':
-        return <OverallAnalysisTab />;
-      case 'land-valuation':
-        return <LandValuationTab />;
-      case 'cost-valuation':
-        return <CostValuationTab />;
-      case 'attribute-cards':
-        return <AttributeCardsTab />;
-      default:
-        return <DataQualityTab />;
-    }
-  };
-
-  // ==================== MAIN RENDER ====================
-  return (
-    <div className="module-container">
-      {/* Header */}
-      <div className="module-header">
-        <div>
-          <p className="text-muted">
-            {jobData?.job_number} - {jobData?.municipality || 'Municipality'} ({jobData?.county || 'County'} County, {jobData?.state || 'State'})
-          </p>
-        </div>
-        <div className="header-actions">
-          {lastSaved && (
-            <span className="last-saved">
-              Last saved: {lastSaved.toLocaleTimeString()}
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Tab Navigation */}
-      <div className="flex gap-2 border-b-2 border-gray-200 mb-6">
-        {tabs.map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`px-4 py-2 font-medium text-sm transition-all ${
-              activeTab === tab.id
-                ? 'border-b-2 border-blue-500 text-blue-600 -mb-[2px]'
-                : 'text-gray-600 hover:text-gray-800'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Content Area */}
-      <div className="content-area">
-        {renderTabContent()}
-      </div>
-
-      {/* Footer Status Bar */}
-      <div className="status-bar">
-        <span>{properties.length} properties loaded</span>
-        <span>
-          {unsavedChanges && (
-            <span className="unsaved-indicator">
-              <AlertCircle size={12} />
-              Unsaved changes
-            </span>
-          )}
-          Ready
-        </span>
-      </div>
-    </div>
-  );
-};
 
 export default MarketLandAnalysis;
