@@ -13,7 +13,7 @@ import {
   Download,
   Upload,
   Save,
-  ChevronLeft
+  ChevronLeft,
   ChevronRight
 } from 'lucide-react';
 
