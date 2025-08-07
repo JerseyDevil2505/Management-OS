@@ -1299,8 +1299,6 @@ const DataQualityTab = () => (
     )}
   </div>
 )}
-  </div>
-):
 
     {/* Property Details Modal */}
     {showDetailsModal && (
@@ -1353,6 +1351,10 @@ const DataQualityTab = () => (
         </div>
       </div>
     )}
+  </div>
+)}
+  </div>
+);
 
   // Pre-Valuation Setup Tab
   const PreValuationTab = () => (
