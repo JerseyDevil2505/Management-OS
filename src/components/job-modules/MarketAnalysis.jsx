@@ -325,361 +325,226 @@ const showPropertyDetails = (checkType, category) => {
 
   // ==================== TAB COMPONENTS ====================
   
-// Data Quality Tab
+// Data Quality Tab - PRODUCTION VERSION using App.css classes
 const DataQualityTab = () => (
   <div className="tab-content">
-    <div className="tab-header" style={{ marginBottom: '20px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <h3>Data Quality Analysis</h3>
-          <p style={{ color: '#6b7280' }}>
-            Analyzing {properties.length} properties for data integrity issues
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <button 
-            className="btn btn-primary"
-            onClick={runQualityChecks}
-            disabled={isRunningChecks}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}
-          >
-            {isRunningChecks ? (
-              <>
-                <RefreshCw size={16} style={{ animation: 'spin 1s linear infinite' }} />
-                Running...
-              </>
-            ) : (
-              <>
-                <RefreshCw size={16} />
-                Run Analysis
-              </>
-            )}
-          </button>
-          <button 
-            className="btn btn-secondary"
-            onClick={() => alert('Excel export would be implemented here')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}
-          >
-            <Download size={16} />
-            Export Excel
-          </button>
-        </div>
-      </div>
+    {/* Header Section */}
+    <div className="mb-6">
+      <h3 className="text-2xl font-bold text-gray-800 mb-2">
+        Data Quality Analysis
+      </h3>
+      <p className="text-gray-600">
+        Analyzing {properties.length} properties for data integrity issues
+      </p>
     </div>
 
-    {/* Quality Score Cards */}
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-      gap: '15px',
-      marginBottom: '30px'
-    }}>
-      <div className="card">
-        <div style={{
-          color: '#6b7280',
-          fontSize: '12px',
-          textTransform: 'uppercase',
-          letterSpacing: '0.5px',
-          marginBottom: '8px'
-        }}>Quality Score</div>
-        <div style={{
-          fontSize: '28px',
-          fontWeight: '600',
-          color: '#10b981'
-        }}>
-          {qualityScore ? `${qualityScore}%` : '—'}
-        </div>
+    {/* Action Buttons */}
+    <div className="flex gap-3 mb-6">
+      <button 
+        onClick={runQualityChecks}
+        disabled={isRunningChecks}
+        className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-all ${
+          isRunningChecks 
+            ? 'bg-gray-400 text-white cursor-not-allowed' 
+            : 'bg-blue-600 text-white hover:bg-blue-700'
+        }`}
+      >
+        <RefreshCw size={16} className={isRunningChecks ? 'animate-spin' : ''} />
+        {isRunningChecks ? 'Running Analysis...' : 'Run Analysis'}
+      </button>
+      
+      <button 
+        onClick={() => alert('Excel export will be implemented')}
+        className="px-4 py-2 bg-white border-2 border-blue-600 text-blue-600 rounded-lg font-medium hover:bg-blue-50 transition-all flex items-center gap-2"
+      >
+        <Download size={16} />
+        Export to Excel
+      </button>
+      
+      <button 
+        onClick={() => alert('QC Form generation will be implemented')}
+        className="px-4 py-2 bg-white border-2 border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-all"
+      >
+        Generate QC Form
+      </button>
+    </div>
+
+    {/* Metrics Cards Grid */}
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+      <div className="card p-4">
+        <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Total Properties</div>
+        <div className="text-2xl font-bold text-gray-800">{properties.length.toLocaleString()}</div>
       </div>
-      <div className="card">
-        <div style={{
-          color: '#6b7280',
-          fontSize: '12px',
-          textTransform: 'uppercase',
-          letterSpacing: '0.5px',
-          marginBottom: '8px'
-        }}>Total Issues</div>
-        <div style={{
-          fontSize: '28px',
-          fontWeight: '600',
-          color: '#1f2937'
-        }}>
-          {issueStats.total}
-        </div>
+      
+      <div className="card p-4">
+        <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">With Issues</div>
+        <div className="text-2xl font-bold text-red-600">{issueStats.total}</div>
       </div>
-      <div className="card">
-        <div style={{
-          color: '#6b7280',
-          fontSize: '12px',
-          textTransform: 'uppercase',
-          letterSpacing: '0.5px',
-          marginBottom: '8px'
-        }}>Critical</div>
-        <div style={{
-          fontSize: '28px',
-          fontWeight: '600',
-          color: '#ef4444'
-        }}>
-          {issueStats.critical}
-        </div>
+      
+      <div className="card p-4">
+        <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Critical</div>
+        <div className="text-2xl font-bold text-red-600">{issueStats.critical}</div>
       </div>
-      <div className="card">
-        <div style={{
-          color: '#6b7280',
-          fontSize: '12px',
-          textTransform: 'uppercase',
-          letterSpacing: '0.5px',
-          marginBottom: '8px'
-        }}>Warnings</div>
-        <div style={{
-          fontSize: '28px',
-          fontWeight: '600',
-          color: '#f59e0b'
-        }}>
-          {issueStats.warning}
-        </div>
+      
+      <div className="card p-4">
+        <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Warnings</div>
+        <div className="text-2xl font-bold text-yellow-600">{issueStats.warning}</div>
       </div>
-      <div className="card">
-        <div style={{
-          color: '#6b7280',
-          fontSize: '12px',
-          textTransform: 'uppercase',
-          letterSpacing: '0.5px',
-          marginBottom: '8px'
-        }}>Info</div>
-        <div style={{
-          fontSize: '28px',
-          fontWeight: '600',
-          color: '#3b82f6'
-        }}>
-          {issueStats.info}
-        </div>
+      
+      <div className="card p-4">
+        <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Info</div>
+        <div className="text-2xl font-bold text-blue-600">{issueStats.info}</div>
+      </div>
+      
+      <div className="card p-4 bg-gradient-to-br from-green-500 to-green-600 text-white">
+        <div className="text-xs uppercase tracking-wide mb-1 opacity-90">Quality Score</div>
+        <div className="text-2xl font-bold">{qualityScore ? `${qualityScore}%` : '—'}</div>
       </div>
     </div>
 
     {/* Check Results */}
-    {Object.keys(checkResults).length > 0 && (
-      <>
-        <h4 style={{ marginBottom: '15px' }}>Check Results by Category</h4>
-        <div style={{ display: 'grid', gap: '15px' }}>
-          {Object.entries(checkResults).map(([category, issues]) => {
-            const isExpanded = expandedCategories.includes(category);
-            const criticalCount = issues.filter(i => i.severity === 'critical').length;
-            const warningCount = issues.filter(i => i.severity === 'warning').length;
-            const infoCount = issues.filter(i => i.severity === 'info').length;
-            
-            if (issues.length === 0) return null;
-            
-            return (
-              <div key={category} className="card" style={{ padding: 0, overflow: 'hidden' }}>
-                <div
-                  onClick={() => toggleQualityCategory(category)}
-                  style={{
-                    padding: '12px 16px',
-                    background: '#f9fafb',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center'
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <ChevronRight
-                      size={16}
-                      style={{
-                        transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
-                        transition: 'transform 0.2s'
-                      }}
-                    />
-                    <span style={{ fontWeight: '600', textTransform: 'capitalize' }}>
-                      {category.replace('_', ' ')} Checks
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    {criticalCount > 0 && (
-                      <span style={{
-                        padding: '2px 8px',
-                        borderRadius: '12px',
-                        fontSize: '12px',
-                        fontWeight: '600',
-                        background: '#fee2e2',
-                        color: '#991b1b'
-                      }}>
-                        {criticalCount} Critical
-                      </span>
-                    )}
-                    {warningCount > 0 && (
-                      <span style={{
-                        padding: '2px 8px',
-                        borderRadius: '12px',
-                        fontSize: '12px',
-                        fontWeight: '600',
-                        background: '#fef3c7',
-                        color: '#92400e'
-                      }}>
-                        {warningCount} Warning
-                      </span>
-                    )}
-                    {infoCount > 0 && (
-                      <span style={{
-                        padding: '2px 8px',
-                        borderRadius: '12px',
-                        fontSize: '12px',
-                        fontWeight: '600',
-                        background: '#dbeafe',
-                        color: '#1e40af'
-                      }}>
-                        {infoCount} Info
-                      </span>
-                    )}
-                  </div>
+    {Object.keys(checkResults).length > 0 ? (
+      <div>
+        <h4 className="text-lg font-semibold text-gray-800 mb-4">
+          Check Results by Category
+        </h4>
+        
+        {Object.entries(checkResults).map(([category, issues]) => {
+          if (issues.length === 0) return null;
+          
+          const isExpanded = expandedCategories.includes(category);
+          const criticalCount = issues.filter(i => i.severity === 'critical').length;
+          const warningCount = issues.filter(i => i.severity === 'warning').length;
+          const infoCount = issues.filter(i => i.severity === 'info').length;
+          
+          return (
+            <div key={category} className="card mb-3 overflow-hidden">
+              <div
+                onClick={() => toggleQualityCategory(category)}
+                className="p-4 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors flex justify-between items-center"
+              >
+                <div className="flex items-center gap-2">
+                  <ChevronRight
+                    size={20}
+                    className={`text-gray-500 transform transition-transform ${
+                      isExpanded ? 'rotate-90' : ''
+                    }`}
+                  />
+                  <span className="font-semibold text-gray-800 capitalize">
+                    {category.replace(/_/g, ' ')} Checks
+                  </span>
                 </div>
                 
-                {isExpanded && (
-                  <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
-                    {Object.entries(
-                      issues.reduce((acc, issue) => {
-                        if (!acc[issue.check]) acc[issue.check] = [];
-                        acc[issue.check].push(issue);
-                        return acc;
-                      }, {})
-                    ).map(([checkType, checkIssues]) => (
-                      <div
-                        key={checkType}
-                        style={{
-                          padding: '10px 16px',
-                          borderTop: '1px solid #e5e7eb',
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center'
-                        }}
-                      >
-                        <span style={{ fontSize: '14px' }}>
-                          {getCheckTitle(checkType)}
-                        </span>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <span style={{
-                            fontWeight: '600',
-                            fontSize: '14px',
-                            color: checkIssues[0].severity === 'critical' ? '#ef4444' :
-                                   checkIssues[0].severity === 'warning' ? '#f59e0b' : '#3b82f6'
-                          }}>
-                            {checkIssues.length} properties
-                          </span>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              showPropertyDetails(checkType, category);
-                            }}
-                            style={{
-                              color: '#3b82f6',
-                              background: 'none',
-                              border: 'none',
-                              cursor: 'pointer',
-                              fontSize: '13px',
-                              textDecoration: 'underline'
-                            }}
-                          >
-                            View
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                <div className="flex gap-2">
+                  {criticalCount > 0 && (
+                    <span className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-xs font-semibold">
+                      {criticalCount} Critical
+                    </span>
+                  )}
+                  {warningCount > 0 && (
+                    <span className="px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-semibold">
+                      {warningCount} Warning
+                    </span>
+                  )}
+                  {infoCount > 0 && (
+                    <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">
+                      {infoCount} Info
+                    </span>
+                  )}
+                </div>
               </div>
-            );
-          })}
-        </div>
-      </>
-    )}
-
-    {/* No results message */}
-    {Object.keys(checkResults).length === 0 && !isRunningChecks && (
-      <div style={{ 
-        textAlign: 'center', 
-        padding: '40px',
-        background: '#f9fafb',
-        borderRadius: '8px',
-        color: '#6b7280'
-      }}>
-        <AlertCircle size={48} style={{ margin: '0 auto 16px', display: 'block' }} />
-        <p>No quality check results yet.</p>
-        <p>Click "Run Analysis" to check for data quality issues.</p>
+              
+              {isExpanded && (
+                <div className="p-4 border-t border-gray-200">
+                  {Object.entries(
+                    issues.reduce((acc, issue) => {
+                      if (!acc[issue.check]) acc[issue.check] = [];
+                      acc[issue.check].push(issue);
+                      return acc;
+                    }, {})
+                  ).map(([checkType, checkIssues]) => (
+                    <div
+                      key={checkType}
+                      className="p-3 bg-gray-50 rounded-lg mb-2 flex justify-between items-center"
+                    >
+                      <span className="text-sm text-gray-700">
+                        {getCheckTitle(checkType)}
+                      </span>
+                      <div className="flex items-center gap-3">
+                        <span className={`text-sm font-semibold ${
+                          checkIssues[0].severity === 'critical' ? 'text-red-600' :
+                          checkIssues[0].severity === 'warning' ? 'text-yellow-600' : 
+                          'text-blue-600'
+                        }`}>
+                          {checkIssues.length} properties
+                        </span>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            showPropertyDetails(checkType, category);
+                          }}
+                          className="px-3 py-1 text-xs bg-white border border-blue-600 text-blue-600 rounded hover:bg-blue-50 transition-colors"
+                        >
+                          View Details
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    ) : (
+      <div className="card p-12 text-center">
+        <AlertCircle size={48} className="text-gray-400 mx-auto mb-4" />
+        <h3 className="text-lg font-semibold text-gray-800 mb-2">
+          {properties.length === 0 ? 'Loading properties...' : 'No Analysis Run Yet'}
+        </h3>
+        <p className="text-gray-600">
+          {properties.length === 0 
+            ? 'Please wait while we load the property data...' 
+            : `${properties.length} properties loaded. Click "Run Analysis" to check for data quality issues.`}
+        </p>
       </div>
     )}
 
     {/* Property Details Modal */}
     {showDetailsModal && (
-      <div style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        background: 'rgba(0, 0, 0, 0.5)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 1000
-      }}>
-        <div style={{
-          background: 'white',
-          borderRadius: '8px',
-          maxWidth: '90%',
-          maxHeight: '80%',
-          width: '800px',
-          overflow: 'hidden',
-          display: 'flex',
-          flexDirection: 'column'
-        }}>
-          <div style={{
-            padding: '20px',
-            borderBottom: '1px solid #e5e7eb',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center'
-          }}>
-            <h3>{modalData.title}</h3>
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-white rounded-lg max-w-4xl w-full max-h-[80vh] overflow-hidden shadow-2xl">
+          <div className="p-6 border-b border-gray-200 flex justify-between items-center">
+            <h3 className="text-lg font-semibold text-gray-800">
+              {modalData.title}
+            </h3>
             <button
               onClick={() => setShowDetailsModal(false)}
-              style={{
-                background: 'none',
-                border: 'none',
-                fontSize: '24px',
-                color: '#6b7280',
-                cursor: 'pointer'
-              }}
+              className="text-gray-500 hover:text-gray-700 text-2xl leading-none"
             >
               ×
             </button>
           </div>
-          <div style={{ padding: '20px', overflowY: 'auto', flex: 1 }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          
+          <div className="p-6 overflow-y-auto max-h-[60vh]">
+            <table className="w-full">
               <thead>
-                <tr style={{ borderBottom: '2px solid #e5e7eb' }}>
-                  <th style={{ padding: '8px', textAlign: 'left', fontSize: '12px', color: '#6b7280' }}>
-                    PROPERTY KEY
+                <tr className="border-b-2 border-gray-200">
+                  <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Property Key
                   </th>
-                  <th style={{ padding: '8px', textAlign: 'left', fontSize: '12px', color: '#6b7280' }}>
-                    MESSAGE
+                  <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Issue Details
                   </th>
                 </tr>
               </thead>
               <tbody>
                 {modalData.properties.map((prop, index) => (
-                  <tr key={index} style={{ borderBottom: '1px solid #e5e7eb' }}>
-                    <td style={{ padding: '8px', fontSize: '14px' }}>
+                  <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
+                    <td className="py-3 px-4 text-sm text-gray-900">
                       {prop.property_key}
                     </td>
-                    <td style={{ padding: '8px', fontSize: '14px' }}>
+                    <td className="py-3 px-4 text-sm text-gray-600">
                       {prop.message}
                     </td>
                   </tr>
