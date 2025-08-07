@@ -1641,5 +1641,100 @@ export const authHelpers = {
     }
   }
 };
+// Worksheet service for Pre-Valuation Setup
+export const worksheetService = {
+  // Auto-save worksheet progress
+  async saveWorksheetStats(jobId, stats) {
+    const { error } = await supabase
+      .from('market_land_valuation')
+      .upsert({
+        job_id: jobId,
+        worksheet_stats: stats,
+        updated_at: new Date().toISOString()
+      })
+      .eq('job_id', jobId);
+    
+    if (error) throw error;
+  },
+
+  // ... rest of the worksheet service code I gave you ...
+};
+
+// This should be the very end of the file
+So it goes:
+
+All your existing services (employeeService, jobService, etc.)
+Add the new worksheetService here
+End of file
+
+This way when you build the actual MarketLandAnalysis component, you can call these functions like:
+
+worksheetService.saveWorksheetStats(jobId, stats)
+worksheetService.initializeMarketLandRecord(jobId)
+RetryJlike after this?
+  // Update user has_account flag when account is createdEditYes, exactly! Add it right after that comment/function. So it would look like:
+javascript  // Update user has_account flag when account is created
+  // ... whatever function is here ...
+
+// Worksheet service for Pre-Valuation Setup
+export const worksheetService = {
+  async saveWorksheetStats(jobId, stats) {
+    const { error } = await supabase
+      .from('market_land_valuation')
+      .upsert({
+        job_id: jobId,
+        worksheet_stats: stats,
+        updated_at: new Date().toISOString()
+      })
+      .eq('job_id', jobId);
+    
+    if (error) throw error;
+  },
+
+  async initializeMarketLandRecord(jobId) {
+    const { data, error } = await supabase
+      .from('market_land_valuation')
+      .select('*')
+      .eq('job_id', jobId)
+      .single();
+    
+    if (error && error.code === 'PGRST116') {
+      // Record doesn't exist, create it
+      const { data: newRecord, error: createError } = await supabase
+        .from('market_land_valuation')
+        .insert({
+          job_id: jobId,
+          worksheet_stats: {
+            last_saved: new Date().toISOString(),
+            entries_completed: 0,
+            ready_to_process: 0,
+            location_variations: {}
+          }
+        })
+        .select()
+        .single();
+      
+      if (createError) throw createError;
+      return newRecord;
+    }
+    
+    if (error) throw error;
+    return data;
+  },
+
+  async updateLocationStandards(jobId, locationVariations) {
+    const { error } = await supabase
+      .from('market_land_valuation')
+      .update({
+        worksheet_stats: {
+          location_variations: locationVariations
+        }
+      })
+      .eq('job_id', jobId);
+    
+    if (error) throw error;
+  }
+};
+
 
 export default supabase;
