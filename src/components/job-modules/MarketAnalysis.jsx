@@ -240,9 +240,14 @@ const runQualityChecks = async () => {
 };
 
 const runPropertyChecks = async (property, results) => {
-  // MOD IV CHECKS
+  const vendorType = property.raw_data?.vendor_source || jobData.vendor_source || 'BRT';
+  const rawData = property.raw_data || {};
+  
+  // ==================== MOD IV CHECKS ====================
   const m4Class = property.property_m4_class;
   const modImprovement = property.values_mod_improvement || 0;
+  const modLand = property.values_mod_land || 0;
+  const modTotal = property.values_mod_total || 0;
   
   // Class 1/3B cannot have improvements
   if ((m4Class === '1' || m4Class === '3B') && modImprovement > 0) {
@@ -250,7 +255,7 @@ const runPropertyChecks = async (property, results) => {
       check: 'vacant_land_improvements',
       severity: 'critical',
       property_key: property.property_composite_key,
-      message: `Class ${m4Class} has improvements: $${modImprovement}`,
+      message: `Class ${m4Class} property has improvements: $${modImprovement.toLocaleString()}`,
       details: property
     });
   }
@@ -261,12 +266,609 @@ const runPropertyChecks = async (property, results) => {
       check: 'missing_improvements',
       severity: 'critical',
       property_key: property.property_composite_key,
-      message: `Class ${m4Class} missing improvements`,
+      message: `Class ${m4Class} property missing improvements`,
       details: property
     });
   }
   
-  // Add more checks here - keeping it shorter for now
+  // Class 15A-15F must have facility populated
+  if (['15A', '15B', '15C', '15D', '15E', '15F'].includes(m4Class) && !property.property_facility) {
+    results.mod_iv.push({
+      check: 'missing_facility',
+      severity: 'critical',
+      property_key: property.property_composite_key,
+      message: `Class ${m4Class} missing facility information`,
+      details: property
+    });
+  }
+  
+  // Farmland pairing checks
+  if (m4Class === '3B' && !property.property_composite_key.includes('Q')) {
+    results.mod_iv.push({
+      check: 'farm_building_no_qualifier',
+      severity: 'warning',
+      property_key: property.property_composite_key,
+      message: 'Class 3B with no qualifier (should be farm building)',
+      details: property
+    });
+  }
+  
+  // ==================== CAMA CHECKS (BRT ONLY) ====================
+  if (vendorType === 'BRT') {
+    const camaClass = property.property_cama_class;
+    const camaImprovement = property.values_cama_improvement || 0;
+    
+    // Class 1/3B shouldn't have CAMA improvements
+    if ((camaClass === '1' || camaClass === '3B') && camaImprovement > 0) {
+      results.cama.push({
+        check: 'cama_vacant_improvements',
+        severity: 'critical',
+        property_key: property.property_composite_key,
+        message: `CAMA Class ${camaClass} has improvements: $${camaImprovement.toLocaleString()}`,
+        details: property
+      });
+    }
+    
+    // Class 2/3A/4A-C must have CAMA improvements
+    if (['2', '3A', '4A', '4B', '4C'].includes(camaClass) && camaImprovement === 0) {
+      results.cama.push({
+        check: 'cama_missing_improvements',
+        severity: 'critical',
+        property_key: property.property_composite_key,
+        message: `CAMA Class ${camaClass} missing improvements`,
+        details: property
+      });
+    }
+  }
+  
+  // ==================== BUILDING CLASS CHECKS ====================
+  const buildingClass = property.asset_building_class;
+  const typeUse = property.asset_type_use;
+  const designStyle = property.asset_design_style;
+  
+  // All except m4_class should have building class 10
+  if (m4Class && buildingClass !== 10 && buildingClass !== null) {
+    // Check if Class 2/3A with building class 10
+    if ((m4Class === '2' || m4Class === '3A') && buildingClass === 10) {
+      results.characteristics.push({
+        check: 'invalid_building_class_10',
+        severity: 'warning',
+        property_key: property.property_composite_key,
+        message: `Class ${m4Class} shouldn't have building class 10`,
+        details: property
+      });
+    }
+  }
+  
+  // If building class > 10, must have design and type use
+  if (buildingClass > 10) {
+    if (!designStyle) {
+      results.characteristics.push({
+        check: 'missing_design_style',
+        severity: 'warning',
+        property_key: property.property_composite_key,
+        message: 'Building class > 10 missing design style',
+        details: property
+      });
+    }
+    if (!typeUse) {
+      results.characteristics.push({
+        check: 'missing_type_use',
+        severity: 'warning',
+        property_key: property.property_composite_key,
+        message: 'Building class > 10 missing type use',
+        details: property
+      });
+    }
+  }
+  
+  // Type Use to Building Class validation
+  if (typeUse && buildingClass) {
+    const typeUseLower = typeUse.toLowerCase();
+    let validClasses = [];
+    
+    if (typeUseLower.includes('single') || typeUseLower.includes('one family')) {
+      validClasses = [16, 17, 18, 19, 20, 21, 22, 23];
+    } else if (typeUseLower.includes('twin') || typeUseLower.includes('semidetached')) {
+      validClasses = [25, 27, 29, 31];
+    } else if (typeUseLower.includes('condo') || typeUseLower.includes('townhouse')) {
+      validClasses = [33, 35, 37, 39];
+    } else if (typeUseLower.includes('multi') || typeUseLower.includes('two family') || 
+               typeUseLower.includes('three family') || typeUseLower.includes('four family')) {
+      validClasses = [43, 45, 47, 49];
+    }
+    
+    if (validClasses.length > 0 && !validClasses.includes(buildingClass)) {
+      results.characteristics.push({
+        check: 'type_use_building_class_mismatch',
+        severity: 'warning',
+        property_key: property.property_composite_key,
+        message: `Type use "${typeUse}" doesn't match building class ${buildingClass}`,
+        details: property
+      });
+    }
+  }
+  
+  // ==================== DESIGN STYLE CHECKS ====================
+  if (designStyle) {
+    const designLower = designStyle.toLowerCase();
+    const storyHeight = property.asset_story_height;
+    
+    // Check for non-standard designs
+    const standardDesigns = [
+      'colonial', 'split level', 'bilevel', 'bi-level', 'cape cod', 'cape',
+      'ranch', 'rancher', 'raised ranch', 'bungalow', 'twin',
+      'townhouse end', 'townhouse int', 'one bed', '1bed', '1 bed',
+      'two bed', '2bed', '2 bed', 'three bed', '3bed', '3 bed'
+    ];
+    
+    const isStandard = standardDesigns.some(std => designLower.includes(std.toLowerCase()));
+    if (!isStandard) {
+      results.characteristics.push({
+        check: 'non_standard_design',
+        severity: 'info',
+        property_key: property.property_composite_key,
+        message: `Non-standard design: ${designStyle}`,
+        details: property
+      });
+    }
+    
+    // Design to Story Height validation
+    if (storyHeight) {
+      if (designLower.includes('colonial') && storyHeight < 2) {
+        results.characteristics.push({
+          check: 'colonial_story_mismatch',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: `Colonial should be 2+ stories (has ${storyHeight})`,
+          details: property
+        });
+      }
+      if ((designLower.includes('ranch') && !designLower.includes('raised')) && storyHeight > 1) {
+        results.characteristics.push({
+          check: 'ranch_story_mismatch',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: `Ranch should be 1 story (has ${storyHeight})`,
+          details: property
+        });
+      }
+      if ((designLower.includes('split level') || designLower.includes('bilevel')) && storyHeight < 2) {
+        results.characteristics.push({
+          check: 'split_level_story_mismatch',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: `Split/Bi-level should be 2+ stories (has ${storyHeight})`,
+          details: property
+        });
+      }
+      if (designLower.includes('raised ranch') && storyHeight > 1) {
+        results.characteristics.push({
+          check: 'raised_ranch_story_mismatch',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: `Raised Ranch should be 1 story (has ${storyHeight})`,
+          details: property
+        });
+      }
+      if ((designLower.includes('cape') || designLower.includes('bungalow')) && storyHeight === 1) {
+        results.characteristics.push({
+          check: 'cape_bungalow_story_mismatch',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: `Cape/Bungalow typically 1.5+ stories (has ${storyHeight})`,
+          details: property
+        });
+      }
+    }
+  }
+  
+  // ==================== LOT SIZE CHECKS ====================
+  const lotAcre = property.asset_lot_acre || 0;
+  const lotSf = property.asset_lot_sf || 0;
+  const lotFrontage = property.asset_lot_frontage || 0;
+  
+  if (lotAcre === 0 && lotSf === 0 && lotFrontage === 0) {
+    results.characteristics.push({
+      check: 'zero_lot_size',
+      severity: 'critical',
+      property_key: property.property_composite_key,
+      message: 'Property has zero lot size (acre, sf, and frontage all zero)',
+      details: property
+    });
+  }
+  
+  // ==================== LIVING AREA & YEAR BUILT ====================
+  const sfla = property.asset_sfla || 0;
+  const yearBuilt = property.asset_year_built;
+  
+  // Class 2/3A must have living area
+  if ((m4Class === '2' || m4Class === '3A') && sfla === 0) {
+    results.characteristics.push({
+      check: 'missing_sfla',
+      severity: 'warning',
+      property_key: property.property_composite_key,
+      message: `Class ${m4Class} property missing living area`,
+      details: property
+    });
+  }
+  
+  // Year built validation for improved properties
+  if ((m4Class === '2' || m4Class === '3A') && buildingClass > 10 && !yearBuilt) {
+    results.characteristics.push({
+      check: 'missing_year_built',
+      severity: 'warning',
+      property_key: property.property_composite_key,
+      message: 'Improved property missing year built',
+      details: property
+    });
+  }
+  
+  // ==================== VCS CHECK ====================
+  if (!property.property_vcs) {
+    results.special.push({
+      check: 'missing_vcs',
+      severity: 'warning',
+      property_key: property.property_composite_key,
+      message: 'Property missing VCS code',
+      details: property
+    });
+  }
+  
+  // ==================== CONDITION CHECKS ====================
+  if ((m4Class === '2' || m4Class === '3A') && buildingClass > 10) {
+    if (!property.asset_ext_cond) {
+      results.characteristics.push({
+        check: 'missing_ext_condition',
+        severity: 'warning',
+        property_key: property.property_composite_key,
+        message: 'Improved property missing exterior condition',
+        details: property
+      });
+    }
+    if (!property.asset_int_cond) {
+      results.characteristics.push({
+        check: 'missing_int_condition',
+        severity: 'warning',
+        property_key: property.property_composite_key,
+        message: 'Improved property missing interior condition',
+        details: property
+      });
+    }
+  }
+  
+  // ==================== BEDROOM/BATHROOM CHECKS FROM RAW DATA ====================
+  if ((m4Class === '2' || m4Class === '3A') && buildingClass > 10) {
+    if (vendorType === 'Microsystems') {
+      // Bedroom check for Microsystems
+      const bedroomTotal = (parseInt(rawData['Bedrm B'] || 0) + 
+                           parseInt(rawData['Bedrm 1'] || 0) + 
+                           parseInt(rawData['Bedrm 2'] || 0) + 
+                           parseInt(rawData['Bedrm 3'] || 0));
+      
+      if (bedroomTotal === 0) {
+        results.rooms.push({
+          check: 'zero_bedrooms',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: 'Improved property has zero bedrooms',
+          details: property
+        });
+      }
+      
+      // Bathroom cross-check for Microsystems
+      const roomBathTotal = (parseInt(rawData['2 Fixture Bath B'] || 0) + parseInt(rawData['2 Fixture Bath 1'] || 0) +
+                            parseInt(rawData['2 Fixture Bath 2'] || 0) + parseInt(rawData['2 Fixture Bath 3'] || 0) +
+                            parseInt(rawData['3 Fixture Bath B'] || 0) + parseInt(rawData['3 Fixture Bath 1'] || 0) +
+                            parseInt(rawData['3 Fixture Bath 2'] || 0) + parseInt(rawData['3 Fixture Bath 3'] || 0) +
+                            parseInt(rawData['4 Fixture Bath B'] || 0) + parseInt(rawData['4 Fixture Bath 1'] || 0) +
+                            parseInt(rawData['4 Fixture Bath 2'] || 0) + parseInt(rawData['4 Fixture Bath 3'] || 0) +
+                            parseInt(rawData['Num 5 Fixture Baths'] || 0));
+      
+      const plumbingBathTotal = (parseInt(rawData['4 Fixture Bath'] || 0) + parseInt(rawData['3 Fixture Bath'] || 0) +
+                                 parseInt(rawData['2 Fixture Bath'] || 0) + parseInt(rawData['Num 5 Fixture Baths'] || 0));
+      
+      if (roomBathTotal !== plumbingBathTotal) {
+        results.rooms.push({
+          check: 'bathroom_count_mismatch',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: `Room bath count (${roomBathTotal}) doesn't match plumbing count (${plumbingBathTotal})`,
+          details: property
+        });
+      }
+    } else if (vendorType === 'BRT') {
+      // Bedroom check for BRT
+      const bedTotal = parseInt(rawData.BEDTOT || 0);
+      if (bedTotal === 0) {
+        results.rooms.push({
+          check: 'zero_bedrooms',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: 'Improved property has zero bedrooms',
+          details: property
+        });
+      }
+      
+      // Bathroom cross-check for BRT
+      const plumbingTotal = (parseInt(rawData.PLUMBING2FIX || 0) + parseInt(rawData.PLUMBING3FIX || 0) +
+                            parseInt(rawData.PLUMBING4FIX || 0) + parseInt(rawData.PLUMBING5FIX || 0) +
+                            parseInt(rawData.PLUMBING6FIX || 0));
+      const bathTotal = parseInt(rawData.BATHTOT || 0);
+      
+      if (plumbingTotal !== bathTotal) {
+        results.rooms.push({
+          check: 'bathroom_count_mismatch',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: `Plumbing count (${plumbingTotal}) doesn't match bath total (${bathTotal})`,
+          details: property
+        });
+      }
+    }
+  }
+  
+  // ==================== PARTIAL SYSTEMS CHECK ====================
+  if (vendorType === 'BRT') {
+    if (rawData.ACPARTIAL || rawData.HEATSYSPARTIAL) {
+      results.special.push({
+        check: 'partial_systems',
+        severity: 'info',
+        property_key: property.property_composite_key,
+        message: 'Property has partial heating/cooling systems',
+        details: property
+      });
+    }
+  } else if (vendorType === 'Microsystems') {
+    if (rawData['Heat System Type1'] && rawData['Heat System Type2']) {
+      results.special.push({
+        check: 'partial_heating',
+        severity: 'info',
+        property_key: property.property_composite_key,
+        message: 'Property has partial heating system',
+        details: property
+      });
+    }
+  }
+  
+  // ==================== LIVING BASEMENT CHECK ====================
+  if (vendorType === 'Microsystems') {
+    if (rawData['Bsmt Finish Heat Y N'] === 'Y' || 
+        rawData['Bsmt Living Quality'] || 
+        (parseInt(rawData['Bsmt Living Sf'] || 0) > 0)) {
+      results.special.push({
+        check: 'living_basement',
+        severity: 'info',
+        property_key: property.property_composite_key,
+        message: 'Property has living basement',
+        details: property
+      });
+    }
+  }
+  // Note: BRT living basement requires code file parsing
+  
+  // ==================== DETACHED ITEMS DEPRECIATION CHECK ====================
+  if (vendorType === 'Microsystems') {
+    // Check if has detached items
+    const hasDetached = rawData['Detached Item Code1'] || rawData['Detached Item Code2'] || 
+                       rawData['Detached Item Code3'] || rawData['Detached Item Code4'] ||
+                       rawData['Detachedbuilding1'] || rawData['Detachedbuilding2'] ||
+                       rawData['Detachedbuilding3'] || rawData['Detachedbuilding4'];
+    
+    if (hasDetached) {
+      // Check if ALL depreciation fields are empty
+      const hasDepreciation = 
+        rawData['Physical Depr1'] || rawData['Functional Depr1'] || rawData['Locational Depr1'] ||
+        rawData['Physical Depr2'] || rawData['Functional Depr2'] || rawData['Locational Depr2'] ||
+        rawData['Physical Depr3'] || rawData['Functional Depr3'] || rawData['Locational Depr3'] ||
+        rawData['Physical Depr4'] || rawData['Functional Depr4'] || rawData['Locational Depr4'] ||
+        rawData['Pysical1'] || rawData['Functional1'] || rawData['Location Economic1'] ||
+        rawData['Pysical2'] || rawData['Functional2'] || rawData['Location Economic2'] ||
+        rawData['Pysical3'] || rawData['Functional3'] || rawData['Location Economic3'] ||
+        rawData['Pysical4'] || rawData['Functional4'] || rawData['Location Economic4'];
+      
+      if (!hasDepreciation) {
+        results.special.push({
+          check: 'detached_missing_depreciation',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: 'Detached items missing depreciation values',
+          details: property
+        });
+      }
+    }
+  } else if (vendorType === 'BRT') {
+    // Check BRT detached items
+    for (let i = 1; i <= 11; i++) {
+      if (rawData[`DETACHEDCODE_${i}`] || rawData[`DETACHEDDCSIZE_${i}`]) {
+        const ncValue = parseInt(rawData[`DETACHEDNC_${i}`] || 0);
+        if (ncValue === 0) {
+          results.special.push({
+            check: 'detached_missing_depreciation',
+            severity: 'warning',
+            property_key: property.property_composite_key,
+            message: `Detached item ${i} missing depreciation value`,
+            details: property
+          });
+        }
+      }
+    }
+  }
+  
+  // ==================== LAND ADJUSTMENTS CHECK ====================
+  if (vendorType === 'Microsystems') {
+    const hasLandAdj = 
+      (parseInt(rawData['Net Adjustment1'] || 0) !== 0) ||
+      (parseInt(rawData['Net Adjustment2'] || 0) !== 0) ||
+      (parseInt(rawData['Net Adjustment3'] || 0) !== 0) ||
+      (parseInt(rawData['Unit Adjustment1'] || 0) !== 0) ||
+      (parseInt(rawData['Unit Adjustment2'] || 0) !== 0) ||
+      (parseInt(rawData['Unit Adjustment'] || 0) !== 0) ||
+      rawData['Adj Reason Code1'] || rawData['Adj Reason Code2'] || rawData['Adj Reason Code3'] ||
+      rawData['Unit Adj Code1'] || rawData['Unit Adj Code2'] || rawData['Unit Adj Code'];
+    
+    if (hasLandAdj) {
+      results.special.push({
+        check: 'land_adjustments_exist',
+        severity: 'info',
+        property_key: property.property_composite_key,
+        message: 'Property has land adjustments',
+        details: property
+      });
+    }
+  } else if (vendorType === 'BRT') {
+    const landAdjFields = [
+      'LANDURCOND_1', 'LANDURCOND_2', 'LANDURCOND_3', 'LANDURCOND_4', 'LANDURCOND_5', 'LANDURCOND_6',
+      'LANDURCONDPC_1', 'LANDURCONDPC_2', 'LANDURCONDPC_3', 'LANDURCONDPC_4', 'LANDURCONDPC_5', 'LANDURCONDPC_6',
+      'LANDURINFL_1', 'LANDURINFL_2', 'LANDURINFL_3', 'LANDURINFL_4', 'LANDURINFL_5', 'LANDURINFL_6',
+      'LANDURINFLPC_1', 'LANDURINFLPC_2', 'LANDURINFLPC_3', 'LANDURINFLPC_4', 'LANDURINFLPC_5', 'LANDURINFLPC_6',
+      'LANDFFINFL_1', 'LANDFFINFL_2', 'LANDFFINFL_3', 'LANDFFINFL_4', 'LANDFFINFL_5', 'LANDFFINFL_6',
+      'LANDFFINFLPC_1', 'LANDFFINFLPC_2', 'LANDFFINFLPC_3', 'LANDFFINFLPC_4', 'LANDFFINFLPC_5', 'LANDFFINFLPC_6',
+      'LANDFFCOND_1', 'LANDFFCOND_2', 'LANDFFCOND_3', 'LANDFFCOND_4', 'LANDFFCOND_5', 'LANDFFCOND_6',
+      'LANDFFCONDPC_1', 'LANDFFCONDPC_2', 'LANDFFCONDPC_3', 'LANDFFCONDPC_4', 'LANDFFCONDPC_5', 'LANDFFCONDPC_6'
+    ];
+    
+    const hasLandAdj = landAdjFields.some(field => rawData[field]);
+    if (hasLandAdj) {
+      results.special.push({
+        check: 'land_adjustments_exist',
+        severity: 'info',
+        property_key: property.property_composite_key,
+        message: 'Property has land adjustments',
+        details: property
+      });
+    }
+  }
+  
+  // ==================== MARKET ADJUSTMENTS CHECK ====================
+  if (vendorType === 'Microsystems') {
+    const hasMarketAdj = 
+      rawData['Over Improved Depr1'] || rawData['Economic Depr'] || 
+      rawData['Under Improved Depr'] || rawData['Function Depr'] ||
+      rawData['Over Improved Depr2'] || rawData['Location Code'];
+    
+    if (hasMarketAdj) {
+      results.special.push({
+        check: 'market_adjustments_exist',
+        severity: 'warning',
+        property_key: property.property_composite_key,
+        message: 'Property has existing market adjustments',
+        details: property
+      });
+    }
+  } else if (vendorType === 'BRT') {
+    // Check multiple market adjustment fields
+    if (parseInt(rawData.MKTADJ || 1) !== 1) {
+      results.special.push({
+        check: 'market_adjustment_factor',
+        severity: 'warning',
+        property_key: property.property_composite_key,
+        message: `MKTADJ is ${rawData.MKTADJ} (should be 1)`,
+        details: property
+      });
+    }
+    
+    if (parseInt(rawData.NCOVR || 0) !== 0) {
+      results.special.push({
+        check: 'ncovr_not_zero',
+        severity: 'warning',
+        property_key: property.property_composite_key,
+        message: `NCOVR is ${rawData.NCOVR} (should be 0)`,
+        details: property
+      });
+    }
+    
+    if (rawData.MKTECONDESC || rawData.MKTFUNCDESC || rawData.MKTMKTDESC || rawData.MKTPHYSDESC) {
+      results.special.push({
+        check: 'market_adjustment_descriptions',
+        severity: 'warning',
+        property_key: property.property_composite_key,
+        message: 'Property has market adjustment descriptions',
+        details: property
+      });
+    }
+    
+    const mktPercentages = [
+      parseInt(rawData.MKTECONPC || 100),
+      parseInt(rawData.MKTFUNCPC || 100),
+      parseInt(rawData.MKTMKTPC || 100),
+      parseInt(rawData.MKTPHYSPC || 100)
+    ];
+    
+    if (mktPercentages.some(pc => pc !== 100)) {
+      results.special.push({
+        check: 'market_adjustment_percentages',
+        severity: 'warning',
+        property_key: property.property_composite_key,
+        message: 'Market adjustment percentages not at 100%',
+        details: property
+      });
+    }
+    
+    // Additional BRT market adjustments
+    if (rawData.NCREDIRECT) {
+      results.special.push({
+        check: 'nc_redirect_exists',
+        severity: 'warning',
+        property_key: property.property_composite_key,
+        message: 'Property has NC redirect value',
+        details: property
+      });
+    }
+    
+    if (parseInt(rawData.NCMKTINFLNC || 0) !== 0 || parseInt(rawData.NCMKTINFPC || 0) !== 0) {
+      results.special.push({
+        check: 'nc_market_influence',
+        severity: 'warning',
+        property_key: property.property_composite_key,
+        message: 'Property has NC market influence values',
+        details: property
+      });
+    }
+  }
+  
+  // ==================== FLAT ADD/OVERRIDE VALUES CHECK ====================
+  if (vendorType === 'Microsystems') {
+    const hasFlatAdd = 
+      rawData['Flat Add Desc1'] || rawData['Flat Add Desc2'] ||
+      rawData['Base Cost Flat Add Desc1'] || rawData['Base Cost Flat Add Desc2'] ||
+      (parseInt(rawData['Base Cost Flat Add Value1'] || 0) !== 0) ||
+      (parseInt(rawData['Base Cost Flat Add Value2'] || 0) !== 0) ||
+      (parseInt(rawData['Flat Add Value1'] || 0) !== 0) ||
+      (parseInt(rawData['Flat Add Value2'] || 0) !== 0);
+    
+    if (hasFlatAdd) {
+      results.special.push({
+        check: 'flat_add_values',
+        severity: 'warning',
+        property_key: property.property_composite_key,
+        message: 'Property has flat add/override values',
+        details: property
+      });
+    }
+  } else if (vendorType === 'BRT') {
+    if (rawData.IMPROVVALUEOVR || rawData.LANDVALUEOVR) {
+      results.special.push({
+        check: 'value_overrides',
+        severity: 'warning',
+        property_key: property.property_composite_key,
+        message: 'Property has improvement or land value overrides',
+        details: property
+      });
+    }
+    
+    if (rawData.WRITEIN_1 || rawData.WRITEIN_2 ||
+        parseInt(rawData.WRITEINVALUE_1 || 0) !== 0 ||
+        parseInt(rawData.WRITEINVALUE_2 || 0) !== 0) {
+      results.special.push({
+        check: 'writein_values',
+        severity: 'warning',
+        property_key: property.property_composite_key,
+        message: 'Property has write-in values',
+        details: property
+      });
+    }
+  }
 };
 
 const saveQualityResults = async (results) => {
@@ -338,10 +940,56 @@ const toggleQualityCategory = (categoryId) => {
 
 const getCheckTitle = (checkType) => {
   const titles = {
+    // MOD IV
     'vacant_land_improvements': 'Vacant Land with Improvements',
     'missing_improvements': 'Properties Missing Improvements',
+    'missing_facility': 'Missing Facility Information',
+    'farm_building_no_qualifier': 'Farm Building Without Qualifier',
+    
+    // CAMA
+    'cama_vacant_improvements': 'CAMA Vacant Land with Improvements',
+    'cama_missing_improvements': 'CAMA Properties Missing Improvements',
+    
+    // Building/Design
+    'invalid_building_class_10': 'Invalid Building Class 10',
+    'missing_design_style': 'Missing Design Style',
+    'missing_type_use': 'Missing Type Use',
+    'type_use_building_class_mismatch': 'Type Use/Building Class Mismatch',
+    'non_standard_design': 'Non-Standard Design',
+    'colonial_story_mismatch': 'Colonial Story Height Issue',
+    'ranch_story_mismatch': 'Ranch Story Height Issue',
+    'split_level_story_mismatch': 'Split Level Story Height Issue',
+    'raised_ranch_story_mismatch': 'Raised Ranch Story Height Issue',
+    'cape_bungalow_story_mismatch': 'Cape/Bungalow Story Height Issue',
+    
+    // Characteristics
     'zero_lot_size': 'Properties with Zero Lot Size',
-    'missing_sfla': 'Missing Living Area'
+    'missing_sfla': 'Missing Living Area',
+    'missing_year_built': 'Missing Year Built',
+    'missing_ext_condition': 'Missing Exterior Condition',
+    'missing_int_condition': 'Missing Interior Condition',
+    
+    // Rooms
+    'zero_bedrooms': 'Properties with Zero Bedrooms',
+    'bathroom_count_mismatch': 'Bathroom Count Mismatch',
+    
+    // Special
+    'missing_vcs': 'Missing VCS Code',
+    'partial_systems': 'Partial Heating/Cooling Systems',
+    'partial_heating': 'Partial Heating System',
+    'living_basement': 'Properties with Living Basement',
+    'detached_missing_depreciation': 'Detached Items Missing Depreciation',
+    'land_adjustments_exist': 'Properties with Land Adjustments',
+    'market_adjustments_exist': 'Properties with Market Adjustments',
+    'market_adjustment_factor': 'Market Adjustment Factor Issue',
+    'ncovr_not_zero': 'NCOVR Not Zero',
+    'market_adjustment_descriptions': 'Market Adjustment Descriptions Present',
+    'market_adjustment_percentages': 'Market Adjustment Percentages Not 100%',
+    'nc_redirect_exists': 'NC Redirect Value Present',
+    'nc_market_influence': 'NC Market Influence Values Present',
+    'flat_add_values': 'Flat Add/Override Values Present',
+    'value_overrides': 'Value Overrides Present',
+    'writein_values': 'Write-in Values Present'
   };
   return titles[checkType] || checkType;
 };
