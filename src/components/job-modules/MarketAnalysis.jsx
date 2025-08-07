@@ -1,4 +1,46 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+// ==================== CONDITION CHECKS ====================
+  if ((m4Class === '2' || m4Class === '3A') && buildingClass > 10) {
+    if (!property.asset_ext_cond) {
+      results.characteristics.push({
+        check: 'missing_ext_condition',
+        severity: 'warning',
+        property_key: property.property_composite_key,
+        message: 'Improved property missing exterior condition',
+        details: property
+      });
+    }
+    if (!property.asset_int_cond) {
+      results.characteristics.push({
+        check: 'missing_int_condition',
+        severity: 'warning',
+        property_key: property.property_composite_key,
+        message: 'Improved property missing interior condition',
+        details: property
+      });
+    }
+  }
+  
+  // ==================== PARTIAL HEATING/COOLING SYSTEMS ====================
+  if (vendorType === 'BRT') {
+    // Check for partial AC or heating in BRT
+    if (rawData.ACPARTIAL && rawData.ACPARTIAL.trim() !== '') {
+      results.special.push({
+        check: 'partial_cooling',
+        severity: 'info',
+        property_key: property.property_composite_key,
+        message: 'Property has partial AC system',
+        details: property
+      });
+    }
+    if (rawData.HEATSYSPARTIAL && rawData.HEATSYSPARTIAL.trim() !== '') {
+      results.special.push({
+        check: 'partial_heating',
+        severity: 'info',
+        property_key: property.property_composite_key,
+        message: 'Property has partial heating system',
+        details: property
+      });
+    import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import { 
   AlertCircle, 
@@ -52,18 +94,44 @@ const MarketLandAnalysis = ({ jobData }) => {
   const [expandedCategories, setExpandedCategories] = useState(['mod_iv']);
   const [isRunningChecks, setIsRunningChecks] = useState(false);
 
-  // ESC key handler for modal
+  // ==================== LOAD RUN HISTORY ON MOUNT ====================
   useEffect(() => {
-    const handleEsc = (event) => {
-      if (event.keyCode === 27) {
-        setShowDetailsModal(false);
+    const loadRunHistory = async () => {
+      if (!jobData?.id) return;
+      
+      try {
+        const { data, error } = await supabase
+          .from('market_land_valuation')
+          .select('*')
+          .eq('job_id', jobData.id)
+          .order('quality_check_last_run', { ascending: false });
+        
+        if (data && data.length > 0) {
+          // Convert to run history format
+          const history = data.map(record => ({
+            date: record.quality_check_last_run,
+            propertyCount: properties.length || 0,
+            criticalCount: record.critical_count || 0,
+            warningCount: record.warning_count || 0,
+            infoCount: record.info_count || 0,
+            totalIssues: record.quality_issues_count || 0,
+            qualityScore: record.quality_score || 0,
+            checkResults: record.check_results || {}
+          }));
+          setRunHistory(history);
+          
+          // Load custom checks if any
+          if (data[0].custom_checks) {
+            setCustomChecks(data[0].custom_checks);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading run history:', error);
       }
     };
-    window.addEventListener('keydown', handleEsc);
-    return () => {
-      window.removeEventListener('keydown', handleEsc);
-    };
-  }, []);
+    
+    loadRunHistory();
+  }, [jobData?.id, properties.length]);
   
   // Pre-Valuation State (Normalization + Page by Page)
   const [targetYear, setTargetYear] = useState(2012);
@@ -206,7 +274,227 @@ const MarketLandAnalysis = ({ jobData }) => {
     }
   };
 
+  // ==================== CUSTOM CHECK FUNCTIONS ====================
+  const addConditionToCustomCheck = () => {
+    setCurrentCustomCheck(prev => ({
+      ...prev,
+      conditions: [...prev.conditions, { logic: 'AND', field: '', operator: '=', value: '' }]
+    }));
+  };
+  
+  const updateCustomCheckCondition = (index, field, value) => {
+    setCurrentCustomCheck(prev => ({
+      ...prev,
+      conditions: prev.conditions.map((cond, i) => 
+        i === index ? { ...cond, [field]: value } : cond
+      )
+    }));
+  };
+  
+  const removeCustomCheckCondition = (index) => {
+    setCurrentCustomCheck(prev => ({
+      ...prev,
+      conditions: prev.conditions.filter((_, i) => i !== index)
+    }));
+  };
+  
+  const saveCustomCheck = () => {
+    if (!currentCustomCheck.name || currentCustomCheck.conditions.some(c => !c.field)) {
+      alert('Please complete all fields before saving');
+      return;
+    }
+    
+    setCustomChecks(prev => [...prev, { ...currentCustomCheck, id: Date.now() }]);
+    setCurrentCustomCheck({
+      name: '',
+      severity: 'warning',
+      conditions: [{ logic: 'IF', field: '', operator: '=', value: '' }]
+    });
+    
+    // Save to database
+    saveCustomChecksToDb([...customChecks, currentCustomCheck]);
+  };
+  
+  const deleteCustomCheck = (checkId) => {
+    setCustomChecks(prev => prev.filter(check => check.id !== checkId));
+    saveCustomChecksToDb(customChecks.filter(check => check.id !== checkId));
+  };
+  
+  const saveCustomChecksToDb = async (checks) => {
+    try {
+      await supabase
+        .from('market_land_valuation')
+        .update({ custom_checks: checks })
+        .eq('job_id', jobData.id);
+    } catch (error) {
+      console.error('Error saving custom checks:', error);
+    }
+  };
+  
+  const runCustomCheck = async (check) => {
+    const results = { custom: [] };
+    
+    for (const property of properties) {
+      let conditionMet = true;
+      
+      for (let i = 0; i < check.conditions.length; i++) {
+        const condition = check.conditions[i];
+        const fieldValue = property[condition.field];
+        const compareValue = condition.value;
+        let thisConditionMet = false;
+        
+        switch (condition.operator) {
+          case '=':
+            thisConditionMet = fieldValue == compareValue;
+            break;
+          case '!=':
+            thisConditionMet = fieldValue != compareValue;
+            break;
+          case '>':
+            thisConditionMet = parseFloat(fieldValue) > parseFloat(compareValue);
+            break;
+          case '<':
+            thisConditionMet = parseFloat(fieldValue) < parseFloat(compareValue);
+            break;
+          case '>=':
+            thisConditionMet = parseFloat(fieldValue) >= parseFloat(compareValue);
+            break;
+          case '<=':
+            thisConditionMet = parseFloat(fieldValue) <= parseFloat(compareValue);
+            break;
+          case 'is null':
+            thisConditionMet = !fieldValue || fieldValue === '';
+            break;
+          case 'is not null':
+            thisConditionMet = fieldValue && fieldValue !== '';
+            break;
+          case 'contains':
+            thisConditionMet = fieldValue && fieldValue.toString().toLowerCase().includes(compareValue.toLowerCase());
+            break;
+        }
+        
+        if (i === 0) {
+          conditionMet = thisConditionMet;
+        } else {
+          if (condition.logic === 'AND') {
+            conditionMet = conditionMet && thisConditionMet;
+          } else if (condition.logic === 'OR') {
+            conditionMet = conditionMet || thisConditionMet;
+          }
+        }
+      }
+      
+      if (conditionMet) {
+        results.custom.push({
+          check: `custom_${check.id}`,
+          severity: check.severity,
+          property_key: property.property_composite_key,
+          message: check.name,
+          details: property
+        });
+      }
+    }
+    
+    // Merge with existing results
+    setCheckResults(prev => ({
+      ...prev,
+      custom: [...(prev.custom || []), ...results.custom]
+    }));
+    
+    // Update stats
+    const newStats = {
+      critical: results.custom.filter(i => i.severity === 'critical').length,
+      warning: results.custom.filter(i => i.severity === 'warning').length,
+      info: results.custom.filter(i => i.severity === 'info').length,
+      total: results.custom.length
+    };
+    
+    setIssueStats(prev => ({
+      critical: prev.critical + newStats.critical,
+      warning: prev.warning + newStats.warning,
+      info: prev.info + newStats.info,
+      total: prev.total + newStats.total
+    }));
+    
+    console.log(`✅ Custom check "${check.name}" found ${results.custom.length} issues`);
+  };
+  
+  const runAllCustomChecks = async () => {
+    // Clear existing custom results
+    setCheckResults(prev => ({ ...prev, custom: [] }));
+    
+    for (const check of customChecks) {
+      await runCustomCheck(check);
+    }
+  };
+
   // ==================== DATA QUALITY FUNCTIONS ====================
+  const exportToExcel = () => {
+    if (Object.keys(checkResults).length === 0) return;
+    
+    // Create CSV content for each category
+    const timestamp = new Date().toISOString().split('T')[0];
+    const jobInfo = `${jobData?.job_number || 'Job'}_${jobData?.municipality || 'Municipality'}`;
+    
+    // Summary worksheet
+    let summaryCSV = 'Data Quality Summary\n\n';
+    summaryCSV += `Job,${jobData?.job_number || 'N/A'}\n`;
+    summaryCSV += `Municipality,${jobData?.municipality || 'N/A'}\n`;
+    summaryCSV += `County,${jobData?.county || 'N/A'}\n`;
+    summaryCSV += `State,${jobData?.state || 'N/A'}\n`;
+    summaryCSV += `Analysis Date,${new Date().toLocaleDateString()}\n\n`;
+    summaryCSV += 'Metrics\n';
+    summaryCSV += `Total Properties,${properties.length}\n`;
+    summaryCSV += `Properties with Issues,${issueStats.total}\n`;
+    summaryCSV += `Critical Issues,${issueStats.critical}\n`;
+    summaryCSV += `Warnings,${issueStats.warning}\n`;
+    summaryCSV += `Info Messages,${issueStats.info}\n`;
+    summaryCSV += `Quality Score,${qualityScore}%\n\n`;
+    
+    // Issues by category
+    summaryCSV += 'Issues by Category\n';
+    summaryCSV += 'Category,Critical,Warning,Info,Total\n';
+    Object.entries(checkResults).forEach(([category, issues]) => {
+      const critical = issues.filter(i => i.severity === 'critical').length;
+      const warning = issues.filter(i => i.severity === 'warning').length;
+      const info = issues.filter(i => i.severity === 'info').length;
+      if (issues.length > 0) {
+        summaryCSV += `${category.replace(/_/g, ' ')},${critical},${warning},${info},${issues.length}\n`;
+      }
+    });
+    
+    // Download summary
+    const summaryBlob = new Blob([summaryCSV], { type: 'text/csv' });
+    const summaryUrl = URL.createObjectURL(summaryBlob);
+    const summaryLink = document.createElement('a');
+    summaryLink.href = summaryUrl;
+    summaryLink.download = `DQ_Summary_${jobInfo}_${timestamp}.csv`;
+    summaryLink.click();
+    
+    // Create detailed issues worksheet for each category with issues
+    setTimeout(() => {
+      let detailsCSV = 'Property Key,Check Type,Severity,Message\n';
+      Object.entries(checkResults).forEach(([category, issues]) => {
+        if (issues.length > 0) {
+          issues.forEach(issue => {
+            detailsCSV += `"${issue.property_key}","${getCheckTitle(issue.check)}","${issue.severity}","${issue.message}"\n`;
+          });
+        }
+      });
+      
+      if (detailsCSV !== 'Property Key,Check Type,Severity,Message\n') {
+        const detailsBlob = new Blob([detailsCSV], { type: 'text/csv' });
+        const detailsUrl = URL.createObjectURL(detailsBlob);
+        const detailsLink = document.createElement('a');
+        detailsLink.href = detailsUrl;
+        detailsLink.download = `DQ_Details_${jobInfo}_${timestamp}.csv`;
+        detailsLink.click();
+      }
+    }, 500);
+    
+    console.log('✅ Export complete - check your downloads for Summary and Details files');
+  };
+  
   const runQualityChecks = async () => {
     setIsRunningChecks(true);
     const results = {
@@ -350,23 +638,34 @@ const MarketLandAnalysis = ({ jobData }) => {
       }
     }
     
-    // ==================== BUILDING CLASS CHECKS ====================
+    // ==================== BUILDING CLASS CHECKS - FIXED! ====================
     const buildingClass = property.asset_building_class;
     const typeUse = property.asset_type_use;
     const designStyle = property.asset_design_style;
     
-    // All except m4_class should have building class 10
-    if (m4Class && buildingClass !== 10 && buildingClass !== null) {
-      // Check if Class 2/3A with building class 10
-      if ((m4Class === '2' || m4Class === '3A') && buildingClass === 10) {
+    // Check 4: Building Class Validation
+    // Rule 1: Non-residential classes (not 2 or 3A) should be building class 10
+    if (m4Class && m4Class !== '2' && m4Class !== '3A') {
+      if (buildingClass && buildingClass !== 10) {
         results.characteristics.push({
-          check: 'invalid_building_class_10',
+          check: 'non_residential_wrong_building_class',
           severity: 'warning',
           property_key: property.property_composite_key,
-          message: `Class ${m4Class} shouldn't have building class 10`,
+          message: `Class ${m4Class} should have building class 10 (has ${buildingClass})`,
           details: property
         });
       }
+    }
+    
+    // Rule 2: Residential classes (2 or 3A) should NOT be building class 10
+    if ((m4Class === '2' || m4Class === '3A') && buildingClass === 10) {
+      results.characteristics.push({
+        check: 'residential_building_class_10',
+        severity: 'warning',
+        property_key: property.property_composite_key,
+        message: `Class ${m4Class} shouldn't have building class 10 (needs >10)`,
+        details: property
+      });
     }
     
     // If building class > 10, must have design and type use
@@ -586,6 +885,7 @@ const MarketLandAnalysis = ({ jobData }) => {
       });
       
       const totalIssues = criticalCount + warningCount + infoCount;
+      const score = calculateQualityScore(results);
       
       // Check if record exists
       const { data: existing } = await supabase
@@ -598,7 +898,11 @@ const MarketLandAnalysis = ({ jobData }) => {
         job_id: jobData.id,
         quality_check_last_run: new Date().toISOString(),
         quality_issues_count: totalIssues,
-        quality_score: calculateQualityScore(results)
+        quality_score: score,
+        critical_count: criticalCount,
+        warning_count: warningCount,
+        info_count: infoCount,
+        custom_checks: customChecks.length > 0 ? customChecks : null
       };
       
       if (existing) {
@@ -613,6 +917,19 @@ const MarketLandAnalysis = ({ jobData }) => {
           .insert(saveData);
         if (error) throw error;
       }
+      
+      // Add to run history
+      const newRun = {
+        date: new Date().toISOString(),
+        propertyCount: properties.length,
+        criticalCount,
+        warningCount,
+        infoCount,
+        totalIssues,
+        qualityScore: score,
+        checkResults: results
+      };
+      setRunHistory(prev => [newRun, ...prev].slice(0, 20)); // Keep last 20 runs
       
       // Keep full results in state for display
       setCheckResults(results);
@@ -667,8 +984,9 @@ const MarketLandAnalysis = ({ jobData }) => {
       'cama_vacant_improvements': 'CAMA Vacant Land with Improvements',
       'cama_missing_improvements': 'CAMA Properties Missing Improvements',
       
-      // Building/Design
-      'invalid_building_class_10': 'Invalid Building Class 10',
+      // Building/Design - UPDATED!
+      'non_residential_wrong_building_class': 'Non-Residential with Wrong Building Class',
+      'residential_building_class_10': 'Residential Properties with Building Class 10',
       'missing_design_style': 'Missing Design Style',
       'missing_type_use': 'Missing Type Use',
       'type_use_building_class_mismatch': 'Type Use/Building Class Mismatch',
@@ -723,288 +1041,571 @@ const MarketLandAnalysis = ({ jobData }) => {
   // ==================== TAB COMPONENTS ====================
   
   // Data Quality Tab
-  const DataQualityTab = () => (
-    <div className="tab-content">
-      {/* Header Section */}
-      <div className="mb-6">
-        <h3 className="text-2xl font-bold text-gray-800 mb-2">
-          Data Quality Analysis
-        </h3>
-        <p className="text-gray-600">
-          {isLoading 
-            ? `Loading ${loadedCount.toLocaleString()} of ${totalPropertyCount.toLocaleString()} properties...`
-            : `Analyzing ${properties.length.toLocaleString()} properties for data integrity issues`
-          }
-        </p>
-      </div>
+  const DataQualityTab = () => {
+    const [activeSubTab, setActiveSubTab] = useState('overview');
+    
+    return (
+      <div className="tab-content">
+        {/* Sub-tab Navigation */}
+        <div className="flex gap-1 border-b border-gray-300 mb-6">
+          <button
+            onClick={() => setActiveSubTab('overview')}
+            className={`px-4 py-2 font-medium text-sm transition-all ${
+              activeSubTab === 'overview'
+                ? 'border-b-2 border-blue-500 text-blue-600 -mb-[1px] bg-blue-50'
+                : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
+            }`}
+          >
+            Overview
+          </button>
+          <button
+            onClick={() => setActiveSubTab('standard')}
+            className={`px-4 py-2 font-medium text-sm transition-all ${
+              activeSubTab === 'standard'
+                ? 'border-b-2 border-blue-500 text-blue-600 -mb-[1px] bg-blue-50'
+                : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
+            }`}
+          >
+            Standard Checks
+          </button>
+          <button
+            onClick={() => setActiveSubTab('custom')}
+            className={`px-4 py-2 font-medium text-sm transition-all ${
+              activeSubTab === 'custom'
+                ? 'border-b-2 border-blue-500 text-blue-600 -mb-[1px] bg-blue-50'
+                : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
+            }`}
+          >
+            Custom Checks
+          </button>
+          <button
+            onClick={() => setActiveSubTab('history')}
+            className={`px-4 py-2 font-medium text-sm transition-all ${
+              activeSubTab === 'history'
+                ? 'border-b-2 border-blue-500 text-blue-600 -mb-[1px] bg-blue-50'
+                : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
+            }`}
+          >
+            Run History
+          </button>
+        </div>
+        
+        {/* Sub-tab Content */}
+        {activeSubTab === 'overview' && (
+          <div>
+            {/* Header Section */}
+            <div className="mb-6">
+              <h3 className="text-2xl font-bold text-gray-800 mb-2">
+                Data Quality Analysis
+              </h3>
+              <p className="text-gray-600">
+                {isLoading 
+                  ? `Loading ${loadedCount.toLocaleString()} of ${totalPropertyCount.toLocaleString()} properties...`
+                  : `Analyzing ${properties.length.toLocaleString()} properties for data integrity issues`
+                }
+              </p>
+            </div>
 
-      {/* Loading Progress Bar */}
-      {isLoading && (
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-gray-700">Loading Properties</span>
-            <span className="text-sm font-medium text-blue-600">{loadingProgress}%</span>
-          </div>
-          <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-            <div 
-              className="h-full bg-gradient-to-r from-blue-500 to-blue-600 transition-all duration-300 ease-out"
-              style={{ width: `${loadingProgress}%` }}
-            >
-              <div className="h-full bg-white bg-opacity-30 animate-pulse"></div>
+            {/* Loading Progress Bar */}
+            {isLoading && (
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-gray-700">Loading Properties</span>
+                  <span className="text-sm font-medium text-blue-600">{loadingProgress}%</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                  <div 
+                    className="h-full bg-gradient-to-r from-blue-500 to-blue-600 transition-all duration-300 ease-out"
+                    style={{ width: `${loadingProgress}%` }}
+                  >
+                    <div className="h-full bg-white bg-opacity-30 animate-pulse"></div>
+                  </div>
+                </div>
+                <div className="mt-2 text-center text-sm text-gray-600">
+                  {loadedCount > 0 && (
+                    <span>
+                      Loaded {loadedCount.toLocaleString()} properties
+                      {loadedCount < totalPropertyCount && 
+                        ` • ${Math.ceil((totalPropertyCount - loadedCount) / 1000)} batches remaining`
+                      }
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="flex gap-3 mb-6">
+              <button 
+                onClick={runQualityChecks}
+                disabled={isRunningChecks || isLoading}
+                className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-all ${
+                  isRunningChecks || isLoading
+                    ? 'bg-gray-400 text-white cursor-not-allowed' 
+                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                }`}
+              >
+                <RefreshCw size={16} className={isRunningChecks ? 'animate-spin' : ''} />
+                {isRunningChecks ? 'Running Analysis...' : 'Run Analysis'}
+              </button>
+              
+              <button 
+                onClick={exportToExcel}
+                disabled={Object.keys(checkResults).length === 0}
+                className={`px-4 py-2 bg-white border-2 border-blue-600 text-blue-600 rounded-lg font-medium hover:bg-blue-50 transition-all flex items-center gap-2 ${
+                  Object.keys(checkResults).length === 0 ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
+              >
+                <Download size={16} />
+                Export to Excel
+              </button>
+            </div>
+
+            {/* Metrics Cards Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+              <div className="bg-white border border-gray-200 rounded-lg p-4">
+                <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Total Properties</div>
+                <div className="text-2xl font-bold text-gray-800">{properties.length.toLocaleString()}</div>
+              </div>
+              
+              <div className="bg-white border border-gray-200 rounded-lg p-4">
+                <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Properties with Issues</div>
+                <div className="text-2xl font-bold text-red-600">{issueStats.total}</div>
+              </div>
+              
+              <div className="bg-white border border-gray-200 rounded-lg p-4">
+                <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Critical Issues</div>
+                <div className="text-2xl font-bold text-red-600">{issueStats.critical}</div>
+              </div>
+              
+              <div className="bg-white border border-gray-200 rounded-lg p-4">
+                <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Warnings</div>
+                <div className="text-2xl font-bold text-yellow-600">{issueStats.warning}</div>
+              </div>
+              
+              <div className="bg-white border border-gray-200 rounded-lg p-4">
+                <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Info Messages</div>
+                <div className="text-2xl font-bold text-blue-600">{issueStats.info}</div>
+              </div>
+              
+              <div className="bg-white border border-gray-200 rounded-lg p-4 bg-gradient-to-br from-green-50 to-green-100">
+                <div className="text-xs text-gray-600 uppercase tracking-wide mb-1">Data Quality Score</div>
+                <div className="text-2xl font-bold text-green-700">{qualityScore ? `${qualityScore}%` : '—'}</div>
+              </div>
             </div>
           </div>
-          <div className="mt-2 text-center text-sm text-gray-600">
-            {loadedCount > 0 && (
-              <span>
-                Loaded {loadedCount.toLocaleString()} properties
-                {loadedCount < totalPropertyCount && 
-                  ` • ${Math.ceil((totalPropertyCount - loadedCount) / 1000)} batches remaining`
-                }
-              </span>
+        )}
+        
+        {activeSubTab === 'standard' && (
+          <div>
+
+            {/* Check Results */}
+            {Object.keys(checkResults).length > 0 ? (
+              <div>
+                <h4 className="text-lg font-semibold text-gray-800 mb-4">
+                  Check Results by Category
+                </h4>
+                
+                {Object.entries(checkResults).map(([category, issues]) => {
+                  if (issues.length === 0) return null;
+                  
+                  const isExpanded = expandedCategories.includes(category);
+                  const criticalCount = issues.filter(i => i.severity === 'critical').length;
+                  const warningCount = issues.filter(i => i.severity === 'warning').length;
+                  const infoCount = issues.filter(i => i.severity === 'info').length;
+                  const passCount = properties.length - issues.length;
+                  
+                  return (
+                    <div key={category} className="bg-white border border-gray-200 rounded-lg mb-3 overflow-hidden">
+                      <div
+                        onClick={() => toggleQualityCategory(category)}
+                        className="p-4 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors flex justify-between items-center"
+                      >
+                        <div className="flex items-center gap-2">
+                          <ChevronRight
+                            size={20}
+                            className={`text-gray-500 transform transition-transform ${
+                              isExpanded ? 'rotate-90' : ''
+                            }`}
+                          />
+                          <span className="font-semibold text-gray-800 capitalize">
+                            {category.replace(/_/g, ' ')} Checks
+                          </span>
+                        </div>
+                        
+                        <div className="flex gap-2">
+                          {criticalCount > 0 && (
+                            <span className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-xs font-semibold">
+                              {criticalCount} Critical
+                            </span>
+                          )}
+                          {warningCount > 0 && (
+                            <span className="px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-semibold">
+                              {warningCount} Warning
+                            </span>
+                          )}
+                          <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-semibold">
+                            {passCount.toLocaleString()} Pass
+                          </span>
+                        </div>
+                      </div>
+                      
+                      {isExpanded && (
+                        <div className="p-4 border-t border-gray-200">
+                          {Object.entries(
+                            issues.reduce((acc, issue) => {
+                              if (!acc[issue.check]) acc[issue.check] = [];
+                              acc[issue.check].push(issue);
+                              return acc;
+                            }, {})
+                          ).map(([checkType, checkIssues]) => (
+                            <div
+                              key={checkType}
+                              className="p-3 bg-gray-50 rounded-lg mb-2 flex justify-between items-center"
+                            >
+                              <span className="text-sm text-gray-700">
+                                {getCheckTitle(checkType)}
+                              </span>
+                              <div className="flex items-center gap-3">
+                                <span className={`text-sm font-semibold ${
+                                  checkIssues[0].severity === 'critical' ? 'text-red-600' :
+                                  checkIssues[0].severity === 'warning' ? 'text-yellow-600' : 
+                                  'text-blue-600'
+                                }`}>
+                                  {checkIssues.length} properties
+                                </span>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    showPropertyDetails(checkType, category);
+                                  }}
+                                  className="px-3 py-1 text-xs bg-white border border-blue-600 text-blue-600 rounded hover:bg-blue-50 transition-colors"
+                                >
+                                  View Details
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="bg-white border border-gray-200 rounded-lg p-12 text-center">
+                {isLoading ? (
+                  <>
+                    <div className="inline-flex items-center justify-center w-16 h-16 mb-4">
+                      <RefreshCw size={32} className="text-blue-600 animate-spin" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-gray-800 mb-2">
+                      Loading Property Data
+                    </h3>
+                    <p className="text-gray-600">
+                      Please wait while we load {totalPropertyCount.toLocaleString()} properties in batches...
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <AlertCircle size={48} className="text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold text-gray-800 mb-2">
+                      No Analysis Run Yet
+                    </h3>
+                    <p className="text-gray-600">
+                      {properties.length.toLocaleString()} properties loaded. Click "Run Analysis" to check for data quality issues.
+                    </p>
+                  </>
+                )}
+              </div>
             )}
           </div>
-        </div>
-      )}
-
-      {/* Action Buttons */}
-      <div className="flex gap-3 mb-6">
-        <button 
-          onClick={runQualityChecks}
-          disabled={isRunningChecks || isLoading}
-          className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-all ${
-            isRunningChecks || isLoading
-              ? 'bg-gray-400 text-white cursor-not-allowed' 
-              : 'bg-blue-600 text-white hover:bg-blue-700'
-          }`}
-        >
-          <RefreshCw size={16} className={isRunningChecks ? 'animate-spin' : ''} />
-          {isRunningChecks ? 'Running Analysis...' : 'Run Analysis'}
-        </button>
+        )}
         
-        <button 
-          onClick={() => alert('Excel export will be implemented')}
-          className="px-4 py-2 bg-white border-2 border-blue-600 text-blue-600 rounded-lg font-medium hover:bg-blue-50 transition-all flex items-center gap-2"
-        >
-          <Download size={16} />
-          Export to Excel
-        </button>
-        
-        <button 
-          onClick={() => alert('QC Form generation will be implemented')}
-          className="px-4 py-2 bg-white border-2 border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-all"
-        >
-          Generate QC Form
-        </button>
-      </div>
-
-      {/* Metrics Cards Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
-        <div className="card p-4">
-          <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Total Properties</div>
-          <div className="text-2xl font-bold text-gray-800">{properties.length.toLocaleString()}</div>
-        </div>
-        
-        <div className="card p-4">
-          <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">With Issues</div>
-          <div className="text-2xl font-bold text-red-600">{issueStats.total}</div>
-        </div>
-        
-        <div className="card p-4">
-          <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Critical</div>
-          <div className="text-2xl font-bold text-red-600">{issueStats.critical}</div>
-        </div>
-        
-        <div className="card p-4">
-          <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Warnings</div>
-          <div className="text-2xl font-bold text-yellow-600">{issueStats.warning}</div>
-        </div>
-        
-        <div className="card p-4">
-          <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Info</div>
-          <div className="text-2xl font-bold text-blue-600">{issueStats.info}</div>
-        </div>
-        
-        <div className="card p-4 bg-gradient-to-br from-green-500 to-green-600 text-white">
-          <div className="text-xs uppercase tracking-wide mb-1 opacity-90">Quality Score</div>
-          <div className="text-2xl font-bold">{qualityScore ? `${qualityScore}%` : '—'}</div>
-        </div>
-      </div>
-
-      {/* Check Results */}
-      {Object.keys(checkResults).length > 0 ? (
-        <div>
-          <h4 className="text-lg font-semibold text-gray-800 mb-4">
-            Check Results by Category
-          </h4>
-          
-          {Object.entries(checkResults).map(([category, issues]) => {
-            if (issues.length === 0) return null;
-            
-            const isExpanded = expandedCategories.includes(category);
-            const criticalCount = issues.filter(i => i.severity === 'critical').length;
-            const warningCount = issues.filter(i => i.severity === 'warning').length;
-            const infoCount = issues.filter(i => i.severity === 'info').length;
-            
-            return (
-              <div key={category} className="card mb-3 overflow-hidden">
-                <div
-                  onClick={() => toggleQualityCategory(category)}
-                  className="p-4 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors flex justify-between items-center"
-                >
-                  <div className="flex items-center gap-2">
-                    <ChevronRight
-                      size={20}
-                      className={`text-gray-500 transform transition-transform ${
-                        isExpanded ? 'rotate-90' : ''
-                      }`}
+        {activeSubTab === 'custom' && (
+          <div>
+            <div className="bg-white border border-gray-200 rounded-lg p-6 mb-6">
+              <h3 className="text-lg font-semibold text-gray-800 mb-4">Custom Check Builder</h3>
+              
+              <div className="space-y-4">
+                {/* Condition Builder */}
+                {currentCustomCheck.conditions.map((condition, index) => (
+                  <div key={index} className="flex gap-2 items-center">
+                    <select 
+                      className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                      value={condition.logic}
+                      onChange={(e) => updateCustomCheckCondition(index, 'logic', e.target.value)}
+                      disabled={index === 0}
+                    >
+                      <option>IF</option>
+                      <option>AND</option>
+                      <option>OR</option>
+                    </select>
+                    
+                    <select 
+                      className="px-3 py-2 border border-gray-300 rounded-lg text-sm flex-1"
+                      value={condition.field}
+                      onChange={(e) => updateCustomCheckCondition(index, 'field', e.target.value)}
+                    >
+                      <option value="">-- Select Field --</option>
+                      <option value="property_m4_class">Property M4 Class</option>
+                      <option value="asset_building_class">Building Class</option>
+                      <option value="asset_sfla">Living Area (SFLA)</option>
+                      <option value="asset_year_built">Year Built</option>
+                      <option value="values_mod_improvement">Mod Improvement Value</option>
+                      <option value="values_mod_land">Mod Land Value</option>
+                      <option value="property_vcs">VCS Code</option>
+                      <option value="asset_design_style">Design Style</option>
+                      <option value="asset_type_use">Type Use</option>
+                      <option value="asset_lot_acre">Lot Acres</option>
+                      <option value="asset_ext_cond">Exterior Condition</option>
+                      <option value="asset_int_cond">Interior Condition</option>
+                    </select>
+                    
+                    <select 
+                      className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                      value={condition.operator}
+                      onChange={(e) => updateCustomCheckCondition(index, 'operator', e.target.value)}
+                    >
+                      <option value="=">=</option>
+                      <option value="!=">!=</option>
+                      <option value=">">&gt;</option>
+                      <option value="<">&lt;</option>
+                      <option value=">=">&gt;=</option>
+                      <option value="<=">&lt;=</option>
+                      <option value="is null">is null</option>
+                      <option value="is not null">is not null</option>
+                      <option value="contains">contains</option>
+                    </select>
+                    
+                    <input 
+                      type="text" 
+                      placeholder="Enter value..."
+                      className="px-3 py-2 border border-gray-300 rounded-lg text-sm flex-1"
+                      value={condition.value}
+                      onChange={(e) => updateCustomCheckCondition(index, 'value', e.target.value)}
+                      disabled={condition.operator === 'is null' || condition.operator === 'is not null'}
                     />
-                    <span className="font-semibold text-gray-800 capitalize">
-                      {category.replace(/_/g, ' ')} Checks
-                    </span>
+                    
+                    <button 
+                      className="p-2 text-red-500 hover:bg-red-50 rounded"
+                      onClick={() => removeCustomCheckCondition(index)}
+                      disabled={currentCustomCheck.conditions.length === 1}
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                ))}
+                
+                <button 
+                  className="text-blue-600 text-sm hover:text-blue-700"
+                  onClick={addConditionToCustomCheck}
+                >
+                  + Add Condition
+                </button>
+                
+                <div className="grid grid-cols-2 gap-4 pt-4 border-t">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Check Name</label>
+                    <input 
+                      type="text"
+                      placeholder="e.g., Missing Tax ID for Commercial"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                      value={currentCustomCheck.name}
+                      onChange={(e) => setCurrentCustomCheck(prev => ({ ...prev, name: e.target.value }))}
+                    />
                   </div>
                   
-                  <div className="flex gap-2">
-                    {criticalCount > 0 && (
-                      <span className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-xs font-semibold">
-                        {criticalCount} Critical
-                      </span>
-                    )}
-                    {warningCount > 0 && (
-                      <span className="px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-semibold">
-                        {warningCount} Warning
-                      </span>
-                    )}
-                    {infoCount > 0 && (
-                      <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">
-                        {infoCount} Info
-                      </span>
-                    )}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Severity</label>
+                    <select 
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                      value={currentCustomCheck.severity}
+                      onChange={(e) => setCurrentCustomCheck(prev => ({ ...prev, severity: e.target.value }))}
+                    >
+                      <option value="critical">Critical</option>
+                      <option value="warning">Warning</option>
+                      <option value="info">Info</option>
+                    </select>
                   </div>
                 </div>
                 
-                {isExpanded && (
-                  <div className="p-4 border-t border-gray-200">
-                    {Object.entries(
-                      issues.reduce((acc, issue) => {
-                        if (!acc[issue.check]) acc[issue.check] = [];
-                        acc[issue.check].push(issue);
-                        return acc;
-                      }, {})
-                    ).map(([checkType, checkIssues]) => (
-                      <div
-                        key={checkType}
-                        className="p-3 bg-gray-50 rounded-lg mb-2 flex justify-between items-center"
-                      >
-                        <span className="text-sm text-gray-700">
-                          {getCheckTitle(checkType)}
-                        </span>
-                        <div className="flex items-center gap-3">
-                          <span className={`text-sm font-semibold ${
-                            checkIssues[0].severity === 'critical' ? 'text-red-600' :
-                            checkIssues[0].severity === 'warning' ? 'text-yellow-600' : 
-                            'text-blue-600'
-                          }`}>
-                            {checkIssues.length} properties
-                          </span>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              showPropertyDetails(checkType, category);
-                            }}
-                            className="px-3 py-1 text-xs bg-white border border-blue-600 text-blue-600 rounded hover:bg-blue-50 transition-colors"
-                          >
-                            View Details
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                <button 
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
+                  onClick={saveCustomCheck}
+                >
+                  Save Custom Check
+                </button>
               </div>
-            );
-          })}
-        </div>
-      ) : (
-        <div className="card p-12 text-center">
-          {isLoading ? (
-            <>
-              <div className="inline-flex items-center justify-center w-16 h-16 mb-4">
-                <RefreshCw size={32} className="text-blue-600 animate-spin" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-800 mb-2">
-                Loading Property Data
-              </h3>
-              <p className="text-gray-600">
-                Please wait while we load {totalPropertyCount.toLocaleString()} properties in batches...
-              </p>
-            </>
-          ) : (
-            <>
-              <AlertCircle size={48} className="text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-gray-800 mb-2">
-                No Analysis Run Yet
-              </h3>
-              <p className="text-gray-600">
-                {properties.length.toLocaleString()} properties loaded. Click "Run Analysis" to check for data quality issues.
-              </p>
-            </>
-          )}
-        </div>
-      )}
-
-      {/* Property Details Modal */}
-      {showDetailsModal && (
-        <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-          onClick={() => setShowDetailsModal(false)}
-        >
-          <div 
-            className="bg-white rounded-lg w-[90%] max-w-5xl h-[80vh] max-h-[700px] overflow-hidden shadow-2xl flex flex-col"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="p-6 border-b border-gray-200 flex justify-between items-center flex-shrink-0">
-              <h3 className="text-lg font-semibold text-gray-800">
-                {modalData.title}
-              </h3>
-              <button
-                onClick={() => setShowDetailsModal(false)}
-                className="text-gray-500 hover:text-gray-700 text-2xl leading-none"
-              >
-                ×
-              </button>
             </div>
             
-            <div className="p-6 overflow-y-auto flex-1">
+            <div className="bg-white border border-gray-200 rounded-lg p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold text-gray-800">Saved Custom Checks</h3>
+                {customChecks.length > 0 && (
+                  <button 
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700"
+                    onClick={runAllCustomChecks}
+                  >
+                    Run All Custom Checks
+                  </button>
+                )}
+              </div>
+              
+              {customChecks.length > 0 ? (
+                <div className="space-y-2">
+                  {customChecks.map((check) => (
+                    <div key={check.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                      <div>
+                        <div className="font-medium text-gray-800">{check.name}</div>
+                        <div className="text-sm text-gray-600">
+                          {check.conditions.length} condition{check.conditions.length !== 1 ? 's' : ''} • 
+                          <span className={`ml-1 font-medium ${
+                            check.severity === 'critical' ? 'text-red-600' :
+                            check.severity === 'warning' ? 'text-yellow-600' :
+                            'text-blue-600'
+                          }`}>
+                            {check.severity}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button 
+                          className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+                          onClick={() => runCustomCheck(check)}
+                        >
+                          Run
+                        </button>
+                        <button 
+                          className="px-3 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700"
+                          onClick={() => deleteCustomCheck(check.id)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-gray-500 text-center py-8">No custom checks saved yet</p>
+              )}
+            </div>
+          </div>
+        )}
+        
+        {activeSubTab === 'history' && (
+          <div>
+            <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
               <table className="w-full">
-                <thead className="sticky top-0 bg-white">
-                  <tr className="border-b-2 border-gray-200">
-                    <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider bg-white">
-                      Property Key
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Run Date
                     </th>
-                    <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider bg-white">
-                      Issue Details
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Properties Analyzed
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Issues Found
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Quality Score
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Actions
                     </th>
                   </tr>
                 </thead>
-                <tbody>
-                  {modalData.properties.map((prop, index) => (
-                    <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="py-3 px-4 text-sm text-gray-900">
-                        {prop.property_key}
-                      </td>
-                      <td className="py-3 px-4 text-sm text-gray-600">
-                        {prop.message}
+                <tbody className="divide-y divide-gray-200">
+                  {runHistory.length > 0 ? (
+                    runHistory.map((run, index) => (
+                      <tr key={index} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 text-sm text-gray-900">
+                          {new Date(run.date).toLocaleString()}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-900">
+                          {run.propertyCount.toLocaleString()}
+                        </td>
+                        <td className="px-4 py-3 text-sm">
+                          <span className="text-red-600 font-medium">{run.criticalCount}</span> Critical,{' '}
+                          <span className="text-yellow-600 font-medium">{run.warningCount}</span> Warning
+                        </td>
+                        <td className="px-4 py-3 text-sm">
+                          <span className="font-medium text-green-600">{run.qualityScore}%</span>
+                        </td>
+                        <td className="px-4 py-3 text-sm">
+                          <button className="text-blue-600 hover:text-blue-700 mr-3">View</button>
+                          <button className="text-blue-600 hover:text-blue-700">Export</button>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan="5" className="px-4 py-8 text-center text-gray-500">
+                        No analysis runs yet
                       </td>
                     </tr>
-                  ))}
+                  )}
                 </tbody>
               </table>
             </div>
           </div>
-        </div>
-      )}
-    </div>
-  );
+        )}
+
+        {/* Property Details Modal */}
+        {showDetailsModal && (
+          <div 
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+            onClick={() => setShowDetailsModal(false)}
+          >
+            <div 
+              className="bg-white rounded-lg w-[90%] max-w-5xl h-[80vh] max-h-[700px] overflow-hidden shadow-2xl flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-6 border-b border-gray-200 flex justify-between items-center flex-shrink-0">
+                <h3 className="text-lg font-semibold text-gray-800">
+                  {modalData.title}
+                </h3>
+                <button
+                  onClick={() => setShowDetailsModal(false)}
+                  className="text-gray-500 hover:text-gray-700 text-2xl leading-none"
+                >
+                  ×
+                </button>
+              </div>
+              
+              <div className="p-6 overflow-y-auto flex-1">
+                <table className="w-full">
+                  <thead className="sticky top-0 bg-white">
+                    <tr className="border-b-2 border-gray-200">
+                      <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider bg-white">
+                        Property Key
+                      </th>
+                      <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider bg-white">
+                        Issue Details
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {modalData.properties.map((prop, index) => (
+                      <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
+                        <td className="py-3 px-4 text-sm text-gray-900">
+                          {prop.property_key}
+                        </td>
+                        <td className="py-3 px-4 text-sm text-gray-600">
+                          {prop.message}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   // Pre-Valuation Setup Tab
   const PreValuationTab = () => (
