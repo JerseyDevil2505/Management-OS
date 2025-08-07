@@ -1299,6 +1299,8 @@ const DataQualityTab = () => (
     )}
   </div>
 )}
+  </div>
+):
 
     {/* Property Details Modal */}
     {showDetailsModal && (
