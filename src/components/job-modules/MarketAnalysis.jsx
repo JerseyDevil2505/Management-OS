@@ -531,6 +531,23 @@ const runPropertyChecks = async (property, results) => {
       details: property
     });
   }
+
+    // DEBUG: Check what raw_data fields we actually have
+  if (property.property_composite_key === properties[0].property_composite_key) {
+    console.log('🔍 First property raw_data sample:');
+    console.log('Vendor type:', vendorType);
+    if (vendorType === 'BRT') {
+      console.log('MKTADJ:', rawData.MKTADJ);
+      console.log('NCOVR:', rawData.NCOVR);
+      console.log('Has any MKT fields?:', Object.keys(rawData).filter(k => k.includes('MKT')));
+    } else {
+      console.log('Sample MS fields:', {
+        'Over Improved Depr1': rawData['Over Improved Depr1'],
+        'Economic Depr': rawData['Economic Depr'],
+        'Has any adjustment fields?': Object.keys(rawData).filter(k => k.includes('Depr') || k.includes('Adj'))
+      });
+    }
+  }
   
   // ==================== CONDITION CHECKS ====================
   if ((m4Class === '2' || m4Class === '3A') && buildingClass > 10) {
