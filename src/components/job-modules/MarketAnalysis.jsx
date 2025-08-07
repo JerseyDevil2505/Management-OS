@@ -14,6 +14,7 @@ import {
   Upload,
   Save,
   ChevronLeft
+  ChevronRight
 } from 'lucide-react';
 
 const MarketLandAnalysis = ({ jobData, onBackToJobs }) => {
