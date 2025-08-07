@@ -169,44 +169,14 @@ const MarketLandAnalysis = ({ jobData, onBackToJobs }) => {
   }, [jobData?.id]);  
 
   // ==================== TAB CONFIGURATION ====================
-  const tabs = [
-    { 
-      id: 'data-quality', 
-      label: 'Data Quality/Error Checking', 
-      icon: AlertCircle,
-      description: 'Validate data integrity and identify issues'
-    },
-    { 
-      id: 'pre-valuation', 
-      label: 'Pre-Valuation Setup', 
-      icon: Settings,
-      description: 'Normalization and Page by Page Worksheet'
-    },
-    { 
-      id: 'overall', 
-      label: 'Overall Analysis', 
-      icon: BarChart,
-      description: 'General analysis including Condos'
-    },
-    { 
-      id: 'land', 
-      label: 'Land Valuation', 
-      icon: Map,
-      description: 'Complete land system with Economic Obsolescence'
-    },
-    { 
-      id: 'cost-valuation', 
-      label: 'Cost Valuation', 
-      icon: Calculator,
-      description: 'New Construction and Cost Conversion Factor'
-    },
-    { 
-      id: 'attribute-cards', 
-      label: 'Attribute & Card Analytics', 
-      icon: Layers,
-      description: 'Condition/Misc Items and Additional Cards'
-    }
-  ];
+const tabs = [
+  { id: 'data-quality', label: 'Data Quality/Error Checking', icon: '📊' },
+  { id: 'pre-valuation', label: 'Pre-Valuation Setup', icon: '⚙️' },
+  { id: 'overall-analysis', label: 'Overall Analysis', icon: '📈' },
+  { id: 'land-valuation', label: 'Land Valuation', icon: '🏞️' },
+  { id: 'cost-valuation', label: 'Cost Valuation', icon: '💰' },
+  { id: 'attribute-cards', label: 'Attribute & Card Analytics', icon: '🎯' }
+];
 
   // ==================== DATA FETCHING ====================
   useEffect(() => {
@@ -926,7 +896,7 @@ const DataQualityTab = () => (
       {/* Header */}
       <div className="module-header">
         <div>
-          <h2 className="module-title">Market & Land Analysis</h2>
+          <h2 className="module-title"></h2>
           <p className="text-muted">
             {jobData?.job_number} - {jobData?.municipality || 'Municipality'} ({jobData?.county || 'County'} County, {jobData?.state || 'State'})
           </p>
@@ -956,22 +926,20 @@ const DataQualityTab = () => (
       </div>
 
       {/* Tab Navigation */}
-      <div className="tab-navigation">
-        {tabs.map(tab => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`tab-button ${isActive ? 'active' : ''}`}
-              title={tab.description}
-            >
-              <Icon size={16} />
-              {tab.label}
-            </button>
-          );
-        })}
+      <div className="flex gap-2 border-b-2 border-gray-200 mb-6">
+        {tabs.map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`px-4 py-2 font-medium text-sm transition-all ${
+              activeTab === tab.id
+                ? 'border-b-2 border-blue-500 text-blue-600 -mb-[2px]'
+                : 'text-gray-600 hover:text-gray-800'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
       {/* Content Area */}
