@@ -25,9 +25,28 @@ const MarketLandAnalysis = ({ jobData, onBackToJobs }) => {
   const [lastSaved, setLastSaved] = useState(null);
   const [unsavedChanges, setUnsavedChanges] = useState(false);
 
-  // Data Quality State
-  const [dataIssues, setDataIssues] = useState([]);
-  const [dataQualityScore, setDataQualityScore] = useState(null);
+  // DATA QUALITY STATE (ADD THESE HERE!)
+  const [checkResults, setCheckResults] = useState({});
+  const [qualityScore, setQualityScore] = useState(null);
+  const [issueStats, setIssueStats] = useState({
+    critical: 0,
+    warning: 0,
+    info: 0,
+    total: 0
+  });
+  const [customChecks, setCustomChecks] = useState([]);
+  const [currentCustomCheck, setCurrentCustomCheck] = useState({
+    name: '',
+    severity: 'warning',
+    conditions: [{ logic: 'IF', field: '', operator: '=', value: '' }]
+  });
+  const [vendorType, setVendorType] = useState(null);
+  const [codeDefinitions, setCodeDefinitions] = useState(null);
+  const [runHistory, setRunHistory] = useState([]);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [modalData, setModalData] = useState({ title: '', properties: [] });
+  const [expandedCategories, setExpandedCategories] = useState(['mod_iv']);
+  const [isRunningChecks, setIsRunningChecks] = useState(false);
   
   // Pre-Valuation State (Normalization + Page by Page)
   const [targetYear, setTargetYear] = useState(2012);
@@ -141,38 +160,477 @@ const MarketLandAnalysis = ({ jobData, onBackToJobs }) => {
     }
   };
 
+  // ==================== DATA QUALITY FUNCTIONS ====================
+const runQualityChecks = async () => {
+  setIsRunningChecks(true);
+  const results = {
+    mod_iv: [],
+    cama: [],
+    characteristics: [],
+    special: [],
+    rooms: [],
+    custom: []
+  };
+  
+  try {
+    // Detect vendor type
+    const vendor = jobData.vendor_source || 'BRT';
+    setVendorType(vendor);
+    
+    // Process properties in batches
+    const pageSize = 1000;
+    const totalPages = Math.ceil(properties.length / pageSize);
+    
+    for (let page = 0; page < totalPages; page++) {
+      const batch = properties.slice(page * pageSize, (page + 1) * pageSize);
+      console.log(`Processing batch ${page + 1} of ${totalPages}...`);
+      
+      for (const property of batch) {
+        await runPropertyChecks(property, results);
+      }
+    }
+    
+    // Save results
+    await saveQualityResults(results);
+    
+    // Calculate quality score
+    const score = calculateQualityScore(results);
+    setQualityScore(score);
+    setCheckResults(results);
+    
+    console.log('Quality check complete!');
+  } catch (error) {
+    console.error('Error running quality checks:', error);
+  } finally {
+    setIsRunningChecks(false);
+  }
+};
+
+const runPropertyChecks = async (property, results) => {
+  // MOD IV CHECKS
+  const m4Class = property.property_m4_class;
+  const modImprovement = property.values_mod_improvement || 0;
+  
+  // Class 1/3B cannot have improvements
+  if ((m4Class === '1' || m4Class === '3B') && modImprovement > 0) {
+    results.mod_iv.push({
+      check: 'vacant_land_improvements',
+      severity: 'critical',
+      property_key: property.property_composite_key,
+      message: `Class ${m4Class} has improvements: $${modImprovement}`,
+      details: property
+    });
+  }
+  
+  // Class 2/3A/4A-C must have improvements
+  if (['2', '3A', '4A', '4B', '4C'].includes(m4Class) && modImprovement === 0) {
+    results.mod_iv.push({
+      check: 'missing_improvements',
+      severity: 'critical',
+      property_key: property.property_composite_key,
+      message: `Class ${m4Class} missing improvements`,
+      details: property
+    });
+  }
+  
+  // Add more checks here - keeping it shorter for now
+};
+
+const saveQualityResults = async (results) => {
+  try {
+    let criticalCount = 0;
+    let warningCount = 0;
+    let infoCount = 0;
+    
+    Object.values(results).forEach(category => {
+      category.forEach(issue => {
+        if (issue.severity === 'critical') criticalCount++;
+        else if (issue.severity === 'warning') warningCount++;
+        else if (issue.severity === 'info') infoCount++;
+      });
+    });
+    
+    const totalIssues = criticalCount + warningCount + infoCount;
+    
+    const { error } = await supabase
+      .from('market_land_valuation')
+      .upsert({
+        job_id: jobData.id,
+        quality_check_results: results,
+        quality_check_last_run: new Date().toISOString(),
+        quality_issues_count: totalIssues,
+        custom_check_definitions: customChecks
+      }, {
+        onConflict: 'job_id'
+      });
+    
+    if (error) throw error;
+    
+    setIssueStats({
+      critical: criticalCount,
+      warning: warningCount,
+      info: infoCount,
+      total: totalIssues
+    });
+    
+    setUnsavedChanges(false);
+    console.log(`Saved quality results: ${totalIssues} issues found`);
+  } catch (error) {
+    console.error('Error saving quality results:', error);
+  }
+};
+
+const calculateQualityScore = (results) => {
+  const totalProps = properties.length || 1;
+  const issueWeights = { critical: 10, warning: 5, info: 1 };
+  let totalDeductions = 0;
+  
+  Object.values(results).forEach(category => {
+    category.forEach(issue => {
+      totalDeductions += issueWeights[issue.severity] || 0;
+    });
+  });
+  
+  const score = Math.max(0, 100 - (totalDeductions / totalProps));
+  return score.toFixed(1);
+};
+
+const toggleQualityCategory = (categoryId) => {
+  setExpandedCategories(prev => 
+    prev.includes(categoryId) 
+      ? prev.filter(id => id !== categoryId)
+      : [...prev, categoryId]
+  );
+};
+
+const getCheckTitle = (checkType) => {
+  const titles = {
+    'vacant_land_improvements': 'Vacant Land with Improvements',
+    'missing_improvements': 'Properties Missing Improvements',
+    'zero_lot_size': 'Properties with Zero Lot Size',
+    'missing_sfla': 'Missing Living Area'
+  };
+  return titles[checkType] || checkType;
+};
+
+const showPropertyDetails = (checkType, category) => {
+  const issues = checkResults[category]?.filter(r => r.check === checkType) || [];
+  setModalData({
+    title: getCheckTitle(checkType),
+    properties: issues
+  });
+  setShowDetailsModal(true);
+};  
+
   // ==================== TAB COMPONENTS ====================
   
-  // Data Quality Tab
-  const DataQualityTab = () => (
-    <div className="tab-content">
-      <div className="tab-header">
-        <h3>Data Quality Analysis</h3>
-        <p className="text-muted">
-          Analyzing {properties.length} properties for data integrity issues
-        </p>
-      </div>
-
-      {/* Quality Score Card */}
-      <div className="card">
-        <div className="flex-between">
-          <span className="text-muted">Overall Data Quality Score</span>
-          <span className="metric-large text-success">
-            {dataQualityScore ? `${dataQualityScore}%` : 'Calculating...'}
-          </span>
+// Data Quality Tab
+const DataQualityTab = () => (
+  <div className="tab-content">
+    <div className="tab-header" style={{ marginBottom: '20px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h3>Data Quality Analysis</h3>
+          <p className="text-muted">
+            Analyzing {properties.length} properties for data integrity issues
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button 
+            className="btn btn-primary"
+            onClick={runQualityChecks}
+            disabled={isRunningChecks}
+          >
+            {isRunningChecks ? (
+              <>
+                <RefreshCw size={16} className="spin" />
+                Running...
+              </>
+            ) : (
+              <>
+                <RefreshCw size={16} />
+                Run Analysis
+              </>
+            )}
+          </button>
+          <button 
+            className="btn btn-secondary"
+            onClick={() => alert('Excel export would be implemented here')}
+          >
+            <Download size={16} />
+            Export Excel
+          </button>
         </div>
       </div>
+    </div>
 
-      {/* Issues List */}
+    {/* Quality Score Cards */}
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+      gap: '15px',
+      marginBottom: '30px'
+    }}>
       <div className="card">
-        <h4>Identified Issues</h4>
-        {/* TODO: Add issues list */}
-        <p className="text-muted">
-          No critical issues found
-        </p>
+        <div className="stat-label">Quality Score</div>
+        <div className="metric-large text-success">
+          {qualityScore ? `${qualityScore}%` : '—'}
+        </div>
+      </div>
+      <div className="card">
+        <div className="stat-label">Total Issues</div>
+        <div className="metric-large">
+          {issueStats.total}
+        </div>
+      </div>
+      <div className="card">
+        <div className="stat-label">Critical</div>
+        <div className="metric-large text-danger">
+          {issueStats.critical}
+        </div>
+      </div>
+      <div className="card">
+        <div className="stat-label">Warnings</div>
+        <div className="metric-large text-warning">
+          {issueStats.warning}
+        </div>
+      </div>
+      <div className="card">
+        <div className="stat-label">Info</div>
+        <div className="metric-large text-info">
+          {issueStats.info}
+        </div>
       </div>
     </div>
-  );
+
+    {/* Check Results */}
+    {Object.keys(checkResults).length > 0 && (
+      <>
+        <h4 style={{ marginBottom: '15px' }}>Check Results by Category</h4>
+        <div style={{ display: 'grid', gap: '15px' }}>
+          {Object.entries(checkResults).map(([category, issues]) => {
+            const isExpanded = expandedCategories.includes(category);
+            const criticalCount = issues.filter(i => i.severity === 'critical').length;
+            const warningCount = issues.filter(i => i.severity === 'warning').length;
+            const infoCount = issues.filter(i => i.severity === 'info').length;
+            
+            if (issues.length === 0) return null;
+            
+            return (
+              <div key={category} className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                <div
+                  onClick={() => toggleQualityCategory(category)}
+                  style={{
+                    padding: '12px 16px',
+                    background: '#f9fafb',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <ChevronRight
+                      size={16}
+                      style={{
+                        transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
+                        transition: 'transform 0.2s'
+                      }}
+                    />
+                    <span style={{ fontWeight: '600', textTransform: 'capitalize' }}>
+                      {category.replace('_', ' ')} Checks
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    {criticalCount > 0 && (
+                      <span style={{
+                        padding: '2px 8px',
+                        borderRadius: '12px',
+                        fontSize: '12px',
+                        fontWeight: '600',
+                        background: '#fee2e2',
+                        color: '#991b1b'
+                      }}>
+                        {criticalCount} Critical
+                      </span>
+                    )}
+                    {warningCount > 0 && (
+                      <span style={{
+                        padding: '2px 8px',
+                        borderRadius: '12px',
+                        fontSize: '12px',
+                        fontWeight: '600',
+                        background: '#fef3c7',
+                        color: '#92400e'
+                      }}>
+                        {warningCount} Warning
+                      </span>
+                    )}
+                    {infoCount > 0 && (
+                      <span style={{
+                        padding: '2px 8px',
+                        borderRadius: '12px',
+                        fontSize: '12px',
+                        fontWeight: '600',
+                        background: '#dbeafe',
+                        color: '#1e40af'
+                      }}>
+                        {infoCount} Info
+                      </span>
+                    )}
+                  </div>
+                </div>
+                
+                {isExpanded && (
+                  <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                    {Object.entries(
+                      issues.reduce((acc, issue) => {
+                        if (!acc[issue.check]) acc[issue.check] = [];
+                        acc[issue.check].push(issue);
+                        return acc;
+                      }, {})
+                    ).map(([checkType, checkIssues]) => (
+                      <div
+                        key={checkType}
+                        style={{
+                          padding: '10px 16px',
+                          borderTop: '1px solid #e5e7eb',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center'
+                        }}
+                      >
+                        <span style={{ fontSize: '14px' }}>
+                          {getCheckTitle(checkType)}
+                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <span style={{
+                            fontWeight: '600',
+                            fontSize: '14px',
+                            color: checkIssues[0].severity === 'critical' ? '#ef4444' :
+                                   checkIssues[0].severity === 'warning' ? '#f59e0b' : '#3b82f6'
+                          }}>
+                            {checkIssues.length} properties
+                          </span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              showPropertyDetails(checkType, category);
+                            }}
+                            style={{
+                              color: '#3b82f6',
+                              background: 'none',
+                              border: 'none',
+                              cursor: 'pointer',
+                              fontSize: '13px',
+                              textDecoration: 'underline'
+                            }}
+                          >
+                            View
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </>
+    )}
+
+    {/* No results message */}
+    {Object.keys(checkResults).length === 0 && !isRunningChecks && (
+      <div style={{ 
+        textAlign: 'center', 
+        padding: '40px',
+        background: '#f9fafb',
+        borderRadius: '8px',
+        color: '#6b7280'
+      }}>
+        <AlertCircle size={48} style={{ margin: '0 auto 16px' }} />
+        <p>No quality check results yet.</p>
+        <p>Click "Run Analysis" to check for data quality issues.</p>
+      </div>
+    )}
+
+    {/* Property Details Modal */}
+    {showDetailsModal && (
+      <div style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: 'rgba(0, 0, 0, 0.5)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 1000
+      }}>
+        <div style={{
+          background: 'white',
+          borderRadius: '8px',
+          maxWidth: '90%',
+          maxHeight: '80%',
+          width: '800px',
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column'
+        }}>
+          <div style={{
+            padding: '20px',
+            borderBottom: '1px solid #e5e7eb',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}>
+            <h3>{modalData.title}</h3>
+            <button
+              onClick={() => setShowDetailsModal(false)}
+              style={{
+                background: 'none',
+                border: 'none',
+                fontSize: '24px',
+                color: '#6b7280',
+                cursor: 'pointer'
+              }}
+            >
+              ×
+            </button>
+          </div>
+          <div style={{ padding: '20px', overflowY: 'auto', flex: 1 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ borderBottom: '2px solid #e5e7eb' }}>
+                  <th style={{ padding: '8px', textAlign: 'left', fontSize: '12px', color: '#6b7280' }}>
+                    PROPERTY KEY
+                  </th>
+                  <th style={{ padding: '8px', textAlign: 'left', fontSize: '12px', color: '#6b7280' }}>
+                    MESSAGE
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {modalData.properties.map((prop, index) => (
+                  <tr key={index} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                    <td style={{ padding: '8px', fontSize: '14px' }}>
+                      {prop.property_key}
+                    </td>
+                    <td style={{ padding: '8px', fontSize: '14px' }}>
+                      {prop.message}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    )}
+  </div>
+);
 
   // Pre-Valuation Setup Tab
   const PreValuationTab = () => (
