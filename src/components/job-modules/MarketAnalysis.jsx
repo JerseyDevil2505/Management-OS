@@ -896,7 +896,6 @@ const DataQualityTab = () => (
       {/* Header */}
       <div className="module-header">
         <div>
-          <h2 className="module-title">Market & Land Analysis</h2>
           <p className="text-muted">
             {jobData?.job_number} - {jobData?.municipality || 'Municipality'} ({jobData?.county || 'County'} County, {jobData?.state || 'State'})
           </p>
