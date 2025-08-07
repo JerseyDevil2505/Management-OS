@@ -25,8 +25,11 @@ const MarketLandAnalysis = ({ jobData, onBackToJobs }) => {
   const [properties, setProperties] = useState([]);
   const [lastSaved, setLastSaved] = useState(null);
   const [unsavedChanges, setUnsavedChanges] = useState(false);
+  const [loadingProgress, setLoadingProgress] = useState(0);
+  const [totalPropertyCount, setTotalPropertyCount] = useState(0);
+  const [loadedCount, setLoadedCount] = useState(0);
 
-  // DATA QUALITY STATE (ADD THESE HERE!)
+  // DATA QUALITY STATE
   const [checkResults, setCheckResults] = useState({});
   const [qualityScore, setQualityScore] = useState(null);
   const [issueStats, setIssueStats] = useState({
@@ -73,6 +76,97 @@ const MarketLandAnalysis = ({ jobData, onBackToJobs }) => {
   // Attribute & Card Analytics State
   const [conditionAdjustments, setConditionAdjustments] = useState({});
   const [additionalCards, setAdditionalCards] = useState([]);
+
+    // ==================== LOAD PROPERTIES WITH PAGINATION ====================
+  useEffect(() => {
+    const loadProperties = async () => {
+      if (!jobData?.id) return;
+      
+      setIsLoading(true);
+      setLoadingProgress(0);
+      setLoadedCount(0);
+      
+      try {
+        // First, get the total count
+        const { count, error: countError } = await supabase
+          .from('property_records')
+          .select('*', { count: 'exact', head: true })
+          .eq('job_id', jobData.id);
+        
+        if (countError) throw countError;
+        
+        setTotalPropertyCount(count || 0);
+        console.log(`📊 Total properties to load: ${count}`);
+        
+        if (!count || count === 0) {
+          setProperties([]);
+          setIsLoading(false);
+          return;
+        }
+        
+        // Calculate number of pages needed (1000 per page)
+        const pageSize = 1000;
+        const totalPages = Math.ceil(count / pageSize);
+        const allProperties = [];
+        
+        // Load properties in batches
+        for (let page = 0; page < totalPages; page++) {
+          const start = page * pageSize;
+          const end = Math.min(start + pageSize - 1, count - 1);
+          
+          console.log(`📥 Loading batch ${page + 1}/${totalPages} (${start}-${end})...`);
+          
+          const { data, error } = await supabase
+            .from('property_records')
+            .select('*')
+            .eq('job_id', jobData.id)
+            .order('property_composite_key')
+            .range(start, end);
+          
+          if (error) throw error;
+          
+          if (data) {
+            allProperties.push(...data);
+            const loaded = allProperties.length;
+            setLoadedCount(loaded);
+            setLoadingProgress(Math.round((loaded / count) * 100));
+            
+            // Update properties state incrementally for better UX
+            setProperties([...allProperties]);
+          }
+          
+          // Small delay between batches to prevent overwhelming the server
+          if (page < totalPages - 1) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+        }
+        
+        console.log(`✅ Successfully loaded ${allProperties.length} properties`);
+        
+        // Detect vendor type from the first property
+        if (allProperties.length > 0) {
+          const firstProp = allProperties[0];
+          const vendor = firstProp.raw_data?.vendor_source || jobData.vendor_source || 'BRT';
+          setVendorType(vendor);
+          console.log(`🏢 Vendor type detected: ${vendor}`);
+        }
+        
+        // Parse code definitions if available
+        if (jobData.parsed_code_definitions) {
+          setCodeDefinitions(jobData.parsed_code_definitions);
+        }
+        
+      } catch (error) {
+        console.error('❌ Error loading properties:', error);
+        setProperties([]);
+      } finally {
+        setIsLoading(false);
+        setLoadingProgress(100);
+      }
+    };
+
+    loadProperties();
+  }, [jobData?.id]);  
 
   // ==================== TAB CONFIGURATION ====================
   const tabs = [
@@ -334,17 +428,48 @@ const DataQualityTab = () => (
         Data Quality Analysis
       </h3>
       <p className="text-gray-600">
-        Analyzing {properties.length} properties for data integrity issues
+        {isLoading 
+          ? `Loading ${loadedCount.toLocaleString()} of ${totalPropertyCount.toLocaleString()} properties...`
+          : `Analyzing ${properties.length.toLocaleString()} properties for data integrity issues`
+        }
       </p>
     </div>
+
+    {/* Loading Progress Bar */}
+    {isLoading && (
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-sm font-medium text-gray-700">Loading Properties</span>
+          <span className="text-sm font-medium text-blue-600">{loadingProgress}%</span>
+        </div>
+        <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+          <div 
+            className="h-full bg-gradient-to-r from-blue-500 to-blue-600 transition-all duration-300 ease-out"
+            style={{ width: `${loadingProgress}%` }}
+          >
+            <div className="h-full bg-white bg-opacity-30 animate-pulse"></div>
+          </div>
+        </div>
+        <div className="mt-2 text-center text-sm text-gray-600">
+          {loadedCount > 0 && (
+            <span>
+              Loaded {loadedCount.toLocaleString()} properties
+              {loadedCount < totalPropertyCount && 
+                ` • ${Math.ceil((totalPropertyCount - loadedCount) / 1000)} batches remaining`
+              }
+            </span>
+          )}
+        </div>
+      </div>
+    )}
 
     {/* Action Buttons */}
     <div className="flex gap-3 mb-6">
       <button 
         onClick={runQualityChecks}
-        disabled={isRunningChecks}
+        disabled={isRunningChecks || isLoading}
         className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-all ${
-          isRunningChecks 
+          isRunningChecks || isLoading
             ? 'bg-gray-400 text-white cursor-not-allowed' 
             : 'bg-blue-600 text-white hover:bg-blue-700'
         }`}
@@ -497,18 +622,32 @@ const DataQualityTab = () => (
         })}
       </div>
     ) : (
-      <div className="card p-12 text-center">
-        <AlertCircle size={48} className="text-gray-400 mx-auto mb-4" />
+  <div className="card p-12 text-center">
+    {isLoading ? (
+      <>
+        <div className="inline-flex items-center justify-center w-16 h-16 mb-4">
+          <RefreshCw size={32} className="text-blue-600 animate-spin" />
+        </div>
         <h3 className="text-lg font-semibold text-gray-800 mb-2">
-          {properties.length === 0 ? 'Loading properties...' : 'No Analysis Run Yet'}
+          Loading Property Data
         </h3>
         <p className="text-gray-600">
-          {properties.length === 0 
-            ? 'Please wait while we load the property data...' 
-            : `${properties.length} properties loaded. Click "Run Analysis" to check for data quality issues.`}
+          Please wait while we load {totalPropertyCount.toLocaleString()} properties in batches...
         </p>
-      </div>
+      </>
+    ) : (
+      <>
+        <AlertCircle size={48} className="text-gray-400 mx-auto mb-4" />
+        <h3 className="text-lg font-semibold text-gray-800 mb-2">
+          No Analysis Run Yet
+        </h3>
+        <p className="text-gray-600">
+          {properties.length.toLocaleString()} properties loaded. Click "Run Analysis" to check for data quality issues.
+        </p>
+      </>
     )}
+  </div>
+)}
 
     {/* Property Details Modal */}
     {showDetailsModal && (
