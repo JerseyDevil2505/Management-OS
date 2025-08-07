@@ -1641,42 +1641,8 @@ export const authHelpers = {
     }
   }
 };
-// Worksheet service for Pre-Valuation Setup
-export const worksheetService = {
-  // Auto-save worksheet progress
-  async saveWorksheetStats(jobId, stats) {
-    const { error } = await supabase
-      .from('market_land_valuation')
-      .upsert({
-        job_id: jobId,
-        worksheet_stats: stats,
-        updated_at: new Date().toISOString()
-      })
-      .eq('job_id', jobId);
-    
-    if (error) throw error;
-  },
 
-  // ... rest of the worksheet service code I gave you ...
-};
-
-// This should be the very end of the file
-So it goes:
-
-All your existing services (employeeService, jobService, etc.)
-Add the new worksheetService here
-End of file
-
-This way when you build the actual MarketLandAnalysis component, you can call these functions like:
-
-worksheetService.saveWorksheetStats(jobId, stats)
-worksheetService.initializeMarketLandRecord(jobId)
-RetryJlike after this?
-  // Update user has_account flag when account is createdEditYes, exactly! Add it right after that comment/function. So it would look like:
-javascript  // Update user has_account flag when account is created
-  // ... whatever function is here ...
-
-// Worksheet service for Pre-Valuation Setup
+// ===== WORKSHEET SERVICE FOR PRE-VALUATION SETUP =====
 export const worksheetService = {
   async saveWorksheetStats(jobId, stats) {
     const { error } = await supabase
@@ -1735,6 +1701,5 @@ export const worksheetService = {
     if (error) throw error;
   }
 };
-
 
 export default supabase;
