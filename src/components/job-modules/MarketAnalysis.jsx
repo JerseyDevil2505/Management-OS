@@ -51,6 +51,19 @@ const MarketLandAnalysis = ({ jobData }) => {
   const [modalData, setModalData] = useState({ title: '', properties: [] });
   const [expandedCategories, setExpandedCategories] = useState(['mod_iv']);
   const [isRunningChecks, setIsRunningChecks] = useState(false);
+
+  // ESC key handler for modal
+  useEffect(() => {
+    const handleEsc = (event) => {
+      if (event.keyCode === 27) {
+        setShowDetailsModal(false);
+      }
+    };
+    window.addEventListener('keydown', handleEsc);
+    return () => {
+      window.removeEventListener('keydown', handleEsc);
+    };
+  }, []);
   
   // Pre-Valuation State (Normalization + Page by Page)
   const [targetYear, setTargetYear] = useState(2012);
@@ -911,6 +924,7 @@ const saveQualityResults = async (results) => {
     let warningCount = 0;
     let infoCount = 0;
     
+    // Count issues without storing details
     Object.values(results).forEach(category => {
       category.forEach(issue => {
         if (issue.severity === 'critical') criticalCount++;
@@ -921,20 +935,35 @@ const saveQualityResults = async (results) => {
     
     const totalIssues = criticalCount + warningCount + infoCount;
     
-    const { error } = await supabase
+    // Check if record exists
+    const { data: existing } = await supabase
       .from('market_land_valuation')
-      .upsert({
-        job_id: jobData.id,
-        quality_check_results: results,
-        quality_check_last_run: new Date().toISOString(),
-        quality_issues_count: totalIssues,
-        custom_check_definitions: customChecks
-      }, {
-        onConflict: 'job_id'
-      });
+      .select('id')
+      .eq('job_id', jobData.id)
+      .single();
     
-    if (error) throw error;
+    const saveData = {
+      job_id: jobData.id,
+      quality_check_last_run: new Date().toISOString(),
+      quality_issues_count: totalIssues,
+      quality_score: calculateQualityScore(results)
+    };
     
+    if (existing) {
+      const { error } = await supabase
+        .from('market_land_valuation')
+        .update(saveData)
+        .eq('job_id', jobData.id);
+      if (error) throw error;
+    } else {
+      const { error } = await supabase
+        .from('market_land_valuation')
+        .insert(saveData);
+      if (error) throw error;
+    }
+    
+    // Keep full results in state for display
+    setCheckResults(results);
     setIssueStats({
       critical: criticalCount,
       warning: warningCount,
@@ -943,9 +972,11 @@ const saveQualityResults = async (results) => {
     });
     
     setUnsavedChanges(false);
-    console.log(`Saved quality results: ${totalIssues} issues found`);
+    console.log(`✅ Saved: ${totalIssues} issues found`);
+    
   } catch (error) {
-    console.error('Error saving quality results:', error);
+    console.error('Error saving:', error);
+    setCheckResults(results); // Still show results even if save fails
   }
 };
 
@@ -1271,9 +1302,15 @@ const DataQualityTab = () => (
 
     {/* Property Details Modal */}
     {showDetailsModal && (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-lg max-w-4xl w-full max-h-[80vh] overflow-hidden shadow-2xl">
-          <div className="p-6 border-b border-gray-200 flex justify-between items-center">
+      <div 
+        className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+        onClick={() => setShowDetailsModal(false)}
+      >
+        <div 
+          className="bg-white rounded-lg w-[90%] max-w-5xl h-[80vh] max-h-[700px] overflow-hidden shadow-2xl flex flex-col"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="p-6 border-b border-gray-200 flex justify-between items-center flex-shrink-0">
             <h3 className="text-lg font-semibold text-gray-800">
               {modalData.title}
             </h3>
@@ -1285,14 +1322,14 @@ const DataQualityTab = () => (
             </button>
           </div>
           
-          <div className="p-6 overflow-y-auto max-h-[60vh]">
+          <div className="p-6 overflow-y-auto flex-1">
             <table className="w-full">
-              <thead>
+              <thead className="sticky top-0 bg-white">
                 <tr className="border-b-2 border-gray-200">
-                  <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider bg-white">
                     Property Key
                   </th>
-                  <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider bg-white">
                     Issue Details
                   </th>
                 </tr>
@@ -1314,8 +1351,6 @@ const DataQualityTab = () => (
         </div>
       </div>
     )}
-  </div>
-);
 
   // Pre-Valuation Setup Tab
   const PreValuationTab = () => (
