@@ -52,6 +52,8 @@ const MarketLandAnalysis = ({ jobData }) => {
   const [modalData, setModalData] = useState({ title: '', properties: [] });
   const [expandedCategories, setExpandedCategories] = useState(['mod_iv']);
   const [isRunningChecks, setIsRunningChecks] = useState(false);
+  const [dataQualityActiveSubTab, setDataQualityActiveSubTab] = useState('overview');
+
 
   // ESC key handler for modal
   useEffect(() => {
@@ -1225,16 +1227,16 @@ const exportToExcel = () => {
   
   // Data Quality Tab
   const DataQualityTab = () => {
-    const [activeSubTab, setActiveSubTab] = useState('overview');
+  // activeSubTab state is now managed by parent
     
     return (
       <div className="tab-content">
         {/* Sub-tab Navigation */}
         <div className="flex gap-1 border-b border-gray-300 mb-6">
           <button
-            onClick={() => setActiveSubTab('overview')}
+            onClick={() => setDataQualityActiveSubTab('overview')}
             className={`px-4 py-2 font-medium text-sm transition-all ${
-              activeSubTab === 'overview'
+              dataQualityActiveSubTab === 'overview'
                 ? 'border-b-2 border-blue-500 text-blue-600 -mb-[1px] bg-blue-50'
                 : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
             }`}
@@ -1242,9 +1244,9 @@ const exportToExcel = () => {
             Overview
           </button>
           <button
-            onClick={() => setActiveSubTab('standard')}
+            onClick={() => setDataQualityActiveSubTab('standard')}
             className={`px-4 py-2 font-medium text-sm transition-all ${
-              activeSubTab === 'standard'
+              dataQualityActiveSubTab === 'standard'
                 ? 'border-b-2 border-blue-500 text-blue-600 -mb-[1px] bg-blue-50'
                 : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
             }`}
@@ -1252,9 +1254,9 @@ const exportToExcel = () => {
             Standard Checks
           </button>
           <button
-            onClick={() => setActiveSubTab('custom')}
+            onClick={() => setDataQualityActiveSubTab('custom')}
             className={`px-4 py-2 font-medium text-sm transition-all ${
-              activeSubTab === 'custom'
+              dataQualityActiveSubTab === 'custom'
                 ? 'border-b-2 border-blue-500 text-blue-600 -mb-[1px] bg-blue-50'
                 : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
             }`}
@@ -1262,9 +1264,9 @@ const exportToExcel = () => {
             Custom Checks
           </button>
           <button
-            onClick={() => setActiveSubTab('history')}
+            onClick={() => setDataQualityActiveSubTab('history')}
             className={`px-4 py-2 font-medium text-sm transition-all ${
-              activeSubTab === 'history'
+              dataQualityActiveSubTab === 'history'
                 ? 'border-b-2 border-blue-500 text-blue-600 -mb-[1px] bg-blue-50'
                 : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
             }`}
@@ -1274,7 +1276,7 @@ const exportToExcel = () => {
         </div>
         
         {/* Sub-tab Content */}
-        {activeSubTab === 'overview' && (
+        {dataQualityActiveSubTab === 'overview' && (
           <div>
             {/* Header Section */}
             <div className="mb-6">
@@ -1380,7 +1382,7 @@ const exportToExcel = () => {
         )}
         
         {/* Standard Checks Tab */}
-        {activeSubTab === 'standard' && (
+        {dataQualityActiveSubTab === 'standard' && (
           <div>
             {/* Debug logging */}
             {console.log('🔍 Standard Checks - checkResults:', checkResults)}
@@ -1501,7 +1503,7 @@ const exportToExcel = () => {
         )}
         
         {/* Custom Checks Tab */}
-        {activeSubTab === 'custom' && (
+        {dataQualityActiveSubTab === 'custom' && (
           <div>
             <div className="bg-white border border-gray-200 rounded-lg p-6 mb-6">
               <h3 className="text-lg font-semibold text-gray-800 mb-4">Custom Check Builder</h3>
@@ -1707,7 +1709,7 @@ const exportToExcel = () => {
         )}
         
         {/* Run History Tab */}
-        {activeSubTab === 'history' && (
+        {dataQualityActiveSubTab === 'history' && (
           <div>
             <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
               <table className="w-full">
