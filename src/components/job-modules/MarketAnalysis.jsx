@@ -1863,20 +1863,26 @@ const exportToExcel = () => {
       {/* Property Details Modal */}
       {showDetailsModal && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center z-50 pt-10 overflow-y-auto"
           onClick={() => setShowDetailsModal(false)}
         >
           <div 
-            className="bg-white rounded-lg w-[90%] max-w-5xl h-[80vh] max-h-[700px] overflow-hidden shadow-2xl flex flex-col"
+            className="bg-white rounded-lg w-[95%] max-w-6xl my-8 shadow-2xl flex flex-col"
+            style={{ maxHeight: 'calc(100vh - 100px)' }}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="p-6 border-b border-gray-200 flex justify-between items-center flex-shrink-0">
-              <h3 className="text-lg font-semibold text-gray-800">
-                {modalData.title}
-              </h3>
+              <div className="flex items-center gap-4">
+                <h3 className="text-lg font-semibold text-gray-800">
+                  {modalData.title}
+                </h3>
+                <span className="text-sm text-gray-500">
+                  ({modalData.properties.length} properties)
+                </span>
+              </div>
               <button
                 onClick={() => setShowDetailsModal(false)}
-                className="text-gray-500 hover:text-gray-700 text-2xl leading-none"
+                className="text-gray-500 hover:text-gray-700 text-2xl leading-none p-2"
               >
                 ×
               </button>
@@ -1884,7 +1890,7 @@ const exportToExcel = () => {
             
             <div className="p-6 overflow-y-auto flex-1">
               <table className="w-full">
-                <thead className="sticky top-0 bg-white">
+                <thead className="sticky top-0 bg-white z-10">
                   <tr className="border-b-2 border-gray-200">
                     <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider bg-white">
                       Property Key
@@ -1908,6 +1914,24 @@ const exportToExcel = () => {
                 </tbody>
               </table>
             </div>
+            
+            {/* Navigation Footer - Back to Top button when many properties */}
+            {modalData.properties.length > 10 && (
+              <div className="p-4 border-t border-gray-200 bg-gray-50 flex justify-between items-center flex-shrink-0">
+                <div className="text-sm text-gray-600">
+                  Showing {modalData.properties.length} properties
+                </div>
+                <button
+                  onClick={() => {
+                    const scrollableDiv = document.querySelector('.overflow-y-auto.flex-1');
+                    if (scrollableDiv) scrollableDiv.scrollTop = 0;
+                  }}
+                  className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+                >
+                  Back to Top ↑
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
