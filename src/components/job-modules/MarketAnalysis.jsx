@@ -16,6 +16,7 @@ import {
   ChevronLeft,
   ChevronRight
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 const MarketLandAnalysis = ({ jobData }) => {
   // ==================== STATE MANAGEMENT ====================
@@ -400,70 +401,143 @@ const MarketLandAnalysis = ({ jobData }) => {
   };
 
   // ==================== DATA QUALITY FUNCTIONS ====================
-  const exportToExcel = () => {
+const exportToExcel = () => {
     if (Object.keys(checkResults).length === 0) return;
     
-    // Create CSV content for each category
+    // Create a new workbook
+    const wb = XLSX.utils.book_new();
+    
+    // Get job info for filename
     const timestamp = new Date().toISOString().split('T')[0];
     const jobInfo = `${jobData?.job_number || 'Job'}_${jobData?.municipality || 'Municipality'}`;
     
-    // Summary worksheet
-    let summaryCSV = 'Data Quality Summary\n\n';
-    summaryCSV += `Job,${jobData?.job_number || 'N/A'}\n`;
-    summaryCSV += `Municipality,${jobData?.municipality || 'N/A'}\n`;
-    summaryCSV += `County,${jobData?.county || 'N/A'}\n`;
-    summaryCSV += `State,${jobData?.state || 'N/A'}\n`;
-    summaryCSV += `Analysis Date,${new Date().toLocaleDateString()}\n\n`;
-    summaryCSV += 'Metrics\n';
-    summaryCSV += `Total Properties,${properties.length}\n`;
-    summaryCSV += `Properties with Issues,${issueStats.total}\n`;
-    summaryCSV += `Critical Issues,${issueStats.critical}\n`;
-    summaryCSV += `Warnings,${issueStats.warning}\n`;
-    summaryCSV += `Info Messages,${issueStats.info}\n`;
-    summaryCSV += `Quality Score,${qualityScore}%\n\n`;
+    // === SUMMARY SHEET ===
+    const summaryData = [
+      ['Data Quality Summary Report'],
+      [],
+      ['Job Information'],
+      ['Job Number', jobData?.job_number || 'N/A'],
+      ['Municipality', jobData?.municipality || 'N/A'],
+      ['County', jobData?.county || 'N/A'],
+      ['State', jobData?.state || 'N/A'],
+      ['Analysis Date', new Date().toLocaleDateString()],
+      [],
+      ['Overall Metrics'],
+      ['Total Properties', properties.length],
+      ['Properties with Issues', issueStats.total],
+      ['Critical Issues', issueStats.critical],
+      ['Warnings', issueStats.warning],
+      ['Info Messages', issueStats.info],
+      ['Quality Score', `${qualityScore}%`],
+      [],
+      ['Issues by Category'],
+      ['Category', 'Critical', 'Warning', 'Info', 'Total']
+    ];
     
-    // Issues by category
-    summaryCSV += 'Issues by Category\n';
-    summaryCSV += 'Category,Critical,Warning,Info,Total\n';
+    // Add category breakdowns
     Object.entries(checkResults).forEach(([category, issues]) => {
-      const critical = issues.filter(i => i.severity === 'critical').length;
-      const warning = issues.filter(i => i.severity === 'warning').length;
-      const info = issues.filter(i => i.severity === 'info').length;
-      if (issues.length > 0) {
-        summaryCSV += `${category.replace(/_/g, ' ')},${critical},${warning},${info},${issues.length}\n`;
+      if (issues && issues.length > 0) {
+        const critical = issues.filter(i => i.severity === 'critical').length;
+        const warning = issues.filter(i => i.severity === 'warning').length;
+        const info = issues.filter(i => i.severity === 'info').length;
+        summaryData.push([
+          category.replace(/_/g, ' ').toUpperCase(),
+          critical,
+          warning,
+          info,
+          issues.length
+        ]);
       }
     });
     
-    // Download summary
-    const summaryBlob = new Blob([summaryCSV], { type: 'text/csv' });
-    const summaryUrl = URL.createObjectURL(summaryBlob);
-    const summaryLink = document.createElement('a');
-    summaryLink.href = summaryUrl;
-    summaryLink.download = `DQ_Summary_${jobInfo}_${timestamp}.csv`;
-    summaryLink.click();
+    const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
     
-    // Create detailed issues worksheet for each category with issues
-    setTimeout(() => {
-      let detailsCSV = 'Property Key,Check Type,Severity,Message\n';
-      Object.entries(checkResults).forEach(([category, issues]) => {
-        if (issues.length > 0) {
-          issues.forEach(issue => {
-            detailsCSV += `"${issue.property_key}","${getCheckTitle(issue.check)}","${issue.severity}","${issue.message}"\n`;
-          });
-        }
-      });
-      
-      if (detailsCSV !== 'Property Key,Check Type,Severity,Message\n') {
-        const detailsBlob = new Blob([detailsCSV], { type: 'text/csv' });
-        const detailsUrl = URL.createObjectURL(detailsBlob);
-        const detailsLink = document.createElement('a');
-        detailsLink.href = detailsUrl;
-        detailsLink.download = `DQ_Details_${jobInfo}_${timestamp}.csv`;
-        detailsLink.click();
+    // Set column widths for summary
+    summarySheet['!cols'] = [
+      { wch: 30 }, // Category column
+      { wch: 15 }, // Numbers columns
+      { wch: 15 },
+      { wch: 15 },
+      { wch: 15 }
+    ];
+    
+    XLSX.utils.book_append_sheet(wb, summarySheet, 'Summary');
+    
+    // === DETAILS SHEET ===
+    const detailsData = [
+      ['Block', 'Lot', 'Qualifier', 'Card', 'Location', 'Class', 'Check Type', 'Severity', 'Message']
+    ];
+    
+    // Process all issues
+    Object.entries(checkResults).forEach(([category, issues]) => {
+      if (issues && issues.length > 0) {
+        issues.forEach(issue => {
+          // Find the full property details
+          const property = properties.find(p => p.property_composite_key === issue.property_key);
+          
+          if (property) {
+            detailsData.push([
+              property.property_block || '',
+              property.property_lot || '',
+              property.property_qualifier || '',
+              property.property_card || '',
+              property.property_location || '',
+              property.property_m4_class || '',
+              getCheckTitle(issue.check),
+              issue.severity,
+              issue.message
+            ]);
+          } else {
+            // Fallback if property not found - parse the composite key
+            const keyParts = issue.property_key.split('_');
+            detailsData.push([
+              keyParts[0] || '',  // Block
+              keyParts[1] || '',  // Lot
+              keyParts[2] || '',  // Qualifier
+              keyParts[3] || '',  // Card
+              keyParts[4] || '',  // Location
+              '',  // Class (can't determine from key)
+              getCheckTitle(issue.check),
+              issue.severity,
+              issue.message
+            ]);
+          }
+        });
       }
-    }, 500);
+    });
     
-    console.log('✅ Export complete - check your downloads for Summary and Details files');
+    const detailsSheet = XLSX.utils.aoa_to_sheet(detailsData);
+    
+    // Set column widths for details
+    detailsSheet['!cols'] = [
+      { wch: 10 }, // Block
+      { wch: 10 }, // Lot
+      { wch: 10 }, // Qualifier
+      { wch: 8 },  // Card
+      { wch: 12 }, // Location
+      { wch: 8 },  // Class
+      { wch: 35 }, // Check Type
+      { wch: 10 }, // Severity
+      { wch: 50 }  // Message
+    ];
+    
+    // Apply header formatting (bold)
+    const range = XLSX.utils.decode_range(detailsSheet['!ref']);
+    for (let C = range.s.c; C <= range.e.c; ++C) {
+      const address = XLSX.utils.encode_col(C) + "1";
+      if (!detailsSheet[address]) continue;
+      detailsSheet[address].s = {
+        font: { bold: true },
+        fill: { fgColor: { rgb: "EEEEEE" } }
+      };
+    }
+    
+    XLSX.utils.book_append_sheet(wb, detailsSheet, 'Details');
+    
+    // Write the file
+    XLSX.writeFile(wb, `DQ_Report_${jobInfo}_${timestamp}.xlsx`);
+    
+    console.log('✅ Excel report exported successfully');
   };
   
   const runQualityChecks = async () => {
@@ -1267,8 +1341,6 @@ const MarketLandAnalysis = ({ jobData }) => {
           </div>
         )}
         
-        )}
-        
         {/* Standard Checks Tab */}
         {activeSubTab === 'standard' && (
           <div>
@@ -1483,6 +1555,7 @@ const MarketLandAnalysis = ({ jobData }) => {
                       />
                       
                       <button 
+                        type="button"
                         className="p-2 text-red-500 hover:bg-red-50 rounded"
                         onClick={() => removeCustomCheckCondition(index)}
                         disabled={currentCustomCheck.conditions.length === 1}
@@ -1492,7 +1565,8 @@ const MarketLandAnalysis = ({ jobData }) => {
                     </div>
                   ))}
                   
-                  <button 
+                  <button
+                    type="button"
                     className="text-blue-600 text-sm hover:text-blue-700 mt-2"
                     onClick={addConditionToCustomCheck}
                   >
@@ -1501,7 +1575,8 @@ const MarketLandAnalysis = ({ jobData }) => {
                 </div>
                 
                 <div className="flex justify-end gap-2 pt-4 border-t">
-                  <button 
+                  <button
+                    type="button" 
                     className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
                     onClick={saveCustomCheck}
                   >
@@ -1515,7 +1590,8 @@ const MarketLandAnalysis = ({ jobData }) => {
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-semibold text-gray-800">Saved Custom Checks</h3>
                 {customChecks.length > 0 && (
-                  <button 
+                  <button
+                    type="button"
                     className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700"
                     onClick={runAllCustomChecks}
                   >
@@ -1542,13 +1618,15 @@ const MarketLandAnalysis = ({ jobData }) => {
                         </div>
                       </div>
                       <div className="flex gap-2">
-                        <button 
+                        <button
+                          type="button"
                           className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
                           onClick={() => runCustomCheck(check)}
                         >
                           Run
                         </button>
-                        <button 
+                        <button
+                          type="button" 
                           className="px-3 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700"
                           onClick={() => deleteCustomCheck(check.id)}
                         >
