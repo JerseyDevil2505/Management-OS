@@ -78,7 +78,44 @@ const MarketLandAnalysis = ({ jobData }) => {
           .eq('job_id', jobData.id)
           .order('quality_check_last_run', { ascending: false });
         
-        if (data && data.length > 0) {
+       if (data && data.length > 0) {
+          // Load run history from quality_check_results
+          if (data[0].quality_check_results?.history) {
+            setRunHistory(data[0].quality_check_results.history);
+          }
+          
+          // Load current results if any
+          if (data[0].quality_check_results?.current) {
+            setCheckResults(data[0].quality_check_results.current);
+            
+            // Calculate stats from loaded results
+            let critical = 0, warning = 0, info = 0;
+            Object.values(data[0].quality_check_results.current).forEach(category => {
+              category.forEach(issue => {
+                if (issue.severity === 'critical') critical++;
+                else if (issue.severity === 'warning') warning++;
+                else if (issue.severity === 'info') info++;
+              });
+            });
+            
+            setIssueStats({
+              critical,
+              warning,
+              info,
+              total: critical + warning + info
+            });
+          }
+          
+          // Load custom checks if any
+          if (data[0].custom_checks) {
+            setCustomChecks(data[0].custom_checks);
+          }
+          
+          // Set quality score if available
+          if (data[0].quality_score) {
+            setQualityScore(data[0].quality_score);
+          }
+        }
           // Convert to run history format
           const history = data.map(record => ({
             date: record.quality_check_last_run,
@@ -454,11 +491,11 @@ const exportToExcel = () => {
     
     // Set column widths for summary
     summarySheet['!cols'] = [
-      { wch: 30 }, // Category column
-      { wch: 15 }, // Numbers columns
-      { wch: 15 },
-      { wch: 15 },
-      { wch: 15 }
+      { wch: 35 }, // Category column (was 30)
+      { wch: 18 }, // Numbers columns (was 15)
+      { wch: 18 },
+      { wch: 18 },
+      { wch: 18 }
     ];
     
     XLSX.utils.book_append_sheet(wb, summarySheet, 'Summary');
@@ -510,15 +547,15 @@ const exportToExcel = () => {
     
     // Set column widths for details
     detailsSheet['!cols'] = [
-      { wch: 10 }, // Block
-      { wch: 10 }, // Lot
-      { wch: 10 }, // Qualifier
-      { wch: 8 },  // Card
-      { wch: 12 }, // Location
-      { wch: 8 },  // Class
-      { wch: 35 }, // Check Type
-      { wch: 10 }, // Severity
-      { wch: 50 }  // Message
+      { wch: 15 }, // Block
+      { wch: 15 }, // Lot  
+      { wch: 12 }, // Qualifier
+      { wch: 10 }, // Card
+      { wch: 20 }, // Location
+      { wch: 10 }, // Class
+      { wch: 45 }, // Check Type
+      { wch: 12 }, // Severity
+      { wch: 60 }  // Message
     ];
     
     // Apply header formatting (bold)
@@ -1035,6 +1072,28 @@ const exportToExcel = () => {
         .eq('job_id', jobData.id)
         .single();
       
+// Create new run entry
+      const newRun = {
+        date: new Date().toISOString(),
+        propertyCount: properties.length,
+        criticalCount,
+        warningCount,
+        infoCount,
+        totalIssues,
+        qualityScore: score
+      };
+      
+      // Get existing history from quality_check_results or create new structure
+      const existingResults = existing?.quality_check_results || {};
+      const existingHistory = existingResults.history || [];
+      const updatedHistory = [newRun, ...existingHistory].slice(0, 50); // Keep last 50 runs
+      
+      // Store both current results and history
+      const qualityCheckResults = {
+        current: results,  // Current check results
+        history: updatedHistory  // Historical runs
+      };
+      
       const saveData = {
         job_id: jobData.id,
         quality_check_last_run: new Date().toISOString(),
@@ -1043,7 +1102,8 @@ const exportToExcel = () => {
         critical_count: criticalCount,
         warning_count: warningCount,
         info_count: infoCount,
-        custom_checks: customChecks.length > 0 ? customChecks : null
+        custom_checks: customChecks.length > 0 ? customChecks : null,
+        quality_check_results: qualityCheckResults  // Store everything here
       };
       
       if (existing) {
@@ -1059,18 +1119,8 @@ const exportToExcel = () => {
         if (error) throw error;
       }
       
-      // Add to run history
-      const newRun = {
-        date: new Date().toISOString(),
-        propertyCount: properties.length,
-        criticalCount,
-        warningCount,
-        infoCount,
-        totalIssues,
-        qualityScore: score,
-        checkResults: results
-      };
-      setRunHistory(prev => [newRun, ...prev].slice(0, 20)); // Keep last 20 runs
+      // Update local state with new history
+      setRunHistory(updatedHistory);
       
       // Keep full results in state for display
       setCheckResults(results);
@@ -1368,7 +1418,11 @@ const exportToExcel = () => {
                   return (
                     <div key={category} className="bg-white border border-gray-200 rounded-lg mb-3 overflow-hidden">
                       <div
-                        onClick={() => toggleQualityCategory(category)}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          toggleQualityCategory(category);
+                        }}
                         className="p-4 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors flex justify-between items-center"
                       >
                         <div className="flex items-center gap-2">
@@ -1431,6 +1485,7 @@ const exportToExcel = () => {
                                 </span>
                                 <button
                                   onClick={(e) => {
+                                    e.preventDefault();
                                     e.stopPropagation();
                                     showPropertyDetails(checkType, category);
                                   }}
