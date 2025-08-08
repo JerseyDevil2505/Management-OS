@@ -581,37 +581,360 @@ const MarketLandAnalysis = ({ jobData }) => {
       });
     }
     
-    // ==================== CAMA CHECKS (BRT ONLY) ====================
-    if (vendorType === 'BRT') {
-      const camaClass = property.property_cama_class;
-      const camaImprovement = property.values_cama_improvement || 0;
-      
-      // Class 1/3B shouldn't have CAMA improvements
-      if ((camaClass === '1' || camaClass === '3B') && camaImprovement > 0) {
-        results.cama.push({
-          check: 'cama_vacant_improvements',
-          severity: 'critical',
+// ==================== CAMA CHECKS ====================
+    // Run for BOTH vendors, not just BRT
+    const camaClass = property.property_cama_class;
+    const camaImprovement = property.values_cama_improvement || 0;
+    
+    // Class 1/3B shouldn't have CAMA improvements
+    if ((camaClass === '1' || camaClass === '3B') && camaImprovement > 0) {
+      results.cama.push({
+        check: 'cama_vacant_improvements',
+        severity: 'critical',
+        property_key: property.property_composite_key,
+        message: `CAMA Class ${camaClass} has improvements: $${camaImprovement.toLocaleString()}`,
+        details: property
+      });
+    }
+    
+    // Class 2/3A/4A-C must have CAMA improvements
+    if (['2', '3A', '4A', '4B', '4C'].includes(camaClass) && camaImprovement === 0) {
+      results.cama.push({
+        check: 'cama_missing_improvements',
+        severity: 'critical',
+        property_key: property.property_composite_key,
+        message: `CAMA Class ${camaClass} missing improvements`,
+        details: property
+      });
+    }
+    
+    // ==================== BUILDING CLASS CHECKS ====================
+    const buildingClass = property.asset_building_class;
+    const typeUse = property.asset_type_use;
+    const designStyle = property.asset_design_style;
+    
+    // Rule 1: Non-residential classes (not 2 or 3A) should be building class 10
+    if (m4Class && m4Class !== '2' && m4Class !== '3A') {
+      if (buildingClass && buildingClass !== 10) {
+        results.characteristics.push({
+          check: 'non_residential_wrong_building_class',
+          severity: 'warning',
           property_key: property.property_composite_key,
-          message: `CAMA Class ${camaClass} has improvements: $${camaImprovement.toLocaleString()}`,
-          details: property
-        });
-      }
-      
-      // Class 2/3A/4A-C must have CAMA improvements
-      if (['2', '3A', '4A', '4B', '4C'].includes(camaClass) && camaImprovement === 0) {
-        results.cama.push({
-          check: 'cama_missing_improvements',
-          severity: 'critical',
-          property_key: property.property_composite_key,
-          message: `CAMA Class ${camaClass} missing improvements`,
+          message: `Class ${m4Class} should have building class 10 (has ${buildingClass})`,
           details: property
         });
       }
     }
     
-    // Additional checks would continue here...
-    // Truncating for brevity as the pattern is established
-  };
+    // Rule 2: Residential classes (2 or 3A) should NOT be building class 10
+    if ((m4Class === '2' || m4Class === '3A') && buildingClass === 10) {
+      results.characteristics.push({
+        check: 'residential_building_class_10',
+        severity: 'warning',
+        property_key: property.property_composite_key,
+        message: `Class ${m4Class} shouldn't have building class 10 (needs >10)`,
+        details: property
+      });
+    }
+    
+    // If building class > 10, must have design and type use
+    if (buildingClass > 10) {
+      if (!designStyle) {
+        results.characteristics.push({
+          check: 'missing_design_style',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: 'Building class > 10 missing design style',
+          details: property
+        });
+      }
+      if (!typeUse) {
+        results.characteristics.push({
+          check: 'missing_type_use',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: 'Building class > 10 missing type use',
+          details: property
+        });
+      }
+    }
+    
+    // INVERSE CHECK: If design is populated, should have building class > 10 and type use
+    if (designStyle && designStyle.trim() !== '') {
+      if (!buildingClass || buildingClass <= 10) {
+        results.characteristics.push({
+          check: 'design_without_proper_building_class',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: `Has design style "${designStyle}" but building class is ${buildingClass || 'missing'} (should be > 10)`,
+          details: property
+        });
+      }
+      if (!typeUse || typeUse.trim() === '') {
+        results.characteristics.push({
+          check: 'design_without_type_use',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: `Has design style "${designStyle}" but missing type use`,
+          details: property
+        });
+      }
+    }
+    
+    // ==================== DESIGN STYLE CHECKS ====================
+    if (designStyle) {
+      let designDescription = designStyle;
+      
+      // Try to look up the design code in parsed_code_definitions
+      if (codeDefinitions) {
+        if (vendorType === 'BRT') {
+          // For BRT, look in section 23 (DESIGN)
+          const designSection = codeDefinitions.sections?.['23']?.MAP;
+          if (designSection) {
+            Object.entries(designSection).forEach(([key, value]) => {
+              if (value.KEY === designStyle || value.DATA?.KEY === designStyle) {
+                designDescription = value.DATA?.VALUE || value.VALUE || designStyle;
+              }
+            });
+          }
+        } else if (vendorType === 'Microsystems') {
+          // For Microsystems, look for 520-prefix codes
+          const lookupCode = designStyle.length <= 3 ? `520${designStyle}` : designStyle;
+          if (codeDefinitions[lookupCode]) {
+            designDescription = codeDefinitions[lookupCode];
+          } else if (codeDefinitions[designStyle]) {
+            designDescription = codeDefinitions[designStyle];
+          }
+        }
+      }
+      
+      // Now do fuzzy matching against standard designs
+      const designLower = designDescription.toLowerCase();
+      const standardDesigns = [
+        'colonial', 'split level', 'split-level', 'bilevel', 'bi-level', 'bi level',
+        'cape cod', 'cape', 'ranch', 'rancher', 'raised ranch', 'bungalow', 
+        'twin', 'townhouse end', 'townhouse int', 'townhouse interior', 'townhouse',
+        'one bed', '1bed', '1 bed', '1 bedroom', 'one bedroom',
+        'two bed', '2bed', '2 bed', '2 bedroom', 'two bedroom',
+        'three bed', '3bed', '3 bed', '3 bedroom', 'three bedroom'
+      ];
+      
+      const isStandard = standardDesigns.some(std => {
+        const stdLower = std.toLowerCase();
+        return designLower.includes(stdLower) || stdLower.includes(designLower);
+      });
+      
+      if (!isStandard) {
+        results.characteristics.push({
+          check: 'non_standard_design',
+          severity: 'info',
+          property_key: property.property_composite_key,
+          message: `Non-standard design: ${designDescription}${designStyle !== designDescription ? ` (code: ${designStyle})` : ''}`,
+          details: property
+        });
+      }
+    }
+    
+    // ==================== TYPE USE TO BUILDING CLASS VALIDATION ====================
+    if (typeUse && buildingClass) {
+      let typeUseDescription = typeUse;
+      
+      // Look up the type use code in parsed_code_definitions
+      if (codeDefinitions) {
+        if (vendorType === 'BRT') {
+          Object.entries(codeDefinitions.sections || {}).forEach(([sectionKey, section]) => {
+            if (section.MAP) {
+              Object.entries(section.MAP).forEach(([key, value]) => {
+                if (value.KEY === typeUse || value.DATA?.KEY === typeUse) {
+                  typeUseDescription = value.DATA?.VALUE || value.VALUE || typeUse;
+                }
+              });
+            }
+          });
+        } else if (vendorType === 'Microsystems') {
+          const lookupCode = typeUse.length <= 4 ? `500${typeUse}` : typeUse;
+          if (codeDefinitions[lookupCode]) {
+            typeUseDescription = codeDefinitions[lookupCode];
+          } else if (codeDefinitions[typeUse]) {
+            typeUseDescription = codeDefinitions[typeUse];
+          }
+        }
+      }
+      
+      // Fuzzy matching on the description
+      const typeUseLower = typeUseDescription.toLowerCase();
+      let validClasses = [];
+      
+      if (typeUseLower.includes('single') || typeUseLower.includes('one family') || 
+          typeUseLower.includes('1 family') || typeUseLower.includes('1family') ||
+          typeUseLower.includes('onefamily') || typeUseLower === 'sf') {
+        validClasses = [16, 17, 18, 19, 20, 21, 22, 23];
+      } 
+      else if (typeUseLower.includes('twin') || typeUseLower.includes('semi') || 
+               typeUseLower.includes('semidetached') || typeUseLower.includes('duplex')) {
+        validClasses = [25, 27, 29, 31];
+      } 
+      else if (typeUseLower.includes('condo') || typeUseLower.includes('townhouse') || 
+               typeUseLower.includes('townhome') || typeUseLower.includes('row')) {
+        validClasses = [33, 35, 37, 39];
+      } 
+      else if (typeUseLower.includes('multi') || typeUseLower.includes('two family') || 
+               typeUseLower.includes('2 family') || typeUseLower.includes('apartment')) {
+        validClasses = [43, 45, 47, 49];
+      }
+      
+      if (validClasses.length > 0 && !validClasses.includes(buildingClass)) {
+        results.characteristics.push({
+          check: 'type_use_building_class_mismatch',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: `Type use "${typeUseDescription}"${typeUse !== typeUseDescription ? ` (code: ${typeUse})` : ''} doesn't match building class ${buildingClass} (expected: ${validClasses.join(', ')})`,
+          details: property
+        });
+      }
+    }
+    
+    // ==================== LOT SIZE CHECKS ====================
+    const lotAcre = property.asset_lot_acre || 0;
+    const lotSf = property.asset_lot_sf || 0;
+    const lotFrontage = property.asset_lot_frontage || 0;
+    
+    if (lotAcre === 0 && lotSf === 0 && lotFrontage === 0) {
+      results.characteristics.push({
+        check: 'zero_lot_size',
+        severity: 'critical',
+        property_key: property.property_composite_key,
+        message: 'Property has zero lot size (acre, sf, and frontage all zero)',
+        details: property
+      });
+    }
+    
+    // ==================== LIVING AREA & YEAR BUILT ====================
+    const sfla = property.asset_sfla || 0;
+    const yearBuilt = property.asset_year_built;
+    
+    // Class 2/3A must have living area
+    if ((m4Class === '2' || m4Class === '3A') && sfla === 0) {
+      results.characteristics.push({
+        check: 'missing_sfla',
+        severity: 'warning',
+        property_key: property.property_composite_key,
+        message: `Class ${m4Class} property missing living area`,
+        details: property
+      });
+    }
+    
+    // Year built validation for improved properties
+    if ((m4Class === '2' || m4Class === '3A') && buildingClass > 10 && !yearBuilt) {
+      results.characteristics.push({
+        check: 'missing_year_built',
+        severity: 'warning',
+        property_key: property.property_composite_key,
+        message: 'Improved property missing year built',
+        details: property
+      });
+    }
+    
+    // ==================== VCS CHECK ====================
+    if (!property.property_vcs) {
+      results.special.push({
+        check: 'missing_vcs',
+        severity: 'warning',
+        property_key: property.property_composite_key,
+        message: 'Property missing VCS code',
+        details: property
+      });
+    }
+    
+    // ==================== CONDITION CHECKS ====================
+    if ((m4Class === '2' || m4Class === '3A') && buildingClass > 10) {
+      if (!property.asset_ext_cond) {
+        results.characteristics.push({
+          check: 'missing_ext_condition',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: 'Improved property missing exterior condition',
+          details: property
+        });
+      }
+      if (!property.asset_int_cond) {
+        results.characteristics.push({
+          check: 'missing_int_condition',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: 'Improved property missing interior condition',
+          details: property
+        });
+      }
+    }
+    
+    // ==================== PARTIAL HEATING/COOLING SYSTEMS (RAW_DATA) ====================
+    if (vendorType === 'BRT') {
+      if (rawData.ACPARTIAL && rawData.ACPARTIAL.toString().trim() !== '') {
+        results.special.push({
+          check: 'partial_cooling',
+          severity: 'info',
+          property_key: property.property_composite_key,
+          message: 'Property has partial AC system',
+          details: property
+        });
+      }
+      if (rawData.HEATSYSPARTIAL && rawData.HEATSYSPARTIAL.toString().trim() !== '') {
+        results.special.push({
+          check: 'partial_heating',
+          severity: 'info',
+          property_key: property.property_composite_key,
+          message: 'Property has partial heating system',
+          details: property
+        });
+      }
+    } else if (vendorType === 'Microsystems') {
+      const heatType1 = rawData['Heat System Type1'] || rawData['Heat Source'];
+      const heatType2 = rawData['Heat System Type2'];
+      if (heatType1 && heatType1.toString().trim() !== '' && 
+          heatType2 && heatType2.toString().trim() !== '') {
+        results.special.push({
+          check: 'partial_heating',
+          severity: 'info',
+          property_key: property.property_composite_key,
+          message: 'Property has partial heating system (multiple heat types)',
+          details: property
+        });
+      }
+    }
+    
+    // ==================== BEDROOM COUNT VALIDATION (RAW_DATA) ====================
+    if ((m4Class === '2' || m4Class === '3A') && buildingClass > 10) {
+      if (vendorType === 'BRT') {
+        const bedTotal = rawData.BEDTOT;
+        if (!bedTotal || parseInt(bedTotal) === 0) {
+          results.rooms.push({
+            check: 'zero_bedrooms',
+            severity: 'warning',
+            property_key: property.property_composite_key,
+            message: 'Residential property has zero bedrooms',
+            details: property
+          });
+        }
+      } else if (vendorType === 'Microsystems') {
+        const bedB = parseInt(rawData['Bedrm B'] || 0);
+        const bed1 = parseInt(rawData['Bedrm 1'] || 0);
+        const bed2 = parseInt(rawData['Bedrm 2'] || 0);
+        const bed3 = parseInt(rawData['Bedrm 3'] || 0);
+        const totalBeds = bedB + bed1 + bed2 + bed3;
+        
+        if (totalBeds === 0) {
+          results.rooms.push({
+            check: 'zero_bedrooms',
+            severity: 'warning',
+            property_key: property.property_composite_key,
+            message: 'Residential property has zero bedrooms',
+            details: property
+          });
+        }
+      }
+    }
+  };  // This closes runPropertyChecks function
 
   const saveQualityResults = async (results) => {
     try {
@@ -782,7 +1105,9 @@ const MarketLandAnalysis = ({ jobData }) => {
       properties: issues
     });
     setShowDetailsModal(true);
-  };  
+  };
+
+  // ==================== TAB COMPONENTS ====================
 
   // ==================== TAB COMPONENTS ====================
   
