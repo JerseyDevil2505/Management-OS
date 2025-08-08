@@ -942,7 +942,359 @@ const MarketLandAnalysis = ({ jobData }) => {
           </div>
         )}
         
-        {/* Additional sub-tabs content would go here... */}
+        )}
+        
+        {/* Standard Checks Tab */}
+        {activeSubTab === 'standard' && (
+          <div>
+            {/* Debug logging */}
+            {console.log('🔍 Standard Checks - checkResults:', checkResults)}
+            {console.log('🔍 Standard Checks - mod_iv issues:', checkResults.mod_iv?.length || 0)}
+            
+            {/* Check Results */}
+            {Object.keys(checkResults).length > 0 ? (
+              <div>
+                <h4 className="text-lg font-semibold text-gray-800 mb-4">
+                  Check Results by Category
+                </h4>
+                
+                {Object.entries(checkResults).map(([category, issues]) => {
+                  // Add null check and skip empty categories
+                  if (!issues || issues.length === 0) return null;
+                  
+                  const isExpanded = expandedCategories.includes(category);
+                  const criticalCount = issues.filter(i => i.severity === 'critical').length;
+                  const warningCount = issues.filter(i => i.severity === 'warning').length;
+                  const infoCount = issues.filter(i => i.severity === 'info').length;
+                  const passCount = properties.length - issues.length;
+                  
+                  return (
+                    <div key={category} className="bg-white border border-gray-200 rounded-lg mb-3 overflow-hidden">
+                      <div
+                        onClick={() => toggleQualityCategory(category)}
+                        className="p-4 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors flex justify-between items-center"
+                      >
+                        <div className="flex items-center gap-2">
+                          <ChevronRight
+                            size={20}
+                            className={`text-gray-500 transform transition-transform ${
+                              isExpanded ? 'rotate-90' : ''
+                            }`}
+                          />
+                          <span className="font-semibold text-gray-800 capitalize">
+                            {category.replace(/_/g, ' ')} Checks ({issues.length} issues)
+                          </span>
+                        </div>
+                        
+                        <div className="flex gap-2">
+                          {criticalCount > 0 && (
+                            <span className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-xs font-semibold">
+                              {criticalCount} Critical
+                            </span>
+                          )}
+                          {warningCount > 0 && (
+                            <span className="px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-semibold">
+                              {warningCount} Warning
+                            </span>
+                          )}
+                          {infoCount > 0 && (
+                            <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">
+                              {infoCount} Info
+                            </span>
+                          )}
+                          <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-semibold">
+                            {passCount.toLocaleString()} Pass
+                          </span>
+                        </div>
+                      </div>
+                      
+                      {isExpanded && (
+                        <div className="p-4 border-t border-gray-200">
+                          {Object.entries(
+                            issues.reduce((acc, issue) => {
+                              if (!acc[issue.check]) acc[issue.check] = [];
+                              acc[issue.check].push(issue);
+                              return acc;
+                            }, {})
+                          ).map(([checkType, checkIssues]) => (
+                            <div
+                              key={checkType}
+                              className="p-3 bg-gray-50 rounded-lg mb-2 flex justify-between items-center"
+                            >
+                              <span className="text-sm text-gray-700">
+                                {getCheckTitle(checkType)}
+                              </span>
+                              <div className="flex items-center gap-3">
+                                <span className={`text-sm font-semibold ${
+                                  checkIssues[0].severity === 'critical' ? 'text-red-600' :
+                                  checkIssues[0].severity === 'warning' ? 'text-yellow-600' : 
+                                  'text-blue-600'
+                                }`}>
+                                  {checkIssues.length} properties
+                                </span>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    showPropertyDetails(checkType, category);
+                                  }}
+                                  className="px-3 py-1 text-xs bg-white border border-blue-600 text-blue-600 rounded hover:bg-blue-50 transition-colors"
+                                >
+                                  View Details
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="bg-white border border-gray-200 rounded-lg p-12 text-center">
+                <AlertCircle size={48} className="text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-gray-800 mb-2">
+                  No Analysis Run Yet
+                </h3>
+                <p className="text-gray-600">
+                  Click "Run Analysis" in the Overview tab to check for data quality issues.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+        
+        {/* Custom Checks Tab */}
+        {activeSubTab === 'custom' && (
+          <div>
+            <div className="bg-white border border-gray-200 rounded-lg p-6 mb-6">
+              <h3 className="text-lg font-semibold text-gray-800 mb-4">Custom Check Builder</h3>
+              
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Check Name</label>
+                    <input 
+                      type="text"
+                      placeholder="e.g., Missing Tax ID for Commercial"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                      value={currentCustomCheck.name}
+                      onChange={(e) => setCurrentCustomCheck(prev => ({ ...prev, name: e.target.value }))}
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Severity</label>
+                    <select 
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                      value={currentCustomCheck.severity}
+                      onChange={(e) => setCurrentCustomCheck(prev => ({ ...prev, severity: e.target.value }))}
+                    >
+                      <option value="critical">Critical</option>
+                      <option value="warning">Warning</option>
+                      <option value="info">Info</option>
+                    </select>
+                  </div>
+                </div>
+                
+                <div className="border-t pt-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Conditions</label>
+                  {currentCustomCheck.conditions.map((condition, index) => (
+                    <div key={index} className="flex gap-2 items-center mb-2">
+                      <select 
+                        className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                        value={condition.logic}
+                        onChange={(e) => updateCustomCheckCondition(index, 'logic', e.target.value)}
+                        disabled={index === 0}
+                      >
+                        <option>IF</option>
+                        <option>AND</option>
+                        <option>OR</option>
+                      </select>
+                      
+                      <select 
+                        className="px-3 py-2 border border-gray-300 rounded-lg text-sm flex-1"
+                        value={condition.field}
+                        onChange={(e) => updateCustomCheckCondition(index, 'field', e.target.value)}
+                      >
+                        <option value="">-- Select Field --</option>
+                        <option value="property_m4_class">Property M4 Class</option>
+                        <option value="asset_building_class">Building Class</option>
+                        <option value="asset_sfla">Living Area (SFLA)</option>
+                        <option value="asset_year_built">Year Built</option>
+                        <option value="values_mod_improvement">Mod Improvement Value</option>
+                        <option value="values_mod_land">Mod Land Value</option>
+                        <option value="property_vcs">VCS Code</option>
+                        <option value="asset_design_style">Design Style</option>
+                        <option value="asset_type_use">Type Use</option>
+                        <option value="asset_lot_acre">Lot Acres</option>
+                        <option value="asset_ext_cond">Exterior Condition</option>
+                        <option value="asset_int_cond">Interior Condition</option>
+                      </select>
+                      
+                      <select 
+                        className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                        value={condition.operator}
+                        onChange={(e) => updateCustomCheckCondition(index, 'operator', e.target.value)}
+                      >
+                        <option value="=">=</option>
+                        <option value="!=">!=</option>
+                        <option value=">">&gt;</option>
+                        <option value="<">&lt;</option>
+                        <option value=">=">&gt;=</option>
+                        <option value="<=">&lt;=</option>
+                        <option value="is null">is null</option>
+                        <option value="is not null">is not null</option>
+                        <option value="contains">contains</option>
+                      </select>
+                      
+                      <input 
+                        type="text" 
+                        placeholder="Value"
+                        className="px-3 py-2 border border-gray-300 rounded-lg text-sm flex-1"
+                        value={condition.value}
+                        onChange={(e) => updateCustomCheckCondition(index, 'value', e.target.value)}
+                        disabled={condition.operator === 'is null' || condition.operator === 'is not null'}
+                      />
+                      
+                      <button 
+                        className="p-2 text-red-500 hover:bg-red-50 rounded"
+                        onClick={() => removeCustomCheckCondition(index)}
+                        disabled={currentCustomCheck.conditions.length === 1}
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                  ))}
+                  
+                  <button 
+                    className="text-blue-600 text-sm hover:text-blue-700 mt-2"
+                    onClick={addConditionToCustomCheck}
+                  >
+                    + Add Condition
+                  </button>
+                </div>
+                
+                <div className="flex justify-end gap-2 pt-4 border-t">
+                  <button 
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
+                    onClick={saveCustomCheck}
+                  >
+                    Save Custom Check
+                  </button>
+                </div>
+              </div>
+            </div>
+            
+            <div className="bg-white border border-gray-200 rounded-lg p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold text-gray-800">Saved Custom Checks</h3>
+                {customChecks.length > 0 && (
+                  <button 
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700"
+                    onClick={runAllCustomChecks}
+                  >
+                    Run All Custom Checks
+                  </button>
+                )}
+              </div>
+              
+              {customChecks.length > 0 ? (
+                <div className="space-y-2">
+                  {customChecks.map((check) => (
+                    <div key={check.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                      <div>
+                        <div className="font-medium text-gray-800">{check.name}</div>
+                        <div className="text-sm text-gray-600">
+                          {check.conditions.length} condition{check.conditions.length !== 1 ? 's' : ''} • 
+                          <span className={`ml-1 font-medium ${
+                            check.severity === 'critical' ? 'text-red-600' :
+                            check.severity === 'warning' ? 'text-yellow-600' :
+                            'text-blue-600'
+                          }`}>
+                            {check.severity}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button 
+                          className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+                          onClick={() => runCustomCheck(check)}
+                        >
+                          Run
+                        </button>
+                        <button 
+                          className="px-3 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700"
+                          onClick={() => deleteCustomCheck(check.id)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-gray-500 text-center py-8">No custom checks saved yet</p>
+              )}
+            </div>
+          </div>
+        )}
+        
+        {/* Run History Tab */}
+        {activeSubTab === 'history' && (
+          <div>
+            <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Run Date
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Properties Analyzed
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Issues Found
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Quality Score
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {runHistory.length > 0 ? (
+                    runHistory.map((run, index) => (
+                      <tr key={index} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 text-sm text-gray-900">
+                          {new Date(run.date).toLocaleString()}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-900">
+                          {run.propertyCount.toLocaleString()}
+                        </td>
+                        <td className="px-4 py-3 text-sm">
+                          <span className="text-red-600 font-medium">{run.criticalCount}</span> Critical,{' '}
+                          <span className="text-yellow-600 font-medium">{run.warningCount}</span> Warning,{' '}
+                          <span className="text-blue-600 font-medium">{run.infoCount}</span> Info
+                        </td>
+                        <td className="px-4 py-3 text-sm">
+                          <span className="font-medium text-green-600">{run.qualityScore}%</span>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan="4" className="px-4 py-8 text-center text-gray-500">
+                        No analysis runs yet. Run an analysis to see history.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+        
+      </div>
         
       </div>
     );
