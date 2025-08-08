@@ -90,6 +90,328 @@ const PRESERVED_FIELDS = [
   'values_norm_time'        // Valuation adjustments
 ];
 
+// ===== CODE INTERPRETATION UTILITIES =====
+// Utilities for interpreting vendor-specific codes in MarketLandAnalysis
+export const interpretCodes = {
+  // Microsystems field to prefix mapping
+  microsystemsPrefixMap: {
+    'inspection_info_by': '140',
+    'asset_building_class': '345',
+    'asset_ext_cond': '490',
+    'asset_int_cond': '491',
+    'asset_type_use': '500',
+    'asset_stories': '510',
+    'asset_design_style': '520',
+    // Raw data fields
+    'topo': '115',
+    'road': '120',
+    'curbing': '125',
+    'sidewalk': '130',
+    'utilities': '135',
+    'zone_table': '205',
+    'vcs': '210',
+    'farmland_override': '212',
+    'land_adjustments': '220',
+    'renovation_impr': '235',
+    'bath_kitchen_dep': '245',
+    'functional_depr': '250',
+    'locational_depr': '260',
+    'item_adjustment': '346',
+    'exterior': '530',
+    'roof_type': '540',
+    'roof_material': '545',
+    'foundation': '550',
+    'interior_wall': '555',
+    'electric': '557',
+    'roof_pitch': '559',
+    'heat_source': '565',
+    'built_ins_590': '590',
+    'built_ins_591': '591',
+    'detached_items': '680'
+  },
+
+  // Get decoded value for Microsystems property field
+  getMicrosystemsValue: function(property, codeDefinitions, fieldName) {
+    if (!property || !codeDefinitions) return null;
+    
+    const prefix = this.microsystemsPrefixMap[fieldName];
+    if (!prefix) return null;
+    
+    // Get the code value from property (check both column and raw_data)
+    let code = property[fieldName];
+    if (!code && property.raw_data) {
+      code = property.raw_data[fieldName];
+    }
+    
+    if (!code || code.trim() === '') return null;
+    
+    // Build lookup key - Microsystems format: "PREFIX+CODE+SPACES+9999"
+    const paddedCode = code.padEnd(4);
+    const lookupKey = `${prefix}${paddedCode}9999`;
+    
+    // Return decoded value or original code if not found
+    return codeDefinitions[lookupKey] || code;
+  },
+
+  // Get design name for any vendor
+  getDesignName: function(property, codeDefinitions, vendorType) {
+    if (!property || !codeDefinitions) return null;
+    
+    const designCode = property.asset_design_style;
+    if (!designCode || designCode.trim() === '') return null;
+    
+    if (vendorType === 'Microsystems') {
+      return this.getMicrosystemsValue(property, codeDefinitions, 'asset_design_style');
+    } else if (vendorType === 'BRT') {
+      // BRT logic - will add later
+      return designCode;
+    }
+    
+    return designCode;
+  },
+
+  // Get type/use name for any vendor
+  getTypeName: function(property, codeDefinitions, vendorType) {
+    if (!property || !codeDefinitions) return null;
+    
+    const typeCode = property.asset_type_use;
+    if (!typeCode || typeCode.trim() === '') return null;
+    
+    if (vendorType === 'Microsystems') {
+      return this.getMicrosystemsValue(property, codeDefinitions, 'asset_type_use');
+    } else if (vendorType === 'BRT') {
+      // BRT logic - will add later
+      return typeCode;
+    }
+    
+    return typeCode;
+  },
+
+  // Check if a field is empty (handles spaces, null, undefined)
+  isFieldEmpty: function(value) {
+    return !value || value.toString().trim() === '';
+  }, 
+ 
+  // Get exterior condition name
+  getExteriorConditionName: function(property, codeDefinitions, vendorType) {
+    if (!property || !codeDefinitions) return null;
+    
+    const condCode = property.asset_ext_cond;
+    if (!condCode || condCode.trim() === '') return null;
+    
+    if (vendorType === 'Microsystems') {
+      return this.getMicrosystemsValue(property, codeDefinitions, 'asset_ext_cond');
+    } else if (vendorType === 'BRT') {
+      // BRT logic - will add later
+      return condCode;
+    }
+    
+    return condCode;
+  },
+
+  // Get interior condition name
+  getInteriorConditionName: function(property, codeDefinitions, vendorType) {
+    if (!property || !codeDefinitions) return null;
+    
+    const condCode = property.asset_int_cond;
+    if (!condCode || condCode.trim() === '') return null;
+    
+    if (vendorType === 'Microsystems') {
+      return this.getMicrosystemsValue(property, codeDefinitions, 'asset_int_cond');
+    } else if (vendorType === 'BRT') {
+      // BRT logic - will add later
+      return condCode;
+    }
+    
+    return condCode;
+  },
+
+  // Get InfoBy category (entry, refusal, estimation, commercial, invalid)
+  getInfoByCategory: function(property, codeDefinitions, vendorType) {
+    if (!property) return null;
+    
+    const infoByCode = property.inspection_info_by;
+    if (!infoByCode || infoByCode.trim() === '') return null;
+    
+    if (vendorType === 'Microsystems') {
+      // First get the decoded value
+      const decodedValue = this.getMicrosystemsValue(property, codeDefinitions, 'inspection_info_by');
+      
+      // Check the decoded value for keywords
+      const upperDecoded = (decodedValue || '').toUpperCase();
+      
+      if (upperDecoded.includes('OWNER') || upperDecoded.includes('AGENT') || 
+          upperDecoded.includes('SPOUSE') || upperDecoded.includes('TENANT')) {
+        return 'entry';
+      } else if (upperDecoded.includes('REFUSED')) {
+        return 'refusal';
+      } else if (upperDecoded.includes('ESTIMATED') || upperDecoded.includes('ESTIM')) {
+        return 'estimation';
+      } else if (upperDecoded.includes('PRICED') || upperDecoded.includes('NARRATIVE')) {
+        return 'commercial';
+      } else if (upperDecoded.includes('AT DOOR')) {
+        return 'invalid';
+      }
+    } else if (vendorType === 'BRT') {
+      // BRT uses direct code mapping
+      const codeMap = {
+        '01': 'entry',    // OWNER
+        '02': 'entry',    // SPOUSE
+        '03': 'entry',    // TENANT
+        '04': 'entry',    // AGENT
+        '05': 'invalid',  // AT DOOR
+        '06': 'refusal',  // REFUSED
+        '07': 'estimation' // ESTIMATED
+      };
+      return codeMap[infoByCode] || 'unknown';
+    }
+    
+    return 'unknown';
+  },
+
+  // Get raw data value with vendor awareness
+  getRawDataValue: function(property, fieldName, vendorType) {
+    if (!property || !property.raw_data) return null;
+    
+    const rawData = property.raw_data;
+    
+    // Handle vendor-specific field name differences
+    if (vendorType === 'BRT') {
+      const brtFieldMap = {
+        'bedrooms': 'BEDTOT',
+        'bathrooms': 'BATHTOT',
+        'full_bath': 'BATHFULL',
+        'half_bath': 'BATHHALF',
+        'stories': 'STORIES',
+        'year_built': 'YEARBLT'
+      };
+      const brtField = brtFieldMap[fieldName] || fieldName;
+      return rawData[brtField];
+    } else if (vendorType === 'Microsystems') {
+      const microFieldMap = {
+        'bedrooms': 'Bedrm Total',
+        'bathrooms': 'Bath Total',
+        'full_bath': 'Bath Full',
+        'half_bath': 'Bath Half',
+        'stories': 'Stories',
+        'year_built': 'Year Built'
+      };
+      const microField = microFieldMap[fieldName] || fieldName;
+      return rawData[microField];
+    }
+    
+    return rawData[fieldName];
+  },
+
+  // Get total lot size (aggregates multiple fields)
+  getTotalLotSize: function(property, vendorType) {
+    if (!property) return 0;
+    
+    // First check standard fields
+    let totalAcres = property.asset_lot_acre || 0;
+    let totalSf = property.asset_lot_sf || 0;
+    
+    // Convert SF to acres if we have SF but no acres
+    if (totalSf > 0 && totalAcres === 0) {
+      totalAcres = totalSf / 43560;
+    }
+    
+    // For BRT, also check LANDUR fields in raw_data
+    if (vendorType === 'BRT' && property.raw_data) {
+      for (let i = 1; i <= 6; i++) {
+        const landField = property.raw_data[`LANDUR_${i}`];
+        if (landField) {
+          const upperField = landField.toUpperCase();
+          const value = parseFloat(landField.replace(/[^0-9.]/g, ''));
+          
+          if (!isNaN(value)) {
+            if (upperField.includes('AC') || upperField.includes('ACRE')) {
+              totalAcres += value;
+            } else if (upperField.includes('SF') || upperField.includes('SITE')) {
+              totalSf += value;
+            }
+          }
+        }
+      }
+    }
+    
+    // Return total in acres
+    return totalAcres + (totalSf / 43560);
+  },
+    // Get bathroom counts (handles different formats)
+  getBathroomCounts: function(property, vendorType) {
+    const result = {
+      full: 0,
+      half: 0,
+      total: 0
+    };
+    
+    if (!property) return result;
+    
+    if (vendorType === 'BRT' && property.raw_data) {
+      // Check for encoded format first (e.g., "3F2H")
+      const plumbing = property.raw_data.PLUMBING;
+      if (plumbing && plumbing.includes('F')) {
+        const matches = plumbing.match(/(\d+)F(\d+)H/);
+        if (matches) {
+          result.full = parseInt(matches[1]) || 0;
+          result.half = parseInt(matches[2]) || 0;
+        }
+      } else {
+        // Use separate fields
+        result.full = parseInt(property.raw_data.BATHFULL) || 0;
+        result.half = parseInt(property.raw_data.BATHHALF) || 0;
+      }
+    } else if (vendorType === 'Microsystems' && property.raw_data) {
+      // Check for decimal format (e.g., "3.5")
+      const bathTotal = property.raw_data['Bath Total'];
+      if (bathTotal && bathTotal.includes('.')) {
+        const parts = bathTotal.split('.');
+        result.full = parseInt(parts[0]) || 0;
+        result.half = parts[1] === '5' ? 1 : 0;
+      } else {
+        // Use separate fields
+        result.full = parseInt(property.raw_data['Bath Full']) || 0;
+        result.half = parseInt(property.raw_data['Bath Half']) || 0;
+      }
+    }
+    
+    result.total = result.full + (result.half * 0.5);
+    return result;
+  },
+
+  // Get bedroom count
+  getBedroomCount: function(property, vendorType) {
+    if (!property) return 0;
+    
+    // First check standard field
+    if (property.asset_bedrooms) {
+      return parseInt(property.asset_bedrooms) || 0;
+    }
+    
+    // Then check raw_data
+    if (property.raw_data) {
+      if (vendorType === 'BRT') {
+        return parseInt(property.raw_data.BEDTOT) || 0;
+      } else if (vendorType === 'Microsystems') {
+        // Might need to sum by floor
+        const total = parseInt(property.raw_data['Bedrm Total']) || 0;
+        if (total > 0) return total;
+        
+        // Try summing individual floors
+        let sum = 0;
+        sum += parseInt(property.raw_data['Bedroom B']) || 0;
+        sum += parseInt(property.raw_data['Bedroom 1']) || 0;
+        sum += parseInt(property.raw_data['Bedroom 2']) || 0;
+        sum += parseInt(property.raw_data['Bedroom 3']) || 0;
+        return sum;
+      }
+    }
+    
+    return 0;
+  }
+};
+
 // ===== EMPLOYEE MANAGEMENT SERVICES =====
 export const employeeService = {
   async getAll() {
