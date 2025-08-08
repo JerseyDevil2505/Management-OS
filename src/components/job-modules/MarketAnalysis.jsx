@@ -78,7 +78,7 @@ const MarketLandAnalysis = ({ jobData }) => {
           .eq('job_id', jobData.id)
           .order('quality_check_last_run', { ascending: false });
         
-       if (data && data.length > 0) {
+if (data && data.length > 0) {
           // Load run history from quality_check_results
           if (data[0].quality_check_results?.history) {
             setRunHistory(data[0].quality_check_results.history);
@@ -114,24 +114,6 @@ const MarketLandAnalysis = ({ jobData }) => {
           // Set quality score if available
           if (data[0].quality_score) {
             setQualityScore(data[0].quality_score);
-          }
-        }
-          // Convert to run history format
-          const history = data.map(record => ({
-            date: record.quality_check_last_run,
-            propertyCount: properties.length || 0,
-            criticalCount: record.critical_count || 0,
-            warningCount: record.warning_count || 0,
-            infoCount: record.info_count || 0,
-            totalIssues: record.quality_issues_count || 0,
-            qualityScore: record.quality_score || 0,
-            checkResults: record.check_results || {}
-          }));
-          setRunHistory(history);
-          
-          // Load custom checks if any
-          if (data[0].custom_checks) {
-            setCustomChecks(data[0].custom_checks);
           }
         }
       } catch (error) {
