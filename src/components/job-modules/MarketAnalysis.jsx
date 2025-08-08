@@ -1070,9 +1070,17 @@ const exportToExcel = () => {
       const existingHistory = existingResults.history || [];
       const updatedHistory = [newRun, ...existingHistory].slice(0, 50); // Keep last 50 runs
       
-      // Store both current results and history
+      // Store summary and history only (not full results with details)
       const qualityCheckResults = {
-        current: results,  // Current check results
+        summary: {
+          mod_iv: results.mod_iv?.length || 0,
+          cama: results.cama?.length || 0,
+          characteristics: results.characteristics?.length || 0,
+          special: results.special?.length || 0,
+          rooms: results.rooms?.length || 0,
+          custom: results.custom?.length || 0,
+          timestamp: new Date().toISOString()
+        },
         history: updatedHistory  // Historical runs
       };
       
