@@ -1618,9 +1618,7 @@ const MarketLandAnalysis = ({ jobData }) => {
             </div>
           </div>
         )}
-        
-      </div>
-        
+          
       </div>
     );
   };
