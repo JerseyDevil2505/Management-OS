@@ -1222,8 +1222,6 @@ const exportToExcel = () => {
   };
 
   // ==================== TAB COMPONENTS ====================
-
-  // ==================== TAB COMPONENTS ====================
   
   // Data Quality Tab
   const DataQualityTab = () => {
@@ -1408,11 +1406,7 @@ const exportToExcel = () => {
                   return (
                     <div key={category} className="bg-white border border-gray-200 rounded-lg mb-3 overflow-hidden">
                       <div
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          toggleQualityCategory(category);
-                        }}
+                        onClick={() => toggleQualityCategory(category)}
                         className="p-4 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors flex justify-between items-center"
                       >
                         <div className="flex items-center gap-2">
@@ -1427,7 +1421,7 @@ const exportToExcel = () => {
                           </span>
                         </div>
                         
-                        <div className="flex gap-2">
+                        <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
                           {criticalCount > 0 && (
                             <span className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-xs font-semibold">
                               {criticalCount} Critical
@@ -1474,8 +1468,8 @@ const exportToExcel = () => {
                                   {checkIssues.length} properties
                                 </span>
                                 <button
+                                  type="button"
                                   onClick={(e) => {
-                                    e.preventDefault();
                                     e.stopPropagation();
                                     showPropertyDetails(checkType, category);
                                   }}
@@ -1521,6 +1515,7 @@ const exportToExcel = () => {
                       placeholder="e.g., Missing Tax ID for Commercial"
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
                       value={currentCustomCheck.name}
+                      onClick={(e) => e.stopPropagation()}
                       onChange={(e) => setCurrentCustomCheck(prev => ({ ...prev, name: e.target.value }))}
                     />
                   </div>
@@ -1530,6 +1525,7 @@ const exportToExcel = () => {
                     <select 
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
                       value={currentCustomCheck.severity}
+                      onClick={(e) => e.stopPropagation()}
                       onChange={(e) => setCurrentCustomCheck(prev => ({ ...prev, severity: e.target.value }))}
                     >
                       <option value="critical">Critical</option>
@@ -1546,6 +1542,7 @@ const exportToExcel = () => {
                       <select 
                         className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
                         value={condition.logic}
+                        onClick={(e) => e.stopPropagation()}
                         onChange={(e) => updateCustomCheckCondition(index, 'logic', e.target.value)}
                         disabled={index === 0}
                       >
@@ -1557,6 +1554,7 @@ const exportToExcel = () => {
                       <select 
                         className="px-3 py-2 border border-gray-300 rounded-lg text-sm flex-1"
                         value={condition.field}
+                        onClick={(e) => e.stopPropagation()}
                         onChange={(e) => updateCustomCheckCondition(index, 'field', e.target.value)}
                       >
                         <option value="">-- Select Field --</option>
@@ -1577,6 +1575,7 @@ const exportToExcel = () => {
                       <select 
                         className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
                         value={condition.operator}
+                        onClick={(e) => e.stopPropagation()}
                         onChange={(e) => updateCustomCheckCondition(index, 'operator', e.target.value)}
                       >
                         <option value="=">=</option>
@@ -1595,6 +1594,7 @@ const exportToExcel = () => {
                         placeholder="Value"
                         className="px-3 py-2 border border-gray-300 rounded-lg text-sm flex-1"
                         value={condition.value}
+                        onClick={(e) => e.stopPropagation()}
                         onChange={(e) => updateCustomCheckCondition(index, 'value', e.target.value)}
                         disabled={condition.operator === 'is null' || condition.operator === 'is not null'}
                       />
@@ -1602,7 +1602,10 @@ const exportToExcel = () => {
                       <button 
                         type="button"
                         className="p-2 text-red-500 hover:bg-red-50 rounded"
-                        onClick={() => removeCustomCheckCondition(index)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeCustomCheckCondition(index);
+                        }}
                         disabled={currentCustomCheck.conditions.length === 1}
                       >
                         <X size={16} />
@@ -1613,7 +1616,10 @@ const exportToExcel = () => {
                   <button
                     type="button"
                     className="text-blue-600 text-sm hover:text-blue-700 mt-2"
-                    onClick={addConditionToCustomCheck}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      addConditionToCustomCheck();
+                    }}
                   >
                     + Add Condition
                   </button>
@@ -1623,7 +1629,10 @@ const exportToExcel = () => {
                   <button
                     type="button" 
                     className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
-                    onClick={saveCustomCheck}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      saveCustomCheck();
+                    }}
                   >
                     Save Custom Check
                   </button>
@@ -1638,7 +1647,10 @@ const exportToExcel = () => {
                   <button
                     type="button"
                     className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700"
-                    onClick={runAllCustomChecks}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      runAllCustomChecks();
+                    }}
                   >
                     Run All Custom Checks
                   </button>
@@ -1666,14 +1678,20 @@ const exportToExcel = () => {
                         <button
                           type="button"
                           className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
-                          onClick={() => runCustomCheck(check)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            runCustomCheck(check);
+                          }}
                         >
                           Run
                         </button>
                         <button
                           type="button" 
                           className="px-3 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700"
-                          onClick={() => deleteCustomCheck(check.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteCustomCheck(check.id);
+                          }}
                         >
                           Delete
                         </button>
@@ -1788,6 +1806,7 @@ const exportToExcel = () => {
           <div className="flex gap-1">
             {tabs.map((tab) => (
               <button
+                type="button"
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={`px-4 py-3 font-medium text-sm transition-all border-b-2 ${
