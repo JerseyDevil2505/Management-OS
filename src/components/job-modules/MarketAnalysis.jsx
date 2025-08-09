@@ -53,7 +53,8 @@ const MarketLandAnalysis = ({ jobData }) => {
   const [expandedCategories, setExpandedCategories] = useState(['mod_iv']);
   const [isRunningChecks, setIsRunningChecks] = useState(false);
   const [dataQualityActiveSubTab, setDataQualityActiveSubTab] = useState('overview');
-
+  const [availableFields, setAvailableFields] = useState([]);
+  
 
   // ESC key handler for modal
   useEffect(() => {
@@ -229,7 +230,18 @@ if (data && data.length > 0) {
         if (jobData.parsed_code_definitions) {
           setCodeDefinitions(jobData.parsed_code_definitions);
         }
-        
+        // Build available fields list for custom checks
+        if (allProperties.length > 0) {
+          const firstProp = allProperties[0];
+          const rawDataFields = firstProp.raw_data ? Object.keys(firstProp.raw_data) : [];
+          
+          // Sort raw data fields alphabetically
+          rawDataFields.sort();
+          
+          // Store for use in custom check builder
+          setAvailableFields(rawDataFields);
+          console.log(`📋 Found ${rawDataFields.length} raw data fields for custom checks`);
+        }        
       } catch (error) {
         console.error('❌ Error loading properties:', error);
         setProperties([]);
@@ -268,6 +280,17 @@ if (data && data.length > 0) {
   };
 
   // ==================== CUSTOM CHECK FUNCTIONS ====================
+  const getFieldDisplayName = (fieldPath) => {
+    if (fieldPath.startsWith('raw_data.')) {
+      return fieldPath.replace('raw_data.', '') + ' (Raw)';
+    }
+    // Convert snake_case to Title Case
+    return fieldPath
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  };
+  
   const addConditionToCustomCheck = () => {
     setCurrentCustomCheck(prev => ({
       ...prev,
@@ -324,15 +347,16 @@ if (data && data.length > 0) {
     }
   };
   
-  const runCustomCheck = async (check) => {
-    const results = { custom: [] };
-    
-    for (const property of properties) {
-      let conditionMet = true;
-      
-      for (let i = 0; i < check.conditions.length; i++) {
         const condition = check.conditions[i];
-        const fieldValue = property[condition.field];
+            
+        // Handle raw_data fields
+        let fieldValue;
+        if (condition.field.startsWith('raw_data.')) {
+          const rawFieldName = condition.field.replace('raw_data.', '');
+          fieldValue = property.raw_data ? property.raw_data[rawFieldName] : null;
+        } else {
+          fieldValue = property[condition.field];
+        }
         const compareValue = condition.value;
         let thisConditionMet = false;
         
@@ -1973,35 +1997,68 @@ const exportToExcel = () => {
                         onChange={(e) => updateCustomCheckCondition(index, 'field', e.target.value)}
                       >
                         <option value="">-- Select Field --</option>
-                        <option value="property_m4_class">Property M4 Class</option>
-                        <option value="asset_building_class">Building Class</option>
-                        <option value="asset_sfla">Living Area (SFLA)</option>
-                        <option value="asset_year_built">Year Built</option>
-                        <option value="values_mod_improvement">Mod Improvement Value</option>
-                        <option value="values_mod_land">Mod Land Value</option>
-                        <option value="property_vcs">VCS Code</option>
-                        <option value="asset_design_style">Design Style</option>
-                        <option value="asset_type_use">Type Use</option>
-                        <option value="asset_lot_acre">Lot Acres</option>
-                        <option value="asset_ext_cond">Exterior Condition</option>
-                        <option value="asset_int_cond">Interior Condition</option>
-                      </select>
-                      
-                      <select 
-                        className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                        value={condition.operator}
-                        onClick={(e) => e.stopPropagation()}
-                        onChange={(e) => updateCustomCheckCondition(index, 'operator', e.target.value)}
-                      >
-                        <option value="=">=</option>
-                        <option value="!=">!=</option>
-                        <option value=">">&gt;</option>
-                        <option value="<">&lt;</option>
-                        <option value=">=">&gt;=</option>
-                        <option value="<=">&lt;=</option>
-                        <option value="is null">is null</option>
-                        <option value="is not null">is not null</option>
-                        <option value="contains">contains</option>
+                        
+                        <optgroup label="Property Identification">
+                          <option value="property_block">Block</option>
+                          <option value="property_lot">Lot</option>
+                          <option value="property_qualifier">Qualifier</option>
+                          <option value="property_card">Card</option>
+                          <option value="property_location">Location</option>
+                          <option value="property_m4_class">M4 Class</option>
+                          <option value="property_cama_class">CAMA Class</option>
+                          <option value="property_vcs">VCS Code</option>
+                          <option value="property_facility">Facility</option>
+                        </optgroup>
+                        
+                        <optgroup label="Values">
+                          <option value="values_mod_improvement">Mod Improvement</option>
+                          <option value="values_mod_land">Mod Land</option>
+                          <option value="values_mod_total">Mod Total</option>
+                          <option value="values_cama_improvement">CAMA Improvement</option>
+                          <option value="values_cama_land">CAMA Land</option>
+                          <option value="values_cama_total">CAMA Total</option>
+                          <option value="values_norm_time">Normalized Time Value</option>
+                          <option value="values_norm_size">Normalized Size Value</option>
+                        </optgroup>
+                        
+                        <optgroup label="Asset Information">
+                          <option value="asset_building_class">Building Class</option>
+                          <option value="asset_design_style">Design Style</option>
+                          <option value="asset_type_use">Type Use</option>
+                          <option value="asset_sfla">Living Area (SFLA)</option>
+                          <option value="asset_year_built">Year Built</option>
+                          <option value="asset_lot_acre">Lot Acres</option>
+                          <option value="asset_lot_sf">Lot Square Feet</option>
+                          <option value="asset_lot_frontage">Lot Frontage</option>
+                          <option value="asset_ext_cond">Exterior Condition</option>
+                          <option value="asset_int_cond">Interior Condition</option>
+                          <option value="asset_zoning">Zoning</option>
+                          <option value="asset_map_page">Map Page</option>
+                          <option value="asset_key_page">Key Page</option>
+                        </optgroup>
+                        
+                        <optgroup label="Sale Information">
+                          <option value="sale_date">Sale Date</option>
+                          <option value="sale_price">Sale Price</option>
+                          <option value="sale_nu">Sale NU</option>
+                          <option value="sale_book">Sale Book</option>
+                          <option value="sale_page">Sale Page</option>
+                        </optgroup>
+                        
+                        <optgroup label="Market Analysis">
+                          <option value="location_analysis">Location Analysis</option>
+                          <option value="newVCS">New VCS</option>
+                        </optgroup>
+                        
+                        {availableFields.length > 0 && (
+                          <optgroup label={`Raw Data Fields (${vendorType || 'Vendor'})`}>
+                            {availableFields.map(field => (
+                              <option key={field} value={`raw_data.${field}`}>
+                                {field}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
                       </select>
                       
                       <input 
