@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   AlertCircle, 
   RefreshCw,
@@ -17,40 +17,84 @@ const DataQualityTab = ({
   jobData,
   vendorType,
   codeDefinitions,
-  isLoading,
-  loadingProgress,
-  loadedCount,
-  totalPropertyCount,
-  
-  // State from parent
-  checkResults,
-  setCheckResults,
-  qualityScore,
-  setQualityScore,
-  issueStats,
-  setIssueStats,
-  customChecks,
-  setCustomChecks,
-  currentCustomCheck,
-  setCurrentCustomCheck,
-  runHistory,
-  setRunHistory,
-  dataQualityActiveSubTab,
-  setDataQualityActiveSubTab,
-  availableFields,
-  expandedCategories,
-  setExpandedCategories,
-  isRunningChecks,
-  setIsRunningChecks,
-  showDetailsModal,
-  setShowDetailsModal,
-  modalData,
-  setModalData
+  availableFields
 }) => {
+  // ==================== INTERNAL STATE MANAGEMENT ====================
+  const [checkResults, setCheckResults] = useState({});
+  const [qualityScore, setQualityScore] = useState(null);
+  const [issueStats, setIssueStats] = useState({
+    critical: 0,
+    warning: 0,
+    info: 0,
+    total: 0
+  });
+  const [customChecks, setCustomChecks] = useState([]);
+  const [currentCustomCheck, setCurrentCustomCheck] = useState({
+    conditions: [{ logic: 'IF', field: '', operator: '=', value: '' }]
+  });
+  const [runHistory, setRunHistory] = useState([]);
+  const [dataQualityActiveSubTab, setDataQualityActiveSubTab] = useState('overview');
+  const [expandedCategories, setExpandedCategories] = useState(['mod_iv']);
+  const [isRunningChecks, setIsRunningChecks] = useState(false);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [modalData, setModalData] = useState({ title: '', properties: [] });
 
   // Refs for uncontrolled inputs
   const customCheckNameInputRef = useRef(null);
   const customCheckSeveritySelectRef = useRef(null);
+
+  // Load saved data on mount
+  useEffect(() => {
+    const loadSavedData = async () => {
+      if (!jobData?.id) return;
+      
+      try {
+        const { data, error } = await supabase
+          .from('market_land_valuation')
+          .select('*')
+          .eq('job_id', jobData.id)
+          .single();
+        
+        if (data) {
+          // Load run history
+          if (data.quality_check_results?.history) {
+            setRunHistory(data.quality_check_results.history);
+          }
+          
+          // Load custom checks
+          if (data.custom_checks) {
+            setCustomChecks(data.custom_checks);
+          }
+          
+          // Load quality score
+          if (data.quality_score) {
+            setQualityScore(data.quality_score);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading saved data:', error);
+      }
+    };
+    
+    loadSavedData();
+  }, [jobData?.id]);
+
+  // ESC key handler for modal
+  useEffect(() => {
+    const handleEsc = (event) => {
+      if (event.key === 'Escape') {
+        setShowDetailsModal(false);
+      }
+    };
+    
+    if (showDetailsModal) {
+      window.addEventListener('keydown', handleEsc);
+      return () => {
+        window.removeEventListener('keydown', handleEsc);
+      };
+    }
+  }, [showDetailsModal]);  
+  
 
   // ==================== DATA QUALITY FUNCTIONS ====================
   const exportToExcel = () => {
@@ -995,6 +1039,7 @@ const DataQualityTab = ({
       const updatedHistory = [newRun, ...existingHistory].slice(0, 50);
       
       const qualityCheckResults = {
+        current: results,  // Add this line to save current results
         summary: {
           mod_iv: results.mod_iv?.length || 0,
           cama: results.cama?.length || 0,
@@ -1352,46 +1397,16 @@ const DataQualityTab = ({
               Data Quality Analysis
             </h3>
             <p className="text-gray-600">
-              {isLoading 
-                ? `Loading ${loadedCount.toLocaleString()} of ${totalPropertyCount.toLocaleString()} properties...`
-                : `Analyzing ${properties.length.toLocaleString()} properties for data integrity issues`
-              }
+              Analyzing {properties.length.toLocaleString()} properties for data integrity issues
             </p>
           </div>
-
-          {isLoading && (
-            <div className="mb-6">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-gray-700">Loading Properties</span>
-                <span className="text-sm font-medium text-blue-600">{loadingProgress}%</span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-                <div 
-                  className="h-full bg-gradient-to-r from-blue-500 to-blue-600 transition-all duration-300 ease-out"
-                  style={{ width: `${loadingProgress}%` }}
-                >
-                  <div className="h-full bg-white bg-opacity-30 animate-pulse"></div>
-                </div>
-              </div>
-              <div className="mt-2 text-center text-sm text-gray-600">
-                {loadedCount > 0 && (
-                  <span>
-                    Loaded {loadedCount.toLocaleString()} properties
-                    {loadedCount < totalPropertyCount && 
-                      ` • ${Math.ceil((totalPropertyCount - loadedCount) / 1000)} batches remaining`
-                    }
-                  </span>
-                )}
-              </div>
-            </div>
-          )}
 
           <div className="flex gap-3 mb-6">
             <button 
               onClick={runQualityChecks}
-              disabled={isRunningChecks || isLoading}
+              disabled={isRunningChecks || properties.length === 0}
               className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-all ${
-                isRunningChecks || isLoading
+                isRunningChecks || properties.length === 0
                   ? 'bg-gray-400 text-white cursor-not-allowed' 
                   : 'bg-blue-600 text-white hover:bg-blue-700'
               }`}
