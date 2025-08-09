@@ -1618,7 +1618,7 @@ const exportToExcel = () => {
       'detached_missing_depreciation': 'Detached Items Missing Depreciation',
       'land_adjustments_exist': 'Properties with Land Adjustments',
       'market_adjustments_exist': 'Properties with Market Adjustments',
-      'value_overrides': 'Manual Value Overrides Present'
+      'value_overrides': 'Manual Value Overrides Present',
       'zero_improvement_with_design': 'Zero Improvements with Design Style',
       'zero_improvement_with_type': 'Zero Improvements with Type Use',
       'commercial_with_design': 'Commercial Property with Residential Design',
