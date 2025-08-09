@@ -336,7 +336,7 @@ if (data && data.length > 0) {
     saveCustomChecksToDb(customChecks.filter(check => check.id !== checkId));
   };
   
-  const saveCustomChecksToDb = async (checks) => {
+const saveCustomChecksToDb = async (checks) => {
     try {
       await supabase
         .from('market_land_valuation')
@@ -347,6 +347,13 @@ if (data && data.length > 0) {
     }
   };
   
+  const runCustomCheck = async (check) => {
+    const results = { custom: [] };
+    
+    for (const property of properties) {
+      let conditionMet = true;
+      
+      for (let i = 0; i < check.conditions.length; i++) {
         const condition = check.conditions[i];
             
         // Handle raw_data fields
