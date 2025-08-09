@@ -11,7 +11,7 @@ import {
   AlertCircle,
   Check,
   X,
-  Grid3x3,
+  Grid,
   Map as MapIcon,
   ChevronLeft,
   ChevronRight,
