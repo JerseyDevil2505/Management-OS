@@ -2071,7 +2071,12 @@ const exportToExcel = () => {
                         placeholder="Value"
                         className="px-3 py-2 border border-gray-300 rounded-lg text-sm flex-1"
                         value={condition.value}
-                        onChange={(e) => updateCustomCheckCondition(index, 'value', e.target.value)}
+                        onFocus={(e) => console.log(`✅ VALUE INPUT ${index} FOCUSED`)}
+                        onBlur={(e) => console.log(`❌ VALUE INPUT ${index} BLURRED - Lost focus!`)}
+                        onChange={(e) => {
+                          console.log(`📝 VALUE INPUT ${index} onChange:`, e.target.value);
+                          updateCustomCheckCondition(index, 'value', e.target.value);
+                        }}
                         disabled={condition.operator === 'is null' || condition.operator === 'is not null'}
                       />
                       
