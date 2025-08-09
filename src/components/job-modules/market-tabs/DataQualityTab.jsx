@@ -2091,34 +2091,6 @@ const DataQualityTab = ({
                       </>
                     )}
                   </div>
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-semibold text-gray-800">
-                    ✅ Saved Custom Checks/Definitions
-                  </h3>
-                  <div className="flex items-center gap-4">
-                    {customChecks.length > 0 && !isDraggingOver && (
-                      <>
-                        <span className="text-sm text-gray-600">
-                          {customChecks.length} custom check{customChecks.length !== 1 ? 's' : ''} will run with analysis
-                        </span>
-                        <button
-                          type="button"
-                          className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            runAllCustomChecks();
-                          }}
-                        >
-                          Run All Custom Checks
-                        </button>
-                      </>
-                    )}
-                    {isDraggingOver && (
-                      <span className="text-sm text-blue-600 font-medium">
-                        Drop here to add to saved checks
-                      </span>
-                    )}
-                  </div>
                 </div>
                 
                 {customChecks.length > 0 ? (
