@@ -54,6 +54,8 @@ const MarketLandAnalysis = ({ jobData }) => {
   const [isRunningChecks, setIsRunningChecks] = useState(false);
   const [dataQualityActiveSubTab, setDataQualityActiveSubTab] = useState('overview');
   const [availableFields, setAvailableFields] = useState([]);
+  const [customCheckName, setCustomCheckName] = useState('');
+  const [customCheckSeverity, setCustomCheckSeverity] = useState('warning');
   
 
   // ESC key handler for modal
@@ -315,12 +317,23 @@ if (data && data.length > 0) {
   };
   
   const saveCustomCheck = () => {
-    if (!currentCustomCheck.name || currentCustomCheck.conditions.some(c => !c.field)) {
+    if (!customCheckName || currentCustomCheck.conditions.some(c => !c.field)) {
       alert('Please complete all fields before saving');
       return;
     }
     
-    setCustomChecks(prev => [...prev, { ...currentCustomCheck, id: Date.now() }]);
+    const newCheck = {
+      ...currentCustomCheck,
+      name: customCheckName,
+      severity: customCheckSeverity,
+      id: Date.now()
+    };
+    
+    setCustomChecks(prev => [...prev, newCheck]);
+    
+    // Reset the form
+    setCustomCheckName('');
+    setCustomCheckSeverity('warning');
     setCurrentCustomCheck({
       name: '',
       severity: 'warning',
@@ -328,7 +341,7 @@ if (data && data.length > 0) {
     });
     
     // Save to database
-    saveCustomChecksToDb([...customChecks, currentCustomCheck]);
+    saveCustomChecksToDb([...customChecks, newCheck]);
   };
   
   const deleteCustomCheck = (checkId) => {
@@ -1936,24 +1949,19 @@ const exportToExcel = () => {
                       type="text"
                       placeholder="e.g., Missing Tax ID for Commercial"
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                      value={currentCustomCheck.name}
-                      onFocus={(e) => console.log('✅ CHECK NAME FOCUSED')}
-                      onBlur={(e) => console.log('❌ CHECK NAME BLURRED - Lost focus!')}
-                      onChange={(e) => {
-                        console.log('📝 CHECK NAME onChange:', e.target.value);
-                        setCurrentCustomCheck(prev => ({ ...prev, name: e.target.value }));
-                      }}
-                    />
+                      value={customCheckName}
+                      onChange={(e) => setCustomCheckName(e.target.value)}
+                    />    
                   </div>
                   
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Severity</label>
                     <select 
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                      value={currentCustomCheck.severity}
+                      value={customCheckSeverity}
                       onClick={(e) => e.stopPropagation()}
-                      onChange={(e) => setCurrentCustomCheck(prev => ({ ...prev, severity: e.target.value }))}
-                    >
+                      onChange={(e) => setCustomCheckSeverity(e.target.value)}
+                    >  
                       <option value="critical">Critical</option>
                       <option value="warning">Warning</option>
                       <option value="info">Info</option>
