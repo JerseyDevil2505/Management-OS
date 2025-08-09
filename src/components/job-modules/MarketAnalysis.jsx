@@ -1944,7 +1944,6 @@ const exportToExcel = () => {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Check Name</label>
                     <input 
-                    <input 
                       type="text"
                       placeholder="e.g., Missing Tax ID for Commercial"
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
