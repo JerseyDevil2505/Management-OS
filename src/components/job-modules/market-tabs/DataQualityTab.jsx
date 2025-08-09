@@ -1301,7 +1301,13 @@ const DataQualityTab = ({
     setCustomChecks(prev => prev.filter(c => c.id !== check.id));
   };
 
-    const handleDragLeave = (e) => {
+    // Add these drag and drop handler functions HERE:
+  const handleDragStart = (e, template) => {
+    e.dataTransfer.effectAllowed = 'copy';
+    e.dataTransfer.setData('template', JSON.stringify(template));
+  }; 
+
+  const handleDragLeave = (e) => {
     // Only set to false if we're leaving the drop zone entirely
     if (e.currentTarget === e.target) {
       setIsDraggingOver(false);
