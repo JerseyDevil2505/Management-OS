@@ -20,32 +20,6 @@ import {
 } from 'lucide-react';
 
 const PreValuationTab = ({ jobData, properties }) => {
-  // ==================== KEYBOARD SHORTCUTS ====================
-  useEffect(() => {
-    const handleKeyPress = (e) => {
-      // Ctrl+S or Cmd+S to save
-      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-        e.preventDefault();
-        if (unsavedChanges) {
-          handleManualSave();
-        }
-      }
-      
-      // Ctrl+E or Cmd+E to export
-      if ((e.ctrlKey || e.metaKey) && e.key === 'e') {
-        e.preventDefault();
-        if (activeSubTab === 'normalization') {
-          exportNormalizationToExcel();
-        } else {
-          exportWorksheetToExcel();
-        }
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyPress);
-    return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [unsavedChanges, activeSubTab]);
-
   // ==================== BATCH OPERATIONS FOR WORKSHEET ====================
   const applyBatchVCS = (vcsValue) => {
     const filtered = filteredWorksheetProps.slice(
