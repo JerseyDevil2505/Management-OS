@@ -1116,7 +1116,7 @@ for (let i = 1; i <= 6; i++) {
           details: property
         });
       }
-} else if (vendorType === 'Microsystems') {
+    } else if (vendorType === 'Microsystems') {
       // Check Net Adjustments (from headers)
       for (let i = 1; i <= 3; i++) {
         const netAdj = rawData[`Net Adjustment${i}`];
