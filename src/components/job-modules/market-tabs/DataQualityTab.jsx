@@ -1307,6 +1307,12 @@ const DataQualityTab = ({
     e.dataTransfer.setData('template', JSON.stringify(template));
   }; 
 
+    const handleDragOver = (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    setIsDraggingOver(true);
+  };
+
   const handleDragLeave = (e) => {
     // Only set to false if we're leaving the drop zone entirely
     if (e.currentTarget === e.target) {
