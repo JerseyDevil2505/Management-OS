@@ -1125,16 +1125,10 @@ for (let i = 1; i <= 6; i++) {
         const netAdj = rawData[`Net Adjustment${i}`];
         const adjCode = rawData[`Adj Reason Code${i}`];
         
-        // Debug Block 1 Lot 3
-        if (property.property_block === '1' && property.property_lot === '3') {
-          console.log(`Checking Net Adjustment${i}:`, netAdj, 'Parsed:', parseFloat(netAdj));
-          console.log(`Checking Adj Reason Code${i}:`, adjCode, 'IsEmpty:', interpretCodes.isFieldEmpty(adjCode));
-        }
+        // Parse the number, treating NaN as 0
+        const netAdjValue = parseFloat(netAdj) || 0;
         
-        if ((netAdj && parseFloat(netAdj) !== 0) || !interpretCodes.isFieldEmpty(adjCode)) {
-          if (property.property_block === '1' && property.property_lot === '3') {
-            console.log(`TRIGGERED by Net Adj${i} or Adj Code${i}`);
-          }
+        if (netAdjValue !== 0 || !interpretCodes.isFieldEmpty(adjCode)) {
           hasLandAdjustments = true;
           break;
         }
@@ -1149,9 +1143,13 @@ for (let i = 1; i <= 6; i++) {
         const unitCode2 = rawData['Unit Adj Code2'];
         const unitCode = rawData['Unit Adj Code'];
         
-        if ((unitAdj1 && parseFloat(unitAdj1) !== 0) || 
-            (unitAdj2 && parseFloat(unitAdj2) !== 0) ||
-            (unitAdj && parseFloat(unitAdj) !== 0) ||
+        const unitAdj1Value = parseFloat(unitAdj1) || 0;
+        const unitAdj2Value = parseFloat(unitAdj2) || 0;
+        const unitAdjValue = parseFloat(unitAdj) || 0;
+        
+        if (unitAdj1Value !== 0 || 
+            unitAdj2Value !== 0 ||
+            unitAdjValue !== 0 ||
             !interpretCodes.isFieldEmpty(unitCode1) ||
             !interpretCodes.isFieldEmpty(unitCode2) ||
             !interpretCodes.isFieldEmpty(unitCode)) {
@@ -1236,26 +1234,30 @@ for (let i = 1; i <= 6; i++) {
           details: property
         });
       }
-    } else if (vendorType === 'Microsystems') {
+} else if (vendorType === 'Microsystems') {
       // Microsystems: Check depreciation fields (100 = no depreciation)
       const issues = [];
       
       // Skip Over Improved Depr1 - not relevant for this check
       
-      if (rawData['Over Improved Depr2'] && parseFloat(rawData['Over Improved Depr2']) !== 100 && parseFloat(rawData['Over Improved Depr2']) !== 0) {
-        issues.push(`Over Improved Depr2 = ${rawData['Over Improved Depr2']}`);
+      const overImpr2 = parseFloat(rawData['Over Improved Depr2']) || 0;
+      if (overImpr2 !== 100 && overImpr2 !== 0) {
+        issues.push(`Over Improved Depr2 = ${overImpr2}`);
       }
-      if (rawData['Economic Depr'] && parseFloat(rawData['Economic Depr']) !== 100 && parseFloat(rawData['Economic Depr']) !== 0) {
-        issues.push(`Economic Depr = ${rawData['Economic Depr']}`);
+      
+      const econDepr = parseFloat(rawData['Economic Depr']) || 0;
+      if (econDepr !== 100 && econDepr !== 0) {
+        issues.push(`Economic Depr = ${econDepr}`);
       }
-      if (rawData['Under Improved Depr'] && parseFloat(rawData['Under Improved Depr']) !== 100 && parseFloat(rawData['Under Improved Depr']) !== 0) {
-        issues.push(`Under Improved Depr = ${rawData['Under Improved Depr']}`);
+      
+      const underImpr = parseFloat(rawData['Under Improved Depr']) || 0;
+      if (underImpr !== 100 && underImpr !== 0) {
+        issues.push(`Under Improved Depr = ${underImpr}`);
       }
-      if (rawData['Function Depr'] && parseFloat(rawData['Function Depr']) !== 100 && parseFloat(rawData['Function Depr']) !== 0) {
-        issues.push(`Function Depr = ${rawData['Function Depr']}`);
-      }
-      if (!interpretCodes.isFieldEmpty(rawData['Location Code'])) {
-        issues.push('Location Code');
+      
+      const funcDepr = parseFloat(rawData['Function Depr']) || 0;
+      if (funcDepr !== 100 && funcDepr !== 0) {
+        issues.push(`Function Depr = ${funcDepr}`);
       }
       
       if (issues.length > 0) {
