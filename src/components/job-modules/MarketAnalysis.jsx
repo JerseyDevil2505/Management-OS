@@ -1238,30 +1238,50 @@ for (let i = 1; i <= 6; i++) {
           details: property
         });
       }
-} else if (vendorType === 'Microsystems') {
-      // Microsystems: Check depreciation fields (100 = no depreciation)
+    } else if (vendorType === 'Microsystems') {
+      // Microsystems: Check for ANY non-empty depreciation/adjustment fields
       const issues = [];
       
-      // Skip Over Improved Depr1 - not relevant for this check
-      
-      const overImpr2 = parseFloat(rawData['Over Improved Depr2']) || 0;
-      if (overImpr2 !== 100 && overImpr2 !== 0) {
-        issues.push(`Over Improved Depr2 = ${overImpr2}`);
+      // Flag these fields if they contain ANYTHING (not empty/null/spaces)
+      if (!interpretCodes.isFieldEmpty(rawData['Over Improved Depr1'])) {
+        issues.push(`Over Improved Depr1: ${rawData['Over Improved Depr1']}`);
       }
       
-      const econDepr = parseFloat(rawData['Economic Depr']) || 0;
-      if (econDepr !== 100 && econDepr !== 0) {
-        issues.push(`Economic Depr = ${econDepr}`);
+      if (!interpretCodes.isFieldEmpty(rawData['Over Improved Depr2'])) {
+        issues.push(`Over Improved Depr2: ${rawData['Over Improved Depr2']}`);
       }
       
+      if (!interpretCodes.isFieldEmpty(rawData['Economic Depr'])) {
+        issues.push(`Economic Depr: ${rawData['Economic Depr']}`);
+      }
+      
+      if (!interpretCodes.isFieldEmpty(rawData['Function Depr'])) {
+        issues.push(`Function Depr: ${rawData['Function Depr']}`);
+      }
+      
+      if (!interpretCodes.isFieldEmpty(rawData['Location Code'])) {
+        issues.push(`Location Code: ${rawData['Location Code']}`);
+      }
+      
+      if (!interpretCodes.isFieldEmpty(rawData['Phys Depr Code'])) {
+        issues.push(`Phys Depr Code: ${rawData['Phys Depr Code']}`);
+      }
+      
+      // Also check Net Functional and Net Locational (100 = good)
+      const netFunctional = parseFloat(rawData['Net Functional Depr']) || 0;
+      if (netFunctional !== 100 && netFunctional !== 0) {
+        issues.push(`Net Functional Depr = ${netFunctional}`);
+      }
+      
+      const netLocational = parseFloat(rawData['Net Locational Depr']) || 0;
+      if (netLocational !== 100 && netLocational !== 0) {
+        issues.push(`Net Locational Depr = ${netLocational}`);
+      }
+      
+      // Under Improved Depr still checks for NOT 100
       const underImpr = parseFloat(rawData['Under Improved Depr']) || 0;
       if (underImpr !== 100 && underImpr !== 0) {
         issues.push(`Under Improved Depr = ${underImpr}`);
-      }
-      
-      const funcDepr = parseFloat(rawData['Function Depr']) || 0;
-      if (funcDepr !== 100 && funcDepr !== 0) {
-        issues.push(`Function Depr = ${funcDepr}`);
       }
       
       if (issues.length > 0) {
