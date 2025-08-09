@@ -1656,7 +1656,7 @@ const exportToExcel = () => {
   // ==================== TAB COMPONENTS ====================
   
   // Data Quality Tab
-  const DataQualityTab = () => {
+  const DataQualityTab = React.memo(() => {
   // activeSubTab state is now managed by parent
     
     return (
@@ -2248,7 +2248,7 @@ const exportToExcel = () => {
         )}
       </div>
     );
-  };
+  });
 
   // ==================== MAIN RENDER ====================
   return (
