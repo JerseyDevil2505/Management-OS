@@ -377,7 +377,7 @@ const DataQualityTab = ({
     const designStyle = property.asset_design_style;
     
     if (m4Class && m4Class !== '2' && m4Class !== '3A') {
-      if (buildingClass && buildingClass !== 10) {
+      if (buildingClass && parseInt(buildingClass) !== 10) {
         results.characteristics.push({
           check: 'non_residential_wrong_building_class',
           severity: 'warning',
@@ -388,7 +388,7 @@ const DataQualityTab = ({
       }
     }
     
-    if ((m4Class === '2' || m4Class === '3A') && buildingClass === 10) {
+    if ((m4Class === '2' || m4Class === '3A') && parseInt(buildingClass) === 10) {
       results.characteristics.push({
         check: 'residential_building_class_10',
         severity: 'warning',
