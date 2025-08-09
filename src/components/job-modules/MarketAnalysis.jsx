@@ -1619,6 +1619,11 @@ const exportToExcel = () => {
       'land_adjustments_exist': 'Properties with Land Adjustments',
       'market_adjustments_exist': 'Properties with Market Adjustments',
       'value_overrides': 'Manual Value Overrides Present'
+      'zero_improvement_with_design': 'Zero Improvements with Design Style',
+      'zero_improvement_with_type': 'Zero Improvements with Type Use',
+      'commercial_with_design': 'Commercial Property with Residential Design',
+      'commercial_with_type': 'Commercial Property with Residential Type',
+      
     };
     return titles[checkType] || checkType;
   };
