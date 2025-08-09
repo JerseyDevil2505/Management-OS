@@ -1937,7 +1937,12 @@ const exportToExcel = () => {
                       placeholder="e.g., Missing Tax ID for Commercial"
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
                       value={currentCustomCheck.name}
-                      onChange={(e) => setCurrentCustomCheck(prev => ({ ...prev, name: e.target.value }))}
+                      onFocus={(e) => console.log('✅ CHECK NAME FOCUSED')}
+                      onBlur={(e) => console.log('❌ CHECK NAME BLURRED - Lost focus!')}
+                      onChange={(e) => {
+                        console.log('📝 CHECK NAME onChange:', e.target.value);
+                        setCurrentCustomCheck(prev => ({ ...prev, name: e.target.value }));
+                      }}
                     />
                   </div>
                   
