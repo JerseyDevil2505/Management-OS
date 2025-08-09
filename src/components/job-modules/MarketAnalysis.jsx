@@ -2077,7 +2077,6 @@ const exportToExcel = () => {
                           console.log(`📝 VALUE INPUT ${index} onChange:`, e.target.value);
                           updateCustomCheckCondition(index, 'value', e.target.value);
                         }}
-                        disabled={condition.operator === 'is null' || condition.operator === 'is not null'}
                       />
                       
                       <button 
