@@ -1116,11 +1116,8 @@ for (let i = 1; i <= 6; i++) {
           details: property
         });
       }
-    } else if (vendorType === 'Microsystems') {
-      // Microsystems: Check Net Adjustment and Unit Adjustment fields
-      let hasLandAdjustments = false;
-      
-      // Check Net Adjustments
+} else if (vendorType === 'Microsystems') {
+      // Check Net Adjustments (from headers)
       for (let i = 1; i <= 3; i++) {
         const netAdj = rawData[`Net Adjustment${i}`];
         const adjCode = rawData[`Adj Reason Code${i}`];
@@ -1128,9 +1125,26 @@ for (let i = 1; i <= 6; i++) {
         // Parse the number, treating NaN as 0
         const netAdjValue = parseFloat(netAdj) || 0;
         
+        // Flag if NOT empty/zero
         if (netAdjValue !== 0 || !interpretCodes.isFieldEmpty(adjCode)) {
           hasLandAdjustments = true;
           break;
+        }
+      }
+      
+      // Check Overall Adjustment fields
+      if (!hasLandAdjustments) {
+        for (let i = 1; i <= 4; i++) {
+          const overallPercent = rawData[`Overall Adj Percent${i}`];
+          const overallReason = rawData[`Overall Adj Reason${i}`];
+          
+          const percentValue = parseFloat(overallPercent) || 0;
+          
+          // Flag if percentage is not 0/100, or if there's a reason code
+          if ((percentValue !== 0 && percentValue !== 100) || !interpretCodes.isFieldEmpty(overallReason)) {
+            hasLandAdjustments = true;
+            break;
+          }
         }
       }
       
@@ -1147,6 +1161,7 @@ for (let i = 1; i <= 6; i++) {
         const unitAdj2Value = parseFloat(unitAdj2) || 0;
         const unitAdjValue = parseFloat(unitAdj) || 0;
         
+        // Flag if any unit adjustment is NOT zero or any code is NOT empty
         if (unitAdj1Value !== 0 || 
             unitAdj2Value !== 0 ||
             unitAdjValue !== 0 ||
@@ -1156,17 +1171,6 @@ for (let i = 1; i <= 6; i++) {
           hasLandAdjustments = true;
         }
       }
-      
-      if (hasLandAdjustments) {
-        results.special.push({
-          check: 'land_adjustments_exist',
-          severity: 'info',
-          property_key: property.property_composite_key,
-          message: 'Property has land adjustments applied',
-          details: property
-        });
-      }
-    }
 
     // ==================== MARKET ADJUSTMENTS ====================
     // Flag pre-existing market adjustments (want clean baseline)
