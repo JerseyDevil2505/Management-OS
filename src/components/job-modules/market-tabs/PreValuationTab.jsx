@@ -830,7 +830,7 @@ const PreValuationTab = ({ jobData, properties }) => {
 
   // Complete worksheet and commit to property_records
   const completeWorksheet = async () => {
-    if (!confirm('This will finalize the worksheet and update all property records. Continue?')) {
+    if (!window.confirm('This will finalize the worksheet and update all property records. Continue?')) {
       return;
     }
 
@@ -1943,7 +1943,7 @@ const PreValuationTab = ({ jobData, properties }) => {
                 : 'text-gray-600 hover:bg-gray-100'
             }`}
           >
-            <Grid3x3 size={16} className="inline mr-2" />
+            <Grid size={16} className="inline mr-2" />
             Page by Page Worksheet
           </button>
         </div>
