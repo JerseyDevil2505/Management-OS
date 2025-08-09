@@ -333,10 +333,8 @@ export const interpretCodes = {
       }
     }
     
-    // Add 5-fixture floor-specific if they exist
-    for (const floor of floorSuffixes) {
-      sum += parseInt(property.raw_data[`5 Fixture Bath ${floor}`]) || 0;
-    }
+    // Add the summary 5-fixture field since there are no floor-specific ones
+    sum += parseInt(property.raw_data['Num 5 Fixture Baths']) || 0;
     
     return sum;
   },
