@@ -1352,6 +1352,7 @@ const exportToExcel = () => {
         });
       }
     }
+  }
   };  // This closes runPropertyChecks function
 
   const saveQualityResults = async (results) => {
