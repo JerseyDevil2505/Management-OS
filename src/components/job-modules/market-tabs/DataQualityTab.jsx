@@ -176,13 +176,21 @@ const DataQualityTab = ({
               issue.message
             ]);
           } else {
-            const keyParts = issue.property_key.split('_');
+            // Fallback if property not found - parse the composite key
+            // Format: YEAR+CCDD-BLOCK-LOT_QUALIFIER-CARD-LOCATION
+            const mainParts = issue.property_key.split('-');
+            const block = mainParts[1] || '';
+            const lotQual = mainParts[2] || '';
+            const [lot, qualifier] = lotQual.split('_');
+            const card = mainParts[3] || '';
+            const location = mainParts[4] || '';
+            
             detailsData.push([
-              keyParts[0] || '',
-              keyParts[1] || '',
-              keyParts[2] || '',
-              keyParts[3] || '',
-              keyParts[4] || '',
+              block,
+              lot || '',
+              qualifier || '',
+              card,
+              location,
               '',
               getCheckTitle(issue.check),
               issue.severity,
@@ -1039,7 +1047,6 @@ const DataQualityTab = ({
       const updatedHistory = [newRun, ...existingHistory].slice(0, 50);
       
       const qualityCheckResults = {
-        current: results,  // Add this line to save current results
         summary: {
           mod_iv: results.mod_iv?.length || 0,
           cama: results.cama?.length || 0,
@@ -1116,9 +1123,14 @@ const DataQualityTab = ({
         ? prev.filter(id => id !== categoryId)
         : [...prev, categoryId]
     );
-  };
-
   const getCheckTitle = (checkType) => {
+    // Handle custom checks
+    if (checkType.startsWith('custom_')) {
+      const checkId = checkType.replace('custom_', '');
+      const customCheck = customChecks.find(c => c.id.toString() === checkId);
+      return customCheck ? customCheck.name : checkType;
+    }
+    
     const titles = {
       'vacant_land_improvements': 'Vacant Land with Improvements',
       'missing_improvements': 'Properties Missing Improvements',
@@ -1233,6 +1245,18 @@ const DataQualityTab = ({
     saveCustomChecksToDb(customChecks.filter(check => check.id !== checkId));
   };
   
+  const editCustomCheck = (check) => {
+    customCheckNameInputRef.current.value = check.name;
+    customCheckSeveritySelectRef.current.value = check.severity;
+    setCurrentCustomCheck({
+      ...check,
+      conditions: check.conditions
+    });
+    // Remove from list so it can be re-saved with same or new name
+    setCustomChecks(prev => prev.filter(c => c.id !== check.id));
+  };
+  
+  const runCustomCheck = async (check) => {
   const runCustomCheck = async (check) => {
     const results = { custom: [] };
     
@@ -1375,7 +1399,7 @@ const DataQualityTab = ({
               : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
           }`}
         >
-          Custom Checks
+          Custom Checks/Definitions
         </button>
         <button
           onClick={() => setDataQualityActiveSubTab('history')}
@@ -1581,7 +1605,7 @@ const DataQualityTab = ({
       {dataQualityActiveSubTab === 'custom' && (
         <div>
           <div className="bg-white border border-gray-200 rounded-lg p-6 mb-6">
-            <h3 className="text-lg font-semibold text-gray-800 mb-4">Custom Check Builder</h3>
+            <h3 className="text-lg font-semibold text-gray-800 mb-4">Custom Check/Definition Builder</h3>
             
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
@@ -1772,7 +1796,7 @@ const DataQualityTab = ({
           
           <div className="bg-white border border-gray-200 rounded-lg p-6">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-gray-800">Saved Custom Checks</h3>
+              <h3 className="text-lg font-semibold text-gray-800">Saved Custom Checks/Definitions</h3>
               {customChecks.length > 0 && (
                 <button
                   type="button"
@@ -1804,7 +1828,7 @@ const DataQualityTab = ({
                         </span>
                       </div>
                     </div>
-                    <div className="flex gap-2">
+<div className="flex gap-2">
                       <button
                         type="button"
                         className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
@@ -1814,6 +1838,16 @@ const DataQualityTab = ({
                         }}
                       >
                         Run
+                      </button>
+                      <button
+                        type="button"
+                        className="px-3 py-1 text-xs bg-yellow-600 text-white rounded hover:bg-yellow-700"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          editCustomCheck(check);
+                        }}
+                      >
+                        Edit
                       </button>
                       <button
                         type="button" 
