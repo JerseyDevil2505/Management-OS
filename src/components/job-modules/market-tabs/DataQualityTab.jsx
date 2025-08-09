@@ -1804,7 +1804,7 @@ const DataQualityTab = ({
         </div>
       )}
       
-      {/* CUSTOM CHECKS TAB CONTENT */}
+{/* CUSTOM CHECKS TAB CONTENT */}
       {dataQualityActiveSubTab === 'custom' && (
         <div>
           {/* View Template Library Button */}
@@ -2112,7 +2112,41 @@ const DataQualityTab = ({
                           </button>
                           <button
                             type="button"
-                            className="px-3 py-1 text-xs bg-ye
+                            className="px-3 py-1 text-xs bg-yellow-600 text-white rounded hover:bg-yellow-700"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              editCustomCheck(check);
+                            }}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button" 
+                            className="px-3 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteCustomCheck(check.id);
+                            }}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-gray-500 text-center py-8">
+                    {isDraggingOver 
+                      ? "Drop templates here to add them" 
+                      : "No custom checks saved yet"}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
       {/* HISTORY TAB CONTENT */}
       {dataQualityActiveSubTab === 'history' && (
         <div>
