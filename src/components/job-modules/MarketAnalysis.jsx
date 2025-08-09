@@ -395,6 +395,14 @@ const saveCustomChecksToDb = async (checks) => {
           case 'contains':
             thisConditionMet = fieldValue && fieldValue.toString().toLowerCase().includes(compareValue.toLowerCase());
             break;
+          case 'is one of':
+            const validValues = compareValue.split(',').map(v => v.trim());
+            thisConditionMet = validValues.includes(fieldValue);
+            break;
+          case 'is not one of':
+            const invalidValues = compareValue.split(',').map(v => v.trim());
+            thisConditionMet = !invalidValues.includes(fieldValue);
+            break;
         }
         
         if (i === 0) {
@@ -852,39 +860,7 @@ const exportToExcel = () => {
         });
       }
     }
-    
-    // ==================== DESIGN STYLE CHECKS ====================
-    if (designStyle) {
-      // Use the utility to get the decoded design name
-      const designDescription = interpretCodes.getDesignName(property, codeDefinitions, vendorType) || designStyle;
-      
-      // Now do fuzzy matching against standard designs
-      const designLower = designDescription.toLowerCase();
-      const standardDesigns = [
-        'colonial', 'split level', 'split-level', 'bilevel', 'bi-level', 'bi level',
-        'cape cod', 'cape', 'ranch', 'rancher', 'raised ranch', 'bungalow', 
-        'twin', 'townhouse end', 'townhouse int', 'townhouse interior', 'townhouse',
-        'one bed', '1bed', '1 bed', '1 bedroom', 'one bedroom',
-        'two bed', '2bed', '2 bed', '2 bedroom', 'two bedroom',
-        'three bed', '3bed', '3 bed', '3 bedroom', 'three bedroom'
-      ];
-      
-      const isStandard = standardDesigns.some(std => {
-        const stdLower = std.toLowerCase();
-        return designLower.includes(stdLower) || stdLower.includes(designLower);
-      });
-      
-      if (!isStandard) {
-        results.characteristics.push({
-          check: 'non_standard_design',
-          severity: 'info',
-          property_key: property.property_composite_key,
-          message: `Non-standard design: ${designDescription}${designStyle !== designDescription ? ` (code: ${designStyle})` : ''}`,
-          details: property
-        });
-      }
-    }
-    
+ 
     // ==================== TYPE USE TO BUILDING CLASS VALIDATION ====================
     if (typeUse && buildingClass) {
       // Use the utility to get the decoded type name
@@ -1961,7 +1937,6 @@ const exportToExcel = () => {
                       placeholder="e.g., Missing Tax ID for Commercial"
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
                       value={currentCustomCheck.name}
-                      onClick={(e) => e.stopPropagation()}
                       onChange={(e) => setCurrentCustomCheck(prev => ({ ...prev, name: e.target.value }))}
                     />
                   </div>
@@ -2067,13 +2042,30 @@ const exportToExcel = () => {
                           </optgroup>
                         )}
                       </select>
+
+                      <select 
+                        className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                        value={condition.operator}
+                        onChange={(e) => updateCustomCheckCondition(index, 'operator', e.target.value)}
+                      >
+                        <option value="=">=</option>
+                        <option value="!=">!=</option>
+                        <option value=">">&gt;</option>
+                        <option value="<">&lt;</option>
+                        <option value=">=">&gt;=</option>
+                        <option value="<=">&lt;=</option>
+                        <option value="is null">is null</option>
+                        <option value="is not null">is not null</option>
+                        <option value="contains">contains</option>
+                        <option value="is one of">is one of</option>
+                        <option value="is not one of">is not one of</option>
+                      </select>
                       
                       <input 
                         type="text" 
                         placeholder="Value"
                         className="px-3 py-2 border border-gray-300 rounded-lg text-sm flex-1"
                         value={condition.value}
-                        onClick={(e) => e.stopPropagation()}
                         onChange={(e) => updateCustomCheckCondition(index, 'value', e.target.value)}
                         disabled={condition.operator === 'is null' || condition.operator === 'is not null'}
                       />
