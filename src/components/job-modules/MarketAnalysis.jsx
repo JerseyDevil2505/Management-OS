@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { supabase } from '../../lib/supabaseClient';
+import { supabase, interpretCodes } from '../../lib/supabaseClient';
 import { 
   AlertCircle, 
   Settings, 
@@ -778,30 +778,8 @@ const exportToExcel = () => {
     
     // ==================== DESIGN STYLE CHECKS ====================
     if (designStyle) {
-      let designDescription = designStyle;
-      
-      // Try to look up the design code in parsed_code_definitions
-      if (codeDefinitions) {
-        if (vendorType === 'BRT') {
-          // For BRT, look in section 23 (DESIGN)
-          const designSection = codeDefinitions.sections?.['23']?.MAP;
-          if (designSection) {
-            Object.entries(designSection).forEach(([key, value]) => {
-              if (value.KEY === designStyle || value.DATA?.KEY === designStyle) {
-                designDescription = value.DATA?.VALUE || value.VALUE || designStyle;
-              }
-            });
-          }
-        } else if (vendorType === 'Microsystems') {
-          // For Microsystems, look for 520-prefix codes
-          const lookupCode = designStyle.length <= 3 ? `520${designStyle}` : designStyle;
-          if (codeDefinitions[lookupCode]) {
-            designDescription = codeDefinitions[lookupCode];
-          } else if (codeDefinitions[designStyle]) {
-            designDescription = codeDefinitions[designStyle];
-          }
-        }
-      }
+      // Use the utility to get the decoded design name
+      const designDescription = interpretCodes.getDesignName(property, codeDefinitions, vendorType) || designStyle;
       
       // Now do fuzzy matching against standard designs
       const designLower = designDescription.toLowerCase();
@@ -832,29 +810,8 @@ const exportToExcel = () => {
     
     // ==================== TYPE USE TO BUILDING CLASS VALIDATION ====================
     if (typeUse && buildingClass) {
-      let typeUseDescription = typeUse;
-      
-      // Look up the type use code in parsed_code_definitions
-      if (codeDefinitions) {
-        if (vendorType === 'BRT') {
-          Object.entries(codeDefinitions.sections || {}).forEach(([sectionKey, section]) => {
-            if (section.MAP) {
-              Object.entries(section.MAP).forEach(([key, value]) => {
-                if (value.KEY === typeUse || value.DATA?.KEY === typeUse) {
-                  typeUseDescription = value.DATA?.VALUE || value.VALUE || typeUse;
-                }
-              });
-            }
-          });
-        } else if (vendorType === 'Microsystems') {
-          const lookupCode = typeUse.length <= 4 ? `500${typeUse}` : typeUse;
-          if (codeDefinitions[lookupCode]) {
-            typeUseDescription = codeDefinitions[lookupCode];
-          } else if (codeDefinitions[typeUse]) {
-            typeUseDescription = codeDefinitions[typeUse];
-          }
-        }
-      }
+      // Use the utility to get the decoded type name
+      const typeUseDescription = interpretCodes.getTypeName(property, codeDefinitions, vendorType) || typeUse;
       
       // Fuzzy matching on the description
       const typeUseLower = typeUseDescription.toLowerCase();
@@ -963,9 +920,9 @@ const exportToExcel = () => {
       }
     }
     
-    // ==================== PARTIAL HEATING/COOLING SYSTEMS (RAW_DATA) ====================
+// ==================== PARTIAL HEATING/COOLING SYSTEMS (RAW_DATA) ====================
     if (vendorType === 'BRT') {
-      if (rawData.ACPARTIAL && rawData.ACPARTIAL.toString().trim() !== '') {
+      if (!interpretCodes.isFieldEmpty(rawData.ACPARTIAL)) {
         results.special.push({
           check: 'partial_cooling',
           severity: 'info',
@@ -974,7 +931,7 @@ const exportToExcel = () => {
           details: property
         });
       }
-      if (rawData.HEATSYSPARTIAL && rawData.HEATSYSPARTIAL.toString().trim() !== '') {
+      if (!interpretCodes.isFieldEmpty(rawData.HEATSYSPARTIAL)) {
         results.special.push({
           check: 'partial_heating',
           severity: 'info',
@@ -998,10 +955,10 @@ const exportToExcel = () => {
       }
     }
     
-    // ==================== BEDROOM COUNT VALIDATION (RAW_DATA) ====================
+// ==================== BEDROOM COUNT VALIDATION (RAW_DATA) ====================
     if ((m4Class === '2' || m4Class === '3A') && buildingClass > 10) {
       if (vendorType === 'BRT') {
-        const bedTotal = rawData.BEDTOT;
+        const bedTotal = interpretCodes.getRawDataValue(property, 'bedrooms', vendorType);
         if (!bedTotal || parseInt(bedTotal) === 0) {
           results.rooms.push({
             check: 'zero_bedrooms',
@@ -1012,11 +969,7 @@ const exportToExcel = () => {
           });
         }
       } else if (vendorType === 'Microsystems') {
-        const bedB = parseInt(rawData['Bedrm B'] || 0);
-        const bed1 = parseInt(rawData['Bedrm 1'] || 0);
-        const bed2 = parseInt(rawData['Bedrm 2'] || 0);
-        const bed3 = parseInt(rawData['Bedrm 3'] || 0);
-        const totalBeds = bedB + bed1 + bed2 + bed3;
+        const totalBeds = interpretCodes.getBedroomRoomSum(property, vendorType);
         
         if (totalBeds === 0) {
           results.rooms.push({
@@ -1028,6 +981,39 @@ const exportToExcel = () => {
           });
         }
       }
+    }
+    // ==================== BATHROOM COUNT CROSS-CHECK ====================
+    if ((m4Class === '2' || m4Class === '3A') && buildingClass > 10) {
+      if (vendorType === 'BRT') {
+        // For BRT: Compare BATHTOT to sum of PLUMBING2FIX through PLUMBING6FIX
+        const bathTotal = parseInt(rawData.BATHTOT) || 0;
+        const plumbingSum = interpretCodes.getBathroomPlumbingSum(property, vendorType);
+        
+        if (bathTotal !== plumbingSum && plumbingSum > 0) {
+          results.rooms.push({
+            check: 'bathroom_count_mismatch',
+            severity: 'warning',
+            property_key: property.property_composite_key,
+            message: `Bathroom total (${bathTotal}) doesn't match plumbing sum (${plumbingSum})`,
+            details: property
+          });
+        }
+      } else if (vendorType === 'Microsystems') {
+        // For Microsystems: Compare summary fields to floor-specific fields
+        const fixtureSum = interpretCodes.getBathroomFixtureSum(property, vendorType);
+        const roomSum = interpretCodes.getBathroomRoomSum(property, vendorType);
+        
+        if (fixtureSum !== roomSum && roomSum > 0) {
+          results.rooms.push({
+            check: 'bathroom_count_mismatch',
+            severity: 'warning',
+            property_key: property.property_composite_key,
+            message: `Bathroom summary (${fixtureSum}) doesn't match floor totals (${roomSum})`,
+            details: property
+          });
+        }
+      }
+    }
  
     // ==================== DETACHED ITEMS MISSING DEPRECIATION ====================
     // Check if detached items exist but have no depreciation
@@ -1037,7 +1023,7 @@ const exportToExcel = () => {
         const detachedCode = rawData[`DETACHEDCODE_${i}`];
         const detachedNC = rawData[`DETACHEDNC_${i}`];
         
-        if (detachedCode && detachedCode.toString().trim() !== '') {
+        if (!interpretCodes.isFieldEmpty(detachedCode)) {
           // Has a detached item, check if depreciation is missing or zero
           if (!detachedNC || parseFloat(detachedNC) === 0) {
             results.special.push({
@@ -1058,7 +1044,7 @@ const exportToExcel = () => {
         const functionalDepr = rawData[`Functional Depr${i}`];
         const locationalDepr = rawData[`Locational Depr${i}`];
         
-        if (detachedCode && detachedCode.toString().trim() !== '') {
+        if (!interpretCodes.isFieldEmpty(detachedCode)) {
           // Has a detached item, check if ALL depreciation fields are missing/zero
           const hasPhys = physicalDepr && parseFloat(physicalDepr) !== 0;
           const hasFunc = functionalDepr && parseFloat(functionalDepr) !== 0;
@@ -1082,9 +1068,9 @@ const exportToExcel = () => {
       // BRT: Check all LANDUR condition/influence fields
       let hasLandAdjustments = false;
       
-      for (let i = 1; i <= 6; i++) {
+for (let i = 1; i <= 6; i++) {
         // Check urban condition
-        if (rawData[`LANDURCOND_${i}`] && rawData[`LANDURCOND_${i}`].toString().trim() !== '') {
+        if (!interpretCodes.isFieldEmpty(rawData[`LANDURCOND_${i}`])) {
           hasLandAdjustments = true;
           break;
         }
@@ -1093,7 +1079,7 @@ const exportToExcel = () => {
           break;
         }
         // Check urban influence
-        if (rawData[`LANDURINFL_${i}`] && rawData[`LANDURINFL_${i}`].toString().trim() !== '') {
+        if (!interpretCodes.isFieldEmpty(rawData[`LANDURINFL_${i}`])) {
           hasLandAdjustments = true;
           break;
         }
@@ -1102,7 +1088,7 @@ const exportToExcel = () => {
           break;
         }
         // Check frontage condition
-        if (rawData[`LANDFFCOND_${i}`] && rawData[`LANDFFCOND_${i}`].toString().trim() !== '') {
+        if (!interpretCodes.isFieldEmpty(rawData[`LANDFFCOND_${i}`])) {
           hasLandAdjustments = true;
           break;
         }
@@ -1111,7 +1097,7 @@ const exportToExcel = () => {
           break;
         }
         // Check frontage influence
-        if (rawData[`LANDFFINFL_${i}`] && rawData[`LANDFFINFL_${i}`].toString().trim() !== '') {
+        if (!interpretCodes.isFieldEmpty(rawData[`LANDFFINFL_${i}`])) {
           hasLandAdjustments = true;
           break;
         }
@@ -1139,7 +1125,7 @@ const exportToExcel = () => {
         const netAdj = rawData[`Net Adjustment${i}`];
         const adjCode = rawData[`Adj Reason Code${i}`];
         
-        if ((netAdj && parseFloat(netAdj) !== 0) || (adjCode && adjCode.toString().trim() !== '')) {
+        if ((netAdj && parseFloat(netAdj) !== 0) || !interpretCodes.isFieldEmpty(adjCode)) {
           hasLandAdjustments = true;
           break;
         }
@@ -1157,9 +1143,9 @@ const exportToExcel = () => {
         if ((unitAdj1 && parseFloat(unitAdj1) !== 0) || 
             (unitAdj2 && parseFloat(unitAdj2) !== 0) ||
             (unitAdj && parseFloat(unitAdj) !== 0) ||
-            (unitCode1 && unitCode1.toString().trim() !== '') ||
-            (unitCode2 && unitCode2.toString().trim() !== '') ||
-            (unitCode && unitCode.toString().trim() !== '')) {
+            !interpretCodes.isFieldEmpty(unitCode1) ||
+            !interpretCodes.isFieldEmpty(unitCode2) ||
+            !interpretCodes.isFieldEmpty(unitCode)) {
           hasLandAdjustments = true;
         }
       }
@@ -1192,7 +1178,7 @@ const exportToExcel = () => {
       }
       
       // NCREDIRECT should be empty
-      if (rawData.NCREDIRECT && rawData.NCREDIRECT.toString().trim() !== '') {
+      if (!interpretCodes.isFieldEmpty(rawData.NCREDIRECT)) {
         issues.push('NC Redirect value present');
       }
       
@@ -1205,16 +1191,16 @@ const exportToExcel = () => {
       }
       
       // Market descriptions should be empty
-      if (rawData.MKTECONDESC && rawData.MKTECONDESC.toString().trim() !== '') {
+      if (!interpretCodes.isFieldEmpty(rawData.MKTECONDESC)) {
         issues.push('Economic description present');
       }
-      if (rawData.MKTFUNCDESC && rawData.MKTFUNCDESC.toString().trim() !== '') {
+      if (!interpretCodes.isFieldEmpty(rawData.MKTFUNCDESC)) {
         issues.push('Functional description present');
       }
-      if (rawData.MKTMKTDESC && rawData.MKTMKTDESC.toString().trim() !== '') {
+      if (!interpretCodes.isFieldEmpty(rawData.MKTMKTDESC)) {
         issues.push('Market description present');
       }
-      if (rawData.MKTPHYSDESC && rawData.MKTPHYSDESC.toString().trim() !== '') {
+      if (!interpretCodes.isFieldEmpty(rawData.MKTPHYSDESC)) {
         issues.push('Physical description present');
       }
       
@@ -1260,7 +1246,7 @@ const exportToExcel = () => {
       if (rawData['Function Depr'] && parseFloat(rawData['Function Depr']) !== 0) {
         issues.push('Function Depr');
       }
-      if (rawData['Location Code'] && rawData['Location Code'].toString().trim() !== '') {
+      if (!interpretCodes.isFieldEmpty(rawData['Location Code'])) {
         issues.push('Location Code');
       }
       
@@ -1281,18 +1267,18 @@ const exportToExcel = () => {
       const overrides = [];
       
       // Check value overrides
-      if (rawData.IMPROVVALUEOVR && rawData.IMPROVVALUEOVR.toString().trim() !== '') {
+      if (!interpretCodes.isFieldEmpty(rawData.IMPROVVALUEOVR)) {
         overrides.push('Improvement value override');
       }
-      if (rawData.LANDVALUEOVR && rawData.LANDVALUEOVR.toString().trim() !== '') {
+      if (!interpretCodes.isFieldEmpty(rawData.LANDVALUEOVR)) {
         overrides.push('Land value override');
       }
       
       // Check write-in values
-      if (rawData.WRITEIN_1 && rawData.WRITEIN_1.toString().trim() !== '') {
+      if (!interpretCodes.isFieldEmpty(rawData.WRITEIN_1)) {
         overrides.push(`Write-in 1: ${rawData.WRITEIN_1}`);
       }
-      if (rawData.WRITEIN_2 && rawData.WRITEIN_2.toString().trim() !== '') {
+      if (!interpretCodes.isFieldEmpty(rawData.WRITEIN_2)) {
         overrides.push(`Write-in 2: ${rawData.WRITEIN_2}`);
       }
       if (rawData.WRITEINVALUE_1 && parseFloat(rawData.WRITEINVALUE_1) !== 0) {
@@ -1315,19 +1301,18 @@ const exportToExcel = () => {
       const overrides = [];
       
       // Check flat add descriptions
-      if (rawData['Flat Add Desc1'] && rawData['Flat Add Desc1'].toString().trim() !== '') {
+      if (!interpretCodes.isFieldEmpty(rawData['Flat Add Desc1'])) {
         overrides.push(`Flat Add 1: ${rawData['Flat Add Desc1']}`);
       }
-      if (rawData['Flat Add Desc2'] && rawData['Flat Add Desc2'].toString().trim() !== '') {
+      if (!interpretCodes.isFieldEmpty(rawData['Flat Add Desc2'])) {
         overrides.push(`Flat Add 2: ${rawData['Flat Add Desc2']}`);
       }
-      if (rawData['Base Cost Flat Add Desc1'] && rawData['Base Cost Flat Add Desc1'].toString().trim() !== '') {
+      if (!interpretCodes.isFieldEmpty(rawData['Base Cost Flat Add Desc1'])) {
         overrides.push(`Base Cost Add 1: ${rawData['Base Cost Flat Add Desc1']}`);
       }
-      if (rawData['Base Cost Flat Add Desc2'] && rawData['Base Cost Flat Add Desc2'].toString().trim() !== '') {
+      if (!interpretCodes.isFieldEmpty(rawData['Base Cost Flat Add Desc2'])) {
         overrides.push(`Base Cost Add 2: ${rawData['Base Cost Flat Add Desc2']}`);
       }
-      
       // Check flat add values
       if (rawData['Flat Add Value1'] && parseFloat(rawData['Flat Add Value1']) !== 0) {
         overrides.push(`Flat value 1: $${rawData['Flat Add Value1']}`);
@@ -1533,11 +1518,16 @@ const exportToExcel = () => {
       'nc_market_influence': 'NC Market Influence Values Present',
       'flat_add_values': 'Flat Add/Override Values Present',
       'value_overrides': 'Value Overrides Present',
-      'writein_values': 'Write-in Values Present'
+      'writein_values': 'Write-in Values Present',
+      
+      // Add any missing check types we've created
+      'detached_missing_depreciation': 'Detached Items Missing Depreciation',
+      'land_adjustments_exist': 'Properties with Land Adjustments',
+      'market_adjustments_exist': 'Properties with Market Adjustments',
+      'value_overrides': 'Manual Value Overrides Present'
     };
     return titles[checkType] || checkType;
   };
-
   const showPropertyDetails = (checkType, category) => {
     const issues = checkResults[category]?.filter(r => r.check === checkType) || [];
     setModalData({
