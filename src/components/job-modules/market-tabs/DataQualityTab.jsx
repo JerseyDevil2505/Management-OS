@@ -1362,28 +1362,135 @@ const DataQualityTab = ({
   };
   
   const runAllCustomChecks = async () => {
-    // Clear existing custom results
-    const clearedResults = { ...checkResults, custom: [] };
-    setCheckResults(clearedResults);
+    // Start with existing results but clear custom
+    const updatedResults = {
+      ...checkResults,
+      custom: []
+    };
     
-    // Run all checks and collect results
-    let allCustomResults = [];
-    
+    // Run all custom checks and collect results
     for (const check of customChecks) {
-      // We need to modify runCustomCheck to also return the results
-      await runCustomCheck(check);
+      const customResults = [];
+      
+      for (const property of properties) {
+        let conditionMet = true;
+        
+        // Check conditions (same logic as runCustomCheck)
+        for (let i = 0; i < check.conditions.length; i++) {
+          const condition = check.conditions[i];
+          
+          let fieldValue;
+          if (condition.field.startsWith('raw_data.')) {
+            const rawFieldName = condition.field.replace('raw_data.', '');
+            fieldValue = property.raw_data ? property.raw_data[rawFieldName] : null;
+          } else {
+            fieldValue = property[condition.field];
+          }
+          
+          const compareValue = condition.value;
+          let thisConditionMet = false;
+          
+          switch (condition.operator) {
+            case '=':
+              thisConditionMet = fieldValue == compareValue;
+              break;
+            case '!=':
+              thisConditionMet = fieldValue != compareValue;
+              break;
+            case '>':
+              thisConditionMet = parseFloat(fieldValue) > parseFloat(compareValue);
+              break;
+            case '<':
+              thisConditionMet = parseFloat(fieldValue) < parseFloat(compareValue);
+              break;
+            case '>=':
+              thisConditionMet = parseFloat(fieldValue) >= parseFloat(compareValue);
+              break;
+            case '<=':
+              thisConditionMet = parseFloat(fieldValue) <= parseFloat(compareValue);
+              break;
+            case 'is null':
+              thisConditionMet = !fieldValue || fieldValue === '';
+              break;
+            case 'is not null':
+              thisConditionMet = fieldValue && fieldValue !== '';
+              break;
+            case 'contains':
+              thisConditionMet = fieldValue && fieldValue.toString().toLowerCase().includes(compareValue.toLowerCase());
+              break;
+            case 'is one of':
+              const validValues = compareValue.split(',').map(v => v.trim());
+              thisConditionMet = validValues.includes(fieldValue);
+              break;
+            case 'is not one of':
+              const invalidValues = compareValue.split(',').map(v => v.trim());
+              thisConditionMet = !invalidValues.includes(fieldValue);
+              break;
+          }
+          
+          if (i === 0) {
+            conditionMet = thisConditionMet;
+          } else {
+            if (condition.logic === 'AND') {
+              conditionMet = conditionMet && thisConditionMet;
+            } else if (condition.logic === 'OR') {
+              conditionMet = conditionMet || thisConditionMet;
+            }
+          }
+        }
+        
+        if (conditionMet) {
+          customResults.push({
+            check: `custom_${check.id}`,
+            severity: check.severity,
+            property_key: property.property_composite_key,
+            message: check.name,
+            details: property
+          });
+        }
+      }
+      
+      // Add to updated results
+      updatedResults.custom.push(...customResults);
     }
     
-    // Wait a bit for state to update then save
-    setTimeout(async () => {
-      // Save the current check results which now include custom
-      await saveQualityResults(checkResults);
-    }, 500);
+    // Update state with complete results
+    setCheckResults(updatedResults);
+    
+    // Calculate stats
+    let criticalCount = 0;
+    let warningCount = 0;
+    let infoCount = 0;
+    
+    Object.values(updatedResults).forEach(category => {
+      category.forEach(issue => {
+        if (issue.severity === 'critical') criticalCount++;
+        else if (issue.severity === 'warning') warningCount++;
+        else if (issue.severity === 'info') infoCount++;
+      });
+    });
+    
+    const totalIssues = criticalCount + warningCount + infoCount;
+    const score = calculateQualityScore(updatedResults);
+    
+    // Update issue stats
+    setIssueStats({
+      critical: criticalCount,
+      warning: warningCount,
+      info: infoCount,
+      total: totalIssues
+    });
+    
+    setQualityScore(score);
+    
+    // Save to database with complete results
+    await saveQualityResults(updatedResults);
+    
+    console.log(`✅ Custom checks complete: ${updatedResults.custom.length} issues found`);
     
     // Jump back to overview
     setDataQualityActiveSubTab('overview');
   };
-
   // RENDER
   return (
     <div className="tab-content">
