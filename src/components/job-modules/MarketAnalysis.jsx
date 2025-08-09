@@ -1125,7 +1125,16 @@ for (let i = 1; i <= 6; i++) {
         const netAdj = rawData[`Net Adjustment${i}`];
         const adjCode = rawData[`Adj Reason Code${i}`];
         
+        // Debug Block 1 Lot 3
+        if (property.property_block === '1' && property.property_lot === '3') {
+          console.log(`Checking Net Adjustment${i}:`, netAdj, 'Parsed:', parseFloat(netAdj));
+          console.log(`Checking Adj Reason Code${i}:`, adjCode, 'IsEmpty:', interpretCodes.isFieldEmpty(adjCode));
+        }
+        
         if ((netAdj && parseFloat(netAdj) !== 0) || !interpretCodes.isFieldEmpty(adjCode)) {
+          if (property.property_block === '1' && property.property_lot === '3') {
+            console.log(`TRIGGERED by Net Adj${i} or Adj Code${i}`);
+          }
           hasLandAdjustments = true;
           break;
         }
@@ -1228,23 +1237,22 @@ for (let i = 1; i <= 6; i++) {
         });
       }
     } else if (vendorType === 'Microsystems') {
-      // Microsystems: Check depreciation fields
+      // Microsystems: Check depreciation fields (100 = no depreciation)
       const issues = [];
       
-      if (rawData['Over Improved Depr1'] && parseFloat(rawData['Over Improved Depr1']) !== 0) {
-        issues.push('Over Improved Depr1');
+      // Skip Over Improved Depr1 - not relevant for this check
+      
+      if (rawData['Over Improved Depr2'] && parseFloat(rawData['Over Improved Depr2']) !== 100 && parseFloat(rawData['Over Improved Depr2']) !== 0) {
+        issues.push(`Over Improved Depr2 = ${rawData['Over Improved Depr2']}`);
       }
-      if (rawData['Over Improved Depr2'] && parseFloat(rawData['Over Improved Depr2']) !== 0) {
-        issues.push('Over Improved Depr2');
+      if (rawData['Economic Depr'] && parseFloat(rawData['Economic Depr']) !== 100 && parseFloat(rawData['Economic Depr']) !== 0) {
+        issues.push(`Economic Depr = ${rawData['Economic Depr']}`);
       }
-      if (rawData['Economic Depr'] && parseFloat(rawData['Economic Depr']) !== 0) {
-        issues.push('Economic Depr');
+      if (rawData['Under Improved Depr'] && parseFloat(rawData['Under Improved Depr']) !== 100 && parseFloat(rawData['Under Improved Depr']) !== 0) {
+        issues.push(`Under Improved Depr = ${rawData['Under Improved Depr']}`);
       }
-      if (rawData['Under Improved Depr'] && parseFloat(rawData['Under Improved Depr']) !== 0) {
-        issues.push('Under Improved Depr');
-      }
-      if (rawData['Function Depr'] && parseFloat(rawData['Function Depr']) !== 0) {
-        issues.push('Function Depr');
+      if (rawData['Function Depr'] && parseFloat(rawData['Function Depr']) !== 100 && parseFloat(rawData['Function Depr']) !== 0) {
+        issues.push(`Function Depr = ${rawData['Function Depr']}`);
       }
       if (!interpretCodes.isFieldEmpty(rawData['Location Code'])) {
         issues.push('Location Code');
