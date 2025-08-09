@@ -1946,12 +1946,14 @@ const exportToExcel = () => {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Check Name</label>
                     <input 
+                    <input 
                       type="text"
                       placeholder="e.g., Missing Tax ID for Commercial"
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
                       value={customCheckName}
+                      onClick={(e) => e.stopPropagation()}
                       onChange={(e) => setCustomCheckName(e.target.value)}
-                    />    
+                    />
                   </div>
                   
                   <div>
@@ -2079,13 +2081,13 @@ const exportToExcel = () => {
                         placeholder="Value"
                         className="px-3 py-2 border border-gray-300 rounded-lg text-sm flex-1"
                         value={condition.value}
-                        onFocus={(e) => console.log(`✅ VALUE INPUT ${index} FOCUSED`)}
-                        onBlur={(e) => console.log(`❌ VALUE INPUT ${index} BLURRED - Lost focus!`)}
+                        onClick={(e) => e.stopPropagation()}
                         onChange={(e) => {
-                          console.log(`📝 VALUE INPUT ${index} onChange:`, e.target.value);
+                          e.stopPropagation();
                           updateCustomCheckCondition(index, 'value', e.target.value);
                         }}
-                      />
+                        disabled={condition.operator === 'is null' || condition.operator === 'is not null'}
+                      />      
                       
                       <button 
                         type="button"
