@@ -754,8 +754,8 @@ const exportToExcel = () => {
       }
     }
     
-    // INVERSE CHECK: If design is populated, should have building class > 10 and type use
-    if (designStyle && designStyle.trim() !== '') {
+    // INVERSE CHECK: If design is populated, should have building class > 10 and type use (Class 2/3A only)
+    if ((m4Class === '2' || m4Class === '3A') && designStyle && designStyle.trim() !== '') {
       if (!buildingClass || buildingClass <= 10) {
         results.characteristics.push({
           check: 'design_without_proper_building_class',
@@ -771,6 +771,52 @@ const exportToExcel = () => {
           severity: 'warning',
           property_key: property.property_composite_key,
           message: `Has design style "${designStyle}" but missing type use`,
+          details: property
+        });
+      }
+    }
+        // ==================== ZERO IMPROVEMENTS WITH DESIGN/TYPE ====================
+    // Flag properties with zero improvements that have design or type populated
+    if (modImprovement === 0) {
+      if (designStyle && designStyle.trim() !== '') {
+        results.characteristics.push({
+          check: 'zero_improvement_with_design',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: `Zero improvement value but has design style: ${designStyle}`,
+          details: property
+        });
+      }
+      
+      if (typeUse && typeUse.trim() !== '') {
+        results.characteristics.push({
+          check: 'zero_improvement_with_type',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: `Zero improvement value but has type use: ${typeUse}`,
+          details: property
+        });
+      }
+    }
+        // ==================== COMMERCIAL PROPERTIES WITH DESIGN/TYPE ====================
+    // Flag commercial properties (4A, 4B, 4C) that have design or type populated
+    if (m4Class === '4A' || m4Class === '4B' || m4Class === '4C') {
+      if (designStyle && designStyle.trim() !== '') {
+        results.characteristics.push({
+          check: 'commercial_with_design',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: `Commercial property (Class ${m4Class}) has residential design style: ${designStyle}`,
+          details: property
+        });
+      }
+      
+      if (typeUse && typeUse.trim() !== '') {
+        results.characteristics.push({
+          check: 'commercial_with_type',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: `Commercial property (Class ${m4Class}) has residential type use: ${typeUse}`,
           details: property
         });
       }
