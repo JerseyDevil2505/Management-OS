@@ -1028,6 +1028,329 @@ const exportToExcel = () => {
           });
         }
       }
+ 
+    // ==================== DETACHED ITEMS MISSING DEPRECIATION ====================
+    // Check if detached items exist but have no depreciation
+    if (vendorType === 'BRT') {
+      // BRT: Check DETACHEDCODE_1 through DETACHEDCODE_11
+      for (let i = 1; i <= 11; i++) {
+        const detachedCode = rawData[`DETACHEDCODE_${i}`];
+        const detachedNC = rawData[`DETACHEDNC_${i}`];
+        
+        if (detachedCode && detachedCode.toString().trim() !== '') {
+          // Has a detached item, check if depreciation is missing or zero
+          if (!detachedNC || parseFloat(detachedNC) === 0) {
+            results.special.push({
+              check: 'detached_missing_depreciation',
+              severity: 'warning',
+              property_key: property.property_composite_key,
+              message: `Detached item ${i} (${detachedCode}) missing depreciation`,
+              details: property
+            });
+          }
+        }
+      }
+    } else if (vendorType === 'Microsystems') {
+      // Microsystems: Check Detached Item Code1-4 and their depreciation fields
+      for (let i = 1; i <= 4; i++) {
+        const detachedCode = rawData[`Detached Item Code${i}`];
+        const physicalDepr = rawData[`Physical Depr${i}`];
+        const functionalDepr = rawData[`Functional Depr${i}`];
+        const locationalDepr = rawData[`Locational Depr${i}`];
+        
+        if (detachedCode && detachedCode.toString().trim() !== '') {
+          // Has a detached item, check if ALL depreciation fields are missing/zero
+          const hasPhys = physicalDepr && parseFloat(physicalDepr) !== 0;
+          const hasFunc = functionalDepr && parseFloat(functionalDepr) !== 0;
+          const hasLoc = locationalDepr && parseFloat(locationalDepr) !== 0;
+          
+          if (!hasPhys && !hasFunc && !hasLoc) {
+            results.special.push({
+              check: 'detached_missing_depreciation',
+              severity: 'warning',
+              property_key: property.property_composite_key,
+              message: `Detached item ${i} (${detachedCode}) has no depreciation values`,
+              details: property
+            });
+          }
+        }
+      }
+    }
+// ==================== LAND ADJUSTMENTS ====================
+    // Flag properties with any land adjustments (want clean slate)
+    if (vendorType === 'BRT') {
+      // BRT: Check all LANDUR condition/influence fields
+      let hasLandAdjustments = false;
+      
+      for (let i = 1; i <= 6; i++) {
+        // Check urban condition
+        if (rawData[`LANDURCOND_${i}`] && rawData[`LANDURCOND_${i}`].toString().trim() !== '') {
+          hasLandAdjustments = true;
+          break;
+        }
+        if (rawData[`LANDURCONDPC_${i}`] && parseFloat(rawData[`LANDURCONDPC_${i}`]) !== 0 && parseFloat(rawData[`LANDURCONDPC_${i}`]) !== 100) {
+          hasLandAdjustments = true;
+          break;
+        }
+        // Check urban influence
+        if (rawData[`LANDURINFL_${i}`] && rawData[`LANDURINFL_${i}`].toString().trim() !== '') {
+          hasLandAdjustments = true;
+          break;
+        }
+        if (rawData[`LANDURINFLPC_${i}`] && parseFloat(rawData[`LANDURINFLPC_${i}`]) !== 0 && parseFloat(rawData[`LANDURINFLPC_${i}`]) !== 100) {
+          hasLandAdjustments = true;
+          break;
+        }
+        // Check frontage condition
+        if (rawData[`LANDFFCOND_${i}`] && rawData[`LANDFFCOND_${i}`].toString().trim() !== '') {
+          hasLandAdjustments = true;
+          break;
+        }
+        if (rawData[`LANDFFCONDPC_${i}`] && parseFloat(rawData[`LANDFFCONDPC_${i}`]) !== 0 && parseFloat(rawData[`LANDFFCONDPC_${i}`]) !== 100) {
+          hasLandAdjustments = true;
+          break;
+        }
+        // Check frontage influence
+        if (rawData[`LANDFFINFL_${i}`] && rawData[`LANDFFINFL_${i}`].toString().trim() !== '') {
+          hasLandAdjustments = true;
+          break;
+        }
+        if (rawData[`LANDFFINFLPC_${i}`] && parseFloat(rawData[`LANDFFINFLPC_${i}`]) !== 0 && parseFloat(rawData[`LANDFFINFLPC_${i}`]) !== 100) {
+          hasLandAdjustments = true;
+          break;
+        }
+      }
+      
+      if (hasLandAdjustments) {
+        results.special.push({
+          check: 'land_adjustments_exist',
+          severity: 'info',
+          property_key: property.property_composite_key,
+          message: 'Property has land adjustments applied',
+          details: property
+        });
+      }
+    } else if (vendorType === 'Microsystems') {
+      // Microsystems: Check Net Adjustment and Unit Adjustment fields
+      let hasLandAdjustments = false;
+      
+      // Check Net Adjustments
+      for (let i = 1; i <= 3; i++) {
+        const netAdj = rawData[`Net Adjustment${i}`];
+        const adjCode = rawData[`Adj Reason Code${i}`];
+        
+        if ((netAdj && parseFloat(netAdj) !== 0) || (adjCode && adjCode.toString().trim() !== '')) {
+          hasLandAdjustments = true;
+          break;
+        }
+      }
+      
+      // Check Unit Adjustments
+      if (!hasLandAdjustments) {
+        const unitAdj1 = rawData['Unit Adjustment1'];
+        const unitAdj2 = rawData['Unit Adjustment2'];
+        const unitAdj = rawData['Unit Adjustment'];
+        const unitCode1 = rawData['Unit Adj Code1'];
+        const unitCode2 = rawData['Unit Adj Code2'];
+        const unitCode = rawData['Unit Adj Code'];
+        
+        if ((unitAdj1 && parseFloat(unitAdj1) !== 0) || 
+            (unitAdj2 && parseFloat(unitAdj2) !== 0) ||
+            (unitAdj && parseFloat(unitAdj) !== 0) ||
+            (unitCode1 && unitCode1.toString().trim() !== '') ||
+            (unitCode2 && unitCode2.toString().trim() !== '') ||
+            (unitCode && unitCode.toString().trim() !== '')) {
+          hasLandAdjustments = true;
+        }
+      }
+      
+      if (hasLandAdjustments) {
+        results.special.push({
+          check: 'land_adjustments_exist',
+          severity: 'info',
+          property_key: property.property_composite_key,
+          message: 'Property has land adjustments applied',
+          details: property
+        });
+      }
+    }
+
+    // ==================== MARKET ADJUSTMENTS ====================
+    // Flag pre-existing market adjustments (want clean baseline)
+    if (vendorType === 'BRT') {
+      // BRT: Check multiple market adjustment fields
+      const issues = [];
+      
+      // MKTADJ should equal 1
+      if (rawData.MKTADJ && parseFloat(rawData.MKTADJ) !== 1) {
+        issues.push(`MKTADJ = ${rawData.MKTADJ} (should be 1)`);
+      }
+      
+      // NCOVR should equal 0
+      if (rawData.NCOVR && parseFloat(rawData.NCOVR) !== 0) {
+        issues.push(`NCOVR = ${rawData.NCOVR} (should be 0)`);
+      }
+      
+      // NCREDIRECT should be empty
+      if (rawData.NCREDIRECT && rawData.NCREDIRECT.toString().trim() !== '') {
+        issues.push('NC Redirect value present');
+      }
+      
+      // Market influence fields should be 0
+      if (rawData.NCMKTINFLNC && parseFloat(rawData.NCMKTINFLNC) !== 0) {
+        issues.push(`NC Market Influence = ${rawData.NCMKTINFLNC}`);
+      }
+      if (rawData.NCMKTINFPC && parseFloat(rawData.NCMKTINFPC) !== 0) {
+        issues.push(`NC Market Influence % = ${rawData.NCMKTINFPC}`);
+      }
+      
+      // Market descriptions should be empty
+      if (rawData.MKTECONDESC && rawData.MKTECONDESC.toString().trim() !== '') {
+        issues.push('Economic description present');
+      }
+      if (rawData.MKTFUNCDESC && rawData.MKTFUNCDESC.toString().trim() !== '') {
+        issues.push('Functional description present');
+      }
+      if (rawData.MKTMKTDESC && rawData.MKTMKTDESC.toString().trim() !== '') {
+        issues.push('Market description present');
+      }
+      if (rawData.MKTPHYSDESC && rawData.MKTPHYSDESC.toString().trim() !== '') {
+        issues.push('Physical description present');
+      }
+      
+      // Market percentages should be 100
+      if (rawData.MKTECONPC && parseFloat(rawData.MKTECONPC) !== 100 && parseFloat(rawData.MKTECONPC) !== 0) {
+        issues.push(`Economic % = ${rawData.MKTECONPC} (should be 100)`);
+      }
+      if (rawData.MKTFUNCPC && parseFloat(rawData.MKTFUNCPC) !== 100 && parseFloat(rawData.MKTFUNCPC) !== 0) {
+        issues.push(`Functional % = ${rawData.MKTFUNCPC} (should be 100)`);
+      }
+      if (rawData.MKTMKTPC && parseFloat(rawData.MKTMKTPC) !== 100 && parseFloat(rawData.MKTMKTPC) !== 0) {
+        issues.push(`Market % = ${rawData.MKTMKTPC} (should be 100)`);
+      }
+      if (rawData.MKTPHYSPC && parseFloat(rawData.MKTPHYSPC) !== 100 && parseFloat(rawData.MKTPHYSPC) !== 0) {
+        issues.push(`Physical % = ${rawData.MKTPHYSPC} (should be 100)`);
+      }
+      
+      if (issues.length > 0) {
+        results.special.push({
+          check: 'market_adjustments_exist',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: `Market adjustments present: ${issues.join(', ')}`,
+          details: property
+        });
+      }
+    } else if (vendorType === 'Microsystems') {
+      // Microsystems: Check depreciation fields
+      const issues = [];
+      
+      if (rawData['Over Improved Depr1'] && parseFloat(rawData['Over Improved Depr1']) !== 0) {
+        issues.push('Over Improved Depr1');
+      }
+      if (rawData['Over Improved Depr2'] && parseFloat(rawData['Over Improved Depr2']) !== 0) {
+        issues.push('Over Improved Depr2');
+      }
+      if (rawData['Economic Depr'] && parseFloat(rawData['Economic Depr']) !== 0) {
+        issues.push('Economic Depr');
+      }
+      if (rawData['Under Improved Depr'] && parseFloat(rawData['Under Improved Depr']) !== 0) {
+        issues.push('Under Improved Depr');
+      }
+      if (rawData['Function Depr'] && parseFloat(rawData['Function Depr']) !== 0) {
+        issues.push('Function Depr');
+      }
+      if (rawData['Location Code'] && rawData['Location Code'].toString().trim() !== '') {
+        issues.push('Location Code');
+      }
+      
+      if (issues.length > 0) {
+        results.special.push({
+          check: 'market_adjustments_exist',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: `Market adjustments present: ${issues.join(', ')}`,
+          details: property
+        });
+      }
+    }
+    
+    // ==================== FLAT ADD VALUES/OVERRIDES ====================
+    // Flag manual overrides that bypass calculations
+    if (vendorType === 'BRT') {
+      const overrides = [];
+      
+      // Check value overrides
+      if (rawData.IMPROVVALUEOVR && rawData.IMPROVVALUEOVR.toString().trim() !== '') {
+        overrides.push('Improvement value override');
+      }
+      if (rawData.LANDVALUEOVR && rawData.LANDVALUEOVR.toString().trim() !== '') {
+        overrides.push('Land value override');
+      }
+      
+      // Check write-in values
+      if (rawData.WRITEIN_1 && rawData.WRITEIN_1.toString().trim() !== '') {
+        overrides.push(`Write-in 1: ${rawData.WRITEIN_1}`);
+      }
+      if (rawData.WRITEIN_2 && rawData.WRITEIN_2.toString().trim() !== '') {
+        overrides.push(`Write-in 2: ${rawData.WRITEIN_2}`);
+      }
+      if (rawData.WRITEINVALUE_1 && parseFloat(rawData.WRITEINVALUE_1) !== 0) {
+        overrides.push(`Write-in value 1: $${rawData.WRITEINVALUE_1}`);
+      }
+      if (rawData.WRITEINVALUE_2 && parseFloat(rawData.WRITEINVALUE_2) !== 0) {
+        overrides.push(`Write-in value 2: $${rawData.WRITEINVALUE_2}`);
+      }
+      
+      if (overrides.length > 0) {
+        results.special.push({
+          check: 'value_overrides',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: `Manual overrides: ${overrides.join(', ')}`,
+          details: property
+        });
+      }
+    } else if (vendorType === 'Microsystems') {
+      const overrides = [];
+      
+      // Check flat add descriptions
+      if (rawData['Flat Add Desc1'] && rawData['Flat Add Desc1'].toString().trim() !== '') {
+        overrides.push(`Flat Add 1: ${rawData['Flat Add Desc1']}`);
+      }
+      if (rawData['Flat Add Desc2'] && rawData['Flat Add Desc2'].toString().trim() !== '') {
+        overrides.push(`Flat Add 2: ${rawData['Flat Add Desc2']}`);
+      }
+      if (rawData['Base Cost Flat Add Desc1'] && rawData['Base Cost Flat Add Desc1'].toString().trim() !== '') {
+        overrides.push(`Base Cost Add 1: ${rawData['Base Cost Flat Add Desc1']}`);
+      }
+      if (rawData['Base Cost Flat Add Desc2'] && rawData['Base Cost Flat Add Desc2'].toString().trim() !== '') {
+        overrides.push(`Base Cost Add 2: ${rawData['Base Cost Flat Add Desc2']}`);
+      }
+      
+      // Check flat add values
+      if (rawData['Flat Add Value1'] && parseFloat(rawData['Flat Add Value1']) !== 0) {
+        overrides.push(`Flat value 1: $${rawData['Flat Add Value1']}`);
+      }
+      if (rawData['Flat Add Value2'] && parseFloat(rawData['Flat Add Value2']) !== 0) {
+        overrides.push(`Flat value 2: $${rawData['Flat Add Value2']}`);
+      }
+      if (rawData['Base Cost Flat Add Value1'] && parseFloat(rawData['Base Cost Flat Add Value1']) !== 0) {
+        overrides.push(`Base cost value 1: $${rawData['Base Cost Flat Add Value1']}`);
+      }
+      if (rawData['Base Cost Flat Add Value2'] && parseFloat(rawData['Base Cost Flat Add Value2']) !== 0) {
+        overrides.push(`Base cost value 2: $${rawData['Base Cost Flat Add Value2']}`);
+      }
+      
+      if (overrides.length > 0) {
+        results.special.push({
+          check: 'value_overrides',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: `Manual overrides: ${overrides.join(', ')}`,
+          details: property
+        });
+      }
     }
   };  // This closes runPropertyChecks function
 
