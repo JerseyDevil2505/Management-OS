@@ -163,8 +163,7 @@ export const interpretCodes = {
     if (vendorType === 'Microsystems') {
       return this.getMicrosystemsValue(property, codeDefinitions, 'asset_design_style');
     } else if (vendorType === 'BRT') {
-      // BRT logic - will add later
-      return designCode;
+      return this.getBRTValue(property, codeDefinitions, 'asset_design_style');
     }
     
     return designCode;
@@ -180,8 +179,7 @@ export const interpretCodes = {
     if (vendorType === 'Microsystems') {
       return this.getMicrosystemsValue(property, codeDefinitions, 'asset_type_use');
     } else if (vendorType === 'BRT') {
-      // BRT logic - will add later
-      return typeCode;
+      return this.getBRTValue(property, codeDefinitions, 'asset_type_use');
     }
     
     return typeCode;
@@ -202,8 +200,7 @@ export const interpretCodes = {
     if (vendorType === 'Microsystems') {
       return this.getMicrosystemsValue(property, codeDefinitions, 'asset_ext_cond');
     } else if (vendorType === 'BRT') {
-      // BRT logic - will add later
-      return condCode;
+      return this.getBRTValue(property, codeDefinitions, 'asset_ext_cond');
     }
     
     return condCode;
@@ -219,54 +216,10 @@ export const interpretCodes = {
     if (vendorType === 'Microsystems') {
       return this.getMicrosystemsValue(property, codeDefinitions, 'asset_int_cond');
     } else if (vendorType === 'BRT') {
-      // BRT logic - will add later
-      return condCode;
+      return this.getBRTValue(property, codeDefinitions, 'asset_int_cond');
     }
     
     return condCode;
-  },
-
-  // Get InfoBy category (entry, refusal, estimation, commercial, invalid)
-  getInfoByCategory: function(property, codeDefinitions, vendorType) {
-    if (!property) return null;
-    
-    const infoByCode = property.inspection_info_by;
-    if (!infoByCode || infoByCode.trim() === '') return null;
-    
-    if (vendorType === 'Microsystems') {
-      // First get the decoded value
-      const decodedValue = this.getMicrosystemsValue(property, codeDefinitions, 'inspection_info_by');
-      
-      // Check the decoded value for keywords
-      const upperDecoded = (decodedValue || '').toUpperCase();
-      
-      if (upperDecoded.includes('OWNER') || upperDecoded.includes('AGENT') || 
-          upperDecoded.includes('SPOUSE') || upperDecoded.includes('TENANT')) {
-        return 'entry';
-      } else if (upperDecoded.includes('REFUSED')) {
-        return 'refusal';
-      } else if (upperDecoded.includes('ESTIMATED') || upperDecoded.includes('ESTIM')) {
-        return 'estimation';
-      } else if (upperDecoded.includes('PRICED') || upperDecoded.includes('NARRATIVE')) {
-        return 'commercial';
-      } else if (upperDecoded.includes('AT DOOR')) {
-        return 'invalid';
-      }
-    } else if (vendorType === 'BRT') {
-      // BRT uses direct code mapping
-      const codeMap = {
-        '01': 'entry',    // OWNER
-        '02': 'entry',    // SPOUSE
-        '03': 'entry',    // TENANT
-        '04': 'entry',    // AGENT
-        '05': 'invalid',  // AT DOOR
-        '06': 'refusal',  // REFUSED
-        '07': 'estimation' // ESTIMATED
-      };
-      return codeMap[infoByCode] || 'unknown';
-    }
-    
-    return 'unknown';
   },
 
   // Get raw data value with vendor awareness
@@ -280,21 +233,27 @@ export const interpretCodes = {
       const brtFieldMap = {
         'bedrooms': 'BEDTOT',
         'bathrooms': 'BATHTOT',
-        'full_bath': 'BATHFULL',
-        'half_bath': 'BATHHALF',
-        'stories': 'STORIES',
-        'year_built': 'YEARBLT'
+        'stories': 'STORYHGT',
+        'year_built': 'YEARBUILT',
+        'building_class': 'BLDGCLASS',
+        'design': 'DESIGN',
+        'type_use': 'TYPEUSE',
+        'exterior_condition': 'EXTERIORNC',
+        'interior_condition': 'INTERIORNC',
+        'info_by': 'INFOBY'
       };
       const brtField = brtFieldMap[fieldName] || fieldName;
       return rawData[brtField];
     } else if (vendorType === 'Microsystems') {
       const microFieldMap = {
-        'bedrooms': 'Bedrm Total',
-        'bathrooms': 'Bath Total',
-        'full_bath': 'Bath Full',
-        'half_bath': 'Bath Half',
-        'stories': 'Stories',
-        'year_built': 'Year Built'
+        'bedrooms': 'Total Bedrms',
+        'stories': 'Story Height',
+        'year_built': 'Year Built',
+        'building_class': 'Bldg Qual Class Code',
+        'design': 'Style Code',
+        'type_use': 'Type Use Code',
+        'condition': 'Condition',
+        'info_by': 'Information By'
       };
       const microField = microFieldMap[fieldName] || fieldName;
       return rawData[microField];
@@ -338,77 +297,58 @@ export const interpretCodes = {
     // Return total in acres
     return totalAcres + (totalSf / 43560);
   },
-    // Get bathroom counts (handles different formats)
-  getBathroomCounts: function(property, vendorType) {
-    const result = {
-      full: 0,
-      half: 0,
-      total: 0
-    };
+// Get bathroom plumbing sum (BRT only)
+  getBathroomPlumbingSum: function(property, vendorType) {
+    if (!property || !property.raw_data || vendorType !== 'BRT') return 0;
     
-    if (!property) return result;
-    
-    if (vendorType === 'BRT' && property.raw_data) {
-      // Check for encoded format first (e.g., "3F2H")
-      const plumbing = property.raw_data.PLUMBING;
-      if (plumbing && plumbing.includes('F')) {
-        const matches = plumbing.match(/(\d+)F(\d+)H/);
-        if (matches) {
-          result.full = parseInt(matches[1]) || 0;
-          result.half = parseInt(matches[2]) || 0;
-        }
-      } else {
-        // Use separate fields
-        result.full = parseInt(property.raw_data.BATHFULL) || 0;
-        result.half = parseInt(property.raw_data.BATHHALF) || 0;
-      }
-    } else if (vendorType === 'Microsystems' && property.raw_data) {
-      // Check for decimal format (e.g., "3.5")
-      const bathTotal = property.raw_data['Bath Total'];
-      if (bathTotal && bathTotal.includes('.')) {
-        const parts = bathTotal.split('.');
-        result.full = parseInt(parts[0]) || 0;
-        result.half = parts[1] === '5' ? 1 : 0;
-      } else {
-        // Use separate fields
-        result.full = parseInt(property.raw_data['Bath Full']) || 0;
-        result.half = parseInt(property.raw_data['Bath Half']) || 0;
-      }
+    let sum = 0;
+    for (let i = 2; i <= 6; i++) {
+      sum += parseInt(property.raw_data[`PLUMBING${i}FIX`]) || 0;
     }
-    
-    result.total = result.full + (result.half * 0.5);
-    return result;
+    return sum;
   },
 
-  // Get bedroom count
-  getBedroomCount: function(property, vendorType) {
-    if (!property) return 0;
+  // Get bathroom fixture sum (Microsystems only - summary fields)
+  getBathroomFixtureSum: function(property, vendorType) {
+    if (!property || !property.raw_data || vendorType !== 'Microsystems') return 0;
     
-    // First check standard field
-    if (property.asset_bedrooms) {
-      return parseInt(property.asset_bedrooms) || 0;
-    }
+    return (parseInt(property.raw_data['4 Fixture Bath']) || 0) +
+           (parseInt(property.raw_data['3 Fixture Bath']) || 0) +
+           (parseInt(property.raw_data['2 Fixture Bath']) || 0) +
+           (parseInt(property.raw_data['Num 5 Fixture Baths']) || 0);
+  },
+
+  // Get bathroom room sum (Microsystems only - floor-specific fields)
+  getBathroomRoomSum: function(property, vendorType) {
+    if (!property || !property.raw_data || vendorType !== 'Microsystems') return 0;
     
-    // Then check raw_data
-    if (property.raw_data) {
-      if (vendorType === 'BRT') {
-        return parseInt(property.raw_data.BEDTOT) || 0;
-      } else if (vendorType === 'Microsystems') {
-        // Might need to sum by floor
-        const total = parseInt(property.raw_data['Bedrm Total']) || 0;
-        if (total > 0) return total;
-        
-        // Try summing individual floors
-        let sum = 0;
-        sum += parseInt(property.raw_data['Bedroom B']) || 0;
-        sum += parseInt(property.raw_data['Bedroom 1']) || 0;
-        sum += parseInt(property.raw_data['Bedroom 2']) || 0;
-        sum += parseInt(property.raw_data['Bedroom 3']) || 0;
-        return sum;
+    let sum = 0;
+    const floorSuffixes = ['B', '1', '2', '3'];
+    const fixtureTypes = ['2 Fixture Bath', '3 Fixture Bath', '4 Fixture Bath'];
+    
+    for (const fixture of fixtureTypes) {
+      for (const floor of floorSuffixes) {
+        const fieldName = `${fixture} ${floor}`;
+        sum += parseInt(property.raw_data[fieldName]) || 0;
       }
     }
     
-    return 0;
+    // Add 5-fixture floor-specific if they exist
+    for (const floor of floorSuffixes) {
+      sum += parseInt(property.raw_data[`5 Fixture Bath ${floor}`]) || 0;
+    }
+    
+    return sum;
+  },
+
+  // Get bedroom room sum (Microsystems only)
+  getBedroomRoomSum: function(property, vendorType) {
+    if (!property || !property.raw_data || vendorType !== 'Microsystems') return 0;
+    
+    return (parseInt(property.raw_data['Bedrm B']) || 0) +
+           (parseInt(property.raw_data['Bedrm 1']) || 0) +
+           (parseInt(property.raw_data['Bedrm 2']) || 0) +
+           (parseInt(property.raw_data['Bedrm 3']) || 0);
   }
 };
 
