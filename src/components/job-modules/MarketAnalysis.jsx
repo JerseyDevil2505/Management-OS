@@ -52,8 +52,8 @@ const MarketLandAnalysis = ({ jobData }) => {
   const [isRunningChecks, setIsRunningChecks] = useState(false);
   const [dataQualityActiveSubTab, setDataQualityActiveSubTab] = useState('overview');
   const [availableFields, setAvailableFields] = useState([]);
-  const [customCheckName, setCustomCheckName] = useState('');
-  const [customCheckSeverity, setCustomCheckSeverity] = useState('warning');
+  const customCheckNameInputRef = useRef(null);
+  const customCheckSeveritySelectRef = useRef(null);
   
 
   // ESC key handler for modal
@@ -315,23 +315,26 @@ if (data && data.length > 0) {
   };
   
   const saveCustomCheck = () => {
-    if (!customCheckName || currentCustomCheck.conditions.some(c => !c.field)) {
+    const checkName = customCheckNameInputRef.current?.value;
+    const checkSeverity = customCheckSeveritySelectRef.current?.value;
+    
+    if (!checkName || currentCustomCheck.conditions.some(c => !c.field)) {
       alert('Please complete all fields before saving');
       return;
     }
     
     const newCheck = {
       ...currentCustomCheck,
-      name: customCheckName,
-      severity: customCheckSeverity,
+      name: checkName,
+      severity: checkSeverity,
       id: Date.now()
     };
     
     setCustomChecks(prev => [...prev, newCheck]);
     
     // Reset the form
-    setCustomCheckName('');
-    setCustomCheckSeverity('warning');
+    customCheckNameInputRef.current.value = '';
+    customCheckSeveritySelectRef.current.value = 'warning';
     setCurrentCustomCheck({
       name: '',
       severity: 'warning',
@@ -1944,22 +1947,21 @@ const exportToExcel = () => {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Check Name</label>
                     <input 
+                      ref={customCheckNameInputRef}
                       type="text"
                       placeholder="e.g., Missing Tax ID for Commercial"
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                      value={customCheckName}
                       onClick={(e) => e.stopPropagation()}
-                      onChange={(e) => setCustomCheckName(e.target.value)}
-                    />
+                    />    
                   </div>
                   
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Severity</label>
                     <select 
+                      ref={customCheckSeveritySelectRef}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                      value={customCheckSeverity}
+                      defaultValue="warning"
                       onClick={(e) => e.stopPropagation()}
-                      onChange={(e) => setCustomCheckSeverity(e.target.value)}
                     >  
                       <option value="critical">Critical</option>
                       <option value="warning">Warning</option>
