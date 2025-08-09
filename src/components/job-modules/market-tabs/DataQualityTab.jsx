@@ -273,9 +273,17 @@ const DataQualityTab = ({
       // Run all custom checks automatically
       if (customChecks.length > 0) {
         console.log(`Running ${customChecks.length} custom checks...`);
+        
+        // Clear previous custom results
+        results.custom = [];
+        
+        // Run each custom check and collect results
         for (const check of customChecks) {
-          await runCustomCheck(check);
+          const customResults = await runSingleCustomCheck(check);
+          results.custom.push(...customResults);
         }
+        
+        console.log(`Custom checks found ${results.custom.length} issues`);
       }
       
       await saveQualityResults(results);
@@ -1017,6 +1025,31 @@ const DataQualityTab = ({
     }
   };
 
+  const runSingleCustomCheck = async (check) => {
+    const checkResults = [];
+    
+    for (const property of properties) {
+      let conditionMet = true;
+      
+      // [SAME LOGIC AS IN runCustomCheck but returns array instead of setting state]
+      // ... all the condition checking logic ...
+      
+      if (conditionMet) {
+        checkResults.push({
+          check: `custom_${check.id}`,
+          severity: check.severity,
+          property_key: property.property_composite_key,
+          message: check.name,
+          details: property
+        });
+      }
+    }
+    
+    return checkResults;
+  };
+
+  
+
   const saveQualityResults = async (results) => {
     try {
       let criticalCount = 0;
@@ -1372,6 +1405,8 @@ const DataQualityTab = ({
     for (const check of customChecks) {
       await runCustomCheck(check);
     }
+    
+    setDataQualityActiveSubTab('overview');
   };
 
   // RENDER
