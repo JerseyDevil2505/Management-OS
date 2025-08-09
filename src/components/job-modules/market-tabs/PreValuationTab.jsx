@@ -421,31 +421,7 @@ const PreValuationTab = ({ jobData, properties }) => {
     }
   }, [properties, targetYear, getHPIMultiplier, jobData]);
 
-  const saveNormalizedValues = async (normalizedSales) => {
-    try {
-      // Batch update normalized values
-      const updates = normalizedSales.map(sale => ({
-        id: sale.id,
-        values_norm_time: sale.time_normalized_price,
-        values_norm_size: sale.size_normalized_price
-      }));
 
-      // Update in batches of 100
-      for (let i = 0; i < updates.length; i += 100) {
-        const batch = updates.slice(i, i + 100);
-        
-        const { error } = await supabase
-          .from('property_records')
-          .upsert(batch, { onConflict: 'id' });
-        
-        if (error) throw error;
-      }
-
-      console.log(`💾 Saved normalized values for ${updates.length} properties`);
-    } catch (error) {
-      console.error('Error saving normalized values:', error);
-    }
-  };
 
   // ==================== WORKSHEET INITIALIZATION ====================
   useEffect(() => {
