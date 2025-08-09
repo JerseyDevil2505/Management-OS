@@ -22,7 +22,7 @@ const DataQualityTab = ({
   loadedCount,
   totalPropertyCount,
   
-  // State and functions from parent
+  // State from parent
   checkResults,
   setCheckResults,
   qualityScore,
@@ -45,22 +45,1092 @@ const DataQualityTab = ({
   showDetailsModal,
   setShowDetailsModal,
   modalData,
-  setModalData,
-  
-  // Functions from parent
-  runQualityChecks,
-  exportToExcel,
-  getCheckTitle,
-  showPropertyDetails,
-  toggleQualityCategory,
-  saveCustomChecksToDb
+  setModalData
 }) => {
 
-  // Refs for uncontrolled inputs (the fix we just did!)
+  // Refs for uncontrolled inputs
   const customCheckNameInputRef = useRef(null);
   const customCheckSeveritySelectRef = useRef(null);
 
-  // Custom check functions (moved from parent)
+  // ==================== DATA QUALITY FUNCTIONS ====================
+  const exportToExcel = () => {
+    if (Object.keys(checkResults).length === 0) return;
+    
+    const wb = XLSX.utils.book_new();
+    const timestamp = new Date().toISOString().split('T')[0];
+    const jobInfo = `${jobData?.job_number || 'Job'}_${jobData?.municipality || 'Municipality'}`;
+    
+    // SUMMARY SHEET
+    const summaryData = [
+      ['Data Quality Summary Report'],
+      [],
+      ['Job Information'],
+      ['Job Number', jobData?.job_number || 'N/A'],
+      ['Municipality', jobData?.municipality || 'N/A'],
+      ['County', jobData?.county || 'N/A'],
+      ['State', jobData?.state || 'N/A'],
+      ['Analysis Date', new Date().toLocaleDateString()],
+      [],
+      ['Overall Metrics'],
+      ['Total Properties', properties.length],
+      ['Properties with Issues', issueStats.total],
+      ['Critical Issues', issueStats.critical],
+      ['Warnings', issueStats.warning],
+      ['Info Messages', issueStats.info],
+      ['Quality Score', `${qualityScore}%`],
+      [],
+      ['Issues by Category'],
+      ['Category', 'Critical', 'Warning', 'Info', 'Total']
+    ];
+    
+    Object.entries(checkResults).forEach(([category, issues]) => {
+      if (issues && issues.length > 0) {
+        const critical = issues.filter(i => i.severity === 'critical').length;
+        const warning = issues.filter(i => i.severity === 'warning').length;
+        const info = issues.filter(i => i.severity === 'info').length;
+        summaryData.push([
+          category.replace(/_/g, ' ').toUpperCase(),
+          critical,
+          warning,
+          info,
+          issues.length
+        ]);
+      }
+    });
+    
+    const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+    summarySheet['!cols'] = [
+      { wch: 35 },
+      { wch: 18 },
+      { wch: 18 },
+      { wch: 18 },
+      { wch: 18 }
+    ];
+    
+    XLSX.utils.book_append_sheet(wb, summarySheet, 'Summary');
+    
+    // DETAILS SHEET
+    const detailsData = [
+      ['Block', 'Lot', 'Qualifier', 'Card', 'Location', 'Class', 'Check Type', 'Severity', 'Message']
+    ];
+    
+    Object.entries(checkResults).forEach(([category, issues]) => {
+      if (issues && issues.length > 0) {
+        issues.forEach(issue => {
+          const property = properties.find(p => p.property_composite_key === issue.property_key);
+          
+          if (property) {
+            detailsData.push([
+              property.property_block || '',
+              property.property_lot || '',
+              property.property_qualifier || '',
+              property.property_card || '',
+              property.property_location || '',
+              property.property_m4_class || '',
+              getCheckTitle(issue.check),
+              issue.severity,
+              issue.message
+            ]);
+          } else {
+            const keyParts = issue.property_key.split('_');
+            detailsData.push([
+              keyParts[0] || '',
+              keyParts[1] || '',
+              keyParts[2] || '',
+              keyParts[3] || '',
+              keyParts[4] || '',
+              '',
+              getCheckTitle(issue.check),
+              issue.severity,
+              issue.message
+            ]);
+          }
+        });
+      }
+    });
+    
+    const detailsSheet = XLSX.utils.aoa_to_sheet(detailsData);
+    detailsSheet['!cols'] = [
+      { wch: 15 },
+      { wch: 15 },
+      { wch: 12 },
+      { wch: 10 },
+      { wch: 20 },
+      { wch: 10 },
+      { wch: 45 },
+      { wch: 12 },
+      { wch: 60 }
+    ];
+    
+    const range = XLSX.utils.decode_range(detailsSheet['!ref']);
+    for (let C = range.s.c; C <= range.e.c; ++C) {
+      const address = XLSX.utils.encode_col(C) + "1";
+      if (!detailsSheet[address]) continue;
+      detailsSheet[address].s = {
+        font: { bold: true },
+        fill: { fgColor: { rgb: "EEEEEE" } }
+      };
+    }
+    
+    XLSX.utils.book_append_sheet(wb, detailsSheet, 'Details');
+    XLSX.writeFile(wb, `DQ_Report_${jobInfo}_${timestamp}.xlsx`);
+    
+    console.log('✅ Excel report exported successfully');
+  };
+  
+  const runQualityChecks = async () => {
+    setIsRunningChecks(true);
+    const results = {
+      mod_iv: [],
+      cama: [],
+      characteristics: [],
+      special: [],
+      rooms: [],
+      custom: []
+    };
+    
+    try {
+      const vendor = vendorType || jobData.vendor_source || 'BRT';
+      
+      const pageSize = 1000;
+      const totalPages = Math.ceil(properties.length / pageSize);
+      
+      for (let page = 0; page < totalPages; page++) {
+        const batch = properties.slice(page * pageSize, (page + 1) * pageSize);
+        console.log(`Processing batch ${page + 1} of ${totalPages}...`);
+        
+        for (const property of batch) {
+          await runPropertyChecks(property, results);
+        }
+      }
+
+      console.log('=== QUALITY CHECK COMPLETE ===');
+      console.log(`Total properties analyzed: ${properties.length}`);
+      console.log('Issues found by category:');
+      Object.entries(results).forEach(([category, issues]) => {
+        console.log(`  ${category}: ${issues.length} issues`);
+        if (category === 'special' && issues.length > 0) {
+          const specialTypes = [...new Set(issues.map(i => i.check))];
+          specialTypes.forEach(type => {
+            const count = issues.filter(i => i.check === type).length;
+            console.log(`    - ${type}: ${count} properties`);
+          });
+        }
+      });
+      
+      await saveQualityResults(results);
+      
+      const score = calculateQualityScore(results);
+      setQualityScore(score);
+      setCheckResults(results);
+      
+      console.log('Quality check complete!');
+    } catch (error) {
+      console.error('Error running quality checks:', error);
+    } finally {
+      setIsRunningChecks(false);
+    }
+  };
+
+  const runPropertyChecks = async (property, results) => {
+    const vendor = property.vendor_source || jobData.vendor_source || 'BRT';
+    const rawData = property.raw_data || {};
+    
+    // MOD IV CHECKS
+    const m4Class = property.property_m4_class;
+    const modImprovement = property.values_mod_improvement || 0;
+    const modLand = property.values_mod_land || 0;
+    const modTotal = property.values_mod_total || 0;
+    
+    if ((m4Class === '1' || m4Class === '3B') && modImprovement > 0) {
+      results.mod_iv.push({
+        check: 'vacant_land_improvements',
+        severity: 'critical',
+        property_key: property.property_composite_key,
+        message: `Class ${m4Class} property has improvements: $${modImprovement.toLocaleString()}`,
+        details: property
+      });
+    }
+    
+    if (['2', '3A', '4A', '4B', '4C'].includes(m4Class) && modImprovement === 0) {
+      results.mod_iv.push({
+        check: 'missing_improvements',
+        severity: 'critical',
+        property_key: property.property_composite_key,
+        message: `Class ${m4Class} property missing improvements`,
+        details: property
+      });
+    }
+    
+    if (['15A', '15B', '15C', '15D', '15E', '15F'].includes(m4Class) && !property.property_facility) {
+      results.mod_iv.push({
+        check: 'missing_facility',
+        severity: 'critical',
+        property_key: property.property_composite_key,
+        message: `Class ${m4Class} missing facility information`,
+        details: property
+      });
+    }
+    
+    if (m4Class === '3B' && !property.property_composite_key.includes('Q')) {
+      results.mod_iv.push({
+        check: 'farm_building_no_qualifier',
+        severity: 'warning',
+        property_key: property.property_composite_key,
+        message: 'Class 3B with no qualifier (should be farm building)',
+        details: property
+      });
+    }
+    
+    // CAMA CHECKS
+    const camaClass = property.property_cama_class;
+    const camaImprovement = property.values_cama_improvement || 0;
+    
+    if ((camaClass === '1' || camaClass === '3B') && camaImprovement > 0) {
+      results.cama.push({
+        check: 'cama_vacant_improvements',
+        severity: 'critical',
+        property_key: property.property_composite_key,
+        message: `CAMA Class ${camaClass} has improvements: $${camaImprovement.toLocaleString()}`,
+        details: property
+      });
+    }
+    
+    if (['2', '3A', '4A', '4B', '4C'].includes(camaClass) && camaImprovement === 0) {
+      results.cama.push({
+        check: 'cama_missing_improvements',
+        severity: 'critical',
+        property_key: property.property_composite_key,
+        message: `CAMA Class ${camaClass} missing improvements`,
+        details: property
+      });
+    }
+    
+    // BUILDING CLASS CHECKS
+    const buildingClass = property.asset_building_class;
+    const typeUse = property.asset_type_use;
+    const designStyle = property.asset_design_style;
+    
+    if (m4Class && m4Class !== '2' && m4Class !== '3A') {
+      if (buildingClass && buildingClass !== 10) {
+        results.characteristics.push({
+          check: 'non_residential_wrong_building_class',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: `Class ${m4Class} should have building class 10 (has ${buildingClass})`,
+          details: property
+        });
+      }
+    }
+    
+    if ((m4Class === '2' || m4Class === '3A') && buildingClass === 10) {
+      results.characteristics.push({
+        check: 'residential_building_class_10',
+        severity: 'warning',
+        property_key: property.property_composite_key,
+        message: `Class ${m4Class} shouldn't have building class 10 (needs >10)`,
+        details: property
+      });
+    }
+    
+    if (buildingClass > 10) {
+      if (!designStyle) {
+        results.characteristics.push({
+          check: 'missing_design_style',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: 'Building class > 10 missing design style',
+          details: property
+        });
+      }
+      if (!typeUse) {
+        results.characteristics.push({
+          check: 'missing_type_use',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: 'Building class > 10 missing type use',
+          details: property
+        });
+      }
+    }
+    
+    if ((m4Class === '2' || m4Class === '3A') && designStyle && designStyle.trim() !== '') {
+      if (!buildingClass || buildingClass <= 10) {
+        results.characteristics.push({
+          check: 'design_without_proper_building_class',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: `Has design style "${designStyle}" but building class is ${buildingClass || 'missing'} (should be > 10)`,
+          details: property
+        });
+      }
+      if (!typeUse || typeUse.trim() === '') {
+        results.characteristics.push({
+          check: 'design_without_type_use',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: `Has design style "${designStyle}" but missing type use`,
+          details: property
+        });
+      }
+    }
+    
+    if (modImprovement === 0) {
+      if (designStyle && designStyle.trim() !== '') {
+        results.characteristics.push({
+          check: 'zero_improvement_with_design',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: `Zero improvement value but has design style: ${designStyle}`,
+          details: property
+        });
+      }
+      
+      if (typeUse && typeUse.trim() !== '') {
+        results.characteristics.push({
+          check: 'zero_improvement_with_type',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: `Zero improvement value but has type use: ${typeUse}`,
+          details: property
+        });
+      }
+    }
+    
+    if (m4Class === '4A' || m4Class === '4B' || m4Class === '4C') {
+      if (designStyle && designStyle.trim() !== '') {
+        results.characteristics.push({
+          check: 'commercial_with_design',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: `Commercial property (Class ${m4Class}) has residential design style: ${designStyle}`,
+          details: property
+        });
+      }
+      
+      if (typeUse && typeUse.trim() !== '') {
+        results.characteristics.push({
+          check: 'commercial_with_type',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: `Commercial property (Class ${m4Class}) has residential type use: ${typeUse}`,
+          details: property
+        });
+      }
+    }
+ 
+    // TYPE USE TO BUILDING CLASS VALIDATION
+    if (typeUse && buildingClass) {
+      const typeUseDescription = interpretCodes.getTypeName(property, codeDefinitions, vendor) || typeUse;
+      const typeUseLower = typeUseDescription.toLowerCase();
+      let validClasses = [];
+      
+      if (typeUseLower.includes('single') || typeUseLower.includes('one family') || 
+          typeUseLower.includes('1 family') || typeUseLower.includes('1family') ||
+          typeUseLower.includes('onefamily') || typeUseLower === 'sf') {
+        validClasses = [16, 17, 18, 19, 20, 21, 22, 23];
+      } 
+      else if (typeUseLower.includes('twin') || typeUseLower.includes('semi') || 
+               typeUseLower.includes('semidetached') || typeUseLower.includes('duplex')) {
+        validClasses = [25, 27, 29, 31];
+      } 
+      else if (typeUseLower.includes('condo') || typeUseLower.includes('townhouse') || 
+               typeUseLower.includes('townhome') || typeUseLower.includes('row')) {
+        validClasses = [33, 35, 37, 39];
+      } 
+      else if (typeUseLower.includes('multi') || typeUseLower.includes('two family') || 
+               typeUseLower.includes('2 family') || typeUseLower.includes('apartment')) {
+        validClasses = [43, 45, 47, 49];
+      }
+      
+      if (validClasses.length > 0 && !validClasses.includes(buildingClass)) {
+        results.characteristics.push({
+          check: 'type_use_building_class_mismatch',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: `Type use "${typeUseDescription}"${typeUse !== typeUseDescription ? ` (code: ${typeUse})` : ''} doesn't match building class ${buildingClass} (expected: ${validClasses.join(', ')})`,
+          details: property
+        });
+      }
+    }
+    
+    // LOT SIZE CHECKS
+    const lotAcre = property.asset_lot_acre || 0;
+    const lotSf = property.asset_lot_sf || 0;
+    const lotFrontage = property.asset_lot_frontage || 0;
+    
+    if (lotAcre === 0 && lotSf === 0 && lotFrontage === 0) {
+      results.characteristics.push({
+        check: 'zero_lot_size',
+        severity: 'critical',
+        property_key: property.property_composite_key,
+        message: 'Property has zero lot size (acre, sf, and frontage all zero)',
+        details: property
+      });
+    }
+    
+    // LIVING AREA & YEAR BUILT
+    const sfla = property.asset_sfla || 0;
+    const yearBuilt = property.asset_year_built;
+    
+    if ((m4Class === '2' || m4Class === '3A') && sfla === 0) {
+      results.characteristics.push({
+        check: 'missing_sfla',
+        severity: 'warning',
+        property_key: property.property_composite_key,
+        message: `Class ${m4Class} property missing living area`,
+        details: property
+      });
+    }
+    
+    if ((m4Class === '2' || m4Class === '3A') && buildingClass > 10 && !yearBuilt) {
+      results.characteristics.push({
+        check: 'missing_year_built',
+        severity: 'warning',
+        property_key: property.property_composite_key,
+        message: 'Improved property missing year built',
+        details: property
+      });
+    }
+    
+    // VCS CHECK
+    if (!property.property_vcs) {
+      results.special.push({
+        check: 'missing_vcs',
+        severity: 'warning',
+        property_key: property.property_composite_key,
+        message: 'Property missing VCS code',
+        details: property
+      });
+    }
+    
+    // CONDITION CHECKS
+    if ((m4Class === '2' || m4Class === '3A') && buildingClass > 10) {
+      if (!property.asset_ext_cond) {
+        results.characteristics.push({
+          check: 'missing_ext_condition',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: 'Improved property missing exterior condition',
+          details: property
+        });
+      }
+      if (!property.asset_int_cond) {
+        results.characteristics.push({
+          check: 'missing_int_condition',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: 'Improved property missing interior condition',
+          details: property
+        });
+      }
+    }
+    
+    // PARTIAL HEATING/COOLING SYSTEMS
+    if (vendor === 'BRT') {
+      if (!interpretCodes.isFieldEmpty(rawData.ACPARTIAL)) {
+        results.special.push({
+          check: 'partial_cooling',
+          severity: 'info',
+          property_key: property.property_composite_key,
+          message: 'Property has partial AC system',
+          details: property
+        });
+      }
+      if (!interpretCodes.isFieldEmpty(rawData.HEATSYSPARTIAL)) {
+        results.special.push({
+          check: 'partial_heating',
+          severity: 'info',
+          property_key: property.property_composite_key,
+          message: 'Property has partial heating system',
+          details: property
+        });
+      }
+    } else if (vendor === 'Microsystems') {
+      const heatType1 = rawData['Heat System Type1'] || rawData['Heat Source'];
+      const heatType2 = rawData['Heat System Type2'];
+      if (heatType1 && heatType1.toString().trim() !== '' && 
+          heatType2 && heatType2.toString().trim() !== '') {
+        results.special.push({
+          check: 'partial_heating',
+          severity: 'info',
+          property_key: property.property_composite_key,
+          message: 'Property has partial heating system (multiple heat types)',
+          details: property
+        });
+      }
+    }
+    
+    // BEDROOM COUNT VALIDATION
+    if ((m4Class === '2' || m4Class === '3A') && buildingClass > 10) {
+      if (vendor === 'BRT') {
+        const bedTotal = interpretCodes.getRawDataValue(property, 'bedrooms', vendor);
+        if (!bedTotal || parseInt(bedTotal) === 0) {
+          results.rooms.push({
+            check: 'zero_bedrooms',
+            severity: 'warning',
+            property_key: property.property_composite_key,
+            message: 'Residential property has zero bedrooms',
+            details: property
+          });
+        }
+      } else if (vendor === 'Microsystems') {
+        const totalBeds = interpretCodes.getBedroomRoomSum(property, vendor);
+        
+        if (totalBeds === 0) {
+          results.rooms.push({
+            check: 'zero_bedrooms',
+            severity: 'warning',
+            property_key: property.property_composite_key,
+            message: 'Residential property has zero bedrooms',
+            details: property
+          });
+        }
+      }
+    }
+    
+    // BATHROOM COUNT CROSS-CHECK
+    if ((m4Class === '2' || m4Class === '3A') && buildingClass > 10) {
+      if (vendor === 'BRT') {
+        const bathTotal = parseInt(rawData.BATHTOT) || 0;
+        const plumbingSum = interpretCodes.getBathroomPlumbingSum(property, vendor);
+        
+        if (bathTotal !== plumbingSum && plumbingSum > 0) {
+          results.rooms.push({
+            check: 'bathroom_count_mismatch',
+            severity: 'warning',
+            property_key: property.property_composite_key,
+            message: `Bathroom total (${bathTotal}) doesn't match plumbing sum (${plumbingSum})`,
+            details: property
+          });
+        }
+      } else if (vendor === 'Microsystems') {
+        const fixtureSum = interpretCodes.getBathroomFixtureSum(property, vendor);
+        const roomSum = interpretCodes.getBathroomRoomSum(property, vendor);
+        
+        if (fixtureSum !== roomSum && roomSum > 0) {
+          results.rooms.push({
+            check: 'bathroom_count_mismatch',
+            severity: 'warning',
+            property_key: property.property_composite_key,
+            message: `Bathroom summary (${fixtureSum}) doesn't match floor totals (${roomSum})`,
+            details: property
+          });
+        }
+      }
+    }
+ 
+    // DETACHED ITEMS MISSING DEPRECIATION
+    if (vendor === 'BRT') {
+      for (let i = 1; i <= 11; i++) {
+        const detachedCode = rawData[`DETACHEDCODE_${i}`];
+        const detachedNC = rawData[`DETACHEDNC_${i}`];
+        
+        if (!interpretCodes.isFieldEmpty(detachedCode)) {
+          if (!detachedNC || parseFloat(detachedNC) === 0) {
+            results.special.push({
+              check: 'detached_missing_depreciation',
+              severity: 'warning',
+              property_key: property.property_composite_key,
+              message: `Detached item ${i} (${detachedCode}) missing depreciation`,
+              details: property
+            });
+          }
+        }
+      }
+    } else if (vendor === 'Microsystems') {
+      for (let i = 1; i <= 4; i++) {
+        const detachedCode = rawData[`Detached Item Code${i}`];
+        const physicalDepr = rawData[`Physical Depr${i}`];
+        const functionalDepr = rawData[`Functional Depr${i}`];
+        const locationalDepr = rawData[`Locational Depr${i}`];
+        
+        if (!interpretCodes.isFieldEmpty(detachedCode)) {
+          const hasPhys = physicalDepr && parseFloat(physicalDepr) !== 0;
+          const hasFunc = functionalDepr && parseFloat(functionalDepr) !== 0;
+          const hasLoc = locationalDepr && parseFloat(locationalDepr) !== 0;
+          
+          if (!hasPhys && !hasFunc && !hasLoc) {
+            results.special.push({
+              check: 'detached_missing_depreciation',
+              severity: 'warning',
+              property_key: property.property_composite_key,
+              message: `Detached item ${i} (${detachedCode}) has no depreciation values`,
+              details: property
+            });
+          }
+        }
+      }
+    }
+    
+    // LAND ADJUSTMENTS
+    if (vendor === 'BRT') {
+      let hasLandAdjustments = false;
+      
+      for (let i = 1; i <= 6; i++) {
+        if (!interpretCodes.isFieldEmpty(rawData[`LANDURCOND_${i}`])) {
+          hasLandAdjustments = true;
+          break;
+        }
+        if (rawData[`LANDURCONDPC_${i}`] && parseFloat(rawData[`LANDURCONDPC_${i}`]) !== 0 && parseFloat(rawData[`LANDURCONDPC_${i}`]) !== 100) {
+          hasLandAdjustments = true;
+          break;
+        }
+        if (!interpretCodes.isFieldEmpty(rawData[`LANDURINFL_${i}`])) {
+          hasLandAdjustments = true;
+          break;
+        }
+        if (rawData[`LANDURINFLPC_${i}`] && parseFloat(rawData[`LANDURINFLPC_${i}`]) !== 0 && parseFloat(rawData[`LANDURINFLPC_${i}`]) !== 100) {
+          hasLandAdjustments = true;
+          break;
+        }
+        if (!interpretCodes.isFieldEmpty(rawData[`LANDFFCOND_${i}`])) {
+          hasLandAdjustments = true;
+          break;
+        }
+        if (rawData[`LANDFFCONDPC_${i}`] && parseFloat(rawData[`LANDFFCONDPC_${i}`]) !== 0 && parseFloat(rawData[`LANDFFCONDPC_${i}`]) !== 100) {
+          hasLandAdjustments = true;
+          break;
+        }
+        if (!interpretCodes.isFieldEmpty(rawData[`LANDFFINFL_${i}`])) {
+          hasLandAdjustments = true;
+          break;
+        }
+        if (rawData[`LANDFFINFLPC_${i}`] && parseFloat(rawData[`LANDFFINFLPC_${i}`]) !== 0 && parseFloat(rawData[`LANDFFINFLPC_${i}`]) !== 100) {
+          hasLandAdjustments = true;
+          break;
+        }
+      }
+      
+      if (hasLandAdjustments) {
+        results.special.push({
+          check: 'land_adjustments_exist',
+          severity: 'info',
+          property_key: property.property_composite_key,
+          message: 'Property has land adjustments applied',
+          details: property
+        });
+      }
+      
+    } else if (vendor === 'Microsystems') {
+      let hasLandAdjustments = false;
+      
+      for (let i = 1; i <= 3; i++) {
+        const netAdj = rawData[`Net Adjustment${i}`];
+        const adjCode = rawData[`Adj Reason Code${i}`];
+        const netAdjValue = parseFloat(netAdj) || 0;
+        
+        if (netAdjValue !== 0 || !interpretCodes.isFieldEmpty(adjCode)) {
+          hasLandAdjustments = true;
+          break;
+        }
+      }
+      
+      if (!hasLandAdjustments) {
+        for (let i = 1; i <= 4; i++) {
+          const overallPercent = rawData[`Overall Adj Percent${i}`];
+          const overallReason = rawData[`Overall Adj Reason${i}`];
+          const percentValue = parseFloat(overallPercent) || 0;
+          
+          if ((percentValue !== 0 && percentValue !== 100) || !interpretCodes.isFieldEmpty(overallReason)) {
+            hasLandAdjustments = true;
+            break;
+          }
+        }
+      }
+      
+      if (!hasLandAdjustments) {
+        const unitAdj1 = rawData['Unit Adjustment1'];
+        const unitAdj2 = rawData['Unit Adjustment2'];
+        const unitAdj = rawData['Unit Adjustment'];
+        const unitCode1 = rawData['Unit Adj Code1'];
+        const unitCode2 = rawData['Unit Adj Code2'];
+        const unitCode = rawData['Unit Adj Code'];
+        
+        const unitAdj1Value = parseFloat(unitAdj1) || 0;
+        const unitAdj2Value = parseFloat(unitAdj2) || 0;
+        const unitAdjValue = parseFloat(unitAdj) || 0;
+        
+        if (unitAdj1Value !== 0 || 
+            unitAdj2Value !== 0 ||
+            unitAdjValue !== 0 ||
+            !interpretCodes.isFieldEmpty(unitCode1) ||
+            !interpretCodes.isFieldEmpty(unitCode2) ||
+            !interpretCodes.isFieldEmpty(unitCode)) {
+          hasLandAdjustments = true;
+        }
+      }
+      
+      if (hasLandAdjustments) {
+        results.special.push({
+          check: 'land_adjustments_exist',
+          severity: 'info',
+          property_key: property.property_composite_key,
+          message: 'Property has land adjustments applied',
+          details: property
+        });
+      }
+    }
+
+    // MARKET ADJUSTMENTS
+    if (vendor === 'BRT') {
+      const issues = [];
+      
+      if (rawData.MKTADJ && parseFloat(rawData.MKTADJ) !== 1) {
+        issues.push(`MKTADJ = ${rawData.MKTADJ} (should be 1)`);
+      }
+      
+      if (rawData.NCOVR && parseFloat(rawData.NCOVR) !== 0) {
+        issues.push(`NCOVR = ${rawData.NCOVR} (should be 0)`);
+      }
+      
+      if (!interpretCodes.isFieldEmpty(rawData.NCREDIRECT)) {
+        issues.push('NC Redirect value present');
+      }
+      
+      if (rawData.NCMKTINFLNC && parseFloat(rawData.NCMKTINFLNC) !== 0) {
+        issues.push(`NC Market Influence = ${rawData.NCMKTINFLNC}`);
+      }
+      if (rawData.NCMKTINFPC && parseFloat(rawData.NCMKTINFPC) !== 0) {
+        issues.push(`NC Market Influence % = ${rawData.NCMKTINFPC}`);
+      }
+      
+      if (!interpretCodes.isFieldEmpty(rawData.MKTECONDESC)) {
+        issues.push('Economic description present');
+      }
+      if (!interpretCodes.isFieldEmpty(rawData.MKTFUNCDESC)) {
+        issues.push('Functional description present');
+      }
+      if (!interpretCodes.isFieldEmpty(rawData.MKTMKTDESC)) {
+        issues.push('Market description present');
+      }
+      if (!interpretCodes.isFieldEmpty(rawData.MKTPHYSDESC)) {
+        issues.push('Physical description present');
+      }
+      
+      if (rawData.MKTECONPC && parseFloat(rawData.MKTECONPC) !== 100 && parseFloat(rawData.MKTECONPC) !== 0) {
+        issues.push(`Economic % = ${rawData.MKTECONPC} (should be 100)`);
+      }
+      if (rawData.MKTFUNCPC && parseFloat(rawData.MKTFUNCPC) !== 100 && parseFloat(rawData.MKTFUNCPC) !== 0) {
+        issues.push(`Functional % = ${rawData.MKTFUNCPC} (should be 100)`);
+      }
+      if (rawData.MKTMKTPC && parseFloat(rawData.MKTMKTPC) !== 100 && parseFloat(rawData.MKTMKTPC) !== 0) {
+        issues.push(`Market % = ${rawData.MKTMKTPC} (should be 100)`);
+      }
+      if (rawData.MKTPHYSPC && parseFloat(rawData.MKTPHYSPC) !== 100 && parseFloat(rawData.MKTPHYSPC) !== 0) {
+        issues.push(`Physical % = ${rawData.MKTPHYSPC} (should be 100)`);
+      }
+      
+      if (issues.length > 0) {
+        results.special.push({
+          check: 'market_adjustments_exist',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: `Market adjustments present: ${issues.join(', ')}`,
+          details: property
+        });
+      }
+    } else if (vendor === 'Microsystems') {
+      const issues = [];
+      
+      if (!interpretCodes.isFieldEmpty(rawData['Over Improved Depr1'])) {
+        issues.push(`Over Improved Depr1: ${rawData['Over Improved Depr1']}`);
+      }
+      
+      if (!interpretCodes.isFieldEmpty(rawData['Over Improved Depr2'])) {
+        issues.push(`Over Improved Depr2: ${rawData['Over Improved Depr2']}`);
+      }
+      
+      if (!interpretCodes.isFieldEmpty(rawData['Economic Depr'])) {
+        issues.push(`Economic Depr: ${rawData['Economic Depr']}`);
+      }
+      
+      if (!interpretCodes.isFieldEmpty(rawData['Function Depr'])) {
+        issues.push(`Function Depr: ${rawData['Function Depr']}`);
+      }
+      
+      if (!interpretCodes.isFieldEmpty(rawData['Location Code'])) {
+        issues.push(`Location Code: ${rawData['Location Code']}`);
+      }
+      
+      if (!interpretCodes.isFieldEmpty(rawData['Phys Depr Code'])) {
+        issues.push(`Phys Depr Code: ${rawData['Phys Depr Code']}`);
+      }
+      
+      const netFunctional = parseFloat(rawData['Net Functional Depr']) || 0;
+      if (netFunctional !== 100 && netFunctional !== 0) {
+        issues.push(`Net Functional Depr = ${netFunctional}`);
+      }
+      
+      const netLocational = parseFloat(rawData['Net Locational Depr']) || 0;
+      if (netLocational !== 100 && netLocational !== 0) {
+        issues.push(`Net Locational Depr = ${netLocational}`);
+      }
+      
+      const underImpr = parseFloat(rawData['Under Improved Depr']) || 0;
+      if (underImpr !== 100 && underImpr !== 0) {
+        issues.push(`Under Improved Depr = ${underImpr}`);
+      }
+      
+      if (issues.length > 0) {
+        results.special.push({
+          check: 'market_adjustments_exist',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: `Market adjustments present: ${issues.join(', ')}`,
+          details: property
+        });
+      }
+    }
+    
+    // FLAT ADD VALUES/OVERRIDES
+    if (vendor === 'BRT') {
+      const overrides = [];
+      
+      if (!interpretCodes.isFieldEmpty(rawData.IMPROVVALUEOVR)) {
+        overrides.push('Improvement value override');
+      }
+      if (!interpretCodes.isFieldEmpty(rawData.LANDVALUEOVR)) {
+        overrides.push('Land value override');
+      }
+      
+      if (!interpretCodes.isFieldEmpty(rawData.WRITEIN_1)) {
+        overrides.push(`Write-in 1: ${rawData.WRITEIN_1}`);
+      }
+      if (!interpretCodes.isFieldEmpty(rawData.WRITEIN_2)) {
+        overrides.push(`Write-in 2: ${rawData.WRITEIN_2}`);
+      }
+      if (rawData.WRITEINVALUE_1 && parseFloat(rawData.WRITEINVALUE_1) !== 0) {
+        overrides.push(`Write-in value 1: $${rawData.WRITEINVALUE_1}`);
+      }
+      if (rawData.WRITEINVALUE_2 && parseFloat(rawData.WRITEINVALUE_2) !== 0) {
+        overrides.push(`Write-in value 2: $${rawData.WRITEINVALUE_2}`);
+      }
+      
+      if (overrides.length > 0) {
+        results.special.push({
+          check: 'value_overrides',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: `Manual overrides: ${overrides.join(', ')}`,
+          details: property
+        });
+      }
+    } else if (vendor === 'Microsystems') {
+      const overrides = [];
+      
+      if (!interpretCodes.isFieldEmpty(rawData['Flat Add Desc1'])) {
+        overrides.push(`Flat Add 1: ${rawData['Flat Add Desc1']}`);
+      }
+      if (!interpretCodes.isFieldEmpty(rawData['Flat Add Desc2'])) {
+        overrides.push(`Flat Add 2: ${rawData['Flat Add Desc2']}`);
+      }
+      if (!interpretCodes.isFieldEmpty(rawData['Base Cost Flat Add Desc1'])) {
+        overrides.push(`Base Cost Add 1: ${rawData['Base Cost Flat Add Desc1']}`);
+      }
+      if (!interpretCodes.isFieldEmpty(rawData['Base Cost Flat Add Desc2'])) {
+        overrides.push(`Base Cost Add 2: ${rawData['Base Cost Flat Add Desc2']}`);
+      }
+      
+      if (rawData['Flat Add Value1'] && parseFloat(rawData['Flat Add Value1']) !== 0) {
+        overrides.push(`Flat value 1: $${rawData['Flat Add Value1']}`);
+      }
+      if (rawData['Flat Add Value2'] && parseFloat(rawData['Flat Add Value2']) !== 0) {
+        overrides.push(`Flat value 2: $${rawData['Flat Add Value2']}`);
+      }
+      if (rawData['Base Cost Flat Add Value1'] && parseFloat(rawData['Base Cost Flat Add Value1']) !== 0) {
+        overrides.push(`Base cost value 1: $${rawData['Base Cost Flat Add Value1']}`);
+      }
+      if (rawData['Base Cost Flat Add Value2'] && parseFloat(rawData['Base Cost Flat Add Value2']) !== 0) {
+        overrides.push(`Base cost value 2: $${rawData['Base Cost Flat Add Value2']}`);
+      }
+      
+      if (overrides.length > 0) {
+        results.special.push({
+          check: 'value_overrides',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: `Manual overrides: ${overrides.join(', ')}`,
+          details: property
+        });
+      }
+    }
+  };
+
+  const saveQualityResults = async (results) => {
+    try {
+      let criticalCount = 0;
+      let warningCount = 0;
+      let infoCount = 0;
+      
+      Object.values(results).forEach(category => {
+        category.forEach(issue => {
+          if (issue.severity === 'critical') criticalCount++;
+          else if (issue.severity === 'warning') warningCount++;
+          else if (issue.severity === 'info') infoCount++;
+        });
+      });
+      
+      const totalIssues = criticalCount + warningCount + infoCount;
+      const score = calculateQualityScore(results);
+      
+      const { data: existing } = await supabase
+        .from('market_land_valuation')
+        .select('id, quality_check_results')
+        .eq('job_id', jobData.id)
+        .single();
+      
+      const newRun = {
+        date: new Date().toISOString(),
+        propertyCount: properties.length,
+        criticalCount,
+        warningCount,
+        infoCount,
+        totalIssues,
+        qualityScore: score
+      };
+      
+      const existingResults = existing?.quality_check_results || {};
+      const existingHistory = existingResults.history || [];
+      const updatedHistory = [newRun, ...existingHistory].slice(0, 50);
+      
+      const qualityCheckResults = {
+        summary: {
+          mod_iv: results.mod_iv?.length || 0,
+          cama: results.cama?.length || 0,
+          characteristics: results.characteristics?.length || 0,
+          special: results.special?.length || 0,
+          rooms: results.rooms?.length || 0,
+          custom: results.custom?.length || 0,
+          timestamp: new Date().toISOString()
+        },
+        history: updatedHistory
+      };
+      
+      const saveData = {
+        job_id: jobData.id,
+        quality_check_last_run: new Date().toISOString(),
+        quality_issues_count: totalIssues,
+        quality_score: score,
+        critical_count: criticalCount,
+        warning_count: warningCount,
+        info_count: infoCount,
+        custom_checks: customChecks.length > 0 ? customChecks : null,
+        quality_check_results: qualityCheckResults
+      };
+      
+      if (existing) {
+        const { error } = await supabase
+          .from('market_land_valuation')
+          .update(saveData)
+          .eq('job_id', jobData.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('market_land_valuation')
+          .insert(saveData);
+        if (error) throw error;
+      }
+      
+      setRunHistory(updatedHistory);
+      
+      setCheckResults(results);
+      setIssueStats({
+        critical: criticalCount,
+        warning: warningCount,
+        info: infoCount,
+        total: totalIssues
+      });
+      
+      console.log(`✅ Saved: ${totalIssues} issues found`);
+      
+    } catch (error) {
+      console.error('Error saving:', error);
+      setCheckResults(results);
+    }
+  };
+
+  const calculateQualityScore = (results) => {
+    const totalProps = properties.length || 1;
+    const issueWeights = { critical: 10, warning: 5, info: 1 };
+    let totalDeductions = 0;
+    
+    Object.values(results).forEach(category => {
+      category.forEach(issue => {
+        totalDeductions += issueWeights[issue.severity] || 0;
+      });
+    });
+    
+    const score = Math.max(0, 100 - (totalDeductions / totalProps));
+    return score.toFixed(1);
+  };
+
+  const toggleQualityCategory = (categoryId) => {
+    setExpandedCategories(prev => 
+      prev.includes(categoryId) 
+        ? prev.filter(id => id !== categoryId)
+        : [...prev, categoryId]
+    );
+  };
+
+  const getCheckTitle = (checkType) => {
+    const titles = {
+      'vacant_land_improvements': 'Vacant Land with Improvements',
+      'missing_improvements': 'Properties Missing Improvements',
+      'missing_facility': 'Missing Facility Information',
+      'farm_building_no_qualifier': 'Farm Building Without Qualifier',
+      'cama_vacant_improvements': 'CAMA Vacant Land with Improvements',
+      'cama_missing_improvements': 'CAMA Properties Missing Improvements',
+      'non_residential_wrong_building_class': 'Non-Residential with Wrong Building Class',
+      'residential_building_class_10': 'Residential Properties with Building Class 10',
+      'missing_design_style': 'Missing Design Style',
+      'missing_type_use': 'Missing Type Use',
+      'design_without_proper_building_class': 'Has Design but Wrong Building Class',
+      'design_without_type_use': 'Has Design but Missing Type Use',
+      'type_use_building_class_mismatch': 'Type Use/Building Class Mismatch',
+      'zero_lot_size': 'Properties with Zero Lot Size',
+      'missing_sfla': 'Missing Living Area',
+      'missing_year_built': 'Missing Year Built',
+      'missing_ext_condition': 'Missing Exterior Condition',
+      'missing_int_condition': 'Missing Interior Condition',
+      'zero_bedrooms': 'Properties with Zero Bedrooms',
+      'bathroom_count_mismatch': 'Bathroom Count Mismatch',
+      'missing_vcs': 'Missing VCS Code',
+      'partial_cooling': 'Partial AC System',
+      'partial_heating': 'Partial Heating System',
+      'detached_missing_depreciation': 'Detached Items Missing Depreciation',
+      'land_adjustments_exist': 'Properties with Land Adjustments',
+      'market_adjustments_exist': 'Properties with Market Adjustments',
+      'value_overrides': 'Manual Value Overrides Present',
+      'zero_improvement_with_design': 'Zero Improvements with Design Style',
+      'zero_improvement_with_type': 'Zero Improvements with Type Use',
+      'commercial_with_design': 'Commercial Property with Residential Design',
+      'commercial_with_type': 'Commercial Property with Residential Type'
+    };
+    return titles[checkType] || checkType;
+  };
+
+  const showPropertyDetails = (checkType, category) => {
+    const issues = checkResults[category]?.filter(r => r.check === checkType) || [];
+    setModalData({
+      title: getCheckTitle(checkType),
+      properties: issues
+    });
+    setShowDetailsModal(true);
+  };
+
+  const saveCustomChecksToDb = async (checks) => {
+    try {
+      await supabase
+        .from('market_land_valuation')
+        .update({ custom_checks: checks })
+        .eq('job_id', jobData.id);
+    } catch (error) {
+      console.error('Error saving custom checks:', error);
+    }
+  };
+
+  // Custom check functions
   const addConditionToCustomCheck = () => {
     setCurrentCustomCheck(prev => ({
       ...prev,
@@ -102,7 +1172,6 @@ const DataQualityTab = ({
     
     setCustomChecks(prev => [...prev, newCheck]);
     
-    // Reset the form
     customCheckNameInputRef.current.value = '';
     customCheckSeveritySelectRef.current.value = 'warning';
     setCurrentCustomCheck({
@@ -111,7 +1180,6 @@ const DataQualityTab = ({
       conditions: [{ logic: 'IF', field: '', operator: '=', value: '' }]
     });
     
-    // Save to database
     saveCustomChecksToDb([...customChecks, newCheck]);
   };
   
@@ -129,7 +1197,6 @@ const DataQualityTab = ({
       for (let i = 0; i < check.conditions.length; i++) {
         const condition = check.conditions[i];
             
-        // Handle raw_data fields
         let fieldValue;
         if (condition.field.startsWith('raw_data.')) {
           const rawFieldName = condition.field.replace('raw_data.', '');
@@ -200,13 +1267,11 @@ const DataQualityTab = ({
       }
     }
     
-    // Merge with existing results
     setCheckResults(prev => ({
       ...prev,
       custom: [...(prev.custom || []), ...results.custom]
     }));
     
-    // Update stats
     const newStats = {
       critical: results.custom.filter(i => i.severity === 'critical').length,
       warning: results.custom.filter(i => i.severity === 'warning').length,
@@ -225,7 +1290,6 @@ const DataQualityTab = ({
   };
   
   const runAllCustomChecks = async () => {
-    // Clear existing custom results
     setCheckResults(prev => ({ ...prev, custom: [] }));
     
     for (const check of customChecks) {
@@ -233,6 +1297,7 @@ const DataQualityTab = ({
     }
   };
 
+  // RENDER
   return (
     <div className="tab-content">
       {/* Sub-tab Navigation */}
@@ -279,10 +1344,9 @@ const DataQualityTab = ({
         </button>
       </div>
       
-      {/* Sub-tab Content */}
+      {/* OVERVIEW TAB CONTENT */}
       {dataQualityActiveSubTab === 'overview' && (
         <div>
-          {/* Header Section */}
           <div className="mb-6">
             <h3 className="text-2xl font-bold text-gray-800 mb-2">
               Data Quality Analysis
@@ -295,7 +1359,6 @@ const DataQualityTab = ({
             </p>
           </div>
 
-          {/* Loading Progress Bar */}
           {isLoading && (
             <div className="mb-6">
               <div className="flex items-center justify-between mb-2">
@@ -323,7 +1386,6 @@ const DataQualityTab = ({
             </div>
           )}
 
-          {/* Action Buttons */}
           <div className="flex gap-3 mb-6">
             <button 
               onClick={runQualityChecks}
@@ -350,7 +1412,6 @@ const DataQualityTab = ({
             </button>
           </div>
 
-          {/* Metrics Cards Grid */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
             <div className="bg-white border border-gray-200 rounded-lg p-4">
               <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Total Properties</div>
@@ -384,11 +1445,10 @@ const DataQualityTab = ({
           </div>
         </div>
       )}
-      
-      {/* Standard Checks Tab */}
+
+      {/* STANDARD CHECKS TAB CONTENT */}
       {dataQualityActiveSubTab === 'standard' && (
         <div>
-          {/* Check Results */}
           {Object.keys(checkResults).length > 0 ? (
             <div>
               <h4 className="text-lg font-semibold text-gray-800 mb-4">
@@ -396,7 +1456,6 @@ const DataQualityTab = ({
               </h4>
               
               {Object.entries(checkResults).map(([category, issues]) => {
-                // Add null check and skip empty categories
                 if (!issues || issues.length === 0) return null;
                 
                 const isExpanded = expandedCategories.includes(category);
@@ -503,7 +1562,7 @@ const DataQualityTab = ({
         </div>
       )}
       
-      {/* Custom Checks Tab */}
+      {/* CUSTOM CHECKS TAB CONTENT */}
       {dataQualityActiveSubTab === 'custom' && (
         <div>
           <div className="bg-white border border-gray-200 rounded-lg p-6 mb-6">
@@ -762,7 +1821,7 @@ const DataQualityTab = ({
         </div>
       )}
       
-      {/* Run History Tab */}
+      {/* HISTORY TAB CONTENT */}
       {dataQualityActiveSubTab === 'history' && (
         <div>
           <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
@@ -815,8 +1874,118 @@ const DataQualityTab = ({
           </div>
         </div>
       )}
+      
+      {/* PROPERTY DETAILS MODAL */}
+      {showDetailsModal && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center z-50 pt-10 overflow-y-auto"
+          onClick={() => setShowDetailsModal(false)}
+        >
+          <div 
+            className="bg-white rounded-lg w-[95%] max-w-6xl my-8 shadow-2xl flex flex-col"
+            style={{ maxHeight: 'calc(100vh - 100px)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-6 border-b border-gray-200 flex justify-between items-center flex-shrink-0">
+              <div className="flex items-center gap-4">
+                <h3 className="text-lg font-semibold text-gray-800">
+                  {modalData.title}
+                </h3>
+                <span className="text-sm text-gray-500">
+                  ({modalData.properties.length} properties)
+                </span>
+              </div>
+              <button
+                onClick={() => setShowDetailsModal(false)}
+                className="text-gray-500 hover:text-gray-700 text-2xl leading-none p-2"
+              >
+                ×
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto flex-1">
+              <table className="w-full">
+                <thead className="sticky top-0 bg-white z-10">
+                  <tr className="border-b-2 border-gray-200">
+                    <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider bg-white">
+                      Block
+                    </th>
+                    <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider bg-white">
+                      Lot
+                    </th>
+                    <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider bg-white">
+                      Qualifier
+                    </th>
+                    <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider bg-white">
+                      Card
+                    </th>
+                    <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider bg-white">
+                      Location
+                    </th>
+                    <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider bg-white">
+                      Class
+                    </th>
+                    <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider bg-white">
+                      Issue Details
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {modalData.properties.map((prop, index) => {
+                    const property = prop.details;
+                    
+                    return (
+                      <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
+                        <td className="py-3 px-4 text-sm text-gray-900">
+                          {property?.property_block || ''}
+                        </td>
+                        <td className="py-3 px-4 text-sm text-gray-900">
+                          {property?.property_lot || ''}
+                        </td>
+                        <td className="py-3 px-4 text-sm text-gray-900">
+                          {property?.property_qualifier || ''}
+                        </td>
+                        <td className="py-3 px-4 text-sm text-gray-900">
+                          {property?.property_card || ''}
+                        </td>
+                        <td className="py-3 px-4 text-sm text-gray-900">
+                          {property?.property_location || ''}
+                        </td>
+                        <td className="py-3 px-4 text-sm text-gray-900">
+                          {property?.property_m4_class || ''}
+                        </td>
+                        <td className="py-3 px-4 text-sm text-gray-600">
+                          {prop.message}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            
+            {modalData.properties.length > 10 && (
+              <div className="p-4 border-t border-gray-200 bg-gray-50 flex justify-between items-center flex-shrink-0">
+                <div className="text-sm text-gray-600">
+                  Showing {modalData.properties.length} properties
+                </div>
+                <button
+                  onClick={() => {
+                    const scrollableDiv = document.querySelector('.overflow-y-auto.flex-1');
+                    if (scrollableDiv) scrollableDiv.scrollTop = 0;
+                  }}
+                  className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+                >
+                  Back to Top ↑
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
 export default DataQualityTab;
+      
