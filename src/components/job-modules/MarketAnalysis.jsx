@@ -1062,13 +1062,13 @@ const exportToExcel = () => {
         }
       }
     }
-// ==================== LAND ADJUSTMENTS ====================
+    // ==================== LAND ADJUSTMENTS ====================
     // Flag properties with any land adjustments (want clean slate)
     if (vendorType === 'BRT') {
       // BRT: Check all LANDUR condition/influence fields
       let hasLandAdjustments = false;
       
-for (let i = 1; i <= 6; i++) {
+      for (let i = 1; i <= 6; i++) {
         // Check urban condition
         if (!interpretCodes.isFieldEmpty(rawData[`LANDURCOND_${i}`])) {
           hasLandAdjustments = true;
@@ -1116,8 +1116,10 @@ for (let i = 1; i <= 6; i++) {
           details: property
         });
       }
+      
     } else if (vendorType === 'Microsystems') {
-      let hasLandAdjustments = false;  // <-- ADD THIS LINE!
+      // Microsystems: Check multiple land adjustment fields
+      let hasLandAdjustments = false;
       
       // Check Net Adjustments (from headers)
       for (let i = 1; i <= 3; i++) {
@@ -1173,6 +1175,17 @@ for (let i = 1; i <= 6; i++) {
           hasLandAdjustments = true;
         }
       }
+      
+      if (hasLandAdjustments) {
+        results.special.push({
+          check: 'land_adjustments_exist',
+          severity: 'info',
+          property_key: property.property_composite_key,
+          message: 'Property has land adjustments applied',
+          details: property
+        });
+      }
+    }
 
     // ==================== MARKET ADJUSTMENTS ====================
     // Flag pre-existing market adjustments (want clean baseline)
