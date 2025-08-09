@@ -230,6 +230,41 @@ const MarketLandAnalysis = ({ jobData }) => {
 
       {/* Tab Content */}
       <div className="px-6 py-6">
+        {/* Loading Overlay */}
+        {isLoading && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-8 max-w-md w-full mx-4">
+              <div className="flex flex-col items-center">
+                <RefreshCw size={48} className="text-blue-600 animate-spin mb-4" />
+                <h3 className="text-xl font-semibold text-gray-800 mb-2">
+                  Loading Property Data
+                </h3>
+                <p className="text-gray-600 text-center mb-4">
+                  Please wait while we load {totalPropertyCount.toLocaleString()} properties...
+                </p>
+                
+                {/* Progress Bar */}
+                <div className="w-full mb-2">
+                  <div className="flex justify-between text-sm text-gray-600 mb-1">
+                    <span>Progress</span>
+                    <span>{loadingProgress}%</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                    <div 
+                      className="h-full bg-gradient-to-r from-blue-500 to-blue-600 transition-all duration-300"
+                      style={{ width: `${loadingProgress}%` }}
+                    />
+                  </div>
+                </div>
+                
+                <p className="text-sm text-gray-500 mt-2">
+                  Loaded {loadedCount.toLocaleString()} of {totalPropertyCount.toLocaleString()}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {activeTab === 'data-quality' && (
           <DataQualityTab 
             properties={properties}
