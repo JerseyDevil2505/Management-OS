@@ -41,8 +41,6 @@ const MarketLandAnalysis = ({ jobData }) => {
   });
   const [customChecks, setCustomChecks] = useState([]);
   const [currentCustomCheck, setCurrentCustomCheck] = useState({
-    name: '',
-    severity: 'warning',
     conditions: [{ logic: 'IF', field: '', operator: '=', value: '' }]
   });
   const [vendorType, setVendorType] = useState(null);
