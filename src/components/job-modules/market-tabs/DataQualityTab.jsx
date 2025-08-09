@@ -38,6 +38,47 @@ const DataQualityTab = ({
   const [isRunningChecks, setIsRunningChecks] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [modalData, setModalData] = useState({ title: '', properties: [] });
+  const [showTemplateLibrary, setShowTemplateLibrary] = useState(false);
+  const [templateLibrary, setTemplateLibrary] = useState([
+    {
+      category: 'BRT Validation',
+      templates: [
+        {
+          id: 'tpl_sf_building',
+          name: 'Single Family Building Class',
+          severity: 'critical',
+          conditions: [
+            { logic: 'IF', field: 'asset_type_use', operator: '=', value: '1' },
+            { logic: 'AND', field: 'asset_building_class', operator: 'is not one of', value: '16,17,18,19,20,21,22,23' }
+          ]
+        },
+        {
+          id: 'tpl_mf_building',
+          name: 'Multi Family Building Class',
+          severity: 'critical',
+          conditions: [
+            { logic: 'IF', field: 'asset_type_use', operator: 'is one of', value: '42,43,44' },
+            { logic: 'AND', field: 'asset_building_class', operator: 'is not one of', value: '43,45,47,49' }
+          ]
+        }
+      ]
+    },
+    {
+      category: 'Data Integrity',
+      templates: [
+        {
+          id: 'tpl_missing_design',
+          name: 'Missing Design Style',
+          severity: 'warning',
+          conditions: [
+            { logic: 'IF', field: 'asset_building_class', operator: '>', value: '10' },
+            { logic: 'AND', field: 'asset_design_style', operator: 'is null', value: '' }
+          ]
+        }
+      ]
+    }
+  ]);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
 
   // Refs for uncontrolled inputs
   const customCheckNameInputRef = useRef(null);
@@ -1259,6 +1300,43 @@ const DataQualityTab = ({
     // Remove from list so it can be re-saved with same or new name
     setCustomChecks(prev => prev.filter(c => c.id !== check.id));
   };
+
+    const handleDragLeave = (e) => {
+    // Only set to false if we're leaving the drop zone entirely
+    if (e.currentTarget === e.target) {
+      setIsDraggingOver(false);
+    }
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDraggingOver(false);
+    
+    try {
+      const template = JSON.parse(e.dataTransfer.getData('template'));
+      
+      // Check if this check already exists
+      const exists = customChecks.some(c => c.name === template.name);
+      if (exists) {
+        alert(`"${template.name}" already exists in saved checks`);
+        return;
+      }
+      
+      // Add to custom checks with new ID
+      const newCheck = {
+        ...template,
+        id: Date.now()
+      };
+      
+      const updatedChecks = [...customChecks, newCheck];
+      setCustomChecks(updatedChecks);
+      saveCustomChecksToDb(updatedChecks);
+      
+      console.log(`✅ Added "${template.name}" from template library`);
+    } catch (error) {
+      console.error('Error adding template:', error);
+    }
+  };  
   
   const runCustomCheck = async (check) => {
     const results = { custom: [] };
@@ -1729,272 +1807,312 @@ const DataQualityTab = ({
       {/* CUSTOM CHECKS TAB CONTENT */}
       {dataQualityActiveSubTab === 'custom' && (
         <div>
-          <div className="bg-white border border-gray-200 rounded-lg p-6 mb-6">
-            <h3 className="text-lg font-semibold text-gray-800 mb-4">Custom Check/Definition Builder</h3>
-            
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Check Name</label>
-                  <input 
-                    ref={customCheckNameInputRef}
-                    type="text"
-                    placeholder="e.g., Missing Tax ID for Commercial"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Severity</label>
-                  <select 
-                    ref={customCheckSeveritySelectRef}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                    defaultValue="warning"
-                    onClick={(e) => e.stopPropagation()}
-                  >  
-                    <option value="critical">Critical</option>
-                    <option value="warning">Warning</option>
-                    <option value="info">Info</option>
-                  </select>
-                </div>
-              </div>
-              
-              <div className="border-t pt-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Conditions</label>
-                {currentCustomCheck.conditions.map((condition, index) => (
-                  <div key={index} className="flex gap-2 items-center mb-2">
-                    <select 
-                      className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                      value={condition.logic}
-                      onClick={(e) => e.stopPropagation()}
-                      onChange={(e) => updateCustomCheckCondition(index, 'logic', e.target.value)}
-                      disabled={index === 0}
-                    >
-                      <option>IF</option>
-                      <option>AND</option>
-                      <option>OR</option>
-                    </select>
-                    
-                    <select 
-                      className="px-3 py-2 border border-gray-300 rounded-lg text-sm flex-1"
-                      value={condition.field}
-                      onClick={(e) => e.stopPropagation()}
-                      onChange={(e) => updateCustomCheckCondition(index, 'field', e.target.value)}
-                    >
-                      <option value="">-- Select Field --</option>
-                      
-                      <optgroup label="Property Identification">
-                        <option value="property_block">Block</option>
-                        <option value="property_lot">Lot</option>
-                        <option value="property_qualifier">Qualifier</option>
-                        <option value="property_card">Card</option>
-                        <option value="property_location">Location</option>
-                        <option value="property_m4_class">M4 Class</option>
-                        <option value="property_cama_class">CAMA Class</option>
-                        <option value="property_vcs">VCS Code</option>
-                        <option value="property_facility">Facility</option>
-                      </optgroup>
-                      
-                      <optgroup label="Values">
-                        <option value="values_mod_improvement">Mod Improvement</option>
-                        <option value="values_mod_land">Mod Land</option>
-                        <option value="values_mod_total">Mod Total</option>
-                        <option value="values_cama_improvement">CAMA Improvement</option>
-                        <option value="values_cama_land">CAMA Land</option>
-                        <option value="values_cama_total">CAMA Total</option>
-                        <option value="values_norm_time">Normalized Time Value</option>
-                        <option value="values_norm_size">Normalized Size Value</option>
-                      </optgroup>
-                      
-                      <optgroup label="Asset Information">
-                        <option value="asset_building_class">Building Class</option>
-                        <option value="asset_design_style">Design Style</option>
-                        <option value="asset_type_use">Type Use</option>
-                        <option value="asset_sfla">Living Area (SFLA)</option>
-                        <option value="asset_year_built">Year Built</option>
-                        <option value="asset_lot_acre">Lot Acres</option>
-                        <option value="asset_lot_sf">Lot Square Feet</option>
-                        <option value="asset_lot_frontage">Lot Frontage</option>
-                        <option value="asset_ext_cond">Exterior Condition</option>
-                        <option value="asset_int_cond">Interior Condition</option>
-                        <option value="asset_zoning">Zoning</option>
-                        <option value="asset_map_page">Map Page</option>
-                        <option value="asset_key_page">Key Page</option>
-                      </optgroup>
-                      
-                      <optgroup label="Sale Information">
-                        <option value="sale_date">Sale Date</option>
-                        <option value="sale_price">Sale Price</option>
-                        <option value="sale_nu">Sale NU</option>
-                        <option value="sale_book">Sale Book</option>
-                        <option value="sale_page">Sale Page</option>
-                      </optgroup>
-                      
-                      <optgroup label="Market Analysis">
-                        <option value="location_analysis">Location Analysis</option>
-                        <option value="newVCS">New VCS</option>
-                      </optgroup>
-                      
-                      {availableFields.length > 0 && (
-                        <optgroup label={`Raw Data Fields (${vendorType || 'Vendor'})`}>
-                          {availableFields.map(field => (
-                            <option key={field} value={`raw_data.${field}`}>
-                              {field}
-                            </option>
-                          ))}
-                        </optgroup>
-                      )}
-                    </select>
-
-                    <select 
-                      className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                      value={condition.operator}
-                      onChange={(e) => updateCustomCheckCondition(index, 'operator', e.target.value)}
-                    >
-                      <option value="=">=</option>
-                      <option value="!=">!=</option>
-                      <option value=">">&gt;</option>
-                      <option value="<">&lt;</option>
-                      <option value=">=">&gt;=</option>
-                      <option value="<=">&lt;=</option>
-                      <option value="is null">is null</option>
-                      <option value="is not null">is not null</option>
-                      <option value="contains">contains</option>
-                      <option value="is one of">is one of</option>
-                      <option value="is not one of">is not one of</option>
-                    </select>
-                    
-                    <input 
-                      type="text" 
-                      placeholder="Value"
-                      className="px-3 py-2 border border-gray-300 rounded-lg text-sm flex-1"
-                      value={condition.value}
-                      onClick={(e) => e.stopPropagation()}
-                      onChange={(e) => {
-                        e.stopPropagation();
-                        updateCustomCheckCondition(index, 'value', e.target.value);
-                      }}
-                      disabled={condition.operator === 'is null' || condition.operator === 'is not null'}
-                    />      
-                    
-                    <button 
-                      type="button"
-                      className="p-2 text-red-500 hover:bg-red-50 rounded"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        removeCustomCheckCondition(index);
-                      }}
-                      disabled={currentCustomCheck.conditions.length === 1}
-                    >
-                      <X size={16} />
-                    </button>
-                  </div>
-                ))}
-                
-                <button
-                  type="button"
-                  className="text-blue-600 text-sm hover:text-blue-700 mt-2"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    addConditionToCustomCheck();
-                  }}
-                >
-                  + Add Condition
-                </button>
-              </div>
-              
-              <div className="flex justify-end gap-2 pt-4 border-t">
-                <button
-                  type="button" 
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    saveCustomCheck();
-                  }}
-                >
-                  Save Custom Check
-                </button>
-              </div>
-            </div>
+          {/* View Template Library Button */}
+          <div className="mb-4">
+            <button
+              onClick={() => setShowTemplateLibrary(!showTemplateLibrary)}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
+            >
+              {showTemplateLibrary ? 'Hide' : 'View'} Template Library
+            </button>
           </div>
-          
-          <div className="bg-white border border-gray-200 rounded-lg p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-gray-800">Saved Custom Checks/Definitions</h3>
-              {customChecks.length > 0 && (
-                <button
-                  type="button"
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    runAllCustomChecks();
-                  }}
-                >
-                  Run All Custom Checks
-                </button>
-              )}
-            </div>
-            
-            {customChecks.length > 0 ? (
-              <div className="space-y-2">
-                {customChecks.map((check) => (
-                  <div key={check.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div>
-                      <div className="font-medium text-gray-800">{check.name}</div>
-                      <div className="text-sm text-gray-600">
-                        {check.conditions.length} condition{check.conditions.length !== 1 ? 's' : ''} • 
-                        <span className={`ml-1 font-medium ${
-                          check.severity === 'critical' ? 'text-red-600' :
-                          check.severity === 'warning' ? 'text-yellow-600' :
+
+          <div className="flex gap-6">
+            {/* Template Library Panel */}
+            {showTemplateLibrary && (
+              <div className="w-1/3 bg-white border border-gray-200 rounded-lg p-4">
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">
+                  📚 Template Library
+                </h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Drag templates to saved checks →
+                </p>
+                
+                {templateLibrary.map((category) => (
+                  <div key={category.category} className="mb-4">
+                    <h4 className="font-medium text-gray-700 mb-2">
+                      {category.category}
+                    </h4>
+                    {category.templates.map((template) => (
+                      <div
+                        key={template.id}
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, template)}
+                        className="p-2 mb-2 bg-blue-50 border border-blue-200 rounded cursor-move hover:bg-blue-100 transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm">📋</span>
+                          <span className="text-sm font-medium text-gray-800">
+                            {template.name}
+                          </span>
+                        </div>
+                        <span className={`text-xs ml-6 ${
+                          template.severity === 'critical' ? 'text-red-600' :
+                          template.severity === 'warning' ? 'text-yellow-600' :
                           'text-blue-600'
                         }`}>
-                          {check.severity}
+                          {template.severity}
                         </span>
                       </div>
-                    </div>
-<div className="flex gap-2">
-                      <button
-                        type="button"
-                        className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          runCustomCheck(check);
-                        }}
-                      >
-                        Run
-                      </button>
-                      <button
-                        type="button"
-                        className="px-3 py-1 text-xs bg-yellow-600 text-white rounded hover:bg-yellow-700"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          editCustomCheck(check);
-                        }}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button" 
-                        className="px-3 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          deleteCustomCheck(check.id);
-                        }}
-                      >
-                        Delete
-                      </button>
-                    </div>
+                    ))}
                   </div>
                 ))}
               </div>
-            ) : (
-              <p className="text-gray-500 text-center py-8">No custom checks saved yet</p>
             )}
-          </div>
-        </div>
-      )}
-      
+
+            {/* Main Content Area */}
+            <div className={showTemplateLibrary ? 'w-2/3' : 'w-full'}>
+              {/* Custom Check Builder */}
+              <div className="bg-white border border-gray-200 rounded-lg p-6 mb-6">
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">
+                  Custom Check/Definition Builder
+                </h3>
+                
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Check Name</label>
+                      <input 
+                        ref={customCheckNameInputRef}
+                        type="text"
+                        placeholder="e.g., Missing Tax ID for Commercial"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Severity</label>
+                      <select 
+                        ref={customCheckSeveritySelectRef}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                        defaultValue="warning"
+                        onClick={(e) => e.stopPropagation()}
+                      >  
+                        <option value="critical">Critical</option>
+                        <option value="warning">Warning</option>
+                        <option value="info">Info</option>
+                      </select>
+                    </div>
+                  </div>
+                  
+                  <div className="border-t pt-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Conditions</label>
+                    {currentCustomCheck.conditions.map((condition, index) => (
+                      <div key={index} className="flex gap-2 items-center mb-2">
+                        <select 
+                          className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                          value={condition.logic}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={(e) => updateCustomCheckCondition(index, 'logic', e.target.value)}
+                          disabled={index === 0}
+                        >
+                          <option>IF</option>
+                          <option>AND</option>
+                          <option>OR</option>
+                        </select>
+                        
+                        <select 
+                          className="px-3 py-2 border border-gray-300 rounded-lg text-sm flex-1"
+                          value={condition.field}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={(e) => updateCustomCheckCondition(index, 'field', e.target.value)}
+                        >
+                          <option value="">-- Select Field --</option>
+                          
+                          <optgroup label="Property Identification">
+                            <option value="property_block">Block</option>
+                            <option value="property_lot">Lot</option>
+                            <option value="property_qualifier">Qualifier</option>
+                            <option value="property_card">Card</option>
+                            <option value="property_location">Location</option>
+                            <option value="property_m4_class">M4 Class</option>
+                            <option value="property_cama_class">CAMA Class</option>
+                            <option value="property_vcs">VCS Code</option>
+                            <option value="property_facility">Facility</option>
+                          </optgroup>
+                          
+                          <optgroup label="Values">
+                            <option value="values_mod_improvement">Mod Improvement</option>
+                            <option value="values_mod_land">Mod Land</option>
+                            <option value="values_mod_total">Mod Total</option>
+                            <option value="values_cama_improvement">CAMA Improvement</option>
+                            <option value="values_cama_land">CAMA Land</option>
+                            <option value="values_cama_total">CAMA Total</option>
+                            <option value="values_norm_time">Normalized Time Value</option>
+                            <option value="values_norm_size">Normalized Size Value</option>
+                          </optgroup>
+                          
+                          <optgroup label="Asset Information">
+                            <option value="asset_building_class">Building Class</option>
+                            <option value="asset_design_style">Design Style</option>
+                            <option value="asset_type_use">Type Use</option>
+                            <option value="asset_sfla">Living Area (SFLA)</option>
+                            <option value="asset_year_built">Year Built</option>
+                            <option value="asset_lot_acre">Lot Acres</option>
+                            <option value="asset_lot_sf">Lot Square Feet</option>
+                            <option value="asset_lot_frontage">Lot Frontage</option>
+                            <option value="asset_ext_cond">Exterior Condition</option>
+                            <option value="asset_int_cond">Interior Condition</option>
+                            <option value="asset_zoning">Zoning</option>
+                            <option value="asset_map_page">Map Page</option>
+                            <option value="asset_key_page">Key Page</option>
+                          </optgroup>
+                          
+                          <optgroup label="Sale Information">
+                            <option value="sale_date">Sale Date</option>
+                            <option value="sale_price">Sale Price</option>
+                            <option value="sale_nu">Sale NU</option>
+                            <option value="sale_book">Sale Book</option>
+                            <option value="sale_page">Sale Page</option>
+                          </optgroup>
+                          
+                          <optgroup label="Market Analysis">
+                            <option value="location_analysis">Location Analysis</option>
+                            <option value="newVCS">New VCS</option>
+                          </optgroup>
+                          
+                          {availableFields.length > 0 && (
+                            <optgroup label={`Raw Data Fields (${vendorType || 'Vendor'})`}>
+                              {availableFields.map(field => (
+                                <option key={field} value={`raw_data.${field}`}>
+                                  {field}
+                                </option>
+                              ))}
+                            </optgroup>
+                          )}
+                        </select>
+
+                        <select 
+                          className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                          value={condition.operator}
+                          onChange={(e) => updateCustomCheckCondition(index, 'operator', e.target.value)}
+                        >
+                          <option value="=">=</option>
+                          <option value="!=">!=</option>
+                          <option value=">">&gt;</option>
+                          <option value="<">&lt;</option>
+                          <option value=">=">&gt;=</option>
+                          <option value="<=">&lt;=</option>
+                          <option value="is null">is null</option>
+                          <option value="is not null">is not null</option>
+                          <option value="contains">contains</option>
+                          <option value="is one of">is one of</option>
+                          <option value="is not one of">is not one of</option>
+                        </select>
+                        
+                        <input 
+                          type="text" 
+                          placeholder="Value"
+                          className="px-3 py-2 border border-gray-300 rounded-lg text-sm flex-1"
+                          value={condition.value}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            updateCustomCheckCondition(index, 'value', e.target.value);
+                          }}
+                          disabled={condition.operator === 'is null' || condition.operator === 'is not null'}
+                        />      
+                        
+                        <button 
+                          type="button"
+                          className="p-2 text-red-500 hover:bg-red-50 rounded"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeCustomCheckCondition(index);
+                          }}
+                          disabled={currentCustomCheck.conditions.length === 1}
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+                    ))}
+                    
+                    <button
+                      type="button"
+                      className="text-blue-600 text-sm hover:text-blue-700 mt-2"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        addConditionToCustomCheck();
+                      }}
+                    >
+                      + Add Condition
+                    </button>
+                  </div>
+                  
+                  <div className="flex justify-end gap-2 pt-4 border-t">
+                    <button
+                      type="button" 
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        saveCustomCheck();
+                      }}
+                    >
+                      Save Custom Check
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Saved Custom Checks with Drop Zone */}
+              <div 
+                className={`bg-white border-2 rounded-lg p-6 transition-all ${
+                  isDraggingOver 
+                    ? 'border-blue-400 bg-blue-50 border-dashed' 
+                    : 'border-gray-200'
+                }`}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+              >
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-semibold text-gray-800">
+                    ✅ Saved Custom Checks/Definitions
+                  </h3>
+                  {customChecks.length > 0 && !isDraggingOver && (
+                    <span className="text-sm text-gray-600">
+                      {customChecks.length} custom check{customChecks.length !== 1 ? 's' : ''} will run with analysis
+                    </span>
+                  )}
+                  {isDraggingOver && (
+                    <span className="text-sm text-blue-600 font-medium">
+                      Drop here to add to saved checks
+                    </span>
+                  )}
+                </div>
+                
+                {customChecks.length > 0 ? (
+                  <div className="space-y-2">
+                    {customChecks.map((check) => (
+                      <div key={check.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                        <div>
+                          <div className="font-medium text-gray-800">{check.name}</div>
+                          <div className="text-sm text-gray-600">
+                            {check.conditions.length} condition{check.conditions.length !== 1 ? 's' : ''} • 
+                            <span className={`ml-1 font-medium ${
+                              check.severity === 'critical' ? 'text-red-600' :
+                              check.severity === 'warning' ? 'text-yellow-600' :
+                              'text-blue-600'
+                            }`}>
+                              {check.severity}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              runCustomCheck(check);
+                            }}
+                          >
+                            Run
+                          </button>
+                          <button
+                            type="button"
+                            className="px-3 py-1 text-xs bg-ye
       {/* HISTORY TAB CONTENT */}
       {dataQualityActiveSubTab === 'history' && (
         <div>
