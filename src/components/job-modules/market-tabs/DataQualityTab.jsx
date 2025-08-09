@@ -274,16 +274,13 @@ const DataQualityTab = ({
       if (customChecks.length > 0) {
         console.log(`Running ${customChecks.length} custom checks...`);
         
-        // Clear previous custom results
-        results.custom = [];
+        // Reset custom results first
+        setCheckResults(prev => ({ ...prev, custom: [] }));
         
-        // Run each custom check and collect results
+        // Run each custom check
         for (const check of customChecks) {
-          const customResults = await runSingleCustomCheck(check);
-          results.custom.push(...customResults);
+          await runCustomCheck(check);
         }
-        
-        console.log(`Custom checks found ${results.custom.length} issues`);
       }
       
       await saveQualityResults(results);
