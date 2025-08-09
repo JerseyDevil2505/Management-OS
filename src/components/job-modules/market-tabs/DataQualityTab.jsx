@@ -483,41 +483,6 @@ const DataQualityTab = ({
         });
       }
     }
- 
-    // TYPE USE TO BUILDING CLASS VALIDATION
-    if (typeUse && buildingClass) {
-      const typeUseDescription = interpretCodes.getTypeName(property, codeDefinitions, vendor) || typeUse;
-      const typeUseLower = typeUseDescription.toLowerCase();
-      let validClasses = [];
-      
-      if (typeUseLower.includes('single') || typeUseLower.includes('one family') || 
-          typeUseLower.includes('1 family') || typeUseLower.includes('1family') ||
-          typeUseLower.includes('onefamily') || typeUseLower === 'sf') {
-        validClasses = [16, 17, 18, 19, 20, 21, 22, 23];
-      } 
-      else if (typeUseLower.includes('twin') || typeUseLower.includes('semi') || 
-               typeUseLower.includes('semidetached') || typeUseLower.includes('duplex')) {
-        validClasses = [25, 27, 29, 31];
-      } 
-      else if (typeUseLower.includes('condo') || typeUseLower.includes('townhouse') || 
-               typeUseLower.includes('townhome') || typeUseLower.includes('row')) {
-        validClasses = [33, 35, 37, 39];
-      } 
-      else if (typeUseLower.includes('multi') || typeUseLower.includes('two family') || 
-               typeUseLower.includes('2 family') || typeUseLower.includes('apartment')) {
-        validClasses = [43, 45, 47, 49];
-      }
-      
-      if (validClasses.length > 0 && !validClasses.includes(buildingClass)) {
-        results.characteristics.push({
-          check: 'type_use_building_class_mismatch',
-          severity: 'warning',
-          property_key: property.property_composite_key,
-          message: `Type use "${typeUseDescription}"${typeUse !== typeUseDescription ? ` (code: ${typeUse})` : ''} doesn't match building class ${buildingClass} (expected: ${validClasses.join(', ')})`,
-          details: property
-        });
-      }
-    }
     
     // LOT SIZE CHECKS
     const lotAcre = property.asset_lot_acre || 0;
@@ -1397,12 +1362,25 @@ const DataQualityTab = ({
   };
   
   const runAllCustomChecks = async () => {
-    setCheckResults(prev => ({ ...prev, custom: [] }));
+    // Clear existing custom results
+    const clearedResults = { ...checkResults, custom: [] };
+    setCheckResults(clearedResults);
+    
+    // Run all checks and collect results
+    let allCustomResults = [];
     
     for (const check of customChecks) {
+      // We need to modify runCustomCheck to also return the results
       await runCustomCheck(check);
     }
     
+    // Wait a bit for state to update then save
+    setTimeout(async () => {
+      // Save the current check results which now include custom
+      await saveQualityResults(checkResults);
+    }, 500);
+    
+    // Jump back to overview
     setDataQualityActiveSubTab('overview');
   };
 
@@ -1429,7 +1407,7 @@ const DataQualityTab = ({
               : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
           }`}
         >
-          Standard Checks
+          Standard & Custom Check Results
         </button>
         <button
           onClick={() => setDataQualityActiveSubTab('custom')}
