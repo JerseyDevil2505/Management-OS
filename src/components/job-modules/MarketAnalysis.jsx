@@ -1337,7 +1337,6 @@ for (let i = 1; i <= 6; i++) {
         });
       }
     }
-  }
   };  // This closes runPropertyChecks function
 
   const saveQualityResults = async (results) => {
@@ -1365,7 +1364,7 @@ for (let i = 1; i <= 6; i++) {
         .eq('job_id', jobData.id)
         .single();
       
-// Create new run entry
+    // Create new run entry
       const newRun = {
         date: new Date().toISOString(),
         propertyCount: properties.length,
