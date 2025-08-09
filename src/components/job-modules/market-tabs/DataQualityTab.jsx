@@ -39,45 +39,35 @@ const DataQualityTab = ({
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [modalData, setModalData] = useState({ title: '', properties: [] });
   const [showTemplateLibrary, setShowTemplateLibrary] = useState(false);
-  const [templateLibrary, setTemplateLibrary] = useState([
-    {
-      category: 'BRT Validation',
-      templates: [
+  const [templateLibrary, setTemplateLibrary] = useState([]);
+
+  // Load custom checks into template library
+  useEffect(() => {
+    if (customChecks.length > 0) {
+      // Group checks by category based on their names
+      const categorizedTemplates = [
         {
-          id: 'tpl_sf_building',
-          name: 'Single Family Building Class',
-          severity: 'critical',
-          conditions: [
-            { logic: 'IF', field: 'asset_type_use', operator: '=', value: '1' },
-            { logic: 'AND', field: 'asset_building_class', operator: 'is not one of', value: '16,17,18,19,20,21,22,23' }
-          ]
+          category: 'Building Class Validation',
+          templates: customChecks.filter(check => 
+            check.name.toLowerCase().includes('building class')
+          )
         },
         {
-          id: 'tpl_mf_building',
-          name: 'Multi Family Building Class',
-          severity: 'critical',
-          conditions: [
-            { logic: 'IF', field: 'asset_type_use', operator: 'is one of', value: '42,43,44' },
-            { logic: 'AND', field: 'asset_building_class', operator: 'is not one of', value: '43,45,47,49' }
-          ]
-        }
-      ]
-    },
-    {
-      category: 'Data Integrity',
-      templates: [
+          category: 'Data Integrity',
+          templates: customChecks.filter(check => 
+            check.name.toLowerCase().includes('missing') || 
+            check.name.toLowerCase().includes('zero')
+          )
+        },
         {
-          id: 'tpl_missing_design',
-          name: 'Missing Design Style',
-          severity: 'warning',
-          conditions: [
-            { logic: 'IF', field: 'asset_building_class', operator: '>', value: '10' },
-            { logic: 'AND', field: 'asset_design_style', operator: 'is null', value: '' }
-          ]
+          category: 'All Checks',
+          templates: customChecks
         }
-      ]
+      ];
+      
+      setTemplateLibrary(categorizedTemplates.filter(cat => cat.templates.length > 0));
     }
-  ]);
+  }, [customChecks]);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
 
   // Refs for uncontrolled inputs
@@ -2101,17 +2091,34 @@ const DataQualityTab = ({
                       </>
                     )}
                   </div>
-                  {isDraggingOver && (
-                    <span className="text-sm text-blue-600 font-medium">
-                      Drop here to add to saved checks
-                    </span>
-                  )}
-                </div>
-                  {isDraggingOver && (
-                    <span className="text-sm text-blue-600 font-medium">
-                      Drop here to add to saved checks
-                    </span>
-                  )}
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-semibold text-gray-800">
+                    ✅ Saved Custom Checks/Definitions
+                  </h3>
+                  <div className="flex items-center gap-4">
+                    {customChecks.length > 0 && !isDraggingOver && (
+                      <>
+                        <span className="text-sm text-gray-600">
+                          {customChecks.length} custom check{customChecks.length !== 1 ? 's' : ''} will run with analysis
+                        </span>
+                        <button
+                          type="button"
+                          className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            runAllCustomChecks();
+                          }}
+                        >
+                          Run All Custom Checks
+                        </button>
+                      </>
+                    )}
+                    {isDraggingOver && (
+                      <span className="text-sm text-blue-600 font-medium">
+                        Drop here to add to saved checks
+                      </span>
+                    )}
+                  </div>
                 </div>
                 
                 {customChecks.length > 0 ? (
