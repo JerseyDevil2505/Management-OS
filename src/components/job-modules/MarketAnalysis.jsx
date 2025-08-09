@@ -1716,7 +1716,8 @@ for (let i = 1; i <= 6; i++) {
                   const criticalCount = issues.filter(i => i.severity === 'critical').length;
                   const warningCount = issues.filter(i => i.severity === 'warning').length;
                   const infoCount = issues.filter(i => i.severity === 'info').length;
-                  const passCount = properties.length - issues.length;
+                  const uniquePropertiesWithIssues = new Set(issues.map(i => i.property_key)).size;
+                  const passCount = properties.length - uniquePropertiesWithIssues;
                   
                   return (
                     <div key={category} className="bg-white border border-gray-200 rounded-lg mb-3 overflow-hidden">
@@ -2205,7 +2206,22 @@ for (let i = 1; i <= 6; i++) {
                 <thead className="sticky top-0 bg-white z-10">
                   <tr className="border-b-2 border-gray-200">
                     <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider bg-white">
-                      Property Key
+                      Block
+                    </th>
+                    <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider bg-white">
+                      Lot
+                    </th>
+                    <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider bg-white">
+                      Qualifier
+                    </th>
+                    <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider bg-white">
+                      Card
+                    </th>
+                    <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider bg-white">
+                      Location
+                    </th>
+                    <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider bg-white">
+                      Class
                     </th>
                     <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider bg-white">
                       Issue Details
@@ -2213,16 +2229,36 @@ for (let i = 1; i <= 6; i++) {
                   </tr>
                 </thead>
                 <tbody>
-                  {modalData.properties.map((prop, index) => (
-                    <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="py-3 px-4 text-sm text-gray-900">
-                        {prop.property_key}
-                      </td>
-                      <td className="py-3 px-4 text-sm text-gray-600">
-                        {prop.message}
-                      </td>
-                    </tr>
-                  ))}
+                  {modalData.properties.map((prop, index) => {
+                    // Get the full property details from the details object
+                    const property = prop.details;
+                    
+                    return (
+                      <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
+                        <td className="py-3 px-4 text-sm text-gray-900">
+                          {property?.property_block || ''}
+                        </td>
+                        <td className="py-3 px-4 text-sm text-gray-900">
+                          {property?.property_lot || ''}
+                        </td>
+                        <td className="py-3 px-4 text-sm text-gray-900">
+                          {property?.property_qualifier || ''}
+                        </td>
+                        <td className="py-3 px-4 text-sm text-gray-900">
+                          {property?.property_card || ''}
+                        </td>
+                        <td className="py-3 px-4 text-sm text-gray-900">
+                          {property?.property_location || ''}
+                        </td>
+                        <td className="py-3 px-4 text-sm text-gray-900">
+                          {property?.property_m4_class || ''}
+                        </td>
+                        <td className="py-3 px-4 text-sm text-gray-600">
+                          {prop.message}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
