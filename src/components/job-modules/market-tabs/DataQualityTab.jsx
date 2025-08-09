@@ -270,12 +270,20 @@ const DataQualityTab = ({
         }
       });
       
+      // Run all custom checks automatically
+      if (customChecks.length > 0) {
+        console.log(`Running ${customChecks.length} custom checks...`);
+        for (const check of customChecks) {
+          await runCustomCheck(check);
+        }
+      }
+      
       await saveQualityResults(results);
       
       const score = calculateQualityScore(results);
       setQualityScore(score);
       setCheckResults(results);
-      
+     
       console.log('Quality check complete!');
     } catch (error) {
       console.error('Error running quality checks:', error);
@@ -1123,6 +1131,7 @@ const DataQualityTab = ({
         ? prev.filter(id => id !== categoryId)
         : [...prev, categoryId]
     );
+  };
   const getCheckTitle = (checkType) => {
     // Handle custom checks
     if (checkType.startsWith('custom_')) {
@@ -1256,7 +1265,6 @@ const DataQualityTab = ({
     setCustomChecks(prev => prev.filter(c => c.id !== check.id));
   };
   
-  const runCustomCheck = async (check) => {
   const runCustomCheck = async (check) => {
     const results = { custom: [] };
     
