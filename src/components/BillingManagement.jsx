@@ -542,13 +542,6 @@ Thank you for your immediate attention to this matter.`;
       const remainingDaysInYear = (12 - currentMonth + 1) * 21; // Rough estimate
       const remainingYearExpenses = globalMetrics.dailyFringe * remainingDaysInYear;
       
-      // Conservative approach (available today)
-      const conservative = globalMetrics.totalPaid - 
-                          operatingReserve - 
-                          cashReserve - 
-                          ytdDistributions - 
-                          remainingYearExpenses;
-      
       // Projected approach (available by year-end)
       const projected = projectedYearEnd - 
                        operatingReserve - 
@@ -557,7 +550,6 @@ Thank you for your immediate attention to this matter.`;
                        globalMetrics.projectedExpenses;
       
       setDistributionMetrics({
-        conservative: Math.max(0, conservative),
         projected: Math.max(0, projected),
         ytdDistributions,
         monthlyCollectionRate,
