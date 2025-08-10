@@ -53,12 +53,12 @@ const JobContainer = ({
         .limit(1)
         .single();
 
-      // Get code version, end_date, and workflow_stats from jobs table 
+     // Get code version, end_date, and workflow_stats from jobs table 
       const { data: jobData, error: jobError } = await supabase
-        .from('jobs')
-        .select('code_file_version, updated_at, end_date, workflow_stats')
-        .eq('id', selectedJob.id)
-        .single();
+       .from('jobs')
+       .select('code_file_version, updated_at, end_date, workflow_stats, parsed_code_definitions, vendor_type')
+       .eq('id', selectedJob.id)
+       .single();
 
       // Get as_of_date from inspection_data table
       const { data: inspectionData, error: inspectionError } = await supabase
@@ -105,6 +105,10 @@ const JobContainer = ({
         sourceFileDate: dataVersionData?.updated_at || null,
         end_date: jobData?.end_date || selectedJob.end_date,
         workflow_stats: jobData?.workflow_stats || selectedJob.workflowStats || null
+
+       // ADD THESE TWO LINES:
+       parsed_code_definitions: jobData?.parsed_code_definitions || null,
+       vendor_type: jobData?.vendor_type || null
       };
       
       setJobData(enrichedJobData);
