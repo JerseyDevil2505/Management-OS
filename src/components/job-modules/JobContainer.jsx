@@ -104,7 +104,7 @@ const JobContainer = ({
         asOfDate: inspectionData?.upload_date || null,
         sourceFileDate: dataVersionData?.updated_at || null,
         end_date: jobData?.end_date || selectedJob.end_date,
-        workflow_stats: jobData?.workflow_stats || selectedJob.workflowStats || null
+        workflow_stats: jobData?.workflow_stats || selectedJob.workflowStats || null,
 
        // ADD THESE TWO LINES:
        parsed_code_definitions: jobData?.parsed_code_definitions || null,
