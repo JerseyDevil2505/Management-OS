@@ -684,8 +684,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       while (hasMore) {
         const { data: batch, error: batchError } = await supabase
           .from('property_records')
-          .select('property_composite_key, property_block, property_lot, property_qualifier, property_location, sales_price, sales_date, sales_nu, property_m4_class, property_cama_class')
-
+          .select('property_composite_key, property_block, property_lot, property_qualifier, property_location, sales_price, sales_date, sales_nu, sales_book, sales_page, property_m4_class, property_cama_class')
           .eq('job_id', job.id)
           .range(rangeStart, rangeStart + batchSize - 1);
           
@@ -762,6 +761,10 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         // ADD: Get sales_nu values
         const sourceSalesNu = sourceRecord[detectedVendor === 'BRT' ? 'CURRENTSALE_NU' : 'Sale Nu'] || '';
         const dbSalesNu = dbRecord.sales_nu || '';
+        const sourceSalesBook = sourceRecord[detectedVendor === 'BRT' ? 'CURRENTSALE_BOOK' : 'Sale Book'] || '';
+        const dbSalesBook = dbRecord.sales_book || '';
+        const sourceSalesPage = sourceRecord[detectedVendor === 'BRT' ? 'CURRENTSALE_PAGE' : 'Sale Page'] || '';
+        const dbSalesPage = dbRecord.sales_page || '';
           
         // FIXED: Normalize both dates for accurate comparison using processor method
         const sourceSalesDate = parseDate(sourceRecord[detectedVendor === 'BRT' ? 'CURRENTSALE_DATE' : 'Sale Date']);
@@ -770,6 +773,8 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         // FIXED: Use proper number comparison with reasonable tolerance AND normalized date comparison
         const pricesDifferent = Math.abs(sourceSalesPrice - dbSalesPrice) > 0.01;
         const datesDifferent = sourceSalesDate !== dbSalesDate;
+        const booksDifferent = sourceSalesBook !== dbSalesBook;
+        const pagesDifferent = sourceSalesPage !== dbSalesPage;
         
         /* DEBUG: Log the first few sales comparisons to see what's happening
         if ((pricesDifferent || datesDifferent) && salesChanges.length < 3) {
@@ -796,6 +801,8 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
               sales_price: { old: dbSalesPrice, new: sourceSalesPrice },
               sales_date: { old: dbSalesDate, new: sourceSalesDate },
               sales_nu: { old: dbSalesNu, new: sourceSalesNu }
+              sales_book: { old: dbSalesBook, new: sourceSalesBook },
+              sales_page: { old: dbSalesPage, new: sourceSalesPage }
             }
           });
         }
@@ -1157,46 +1164,138 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       await saveComparisonReport(comparisonResults, salesDecisions);
       addBatchLog('✅ Comparison report saved successfully', 'success');
       
-      // Store sales decisions as JSON in property records
+// Store sales decisions as JSON in property records
       if (salesDecisions.size > 0) {
         setProcessingStatus('Saving sales decisions...');
         addBatchLog(`💰 Processing ${salesDecisions.size} sales decisions...`, 'info');
         
         let salesProcessed = 0;
+        let salesReverted = 0;
+        let salesBothStored = 0;
+        
         for (const [compositeKey, decision] of salesDecisions.entries()) {
           const salesChange = comparisonResults.details.salesChanges.find(sc => sc.property_composite_key === compositeKey);
           
+          if (!salesChange) {
+            console.error('Could not find sales change data for:', compositeKey);
+            continue;
+          }
+          
           try {
-            const { error } = await supabase
-              .from('property_records')
-              .update({ 
+            let updateData = {};
+            
+            if (decision === 'Keep Old') {
+              // REVERT to old sales data
+              updateData = {
+                sales_price: salesChange.differences.sales_price.old,
+                sales_date: salesChange.differences.sales_date.old,
+                sales_nu: salesChange.differences.sales_nu.old,
+                sales_book: salesChange.differences.sales_book.old,
+                sales_page: salesChange.differences.sales_page.old,
                 sales_history: {
                   comparison_date: new Date().toISOString().split('T')[0],
                   sales_decision: {
                     decision_type: decision,
-                    old_price: salesChange?.differences.sales_price.old,
-                    new_price: salesChange?.differences.sales_price.new,
-                    old_date: salesChange?.differences.sales_date.old,
-                    new_date: salesChange?.differences.sales_date.new,
-                    decided_by: 'user', // TODO: Get actual user ID
-                    decided_at: new Date().toISOString()
+                    old_price: salesChange.differences.sales_price.old,
+                    new_price: salesChange.differences.sales_price.new,
+                    old_date: salesChange.differences.sales_date.old,
+                    new_date: salesChange.differences.sales_date.new,
+                    old_book: salesChange.differences.sales_book.old,
+                    new_book: salesChange.differences.sales_book.new,
+                    old_page: salesChange.differences.sales_page.old,
+                    new_page: salesChange.differences.sales_page.new,
+                    decided_by: 'user',
+                    decided_at: new Date().toISOString(),
+                    action_taken: 'Reverted to old values'
                   }
                 }
-              })
+              };
+              salesReverted++;
+              
+            } else if (decision === 'Keep New') {
+              // Just store the decision - new values already in place
+              updateData = {
+                sales_history: {
+                  comparison_date: new Date().toISOString().split('T')[0],
+                  sales_decision: {
+                    decision_type: decision,
+                    old_price: salesChange.differences.sales_price.old,
+                    new_price: salesChange.differences.sales_price.new,
+                    old_date: salesChange.differences.sales_date.old,
+                    new_date: salesChange.differences.sales_date.new,
+                    old_book: salesChange.differences.sales_book.old,
+                    new_book: salesChange.differences.sales_book.new,
+                    old_page: salesChange.differences.sales_page.old,
+                    new_page: salesChange.differences.sales_page.new,
+                    decided_by: 'user',
+                    decided_at: new Date().toISOString(),
+                    action_taken: 'Kept new values'
+                  }
+                }
+              };
+              
+            } else if (decision === 'Keep Both') {
+              // Store both sales in history, keep new as current
+              updateData = {
+                sales_history: {
+                  comparison_date: new Date().toISOString().split('T')[0],
+                  sales_decision: {
+                    decision_type: decision,
+                    old_price: salesChange.differences.sales_price.old,
+                    new_price: salesChange.differences.sales_price.new,
+                    old_date: salesChange.differences.sales_date.old,
+                    new_date: salesChange.differences.sales_date.new,
+                    old_book: salesChange.differences.sales_book.old,
+                    new_book: salesChange.differences.sales_book.new,
+                    old_page: salesChange.differences.sales_page.old,
+                    new_page: salesChange.differences.sales_page.new,
+                    decided_by: 'user',
+                    decided_at: new Date().toISOString(),
+                    action_taken: 'Kept both - new as current, old in history'
+                  },
+                  previous_sales: [
+                    {
+                      sales_price: salesChange.differences.sales_price.old,
+                      sales_date: salesChange.differences.sales_date.old,
+                      sales_nu: salesChange.differences.sales_nu.old,
+                      sales_book: salesChange.differences.sales_book.old,
+                      sales_page: salesChange.differences.sales_page.old,
+                      recorded_date: new Date().toISOString()
+                    }
+                  ]
+                }
+              };
+              salesBothStored++;
+            }
+            
+            const { error } = await supabase
+              .from('property_records')
+              .update(updateData)
               .eq('property_composite_key', compositeKey)
               .eq('job_id', job.id);
             
             if (error) {
-              console.error('Error updating sales history:', error);
+              console.error('Error updating sales decision:', error);
               addBatchLog(`❌ Error saving sales decision for ${compositeKey}`, 'error', { error: error.message });
             } else {
               salesProcessed++;
             }
           } catch (updateError) {
-            console.error('Failed to update sales history for property:', compositeKey, updateError);
-            addBatchLog(`❌ Failed to update sales history for ${compositeKey}`, 'error', { error: updateError.message });
+            console.error('Failed to update sales decision for property:', compositeKey, updateError);
+            addBatchLog(`❌ Failed to update sales decision for ${compositeKey}`, 'error', { error: updateError.message });
           }
         }
+        
+        addBatchLog(`✅ Processed ${salesProcessed}/${salesDecisions.size} sales decisions`, 'success', {
+          reverted: salesReverted,
+          keptNew: salesProcessed - salesReverted - salesBothStored,
+          keptBoth: salesBothStored
+        });
+        
+        if (salesReverted > 0) {
+          addNotification(`↩️ Reverted ${salesReverted} sales to old values`, 'info');
+        }
+      }
         
         addBatchLog(`✅ Saved ${salesProcessed}/${salesDecisions.size} sales decisions`, 'success');
       }
@@ -1652,6 +1751,17 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                                   <div className="text-xs text-gray-500">
                                     NU: {change.differences.sales_nu.old}
                                   </div>
+                                )}
+                                {change.differences.sales_book?.old && (
+                                  <div className="text-xs text-gray-500">
+                                    Book: {change.differences.sales_book.old}
+                                  </div>
+                                )}
+                                {change.differences.sales_page?.old && (
+                                  <div className="text-xs text-gray-500">
+                                    Page: {change.differences.sales_page.old}
+                                  </div>
+                                )}
                                 )}                                
                               </div>
                               <div className="text-gray-400">→</div>
@@ -1666,7 +1776,18 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                                 {change.differences.sales_nu?.new && (
                                   <div className="text-xs text-gray-500">
                                     NU: {change.differences.sales_nu.new}
-                                  </div>    
+                                  </div>
+                                )}
+                                {change.differences.sales_book?.new && (
+                                  <div className="text-xs text-gray-500">
+                                    Book: {change.differences.sales_book.new}
+                                  </div>
+                                )}
+                                {change.differences.sales_page?.new && (
+                                  <div className="text-xs text-gray-500">
+                                    Page: {change.differences.sales_page.new}
+                                  </div>
+                                )}   
                                 )}                                
                               </div>
                             </div>
