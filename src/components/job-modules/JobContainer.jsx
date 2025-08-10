@@ -354,76 +354,89 @@ const JobContainer = ({
   const ActiveComponent = activeModuleData?.component;
 
   return (
-    <div className="max-w-6xl mx-auto p-6 bg-white">
+    <div className="bg-white">
       {/* Enhanced File Version Status Banner with Progress Bar */}
-      {!isLoadingVersion && (
-        <div className={`mb-6 rounded-lg border p-4 ${
-          versionError 
-            ? 'bg-red-50 border-red-200' 
-            : 'bg-blue-50 border-blue-200'
-        }`}>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              {versionError ? (
-                <AlertCircle className="w-5 h-5 text-red-600 mr-2" />
-              ) : (
-                <Database className="w-5 h-5 text-blue-600 mr-2" />
-              )}
-              <span className={`font-medium ${
-                versionError ? 'text-red-800' : 'text-blue-800'
-              }`}>
-                {versionError 
-                  ? 'Data Loading Error' 
-                  : `Current Data Version: ${latestFileVersion} | Current Code Version: ${latestCodeVersion}`
-                }
-              </span>
-              {jobData?.has_property_assignments && (
-                <span className="ml-3 px-2 py-1 bg-yellow-100 text-yellow-800 text-xs font-medium rounded">
-                  Assigned Properties Only
+      <div className="max-w-6xl mx-auto p-6">
+        {/* Show loading banner DURING load */}
+        {(isLoadingVersion || isLoadingProperties) && (
+          <div className="mb-6 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg p-6 shadow-lg">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white mr-3"></div>
+                <h3 className="text-lg font-semibold">
+                  {isLoadingVersion ? 'Initializing job data...' : 'Loading property records...'}
+                </h3>
+              </div>
+              {!isLoadingVersion && <span className="text-xl font-bold">{loadingProgress}%</span>}
+            </div>
+            
+            {!isLoadingVersion && propertyRecordsCount > 0 && (
+              <>
+                <div className="w-full bg-white bg-opacity-20 rounded-full h-3 overflow-hidden">
+                  <div 
+                    className="h-full bg-white transition-all duration-300 rounded-full"
+                    style={{ width: `${loadingProgress}%` }}
+                  />
+                </div>
+                <p className="text-sm mt-2 text-blue-100">
+                  Loading {loadedCount.toLocaleString()} of {propertyRecordsCount.toLocaleString()} properties
+                  {jobData?.has_property_assignments && ' (assigned properties only)'}
+                </p>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Show version info banner AFTER loading */}
+        {!isLoadingVersion && !isLoadingProperties && (
+          <div className={`mb-6 rounded-lg border p-4 ${
+            versionError 
+              ? 'bg-red-50 border-red-200' 
+              : 'bg-blue-50 border-blue-200'
+          }`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                {versionError ? (
+                  <AlertCircle className="w-5 h-5 text-red-600 mr-2" />
+                ) : (
+                  <Database className="w-5 h-5 text-blue-600 mr-2" />
+                )}
+                <span className={`font-medium ${
+                  versionError ? 'text-red-800' : 'text-blue-800'
+                }`}>
+                  {versionError 
+                    ? 'Data Loading Error' 
+                    : `Current Data Version: ${latestFileVersion} | Current Code Version: ${latestCodeVersion}`
+                  }
                 </span>
+                {jobData?.has_property_assignments && (
+                  <span className="ml-3 px-2 py-1 bg-yellow-100 text-yellow-800 text-xs font-medium rounded">
+                    Assigned Properties Only
+                  </span>
+                )}
+              </div>
+              {!versionError && (
+                <div className="text-sm text-blue-600">
+                  <span>{propertyRecordsCount.toLocaleString()} properties available</span>
+                </div>
               )}
             </div>
-            {!versionError && (
-              <div className="text-sm text-blue-600">
-                <span>{propertyRecordsCount.toLocaleString()} properties available</span>
+            
+            {versionError && (
+              <div className="mt-2">
+                <p className="text-sm text-red-700">
+                  {versionError}
+                </p>
+                <button
+                  onClick={loadLatestFileVersions}
+                  className="mt-2 text-sm text-red-600 hover:text-red-800 underline"
+                >
+                  Retry Loading
+                </button>
               </div>
             )}
           </div>
-          
-          {/* Progress Bar for Property Loading */}
-          {isLoadingProperties && (
-            <div className="mt-3">
-              <div className="flex justify-between text-xs text-gray-600 mb-1">
-                <span>Loading properties...</span>
-                <span>{loadingProgress}%</span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-                <div 
-                  className="h-full bg-gradient-to-r from-blue-500 to-blue-600 transition-all duration-300"
-                  style={{ width: `${loadingProgress}%` }}
-                />
-              </div>
-              <p className="text-xs text-gray-500 mt-1">
-                Loaded {loadedCount.toLocaleString()} of {propertyRecordsCount.toLocaleString()}
-              </p>
-            </div>
-          )}
-          
-          {versionError && (
-            <div className="mt-2">
-              <p className="text-sm text-red-700">
-                {versionError}
-              </p>
-              <button
-                onClick={loadLatestFileVersions}
-                className="mt-2 text-sm text-red-600 hover:text-red-800 underline"
-              >
-                Retry Loading
-              </button>
-            </div>
-          )}
-        </div>
-      )}
+        )}
 
       {/* Loading State */}
       {isLoadingVersion && (
@@ -478,7 +491,8 @@ const JobContainer = ({
         </div>
       </div>
 
-      {/* Active Module Content */}
+      </div>
+      {/* Active Module Content - Each module controls its own container */}
       <div className="min-h-96">
         {ActiveComponent && jobData ? (
           <ActiveComponent
