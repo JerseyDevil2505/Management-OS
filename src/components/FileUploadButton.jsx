@@ -800,7 +800,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
             differences: {
               sales_price: { old: dbSalesPrice, new: sourceSalesPrice },
               sales_date: { old: dbSalesDate, new: sourceSalesDate },
-              sales_nu: { old: dbSalesNu, new: sourceSalesNu }
+              sales_nu: { old: dbSalesNu, new: sourceSalesNu },
               sales_book: { old: dbSalesBook, new: sourceSalesBook },
               sales_page: { old: dbSalesPage, new: sourceSalesPage }
             }
