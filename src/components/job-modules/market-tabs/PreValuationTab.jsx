@@ -222,7 +222,7 @@ useEffect(() => {
           id: prop.id,
           property_composite_key: prop.property_composite_key,
           ...parsed,
-          property_address: prop.property_address,
+          property_location: prop.property_location,
           property_class: prop.property_class || prop.property_m4_class,
           property_vcs: prop.property_vcs || prop.current_vcs || '',
           new_vcs: prop.new_vcs || '',
@@ -247,13 +247,25 @@ useEffect(() => {
   // ==================== NORMALIZATION FUNCTIONS ====================
   
   const getHPIMultiplier = useCallback((saleYear, targetYear) => {
-    if (saleYear === targetYear) return 1.0;
+    // Find the max year available in HPI data
+    const maxHPIYear = Math.max(...hpiData.map(h => h.observation_year));
+    
+    // If sale year is beyond our HPI data, use 1.0
+    if (saleYear > maxHPIYear) return 1.0;
+    
+    // Use the max available year if target year is beyond HPI data
+    const effectiveTargetYear = targetYear > maxHPIYear ? maxHPIYear : targetYear;
+    
+    if (saleYear === effectiveTargetYear) return 1.0;
     
     const saleYearData = hpiData.find(h => h.observation_year === saleYear);
-    const targetYearData = hpiData.find(h => h.observation_year === targetYear);
+    const targetYearData = hpiData.find(h => h.observation_year === effectiveTargetYear);
     
     if (!saleYearData || !targetYearData) {
-      console.warn(`Missing HPI data for year ${!saleYearData ? saleYear : targetYear}. Using 1.0 multiplier.`);
+      // Only warn once, not for every sale
+      if (!saleYearData && saleYear <= maxHPIYear) {
+        console.warn(`Missing HPI data for sale year ${saleYear}`);
+      }
       return 1.0;
     }
     
@@ -275,14 +287,17 @@ const runTimeNormalization = useCallback(async () => {
         const saleYear = new Date(p.sales_date).getFullYear();
         if (saleYear < salesFromYear) return false;
         
-        // Must have building class > 10, typeuse, and design
-        if (!p.asset_building_class || parseInt(p.asset_building_class) <= 10) return false;
-        if (!p.asset_type_use) return false;
-        if (!p.asset_design_style) return false;
+        // Must have building class > 10, typeuse, and design (trim spaces for legacy ASCII 32)
+        const buildingClass = p.asset_building_class?.toString().trim();
+        const typeUse = p.asset_type_use?.toString().trim();
+        const designStyle = p.asset_design_style?.toString().trim();
+        
+        if (!buildingClass || parseInt(buildingClass) <= 10) return false;
+        if (!typeUse) return false;
+        if (!designStyle) return false;
         
         return true;
       });
-
       const excludedCount = properties.filter(p => 
         p.sales_price && p.sales_price > 0 && p.sales_price < minSalePrice
       ).length;
@@ -294,8 +309,8 @@ const runTimeNormalization = useCallback(async () => {
         const timeNormalizedPrice = Math.round(prop.sales_price * hpiMultiplier);
         
         // Calculate sales ratio if we have assessed value
-        const salesRatio = prop.assessed_value ? 
-          (prop.assessed_value / timeNormalizedPrice) : null;
+        const salesRatio = prop.values_mod_total ? 
+          (prop.values_mod_total / timeNormalizedPrice) : null;
         
         // Flag outliers based on equalization ratio
         const lowerBound = equalizationRatio * (1 - outlierThreshold/100);
@@ -345,19 +360,25 @@ const runTimeNormalization = useCallback(async () => {
       // Only use sales that were kept after time normalization review
       const acceptedSales = timeNormalizedSales.filter(s => s.keep_reject === 'keep');
       
-      // Group by type/use codes as discussed
+      // Group by type/use codes using "starts with" pattern
       const groups = {
         singleFamily: acceptedSales.filter(s => 
-          s.asset_type_use && !['42','43','44','30','31','51','52','53'].includes(s.asset_type_use)
+          s.asset_type_use?.toString().trim().startsWith('1')
         ),
-        multifamily: acceptedSales.filter(s => 
-          ['42','43','44'].includes(s.asset_type_use)
+        semiDetached: acceptedSales.filter(s => 
+          s.asset_type_use?.toString().trim().startsWith('2')
         ),
         townhouses: acceptedSales.filter(s => 
-          ['30','31'].includes(s.asset_type_use)
+          s.asset_type_use?.toString().trim().startsWith('3')
+        ),
+        multifamily: acceptedSales.filter(s => 
+          s.asset_type_use?.toString().trim().startsWith('4')
         ),
         conversions: acceptedSales.filter(s => 
-          ['51','52','53'].includes(s.asset_type_use)
+          s.asset_type_use?.toString().trim().startsWith('5')
+        ),
+        condominiums: acceptedSales.filter(s => 
+          s.asset_type_use?.toString().trim().startsWith('6')
         )
       };
 
@@ -393,9 +414,11 @@ const runTimeNormalization = useCallback(async () => {
         acceptedSales: acceptedSales.length,
         sizeNormalized: totalSizeNormalized,
         singleFamily: groups.singleFamily.length,
-        multifamily: groups.multifamily.length,
+        semiDetached: groups.semiDetached.length,
         townhouses: groups.townhouses.length,
+        multifamily: groups.multifamily.length,
         conversions: groups.conversions.length,
+        condominiums: groups.condominiums.length,
         avgSizeAdjustment: totalSizeNormalized > 0 ? 
           Math.round(totalAdjustment / totalSizeNormalized) : 0
       }));
@@ -637,7 +660,7 @@ const runTimeNormalization = useCallback(async () => {
     
     filteredWorksheetProps.forEach(prop => {
       csv += `"${prop.block}","${prop.lot}","${prop.qualifier || ''}","${prop.card || ''}","${prop.location || ''}",`;
-      csv += `"${prop.property_address}","${prop.property_class}","${prop.property_vcs}",`;
+      csv += `"${prop.property_location}","${prop.property_class}","${prop.property_vcs}",`;
       csv += `"${prop.building_class_display}","${prop.type_use_display}","${prop.design_display}",`;
       csv += `"${prop.new_vcs}","${prop.location_analysis}","${prop.asset_zoning}",`;
       csv += `"${prop.asset_map_page}","${prop.asset_key_page}","${prop.worksheet_notes}",`;
@@ -653,7 +676,7 @@ const runTimeNormalization = useCallback(async () => {
     URL.revokeObjectURL(url);
   };
 
-  const analyzeImportFile = async (file) => {
+const analyzeImportFile = async (file) => {
     setIsAnalyzingImport(true);
     setImportFile(file);
     
@@ -663,7 +686,7 @@ const runTimeNormalization = useCallback(async () => {
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
       const jsonData = XLSX.utils.sheet_to_json(worksheet);
       
-      // Analysis logic from our discussion
+      // Analysis results
       const analysis = {
         fileName: file.name,
         totalRows: jsonData.length,
@@ -672,13 +695,76 @@ const runTimeNormalization = useCallback(async () => {
         fuzzyMatched: []
       };
       
-      // Process each row
+      // Process each row from Excel
       for (const row of jsonData) {
-        // Matching logic here...
+        // Build composite key from Excel data (need Year and CCDD columns)
+        const year = row.Year || new Date().getFullYear();
+        const ccdd = row.CCDD || jobData?.ccdd || '';
+        const block = row.Block?.toString() || '';
+        const lot = row.Lot?.toString() || '';
+        const qual = row.Qual?.toString().trim() || 'NONE';
+        const card = row.Bldg?.toString() || row.Card?.toString() || 'NONE';
+        const location = row.Location?.toString() || 'NONE';
+        
+        const compositeKey = `${year}${ccdd}-${block}-${lot}_${qual}-${card}-${location}`;
+        
+        // Find matching property in worksheet
+        const match = worksheetProperties.find(p => p.property_composite_key === compositeKey);
+        
+        if (match) {
+          analysis.matched.push({
+            compositeKey,
+            excelData: row,
+            currentData: match,
+            updates: {
+              new_vcs: row['New VCS'] || '',
+              asset_zoning: row.Zone || '',
+              asset_map_page: row['Map Page']?.toString() || '',
+              asset_key_page: row['Key Page']?.toString() || ''
+            }
+          });
+        } else {
+          // Try fuzzy match on address if no composite key match
+          if (importOptions.useAddressFuzzyMatch && row.Location) {
+            const fuzzyMatch = worksheetProperties.find(p => {
+              if (!p.property_location) return false;
+              const similarity = calculateSimilarity(
+                p.property_location.toLowerCase(),
+                row.Location.toString().toLowerCase()
+              );
+              return similarity >= importOptions.fuzzyMatchThreshold;
+            });
+            
+            if (fuzzyMatch) {
+              analysis.fuzzyMatched.push({
+                compositeKey,
+                excelData: row,
+                currentData: fuzzyMatch,
+                updates: {
+                  new_vcs: row['New VCS'] || '',
+                  asset_zoning: row.Zone || '',
+                  asset_map_page: row['Map Page']?.toString() || '',
+                  asset_key_page: row['Key Page']?.toString() || ''
+                }
+              });
+            } else {
+              analysis.unmatched.push({
+                compositeKey,
+                excelData: row
+              });
+            }
+          } else {
+            analysis.unmatched.push({
+              compositeKey,
+              excelData: row
+            });
+          }
+        }
       }
       
       setImportPreview(analysis);
       setShowImportModal(true);
+      console.log(`Import analysis complete: ${analysis.matched.length} exact, ${analysis.fuzzyMatched.length} fuzzy, ${analysis.unmatched.length} unmatched`);
     } catch (error) {
       console.error('Error analyzing import file:', error);
       alert('Error analyzing file. Please check the format.');
@@ -686,7 +772,45 @@ const runTimeNormalization = useCallback(async () => {
       setIsAnalyzingImport(false);
     }
   };
-
+  
+  // Helper function for fuzzy matching
+  const calculateSimilarity = (str1, str2) => {
+    const longer = str1.length > str2.length ? str1 : str2;
+    const shorter = str1.length > str2.length ? str2 : str1;
+    
+    if (longer.length === 0) return 1.0;
+    
+    const distance = levenshteinDistance(longer, shorter);
+    return (longer.length - distance) / longer.length;
+  };
+  
+  const levenshteinDistance = (str1, str2) => {
+    const matrix = [];
+    
+    for (let i = 0; i <= str2.length; i++) {
+      matrix[i] = [i];
+    }
+    
+    for (let j = 0; j <= str1.length; j++) {
+      matrix[0][j] = j;
+    }
+    
+    for (let i = 1; i <= str2.length; i++) {
+      for (let j = 1; j <= str1.length; j++) {
+        if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+          matrix[i][j] = matrix[i - 1][j - 1];
+        } else {
+          matrix[i][j] = Math.min(
+            matrix[i - 1][j - 1] + 1,
+            matrix[i][j - 1] + 1,
+            matrix[i - 1][j] + 1
+          );
+        }
+      }
+    }
+    
+    return matrix[str2.length][str1.length];
+  };
   // ==================== SEARCH AND FILTER ====================
   
   useEffect(() => {
@@ -695,7 +819,7 @@ const runTimeNormalization = useCallback(async () => {
     if (worksheetSearchTerm) {
       const searchLower = worksheetSearchTerm.toLowerCase();
       filtered = filtered.filter(p =>
-        p.property_address?.toLowerCase().includes(searchLower) ||
+        p.property_location?.toLowerCase().includes(searchLower) ||
         p.property_composite_key?.toLowerCase().includes(searchLower) ||
         p.block?.includes(worksheetSearchTerm) ||
         p.lot?.includes(worksheetSearchTerm)
@@ -922,12 +1046,12 @@ const runTimeNormalization = useCallback(async () => {
                 </div>
               </div>
 
-              {/* Sales Review Table */}
+{/* Sales Review Table */}
               <div className="bg-white rounded-lg shadow p-6">
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-lg font-semibold">Sales Review</h3>
                   <div className="flex gap-2">
-                    <select
+<select
                       value={salesReviewFilter}
                       onChange={(e) => setSalesReviewFilter(e.target.value)}
                       className="px-3 py-2 border border-gray-300 rounded"
@@ -935,8 +1059,24 @@ const runTimeNormalization = useCallback(async () => {
                       <option value="all">All Sales</option>
                       <option value="flagged">Flagged Only</option>
                       <option value="pending">Pending Review</option>
-                      <option value="single-family">Single Family (10)</option>
-                      <option value="multifamily">Multifamily (42/43/44)</option>
+                      {timeNormalizedSales.some(s => s.asset_type_use?.toString().trim().startsWith('1')) && (
+                        <option value="type-1">Single Family</option>
+                      )}
+                      {timeNormalizedSales.some(s => s.asset_type_use?.toString().trim().startsWith('2')) && (
+                        <option value="type-2">Semi-Detached</option>
+                      )}
+                      {timeNormalizedSales.some(s => s.asset_type_use?.toString().trim().startsWith('3')) && (
+                        <option value="type-3">Row/Townhomes</option>
+                      )}
+                      {timeNormalizedSales.some(s => s.asset_type_use?.toString().trim().startsWith('4')) && (
+                        <option value="type-4">MultiFamily</option>
+                      )}
+                      {timeNormalizedSales.some(s => s.asset_type_use?.toString().trim().startsWith('5')) && (
+                        <option value="type-5">Conversions</option>
+                      )}
+                      {timeNormalizedSales.some(s => s.asset_type_use?.toString().trim().startsWith('6')) && (
+                        <option value="type-6">Condominiums</option>
+                      )}
                     </select>
                     <button
                       onClick={() => {/* Export logic */}}
@@ -951,12 +1091,17 @@ const runTimeNormalization = useCallback(async () => {
                   <table className="w-full">
                     <thead className="bg-gray-50 border-b">
                       <tr>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Property ID</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Address</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Block</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Lot</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Qual</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Card</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Location</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Class</th>
                         <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Type</th>
                         <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Sale Date</th>
                         <th className="px-4 py-3 text-right text-sm font-medium text-gray-700">Sale Price</th>
                         <th className="px-4 py-3 text-right text-sm font-medium text-gray-700">Time Norm</th>
+                        <th className="px-4 py-3 text-right text-sm font-medium text-gray-700">Sale NU</th>
                         <th className="px-4 py-3 text-center text-sm font-medium text-gray-700">Ratio</th>
                         <th className="px-4 py-3 text-center text-sm font-medium text-gray-700">Status</th>
                         <th className="px-4 py-3 text-center text-sm font-medium text-gray-700">Decision</th>
@@ -968,69 +1113,83 @@ const runTimeNormalization = useCallback(async () => {
                           if (salesReviewFilter === 'all') return true;
                           if (salesReviewFilter === 'flagged') return sale.is_outlier;
                           if (salesReviewFilter === 'pending') return sale.keep_reject === 'pending';
-                          if (salesReviewFilter === 'single-family') return sale.asset_type_use === '10';
-                          if (salesReviewFilter === 'multifamily') return ['42','43','44'].includes(sale.asset_type_use);
+                          if (salesReviewFilter === 'type-1') return sale.asset_type_use?.toString().trim().startsWith('1');
+                          if (salesReviewFilter === 'type-2') return sale.asset_type_use?.toString().trim().startsWith('2');
+                          if (salesReviewFilter === 'type-3') return sale.asset_type_use?.toString().trim().startsWith('3');
+                          if (salesReviewFilter === 'type-4') return sale.asset_type_use?.toString().trim().startsWith('4');
+                          if (salesReviewFilter === 'type-5') return sale.asset_type_use?.toString().trim().startsWith('5');
+                          if (salesReviewFilter === 'type-6') return sale.asset_type_use?.toString().trim().startsWith('6');
                           return true;
                         })
                         .slice(0, 50)
-                        .map((sale) => (
-                          <tr key={sale.id} className="border-b hover:bg-gray-50">
-                            <td className="px-4 py-3 text-sm">{sale.property_composite_key}</td>
-                            <td className="px-4 py-3 text-sm">{sale.property_address}</td>
-                            <td className="px-4 py-3 text-sm">
-                              <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">
-                                {getTypeUseDisplay(sale)}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 text-sm">
-                              {new Date(sale.sale_date).toLocaleDateString()}
-                            </td>
-                            <td className="px-4 py-3 text-sm text-right">
-                              ${sale.sale_price?.toLocaleString()}
-                            </td>
-                            <td className="px-4 py-3 text-sm text-right">
-                              ${sale.time_normalized_price?.toLocaleString()}
-                            </td>
-                            <td className="px-4 py-3 text-sm text-center">
-                              {sale.sales_ratio?.toFixed(2)}
-                            </td>
-                            <td className="px-4 py-3 text-sm text-center">
-                              {sale.is_outlier ? (
-                                <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded text-xs">
-                                  Outlier
+                        .map((sale) => {
+                          const parsed = parseCompositeKey(sale.property_composite_key);
+                          return (
+                            <tr key={sale.id} className="border-b hover:bg-gray-50">
+                              <td className="px-4 py-3 text-sm">{parsed.block}</td>
+                              <td className="px-4 py-3 text-sm">{parsed.lot}</td>
+                              <td className="px-4 py-3 text-sm">{parsed.qualifier || ''}</td>
+                              <td className="px-4 py-3 text-sm">{parsed.card || '1'}</td>
+                              <td className="px-4 py-3 text-sm">{sale.property_location}</td>
+                              <td className="px-4 py-3 text-sm">{sale.property_class || sale.property_m4_class}</td>
+                              <td className="px-4 py-3 text-sm">
+                                <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">
+                                  {sale.asset_type_use || ''}
                                 </span>
-                              ) : (
-                                <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs">
-                                  Valid
-                                </span>
-                              )}
-                            </td>
-                            <td className="px-4 py-3">
-                              <div className="flex gap-1 justify-center">
-                                <button
-                                  onClick={() => handleSalesDecision(sale.id, 'keep')}
-                                  className={`px-2 py-1 rounded text-xs ${
-                                    sale.keep_reject === 'keep'
-                                      ? 'bg-green-600 text-white'
-                                      : 'bg-gray-200 hover:bg-green-100'
-                                  }`}
-                                >
-                                  Keep
-                                </button>
-                                <button
-                                  onClick={() => handleSalesDecision(sale.id, 'reject')}
-                                  className={`px-2 py-1 rounded text-xs ${
-                                    sale.keep_reject === 'reject'
-                                      ? 'bg-red-600 text-white'
-                                      : 'bg-gray-200 hover:bg-red-100'
-                                  }`}
-                                >
-                                  Reject
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
+                              </td>
+                              <td className="px-4 py-3 text-sm">
+                                {sale.sales_date ? new Date(sale.sales_date).toLocaleDateString() : ''}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-right">
+                                ${sale.sales_price?.toLocaleString()}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-right">
+                                ${sale.time_normalized_price?.toLocaleString()}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-right">
+                                {sale.sales_nu || ''}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-center">
+                                {sale.sales_ratio?.toFixed(2)}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-center">
+                                {sale.is_outlier ? (
+                                  <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded text-xs">
+                                    Outlier
+                                  </span>
+                                ) : (
+                                  <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs">
+                                    Valid
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="flex gap-1 justify-center">
+                                  <button
+                                    onClick={() => handleSalesDecision(sale.id, 'keep')}
+                                    className={`px-2 py-1 rounded text-xs ${
+                                      sale.keep_reject === 'keep'
+                                        ? 'bg-green-600 text-white'
+                                        : 'bg-gray-200 hover:bg-green-100'
+                                    }`}
+                                  >
+                                    Keep
+                                  </button>
+                                  <button
+                                    onClick={() => handleSalesDecision(sale.id, 'reject')}
+                                    className={`px-2 py-1 rounded text-xs ${
+                                      sale.keep_reject === 'reject'
+                                        ? 'bg-red-600 text-white'
+                                        : 'bg-gray-200 hover:bg-red-100'
+                                    }`}
+                                  >
+                                    Reject
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
                     </tbody>
                   </table>
                 </div>
@@ -1066,19 +1225,20 @@ const runTimeNormalization = useCallback(async () => {
                 <div className="p-4 bg-blue-50 rounded mb-4">
                   <p className="text-sm">
                     <strong>Process:</strong> After reviewing time normalization results, run size normalization on accepted sales. 
-                    Properties are grouped by type and adjusted to their group's average size:
+                    Properties are grouped by type (based on first digit/character) and adjusted to their group's average size:
                   </p>
                   <ul className="text-sm mt-2 space-y-1">
-                    <li>• <strong>Single Family:</strong> 10 and other residential types (most common)</li>
-                    <li>• <strong>Multifamily:</strong> 42, 43, 44 grouped together (if present)</li>
-                    <li>• <strong>Townhouses/Row:</strong> 30, 31 grouped together (if present)</li>
-                    <li>• <strong>Conversions:</strong> 51, 52, 53 grouped together (if present)</li>
-                    <li>• <strong>Tax Exempt:</strong> 15A-F included (residences, parsonages, group homes)</li>
+                    <li>• <strong>Single Family (1x):</strong> All codes starting with 1</li>
+                    <li>• <strong>Semi-Detached (2x):</strong> All codes starting with 2</li>
+                    <li>• <strong>Row/Townhouses (3x):</strong> All codes starting with 3</li>
+                    <li>• <strong>Multifamily (4x):</strong> All codes starting with 4</li>
+                    <li>• <strong>Conversions (5x):</strong> All codes starting with 5</li>
+                    <li>• <strong>Condominiums (6x):</strong> All codes starting with 6</li>
                   </ul>
                 </div>
 
                 {normalizationStats.sizeNormalized > 0 && (
-                  <div className="grid grid-cols-6 gap-4">
+<div className="grid grid-cols-4 gap-4">
                     <div className="text-center">
                       <div className="text-2xl font-bold">{normalizationStats.acceptedSales}</div>
                       <div className="text-sm text-gray-600">Accepted Sales</div>
@@ -1087,22 +1247,42 @@ const runTimeNormalization = useCallback(async () => {
                       <div className="text-2xl font-bold">{normalizationStats.sizeNormalized}</div>
                       <div className="text-sm text-gray-600">Size Normalized</div>
                     </div>
-                    <div className="text-center">
-                      <div className="text-2xl font-bold">{normalizationStats.singleFamily}</div>
-                      <div className="text-sm text-gray-600">Single Family</div>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-2xl font-bold">{normalizationStats.multifamily}</div>
-                      <div className="text-sm text-gray-600">Multifamily (42-44)</div>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-2xl font-bold">{normalizationStats.townhouses}</div>
-                      <div className="text-sm text-gray-600">Townhouses (30-31)</div>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-2xl font-bold">{normalizationStats.conversions}</div>
-                      <div className="text-sm text-gray-600">Conversions (51-53)</div>
-                    </div>
+                    {normalizationStats.singleFamily > 0 && (
+                      <div className="text-center">
+                        <div className="text-2xl font-bold">{normalizationStats.singleFamily}</div>
+                        <div className="text-sm text-gray-600">Single Family (1x)</div>
+                      </div>
+                    )}
+                    {normalizationStats.semiDetached > 0 && (
+                      <div className="text-center">
+                        <div className="text-2xl font-bold">{normalizationStats.semiDetached}</div>
+                        <div className="text-sm text-gray-600">Semi-Detached (2x)</div>
+                      </div>
+                    )}
+                    {normalizationStats.townhouses > 0 && (
+                      <div className="text-center">
+                        <div className="text-2xl font-bold">{normalizationStats.townhouses}</div>
+                        <div className="text-sm text-gray-600">Townhouses (3x)</div>
+                      </div>
+                    )}
+                    {normalizationStats.multifamily > 0 && (
+                      <div className="text-center">
+                        <div className="text-2xl font-bold">{normalizationStats.multifamily}</div>
+                        <div className="text-sm text-gray-600">Multifamily (4x)</div>
+                      </div>
+                    )}
+                    {normalizationStats.conversions > 0 && (
+                      <div className="text-center">
+                        <div className="text-2xl font-bold">{normalizationStats.conversions}</div>
+                        <div className="text-sm text-gray-600">Conversions (5x)</div>
+                      </div>
+                    )}
+                    {normalizationStats.condominiums > 0 && (
+                      <div className="text-center">
+                        <div className="text-2xl font-bold">{normalizationStats.condominiums}</div>
+                        <div className="text-sm text-gray-600">Condominiums (6x)</div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -1242,9 +1422,9 @@ const runTimeNormalization = useCallback(async () => {
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">Loc</th>
                     <th 
                       className="px-3 py-2 text-left text-xs font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
-                      onClick={() => handleSort('property_address')}
+                      onClick={() => handleSort('property_location')}
                     >
-                      Address {sortConfig.field === 'property_address' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                      Address {sortConfig.field === 'property_location' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
                     </th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">Class</th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">Current VCS</th>
@@ -1269,7 +1449,7 @@ const runTimeNormalization = useCallback(async () => {
                       <td className="px-3 py-2 text-sm">{prop.qualifier}</td>
                       <td className="px-3 py-2 text-sm">{prop.card || '1'}</td>
                       <td className="px-3 py-2 text-sm">{prop.location || '-'}</td>
-                      <td className="px-3 py-2 text-sm">{prop.property_address}</td>
+                      <td className="px-3 py-2 text-sm">{prop.property_location}</td>
                       <td className="px-3 py-2 text-sm">{prop.property_class}</td>
                       <td className="px-3 py-2 text-sm">{prop.property_vcs}</td>
                       <td className="px-1">
