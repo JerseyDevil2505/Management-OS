@@ -163,13 +163,13 @@ useEffect(() => {
     try {
       const { data, error } = await supabase
         .from('county_hpi_data')
-        .select('county')
+        .select('county_name')
         .order('county');
       
       if (error) throw error;
       
       // Get unique counties
-      const uniqueCounties = [...new Set(data.map(item => item.county))];
+      const uniqueCounties = [...new Set(data.map(item => item.county_name))];
       setAvailableCounties(uniqueCounties);
       
       // Set default to job's county or first available
@@ -195,7 +195,7 @@ useEffect(() => {
         const { data, error } = await supabase
           .from('county_hpi_data')
           .select('*')
-          .eq('county', selectedCounty)
+          .eq('county_name', selectedCounty)
           .order('year', { ascending: true });
         
         if (error) throw error;
