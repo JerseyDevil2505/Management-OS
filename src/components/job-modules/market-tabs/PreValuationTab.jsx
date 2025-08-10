@@ -121,7 +121,7 @@ const PreValuationTab = ({ jobData, properties }) => {
       vendorType
     );
     
-    return typeName || property.asset_typeuse || '';
+    return typeName || property.asset_type_use || '';
   }, [codeDefinitions, vendorType]);
 
   const getDesignDisplay = useCallback((property) => {
@@ -224,8 +224,8 @@ useEffect(() => {
           ...parsed,
           property_address: prop.property_address,
           property_class: prop.property_class || prop.property_m4_class,
-          asset_vcs: prop.asset_vcs || prop.current_vcs || '',
-          asset_newvcs: prop.asset_newvcs || '',
+          property_vcs: prop.property_vcs || prop.current_vcs || '',
+          new_vcs: prop.new_vcs || '',
           location_analysis: prop.location_analysis || '',
           asset_zoning: prop.asset_zoning || '',
           asset_map_page: prop.asset_map_page || '',
@@ -263,35 +263,35 @@ useEffect(() => {
     return targetHPI / saleHPI;
   }, [hpiData]);
 
-  const runTimeNormalization = useCallback(async () => {
+const runTimeNormalization = useCallback(async () => {
     setIsProcessingTime(true);
     
     try {
       // Filter for VALID residential sales only (as discussed)
       const validSales = properties.filter(p => {
-        if (!p.sale_price || p.sale_price < minSalePrice) return false;
-        if (!p.sale_date) return false;
+        if (!p.sales_price || p.sales_price < minSalePrice) return false;
+        if (!p.sales_date) return false;
         
-        const saleYear = new Date(p.sale_date).getFullYear();
+        const saleYear = new Date(p.sales_date).getFullYear();
         if (saleYear < salesFromYear) return false;
         
         // Must have building class > 10, typeuse, and design
         if (!p.asset_building_class || parseInt(p.asset_building_class) <= 10) return false;
-        if (!p.asset_typeuse) return false;
+        if (!p.asset_type_use) return false;
         if (!p.asset_design_style) return false;
         
         return true;
       });
 
       const excludedCount = properties.filter(p => 
-        p.sale_price && p.sale_price > 0 && p.sale_price < minSalePrice
+        p.sales_price && p.sales_price > 0 && p.sales_price < minSalePrice
       ).length;
 
       // Process each valid sale
       const normalized = validSales.map(prop => {
-        const saleYear = new Date(prop.sale_date).getFullYear();
+        const saleYear = new Date(prop.sales_date).getFullYear();
         const hpiMultiplier = getHPIMultiplier(saleYear, normalizeToYear);
-        const timeNormalizedPrice = Math.round(prop.sale_price * hpiMultiplier);
+        const timeNormalizedPrice = Math.round(prop.sales_price * hpiMultiplier);
         
         // Calculate sales ratio if we have assessed value
         const salesRatio = prop.assessed_value ? 
@@ -348,16 +348,16 @@ useEffect(() => {
       // Group by type/use codes as discussed
       const groups = {
         singleFamily: acceptedSales.filter(s => 
-          s.asset_typeuse && !['42','43','44','30','31','51','52','53'].includes(s.asset_typeuse)
+          s.asset_type_use && !['42','43','44','30','31','51','52','53'].includes(s.asset_type_use)
         ),
         multifamily: acceptedSales.filter(s => 
-          ['42','43','44'].includes(s.asset_typeuse)
+          ['42','43','44'].includes(s.asset_type_use)
         ),
         townhouses: acceptedSales.filter(s => 
-          ['30','31'].includes(s.asset_typeuse)
+          ['30','31'].includes(s.asset_type_use)
         ),
         conversions: acceptedSales.filter(s => 
-          ['51','52','53'].includes(s.asset_typeuse)
+          ['51','52','53'].includes(s.asset_type_use)
         )
       };
 
@@ -457,7 +457,7 @@ useEffect(() => {
   const updateWorksheetStats = useCallback((props) => {
     const stats = {
       totalProperties: props.length,
-      vcsAssigned: props.filter(p => p.asset_newvcs).length,
+      vcsAssigned: props.filter(p => p.new_vcs).length,
       zoningEntered: props.filter(p => p.asset_zoning).length,
       locationAnalysis: props.filter(p => p.location_analysis).length,
       readyToProcess: readyProperties.size
@@ -475,7 +475,7 @@ useEffect(() => {
       prop.property_composite_key === propertyKey
         ? { 
             ...prop, 
-            [field]: field === 'asset_newvcs' || field === 'asset_zoning' 
+            [field]: field === 'new_vcs' || field === 'asset_zoning' 
               ? value.toUpperCase() 
               : value 
           }
@@ -593,7 +593,7 @@ useEffect(() => {
         await supabase
           .from('property_records')
           .update({
-            asset_newvcs: prop.asset_newvcs,
+            new_vcs: prop.new_vcs,
             location_analysis: prop.location_analysis,
             asset_zoning: prop.asset_zoning,
             asset_map_page: prop.asset_map_page,
@@ -612,7 +612,7 @@ useEffect(() => {
   };
 
   const copyCurrentVCS = (propertyKey, currentVCS) => {
-    handleWorksheetChange(propertyKey, 'asset_newvcs', currentVCS);
+    handleWorksheetChange(propertyKey, 'new_vcs', currentVCS);
   };
 
   const handleSort = (field) => {
@@ -637,9 +637,9 @@ useEffect(() => {
     
     filteredWorksheetProps.forEach(prop => {
       csv += `"${prop.block}","${prop.lot}","${prop.qualifier || ''}","${prop.card || ''}","${prop.location || ''}",`;
-      csv += `"${prop.property_address}","${prop.property_class}","${prop.asset_vcs}",`;
+      csv += `"${prop.property_address}","${prop.property_class}","${prop.property_vcs}",`;
       csv += `"${prop.building_class_display}","${prop.type_use_display}","${prop.design_display}",`;
-      csv += `"${prop.asset_newvcs}","${prop.location_analysis}","${prop.asset_zoning}",`;
+      csv += `"${prop.new_vcs}","${prop.location_analysis}","${prop.asset_zoning}",`;
       csv += `"${prop.asset_map_page}","${prop.asset_key_page}","${prop.worksheet_notes}",`;
       csv += `"${readyProperties.has(prop.property_composite_key) ? 'Yes' : 'No'}"\n`;
     });
@@ -704,7 +704,7 @@ useEffect(() => {
     
     switch (worksheetFilter) {
       case 'missing-vcs':
-        filtered = filtered.filter(p => !p.asset_newvcs);
+        filtered = filtered.filter(p => !p.new_vcs);
         break;
       case 'missing-location':
         filtered = filtered.filter(p => !p.location_analysis);
@@ -716,7 +716,7 @@ useEffect(() => {
         filtered = filtered.filter(p => readyProperties.has(p.property_composite_key));
         break;
       case 'completed':
-        filtered = filtered.filter(p => p.asset_newvcs && p.asset_zoning);
+        filtered = filtered.filter(p => p.new_vcs && p.asset_zoning);
         break;
     }
     
@@ -968,8 +968,8 @@ useEffect(() => {
                           if (salesReviewFilter === 'all') return true;
                           if (salesReviewFilter === 'flagged') return sale.is_outlier;
                           if (salesReviewFilter === 'pending') return sale.keep_reject === 'pending';
-                          if (salesReviewFilter === 'single-family') return sale.asset_typeuse === '10';
-                          if (salesReviewFilter === 'multifamily') return ['42','43','44'].includes(sale.asset_typeuse);
+                          if (salesReviewFilter === 'single-family') return sale.asset_type_use === '10';
+                          if (salesReviewFilter === 'multifamily') return ['42','43','44'].includes(sale.asset_type_use);
                           return true;
                         })
                         .slice(0, 50)
@@ -1271,10 +1271,10 @@ useEffect(() => {
                       <td className="px-3 py-2 text-sm">{prop.location || '-'}</td>
                       <td className="px-3 py-2 text-sm">{prop.property_address}</td>
                       <td className="px-3 py-2 text-sm">{prop.property_class}</td>
-                      <td className="px-3 py-2 text-sm">{prop.asset_vcs}</td>
+                      <td className="px-3 py-2 text-sm">{prop.property_vcs}</td>
                       <td className="px-1">
                         <button
-                          onClick={() => copyCurrentVCS(prop.property_composite_key, prop.asset_vcs)}
+                          onClick={() => copyCurrentVCS(prop.property_composite_key, prop.property_vcs)}
                           className="px-2 py-1 text-xs bg-gray-200 hover:bg-gray-300 rounded"
                           title="Copy current VCS to new"
                         >
@@ -1287,8 +1287,8 @@ useEffect(() => {
                       <td className="px-2 py-1 bg-gray-50">
                         <input
                           type="text"
-                          value={prop.asset_newvcs}
-                          onChange={(e) => handleWorksheetChange(prop.property_composite_key, 'asset_newvcs', e.target.value)}
+                          value={prop.new_vcs}
+                          onChange={(e) => handleWorksheetChange(prop.property_composite_key, 'new_vcs', e.target.value)}
                           maxLength="4"
                           className="w-16 px-1 py-1 border border-gray-300 rounded text-sm uppercase"
                           style={{ textTransform: 'uppercase' }}
