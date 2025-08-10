@@ -129,6 +129,40 @@ export const interpretCodes = {
     'built_ins_591': '591',
     'detached_items': '680'
   },
+  // BRT section to field mapping
+  brtSectionMap: {
+    'asset_design_style': '23',
+    'asset_building_class': '20',
+    'asset_type_use': '21',
+    'asset_stories': '22',
+    'asset_ext_cond': '60',
+    'asset_int_cond': '60',  // Same section, different codes
+    'inspection_info_by': '53',
+    // Raw data fields
+    'roof_type': '24',
+    'roof_material': '25',
+    'exterior_finish': '26',
+    'foundation': '27',
+    'interior_finish': '28',
+    'floor_finish': '29',
+    'basement': '30',
+    'heat_source': '31',
+    'heat_system': '32',
+    'electric': '33',
+    'air_cond': '34',
+    'plumbing': '35',
+    'fireplace': '36',
+    'attic_dormer': '37',
+    'garages': '41',
+    'neighborhood': '50',
+    'view': '51',
+    'utilities': '52',
+    'road': '54',
+    'curbing': '55',
+    'sidewalk': '56',
+    'condition': '60',
+    'vcs': 'special'  // Handle VCS differently
+  },
 
   // Get decoded value for Microsystems property field
   getMicrosystemsValue: function(property, codeDefinitions, fieldName) {
@@ -152,8 +186,37 @@ export const interpretCodes = {
     // Return decoded value or original code if not found
     return codeDefinitions[lookupKey] || code;
   },
+    // ADD THIS: Core BRT lookup function
+  getBRTValue: function(property, codeDefinitions, fieldName, sectionNumber) {
+    if (!property || !codeDefinitions) return null;
+    
+    // Check both the property field and raw_data
+    let code = property[fieldName];
+    if (!code && property.raw_data) {
+      code = property.raw_data[fieldName];
+    }
+    
+    if (!code || code.trim() === '') return null;
+    
+    // Check if we have sections (BRT structure)
+    if (!codeDefinitions.sections || !codeDefinitions.sections[sectionNumber]) {
+      return code;
+    }
+    
+    const section = codeDefinitions.sections[sectionNumber];
+    const sectionMap = section.MAP || {};
+    
+    // Look through the MAP for matching code
+    for (const [key, value] of Object.entries(sectionMap)) {
+      if (value.KEY === code || value.DATA?.KEY === code) {
+        return value.DATA?.VALUE || value.VALUE || code;
+      }
+    }
+       
+    return code; // Return original if no match found
+  },
 
-  // Get design name for any vendor
+  // REPLACE the existing getDesignName with this:
   getDesignName: function(property, codeDefinitions, vendorType) {
     if (!property || !codeDefinitions) return null;
     
@@ -163,13 +226,13 @@ export const interpretCodes = {
     if (vendorType === 'Microsystems') {
       return this.getMicrosystemsValue(property, codeDefinitions, 'asset_design_style');
     } else if (vendorType === 'BRT') {
-      return this.getBRTValue(property, codeDefinitions, 'asset_design_style');
+      return this.getBRTValue(property, codeDefinitions, 'asset_design_style', '23');
     }
     
     return designCode;
   },
 
-  // Get type/use name for any vendor
+  // REPLACE the existing getTypeName with this:
   getTypeName: function(property, codeDefinitions, vendorType) {
     if (!property || !codeDefinitions) return null;
     
@@ -179,7 +242,7 @@ export const interpretCodes = {
     if (vendorType === 'Microsystems') {
       return this.getMicrosystemsValue(property, codeDefinitions, 'asset_type_use');
     } else if (vendorType === 'BRT') {
-      return this.getBRTValue(property, codeDefinitions, 'asset_type_use');
+      return this.getBRTValue(property, codeDefinitions, 'asset_type_use', '21');
     }
     
     return typeCode;
@@ -190,38 +253,39 @@ export const interpretCodes = {
     return !value || value.toString().trim() === '';
   }, 
  
-  // Get exterior condition name
-  getExteriorConditionName: function(property, codeDefinitions, vendorType) {
-    if (!property || !codeDefinitions) return null;
-    
-    const condCode = property.asset_ext_cond;
-    if (!condCode || condCode.trim() === '') return null;
-    
-    if (vendorType === 'Microsystems') {
-      return this.getMicrosystemsValue(property, codeDefinitions, 'asset_ext_cond');
-    } else if (vendorType === 'BRT') {
-      return this.getBRTValue(property, codeDefinitions, 'asset_ext_cond');
-    }
-    
-    return condCode;
-  },
+// Fix getExteriorConditionName:
+getExteriorConditionName: function(property, codeDefinitions, vendorType) {
+  if (!property || !codeDefinitions) return null;
+  
+  const condCode = property.asset_ext_cond;
+  if (!condCode || condCode.trim() === '') return null;
+  
+  if (vendorType === 'Microsystems') {
+    return this.getMicrosystemsValue(property, codeDefinitions, 'asset_ext_cond');
+  } else if (vendorType === 'BRT') {
+    // ADD THE SECTION NUMBER HERE - need to find what section exterior condition is in
+    return this.getBRTValue(property, codeDefinitions, 'asset_ext_cond', '60'); 
+  }
+  
+  return condCode;
+},
 
-  // Get interior condition name
-  getInteriorConditionName: function(property, codeDefinitions, vendorType) {
-    if (!property || !codeDefinitions) return null;
-    
-    const condCode = property.asset_int_cond;
-    if (!condCode || condCode.trim() === '') return null;
-    
-    if (vendorType === 'Microsystems') {
-      return this.getMicrosystemsValue(property, codeDefinitions, 'asset_int_cond');
-    } else if (vendorType === 'BRT') {
-      return this.getBRTValue(property, codeDefinitions, 'asset_int_cond');
-    }
-    
-    return condCode;
-  },
-
+// Fix getInteriorConditionName:
+getInteriorConditionName: function(property, codeDefinitions, vendorType) {
+  if (!property || !codeDefinitions) return null;
+  
+  const condCode = property.asset_int_cond;
+  if (!condCode || condCode.trim() === '') return null;
+  
+  if (vendorType === 'Microsystems') {
+    return this.getMicrosystemsValue(property, codeDefinitions, 'asset_int_cond');
+  } else if (vendorType === 'BRT') {
+    // ADD THE SECTION NUMBER HERE - need to find what section interior condition is in
+    return this.getBRTValue(property, codeDefinitions, 'asset_int_cond', '60'); 
+  }
+  
+  return condCode;
+},
   // Get raw data value with vendor awareness
   getRawDataValue: function(property, fieldName, vendorType) {
     if (!property || !property.raw_data) return null;
