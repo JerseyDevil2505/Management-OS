@@ -164,7 +164,7 @@ useEffect(() => {
       const { data, error } = await supabase
         .from('county_hpi_data')
         .select('county_name')
-        .order('county');
+        .order('county_name');
       
       if (error) throw error;
       
