@@ -973,7 +973,8 @@ const analyzeImportFile = async (file) => {
 
       {/* Normalization Tab Content */}
       {activeSubTab === 'normalization' && (
-        <div className="space-y-6">
+        <div className="w-full">
+          <div className="space-y-6 px-4">
           {/* Configuration Section */}
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex justify-between items-center mb-4">
@@ -1138,12 +1139,12 @@ const analyzeImportFile = async (file) => {
                 </div>
               </div>
 
-{/* Sales Review Table */}
+              {/* Sales Review Table */}
               <div className="bg-white rounded-lg shadow p-6">
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-lg font-semibold">Sales Review</h3>
                   <div className="flex gap-2">
-<select
+                  <select
                       value={salesReviewFilter}
                       onChange={(e) => setSalesReviewFilter(e.target.value)}
                       className="px-3 py-2 border border-gray-300 rounded"
@@ -1360,7 +1361,7 @@ const analyzeImportFile = async (file) => {
                 </div>
 
                 {normalizationStats.sizeNormalized > 0 && (
-<div className="grid grid-cols-4 gap-4">
+                  <div className="grid grid-cols-4 gap-4">
                     <div className="text-center">
                       <div className="text-2xl font-bold">{normalizationStats.acceptedSales}</div>
                       <div className="text-sm text-gray-600">Accepted Sales</div>
@@ -1410,6 +1411,7 @@ const analyzeImportFile = async (file) => {
               </div>
             </>
           )}
+          </div>
         </div>
       )}
 
