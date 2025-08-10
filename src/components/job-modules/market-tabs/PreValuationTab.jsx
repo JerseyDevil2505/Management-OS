@@ -20,144 +20,6 @@ import {
 } from 'lucide-react';
 
 const PreValuationTab = ({ jobData, properties }) => {
-  // ==================== BATCH OPERATIONS FOR WORKSHEET ====================
-  const applyBatchVCS = (vcsValue) => {
-    const filtered = filteredWorksheetProps.slice(
-      (currentPage - 1) * itemsPerPage,
-      currentPage * itemsPerPage
-    );
-    
-    setWorksheetProperties(prev => {
-      const updated = prev.map(prop => {
-        const isInCurrentPage = filtered.some(f => f.id === prop.id);
-        if (isInCurrentPage) {
-          return { ...prop, asset_newvcs: vcsValue.toUpperCase() };
-        }
-        return prop;
-      });
-      
-      updateWorksheetStats(updated);
-      return updated;
-    });
-    
-    setUnsavedChanges(true);
-  };
-
-  const applyBatchZoning = (zoningValue) => {
-    const filtered = filteredWorksheetProps.slice(
-      (currentPage - 1) * itemsPerPage,
-      currentPage * itemsPerPage
-    );
-    
-    setWorksheetProperties(prev => {
-      const updated = prev.map(prop => {
-        const isInCurrentPage = filtered.some(f => f.id === prop.id);
-        if (isInCurrentPage) {
-          return { ...prop, asset_zoning: zoningValue.toUpperCase() };
-        }
-        return prop;
-      });
-      
-      updateWorksheetStats(updated);
-      return updated;
-    });
-    
-    setUnsavedChanges(true);
-  };
-
-  const markAllReady = (ready) => {
-    const filtered = filteredWorksheetProps.slice(
-      (currentPage - 1) * itemsPerPage,
-      currentPage * itemsPerPage
-    );
-    
-    if (ready) {
-      const keysToAdd = filtered.map(p => p.property_composite_key);
-      setReadyProperties(prev => new Set([...prev, ...keysToAdd]));
-    } else {
-      setReadyProperties(prev => {
-        const newSet = new Set(prev);
-        filtered.forEach(p => newSet.delete(p.property_composite_key));
-        return newSet;
-      });
-    }
-    
-    updateWorksheetStats(worksheetProperties);
-    setUnsavedChanges(true);
-  };
-
-  // ==================== LOAD PREVIOUSLY SAVED DATA ====================
-  useEffect(() => {
-    const loadSavedWorksheetData = async () => {
-      if (!jobData?.id) return;
-      
-      try {
-        // Load any previously saved worksheet data from staging
-        const { data, error } = await supabase
-          .from('market_land_valuation')
-          .select('*')
-          .eq('job_id', jobData.id)
-          .single();
-        
-        if (data) {
-          // Restore worksheet data if it exists
-          if (data.worksheet_data && Array.isArray(data.worksheet_data)) {
-            console.log(`📋 Loading saved worksheet data (${data.worksheet_data.length} entries)`);
-            
-            // Merge saved data with current properties
-            const mergedProperties = worksheetProperties.map(prop => {
-              const savedData = data.worksheet_data.find(
-                s => s.property_composite_key === prop.property_composite_key
-              );
-              
-              if (savedData) {
-                return {
-                  ...prop,
-                  asset_newvcs: savedData.asset_newvcs || prop.asset_newvcs,
-                  location_analysis: savedData.location_analysis || prop.location_analysis,
-                  asset_zoning: savedData.asset_zoning || prop.asset_zoning,
-                  asset_map_page: savedData.asset_map_page || prop.asset_map_page,
-                  asset_key_page: savedData.asset_key_page || prop.asset_key_page,
-                  worksheet_notes: savedData.worksheet_notes || prop.worksheet_notes
-                };
-              }
-              return prop;
-            });
-            
-            setWorksheetProperties(mergedProperties);
-            
-            // Restore ready properties
-            const readyKeys = data.worksheet_data
-              .filter(d => d.worksheet_ready)
-              .map(d => d.property_composite_key);
-            setReadyProperties(new Set(readyKeys));
-          }
-          
-          // Restore location variations if they exist
-          if (data.worksheet_stats?.location_variations) {
-            setLocationVariations(data.worksheet_stats.location_variations);
-          }
-          
-          // Show status if worksheet was already completed
-          if (data.is_worksheet_complete) {
-            console.log('✅ This worksheet has been completed and finalized');
-          } else {
-            console.log('📝 Worksheet in progress - loaded from staging');
-          }
-        }
-      } catch (error) {
-        if (error.code !== 'PGRST116') { // Not found is OK
-          console.error('Error loading saved worksheet data:', error);
-        }
-      }
-    };
-
-    // Only load after properties are initialized
-    if (worksheetProperties.length > 0) {
-      loadSavedWorksheetData();
-    }
-  }, [jobData?.id, worksheetProperties.length]);
-
   // ==================== STATE MANAGEMENT ====================
   // Normalization Component State
   const [activeSubTab, setActiveSubTab] = useState('normalization');
@@ -440,6 +302,144 @@ const PreValuationTab = ({ jobData, properties }) => {
       console.log(`📊 Initialized worksheet with ${worksheetData.length} properties (optimized for memory)`);
     }
   }, [properties, parseCompositeKey, getBuildingClassDisplay, getTypeUseDisplay, getDesignDisplay]);
+
+    // ==================== LOAD PREVIOUSLY SAVED DATA ====================
+  useEffect(() => {
+    const loadSavedWorksheetData = async () => {
+      if (!jobData?.id) return;
+      
+      try {
+        // Load any previously saved worksheet data from staging
+        const { data, error } = await supabase
+          .from('market_land_valuation')
+          .select('*')
+          .eq('job_id', jobData.id)
+          .single();
+        
+        if (data) {
+          // Restore worksheet data if it exists
+          if (data.worksheet_data && Array.isArray(data.worksheet_data)) {
+            console.log(`📋 Loading saved worksheet data (${data.worksheet_data.length} entries)`);
+            
+            // Merge saved data with current properties
+            const mergedProperties = worksheetProperties.map(prop => {
+              const savedData = data.worksheet_data.find(
+                s => s.property_composite_key === prop.property_composite_key
+              );
+              
+              if (savedData) {
+                return {
+                  ...prop,
+                  asset_newvcs: savedData.asset_newvcs || prop.asset_newvcs,
+                  location_analysis: savedData.location_analysis || prop.location_analysis,
+                  asset_zoning: savedData.asset_zoning || prop.asset_zoning,
+                  asset_map_page: savedData.asset_map_page || prop.asset_map_page,
+                  asset_key_page: savedData.asset_key_page || prop.asset_key_page,
+                  worksheet_notes: savedData.worksheet_notes || prop.worksheet_notes
+                };
+              }
+              return prop;
+            });
+            
+            setWorksheetProperties(mergedProperties);
+            
+            // Restore ready properties
+            const readyKeys = data.worksheet_data
+              .filter(d => d.worksheet_ready)
+              .map(d => d.property_composite_key);
+            setReadyProperties(new Set(readyKeys));
+          }
+          
+          // Restore location variations if they exist
+          if (data.worksheet_stats?.location_variations) {
+            setLocationVariations(data.worksheet_stats.location_variations);
+          }
+          
+          // Show status if worksheet was already completed
+          if (data.is_worksheet_complete) {
+            console.log('✅ This worksheet has been completed and finalized');
+          } else {
+            console.log('📝 Worksheet in progress - loaded from staging');
+          }
+        }
+      } catch (error) {
+        if (error.code !== 'PGRST116') { // Not found is OK
+          console.error('Error loading saved worksheet data:', error);
+        }
+      }
+    };
+
+    // Only load after properties are initialized
+    if (worksheetProperties.length > 0) {
+      loadSavedWorksheetData();
+    }
+  }, [jobData?.id, worksheetProperties.length]);
+
+  // ==================== BATCH OPERATIONS FOR WORKSHEET ====================
+  const applyBatchVCS = (vcsValue) => {
+    const filtered = filteredWorksheetProps.slice(
+      (currentPage - 1) * itemsPerPage,
+      currentPage * itemsPerPage
+    );
+    
+    setWorksheetProperties(prev => {
+      const updated = prev.map(prop => {
+        const isInCurrentPage = filtered.some(f => f.id === prop.id);
+        if (isInCurrentPage) {
+          return { ...prop, asset_newvcs: vcsValue.toUpperCase() };
+        }
+        return prop;
+      });
+      
+      updateWorksheetStats(updated);
+      return updated;
+    });
+    
+    setUnsavedChanges(true);
+  };
+
+  const applyBatchZoning = (zoningValue) => {
+    const filtered = filteredWorksheetProps.slice(
+      (currentPage - 1) * itemsPerPage,
+      currentPage * itemsPerPage
+    );
+    
+    setWorksheetProperties(prev => {
+      const updated = prev.map(prop => {
+        const isInCurrentPage = filtered.some(f => f.id === prop.id);
+        if (isInCurrentPage) {
+          return { ...prop, asset_zoning: zoningValue.toUpperCase() };
+        }
+        return prop;
+      });
+      
+      updateWorksheetStats(updated);
+      return updated;
+    });
+    
+    setUnsavedChanges(true);
+  };
+
+  const markAllReady = (ready) => {
+    const filtered = filteredWorksheetProps.slice(
+      (currentPage - 1) * itemsPerPage,
+      currentPage * itemsPerPage
+    );
+    
+    if (ready) {
+      const keysToAdd = filtered.map(p => p.property_composite_key);
+      setReadyProperties(prev => new Set([...prev, ...keysToAdd]));
+    } else {
+      setReadyProperties(prev => {
+        const newSet = new Set(prev);
+        filtered.forEach(p => newSet.delete(p.property_composite_key));
+        return newSet;
+      });
+    }
+    
+    updateWorksheetStats(worksheetProperties);
+    setUnsavedChanges(true);
+  };
 
   // ==================== WORKSHEET FUNCTIONS ====================
   const updateWorksheetStats = useCallback((props) => {
