@@ -23,8 +23,8 @@ const PreValuationTab = ({ jobData, properties }) => {
   const [salesFromYear, setSalesFromYear] = useState(2012);
   const [selectedCounty, setSelectedCounty] = useState(jobData?.county || 'Bergen');
   const [availableCounties, setAvailableCounties] = useState([]);
-  const [equalizationRatio, setEqualizationRatio] = useState(1.00);
-  const [outlierThreshold, setOutlierThreshold] = useState(15);
+  const [equalizationRatio, setEqualizationRatio] = useState('');
+  const [outlierThreshold, setOutlierThreshold] = useState('');
   const [minSalePrice, setMinSalePrice] = useState(100);
   
   // Normalization Data State
@@ -63,6 +63,7 @@ const PreValuationTab = ({ jobData, properties }) => {
   const [lastAutoSave, setLastAutoSave] = useState(null);
   const [readyProperties, setReadyProperties] = useState(new Set());
   const [sortConfig, setSortConfig] = useState({ field: null, direction: 'asc' });
+  const [normSortConfig, setNormSortConfig] = useState({ field: null, direction: 'asc' });
   const [locationVariations, setLocationVariations] = useState({});
   const [showLocationModal, setShowLocationModal] = useState(false);
   const [currentLocationChoice, setCurrentLocationChoice] = useState(null);
@@ -211,6 +212,45 @@ useEffect(() => {
 
     loadHPIData();
   }, [selectedCounty]);
+  // ==================== LOAD SAVED NORMALIZATION DATA ====================
+  useEffect(() => {
+    const loadSavedNormalizationData = async () => {
+      if (!jobData?.id) return;
+      
+      try {
+        const savedData = await worksheetService.loadNormalizationData(jobData.id);
+        
+        if (savedData) {
+          // Restore configuration
+          if (savedData.normalization_config) {
+            const config = savedData.normalization_config;
+            if (config.equalizationRatio !== undefined) setEqualizationRatio(config.equalizationRatio);
+            if (config.outlierThreshold !== undefined) setOutlierThreshold(config.outlierThreshold);
+            if (config.normalizeToYear !== undefined) setNormalizeToYear(config.normalizeToYear);
+            if (config.salesFromYear !== undefined) setSalesFromYear(config.salesFromYear);
+            if (config.minSalePrice !== undefined) setMinSalePrice(config.minSalePrice);
+            if (config.selectedCounty !== undefined) setSelectedCounty(config.selectedCounty);
+          }
+          
+          // Restore normalized sales
+          if (savedData.time_normalized_sales && savedData.time_normalized_sales.length > 0) {
+            setTimeNormalizedSales(savedData.time_normalized_sales);
+          }
+          
+          // Restore stats
+          if (savedData.normalization_stats) {
+            setNormalizationStats(savedData.normalization_stats);
+          }
+          
+          console.log('✅ Loaded saved normalization data');
+        }
+      } catch (error) {
+        console.error('Error loading saved normalization data:', error);
+      }
+    };
+    
+    loadSavedNormalizationData();
+  }, [jobData?.id]);
 
   // ==================== WORKSHEET INITIALIZATION ====================
   useEffect(() => {
@@ -281,7 +321,7 @@ const runTimeNormalization = useCallback(async () => {
     try {
       // Filter for VALID residential sales only (as discussed)
       const validSales = properties.filter(p => {
-        if (!p.sales_price || p.sales_price < minSalePrice) return false;
+        if (!p.sales_price || p.sales_price <= minSalePrice) return false;  // Changed < to <=
         if (!p.sales_date) return false;
         
         const saleYear = new Date(p.sales_date).getFullYear();
@@ -334,17 +374,32 @@ const runTimeNormalization = useCallback(async () => {
       const totalRatio = normalized.reduce((sum, s) => sum + (s.sales_ratio || 0), 0);
       const avgRatio = normalized.length > 0 ? totalRatio / normalized.length : 0;
       
-      setNormalizationStats(prev => ({
-        ...prev,
+      const newStats = {
+        ...normalizationStats,
         totalSales: normalized.length,
         timeNormalized: normalized.length,
         excluded: excludedCount,
         flaggedOutliers: normalized.filter(s => s.is_outlier).length,
         pendingReview: normalized.filter(s => s.keep_reject === 'pending').length,
         averageRatio: avgRatio.toFixed(2)
-      }));
+      };
+      
+      setNormalizationStats(newStats);
+      
+      // Save configuration and results to database
+      const config = {
+        equalizationRatio,
+        outlierThreshold,
+        normalizeToYear,
+        salesFromYear,
+        minSalePrice,
+        selectedCounty
+      };
+      
+      await worksheetService.saveNormalizationConfig(jobData.id, config);
+      await worksheetService.saveTimeNormalizedSales(jobData.id, normalized, newStats);
 
-      console.log(`✅ Time normalization complete for ${normalized.length} sales`);
+      console.log(`✅ Time normalization complete for ${normalized.length} sales - saved to database`);
     } catch (error) {
       console.error('Error during time normalization:', error);
       alert('Error during time normalization. Please check the console.');
@@ -435,7 +490,7 @@ const runTimeNormalization = useCallback(async () => {
     }
   }, [timeNormalizedSales]);
 
-  const handleSalesDecision = async (saleId, decision) => {
+const handleSalesDecision = async (saleId, decision) => {
     const updatedSales = timeNormalizedSales.map(sale =>
       sale.id === saleId ? { ...sale, keep_reject: decision } : sale
     );
@@ -457,11 +512,15 @@ const runTimeNormalization = useCallback(async () => {
         .eq('id', saleId);
     }
 
-    // Update pending count
-    setNormalizationStats(prev => ({
-      ...prev,
+    // Update pending count and save to persistent storage
+    const newStats = {
+      ...normalizationStats,
       pendingReview: updatedSales.filter(s => s.keep_reject === 'pending').length
-    }));
+    };
+    setNormalizationStats(newStats);
+    
+    // Save updated sales array to database
+    await worksheetService.saveTimeNormalizedSales(jobData.id, updatedSales, newStats);
   };
 
   const saveSizeNormalizedValues = async (sales) => {
@@ -651,6 +710,33 @@ const runTimeNormalization = useCallback(async () => {
     });
     
     setFilteredWorksheetProps(sorted);
+  };
+  const handleNormalizationSort = (field) => {
+    const direction = normSortConfig.field === field && normSortConfig.direction === 'asc' ? 'desc' : 'asc';
+    setNormSortConfig({ field, direction });
+    
+    const sorted = [...timeNormalizedSales].sort((a, b) => {
+      let aVal, bVal;
+      
+      // Handle composite key parsing for block/lot
+      if (field === 'block' || field === 'lot') {
+        const aParsed = parseCompositeKey(a.property_composite_key);
+        const bParsed = parseCompositeKey(b.property_composite_key);
+        aVal = field === 'block' ? aParsed.block : aParsed.lot;
+        bVal = field === 'block' ? bParsed.block : bParsed.lot;
+      } else {
+        aVal = a[field];
+        bVal = b[field];
+      }
+      
+      if (direction === 'asc') {
+        return aVal > bVal ? 1 : -1;
+      } else {
+        return aVal < bVal ? 1 : -1;
+      }
+    });
+    
+    setTimeNormalizedSales(sorted);
   };
 
   // ==================== IMPORT/EXPORT FUNCTIONS ====================
@@ -897,10 +983,16 @@ const analyzeImportFile = async (file) => {
                   <span className="text-green-600 text-sm">✓ HPI Data Loaded</span>
                 )}
                 <button
-                  onClick={runTimeNormalization}
+                  onClick={() => {
+                    if (!equalizationRatio || !outlierThreshold) {
+                      alert('Please enter Equalization Ratio and Outlier Threshold before running normalization');
+                      return;
+                    }
+                    runTimeNormalization();
+                  }}
                   disabled={isProcessingTime || !hpiLoaded}
                   className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-                >
+                >      
                   {isProcessingTime ? (
                     <>
                       <RefreshCw className="inline-block animate-spin mr-2" size={16} />
@@ -1087,24 +1179,54 @@ const analyzeImportFile = async (file) => {
                   </div>
                 </div>
 
-                <div className="overflow-x-auto">
-                  <table className="w-full">
+                <div className="overflow-x-auto max-w-full">
+                  <table className="min-w-full table-fixed">
                     <thead className="bg-gray-50 border-b">
                       <tr>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Block</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Lot</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Qual</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Card</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Location</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Class</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Type</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Sale Date</th>
-                        <th className="px-4 py-3 text-right text-sm font-medium text-gray-700">Sale Price</th>
-                        <th className="px-4 py-3 text-right text-sm font-medium text-gray-700">Time Norm</th>
-                        <th className="px-4 py-3 text-right text-sm font-medium text-gray-700">Sale NU</th>
-                        <th className="px-4 py-3 text-center text-sm font-medium text-gray-700">Ratio</th>
-                        <th className="px-4 py-3 text-center text-sm font-medium text-gray-700">Status</th>
-                        <th className="px-4 py-3 text-center text-sm font-medium text-gray-700">Decision</th>
+                        <th 
+                          className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
+                          onClick={() => handleNormalizationSort('block')}
+                        >
+                          Block {normSortConfig.field === 'block' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
+                        </th>
+                        <th 
+                          className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
+                          onClick={() => handleNormalizationSort('lot')}
+                        >
+                          Lot {normSortConfig.field === 'lot' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
+                        </th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-16">Qual</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-16">Card</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-32">Location</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-16">Class</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-20">Type</th>
+                        <th 
+                          className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-24 cursor-pointer hover:bg-gray-100"
+                          onClick={() => handleNormalizationSort('sales_date')}
+                        >
+                          Sale Date {normSortConfig.field === 'sales_date' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
+                        </th>
+                        <th 
+                          className="px-4 py-3 text-right text-sm font-medium text-gray-700 w-24 cursor-pointer hover:bg-gray-100"
+                          onClick={() => handleNormalizationSort('sales_price')}
+                        >
+                          Sale Price {normSortConfig.field === 'sales_price' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
+                        </th>
+                        <th 
+                          className="px-4 py-3 text-right text-sm font-medium text-gray-700 w-24 cursor-pointer hover:bg-gray-100"
+                          onClick={() => handleNormalizationSort('time_normalized_price')}
+                        >
+                          Time Norm {normSortConfig.field === 'time_normalized_price' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
+                        </th>
+                        <th className="px-4 py-3 text-right text-sm font-medium text-gray-700 w-16">Sale NU</th>
+                        <th 
+                          className="px-4 py-3 text-center text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
+                          onClick={() => handleNormalizationSort('sales_ratio')}
+                        >
+                          Ratio {normSortConfig.field === 'sales_ratio' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
+                        </th>
+                        <th className="px-4 py-3 text-center text-sm font-medium text-gray-700 w-20">Status</th>
+                        <th className="px-4 py-3 text-center text-sm font-medium text-gray-700 w-28">Decision</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1134,7 +1256,7 @@ const analyzeImportFile = async (file) => {
                               <td className="px-4 py-3 text-sm">{sale.property_class || sale.property_m4_class}</td>
                               <td className="px-4 py-3 text-sm">
                                 <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">
-                                  {sale.asset_type_use || ''}
+                                  {getTypeUseDisplay(sale)}
                                 </span>
                               </td>
                               <td className="px-4 py-3 text-sm">
@@ -1150,7 +1272,7 @@ const analyzeImportFile = async (file) => {
                                 {sale.sales_nu || ''}
                               </td>
                               <td className="px-4 py-3 text-sm text-center">
-                                {sale.sales_ratio?.toFixed(2)}
+                                {sale.sales_ratio ? `${(sale.sales_ratio * 100).toFixed(0)}%` : ''}
                               </td>
                               <td className="px-4 py-3 text-sm text-center">
                                 {sale.is_outlier ? (
@@ -1401,8 +1523,8 @@ const analyzeImportFile = async (file) => {
               </div>
             </div>
 
-            <div className="overflow-x-auto max-h-[600px]">
-              <table className="w-full">
+            <div className="overflow-x-auto max-h-[600px] max-w-full">
+              <table className="min-w-full table-fixed">
                 <thead className="bg-gray-50 border-b sticky top-0">
                   <tr>
                     <th 
@@ -1420,18 +1542,12 @@ const analyzeImportFile = async (file) => {
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">Qual</th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">Card</th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">Loc</th>
-                    <th 
-                      className="px-3 py-2 text-left text-xs font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
-                      onClick={() => handleSort('property_location')}
-                    >
-                      Address {sortConfig.field === 'property_location' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                    </th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">Class</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">Current VCS</th>
-                    <th></th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">Building</th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">Type/Use</th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">Design</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">Current VCS</th>
+                    <th></th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-700 bg-blue-50">New VCS</th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-700 bg-blue-50">Location Analysis</th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-700 bg-blue-50">Zoning</th>
@@ -1449,8 +1565,10 @@ const analyzeImportFile = async (file) => {
                       <td className="px-3 py-2 text-sm">{prop.qualifier}</td>
                       <td className="px-3 py-2 text-sm">{prop.card || '1'}</td>
                       <td className="px-3 py-2 text-sm">{prop.location || '-'}</td>
-                      <td className="px-3 py-2 text-sm">{prop.property_location}</td>
                       <td className="px-3 py-2 text-sm">{prop.property_class}</td>
+                      <td className="px-3 py-2 text-sm">{prop.building_class_display}</td>
+                      <td className="px-3 py-2 text-sm">{prop.type_use_display}</td>
+                      <td className="px-3 py-2 text-sm">{prop.design_display}</td>
                       <td className="px-3 py-2 text-sm">{prop.property_vcs}</td>
                       <td className="px-1">
                         <button
@@ -1461,9 +1579,6 @@ const analyzeImportFile = async (file) => {
                           →
                         </button>
                       </td>
-                      <td className="px-3 py-2 text-sm">{prop.building_class_display}</td>
-                      <td className="px-3 py-2 text-sm">{prop.type_use_display}</td>
-                      <td className="px-3 py-2 text-sm">{prop.design_display}</td>
                       <td className="px-2 py-1 bg-gray-50">
                         <input
                           type="text"
@@ -1520,16 +1635,24 @@ const analyzeImportFile = async (file) => {
                           type="checkbox"
                           checked={readyProperties.has(prop.property_composite_key)}
                           onChange={(e) => {
+                            let newReadyProperties;
                             if (e.target.checked) {
-                              setReadyProperties(prev => new Set([...prev, prop.property_composite_key]));
+                              newReadyProperties = new Set([...readyProperties, prop.property_composite_key]);
                             } else {
-                              setReadyProperties(prev => {
-                                const newSet = new Set(prev);
-                                newSet.delete(prop.property_composite_key);
-                                return newSet;
-                              });
+                              newReadyProperties = new Set(readyProperties);
+                              newReadyProperties.delete(prop.property_composite_key);
                             }
-                            updateWorksheetStats(worksheetProperties);
+                            setReadyProperties(newReadyProperties);
+                            
+                            // Update stats with the new ready count
+                            const stats = {
+                              totalProperties: worksheetProperties.length,
+                              vcsAssigned: worksheetProperties.filter(p => p.new_vcs).length,
+                              zoningEntered: worksheetProperties.filter(p => p.asset_zoning).length,
+                              locationAnalysis: worksheetProperties.filter(p => p.location_analysis).length,
+                              readyToProcess: newReadyProperties.size
+                            };
+                            setWorksheetStats(stats);
                           }}
                           className="w-4 h-4"
                         />
@@ -1730,11 +1853,51 @@ const analyzeImportFile = async (file) => {
              >
                Cancel
              </button>
-             <button
-               onClick={() => {
-                 // Process the import
+<button
+               onClick={async () => {
+                 // Process the import - actually apply the updates
                  console.log('Processing import with options:', importOptions);
-                 setShowImportModal(false);
+                 
+                 try {
+                   // Apply matched updates
+                   const allUpdates = [...(importPreview.matched || []), ...(importPreview.fuzzyMatched || [])];
+                   
+                   for (const match of allUpdates) {
+                     // Update the worksheet properties in memory
+                     const updatedProps = worksheetProperties.map(prop => {
+                       if (prop.property_composite_key === match.currentData.property_composite_key) {
+                         return {
+                           ...prop,
+                           new_vcs: match.updates.new_vcs || prop.new_vcs,
+                           asset_zoning: match.updates.asset_zoning || prop.asset_zoning,
+                           asset_map_page: match.updates.asset_map_page || prop.asset_map_page,
+                           asset_key_page: match.updates.asset_key_page || prop.asset_key_page
+                         };
+                       }
+                       return prop;
+                     });
+                     
+                     setWorksheetProperties(updatedProps);
+                     setFilteredWorksheetProps(updatedProps);
+                   }
+                   
+                   // Mark as ready if option selected
+                   if (importOptions.markImportedAsReady) {
+                     const importedKeys = allUpdates.map(m => m.currentData.property_composite_key);
+                     setReadyProperties(prev => new Set([...prev, ...importedKeys]));
+                   }
+                   
+                   // Update stats
+                   updateWorksheetStats(worksheetProperties);
+                   setUnsavedChanges(true);
+                   
+                   alert(`Successfully imported ${allUpdates.length} property updates`);
+                   setShowImportModal(false);
+                   setImportPreview(null);
+                 } catch (error) {
+                   console.error('Error applying import:', error);
+                   alert('Error applying import. Please check the console.');
+                 }
                }}
                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
              >
