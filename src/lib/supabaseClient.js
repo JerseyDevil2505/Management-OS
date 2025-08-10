@@ -411,6 +411,134 @@ getInteriorConditionName: function(property, codeDefinitions, vendorType) {
            (parseInt(property.raw_data['Bedrm 1']) || 0) +
            (parseInt(property.raw_data['Bedrm 2']) || 0) +
            (parseInt(property.raw_data['Bedrm 3']) || 0);
+  },
+
+  // Get VCS (Valuation Control Sector) description - aka Neighborhood
+  getVCSDescription: function(property, codeDefinitions, vendorType) {
+    if (!property || !codeDefinitions) return null;
+    
+    // Get VCS code from property (check multiple possible fields)
+    let vcsCode = property.newVCS || property.new_vcs || property.vcs;
+    if (!vcsCode && property.raw_data) {
+      vcsCode = property.raw_data.vcs || 
+                property.raw_data.VCS || 
+                property.raw_data.NEIGHBORHOOD ||
+                property.raw_data.neighborhood;
+    }  
+    
+    if (!vcsCode || vcsCode.toString().trim() === '') return null;
+    
+    // Clean the VCS code
+    vcsCode = vcsCode.toString().trim();
+    
+    if (vendorType === 'Microsystems') {
+      // Microsystems: Direct lookup with 210 prefix
+      // The codes have format: 210XXXX9999 where XXXX is the VCS code
+      // We need to pad the code to 4 characters
+      const paddedCode = vcsCode.padEnd(4, ' ');
+      
+      // Try multiple lookup patterns (1000, 5000, 9999 suffixes)
+      const suffixes = ['9999', '5000', '1000'];
+      
+      for (const suffix of suffixes) {
+        const lookupKey = `210${paddedCode}${suffix}`;
+        if (codeDefinitions[lookupKey]) {
+          return codeDefinitions[lookupKey];
+        }
+      }
+      
+      // If no match found, return the original code
+      return vcsCode;
+      
+    } else if (vendorType === 'BRT') {
+      // BRT: Navigate the nested structure
+      // Structure: sections.VCS[number]["9"]["DATA"]["VALUE"]
+      
+      if (!codeDefinitions.sections || !codeDefinitions.sections.VCS) {
+        return vcsCode;
+      }
+      
+      const vcsSection = codeDefinitions.sections.VCS;
+      
+      // VCS code in BRT is typically the key number (1-55 in your example)
+      // Check if the code is a direct key in the VCS section
+      if (vcsSection[vcsCode]) {
+        // Navigate to the neighborhood value
+        const entry = vcsSection[vcsCode];
+        if (entry['9'] && entry['9']['DATA'] && entry['9']['DATA']['VALUE']) {
+          return entry['9']['DATA']['VALUE'];
+        }
+      }
+      
+      // If not found by direct key, search through all entries
+      for (const key in vcsSection) {
+        const entry = vcsSection[key];
+        // Check if this entry's KEY matches our VCS code
+        if (entry.KEY === vcsCode || entry.DATA?.KEY === vcsCode) {
+          if (entry['9'] && entry['9']['DATA'] && entry['9']['DATA']['VALUE']) {
+            return entry['9']['DATA']['VALUE'];
+          }
+        }
+      }
+      
+      // Return original code if no match found
+      return vcsCode;
+    }
+    
+    return vcsCode;
+  },
+  // Get all available VCS codes and descriptions for a job
+  getAllVCSCodes: function(codeDefinitions, vendorType) {
+    const vcsCodes = [];
+    
+    if (!codeDefinitions) return vcsCodes;
+    
+    if (vendorType === 'Microsystems') {
+      // Extract all 210-prefixed codes
+      for (const key in codeDefinitions) {
+        if (key.startsWith('210') && key.endsWith('9999')) {
+          // Extract the VCS code part (characters 3-7)
+          const vcsCode = key.substring(3, 7).trim();
+          const description = codeDefinitions[key];
+          
+          // Avoid duplicates
+          if (!vcsCodes.find(v => v.code === vcsCode)) {
+            vcsCodes.push({
+              code: vcsCode,
+              description: description
+            });
+          }
+        }
+      }
+      
+    } else if (vendorType === 'BRT') {
+      // Extract from nested VCS section
+      if (codeDefinitions.sections && codeDefinitions.sections.VCS) {
+        const vcsSection = codeDefinitions.sections.VCS;
+        
+        for (const key in vcsSection) {
+          const entry = vcsSection[key];
+          if (entry['9'] && entry['9']['DATA'] && entry['9']['DATA']['VALUE']) {
+            vcsCodes.push({
+              code: key,
+              description: entry['9']['DATA']['VALUE']
+            });
+          }
+        }
+      }
+    }
+    
+    // Sort by code
+    return vcsCodes.sort((a, b) => {
+      // Try numeric sort first
+      const numA = parseInt(a.code);
+      const numB = parseInt(b.code);
+      if (!isNaN(numA) && !isNaN(numB)) {
+        return numA - numB;
+      }
+      // Fall back to string sort
+      return a.code.localeCompare(b.code);
+    });
   }
 };
 
