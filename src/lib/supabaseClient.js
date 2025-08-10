@@ -539,8 +539,122 @@ getInteriorConditionName: function(property, codeDefinitions, vendorType) {
       // Fall back to string sort
       return a.code.localeCompare(b.code);
     });
-  }
+  },
 };
+
+  // ===== PACKAGE SALE AGGREGATOR =====
+  getPackageSaleData: function(properties, targetProperty) {
+    // Check if we have the required fields for package sale detection
+    if (!targetProperty?.sales_date || !targetProperty?.sales_book || !targetProperty?.sales_page) {
+      return null;
+    }
+    
+    // Find all properties in the same package (same date, book, and page)
+    const packageProperties = properties.filter(p => 
+      p.sales_date === targetProperty.sales_date &&
+      p.sales_book === targetProperty.sales_book &&
+      p.sales_page === targetProperty.sales_page
+    );
+    
+    // If only one property, it's not a package sale
+    if (packageProperties.length <= 1) {
+      return null;
+    }
+    
+    // Check if any properties have "Keep Both" decisions in sales_history
+    const hasKeepBothHistory = packageProperties.some(p => 
+      p.sales_history?.sales_decision?.decision_type === 'Keep Both'
+    );
+    
+    // Sort by building class to find primary property (lowest class number)
+    const sortedByClass = [...packageProperties].sort((a, b) => {
+      const classA = parseInt(a.asset_building_class) || 999;
+      const classB = parseInt(b.asset_building_class) || 999;
+      return classA - classB;
+    });
+    
+    const primary = sortedByClass[0];
+    
+    // Calculate combined lot size (sum of sf and acres converted)
+    const combinedLotSF = packageProperties.reduce((sum, p) => {
+      const sf = parseFloat(p.asset_lot_sf) || 0;
+      const acres = parseFloat(p.asset_lot_acre) || 0;
+      return sum + sf + (acres * 43560); // Convert acres to SF
+    }, 0);
+    
+    // Calculate combined assessed value
+    const combinedAssessed = packageProperties.reduce((sum, p) => {
+      const assessed = parseFloat(p.values_mod_total) || 0;
+      return sum + assessed;
+    }, 0);
+    
+    // Get unique property classes
+    const propertyClasses = [...new Set(packageProperties.map(p => p.asset_building_class))];
+    
+    // Check for specific class types
+    const hasVacant = packageProperties.some(p => 
+      p.asset_building_class === '1' || p.asset_building_class === '3B'
+    );
+    
+    const hasFarmland = packageProperties.some(p => 
+      p.asset_building_class === '3B'
+    );
+    
+    const hasResidential = packageProperties.some(p => {
+      const propClass = p.asset_building_class;
+      return propClass === '2' || propClass === '3A';
+    });
+    
+    const hasCommercial = packageProperties.some(p => {
+      const propClass = p.asset_building_class;
+      return propClass === '4A' || propClass === '4B' || propClass === '4C';
+    });
+    
+    // Create package ID for grouping
+    const packageId = `${targetProperty.sales_book}-${targetProperty.sales_page}-${targetProperty.sales_date}`;
+    
+    // Check for previous individual sales (from Keep Both decisions in sales_history)
+    const previousIndividualSales = packageProperties
+      .filter(p => p.sales_history?.sales_decision?.old_price)
+      .map(p => ({
+        composite_key: p.property_composite_key,
+        old_price: p.sales_history.sales_decision.old_price,
+        old_date: p.sales_history.sales_decision.old_date,
+        package_discount: p.sales_history.sales_decision.old_price - (p.sales_price / packageProperties.length)
+      }));
+    
+    return {
+      is_package_sale: true,
+      package_count: packageProperties.length,
+      package_id: packageId,
+      combined_lot_sf: combinedLotSF,
+      combined_lot_acres: combinedLotSF / 43560,
+      combined_assessed: combinedAssessed,
+      primary_type_use: primary.asset_type_use,
+      primary_building_class: primary.asset_building_class,
+      property_classes: propertyClasses,
+      has_vacant: hasVacant,
+      has_farmland: hasFarmland,
+      has_residential: hasResidential,
+      has_commercial: hasCommercial,
+      has_keep_both_history: hasKeepBothHistory,
+      sale_price: parseFloat(targetProperty.sales_price), // Use original, not multiplied
+      sales_nu: targetProperty.sales_nu,
+      previous_individual_sales: previousIndividualSales,
+      package_properties: packageProperties.map(p => ({
+        composite_key: p.property_composite_key,
+        building_class: p.asset_building_class,
+        lot_sf: p.asset_lot_sf,
+        lot_acre: p.asset_lot_acre,
+        assessed_value: p.values_mod_total,
+        has_sales_history: !!p.sales_history,
+        location: p.property_location,
+        block: p.property_block,
+        lot: p.property_lot
+      }))
+    };
+  }
+};  
 
 // ===== EMPLOYEE MANAGEMENT SERVICES =====
 export const employeeService = {
