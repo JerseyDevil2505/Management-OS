@@ -2856,20 +2856,24 @@ Thank you for your immediate attention to this matter.`;
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-              {/* Actual (Year-to-Date) */}
+{/* Actual (Year-to-Date) */}
               <div className="bg-white rounded-lg p-6 shadow-md border-2 border-green-400">
                 <h3 className="text-md font-semibold text-gray-700 mb-3">Actual (Year-to-Date)</h3>
                 <p className={`text-3xl font-bold ${
-                  (globalMetrics.totalPaid - globalMetrics.currentExpenses - distributionMetrics.ytdDistributions) >= 0 
+                  ((globalMetrics.totalPaid + globalMetrics.totalOpen) - globalMetrics.currentExpenses - distributionMetrics.ytdDistributions) >= 0 
                     ? 'text-green-600' 
                     : 'text-red-600'
                 }`}>
-                  {formatCurrency(globalMetrics.totalPaid - globalMetrics.currentExpenses - distributionMetrics.ytdDistributions)}
+                  {formatCurrency((globalMetrics.totalPaid + globalMetrics.totalOpen) - globalMetrics.currentExpenses - distributionMetrics.ytdDistributions)}
                 </p>
                 <div className="mt-4 space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-gray-600">YTD Income:</span>
+                    <span className="text-gray-600">YTD Income (Paid):</span>
                     <span className="font-medium text-green-600">{formatCurrency(globalMetrics.totalPaid)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Open Invoices:</span>
+                    <span className="font-medium text-blue-600">+{formatCurrency(globalMetrics.totalOpen)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">YTD Expenses:</span>
@@ -2878,9 +2882,9 @@ Thank you for your immediate attention to this matter.`;
                   <div className="flex justify-between border-t pt-2">
                     <span className="text-gray-600 font-semibold">Net Profit:</span>
                     <span className={`font-bold ${
-                      (globalMetrics.totalPaid - globalMetrics.currentExpenses) >= 0 ? 'text-green-600' : 'text-red-600'
+                      ((globalMetrics.totalPaid + globalMetrics.totalOpen) - globalMetrics.currentExpenses) >= 0 ? 'text-green-600' : 'text-red-600'
                     }`}>
-                      {formatCurrency(globalMetrics.totalPaid - globalMetrics.currentExpenses)}
+                      {formatCurrency((globalMetrics.totalPaid + globalMetrics.totalOpen) - globalMetrics.currentExpenses)}
                     </span>
                   </div>
                   <div className="flex justify-between">
@@ -2890,18 +2894,18 @@ Thank you for your immediate attention to this matter.`;
                   <div className="flex justify-between border-t pt-2">
                     <span className="text-gray-600 font-semibold">Balance:</span>
                     <span className={`font-bold ${
-                      (globalMetrics.totalPaid - globalMetrics.currentExpenses - distributionMetrics.ytdDistributions) >= 0 
+                      ((globalMetrics.totalPaid + globalMetrics.totalOpen) - globalMetrics.currentExpenses - distributionMetrics.ytdDistributions) >= 0 
                         ? 'text-green-600' 
                         : 'text-red-600'
                     }`}>
-                      {formatCurrency(globalMetrics.totalPaid - globalMetrics.currentExpenses - distributionMetrics.ytdDistributions)}
+                      {formatCurrency((globalMetrics.totalPaid + globalMetrics.totalOpen) - globalMetrics.currentExpenses - distributionMetrics.ytdDistributions)}
                     </span>
                   </div>
                   {/* Show shareholder loan if distributions exceed profit */}
-                  {(distributionMetrics.ytdDistributions > (globalMetrics.totalPaid - globalMetrics.currentExpenses)) && (
+                  {(distributionMetrics.ytdDistributions > ((globalMetrics.totalPaid + globalMetrics.totalOpen) - globalMetrics.currentExpenses)) && (
                     <div className="mt-2 p-2 bg-red-50 rounded border border-red-200">
                       <span className="text-xs text-red-700 font-semibold">
-                        ⚠️ Shareholder Loan Required: {formatCurrency(distributionMetrics.ytdDistributions - (globalMetrics.totalPaid - globalMetrics.currentExpenses))}
+                        ⚠️ Shareholder Loan Required: {formatCurrency(distributionMetrics.ytdDistributions - ((globalMetrics.totalPaid + globalMetrics.totalOpen) - globalMetrics.currentExpenses))}
                       </span>
                     </div>
                   )}
@@ -2955,7 +2959,7 @@ Thank you for your immediate attention to this matter.`;
                 <p className="text-sm text-gray-600">Thomas Davis (10%)</p>
                 <p className="text-xs text-gray-500 mb-1">Actual Balance / Projected</p>
                 <p className="text-lg font-semibold text-gray-900">
-                  ${Math.floor((globalMetrics.totalPaid - globalMetrics.currentExpenses - distributionMetrics.ytdDistributions) * 0.10).toLocaleString()} / 
+                  ${Math.floor(((globalMetrics.totalPaid + globalMetrics.totalOpen) - globalMetrics.currentExpenses - distributionMetrics.ytdDistributions) * 0.10).toLocaleString()} / 
                   ${Math.floor(distributionMetrics.projected * 0.10).toLocaleString()}
                 </p>
               </div>
@@ -2963,7 +2967,7 @@ Thank you for your immediate attention to this matter.`;
                 <p className="text-sm text-gray-600">Brian Schneider (45%)</p>
                 <p className="text-xs text-gray-500 mb-1">Actual Balance / Projected</p>
                 <p className="text-lg font-semibold text-gray-900">
-                  ${Math.floor((globalMetrics.totalPaid - globalMetrics.currentExpenses - distributionMetrics.ytdDistributions) * 0.45).toLocaleString()} / 
+                  ${Math.floor(((globalMetrics.totalPaid + globalMetrics.totalOpen) - globalMetrics.currentExpenses - distributionMetrics.ytdDistributions) * 0.45).toLocaleString()} / 
                   ${Math.floor(distributionMetrics.projected * 0.45).toLocaleString()}
                 </p>
               </div>
@@ -2971,7 +2975,7 @@ Thank you for your immediate attention to this matter.`;
                 <p className="text-sm text-gray-600">Kristine Duda (45%)</p>
                 <p className="text-xs text-gray-500 mb-1">Actual Balance / Projected</p>
                 <p className="text-lg font-semibold text-gray-900">
-                  ${Math.floor((globalMetrics.totalPaid - globalMetrics.currentExpenses - distributionMetrics.ytdDistributions) * 0.45).toLocaleString()} / 
+                  ${Math.floor(((globalMetrics.totalPaid + globalMetrics.totalOpen) - globalMetrics.currentExpenses - distributionMetrics.ytdDistributions) * 0.45).toLocaleString()} / 
                   ${Math.floor(distributionMetrics.projected * 0.45).toLocaleString()}
                 </p>
               </div>
