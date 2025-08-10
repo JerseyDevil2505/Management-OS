@@ -22,6 +22,7 @@ const PreValuationTab = ({ jobData, properties }) => {
   const [normalizeToYear, setNormalizeToYear] = useState(2025);
   const [salesFromYear, setSalesFromYear] = useState(2012);
   const [selectedCounty, setSelectedCounty] = useState(jobData?.county || 'Bergen');
+  const [availableCounties, setAvailableCounties] = useState([]);
   const [equalizationRatio, setEqualizationRatio] = useState(1.00);
   const [outlierThreshold, setOutlierThreshold] = useState(15);
   const [minSalePrice, setMinSalePrice] = useState(100);
@@ -155,6 +156,35 @@ const PreValuationTab = ({ jobData, properties }) => {
       location: parts[4] === 'NONE' ? '' : parts[4] || ''
     };
   }, []);
+
+  // Load available counties from database
+useEffect(() => {
+  const loadAvailableCounties = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('county_hpi_data')
+        .select('county')
+        .order('county');
+      
+      if (error) throw error;
+      
+      // Get unique counties
+      const uniqueCounties = [...new Set(data.map(item => item.county))];
+      setAvailableCounties(uniqueCounties);
+      
+      // Set default to job's county or first available
+      if (uniqueCounties.length > 0 && !selectedCounty) {
+        setSelectedCounty(jobData?.county || uniqueCounties[0]);
+      }
+      
+      console.log(`📍 Found ${uniqueCounties.length} counties with HPI data:`, uniqueCounties);
+    } catch (error) {
+      console.error('Error loading counties:', error);
+    }
+  };
+  
+  loadAvailableCounties();
+}, []);  
 
   // ==================== HPI DATA LOADING ====================
   useEffect(() => {
@@ -794,11 +824,15 @@ const PreValuationTab = ({ jobData, properties }) => {
                   value={selectedCounty}
                   onChange={(e) => setSelectedCounty(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded"
+                  disabled={availableCounties.length === 0}
                 >
-                  <option value="Bergen">Bergen</option>
-                  <option value="Essex">Essex</option>
-                  <option value="Morris">Morris</option>
-                  <option value="Passaic">Passaic</option>
+                  {availableCounties.length === 0 ? (
+                    <option value="">Loading counties...</option>
+                  ) : (
+                    availableCounties.map(county => (
+                      <option key={county} value={county}>{county}</option>
+                    ))
+                  )}
                 </select>
                 <p className="text-xs text-gray-500 mt-1">County for HPI data lookup</p>
               </div>
