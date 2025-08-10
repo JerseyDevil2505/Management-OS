@@ -2110,6 +2110,5 @@ export const worksheetService = {
     if (error) throw error;
   }
 };
-};
 
 export default supabase;
