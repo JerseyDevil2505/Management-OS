@@ -1297,9 +1297,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         }
       }
       
-      // Update job with new file info - removed source_file_version update
-      addBatchLog('🔄 Updating job metadata...', 'info');
-      // Update job with new file info - removed source_file_version update
+       // Update job with new file info - removed source_file_version update
       addBatchLog('🔄 Updating job metadata...', 'info');
       try {
         await jobService.update(job.id, {
