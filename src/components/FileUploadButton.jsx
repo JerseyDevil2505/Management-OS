@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+  import React, { useState, useEffect } from 'react';
 import { Upload, FileText, CheckCircle, AlertTriangle, X, Database, Settings, Download, Eye, Calendar, RefreshCw } from 'lucide-react';
 import { jobService, propertyService, supabase } from '../lib/supabaseClient';
 
@@ -1163,8 +1163,8 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       addBatchLog('💾 Saving comparison report to database...', 'info');
       await saveComparisonReport(comparisonResults, salesDecisions);
       addBatchLog('✅ Comparison report saved successfully', 'success');
-      
-// Store sales decisions as JSON in property records
+          
+      // Store sales decisions as JSON in property records
       if (salesDecisions.size > 0) {
         setProcessingStatus('Saving sales decisions...');
         addBatchLog(`💰 Processing ${salesDecisions.size} sales decisions...`, 'info');
@@ -1299,6 +1299,96 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       
       // Update job with new file info - removed source_file_version update
       addBatchLog('🔄 Updating job metadata...', 'info');
+      // Update job with new file info - removed source_file_version update
+      addBatchLog('🔄 Updating job metadata...', 'info');
+      try {
+        await jobService.update(job.id, {
+          sourceFileStatus: result.errors > 0 ? 'error' : 'imported',
+          totalProperties: result.processed,
+          source_file_uploaded_at: new Date().toISOString()
+          // FIX 1: Removed source_file_version update - it's handled in property_records now
+        });
+        addBatchLog('✅ Job metadata updated successfully', 'success');
+      } catch (updateError) {
+        console.error('❌ Failed to update job:', updateError);
+        addBatchLog('⚠️ Job metadata update failed', 'warning', { error: updateError.message });
+        addNotification('Data processed but job update failed', 'warning');
+      }
+      
+      const totalProcessed = result.processed || 0;
+      const errorCount = result.errors || 0;
+      
+      if (errorCount > 0) {
+        addBatchLog(`⚠️ Processing completed with ${errorCount} errors`, 'warning', {
+          totalProcessed,
+          errorCount
+        });
+        addNotification(`❌ Processing completed with ${errorCount} errors. ${totalProcessed} records processed.`, 'warning');
+      } else {
+        addBatchLog('🎉 All processing completed successfully!', 'success', {
+          totalProcessed,
+          vendor: detectedVendor,
+          salesDecisions: salesDecisions.size
+        });
+        addNotification(`✅ Successfully processed ${totalProcessed} records via ${detectedVendor} updater`, 'success');
+        
+        if (salesDecisions.size > 0) {
+          addNotification(`💾 Saved ${salesDecisions.size} sales decisions`, 'success');
+        }
+      }
+      // Check if rollback occurred
+      if (result.warnings && result.warnings.some(w => w.includes('rolled back'))) {
+        addBatchLog('⚠️ UPDATE FAILED - All changes have been rolled back', 'error', {
+          message: 'The update encountered errors and all changes were automatically reversed'
+        });
+        addNotification('❌ Update failed - all changes rolled back. Check logs for details.', 'error');
+      }
+      
+      // CRITICAL FIX: Update banner state immediately
+      addBatchLog('🔄 Refreshing UI state...', 'info');
+      setSourceFileVersion(newFileVersion);  // Use the newFileVersion we already calculated
+      setLastSourceProcessedDate(new Date().toISOString());  // Track our own date!
+      addBatchLog('✅ UI state refreshed successfully', 'success');
+      
+      setBatchComplete(true);
+      
+      // Auto-close modal after 3 seconds if successful
+      if (errorCount === 0) {
+        setTimeout(() => {
+          setShowBatchModal(false);
+          setShowResultsModal(false);
+          setSourceFile(null);
+          setSourceFileContent(null);
+          setSalesDecisions(new Map());
+        }, 3000);
+      }
+      
+      // Notify parent component
+      if (onFileProcessed) {
+        onFileProcessed(result);
+      }
+      
+    } catch (error) {
+      console.error('❌ Processing failed:', error);
+      
+      // Check if this was a rollback error
+      const isRollback = error.message && (error.message.includes('rolled back') || error.message.includes('reverted'));
+      
+      if (isRollback) {
+        addBatchLog('❌ CRITICAL FAILURE - Update rolled back', 'error', { 
+          error: error.message,
+          details: 'All database changes have been reversed'
+        });
+        addNotification(`❌ ${error.message}`, 'error');
+      } else {
+        addBatchLog('❌ Processing workflow failed', 'error', { error: error.message });
+        addNotification(`Processing failed: ${error.message}`, 'error');
+      }
+    } finally {
+      setProcessing(false);
+      setProcessingStatus('');
+    }
+  };
 
   // ENHANCED: Batch Processing Modal with insert progress
   const BatchProcessingModal = () => {
