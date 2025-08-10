@@ -1968,19 +1968,7 @@ export const authHelpers = {
 
 // ===== WORKSHEET SERVICE FOR PRE-VALUATION SETUP =====
 export const worksheetService = {
-  async saveWorksheetStats(jobId, stats) {
-    const { error } = await supabase
-      .from('market_land_valuation')
-      .upsert({
-        job_id: jobId,
-        worksheet_stats: stats,
-        updated_at: new Date().toISOString()
-      })
-      .eq('job_id', jobId);
-    
-    if (error) throw error;
-  },
-
+  // Initialize or get existing market_land_valuation record
   async initializeMarketLandRecord(jobId) {
     const { data, error } = await supabase
       .from('market_land_valuation')
@@ -1994,6 +1982,10 @@ export const worksheetService = {
         .from('market_land_valuation')
         .insert({
           job_id: jobId,
+          normalization_config: {},
+          time_normalized_sales: [],
+          normalization_stats: {},
+          worksheet_data: {},
           worksheet_stats: {
             last_saved: new Date().toISOString(),
             entries_completed: 0,
@@ -2012,6 +2004,99 @@ export const worksheetService = {
     return data;
   },
 
+  // Save normalization configuration
+  async saveNormalizationConfig(jobId, config) {
+    await this.initializeMarketLandRecord(jobId);
+    
+    const { error } = await supabase
+      .from('market_land_valuation')
+      .update({
+        normalization_config: config,
+        updated_at: new Date().toISOString()
+      })
+      .eq('job_id', jobId);
+    
+    if (error) throw error;
+  },
+
+  // Save time normalized sales results
+  async saveTimeNormalizedSales(jobId, sales, stats) {
+    const { error } = await supabase
+      .from('market_land_valuation')
+      .update({
+        time_normalized_sales: sales,
+        normalization_stats: stats,
+        last_normalization_run: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('job_id', jobId);
+    
+    if (error) throw error;
+  },
+
+  // Load saved normalization data
+  async loadNormalizationData(jobId) {
+    const { data, error } = await supabase
+      .from('market_land_valuation')
+      .select('normalization_config, time_normalized_sales, normalization_stats, last_normalization_run')
+      .eq('job_id', jobId)
+      .single();
+    
+    if (error && error.code === 'PGRST116') {
+      // No record exists yet
+      return null;
+    }
+    
+    if (error) throw error;
+    return data;
+  },
+
+  // Save worksheet stats
+  async saveWorksheetStats(jobId, stats) {
+    const { error } = await supabase
+      .from('market_land_valuation')
+      .update({
+        worksheet_stats: stats,
+        last_worksheet_save: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('job_id', jobId);
+    
+    if (error) throw error;
+  },
+
+  // Save worksheet data changes
+  async saveWorksheetData(jobId, worksheetData) {
+    const { error } = await supabase
+      .from('market_land_valuation')
+      .update({
+        worksheet_data: worksheetData,
+        last_worksheet_save: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('job_id', jobId);
+    
+    if (error) throw error;
+  },
+
+  // Load saved worksheet data
+  async loadWorksheetData(jobId) {
+    const { data, error } = await supabase
+      .from('market_land_valuation')
+      .select('worksheet_data, worksheet_stats, last_worksheet_save')
+      .eq('job_id', jobId)
+      .single();
+    
+    if (error && error.code === 'PGRST116') {
+      // No record exists yet
+      return null;
+    }
+    
+    if (error) throw error;
+    return data;
+  },
+
+  // Update location standards
   async updateLocationStandards(jobId, locationVariations) {
     const { error } = await supabase
       .from('market_land_valuation')
@@ -2024,6 +2109,7 @@ export const worksheetService = {
     
     if (error) throw error;
   }
+};
 };
 
 export default supabase;
