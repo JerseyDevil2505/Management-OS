@@ -26,123 +26,54 @@ import LandValuationTab from './market-tabs/LandValuationTab';
 import CostValuationTab from './market-tabs/CostValuationTab';
 import AttributeCardsTab from './market-tabs/AttributeCardsTab';
 
-const MarketLandAnalysis = ({ jobData }) => {
+const MarketLandAnalysis = ({ jobData, properties }) => {
   // ==================== STATE MANAGEMENT ====================
   const [activeTab, setActiveTab] = useState('data-quality');
-  const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [properties, setProperties] = useState([]);
   const [lastSaved, setLastSaved] = useState(null);
   const [unsavedChanges, setUnsavedChanges] = useState(false);
-  const [loadingProgress, setLoadingProgress] = useState(0);
-  const [totalPropertyCount, setTotalPropertyCount] = useState(0);
-  const [loadedCount, setLoadedCount] = useState(0);
-  const [vendorType, setVendorType] = useState(null);
-  const [codeDefinitions, setCodeDefinitions] = useState(null);
-  const [availableFields, setAvailableFields] = useState([]);
   
-  // ==================== LOAD PROPERTIES WITH PAGINATION ====================
-  useEffect(() => {
-    const loadProperties = async () => {
-      if (!jobData?.id) return;
+  // ==================== DERIVE DATA FROM PROPS ====================
+  // Extract vendor type and code definitions from jobData
+  const vendorType = useMemo(() => {
+    return jobData?.vendor_type || 'BRT';
+  }, [jobData?.vendor_type]);
+  
+  const codeDefinitions = useMemo(() => {
+    return jobData?.parsed_code_definitions || null;
+  }, [jobData?.parsed_code_definitions]);
+  
+  // Build available fields list from properties for custom checks
+  const availableFields = useMemo(() => {
+    if (properties && properties.length > 0) {
+      const firstProp = properties[0];
+      const rawDataFields = firstProp.raw_data ? Object.keys(firstProp.raw_data) : [];
       
-      setIsLoading(true);
-      setLoadingProgress(0);
-      setLoadedCount(0);
+      // Sort raw data fields alphabetically
+      rawDataFields.sort();
       
-      try {
-        // First, get the total count
-        const { count, error: countError } = await supabase
-          .from('property_records')
-          .select('*', { count: 'exact', head: true })
-          .eq('job_id', jobData.id);
-        
-        if (countError) throw countError;
-        
-        setTotalPropertyCount(count || 0);
-        console.log(`📊 Total properties to load: ${count}`);
-        
-        if (!count || count === 0) {
-          setProperties([]);
-          setIsLoading(false);
-          return;
-        }
-        
-        // Calculate number of pages needed (1000 per page)
-        const pageSize = 1000;
-        const totalPages = Math.ceil(count / pageSize);
-        const allProperties = [];
-        
-        // Load properties in batches
-        for (let page = 0; page < totalPages; page++) {
-          const start = page * pageSize;
-          const end = Math.min(start + pageSize - 1, count - 1);
-          
-          console.log(`📥 Loading batch ${page + 1}/${totalPages} (${start}-${end})...`);
-          
-          const { data, error } = await supabase
-            .from('property_records')
-            .select('*')
-            .eq('job_id', jobData.id)
-            .order('property_composite_key')
-            .range(start, end);
-          
-          if (error) throw error;
-          
-          if (data) {
-            allProperties.push(...data);
-            const loaded = allProperties.length;
-            setLoadedCount(loaded);
-            setLoadingProgress(Math.round((loaded / count) * 100));
-            
-            // Update properties state incrementally for better UX
-            setProperties([...allProperties]);
-          }
-          
-          // Small delay between batches to prevent overwhelming the server
-          if (page < totalPages - 1) {
-            await new Promise(resolve => setTimeout(resolve, 100));
-          }
-        }
-        
-        console.log(`✅ Successfully loaded ${allProperties.length} properties`);
-        
-        // Detect vendor type from the first property
-        if (allProperties.length > 0) {
-          const firstProp = allProperties[0];
-          const vendor = firstProp.vendor_source || jobData.vendor_source || 'BRT';
-          setVendorType(vendor);
-          console.log(`🏢 Vendor type detected: ${vendor}`);
-        }
-        
-        // Parse code definitions if available
-        if (jobData.parsed_code_definitions) {
-          setCodeDefinitions(jobData.parsed_code_definitions);
-        }
-        
-        // Build available fields list for custom checks
-        if (allProperties.length > 0) {
-          const firstProp = allProperties[0];
-          const rawDataFields = firstProp.raw_data ? Object.keys(firstProp.raw_data) : [];
-          
-          // Sort raw data fields alphabetically
-          rawDataFields.sort();
-          
-          // Store for use in custom check builder
-          setAvailableFields(rawDataFields);
-          console.log(`📋 Found ${rawDataFields.length} raw data fields for custom checks`);
-        }        
-      } catch (error) {
-        console.error('❌ Error loading properties:', error);
-        setProperties([]);
-      } finally {
-        setIsLoading(false);
-        setLoadingProgress(100);
-      }
-    };
+      console.log(`📋 Found ${rawDataFields.length} raw data fields for custom checks`);
+      return rawDataFields;
+    }
+    return [];
+  }, [properties]);
 
-    loadProperties();
-  }, [jobData?.id]);  
+  // Get property count
+  const propertyCount = useMemo(() => {
+    return properties ? properties.length : 0;
+  }, [properties]);
+
+  // Log initial load info
+  useEffect(() => {
+    if (properties && properties.length > 0) {
+      console.log(`✅ MarketLandAnalysis received ${properties.length} properties`);
+      console.log(`🏢 Vendor type: ${vendorType}`);
+      console.log(`📚 Code definitions loaded: ${codeDefinitions ? 'Yes' : 'No'}`);
+      if (jobData?.has_property_assignments) {
+        console.log(`📋 Working with assigned properties only`);
+      }
+    }
+  }, [properties, vendorType, codeDefinitions, jobData?.has_property_assignments]);
 
   // ==================== TAB CONFIGURATION ====================
   const tabs = [
@@ -159,15 +90,36 @@ const MarketLandAnalysis = ({ jobData }) => {
     setIsSaving(true);
     try {
       // TODO: Implement save logic for current tab
+      // This will vary based on which tab is active
+      
+      // Example structure:
+      // if (activeTab === 'pre-valuation') {
+      //   await worksheetService.saveWorksheetData(jobData.id, worksheetData);
+      // } else if (activeTab === 'land-valuation') {
+      //   await landService.saveLandData(jobData.id, landData);
+      // }
+      
       setLastSaved(new Date());
       setUnsavedChanges(false);
       console.log('Analysis data saved successfully');
     } catch (error) {
       console.error('Error saving analysis:', error);
+      alert('Failed to save data. Please try again.');
     } finally {
       setIsSaving(false);
     }
   };
+
+  // Auto-save reminder
+  useEffect(() => {
+    if (unsavedChanges) {
+      const timer = setTimeout(() => {
+        console.log('💾 Reminder: You have unsaved changes');
+      }, 60000); // Remind after 1 minute of unsaved changes
+      
+      return () => clearTimeout(timer);
+    }
+  }, [unsavedChanges]);
 
   // ==================== MAIN RENDER ====================
   return (
@@ -180,9 +132,17 @@ const MarketLandAnalysis = ({ jobData }) => {
               <h1 className="text-2xl font-bold text-gray-900">Market & Land Analysis</h1>
               <p className="text-sm text-gray-600 mt-1">
                 Job #{jobData?.job_number} • {jobData?.municipality}, {jobData?.county} {jobData?.state}
+                {jobData?.has_property_assignments && (
+                  <span className="ml-2 px-2 py-0.5 bg-yellow-100 text-yellow-700 text-xs font-medium rounded">
+                    Assigned Properties Only
+                  </span>
+                )}
               </p>
             </div>
             <div className="flex items-center gap-4">
+              <div className="text-sm text-gray-500">
+                {propertyCount.toLocaleString()} properties loaded
+              </div>
               {lastSaved && (
                 <span className="text-sm text-gray-500">
                   Last saved: {lastSaved.toLocaleTimeString()}
@@ -230,57 +190,106 @@ const MarketLandAnalysis = ({ jobData }) => {
 
       {/* Tab Content */}
       <div className="px-6 py-6">
-        {/* Loading Overlay */}
-        {isLoading && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-8 max-w-md w-full mx-4">
-              <div className="flex flex-col items-center">
-                <RefreshCw size={48} className="text-blue-600 animate-spin mb-4" />
-                <h3 className="text-xl font-semibold text-gray-800 mb-2">
-                  Loading Property Data
-                </h3>
-                <p className="text-gray-600 text-center mb-4">
-                  Please wait while we load {totalPropertyCount.toLocaleString()} properties...
-                </p>
-                
-                {/* Progress Bar */}
-                <div className="w-full mb-2">
-                  <div className="flex justify-between text-sm text-gray-600 mb-1">
-                    <span>Progress</span>
-                    <span>{loadingProgress}%</span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-                    <div 
-                      className="h-full bg-gradient-to-r from-blue-500 to-blue-600 transition-all duration-300"
-                      style={{ width: `${loadingProgress}%` }}
-                    />
-                  </div>
-                </div>
-                
-                <p className="text-sm text-gray-500 mt-2">
-                  Loaded {loadedCount.toLocaleString()} of {totalPropertyCount.toLocaleString()}
-                </p>
-              </div>
+        {/* Check if we have properties */}
+        {!properties || properties.length === 0 ? (
+          <div className="bg-white rounded-lg shadow-sm p-8">
+            <div className="text-center">
+              <AlertCircle className="mx-auto h-12 w-12 text-gray-400" />
+              <h3 className="mt-2 text-lg font-medium text-gray-900">No Properties Loaded</h3>
+              <p className="mt-1 text-sm text-gray-500">
+                {jobData?.has_property_assignments 
+                  ? 'No assigned properties found for this job.'
+                  : 'No properties found for this job.'}
+              </p>
+              <p className="mt-2 text-xs text-gray-400">
+                Properties should be automatically loaded from the job data.
+              </p>
             </div>
           </div>
+        ) : (
+          <>
+            {/* Render active tab with all necessary props */}
+            {activeTab === 'data-quality' && (
+              <DataQualityTab 
+                properties={properties}
+                jobData={jobData}
+                vendorType={vendorType}
+                codeDefinitions={codeDefinitions}
+                availableFields={availableFields}
+                onDataChange={() => setUnsavedChanges(true)}
+              />
+            )}
+            
+            {activeTab === 'pre-valuation' && (
+              <PreValuationTab 
+                jobData={jobData} 
+                properties={properties}
+                vendorType={vendorType}
+                codeDefinitions={codeDefinitions}
+                onDataChange={() => setUnsavedChanges(true)}
+              />
+            )}
+            
+            {activeTab === 'overall-analysis' && (
+              <OverallAnalysisTab 
+                jobData={jobData} 
+                properties={properties}
+                vendorType={vendorType}
+                codeDefinitions={codeDefinitions}
+                onDataChange={() => setUnsavedChanges(true)}
+              />
+            )}
+            
+            {activeTab === 'land-valuation' && (
+              <LandValuationTab 
+                jobData={jobData} 
+                properties={properties}
+                vendorType={vendorType}
+                codeDefinitions={codeDefinitions}
+                onDataChange={() => setUnsavedChanges(true)}
+              />
+            )}
+            
+            {activeTab === 'cost-valuation' && (
+              <CostValuationTab 
+                jobData={jobData} 
+                properties={properties}
+                vendorType={vendorType}
+                codeDefinitions={codeDefinitions}
+                onDataChange={() => setUnsavedChanges(true)}
+              />
+            )}
+            
+            {activeTab === 'attribute-cards' && (
+              <AttributeCardsTab 
+                jobData={jobData} 
+                properties={properties}
+                vendorType={vendorType}
+                codeDefinitions={codeDefinitions}
+                onDataChange={() => setUnsavedChanges(true)}
+              />
+            )}
+          </>
         )}
-
-        {activeTab === 'data-quality' && (
-          <DataQualityTab 
-            properties={properties}
-            jobData={jobData}
-            vendorType={vendorType}
-            codeDefinitions={codeDefinitions}
-            availableFields={availableFields}
-          />
-        )}
-        {activeTab === 'pre-valuation' && <PreValuationTab jobData={jobData} properties={properties} />}
-        {activeTab === 'overall-analysis' && <OverallAnalysisTab jobData={jobData} properties={properties} />}
-        {activeTab === 'land-valuation' && <LandValuationTab jobData={jobData} properties={properties} />}
-        {activeTab === 'cost-valuation' && <CostValuationTab jobData={jobData} properties={properties} />}
-        {activeTab === 'attribute-cards' && <AttributeCardsTab jobData={jobData} properties={properties} />}
       </div>
 
+      {/* Floating Save Reminder */}
+      {unsavedChanges && (
+        <div className="fixed bottom-4 right-4 bg-yellow-50 border border-yellow-200 rounded-lg shadow-lg p-4 flex items-center gap-3">
+          <AlertCircle className="text-yellow-600" size={20} />
+          <div>
+            <p className="text-sm font-medium text-yellow-800">Unsaved Changes</p>
+            <p className="text-xs text-yellow-600">Remember to save your work</p>
+          </div>
+          <button
+            onClick={handleSave}
+            disabled={isSaving}
+            className="ml-4 px-3 py-1.5 bg-yellow-600 text-white text-sm font-medium rounded hover:bg-yellow-700 disabled:opacity-50"
+          >
+            {isSaving ? 'Saving...' : 'Save Now'}
+          </button>
+        </div>
+      )}
     </div>
   );
 };
