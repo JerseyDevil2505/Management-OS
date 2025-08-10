@@ -1,13 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Building, Factory, TrendingUp, DollarSign, Scale, Database, AlertCircle } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
-import ManagementChecklist from './ManagementChecklist';
-import ProductionTracker from './ProductionTracker';
-import MarketAnalysis from './MarketAnalysis';
-import FinalValuation from './FinalValuation';
-import AppealCoverage from './AppealCoverage';
+// ... other imports
 
-// 🔧 ENHANCED: Accept App.js workflow state management props + file refresh trigger
 const JobContainer = ({ 
   selectedJob, 
   onBackToJobs, 
@@ -22,15 +17,21 @@ const JobContainer = ({
   const [propertyRecordsCount, setPropertyRecordsCount] = useState(0);
   const [isLoadingVersion, setIsLoadingVersion] = useState(true);
   const [versionError, setVersionError] = useState(null);
+  
+  // NEW: Property loading states
+  const [properties, setProperties] = useState([]);
+  const [isLoadingProperties, setIsLoadingProperties] = useState(false);
+  const [loadingProgress, setLoadingProgress] = useState(0);
+  const [loadedCount, setLoadedCount] = useState(0);
 
-  // Load latest file versions and property count
+  // Load latest file versions and properties
   useEffect(() => {
     if (selectedJob) {
       loadLatestFileVersions();
     }
   }, [selectedJob]);
 
-  // NEW: Refresh when App.js signals file processing completion
+  // Refresh when App.js signals file processing completion
   useEffect(() => {
     if (fileRefreshTrigger > 0 && selectedJob) {
       loadLatestFileVersions();
@@ -42,6 +43,9 @@ const JobContainer = ({
 
     setIsLoadingVersion(true);
     setVersionError(null);
+    setIsLoadingProperties(true);
+    setLoadingProgress(0);
+    setLoadedCount(0);
 
     try {
       // Get data version AND source file date from property_records table
@@ -53,15 +57,94 @@ const JobContainer = ({
         .limit(1)
         .single();
 
-     // Get code version, end_date, and workflow_stats from jobs table 
+      // Get job data including assignment status
       const { data: jobData, error: jobError } = await supabase
-       .from('jobs')
-       .select('code_file_version, updated_at, end_date, workflow_stats, parsed_code_definitions, vendor_type')
-       .eq('id', selectedJob.id)
-       .single();
+        .from('jobs')
+        .select('code_file_version, updated_at, end_date, workflow_stats, parsed_code_definitions, vendor_type, has_property_assignments')
+        .eq('id', selectedJob.id)
+        .single();
 
-      // Get as_of_date from inspection_data table
-      const { data: inspectionData, error: inspectionError } = await supabase
+      if (dataVersionError && dataVersionError.code !== 'PGRST116') throw dataVersionError;
+      if (jobError) throw jobError;
+
+      const currentFileVersion = dataVersionData?.file_version || 1;
+      const currentCodeVersion = jobData?.code_file_version || 1;
+      const hasAssignments = jobData?.has_property_assignments || false;
+      
+      setLatestFileVersion(currentFileVersion);
+      setLatestCodeVersion(currentCodeVersion);
+
+      // Build query for property count and loading
+      let propertyQuery = supabase
+        .from('property_records')
+        .select('*', { count: 'exact', head: true })
+        .eq('job_id', selectedJob.id);
+
+      // Apply assignment filter if needed
+      if (hasAssignments) {
+        propertyQuery = propertyQuery.eq('is_assigned_property', true);
+        console.log('📋 Loading only assigned properties (has_property_assignments = true)');
+      } else {
+        console.log('📋 Loading all properties (no assignments)');
+      }
+
+      // Get count first
+      const { count, error: countError } = await propertyQuery;
+      if (countError) throw countError;
+
+      setPropertyRecordsCount(count || 0);
+      console.log(`📊 Total properties to load: ${count}`);
+
+      // Now load the actual properties with pagination
+      if (count && count > 0) {
+        const allProperties = [];
+        const pageSize = 1000;
+        const totalPages = Math.ceil(count / pageSize);
+
+        for (let page = 0; page < totalPages; page++) {
+          const start = page * pageSize;
+          const end = Math.min(start + pageSize - 1, count - 1);
+          
+          console.log(`📥 Loading batch ${page + 1}/${totalPages} (${start}-${end})...`);
+          
+          // Build the query again for actual data
+          let dataQuery = supabase
+            .from('property_records')
+            .select('*')
+            .eq('job_id', selectedJob.id)
+            .order('property_composite_key')
+            .range(start, end);
+
+          // Apply assignment filter if needed
+          if (hasAssignments) {
+            dataQuery = dataQuery.eq('is_assigned_property', true);
+          }
+
+          const { data, error } = await dataQuery;
+          
+          if (error) throw error;
+          
+          if (data) {
+            allProperties.push(...data);
+            const loaded = allProperties.length;
+            setLoadedCount(loaded);
+            setLoadingProgress(Math.round((loaded / count) * 100));
+          }
+          
+          // Small delay between batches to prevent overwhelming the server
+          if (page < totalPages - 1) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+        }
+
+        setProperties(allProperties);
+        console.log(`✅ Successfully loaded ${allProperties.length} properties`);
+      } else {
+        setProperties([]);
+      }
+
+      // Get inspection data as_of_date
+      const { data: inspectionData } = await supabase
         .from('inspection_data')
         .select('upload_date')
         .eq('job_id', selectedJob.id)
@@ -69,50 +152,25 @@ const JobContainer = ({
         .limit(1)
         .single();
 
-
-      if (dataVersionError && dataVersionError.code !== 'PGRST116') throw dataVersionError;
-      if (jobError) throw jobError;
-      // Don't throw on inspection error - it might not exist yet
-
-      const currentFileVersion = dataVersionData?.file_version || 1;
-      const currentCodeVersion = jobData?.code_file_version || 1;
-      
-      setLatestFileVersion(currentFileVersion);
-      setLatestCodeVersion(currentCodeVersion);
-
-      // Get count of records from property_records for this job
-      const { count, error: countError } = await supabase
-        .from('property_records')
-        .select('*', { count: 'exact', head: true })
-        .eq('job_id', selectedJob.id);
-
-      if (countError) throw countError;
-
-      setPropertyRecordsCount(count || 0);
-
-      // Prepare enriched job data with all the fetched info
+      // Prepare enriched job data
       const enrichedJobData = {
         ...selectedJob,
         updated_at: jobData?.updated_at || selectedJob.updated_at,
-        manager_name: 'Manager Name Here', // TODO: Resolve from employees table using assigned_manager UUID
+        manager_name: 'Manager Name Here',
         due_year: selectedJob.end_date ? new Date(selectedJob.end_date).getFullYear() : 'TBD',
         latest_data_version: currentFileVersion,
         latest_code_version: currentCodeVersion,
         property_count: count || 0,
-        
-        // NEW: Add the properly fetched dates
         asOfDate: inspectionData?.upload_date || null,
         sourceFileDate: dataVersionData?.updated_at || null,
         end_date: jobData?.end_date || selectedJob.end_date,
         workflow_stats: jobData?.workflow_stats || selectedJob.workflowStats || null,
-
-       // ADD THESE TWO LINES:
-       parsed_code_definitions: jobData?.parsed_code_definitions || null,
-       vendor_type: jobData?.vendor_type || null
+        parsed_code_definitions: jobData?.parsed_code_definitions || null,
+        vendor_type: jobData?.vendor_type || null,
+        has_property_assignments: hasAssignments
       };
       
       setJobData(enrichedJobData);
-
 
     } catch (error) {
       console.error('Error loading file versions:', error);
@@ -131,121 +189,21 @@ const JobContainer = ({
         workflow_stats: selectedJob.workflowStats || null
       };
       setJobData(fallbackJobData);
+      setProperties([]);
     } finally {
       setIsLoadingVersion(false);
+      setIsLoadingProperties(false);
+      setLoadingProgress(100);
     }
   };
 
-  // Handle file upload completion - refresh version data
-  const handleFileProcessed = async (fileType, fileName) => {
-    
-    // Refresh file version data when new files are uploaded
-    await loadLatestFileVersions();
-    
-    // 🔧 ENHANCED: Invalidate ProductionTracker analytics when files change
-    if (onUpdateWorkflowStats && selectedJob?.id) {
-      onUpdateWorkflowStats({
-        totalRecords: 0,
-        validInspections: 0,
-        jobEntryRate: 0,
-        jobRefusalRate: 0,
-        commercialCompletePercent: 0,
-        pricingCompletePercent: 0,
-        isProcessed: false,
-        lastProcessed: null
-      }, true);
-    }
-  };
+  // ... rest of the component code ...
 
-  // 🔧 ENHANCED: Handle ProductionTracker analytics completion with App.js notification
-  const handleAnalyticsUpdate = (analyticsData) => {
-    if (!onUpdateWorkflowStats || !selectedJob?.id) return;
-
-
-    // Transform ProductionTracker data to App.js format
-    const transformedStats = {
-      totalRecords: analyticsData.totalRecords || 0,
-      validInspections: analyticsData.validInspections || 0,
-      jobEntryRate: analyticsData.jobEntryRate || 0,
-      jobRefusalRate: analyticsData.jobRefusalRate || 0,
-      commercialCompletePercent: analyticsData.commercialCompletePercent || 0,
-      pricingCompletePercent: analyticsData.pricingCompletePercent || 0,
-      lastProcessed: new Date().toISOString(),
-      isProcessed: true,
-
-      // 🔧 ENHANCED: Include class breakdown for AdminJobManagement
-      classBreakdown: analyticsData.classBreakdown || {},
-      
-      // Include billing analytics for completeness
-      billingAnalytics: analyticsData.billingAnalytics || null,
-      validationReport: analyticsData.validationReport || null,
-      
-      // Inspector stats for detailed analytics
-      inspectorStats: analyticsData.inspectorStats || {}
-    };
-
-    // 🔧 ENHANCED: Update App.js state with database persistence flag
-    onUpdateWorkflowStats(transformedStats, true);
-    
-  };
-
-  if (!selectedJob) {
-    return (
-      <div className="max-w-6xl mx-auto p-6 bg-white">
-        <div className="text-center text-gray-500 py-12">
-          <Building className="w-16 h-16 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold mb-2">No Job Selected</h3>
-          <p>Please select a job from the Job Management to access modules.</p>
-        </div>
-      </div>
-    );
-  }
-
-  const modules = [
-    {
-      id: 'checklist',
-      name: 'Checklist',
-      icon: Building,
-      component: ManagementChecklist,
-      description: 'Project checklist and documentation'
-    },
-    {
-      id: 'production',
-      name: 'ProductionTracker',
-      icon: Factory,
-      component: ProductionTracker,
-      description: 'Analytics and validation engine'
-    },
-    {
-      id: 'market-analysis',
-      name: 'Market & Land Analysis',
-      icon: TrendingUp,
-      component: MarketAnalysis,
-      description: 'Market analysis and land valuation'
-    },
-    {
-      id: 'final-valuation',
-      name: 'Final Valuation',
-      icon: DollarSign,
-      component: FinalValuation,
-      description: 'Final property valuations'
-    },
-    {
-      id: 'appeal-coverage',
-      name: 'Appeal Coverage',
-      icon: Scale,
-      component: AppealCoverage,
-      description: 'Appeal management and coverage'
-    }
-  ];
-
-  const activeModuleData = modules.find(m => m.id === activeModule);
-  const ActiveComponent = activeModuleData?.component;
-
-  // 🔧 ENHANCED: Determine which props to pass based on active module
+  // Update getModuleProps to pass properties
   const getModuleProps = () => {
     const baseProps = {
       jobData,
+      properties,  // NEW: Pass loaded properties
       onBackToJobs,
       activeSubModule: activeModule,
       onSubModuleChange: setActiveModule,
@@ -255,24 +213,12 @@ const JobContainer = ({
       onFileProcessed: handleFileProcessed
     };
 
-    // 🔧 CRITICAL: Pass App.js state management to ProductionTracker
+    // Pass specific props to ProductionTracker
     if (activeModule === 'production' && onUpdateWorkflowStats) {
       return {
         ...baseProps,
-        // Pass current workflow stats from App.js
         currentWorkflowStats: workflowStats,
-        // Pass update function for analytics completion
         onAnalyticsUpdate: handleAnalyticsUpdate,
-        // Direct access to App.js state updater if needed
-        onUpdateWorkflowStats
-      };
-    }
-
-    // 🔧 Future modules can get their specific props here
-    if (activeModule === 'checklist') {
-      return {
-        ...baseProps,
-        // ManagementChecklist could also update workflow stats
         onUpdateWorkflowStats
       };
     }
@@ -282,7 +228,7 @@ const JobContainer = ({
 
   return (
     <div className="max-w-6xl mx-auto p-6 bg-white">
-      {/* File Version Status Banner */}
+      {/* Enhanced File Version Status Banner with Progress Bar */}
       {!isLoadingVersion && (
         <div className={`mb-6 rounded-lg border p-4 ${
           versionError 
@@ -304,6 +250,11 @@ const JobContainer = ({
                   : `Current Data Version: ${latestFileVersion} | Current Code Version: ${latestCodeVersion}`
                 }
               </span>
+              {jobData?.has_property_assignments && (
+                <span className="ml-3 px-2 py-1 bg-yellow-100 text-yellow-800 text-xs font-medium rounded">
+                  Assigned Properties Only
+                </span>
+              )}
             </div>
             {!versionError && (
               <div className="text-sm text-blue-600">
@@ -311,6 +262,26 @@ const JobContainer = ({
               </div>
             )}
           </div>
+          
+          {/* Progress Bar for Property Loading */}
+          {isLoadingProperties && (
+            <div className="mt-3">
+              <div className="flex justify-between text-xs text-gray-600 mb-1">
+                <span>Loading properties...</span>
+                <span>{loadingProgress}%</span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                <div 
+                  className="h-full bg-gradient-to-r from-blue-500 to-blue-600 transition-all duration-300"
+                  style={{ width: `${loadingProgress}%` }}
+                />
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Loaded {loadedCount.toLocaleString()} of {propertyRecordsCount.toLocaleString()}
+              </p>
+            </div>
+          )}
+          
           {versionError && (
             <div className="mt-2">
               <p className="text-sm text-red-700">
@@ -327,85 +298,7 @@ const JobContainer = ({
         </div>
       )}
 
-      {/* Loading State */}
-      {isLoadingVersion && (
-        <div className="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
-          <div className="flex items-center">
-            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-3"></div>
-            <span className="text-gray-600">Loading latest data version...</span>
-          </div>
-        </div>
-      )}
-
-      {/* Module Navigation Tabs */}
-      <div className="mb-6">
-        <div className="border-b border-gray-200">
-          <nav className="-mb-px flex space-x-8">
-            {modules.map((module) => {
-              const IconComponent = module.icon;
-              const isActive = activeModule === module.id;
-              const isAvailable = module.component !== null;
-              
-              return (
-                <button
-                  key={module.id}
-                  onClick={() => isAvailable && setActiveModule(module.id)}
-                  disabled={!isAvailable || isLoadingVersion}
-                  className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center gap-2 transition-colors ${
-                    isActive
-                      ? 'border-blue-500 text-blue-600'
-                      : isAvailable && !isLoadingVersion
-                      ? 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                      : 'border-transparent text-gray-300 cursor-not-allowed'
-                  }`}
-                  title={!isAvailable ? 'Coming soon' : module.description}
-                >
-                  <IconComponent className="w-4 h-4" />
-                  {module.name}
-                  {!isAvailable && (
-                    <span className="text-xs bg-gray-200 text-gray-600 px-2 py-1 rounded-full ml-1">
-                      Soon
-                    </span>
-                  )}
-                  {/* 🔧 NEW: Show analytics indicator for ProductionTracker */}
-                  {module.id === 'production' && workflowStats?.isProcessed && (
-                    <span className="text-xs bg-green-500 text-white px-2 py-1 rounded-full ml-1">
-                      ✓
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </nav>
-        </div>
-      </div>
-
-      {/* Active Module Content */}
-      <div className="min-h-96">
-        {ActiveComponent && jobData ? (
-          <ActiveComponent
-            {...getModuleProps()}
-          />
-        ) : !isLoadingVersion ? (
-          <div className="text-center text-gray-500 py-24">
-            <div className="mb-4">
-              {activeModuleData && <activeModuleData.icon className="w-16 h-16 mx-auto text-gray-400" />}
-            </div>
-            <h3 className="text-lg font-semibold mb-2">
-              {activeModuleData?.name} Coming Soon
-            </h3>
-            <p className="text-sm">
-              {activeModuleData?.description} will be available in a future update.
-            </p>
-          </div>
-        ) : (
-          <div className="text-center text-gray-500 py-24">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <h3 className="text-lg font-semibold mb-2">Loading Module Data...</h3>
-            <p className="text-sm">Preparing latest data version for module access.</p>
-          </div>
-        )}
-      </div>
+      {/* ... rest of the component JSX ... */}
     </div>
   );
 };
