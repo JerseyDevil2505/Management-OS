@@ -252,21 +252,21 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
     { id: 'first-attempt', item_text: 'First Attempt Inspections', item_order: 12, category: 'inspection', requires_client_approval: false, allows_file_upload: false },
     { id: 'second-attempt', item_text: 'Second Attempt Inspections', item_order: 13, category: 'inspection', requires_client_approval: false, allows_file_upload: false, special_action: 'generate_second_attempt_mailer' },
     { id: 'third-attempt', item_text: 'Third Attempt Inspections', item_order: 14, category: 'inspection', requires_client_approval: false, allows_file_upload: false, special_action: 'generate_third_attempt_mailer' },
-    { id: 'error-management', item_text: 'Error Management/Quality Control', item_order: 15, category: 'inspection', requires_client_approval: false, allows_file_upload: false },
-    { id: 'market-analysis', item_text: 'Market Analysis', item_order: 16, category: 'analysis', requires_client_approval: false, allows_file_upload: false, is_analysis_item: true, sync_from_component: true },
-    { id: 'page-by-page', item_text: 'Page by Page Analysis', item_order: 17, category: 'analysis', requires_client_approval: false, allows_file_upload: false },
-    { id: 'lot-sizing', item_text: 'Lot Sizing Completed', item_order: 18, category: 'analysis', requires_client_approval: false, allows_file_upload: false },
-    { id: 'lot-sizing-questions', item_text: 'Lot Sizing Questions Complete', item_order: 19, category: 'analysis', requires_client_approval: false, allows_file_upload: false },
-    { id: 'vcs-reviewed', item_text: 'VCS Reviewed/Reset', item_order: 20, category: 'analysis', requires_client_approval: true, allows_file_upload: false },
-    { id: 'land-value-tables', item_text: 'Land Value Tables Built', item_order: 21, category: 'analysis', requires_client_approval: false, allows_file_upload: false, is_analysis_item: true, sync_from_component: true },
-    { id: 'land-values-entered', item_text: 'Land Values Entered', item_order: 22, category: 'analysis', requires_client_approval: true, allows_file_upload: false, is_analysis_item: true, sync_from_component: true },
-    { id: 'economic-obsolescence', item_text: 'Economic Obsolescence Study', item_order: 23, category: 'analysis', requires_client_approval: false, allows_file_upload: false },
+    { id: 'lot-sizing', item_text: 'Lot Sizing Completed', item_order: 15, category: 'inspection', requires_client_approval: false, allows_file_upload: false },
+    { id: 'lot-sizing-questions', item_text: 'Lot Sizing Questions Complete', item_order: 16, category: 'inspection', requires_client_approval: false, allows_file_upload: false },
+    { id: 'data-quality-analysis', item_text: 'Data Quality Analysis', item_order: 17, category: 'analysis', requires_client_approval: false, allows_file_upload: false },
+    { id: 'market-analysis', item_text: 'Market Analysis', item_order: 18, category: 'analysis', requires_client_approval: false, allows_file_upload: false, is_analysis_item: true, sync_from_component: true },
+    { id: 'page-by-page', item_text: 'Page by Page Analysis', item_order: 19, category: 'analysis', requires_client_approval: false, allows_file_upload: false, is_analysis_item: true, sync_from_component: true },
+    { id: 'land-value-tables', item_text: 'Land Value Tables Built', item_order: 20, category: 'analysis', requires_client_approval: false, allows_file_upload: false, is_analysis_item: true, sync_from_component: true },
+    { id: 'land-values-entered', item_text: 'Land Values Entered', item_order: 21, category: 'analysis', requires_client_approval: true, allows_file_upload: false, is_analysis_item: true, sync_from_component: true },
+    { id: 'economic-obsolescence', item_text: 'Economic Obsolescence Study', item_order: 22, category: 'analysis', requires_client_approval: false, allows_file_upload: false, is_analysis_item: true, sync_from_component: true },
+    { id: 'vcs-reviewed', item_text: 'VCS Reviewed/Reset', item_order: 23, category: 'analysis', requires_client_approval: true, allows_file_upload: false },
     { id: 'cost-conversion', item_text: 'Cost Conversion Factor Set', item_order: 24, category: 'analysis', requires_client_approval: true, allows_file_upload: false, is_analysis_item: true, sync_from_component: true },
-    { id: 'building-class-review', item_text: 'Building Class Review/Updated', item_order: 25, category: 'analysis', requires_client_approval: false, allows_file_upload: false },
-    { id: 'effective-age', item_text: 'Effective Age Loaded/Set', item_order: 26, category: 'analysis', requires_client_approval: false, allows_file_upload: false },
+    { id: 'building-class-review', item_text: 'Building Class Review/Updated', item_order: 25, category: 'analysis', requires_client_approval: false, allows_file_upload: false, is_analysis_item: true, sync_from_component: true },
+    { id: 'effective-age', item_text: 'Effective Age Loaded/Set', item_order: 26, category: 'analysis', requires_client_approval: false, allows_file_upload: false, is_analysis_item: true, sync_from_component: true },
     { id: 'final-values', item_text: 'Final Values Ready', item_order: 27, category: 'completion', requires_client_approval: true, allows_file_upload: false, is_analysis_item: true, sync_from_component: true },
-    { id: 'turnover-document', item_text: 'Generate Turnover Document', item_order: 29, category: 'completion', requires_client_approval: false, allows_file_upload: false, special_action: 'generate_turnover_pdf' },
-    { id: 'turnover-date', item_text: 'Turnover Date', item_order: 30, category: 'completion', requires_client_approval: false, allows_file_upload: false, input_type: 'date', special_action: 'archive_trigger' }
+    { id: 'turnover-document', item_text: 'Generate Turnover Document', item_order: 28, category: 'completion', requires_client_approval: false, allows_file_upload: true },
+    { id: 'turnover-date', item_text: 'Turnover Date', item_order: 29, category: 'completion', requires_client_approval: false, allows_file_upload: false, input_type: 'date', special_action: 'archive_trigger' }
   ];
 
   // Load checklist items from database
@@ -983,7 +983,6 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
       setGeneratingLists(prev => ({ ...prev, third: false }));
     }
   };
-
   const handleTurnoverDate = async (itemId, date) => {
     if (date) {
       // First update the item status
@@ -1520,12 +1519,6 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
                     >
                       <Download className="w-4 h-4" />
                       {generatingLists.third ? 'Generating...' : '3rd Attempt Excel'}
-                    </button>
-                  )}
-                  {item.special_action === 'generate_turnover_pdf' && (
-                    <button className="px-3 py-1 bg-orange-500 text-white rounded-md text-sm hover:bg-orange-600 flex items-center gap-1">
-                      <Printer className="w-4 h-4" />
-                      Generate PDF
                     </button>
                   )}
                   {item.input_type === 'date' && (
