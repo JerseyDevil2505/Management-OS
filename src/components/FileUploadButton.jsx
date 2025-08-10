@@ -1761,8 +1761,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                                   <div className="text-xs text-gray-500">
                                     Page: {change.differences.sales_page.old}
                                   </div>
-                                )}
-                                )}                                
+                                )}                           
                               </div>
                               <div className="text-gray-400">→</div>
                               <div>
