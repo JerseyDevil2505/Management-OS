@@ -2830,118 +2830,161 @@ Thank you for your immediate attention to this matter.`;
           {/* Shareholder Distributions Tab */}
           {activeTab === 'distributions' && (
             <div className="space-y-6">
-              {/* Distribution Metrics Dashboard */}
-              <div className="bg-gradient-to-r from-green-50 to-blue-50 rounded-lg p-6">
-                <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-lg font-semibold text-gray-800">Distribution Analysis</h2>
-                  
-                  {/* Reserve Settings */}
-                  <div className="flex items-center space-x-4 text-sm">
-                    <div className="flex items-center space-x-2">
-                      <label className="text-gray-700 font-medium">Operating Reserve:</label>
-                      <select
-                        value={reserveSettings.operatingReserveMonths}
-                        onChange={(e) => setReserveSettings(prev => ({ ...prev, operatingReserveMonths: parseInt(e.target.value) }))}
-                        className="px-3 py-1 border border-gray-300 rounded-md bg-white"
-                      >
-                        <option value="0">None</option>
-                        <option value="1">1 Month</option>
-                        <option value="2">2 Months</option>
-                      </select>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <label className="text-gray-700 font-medium">Cash Reserve: $</label>
-                      <input
-                        type="number"
-                        value={reserveSettings.cashReserve}
-                        onChange={(e) => setReserveSettings(prev => ({ ...prev, cashReserve: parseInt(e.target.value) || 0 }))}
-                        className="w-28 px-3 py-1 border border-gray-300 rounded-md"
-                        step="10000"
-                        placeholder="200000"
-                      />
-                    </div>
-                  </div>
+{/* Distribution Metrics Dashboard */}
+          <div className="bg-gradient-to-r from-green-50 to-blue-50 rounded-lg p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-semibold text-gray-800">Distribution Analysis</h2>
+              
+              {/* Reserve Settings */}
+              <div className="flex items-center space-x-4 text-sm">
+                <div className="flex items-center space-x-2">
+                  <label className="text-gray-700 font-medium">Operating Reserve:</label>
+                  <select
+                    value={reserveSettings.operatingReserveMonths}
+                    onChange={(e) => setReserveSettings(prev => ({ ...prev, operatingReserveMonths: parseInt(e.target.value) }))}
+                    className="px-3 py-1 border border-gray-300 rounded-md bg-white"
+                  >
+                    <option value="0">None</option>
+                    <option value="1">1 Month</option>
+                    <option value="2">2 Months</option>
+                  </select>
                 </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                  {/* Conservative Approach */}
-                  <div className="bg-white rounded-lg p-6 shadow-md border-2 border-green-400">
-                    <h3 className="text-md font-semibold text-gray-700 mb-3">Conservative (Available Today)</h3>
-                    <p className={`text-3xl font-bold ${distributionMetrics.conservative > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {formatCurrency(distributionMetrics.conservative)}
-                    </p>
-                    <div className="mt-4 space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Cash on Hand:</span>
-                        <span className="font-medium">{formatCurrency(globalMetrics.totalPaid)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Operating Reserve (2mo):</span>
-                        <span className="font-medium text-red-600">-{formatCurrency(distributionMetrics.operatingReserve)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Cash Reserve:</span>
-                        <span className="font-medium text-red-600">-{formatCurrency(distributionMetrics.cashReserve)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">YTD Distributions:</span>
-                        <span className="font-medium text-red-600">-{formatCurrency(distributionMetrics.ytdDistributions)}</span>
-                      </div>
-                    </div>
+                <div className="flex items-center space-x-2">
+                  <label className="text-gray-700 font-medium">Cash Reserve: $</label>
+                  <input
+                    type="number"
+                    value={reserveSettings.cashReserve}
+                    onChange={(e) => setReserveSettings(prev => ({ ...prev, cashReserve: parseInt(e.target.value) || 0 }))}
+                    className="w-28 px-3 py-1 border border-gray-300 rounded-md"
+                    step="10000"
+                    placeholder="200000"
+                  />
+                </div>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+              {/* Actual (Year-to-Date) */}
+              <div className="bg-white rounded-lg p-6 shadow-md border-2 border-green-400">
+                <h3 className="text-md font-semibold text-gray-700 mb-3">Actual (Year-to-Date)</h3>
+                <p className={`text-3xl font-bold ${
+                  (globalMetrics.totalPaid - globalMetrics.currentExpenses - distributionMetrics.ytdDistributions) >= 0 
+                    ? 'text-green-600' 
+                    : 'text-red-600'
+                }`}>
+                  {formatCurrency(globalMetrics.totalPaid - globalMetrics.currentExpenses - distributionMetrics.ytdDistributions)}
+                </p>
+                <div className="mt-4 space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">YTD Income:</span>
+                    <span className="font-medium text-green-600">{formatCurrency(globalMetrics.totalPaid)}</span>
                   </div>
-                  
-                  {/* Projected Approach */}
-                  <div className="bg-white rounded-lg p-6 shadow-md border-2 border-blue-400">
-                    <h3 className="text-md font-semibold text-gray-700 mb-3">Projected (Year-End)</h3>
-                    <p className={`text-3xl font-bold ${distributionMetrics.projected > 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">YTD Expenses:</span>
+                    <span className="font-medium text-red-600">-{formatCurrency(globalMetrics.currentExpenses)}</span>
+                  </div>
+                  <div className="flex justify-between border-t pt-2">
+                    <span className="text-gray-600 font-semibold">Net Profit:</span>
+                    <span className={`font-bold ${
+                      (globalMetrics.totalPaid - globalMetrics.currentExpenses) >= 0 ? 'text-green-600' : 'text-red-600'
+                    }`}>
+                      {formatCurrency(globalMetrics.totalPaid - globalMetrics.currentExpenses)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">YTD Distributions:</span>
+                    <span className="font-medium text-blue-600">-{formatCurrency(distributionMetrics.ytdDistributions)}</span>
+                  </div>
+                  <div className="flex justify-between border-t pt-2">
+                    <span className="text-gray-600 font-semibold">Balance:</span>
+                    <span className={`font-bold ${
+                      (globalMetrics.totalPaid - globalMetrics.currentExpenses - distributionMetrics.ytdDistributions) >= 0 
+                        ? 'text-green-600' 
+                        : 'text-red-600'
+                    }`}>
+                      {formatCurrency(globalMetrics.totalPaid - globalMetrics.currentExpenses - distributionMetrics.ytdDistributions)}
+                    </span>
+                  </div>
+                  {/* Show shareholder loan if distributions exceed profit */}
+                  {(distributionMetrics.ytdDistributions > (globalMetrics.totalPaid - globalMetrics.currentExpenses)) && (
+                    <div className="mt-2 p-2 bg-red-50 rounded border border-red-200">
+                      <span className="text-xs text-red-700 font-semibold">
+                        ⚠️ Shareholder Loan Required: {formatCurrency(distributionMetrics.ytdDistributions - (globalMetrics.totalPaid - globalMetrics.currentExpenses))}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              {/* Projected (Year-End) */}
+              <div className="bg-white rounded-lg p-6 shadow-md border-2 border-blue-400">
+                <h3 className="text-md font-semibold text-gray-700 mb-3">Projected (Year-End)</h3>
+                <p className={`text-3xl font-bold ${distributionMetrics.projected > 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                  {formatCurrency(distributionMetrics.projected)}
+                </p>
+                <div className="mt-4 space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Projected Cash:</span>
+                    <span className="font-medium">{formatCurrency(distributionMetrics.projectedYearEnd)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Monthly Collection Rate:</span>
+                    <span className="font-medium text-green-600">{formatCurrency(distributionMetrics.monthlyCollectionRate)}/mo</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Open Invoices:</span>
+                    <span className="font-medium">{formatCurrency(globalMetrics.totalOpen)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Projected Expenses:</span>
+                    <span className="font-medium text-red-600">-{formatCurrency(globalMetrics.projectedExpenses)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Operating Reserve:</span>
+                    <span className="font-medium text-orange-600">-{formatCurrency(distributionMetrics.operatingReserve)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Cash Reserve:</span>
+                    <span className="font-medium text-orange-600">-{formatCurrency(distributionMetrics.cashReserve)}</span>
+                  </div>
+                  <div className="flex justify-between border-t pt-2">
+                    <span className="text-gray-600 font-semibold">Available for Distribution:</span>
+                    <span className="font-bold text-blue-600">
                       {formatCurrency(distributionMetrics.projected)}
-                    </p>
-                    <div className="mt-4 space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Projected Cash:</span>
-                        <span className="font-medium">{formatCurrency(distributionMetrics.projectedYearEnd)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Monthly Collection Rate:</span>
-                        <span className="font-medium text-green-600">{formatCurrency(distributionMetrics.monthlyCollectionRate)}/mo</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Open Invoices:</span>
-                        <span className="font-medium">{formatCurrency(globalMetrics.totalOpen)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Projected Expenses:</span>
-                        <span className="font-medium text-red-600">-{formatCurrency(globalMetrics.projectedExpenses)}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                
-                {/* Per-Person Breakdown */}
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="bg-white rounded-lg p-4 shadow-sm">
-                    <p className="text-sm text-gray-600">Thomas Davis (10%)</p>
-                    <p className="text-xs text-gray-500 mb-1">Conservative / Projected</p>
-                    <p className="text-lg font-semibold text-gray-900">
-                      ${Math.floor(distributionMetrics.conservative * 0.10).toLocaleString()} / ${Math.floor(distributionMetrics.projected * 0.10).toLocaleString()}
-                    </p>
-                  </div>
-                  <div className="bg-white rounded-lg p-4 shadow-sm">
-                    <p className="text-sm text-gray-600">Brian Schneider (45%)</p>
-                    <p className="text-xs text-gray-500 mb-1">Conservative / Projected</p>
-                    <p className="text-lg font-semibold text-gray-900">
-                      ${Math.floor(distributionMetrics.conservative * 0.45).toLocaleString()} / ${Math.floor(distributionMetrics.projected * 0.45).toLocaleString()}
-                    </p>
-                  </div>
-                  <div className="bg-white rounded-lg p-4 shadow-sm">
-                    <p className="text-sm text-gray-600">Kristine Duda (45%)</p>
-                    <p className="text-xs text-gray-500 mb-1">Conservative / Projected</p>
-                    <p className="text-lg font-semibold text-gray-900">
-                      ${Math.floor(distributionMetrics.conservative * 0.45).toLocaleString()} / ${Math.floor(distributionMetrics.projected * 0.45).toLocaleString()}
-                    </p>
+                    </span>
                   </div>
                 </div>
               </div>
+            </div>
+            
+            {/* Per-Person Breakdown */}
+            <div className="grid grid-cols-3 gap-4">
+              <div className="bg-white rounded-lg p-4 shadow-sm">
+                <p className="text-sm text-gray-600">Thomas Davis (10%)</p>
+                <p className="text-xs text-gray-500 mb-1">Actual Balance / Projected</p>
+                <p className="text-lg font-semibold text-gray-900">
+                  ${Math.floor((globalMetrics.totalPaid - globalMetrics.currentExpenses - distributionMetrics.ytdDistributions) * 0.10).toLocaleString()} / 
+                  ${Math.floor(distributionMetrics.projected * 0.10).toLocaleString()}
+                </p>
+              </div>
+              <div className="bg-white rounded-lg p-4 shadow-sm">
+                <p className="text-sm text-gray-600">Brian Schneider (45%)</p>
+                <p className="text-xs text-gray-500 mb-1">Actual Balance / Projected</p>
+                <p className="text-lg font-semibold text-gray-900">
+                  ${Math.floor((globalMetrics.totalPaid - globalMetrics.currentExpenses - distributionMetrics.ytdDistributions) * 0.45).toLocaleString()} / 
+                  ${Math.floor(distributionMetrics.projected * 0.45).toLocaleString()}
+                </p>
+              </div>
+              <div className="bg-white rounded-lg p-4 shadow-sm">
+                <p className="text-sm text-gray-600">Kristine Duda (45%)</p>
+                <p className="text-xs text-gray-500 mb-1">Actual Balance / Projected</p>
+                <p className="text-lg font-semibold text-gray-900">
+                  ${Math.floor((globalMetrics.totalPaid - globalMetrics.currentExpenses - distributionMetrics.ytdDistributions) * 0.45).toLocaleString()} / 
+                  ${Math.floor(distributionMetrics.projected * 0.45).toLocaleString()}
+                </p>
+              </div>
+            </div>
+          </div>
               
               {/* Distributions by Partner */}
               <div className="bg-white rounded-lg shadow overflow-hidden">
