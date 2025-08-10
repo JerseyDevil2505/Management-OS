@@ -192,11 +192,11 @@ useEffect(() => {
       if (!selectedCounty) return;
       
       try {
-        const { data, error } = await supabase
-          .from('county_hpi_data')
-          .select('*')
-          .eq('county_name', selectedCounty)
-          .order('year', { ascending: true });
+      const { data, error } = await supabase
+        .from('county_hpi_data')
+        .select('*')
+        .eq('county_name', selectedCounty)
+        .order('observation_year', { ascending: true });
         
         if (error) throw error;
         
@@ -249,16 +249,16 @@ useEffect(() => {
   const getHPIMultiplier = useCallback((saleYear, targetYear) => {
     if (saleYear === targetYear) return 1.0;
     
-    const saleYearData = hpiData.find(h => h.year === saleYear);
-    const targetYearData = hpiData.find(h => h.year === targetYear);
+    const saleYearData = hpiData.find(h => h.observation_year === saleYear);
+    const targetYearData = hpiData.find(h => h.observation_year === targetYear);
     
     if (!saleYearData || !targetYearData) {
       console.warn(`Missing HPI data for year ${!saleYearData ? saleYear : targetYear}. Using 1.0 multiplier.`);
       return 1.0;
     }
     
-    const saleHPI = saleYearData.hpi_value || 100;
-    const targetHPI = targetYearData.hpi_value || 100;
+    const saleHPI = saleYearData.hpi_index || 100;
+    const targetHPI = targetYearData.hpi_index || 100;
     
     return targetHPI / saleHPI;
   }, [hpiData]);
