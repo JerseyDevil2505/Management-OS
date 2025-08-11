@@ -889,7 +889,10 @@ const analyzeImportFile = async (file) => {
           analysis.matched.push({
             compositeKey,
             excelData: row,
-            currentData: match,
+            currentData: {
+              ...match,
+              id: match.id  // Make sure ID is included
+            },
             updates: {
               new_vcs: row['New VCS'] || '',
               asset_zoning: row.Zone || '',
@@ -913,7 +916,10 @@ const analyzeImportFile = async (file) => {
               analysis.fuzzyMatched.push({
                 compositeKey,
                 excelData: row,
-                currentData: fuzzyMatch,
+                currentData: {
+                  ...fuzzyMatch,
+                  id: fuzzyMatch.id  // Make sure ID is included
+                },
                 updates: {
                   new_vcs: row['New VCS'] || '',
                   asset_zoning: row.Zone || '',
@@ -2085,24 +2091,50 @@ const analyzeImportFile = async (file) => {
                    // Apply matched updates
                    const allUpdates = [...(importPreview.matched || []), ...(importPreview.fuzzyMatched || [])];
                    
-                   for (const match of allUpdates) {
-                     // Update the worksheet properties in memory
-                     const updatedProps = worksheetProperties.map(prop => {
-                       if (prop.property_composite_key === match.currentData.property_composite_key) {
-                         return {
-                           ...prop,
-                           new_vcs: match.updates.new_vcs || prop.new_vcs,
-                           asset_zoning: match.updates.asset_zoning || prop.asset_zoning,
-                           asset_map_page: match.updates.asset_map_page || prop.asset_map_page,
-                           asset_key_page: match.updates.asset_key_page || prop.asset_key_page
-                         };
-                       }
-                       return prop;
-                     });
+try {
+                   // Apply matched updates
+                   const allUpdates = [...(importPreview.matched || []), ...(importPreview.fuzzyMatched || [])];
+                   
+                   // Batch update to database
+                   const batchSize = 50;
+                   for (let i = 0; i < allUpdates.length; i += batchSize) {
+                     const batch = allUpdates.slice(i, i + batchSize);
                      
-                     setWorksheetProperties(updatedProps);
-                     setFilteredWorksheetProps(updatedProps);
+                     await Promise.all(batch.map(match => 
+                       supabase
+                         .from('property_records')
+                         .update({
+                           new_vcs: match.updates.new_vcs || null,
+                           asset_zoning: match.updates.asset_zoning || null,
+                           asset_map_page: match.updates.asset_map_page || null,
+                           asset_key_page: match.updates.asset_key_page || null
+                         })
+                         .eq('id', match.currentData.id)  // Use ID not composite key
+                     ));
+                     
+                     console.log(`Imported batch ${Math.floor(i/batchSize) + 1} of ${Math.ceil(allUpdates.length/batchSize)}`);
                    }
+                   
+                   // Then update UI
+                   const updatedProps = worksheetProperties.map(prop => {
+                     const match = allUpdates.find(m => 
+                       m.currentData.property_composite_key === prop.property_composite_key
+                     );
+                     if (match) {
+                       return {
+                         ...prop,
+                         new_vcs: match.updates.new_vcs || prop.new_vcs,
+                         asset_zoning: match.updates.asset_zoning || prop.asset_zoning,
+                         asset_map_page: match.updates.asset_map_page || prop.asset_map_page,
+                         asset_key_page: match.updates.asset_key_page || prop.asset_key_page
+                       };
+                     }
+                     return prop;
+                   });
+                   
+                   setWorksheetProperties(updatedProps);
+                   setFilteredWorksheetProps(updatedProps);
+                   updateWorksheetStats(updatedProps);
                    
                    // Mark as ready if option selected
                    if (importOptions.markImportedAsReady) {
