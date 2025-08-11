@@ -94,6 +94,8 @@ const PreValuationTab = ({ jobData, properties }) => {
     locations: {},
     zones: {}
   });
+  const [isProcessingImport, setIsProcessingImport] = useState(false);
+  const [importProgress, setImportProgress] = useState({ current: 0, total: 0, message: '' });
 
   // Vendor detection
   const vendorType = jobData?.vendor_source || jobData?.vendor_type || 'BRT';
@@ -2265,16 +2267,32 @@ const analyzeImportFile = async (file) => {
                  // Process the import - actually apply the updates
                  console.log('Processing import with options:', importOptions);
                  
+                 // Show processing modal
+                 setShowImportModal(false);
+                 setIsProcessingImport(true);
+                 setImportProgress({ current: 0, total: 0, message: 'Preparing import...' });
+                 
                  try {
                    // Apply matched updates
                    const allUpdates = [...(importPreview.matched || []), ...(importPreview.fuzzyMatched || [])];
+                   setImportProgress({ current: 0, total: allUpdates.length, message: 'Processing updates...' });
                    
-                    // Then update UI
+                  // Then update UI with progress tracking
+                   let processedCount = 0;
                    const updatedProps = worksheetProperties.map(prop => {
                      const match = allUpdates.find(m => 
                        m.currentData.id === prop.id  // Use ID for matching
                      );
                      if (match) {
+                       processedCount++;
+                       // Update progress every 10 items or on last item
+                       if (processedCount % 10 === 0 || processedCount === allUpdates.length) {
+                         setImportProgress({ 
+                           current: processedCount, 
+                           total: allUpdates.length, 
+                           message: `Updating property ${processedCount} of ${allUpdates.length}...` 
+                         });
+                       }
                        return {
                          ...prop,
                          new_vcs: match.updates.new_vcs || prop.new_vcs,
@@ -2301,11 +2319,24 @@ const analyzeImportFile = async (file) => {
                    updateWorksheetStats(worksheetProperties);
                    setUnsavedChanges(true);
                    
-                   alert(`Successfully imported ${allUpdates.length} property updates`);
-                   setShowImportModal(false);
+                    setImportProgress({ 
+                     current: allUpdates.length, 
+                     total: allUpdates.length, 
+                     message: 'Import complete!' 
+                   });
+                   
+                   // Small delay to show completion
+                   setTimeout(() => {
+                     setIsProcessingImport(false);
+                     setImportProgress({ current: 0, total: 0, message: '' });
+                     alert(`Successfully imported ${allUpdates.length} property updates`);
+                   }, 1000);
+                   
                    setImportPreview(null);
                  } catch (error) {
                    console.error('Error applying import:', error);
+                   setIsProcessingImport(false);
+                   setImportProgress({ current: 0, total: 0, message: '' });
                    alert('Error applying import. Please check the console.');
                  }
                }}
@@ -2317,8 +2348,39 @@ const analyzeImportFile = async (file) => {
          </div>
        </div>
      )}
+     {/* Import Processing Progress Modal */}
+     {isProcessingImport && (
+       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+         <div className="bg-white rounded-lg p-6 max-w-md w-full">
+           <h3 className="text-lg font-semibold mb-4">Processing Import</h3>
+           
+           <div className="mb-4">
+             <div className="flex justify-between text-sm text-gray-600 mb-2">
+               <span>{importProgress.message}</span>
+               <span>{importProgress.current} / {importProgress.total}</span>
+             </div>
+             
+             <div className="w-full bg-gray-200 rounded-full h-2">
+               <div
+                 className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                 style={{
+                   width: `${importProgress.total > 0 
+                     ? (importProgress.current / importProgress.total * 100) 
+                     : 0}%`
+                 }}
+               />
+             </div>
+           </div>
+           
+           <div className="flex items-center justify-center">
+             <RefreshCw className="animate-spin text-blue-600" size={20} />
+             <span className="ml-2 text-sm text-gray-600">Please wait...</span>
+           </div>
+         </div>
+       </div>
+     )}
+     
    </div>
  );
 };
-
 export default PreValuationTab;
