@@ -357,32 +357,68 @@ const JobContainer = ({
     <div className="bg-white">
       {/* Enhanced File Version Status Banner with Progress Bar */}
       <div className="max-w-6xl mx-auto p-6">
-        {/* Show loading banner DURING load */}
+        {/* IMPROVED: Clean loading banner with progress bar */}
         {(isLoadingVersion || isLoadingProperties) && (
-          <div className="mb-6 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg p-6 shadow-lg">
+          <div className="mb-6 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
             <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white mr-3"></div>
-                <h3 className="text-lg font-semibold">
-                  {isLoadingVersion ? 'Initializing job data...' : 'Loading property records...'}
-                </h3>
-              </div>
-              {!isLoadingVersion && <span className="text-xl font-bold">{loadingProgress}%</span>}
+              <h3 className="text-lg font-semibold text-gray-800">
+                {isLoadingVersion ? 'Initializing job data...' : 'Loading property records'}
+              </h3>
+              {isLoadingVersion ? (
+                <div className="animate-spin rounded-full h-5 w-5 border-2 border-gray-300 border-t-blue-600"></div>
+              ) : (
+                <span className={`text-sm font-medium ${
+                  loadingProgress > 90 ? 'text-green-600' : 'text-blue-600'
+                }`}>
+                  {loadingProgress}%
+                </span>
+              )}
             </div>
             
             {!isLoadingVersion && propertyRecordsCount > 0 && (
               <>
-                <div className="w-full bg-white bg-opacity-20 rounded-full h-3 overflow-hidden">
-                  <div 
-                    className="h-full bg-white transition-all duration-300 rounded-full"
-                    style={{ width: `${loadingProgress}%` }}
-                  />
+                {/* Progress bar */}
+                <div className="mb-3">
+                  <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                    <div 
+                      className={`h-full transition-all duration-300 ease-out rounded-full ${
+                        loadingProgress > 90 
+                          ? 'bg-gradient-to-r from-green-500 to-green-600' 
+                          : 'bg-gradient-to-r from-blue-500 to-blue-600'
+                      }`}
+                      style={{ width: `${loadingProgress}%` }}
+                    />
+                  </div>
                 </div>
-                <p className="text-sm mt-2 text-blue-100">
-                  Loading {loadedCount.toLocaleString()} of {propertyRecordsCount.toLocaleString()} properties
-                  {jobData?.has_property_assignments && ' (assigned properties only)'}
-                </p>
+                
+                {/* Status text */}
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-600">
+                    <span className="font-semibold text-gray-800">
+                      {loadedCount.toLocaleString()}
+                    </span> of <span className="font-semibold text-gray-800">
+                      {propertyRecordsCount.toLocaleString()}
+                    </span> records loaded
+                    {jobData?.has_property_assignments && (
+                      <span className="ml-2 text-amber-600">(assigned only)</span>
+                    )}
+                  </span>
+                  {loadingProgress > 90 && (
+                    <span className="text-green-600 flex items-center">
+                      <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      Finalizing...
+                    </span>
+                  )}
+                </div>
               </>
+            )}
+            
+            {isLoadingVersion && (
+              <div className="text-sm text-gray-500">
+                Connecting to database and fetching job information
+              </div>
             )}
           </div>
         )}
@@ -438,60 +474,50 @@ const JobContainer = ({
           </div>
         )}
 
-      {/* Loading State */}
-      {isLoadingVersion && (
-        <div className="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
-          <div className="flex items-center">
-            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-3"></div>
-            <span className="text-gray-600">Loading latest data version...</span>
+        {/* Module Navigation Tabs */}
+        <div className="mb-6">
+          <div className="border-b border-gray-200">
+            <nav className="-mb-px flex space-x-8">
+              {modules.map((module) => {
+                const IconComponent = module.icon;
+                const isActive = activeModule === module.id;
+                const isAvailable = module.component !== null;
+                
+                return (
+                  <button
+                    key={module.id}
+                    onClick={() => isAvailable && setActiveModule(module.id)}
+                    disabled={!isAvailable || isLoadingVersion}
+                    className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center gap-2 transition-colors ${
+                      isActive
+                        ? 'border-blue-500 text-blue-600'
+                        : isAvailable && !isLoadingVersion
+                        ? 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                        : 'border-transparent text-gray-300 cursor-not-allowed'
+                    }`}
+                    title={!isAvailable ? 'Coming soon' : module.description}
+                  >
+                    <IconComponent className="w-4 h-4" />
+                    {module.name}
+                    {!isAvailable && (
+                      <span className="text-xs bg-gray-200 text-gray-600 px-2 py-1 rounded-full ml-1">
+                        Soon
+                      </span>
+                    )}
+                    {/* 🔧 NEW: Show analytics indicator for ProductionTracker */}
+                    {module.id === 'production' && workflowStats?.isProcessed && (
+                      <span className="text-xs bg-green-500 text-white px-2 py-1 rounded-full ml-1">
+                        ✓
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </nav>
           </div>
         </div>
-      )}
-
-      {/* Module Navigation Tabs */}
-      <div className="mb-6">
-        <div className="border-b border-gray-200">
-          <nav className="-mb-px flex space-x-8">
-            {modules.map((module) => {
-              const IconComponent = module.icon;
-              const isActive = activeModule === module.id;
-              const isAvailable = module.component !== null;
-              
-              return (
-                <button
-                  key={module.id}
-                  onClick={() => isAvailable && setActiveModule(module.id)}
-                  disabled={!isAvailable || isLoadingVersion}
-                  className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center gap-2 transition-colors ${
-                    isActive
-                      ? 'border-blue-500 text-blue-600'
-                      : isAvailable && !isLoadingVersion
-                      ? 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                      : 'border-transparent text-gray-300 cursor-not-allowed'
-                  }`}
-                  title={!isAvailable ? 'Coming soon' : module.description}
-                >
-                  <IconComponent className="w-4 h-4" />
-                  {module.name}
-                  {!isAvailable && (
-                    <span className="text-xs bg-gray-200 text-gray-600 px-2 py-1 rounded-full ml-1">
-                      Soon
-                    </span>
-                  )}
-                  {/* 🔧 NEW: Show analytics indicator for ProductionTracker */}
-                  {module.id === 'production' && workflowStats?.isProcessed && (
-                    <span className="text-xs bg-green-500 text-white px-2 py-1 rounded-full ml-1">
-                      ✓
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </nav>
-        </div>
       </div>
 
-      </div>
       {/* Active Module Content - Each module controls its own container */}
       <div className="min-h-96">
         {ActiveComponent && jobData ? (
