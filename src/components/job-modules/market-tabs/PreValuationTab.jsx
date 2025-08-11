@@ -871,16 +871,46 @@ const analyzeImportFile = async (file) => {
       
       // Process each row from Excel
       for (const row of jsonData) {
-        // Build composite key from Excel data (need Year and CCDD columns)
-        const year = row.Year || new Date().getFullYear();
-        const ccdd = row.CCDD || jobData?.ccdd || '';
-        const block = row.Block?.toString() || '';
-        const lot = row.Lot?.toString() || '';
-        const qual = row.Qual?.toString().trim() || 'NONE';
-        const card = row.Bldg?.toString() || row.Card?.toString() || 'NONE';
-        const location = row.Location?.toString() || 'NONE';
+        // Build composite key from Excel data - vendor aware
+        const year = row.Year || row.YEAR || new Date().getFullYear();
+        const ccdd = row.Ccdd || row.CCDD || jobData?.ccdd || '';
+        const block = (row.Block || row.BLOCK)?.toString() || '';
+        const lot = (row.Lot || row.LOT)?.toString() || '';
+        
+        // Handle qualifier - both vendors
+        let qual = (row.Qual || row.Qualifier || row.QUALIFIER)?.toString().trim() || '';
+        qual = qual || 'NONE';
+        
+        // Handle card/bldg based on vendor
+        let card;
+        if (vendorType === 'Microsystems') {
+          card = (row.Bldg || row.BLDG)?.toString().trim() || 'NONE';
+        } else { // BRT
+          card = (row.Card || row.CARD)?.toString().trim() || 'NONE';
+        }
+        
+        // Handle location field - check for the actual property location first
+        let location;
+        if (vendorType === 'Microsystems') {
+          // For Microsystems, handle the duplicate Location field issue
+          // Try to get the first Location column (property address) not the second one
+          location = row.Location?.toString().trim() || '';
+          // If Location seems to be empty or is actually the analysis field, try other patterns
+          if (!location || location.toLowerCase().includes('analysis')) {
+            location = row['Property Location']?.toString().trim() || 
+                      row.Address?.toString().trim() || 
+                      'NONE';
+          }
+        } else { // BRT
+          location = (row.PROPERTY_LOCATION || row['Property Location'] || row.Location)?.toString().trim() || 'NONE';
+        }
         
         const compositeKey = `${year}${ccdd}-${block}-${lot}_${qual}-${card}-${location}`;
+        
+        // Debug for specific blocks
+        if (parseInt(block) >= 7 && parseInt(block) <= 10) {
+          console.log(`🔍 Import row ${block}-${lot}: compositeKey = ${compositeKey}`);
+        }
         
         // Find matching property in worksheet
         const match = worksheetProperties.find(p => p.property_composite_key === compositeKey);
@@ -891,24 +921,36 @@ const analyzeImportFile = async (file) => {
             excelData: row,
             currentData: {
               ...match,
-              id: match.id  // Make sure ID is included
+              id: match.id
             },
             updates: {
               new_vcs: row['New VCS'] || '',
-              location_analysis: row['Location Analysis'] || '',
-              asset_zoning: row['Zone'] || '',
+              location_analysis: row['Location Analysis'] || row['Loc Analysis'] || '',
+              asset_zoning: row['Zone'] || row['Zoning'] || '',
               asset_map_page: row['Map Page'] || '',
-              asset_key_page: row['Key'] || ''
+              asset_key_page: row['Key'] || row['Key Page'] || ''
             }
           });
         } else {
-          // Try fuzzy match on address if no composite key match
-          if (importOptions.useAddressFuzzyMatch && row.Location) {
+          // Debug unmatched
+          if (parseInt(block) >= 7 && parseInt(block) <= 10) {
+            console.log(`❌ No match found for: ${compositeKey}`);
+            // Find close matches for debugging
+            const closeMatches = worksheetProperties.filter(p => 
+              p.property_composite_key.includes(`-${block}-${lot}`)
+            );
+            if (closeMatches.length > 0) {
+              console.log(`   Close matches:`, closeMatches.map(p => p.property_composite_key));
+            }
+          }
+          
+          // Try fuzzy match on address if enabled
+          if (importOptions.useAddressFuzzyMatch && location && location !== 'NONE') {
             const fuzzyMatch = worksheetProperties.find(p => {
               if (!p.property_location) return false;
               const similarity = calculateSimilarity(
                 p.property_location.toLowerCase(),
-                row.Location.toString().toLowerCase()
+                location.toLowerCase()
               );
               return similarity >= importOptions.fuzzyMatchThreshold;
             });
@@ -919,15 +961,15 @@ const analyzeImportFile = async (file) => {
                 excelData: row,
                 currentData: {
                   ...fuzzyMatch,
-                  id: fuzzyMatch.id  // Make sure ID is included
+                  id: fuzzyMatch.id
                 },
-            updates: {
-              new_vcs: row['New VCS'] || '',
-              location_analysis: row['Location Analysis'] || '',
-              asset_zoning: row['Zone'] || '',
-              asset_map_page: row['Map Page'] || '',
-              asset_key_page: row['Key'] || ''
-            }
+                updates: {
+                  new_vcs: row['New VCS'] || '',
+                  location_analysis: row['Location Analysis'] || row['Loc Analysis'] || '',
+                  asset_zoning: row['Zone'] || row['Zoning'] || '',
+                  asset_map_page: row['Map Page'] || '',
+                  asset_key_page: row['Key'] || row['Key Page'] || ''
+                }
               });
             } else {
               analysis.unmatched.push({
