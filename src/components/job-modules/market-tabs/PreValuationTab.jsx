@@ -1070,7 +1070,7 @@ const analyzeImportFile = async (file) => {
                   type="number"
                   value={equalizationRatio}
                   onChange={(e) => setEqualizationRatio(parseFloat(e.target.value))}
-                  className="w-32 px-3 py-1 border rounded"
+                  className="w-24 px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                   step="0.01"
                   placeholder="52.99"
                 />
@@ -1142,10 +1142,12 @@ const analyzeImportFile = async (file) => {
                     <div className="text-2xl font-bold text-red-600">{normalizationStats.pendingReview}</div>
                     <div className="text-sm text-gray-600">Pending Review</div>
                   </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold">{normalizationStats.averageRatio}</div>
-                    <div className="text-sm text-gray-600">Average Ratio</div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-gray-700">
+                    {normalizationStats.averageRatio ? `${(normalizationStats.averageRatio * 100).toFixed(2)}%` : '0.00%'}
                   </div>
+                  <div className="text-sm text-gray-500">Average Ratio</div>
+                </div>
                 </div>
               </div>
 
