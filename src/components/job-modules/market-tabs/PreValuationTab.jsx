@@ -434,7 +434,11 @@ const runTimeNormalization = useCallback(async () => {
     
     try {
       // Only use sales that were kept after time normalization review
-      const acceptedSales = timeNormalizedSales.filter(s => s.keep_reject === 'keep');
+      const acceptedSales = timeNormalizedSales.filter(s => s.keep_reject === 'keep').map(s => ({
+        ...s,
+        size_normalized_price: null,  // Clear old values
+        size_adjustment: null
+      }));
       
       // Group by type/use codes using "starts with" pattern
       const groups = {
@@ -472,9 +476,28 @@ const runTimeNormalization = useCallback(async () => {
         // Apply 50% method to each sale
         groupSales.forEach(sale => {
           const currentSize = sale.asset_living_sf || 0;
+          
+          // Skip if no living size data
+          if (currentSize <= 0) {
+            console.warn(`Skipping property ${sale.id} - no living_sf: ${currentSize}`);
+            return;
+          }
+          
           const sizeDiff = avgSize - currentSize;
           const pricePerSf = sale.time_normalized_price / currentSize;
           const adjustment = sizeDiff * pricePerSf * 0.5;
+          
+          // Check for NaN
+          if (isNaN(adjustment)) {
+            console.error(`NaN adjustment for property ${sale.id}:`, {
+              currentSize,
+              avgSize,
+              sizeDiff,
+              pricePerSf,
+              time_normalized_price: sale.time_normalized_price
+            });
+            return;
+          }
           
           sale.size_normalized_price = Math.round(sale.time_normalized_price + adjustment);
           sale.size_adjustment = adjustment;
