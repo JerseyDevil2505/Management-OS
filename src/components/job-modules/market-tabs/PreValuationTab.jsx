@@ -329,6 +329,17 @@ const runTimeNormalization = useCallback(async () => {
         const saleYear = new Date(p.sales_date).getFullYear();
         if (saleYear < salesFromYear) return false;
         
+        // Parse composite key to check card
+        const parsed = parseCompositeKey(p.property_composite_key);
+        const card = parsed.card?.toUpperCase();
+        
+        // Only primary buildings: M for Microsystems, 1 for BRT
+        if (vendorType === 'Microsystems') {
+          if (card !== 'M') return false;
+        } else {
+          if (card !== '1') return false;
+        }
+        
         // Must have building class > 10, typeuse, and design (trim spaces for legacy ASCII 32)
         const buildingClass = p.asset_building_class?.toString().trim();
         const typeUse = p.asset_type_use?.toString().trim();
