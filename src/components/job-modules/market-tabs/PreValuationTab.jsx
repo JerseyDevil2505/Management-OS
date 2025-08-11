@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+  import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase, interpretCodes, worksheetService } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx';
 import { 
@@ -895,6 +895,7 @@ const analyzeImportFile = async (file) => {
             },
             updates: {
               new_vcs: row['New VCS'] || '',
+              location_analysis: row['Location Analysis'] || row['Location'] || '',
               asset_zoning: row.Zone || '',
               asset_map_page: row['Map Page']?.toString() || '',
               asset_key_page: row['Key Page']?.toString() || ''
@@ -922,6 +923,7 @@ const analyzeImportFile = async (file) => {
                 },
                 updates: {
                   new_vcs: row['New VCS'] || '',
+                  location_analysis: row['Location Analysis'] || row['Location'] || '',
                   asset_zoning: row.Zone || '',
                   asset_map_page: row['Map Page']?.toString() || '',
                   asset_key_page: row['Key Page']?.toString() || ''
@@ -1021,6 +1023,9 @@ const analyzeImportFile = async (file) => {
         break;
       case 'completed':
         filtered = filtered.filter(p => p.new_vcs && p.asset_zoning);
+        break;
+        case 'not-ready':
+        filtered = filtered.filter(p => !readyProperties.has(p.property_composite_key));
         break;
     }
     
@@ -1748,6 +1753,7 @@ const analyzeImportFile = async (file) => {
                   <option value="missing-zoning">Missing Zoning</option>
                   <option value="ready">Ready to Process</option>
                   <option value="completed">Completed</option>
+                  <option value="not-ready">Not Ready</option>
                 </select>
               </div>
             </div>
@@ -2091,35 +2097,16 @@ const analyzeImportFile = async (file) => {
                    // Apply matched updates
                    const allUpdates = [...(importPreview.matched || []), ...(importPreview.fuzzyMatched || [])];
                    
-                   // Batch update to database
-                   const batchSize = 50;
-                   for (let i = 0; i < allUpdates.length; i += batchSize) {
-                     const batch = allUpdates.slice(i, i + batchSize);
-                     
-                     await Promise.all(batch.map(match => 
-                       supabase
-                         .from('property_records')
-                         .update({
-                           new_vcs: match.updates.new_vcs || null,
-                           asset_zoning: match.updates.asset_zoning || null,
-                           asset_map_page: match.updates.asset_map_page || null,
-                           asset_key_page: match.updates.asset_key_page || null
-                         })
-                         .eq('id', match.currentData.id)  // Use ID not composite key
-                     ));
-                     
-                     console.log(`Imported batch ${Math.floor(i/batchSize) + 1} of ${Math.ceil(allUpdates.length/batchSize)}`);
-                   }
-                   
-                   // Then update UI
+                    // Then update UI
                    const updatedProps = worksheetProperties.map(prop => {
                      const match = allUpdates.find(m => 
-                       m.currentData.property_composite_key === prop.property_composite_key
+                       m.currentData.id === prop.id  // Use ID for matching
                      );
                      if (match) {
                        return {
                          ...prop,
                          new_vcs: match.updates.new_vcs || prop.new_vcs,
+                         location_analysis: match.updates.location_analysis || prop.location_analysis,
                          asset_zoning: match.updates.asset_zoning || prop.asset_zoning,
                          asset_map_page: match.updates.asset_map_page || prop.asset_map_page,
                          asset_key_page: match.updates.asset_key_page || prop.asset_key_page
@@ -2152,7 +2139,7 @@ const analyzeImportFile = async (file) => {
                }}
                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
              >
-               Import {importPreview.matched?.length || 0} Updates
+               Import {(importPreview.matched?.length || 0) + (importPreview.fuzzyMatched?.length || 0)} Updates
              </button>
            </div>
          </div>
