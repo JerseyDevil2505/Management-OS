@@ -1130,8 +1130,7 @@ const analyzeImportFile = async (file) => {
                   className="w-full px-3 py-2 border border-gray-300 rounded"
                   step="0.01"
                 />
-                <span className="ml-1 text-gray-600">%</span>
-                <p className="text-xs text-gray-500 mt-1">For outlier detection (typically 0.85-1.15)</p>
+                <p className="text-xs text-gray-500 mt-1">Target ratio for the market (typically 85-115%)</p>
               </div>
               
               <div>
@@ -1603,8 +1602,16 @@ const analyzeImportFile = async (file) => {
                     <div className="text-sm text-gray-500 italic">
                       Each type group normalized to its own average lot size using 50% adjustment method
                     </div>
-                  </div>
+                  </div>        
                 )}
+              </div>
+            </>
+          )}
+          </div>
+        </div>
+      )}
+
+      {/* Property Worksheet Tab Content */}
 
       {/* Property Worksheet Tab Content */}
       {activeSubTab === 'worksheet' && (
