@@ -48,7 +48,7 @@ const JobContainer = ({
 
     setIsLoadingVersion(true);
     setVersionError(null);
-    setIsLoadingProperties(true);
+    setIsLoadingProperties(false); // Don't set this to true yet
     setLoadingProgress(0);
     setLoadedCount(0);
 
@@ -88,6 +88,10 @@ const JobContainer = ({
       
       setLatestFileVersion(currentFileVersion);
       setLatestCodeVersion(currentCodeVersion);
+      
+      // Now we're done with initial loading, start property loading
+      setIsLoadingVersion(false);
+      setIsLoadingProperties(true);
 
       // Build query for property count
       let propertyCountQuery = supabase
