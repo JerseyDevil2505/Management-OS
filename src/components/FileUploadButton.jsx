@@ -1387,6 +1387,49 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       setProcessingStatus('');
     }
   };
+  const handleSourceFileUpload = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    setSourceFile(file);
+    
+    try {
+      const content = await file.text();
+      setSourceFileContent(content);
+      
+      const vendor = detectVendorType(content, file.name);
+      setDetectedVendor(vendor);
+      
+      if (vendor) {
+        addNotification(`✅ Detected ${vendor} file format`, 'success');
+      } else {
+        addNotification('⚠️ Could not detect vendor type', 'warning');
+      }
+    } catch (error) {
+      console.error('Error reading file:', error);
+      addNotification('Error reading file', 'error');
+    }
+  };
+
+  const handleCodeFileUpload = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    setCodeFile(file);
+    
+    try {
+      const content = await file.text();
+      setCodeFileContent(content);
+      
+      const vendor = detectVendorType(content, file.name);
+      if (vendor) {
+        addNotification(`✅ Detected ${vendor} code file`, 'success');
+      }
+    } catch (error) {
+      console.error('Error reading code file:', error);
+      addNotification('Error reading code file', 'error');
+    }
+  };
 
   // ENHANCED: Batch Processing Modal with insert progress
   const BatchProcessingModal = () => {
