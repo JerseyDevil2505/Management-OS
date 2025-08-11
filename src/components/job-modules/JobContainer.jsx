@@ -357,12 +357,15 @@ const JobContainer = ({
   const activeModuleData = modules.find(m => m.id === activeModule);
   const ActiveComponent = activeModuleData?.component;
 
+  // FIXED: Combined loading state check
+  const isLoading = isLoadingVersion || isLoadingProperties;
+
   return (
     <div className="bg-white">
       {/* Enhanced File Version Status Banner with Progress Bar */}
       <div className="max-w-6xl mx-auto p-6">
         {/* IMPROVED: Clean loading banner with progress bar */}
-        {(isLoadingVersion || isLoadingProperties) && (
+        {isLoading && (
           <div className="mb-6 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-lg font-semibold text-gray-800">
@@ -428,7 +431,7 @@ const JobContainer = ({
         )}
 
         {/* Show version info banner AFTER loading */}
-        {!isLoadingVersion && !isLoadingProperties && (
+        {!isLoading && (
           <div className={`mb-6 rounded-lg border p-4 ${
             versionError 
               ? 'bg-red-50 border-red-200' 
@@ -491,11 +494,11 @@ const JobContainer = ({
                   <button
                     key={module.id}
                     onClick={() => isAvailable && setActiveModule(module.id)}
-                    disabled={!isAvailable || isLoadingVersion}
+                    disabled={!isAvailable || isLoading}
                     className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center gap-2 transition-colors ${
                       isActive
                         ? 'border-blue-500 text-blue-600'
-                        : isAvailable && !isLoadingVersion
+                        : isAvailable && !isLoading
                         ? 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                         : 'border-transparent text-gray-300 cursor-not-allowed'
                     }`}
@@ -524,11 +527,18 @@ const JobContainer = ({
 
       {/* Active Module Content - Each module controls its own container */}
       <div className="min-h-96">
-        {ActiveComponent && jobData ? (
+        {/* FIXED: Show loading state while loading, then show component or "coming soon" */}
+        {isLoading ? (
+          <div className="text-center text-gray-500 py-24">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <h3 className="text-lg font-semibold mb-2">Loading Module Data...</h3>
+            <p className="text-sm">Preparing latest data version for module access.</p>
+          </div>
+        ) : ActiveComponent && jobData ? (
           <ActiveComponent
             {...getModuleProps()}
           />
-        ) : !isLoadingVersion ? (
+        ) : (
           <div className="text-center text-gray-500 py-24">
             <div className="mb-4">
               {activeModuleData && <activeModuleData.icon className="w-16 h-16 mx-auto text-gray-400" />}
@@ -539,12 +549,6 @@ const JobContainer = ({
             <p className="text-sm">
               {activeModuleData?.description} will be available in a future update.
             </p>
-          </div>
-        ) : (
-          <div className="text-center text-gray-500 py-24">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <h3 className="text-lg font-semibold mb-2">Loading Module Data...</h3>
-            <p className="text-sm">Preparing latest data version for module access.</p>
           </div>
         )}
       </div>
