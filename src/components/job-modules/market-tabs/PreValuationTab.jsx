@@ -895,10 +895,10 @@ const analyzeImportFile = async (file) => {
             },
             updates: {
               new_vcs: row['New VCS'] || '',
-              location_analysis: row['Location Analysis'] || row['Location'] || '',
-              asset_zoning: row.Zone || '',
-              asset_map_page: row['Map Page']?.toString() || '',
-              asset_key_page: row['Key Page']?.toString() || ''
+              location_analysis: row['Location Analysis'] || '',
+              asset_zoning: row['Zone'] || '',
+              asset_map_page: row['Map Page'] || '',
+              asset_key_page: row['Key'] || ''
             }
           });
         } else {
@@ -921,13 +921,13 @@ const analyzeImportFile = async (file) => {
                   ...fuzzyMatch,
                   id: fuzzyMatch.id  // Make sure ID is included
                 },
-                updates: {
-                  new_vcs: row['New VCS'] || '',
-                  location_analysis: row['Location Analysis'] || row['Location'] || '',
-                  asset_zoning: row.Zone || '',
-                  asset_map_page: row['Map Page']?.toString() || '',
-                  asset_key_page: row['Key Page']?.toString() || ''
-                }
+            updates: {
+              new_vcs: row['New VCS'] || '',
+              location_analysis: row['Location Analysis'] || '',
+              asset_zoning: row['Zone'] || '',
+              asset_map_page: row['Map Page'] || '',
+              asset_key_page: row['Key'] || ''
+            }
               });
             } else {
               analysis.unmatched.push({
