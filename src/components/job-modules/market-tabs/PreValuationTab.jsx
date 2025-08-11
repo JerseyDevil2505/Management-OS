@@ -503,6 +503,7 @@ const runTimeNormalization = useCallback(async () => {
       await saveSizeNormalizedValues(acceptedSales);
       
       console.log(`✅ Size normalization complete for ${totalSizeNormalized} sales`);
+      alert(`✅ Size Normalization Applied!\n\nProcessed ${totalSizeNormalized} sales from ${acceptedSales.length} kept time-normalized sales.\n\nAverage adjustment: $${Math.round(totalAdjustment / totalSizeNormalized).toLocaleString()}`);
     } catch (error) {
       console.error('Error during size normalization:', error);
       alert('Error during size normalization. Please check the console.');
@@ -511,49 +512,86 @@ const runTimeNormalization = useCallback(async () => {
     }
   }, [timeNormalizedSales]);
 
-const handleSalesDecision = async (saleId, decision) => {
+const handleSalesDecision = (saleId, decision) => {
     const updatedSales = timeNormalizedSales.map(sale =>
       sale.id === saleId ? { ...sale, keep_reject: decision } : sale
     );
     setTimeNormalizedSales(updatedSales);
 
-    // Update database based on decision
-    if (decision === 'keep') {
-      // Save time normalized value
-      const sale = timeNormalizedSales.find(s => s.id === saleId);
-      await supabase
-        .from('property_records')
-        .update({ values_norm_time: sale.time_normalized_price })
-        .eq('id', saleId);
-    } else {
-      // Clear the value if rejected
-      await supabase
-        .from('property_records')
-        .update({ values_norm_time: null })
-        .eq('id', saleId);
-    }
-
-    // Update pending count and save to persistent storage
+    // Just update stats, no DB calls
     const newStats = {
       ...normalizationStats,
-      pendingReview: updatedSales.filter(s => s.keep_reject === 'pending').length
+      pendingReview: updatedSales.filter(s => s.keep_reject === 'pending').length,
+      keptCount: updatedSales.filter(s => s.keep_reject === 'keep').length,
+      rejectedCount: updatedSales.filter(s => s.keep_reject === 'reject').length
     };
     setNormalizationStats(newStats);
-    
-    // Save updated sales array to database
-    await worksheetService.saveTimeNormalizedSales(jobData.id, updatedSales, newStats);
   };
 
-  const saveSizeNormalizedValues = async (sales) => {
-    for (const sale of sales) {
-      if (sale.size_normalized_price) {
-        await supabase
+const saveSizeNormalizedValues = async (sales) => {
+    const salesToUpdate = sales.filter(s => s.size_normalized_price);
+    
+    // Batch update in chunks of 500
+    for (let i = 0; i < salesToUpdate.length; i += 500) {
+      const batch = salesToUpdate.slice(i, i + 500);
+      
+      await Promise.all(batch.map(sale => 
+        supabase
           .from('property_records')
           .update({ values_norm_size: sale.size_normalized_price })
-          .eq('id', sale.id);
-      }
+          .eq('id', sale.id)
+      ));
+      
+      console.log(`✅ Saved size normalization batch ${Math.floor(i/500) + 1} of ${Math.ceil(salesToUpdate.length/500)}`);
     }
   };
+  const saveBatchDecisions = async () => {
+    try {
+      const keeps = timeNormalizedSales.filter(s => s.keep_reject === 'keep');
+      const rejects = timeNormalizedSales.filter(s => s.keep_reject === 'reject');
+      
+      console.log(`💾 Saving ${keeps.length} keeps and ${rejects.length} rejects...`);
+      
+const saveBatchDecisions = async () => {
+    try {
+      const keeps = timeNormalizedSales.filter(s => s.keep_reject === 'keep');
+      const rejects = timeNormalizedSales.filter(s => s.keep_reject === 'reject');
+      
+      console.log(`💾 Saving ${keeps.length} keeps and ${rejects.length} rejects...`);
+      
+      // Batch update keeps in chunks of 500
+      if (keeps.length > 0) {
+        for (let i = 0; i < keeps.length; i += 500) {
+          const batch = keeps.slice(i, i + 500);
+          const updates = batch.map(sale => ({
+            id: sale.id,
+            values_norm_time: sale.time_normalized_price
+          }));
+          
+          // Use Promise.all for parallel updates within batch
+          await Promise.all(updates.map(u => 
+            supabase
+              .from('property_records')
+              .update({ values_norm_time: u.values_norm_time })
+              .eq('id', u.id)
+          ));
+          
+          console.log(`✅ Saved batch ${Math.floor(i/500) + 1} of ${Math.ceil(keeps.length/500)}`);
+        }
+      }
+      
+      // Batch update rejects in chunks of 500
+      if (rejects.length > 0) {
+        for (let i = 0; i < rejects.length; i += 500) {
+          const batch = rejects.slice(i, i + 500);
+          const rejectIds = batch.map(s => s.id);
+          
+          await supabase
+            .from('property_records')
+            .update({ values_norm_time: null })
+            .in('id', rejectIds);
+          
+          console.log(`✅ Cleared bat
 
   // ==================== WORKSHEET FUNCTIONS ====================
   
@@ -1155,10 +1193,53 @@ const analyzeImportFile = async (file) => {
                     <div className="text-sm text-gray-600">Pending Review</div>
                   </div>
                 <div className="text-center">
-                  <div className="text-2xl font-bold text-gray-700">
-                    {normalizationStats.averageRatio ? `${(normalizationStats.averageRatio * 100).toFixed(2)}%` : '0.00%'}
+                  <div className="text-2xl font-bold text-blue-700">
+                    {(() => {
+                      const currentYear = new Date().getFullYear();
+                      const currentYearSales = properties.filter(p => {
+                        if (!p.sales_price || p.sales_price <= minSalePrice) return false;
+                        if (!p.sales_date) return false;
+                        
+                        const saleYear = new Date(p.sales_date).getFullYear();
+                        if (saleYear !== currentYear) return false;
+                        
+                        // Check sales_nu conditions (empty, null, 00, 7, or 07 are valid)
+                        const nu = p.sales_nu?.toString().trim();
+                        const validNU = !nu || nu === '' || nu === '00' || nu === '7' || nu === '07';
+                        if (!validNU) return false;
+                        
+                        // Same filters as normalization
+                        const parsed = parseCompositeKey(p.property_composite_key);
+                        const card = parsed.card?.toUpperCase();
+                        
+                        // Card filter based on vendor
+                        if (vendorType === 'Microsystems') {
+                          if (card !== 'M') return false;
+                        } else {
+                          if (card !== '1') return false;
+                        }
+                        
+                        const buildingClass = p.asset_building_class?.toString().trim();
+                        const typeUse = p.asset_type_use?.toString().trim();
+                        const designStyle = p.asset_design_style?.toString().trim();
+                        
+                        if (!buildingClass || parseInt(buildingClass) <= 10) return false;
+                        if (!typeUse) return false;
+                        if (!designStyle) return false;
+                        
+                        return true;
+                      });
+                      
+                      const totalRatio = currentYearSales.reduce((sum, p) => {
+                        const ratio = p.values_mod_total ? (p.values_mod_total / p.sales_price) : 0;
+                        return sum + ratio;
+                      }, 0);
+                      
+                      const avgRatio = currentYearSales.length > 0 ? totalRatio / currentYearSales.length : 0;
+                      return `${(avgRatio * 100).toFixed(2)}%`;
+                    })()}
                   </div>
-                  <div className="text-sm text-gray-500">Average Ratio</div>
+                  <div className="text-sm text-gray-500">True Ratio</div>
                 </div>
                 </div>
               </div>
@@ -1195,12 +1276,6 @@ const analyzeImportFile = async (file) => {
                         <option value="type-6">Condominiums</option>
                       )}
                     </select>
-                    <button
-                      onClick={() => {/* Export logic */}}
-                      className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
-                    >
-                      Export CSV
-                    </button>
                   </div>
                 </div>
 
@@ -1409,6 +1484,16 @@ const analyzeImportFile = async (file) => {
                     Consider property condition, special circumstances, and market conditions when making keep/reject decisions.
                   </p>
                 </div>
+                
+                {/* Save All Decisions Button */}
+                <div className="mt-4 flex justify-center">
+                  <button
+                    onClick={saveBatchDecisions}
+                    className="px-6 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+                  >
+                    Save All Keep/Reject Decisions
+                  </button>
+                </div>
               </div>
 
               {/* Size Normalization Section */}
@@ -1446,60 +1531,74 @@ const analyzeImportFile = async (file) => {
                   </ul>
                 </div>
 
-                {normalizationStats.sizeNormalized > 0 && (
-                  <div className="grid grid-cols-4 gap-4">
-                    <div className="text-center">
-                      <div className="text-2xl font-bold">{normalizationStats.acceptedSales}</div>
-                      <div className="text-sm text-gray-600">Accepted Sales</div>
+{normalizationStats.sizeNormalized > 0 && (
+                  <div className="space-y-4">
+                    {/* Main Stats */}
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="text-center">
+                        <div className="text-2xl font-bold">{normalizationStats.acceptedSales}</div>
+                        <div className="text-sm text-gray-600">Accepted Sales</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-green-600">{normalizationStats.sizeNormalized}</div>
+                        <div className="text-sm text-gray-600">Size Normalized</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-blue-600">
+                          ${normalizationStats.avgSizeAdjustment?.toLocaleString() || 0}
+                        </div>
+                        <div className="text-sm text-gray-600">Avg Adjustment</div>
+                      </div>
                     </div>
-                    <div className="text-center">
-                      <div className="text-2xl font-bold">{normalizationStats.sizeNormalized}</div>
-                      <div className="text-sm text-gray-600">Size Normalized</div>
+                    
+                    {/* Type Grouping Breakdown */}
+                    <div className="border-t pt-4">
+                      <h4 className="text-sm font-medium text-gray-700 mb-2">Size Normalization by Type:</h4>
+                      <div className="grid grid-cols-3 gap-2">
+                        {normalizationStats.singleFamily > 0 && (
+                          <div className="bg-gray-50 rounded p-2">
+                            <div className="text-lg font-semibold">{normalizationStats.singleFamily}</div>
+                            <div className="text-xs text-gray-600">Single Family (1x)</div>
+                          </div>
+                        )}
+                        {normalizationStats.semiDetached > 0 && (
+                          <div className="bg-gray-50 rounded p-2">
+                            <div className="text-lg font-semibold">{normalizationStats.semiDetached}</div>
+                            <div className="text-xs text-gray-600">Semi-Detached (2x)</div>
+                          </div>
+                        )}
+                        {normalizationStats.townhouses > 0 && (
+                          <div className="bg-gray-50 rounded p-2">
+                            <div className="text-lg font-semibold">{normalizationStats.townhouses}</div>
+                            <div className="text-xs text-gray-600">Row/Townhouses (3x)</div>
+                          </div>
+                        )}
+                        {normalizationStats.multifamily > 0 && (
+                          <div className="bg-gray-50 rounded p-2">
+                            <div className="text-lg font-semibold">{normalizationStats.multifamily}</div>
+                            <div className="text-xs text-gray-600">Multifamily (4x)</div>
+                          </div>
+                        )}
+                        {normalizationStats.conversions > 0 && (
+                          <div className="bg-gray-50 rounded p-2">
+                            <div className="text-lg font-semibold">{normalizationStats.conversions}</div>
+                            <div className="text-xs text-gray-600">Conversions (5x)</div>
+                          </div>
+                        )}
+                        {normalizationStats.condominiums > 0 && (
+                          <div className="bg-gray-50 rounded p-2">
+                            <div className="text-lg font-semibold">{normalizationStats.condominiums}</div>
+                            <div className="text-xs text-gray-600">Condominiums (6x)</div>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    {normalizationStats.singleFamily > 0 && (
-                      <div className="text-center">
-                        <div className="text-2xl font-bold">{normalizationStats.singleFamily}</div>
-                        <div className="text-sm text-gray-600">Single Family (1x)</div>
-                      </div>
-                    )}
-                    {normalizationStats.semiDetached > 0 && (
-                      <div className="text-center">
-                        <div className="text-2xl font-bold">{normalizationStats.semiDetached}</div>
-                        <div className="text-sm text-gray-600">Semi-Detached (2x)</div>
-                      </div>
-                    )}
-                    {normalizationStats.townhouses > 0 && (
-                      <div className="text-center">
-                        <div className="text-2xl font-bold">{normalizationStats.townhouses}</div>
-                        <div className="text-sm text-gray-600">Townhouses (3x)</div>
-                      </div>
-                    )}
-                    {normalizationStats.multifamily > 0 && (
-                      <div className="text-center">
-                        <div className="text-2xl font-bold">{normalizationStats.multifamily}</div>
-                        <div className="text-sm text-gray-600">Multifamily (4x)</div>
-                      </div>
-                    )}
-                    {normalizationStats.conversions > 0 && (
-                      <div className="text-center">
-                        <div className="text-2xl font-bold">{normalizationStats.conversions}</div>
-                        <div className="text-sm text-gray-600">Conversions (5x)</div>
-                      </div>
-                    )}
-                    {normalizationStats.condominiums > 0 && (
-                      <div className="text-center">
-                        <div className="text-2xl font-bold">{normalizationStats.condominiums}</div>
-                        <div className="text-sm text-gray-600">Condominiums (6x)</div>
-                      </div>
-                    )}
+                    
+                    <div className="text-sm text-gray-500 italic">
+                      Each type group normalized to its own average lot size using 50% adjustment method
+                    </div>
                   </div>
                 )}
-              </div>
-            </>
-          )}
-          </div>
-        </div>
-      )}
 
       {/* Property Worksheet Tab Content */}
       {activeSubTab === 'worksheet' && (
