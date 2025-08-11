@@ -540,7 +540,6 @@ getInteriorConditionName: function(property, codeDefinitions, vendorType) {
       return a.code.localeCompare(b.code);
     });
   },
-};
 
   // ===== PACKAGE SALE AGGREGATOR =====
   getPackageSaleData: function(properties, targetProperty) {
