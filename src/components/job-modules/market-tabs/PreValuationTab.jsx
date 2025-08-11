@@ -1064,15 +1064,14 @@ const analyzeImportFile = async (file) => {
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Equalization Ratio
+                  Equalization Ratio (%)
                 </label>
                 <input
                   type="number"
                   value={equalizationRatio}
                   onChange={(e) => setEqualizationRatio(parseFloat(e.target.value))}
-                  className="w-24 px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded"
                   step="0.01"
-                  placeholder="52.99"
                 />
                 <span className="ml-1 text-gray-600">%</span>
                 <p className="text-xs text-gray-500 mt-1">For outlier detection (typically 0.85-1.15)</p>
