@@ -347,14 +347,22 @@ const runTimeNormalization = useCallback(async () => {
         const saleYear = new Date(prop.sales_date).getFullYear();
         const hpiMultiplier = getHPIMultiplier(saleYear, normalizeToYear);
         const timeNormalizedPrice = Math.round(prop.sales_price * hpiMultiplier);
+        // Check for package sale
+        const packageData = interpretCodes.getPackageSaleData(validSales, prop);
         
-        // Calculate sales ratio if we have assessed value
-        const salesRatio = prop.values_mod_total ? 
-          (prop.values_mod_total / timeNormalizedPrice) : null;
+        // If it's a package sale, use combined values for ratio calculation
+        const assessedValueForRatio = packageData 
+          ? packageData.combined_assessed 
+          : (prop.values_mod_total || 0);
         
-        // Flag outliers based on equalization ratio
-        const lowerBound = equalizationRatio * (1 - outlierThreshold/100);
-        const upperBound = equalizationRatio * (1 + outlierThreshold/100);
+        // Calculate sales ratio using package-aware assessed value
+        const salesRatio = assessedValueForRatio ? 
+          (assessedValueForRatio / timeNormalizedPrice) : null;
+        
+        // Flag outliers based on equalization ratio (convert from percentage to decimal)
+        const ratioAsDecimal = equalizationRatio / 100;
+        const lowerBound = ratioAsDecimal * (1 - outlierThreshold/100);
+        const upperBound = ratioAsDecimal * (1 + outlierThreshold/100);
         const isOutlier = salesRatio && 
           (salesRatio < lowerBound || salesRatio > upperBound);
         
@@ -1062,9 +1070,11 @@ const analyzeImportFile = async (file) => {
                   type="number"
                   value={equalizationRatio}
                   onChange={(e) => setEqualizationRatio(parseFloat(e.target.value))}
+                  className="w-32 px-3 py-1 border rounded"
                   step="0.01"
-                  className="w-full px-3 py-2 border border-gray-300 rounded"
+                  placeholder="52.99"
                 />
+                <span className="ml-1 text-gray-600">%</span>
                 <p className="text-xs text-gray-500 mt-1">For outlier detection (typically 0.85-1.15)</p>
               </div>
               
@@ -1201,6 +1211,8 @@ const analyzeImportFile = async (file) => {
                         <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-32">Location</th>
                         <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-16">Class</th>
                         <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-20">Type</th>
+                        <th className="px-4 py-3 text-center text-sm font-medium text-gray-700 w-16">Package</th>
+                        
                         <th 
                           className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-24 cursor-pointer hover:bg-gray-100"
                           onClick={() => handleNormalizationSort('sales_date')}
@@ -1255,10 +1267,31 @@ const analyzeImportFile = async (file) => {
                               <td className="px-4 py-3 text-sm">{parsed.card || '1'}</td>
                               <td className="px-4 py-3 text-sm">{sale.property_location}</td>
                               <td className="px-4 py-3 text-sm">{sale.property_class || sale.property_m4_class}</td>
-                              <td className="px-4 py-3 text-sm">
-                                <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">
-                                  {getTypeUseDisplay(sale)}
-                                </span>
+                              <td className="px-4 py-3 text-sm text-center">
+                                {(() => {
+                                  const packageData = interpretCodes.getPackageSaleData(timeNormalizedSales, sale);
+                                  if (!packageData) return '-';
+                                  
+                                  // Check if it's a farm package (has 3B)
+                                  const isFarmPackage = packageData.has_farmland;
+                                  
+                                  if (isFarmPackage) {
+                                    return (
+                                      <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-medium" 
+                                            title={`Farm package: ${packageData.package_count} properties (includes farmland)`}>
+                                        Farm ({packageData.package_count})
+                                      </span>
+                                    );
+                                  }
+                                  
+                                  // Regular package (no farmland)
+                                  return (
+                                    <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs font-medium" 
+                                          title={`Package sale: ${packageData.package_count} properties`}>
+                                      Pkg ({packageData.package_count})
+                                    </span>
+                                  );
+                                })()}
                               </td>
                               <td className="px-4 py-3 text-sm">
                                 {sale.sales_date ? new Date(sale.sales_date).toLocaleDateString() : ''}
@@ -1277,7 +1310,7 @@ const analyzeImportFile = async (file) => {
                               </td>
                               <td className="px-4 py-3 text-sm text-center">
                                 {sale.is_outlier ? (
-                                  <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded text-xs">
+                                  <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded text-xs">
                                     Outlier
                                   </span>
                                 ) : (
@@ -1319,7 +1352,7 @@ const analyzeImportFile = async (file) => {
 
                 <div className="mt-4 p-4 bg-blue-50 rounded">
                   <p className="text-sm">
-                    <strong>Review Guidelines:</strong> Sales with ratios outside {(equalizationRatio * (1 - outlierThreshold/100)).toFixed(2)}-{(equalizationRatio * (1 + outlierThreshold/100)).toFixed(2)} are flagged. 
+                    <strong>Review Guidelines:</strong> Sales with ratios outside {((equalizationRatio * (1 - outlierThreshold/100))).toFixed(0)}%-{((equalizationRatio * (1 + outlierThreshold/100))).toFixed(0)}% are flagged.
                     Consider property condition, special circumstances, and market conditions when making keep/reject decisions.
                   </p>
                 </div>
