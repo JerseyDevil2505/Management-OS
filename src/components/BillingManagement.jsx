@@ -542,13 +542,6 @@ Thank you for your immediate attention to this matter.`;
       const remainingDaysInYear = (12 - currentMonth + 1) * 21; // Rough estimate
       const remainingYearExpenses = globalMetrics.dailyFringe * remainingDaysInYear;
       
-      // Conservative approach (available today)
-      const conservative = globalMetrics.totalPaid - 
-                          operatingReserve - 
-                          cashReserve - 
-                          ytdDistributions - 
-                          remainingYearExpenses;
-      
       // Projected approach (available by year-end)
       const projected = projectedYearEnd - 
                        operatingReserve - 
@@ -557,7 +550,6 @@ Thank you for your immediate attention to this matter.`;
                        globalMetrics.projectedExpenses;
       
       setDistributionMetrics({
-        conservative: Math.max(0, conservative),
         projected: Math.max(0, projected),
         ytdDistributions,
         monthlyCollectionRate,
@@ -599,7 +591,7 @@ Thank you for your immediate attention to this matter.`;
       const { data: planningJobsData, error: planningError } = await supabase
         .from('planning_jobs')
         .select('*')
-        .gt('contract_amount', 0);  // Just this - if it's greater than 0, include it!
+        .gt('contract_amount', 0);
 
       if (planningError) {
         console.error('Error fetching planning jobs:', planningError);
@@ -645,15 +637,19 @@ Thank you for your immediate attention to this matter.`;
           }
           
           if (contract && parcels > 0) {
+            // Fix timezone issue - parse date string directly
+            const dueYear = job.end_date ? parseInt(job.end_date.substring(0, 4)) : new Date().getFullYear();
+            
             allJobs.push({
               municipality: job.job_name,
-              completionYear: job.end_date ? new Date(job.end_date).getFullYear() : new Date().getFullYear() + 1,
+              dueYear: dueYear,
               contractStatus: 'YES',
               parcels: parcels,
               amount: contract.contract_amount,
               pricePerParcel: (contract.contract_amount / parcels).toFixed(2),
               percentComplete: percentComplete,
-              percentBilled: percentBilled
+              percentBilled: percentBilled,
+              isPending: false
             });
           }
         });
@@ -662,306 +658,148 @@ Thank you for your immediate attention to this matter.`;
       // Process planning jobs
       if (planningJobsData && planningJobsData.length > 0) {
         planningJobsData.forEach(job => {
-          // Simple check - just need a contract amount
           if (job.contract_amount > 0) {
             const parcels = job.total_properties || 
                            ((job.residential_properties || 0) + (job.commercial_properties || 0)) || 
                            0;
             
+            // Fix timezone issue for planning jobs too
+            const dueYear = job.end_date ? parseInt(job.end_date.substring(0, 4)) : new Date().getFullYear() + 1;
+            
             allJobs.push({
-              municipality: job.municipality || job.job_name || 'Unknown',
-              completionYear: job.end_date ? new Date(job.end_date).getFullYear() : new Date().getFullYear() + 2,
+              municipality: (job.municipality || job.job_name || 'Unknown') + '*', // Add asterisk for pending
+              dueYear: dueYear,
               contractStatus: 'PENDING',
               parcels: parcels,
               amount: job.contract_amount,
               pricePerParcel: parcels > 0 ? (job.contract_amount / parcels).toFixed(2) : '0.00',
               percentComplete: '0.0',
-              percentBilled: '0.0'
+              percentBilled: '0.0',
+              isPending: true
             });
           }
         });
       }
       
-      // Sort by municipality name
-      allJobs.sort((a, b) => a.municipality.localeCompare(b.municipality));
+      // Sort by percent billed (highest to lowest)
+      allJobs.sort((a, b) => parseFloat(b.percentBilled) - parseFloat(a.percentBilled));
       
-      // Calculate totals
+      // Calculate totals - exclude jobs with 0 parcels from average calculation
       const totalParcels = allJobs.reduce((sum, job) => sum + job.parcels, 0);
       const totalAmount = allJobs.reduce((sum, job) => sum + parseFloat(job.amount), 0);
-      const avgPricePerParcel = totalParcels > 0 ? (totalAmount / totalParcels).toFixed(2) : '0.00';
+      
+      // Calculate average only for jobs WITH parcels
+      const jobsWithParcels = allJobs.filter(job => job.parcels > 0);
+      const parcelsForAvg = jobsWithParcels.reduce((sum, job) => sum + job.parcels, 0);
+      const amountForAvg = jobsWithParcels.reduce((sum, job) => sum + parseFloat(job.amount), 0);
+      const avgPricePerParcel = parcelsForAvg > 0 ? (amountForAvg / parcelsForAvg).toFixed(2) : '0.00';
       
       console.log('Total jobs in report:', allJobs.length);
       console.log('Total amount:', totalAmount);
       console.log('Total parcels:', totalParcels);
       
-      // Generate HTML report
-      const reportHTML = `
-<!DOCTYPE html>
-<html>
-<head>
-  <title>PPA Contract Status Report</title>
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-    
-    body { 
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; 
-      margin: 0;
-      padding: 30px;
-      background-color: #f9fafb;
-      color: #111827;
-    }
-    
-    .container {
-      max-width: 1200px;
-      margin: 0 auto;
-      background: white;
-      border-radius: 12px;
-      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
-      padding: 40px;
-    }
-    
-    .header {
-      text-align: center;
-      margin-bottom: 40px;
-      border-bottom: 2px solid #e5e7eb;
-      padding-bottom: 20px;
-    }
-    
-    h1 { 
-      font-size: 28px; 
-      font-weight: 700;
-      margin: 0 0 8px 0;
-      color: #1f2937;
-      letter-spacing: -0.5px;
-    }
-    
-    h2 { 
-      font-size: 16px; 
-      font-weight: 400;
-      margin: 0;
-      color: #6b7280;
-    }
-    
-    table { 
-      border-collapse: collapse; 
-      width: 100%; 
-      margin-bottom: 30px;
-      border-radius: 8px;
-      overflow: hidden;
-      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
-    }
-    
-    th { 
-      background: linear-gradient(to bottom, #f9fafb, #f3f4f6);
-      font-weight: 600;
-      font-size: 12px;
-      color: #374151;
-      padding: 12px 16px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      border-bottom: 1px solid #e5e7eb;
-      text-align: center;
-    }
-    
-    td { 
-      font-size: 13px;
-      padding: 12px 16px;
-      border-bottom: 1px solid #f3f4f6;
-      text-align: center;
-    }
-    
-    tr:hover {
-      background-color: #f9fafb;
-    }
-    
-    tr:last-child td {
-      border-bottom: none;
-    }
-    
-    .municipality {
-      text-align: left;
-      font-weight: 500;
-      color: #1f2937;
-    }
-    
-    .number { 
-      font-variant-numeric: tabular-nums;
-      color: #374151;
-    }
-    
-    .status-yes {
-      display: inline-block;
-      padding: 4px 12px;
-      background-color: #d1fae5;
-      color: #065f46;
-      border-radius: 12px;
-      font-size: 11px;
-      font-weight: 600;
-    }
-    
-    .status-pending {
-      display: inline-block;
-      padding: 4px 12px;
-      background-color: #fef3c7;
-      color: #92400e;
-      border-radius: 12px;
-      font-size: 11px;
-      font-weight: 600;
-    }
-    
-    .summary {
-      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-      color: white;
-      padding: 24px;
-      border-radius: 12px;
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 20px;
-      text-align: center;
-    }
-    
-    .summary-item {
-      padding: 10px;
-    }
-    
-    .summary-label {
-      font-size: 12px;
-      opacity: 0.9;
-      margin-bottom: 4px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-    
-    .summary-value {
-      font-size: 24px;
-      font-weight: 700;
-    }
-    
-    @media print {
-      body { background: white; padding: 20px; }
-      .container { box-shadow: none; padding: 0; }
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="header">
-      <h1>PROFESSIONAL PROPERTY APPRAISERS</h1>
-      <h2>Contract Status Report - ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</h2>
-    </div>
-    
-    <table>
-      <thead>
-        <tr>
-          <th style="text-align: left;">Municipality</th>
-          <th>Completion<br>Year</th>
-          <th>Fully<br>Executed</th>
-          <th>Parcels</th>
-          <th>Contract<br>Amount</th>
-          <th>Price per<br>Parcel</th>
-          <th>%<br>Complete</th>
-          <th>%<br>Billed</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${allJobs.map((job, index) => `
-          <tr>
-            <td class="municipality">${job.municipality}</td>
-            <td class="number">${job.completionYear}</td>
-            <td>
-              <span class="${job.contractStatus === 'YES' ? 'status-yes' : 'status-pending'}">
-                ${job.contractStatus}
-              </span>
-            </td>
-            <td class="number">${job.parcels.toLocaleString()}</td>
-            <td class="number">$${parseFloat(job.amount).toLocaleString()}</td>
-            <td class="number">$${job.pricePerParcel}</td>
-            <td class="number">${job.percentComplete}%</td>
-            <td class="number">${job.percentBilled}%</td>
-          </tr>
-        `).join('')}
-      </tbody>
-    </table>
-    
-    <div class="summary">
-      <div class="summary-item">
-        <div class="summary-label">Total Contracts</div>
-        <div class="summary-value">${allJobs.length}</div>
-      </div>
-      <div class="summary-item">
-        <div class="summary-label">Total Parcels</div>
-        <div class="summary-value">${totalParcels.toLocaleString()}</div>
-      </div>
-      <div class="summary-item">
-        <div class="summary-label">Contract Value</div>
-        <div class="summary-value">$${totalAmount.toLocaleString()}</div>
-      </div>
-      <div class="summary-item">
-        <div class="summary-label">Avg $/Parcel</div>
-        <div class="summary-value">$${avgPricePerParcel}</div>
-      </div>
-    </div>
-  </div>
-  <div class="text-center mt-6 text-xs text-gray-500 italic" style="margin-top: 24px; text-align: center; font-size: 12px; color: #6b7280; font-style: italic;">
-    *Planned jobs have been awarded but not yet moved to active jobs
-  </div>
-</body>
-</html>
-      `;
-      
-      // Generate PDF using jsPDF
+      // Generate PDF using jsPDF - LANDSCAPE orientation
       const { jsPDF } = window.jspdf;
-      const doc = new jsPDF();
-      
-      // Add content as text (simpler approach for web editor)
-      doc.setFontSize(16);
-      doc.text('PROFESSIONAL PROPERTY APPRAISERS', 105, 20, { align: 'center' });
-      doc.setFontSize(12);
-      doc.text('Bonding Status Report', 105, 30, { align: 'center' });
-      doc.text(new Date().toLocaleDateString(), 105, 36, { align: 'center' });
-      
-      // Add table headers
-      let y = 50;
-      doc.setFontSize(10);
-      doc.text('Municipality', 10, y);
-      doc.text('Year', 60, y);
-      doc.text('Status', 80, y);
-      doc.text('Parcels', 100, y);
-      doc.text('Amount', 120, y);
-      doc.text('$/Parcel', 150, y);
-      doc.text('Complete', 170, y);
-      doc.text('Billed', 190, y);
-      
-      // Add jobs
-      y += 10;
-      allJobs.forEach(job => {
-        if (y > 270) { // New page if needed
-          doc.addPage();
-          y = 20;
-        }
-        doc.text(job.municipality.substring(0, 20), 10, y);
-        doc.text(job.completionYear.toString(), 60, y);
-        doc.text(job.contractStatus, 80, y);
-        doc.text(job.parcels.toString(), 100, y);
-        doc.text(`$${parseInt(job.amount).toLocaleString()}`, 120, y);
-        doc.text(`$${job.pricePerParcel}`, 150, y);
-        doc.text(`${job.percentComplete}%`, 170, y);
-        doc.text(`${job.percentBilled}%`, 190, y);
-        y += 7;
+      const doc = new jsPDF({
+        orientation: 'landscape',
+        unit: 'mm',
+        format: 'letter'
       });
       
-      // Add totals
-      y += 10;
+      // Add content with adjusted positions for landscape
+      doc.setFontSize(14);
+      doc.text('PROFESSIONAL PROPERTY APPRAISERS', 140, 15, { align: 'center' });
       doc.setFontSize(11);
-      doc.text(`Total Contracts: ${allJobs.length}`, 10, y);
-      y += 7;
-      doc.text(`Total Parcels: ${totalParcels.toLocaleString()}`, 10, y);
-      y += 7;
-      doc.text(`Total Amount: $${totalAmount.toLocaleString()}`, 10, y);
+      doc.text('Bonding Status Report', 140, 22, { align: 'center' });
+      doc.text(new Date().toLocaleDateString(), 140, 28, { align: 'center' });
       
-      // Add footnote
+      // Add table headers with better spacing for landscape
+      let y = 40;
+      doc.setFontSize(9);
+      doc.text('Municipality', 10, y);
+      doc.text('Due Year', 65, y);
+      doc.text('Contract Status', 85, y);
+      doc.text('Parcels', 115, y);
+      doc.text('Amount', 135, y);
+      doc.text('$/Parcel', 165, y);
+      doc.text('Complete %', 185, y);
+      doc.text('Billed %', 215, y);
+      
+      // Add jobs with adjusted spacing
+      y += 8;
       doc.setFontSize(8);
-      doc.text('*Planned jobs have been awarded but not yet moved to active jobs', 105, 280, { align: 'center' });
+      
+      let currentPage = 1;
+      allJobs.forEach(job => {
+        if (y > 185) { // New page if needed
+          doc.addPage();
+          currentPage++;
+          y = 20;
+          // Repeat headers on new page
+          doc.setFontSize(9);
+          doc.text('Municipality', 10, y);
+          doc.text('Due Year', 65, y);
+          doc.text('Contract Status', 85, y);
+          doc.text('Parcels', 115, y);
+          doc.text('Amount', 135, y);
+          doc.text('$/Parcel', 165, y);
+          doc.text('Complete %', 185, y);
+          doc.text('Billed %', 215, y);
+          y += 8;
+          doc.setFontSize(8);
+        }
+        
+        // Municipality name
+        doc.text(job.municipality.substring(0, 35), 10, y);
+        
+        // Due Year
+        doc.text(job.dueYear.toString(), 65, y);
+        
+        // Contract Status with color
+        if (job.contractStatus === 'YES') {
+          doc.setTextColor(6, 95, 70); // Green for Fully Executed
+          doc.text('Fully Executed', 85, y);
+        } else {
+          doc.setTextColor(146, 64, 14); // Amber for Awarded
+          doc.text('Awarded', 85, y);
+        }
+        doc.setTextColor(0, 0, 0); // Back to black
+        
+        // Parcels (right-aligned)
+        doc.text(job.parcels.toLocaleString(), 125, y, { align: 'right' });
+        
+        // Amount (right-aligned)
+        doc.text(`$${parseFloat(job.amount).toLocaleString()}`, 155, y, { align: 'right' });
+        
+        // $/Parcel (right-aligned)
+        doc.text(`$${job.pricePerParcel}`, 175, y, { align: 'right' });
+        
+        // Complete % (right-aligned)
+        doc.text(`${job.percentComplete}%`, 205, y, { align: 'right' });
+        
+        // Billed % (right-aligned)
+        doc.text(`${job.percentBilled}%`, 235, y, { align: 'right' });
+        
+        y += 6;
+      });
+      
+      // Add totals - left aligned, all bold, no spacing
+      y += 10;
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'bold');
+      doc.text(`Total Contracts: ${allJobs.length}`, 10, y);
+      y += 5;
+      doc.text(`Total Parcels: ${totalParcels.toLocaleString()}`, 10, y);
+      y += 5;
+      doc.text(`Total Amount: $${totalAmount.toLocaleString()}`, 10, y);
+      y += 5;
+      doc.setFontSize(11);
+      doc.text(`Overall Avg $/Parcel: $${avgPricePerParcel}`, 10, y);
+      doc.setFont(undefined, 'normal');
+      
+      // Add footnote centered at bottom
+      doc.setFontSize(8);
+      doc.text('*Awarded jobs have been awarded but not yet moved to active jobs', 140, 195, { align: 'center' });
       
       // Save PDF
       doc.save(`PPA_Bonding_Report_${new Date().toISOString().split('T')[0]}.pdf`);
@@ -2984,118 +2822,165 @@ Thank you for your immediate attention to this matter.`;
           {/* Shareholder Distributions Tab */}
           {activeTab === 'distributions' && (
             <div className="space-y-6">
-              {/* Distribution Metrics Dashboard */}
-              <div className="bg-gradient-to-r from-green-50 to-blue-50 rounded-lg p-6">
-                <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-lg font-semibold text-gray-800">Distribution Analysis</h2>
-                  
-                  {/* Reserve Settings */}
-                  <div className="flex items-center space-x-4 text-sm">
-                    <div className="flex items-center space-x-2">
-                      <label className="text-gray-700 font-medium">Operating Reserve:</label>
-                      <select
-                        value={reserveSettings.operatingReserveMonths}
-                        onChange={(e) => setReserveSettings(prev => ({ ...prev, operatingReserveMonths: parseInt(e.target.value) }))}
-                        className="px-3 py-1 border border-gray-300 rounded-md bg-white"
-                      >
-                        <option value="0">None</option>
-                        <option value="1">1 Month</option>
-                        <option value="2">2 Months</option>
-                      </select>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <label className="text-gray-700 font-medium">Cash Reserve: $</label>
-                      <input
-                        type="number"
-                        value={reserveSettings.cashReserve}
-                        onChange={(e) => setReserveSettings(prev => ({ ...prev, cashReserve: parseInt(e.target.value) || 0 }))}
-                        className="w-28 px-3 py-1 border border-gray-300 rounded-md"
-                        step="10000"
-                        placeholder="200000"
-                      />
-                    </div>
-                  </div>
+{/* Distribution Metrics Dashboard */}
+          <div className="bg-gradient-to-r from-green-50 to-blue-50 rounded-lg p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-semibold text-gray-800">Distribution Analysis</h2>
+              
+              {/* Reserve Settings */}
+              <div className="flex items-center space-x-4 text-sm">
+                <div className="flex items-center space-x-2">
+                  <label className="text-gray-700 font-medium">Operating Reserve:</label>
+                  <select
+                    value={reserveSettings.operatingReserveMonths}
+                    onChange={(e) => setReserveSettings(prev => ({ ...prev, operatingReserveMonths: parseInt(e.target.value) }))}
+                    className="px-3 py-1 border border-gray-300 rounded-md bg-white"
+                  >
+                    <option value="0">None</option>
+                    <option value="1">1 Month</option>
+                    <option value="2">2 Months</option>
+                  </select>
                 </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                  {/* Conservative Approach */}
-                  <div className="bg-white rounded-lg p-6 shadow-md border-2 border-green-400">
-                    <h3 className="text-md font-semibold text-gray-700 mb-3">Conservative (Available Today)</h3>
-                    <p className={`text-3xl font-bold ${distributionMetrics.conservative > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {formatCurrency(distributionMetrics.conservative)}
-                    </p>
-                    <div className="mt-4 space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Cash on Hand:</span>
-                        <span className="font-medium">{formatCurrency(globalMetrics.totalPaid)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Operating Reserve (2mo):</span>
-                        <span className="font-medium text-red-600">-{formatCurrency(distributionMetrics.operatingReserve)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Cash Reserve:</span>
-                        <span className="font-medium text-red-600">-{formatCurrency(distributionMetrics.cashReserve)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">YTD Distributions:</span>
-                        <span className="font-medium text-red-600">-{formatCurrency(distributionMetrics.ytdDistributions)}</span>
-                      </div>
-                    </div>
+                <div className="flex items-center space-x-2">
+                  <label className="text-gray-700 font-medium">Cash Reserve: $</label>
+                  <input
+                    type="number"
+                    value={reserveSettings.cashReserve}
+                    onChange={(e) => setReserveSettings(prev => ({ ...prev, cashReserve: parseInt(e.target.value) || 0 }))}
+                    className="w-28 px-3 py-1 border border-gray-300 rounded-md"
+                    step="10000"
+                    placeholder="200000"
+                  />
+                </div>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+{/* Actual (Year-to-Date) */}
+              <div className="bg-white rounded-lg p-6 shadow-md border-2 border-green-400">
+                <h3 className="text-md font-semibold text-gray-700 mb-3">Actual (Year-to-Date)</h3>
+                <p className={`text-3xl font-bold ${
+                  ((globalMetrics.totalPaid + globalMetrics.totalOpen) - globalMetrics.currentExpenses - distributionMetrics.ytdDistributions) >= 0 
+                    ? 'text-green-600' 
+                    : 'text-red-600'
+                }`}>
+                  {formatCurrency((globalMetrics.totalPaid + globalMetrics.totalOpen) - globalMetrics.currentExpenses - distributionMetrics.ytdDistributions)}
+                </p>
+                <div className="mt-4 space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">YTD Income (Paid):</span>
+                    <span className="font-medium text-green-600">{formatCurrency(globalMetrics.totalPaid)}</span>
                   </div>
-                  
-                  {/* Projected Approach */}
-                  <div className="bg-white rounded-lg p-6 shadow-md border-2 border-blue-400">
-                    <h3 className="text-md font-semibold text-gray-700 mb-3">Projected (Year-End)</h3>
-                    <p className={`text-3xl font-bold ${distributionMetrics.projected > 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Open Invoices:</span>
+                    <span className="font-medium text-blue-600">+{formatCurrency(globalMetrics.totalOpen)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">YTD Expenses:</span>
+                    <span className="font-medium text-red-600">-{formatCurrency(globalMetrics.currentExpenses)}</span>
+                  </div>
+                  <div className="flex justify-between border-t pt-2">
+                    <span className="text-gray-600 font-semibold">Net Profit:</span>
+                    <span className={`font-bold ${
+                      ((globalMetrics.totalPaid + globalMetrics.totalOpen) - globalMetrics.currentExpenses) >= 0 ? 'text-green-600' : 'text-red-600'
+                    }`}>
+                      {formatCurrency((globalMetrics.totalPaid + globalMetrics.totalOpen) - globalMetrics.currentExpenses)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">YTD Distributions:</span>
+                    <span className="font-medium text-blue-600">-{formatCurrency(distributionMetrics.ytdDistributions)}</span>
+                  </div>
+                  <div className="flex justify-between border-t pt-2">
+                    <span className="text-gray-600 font-semibold">Balance:</span>
+                    <span className={`font-bold ${
+                      ((globalMetrics.totalPaid + globalMetrics.totalOpen) - globalMetrics.currentExpenses - distributionMetrics.ytdDistributions) >= 0 
+                        ? 'text-green-600' 
+                        : 'text-red-600'
+                    }`}>
+                      {formatCurrency((globalMetrics.totalPaid + globalMetrics.totalOpen) - globalMetrics.currentExpenses - distributionMetrics.ytdDistributions)}
+                    </span>
+                  </div>
+                  {/* Show shareholder loan if distributions exceed profit */}
+                  {(distributionMetrics.ytdDistributions > ((globalMetrics.totalPaid + globalMetrics.totalOpen) - globalMetrics.currentExpenses)) && (
+                    <div className="mt-2 p-2 bg-red-50 rounded border border-red-200">
+                      <span className="text-xs text-red-700 font-semibold">
+                        ⚠️ Shareholder Loan Required: {formatCurrency(distributionMetrics.ytdDistributions - ((globalMetrics.totalPaid + globalMetrics.totalOpen) - globalMetrics.currentExpenses))}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              {/* Projected (Year-End) */}
+              <div className="bg-white rounded-lg p-6 shadow-md border-2 border-blue-400">
+                <h3 className="text-md font-semibold text-gray-700 mb-3">Projected (Year-End)</h3>
+                <p className={`text-3xl font-bold ${distributionMetrics.projected > 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                  {formatCurrency(distributionMetrics.projected)}
+                </p>
+                <div className="mt-4 space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Projected Cash:</span>
+                    <span className="font-medium">{formatCurrency(distributionMetrics.projectedYearEnd)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Monthly Collection Rate:</span>
+                    <span className="font-medium text-green-600">{formatCurrency(distributionMetrics.monthlyCollectionRate)}/mo</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Open Invoices:</span>
+                    <span className="font-medium">{formatCurrency(globalMetrics.totalOpen)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Projected Expenses:</span>
+                    <span className="font-medium text-red-600">-{formatCurrency(globalMetrics.projectedExpenses)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Operating Reserve:</span>
+                    <span className="font-medium text-orange-600">-{formatCurrency(distributionMetrics.operatingReserve)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Cash Reserve:</span>
+                    <span className="font-medium text-orange-600">-{formatCurrency(distributionMetrics.cashReserve)}</span>
+                  </div>
+                  <div className="flex justify-between border-t pt-2">
+                    <span className="text-gray-600 font-semibold">Available for Distribution:</span>
+                    <span className="font-bold text-blue-600">
                       {formatCurrency(distributionMetrics.projected)}
-                    </p>
-                    <div className="mt-4 space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Projected Cash:</span>
-                        <span className="font-medium">{formatCurrency(distributionMetrics.projectedYearEnd)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Monthly Collection Rate:</span>
-                        <span className="font-medium text-green-600">{formatCurrency(distributionMetrics.monthlyCollectionRate)}/mo</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Open Invoices:</span>
-                        <span className="font-medium">{formatCurrency(globalMetrics.totalOpen)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Projected Expenses:</span>
-                        <span className="font-medium text-red-600">-{formatCurrency(globalMetrics.projectedExpenses)}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                
-                {/* Per-Person Breakdown */}
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="bg-white rounded-lg p-4 shadow-sm">
-                    <p className="text-sm text-gray-600">Thomas Davis (10%)</p>
-                    <p className="text-xs text-gray-500 mb-1">Conservative / Projected</p>
-                    <p className="text-lg font-semibold text-gray-900">
-                      ${Math.floor(distributionMetrics.conservative * 0.10).toLocaleString()} / ${Math.floor(distributionMetrics.projected * 0.10).toLocaleString()}
-                    </p>
-                  </div>
-                  <div className="bg-white rounded-lg p-4 shadow-sm">
-                    <p className="text-sm text-gray-600">Brian Schneider (45%)</p>
-                    <p className="text-xs text-gray-500 mb-1">Conservative / Projected</p>
-                    <p className="text-lg font-semibold text-gray-900">
-                      ${Math.floor(distributionMetrics.conservative * 0.45).toLocaleString()} / ${Math.floor(distributionMetrics.projected * 0.45).toLocaleString()}
-                    </p>
-                  </div>
-                  <div className="bg-white rounded-lg p-4 shadow-sm">
-                    <p className="text-sm text-gray-600">Kristine Duda (45%)</p>
-                    <p className="text-xs text-gray-500 mb-1">Conservative / Projected</p>
-                    <p className="text-lg font-semibold text-gray-900">
-                      ${Math.floor(distributionMetrics.conservative * 0.45).toLocaleString()} / ${Math.floor(distributionMetrics.projected * 0.45).toLocaleString()}
-                    </p>
+                    </span>
                   </div>
                 </div>
               </div>
+            </div>
+            
+            {/* Per-Person Breakdown */}
+            <div className="grid grid-cols-3 gap-4">
+              <div className="bg-white rounded-lg p-4 shadow-sm">
+                <p className="text-sm text-gray-600">Thomas Davis (10%)</p>
+                <p className="text-xs text-gray-500 mb-1">Actual Balance / Projected</p>
+                <p className="text-lg font-semibold text-gray-900">
+                  ${Math.floor(((globalMetrics.totalPaid + globalMetrics.totalOpen) - globalMetrics.currentExpenses - distributionMetrics.ytdDistributions) * 0.10).toLocaleString()} / 
+                  ${Math.floor(distributionMetrics.projected * 0.10).toLocaleString()}
+                </p>
+              </div>
+              <div className="bg-white rounded-lg p-4 shadow-sm">
+                <p className="text-sm text-gray-600">Brian Schneider (45%)</p>
+                <p className="text-xs text-gray-500 mb-1">Actual Balance / Projected</p>
+                <p className="text-lg font-semibold text-gray-900">
+                  ${Math.floor(((globalMetrics.totalPaid + globalMetrics.totalOpen) - globalMetrics.currentExpenses - distributionMetrics.ytdDistributions) * 0.45).toLocaleString()} / 
+                  ${Math.floor(distributionMetrics.projected * 0.45).toLocaleString()}
+                </p>
+              </div>
+              <div className="bg-white rounded-lg p-4 shadow-sm">
+                <p className="text-sm text-gray-600">Kristine Duda (45%)</p>
+                <p className="text-xs text-gray-500 mb-1">Actual Balance / Projected</p>
+                <p className="text-lg font-semibold text-gray-900">
+                  ${Math.floor(((globalMetrics.totalPaid + globalMetrics.totalOpen) - globalMetrics.currentExpenses - distributionMetrics.ytdDistributions) * 0.45).toLocaleString()} / 
+                  ${Math.floor(distributionMetrics.projected * 0.45).toLocaleString()}
+                </p>
+              </div>
+            </div>
+          </div>
               
               {/* Distributions by Partner */}
               <div className="bg-white rounded-lg shadow overflow-hidden">

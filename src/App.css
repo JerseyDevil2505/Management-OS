@@ -186,6 +186,54 @@ h3, h4, h5, h6 {
   font-weight: 600;
 }
 
+/* Modal text fix - ensure text is always dark in modals */
+.fixed[class*="bg-black"] .bg-white,
+.fixed[class*="bg-opacity"] .bg-white {
+  color: #374151 !important; /* text-gray-700 */
+}
+
+.fixed[class*="bg-black"] .bg-white * {
+  color: inherit;
+}
+
+/* Specific modal text colors */
+.fixed .bg-white .text-gray-900,
+.fixed .bg-white .text-gray-800,
+.fixed .bg-white .text-gray-700,
+.fixed .bg-white .text-gray-600 {
+  color: #374151 !important; /* Ensure dark text */
+}
+
+/* Fix for any white text in modals */
+.fixed .bg-white span:not([class*="text-"]),
+.fixed .bg-white div:not([class*="text-"]) {
+  color: #374151 !important;
+}
+
+/* Prevent white text on light backgrounds in modals */
+.fixed .bg-purple-50,
+.fixed .bg-blue-50,
+.fixed .bg-green-50,
+.fixed .bg-yellow-50,
+.fixed .bg-red-50,
+.fixed .bg-gray-50 {
+  color: #374151 !important;
+}
+
+/* Ensure all text in modal content areas is visible */
+.fixed .overflow-y-auto {
+  color: #374151;
+}
+
+.fixed .overflow-y-auto * {
+  color: inherit;
+}
+
+/* Override any inherited white text in modals */
+.fixed {
+  color: #374151;
+}
+
 /* Scrollbar styling for webkit browsers */
 ::-webkit-scrollbar {
   width: 10px;
@@ -203,4 +251,8 @@ h3, h4, h5, h6 {
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--primary-blue-dark);
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }

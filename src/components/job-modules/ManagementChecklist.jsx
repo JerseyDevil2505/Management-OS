@@ -9,9 +9,9 @@ import { supabase, checklistService } from '../../lib/supabaseClient';
 import * as XLSX from 'xlsx';
 
 const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checklist', onSubModuleChange }) => {
-  const [editableClientName, setEditableClientName] = useState(jobData?.client_name || '');
+  const [editableAssessorName, setEditableAssessorName] = useState(jobData?.assessor_name || '');
   const [editableAssessorEmail, setEditableAssessorEmail] = useState(jobData?.assessor_email || '');
-  const [hasClientNameChanges, setHasClientNameChanges] = useState(false);
+  const [hasAssessorNameChanges, setHasAssessorNameChanges] = useState(false);
   const [hasAssessorEmailChanges, setHasAssessorEmailChanges] = useState(false);
   const [checklistType, setChecklistType] = useState('revaluation');
   const [checklistItems, setChecklistItems] = useState([]);
@@ -45,32 +45,32 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
   };
 
   useEffect(() => {
-    const getCurrentUser = async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          // Using your UUID for now
-          setCurrentUser({
-            id: '5df85ca3-7a54-4798-a665-c31da8d9caad',
-            email: 'ppalead1@gmail.com',
-            name: 'Jim Duda'
-          });
+    const loadJobDetails = async () => {
+      if (jobData?.id) {
+        // Scroll to top when component loads
+        window.scrollTo(0, 0);
+        
+        // Fetch the latest job data to get saved assessor info
+        const { data, error } = await supabase
+          .from('jobs')
+          .select('assessor_name, assessor_email')
+          .eq('id', jobData.id)
+          .single();
+        
+        if (data && !error) {
+          setEditableAssessorName(data.assessor_name || '');
+          setEditableAssessorEmail(data.assessor_email || '');
         }
-      } catch (error) {
-        console.error('Error getting current user:', error);
-        // Fallback to your UUID
-        setCurrentUser({
-          id: '5df85ca3-7a54-4798-a665-c31da8d9caad',
-          email: 'ppalead1@gmail.com',
-          name: 'Jim Duda'
-        });
       }
     };
-    getCurrentUser();
-  }, []);
+    
+    loadJobDetails();
+  }, [jobData?.id]);
 
   useEffect(() => {
     if (jobData) {
+      // Scroll to top when checklist items are loaded
+      window.scrollTo(0, 0);
       loadChecklistItems();
     }
   }, [jobData, checklistType]);
@@ -96,9 +96,10 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
             fileChecks[item.id] = false;
             // If file doesn't exist, clear it from the database
             await supabase
-              .from('checklist_items')
+              .from('checklist_item_status')
               .update({ file_attachment_path: null })
-              .eq('id', item.id);
+              .eq('job_id', jobData.id)
+              .eq('item_id', item.id);
           }
         } catch (err) {
           console.error('Error checking file:', err);
@@ -141,12 +142,14 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
         .select(`
           property_block,
           property_lot,
+          property_qualifier,
           property_m4_class,
           property_location,
           property_facility,
           owner_name,
           owner_street,
           owner_csz,
+          property_composite_key,
           inspection_info_by
         `)
         .eq('job_id', jobId)
@@ -203,6 +206,8 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
         .select(`
           block,
           lot,
+          qualifier,
+          property_composite_key,
           info_by_code,
           list_by,
           measure_date,
@@ -231,67 +236,118 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
     return allRecords;
   };
 
+  // Define the checklist template locally in code
+  const CHECKLIST_TEMPLATE = [
+    { id: 'contract-signed-client', item_text: 'Contract Signed by Client', item_order: 1, category: 'setup', requires_client_approval: false, allows_file_upload: true },
+    { id: 'contract-signed-state', item_text: 'Contract Signed/Approved by State', item_order: 2, category: 'setup', requires_client_approval: false, allows_file_upload: true },
+    { id: 'tax-maps-approved', item_text: 'Tax Maps Approved', item_order: 3, category: 'setup', requires_client_approval: false, allows_file_upload: false },
+    { id: 'tax-map-upload', item_text: 'Tax Map Upload', item_order: 4, category: 'setup', requires_client_approval: false, allows_file_upload: true },
+    { id: 'zoning-map-upload', item_text: 'Zoning Map Upload', item_order: 5, category: 'setup', requires_client_approval: false, allows_file_upload: true },
+    { id: 'zoning-regulations-upload', item_text: 'Zoning Bulk and Use Regulations Upload', item_order: 6, category: 'setup', requires_client_approval: false, allows_file_upload: true },
+    { id: 'ppa-website-updated', item_text: 'PPA Website Updated', item_order: 7, category: 'setup', requires_client_approval: false, allows_file_upload: false },
+    { id: 'data-collection-params', item_text: 'Data Collection Parameters', item_order: 8, category: 'setup', requires_client_approval: true, allows_file_upload: false },
+    { id: 'initial-mailing-list', item_text: 'Initial Mailing List', item_order: 9, category: 'inspection', requires_client_approval: false, allows_file_upload: false, special_action: 'generate_mailing_list' },
+    { id: 'initial-letter-brochure', item_text: 'Initial Letter and Brochure', item_order: 10, category: 'inspection', requires_client_approval: false, allows_file_upload: true },
+    { id: 'initial-mailing-sent', item_text: 'Initial Mailing Sent', item_order: 11, category: 'inspection', requires_client_approval: false, allows_file_upload: false },
+    { id: 'first-attempt', item_text: 'First Attempt Inspections', item_order: 12, category: 'inspection', requires_client_approval: false, allows_file_upload: false },
+    { id: 'second-attempt', item_text: 'Second Attempt Inspections', item_order: 13, category: 'inspection', requires_client_approval: false, allows_file_upload: false, special_action: 'generate_second_attempt_mailer' },
+    { id: 'third-attempt', item_text: 'Third Attempt Inspections', item_order: 14, category: 'inspection', requires_client_approval: false, allows_file_upload: false, special_action: 'generate_third_attempt_mailer' },
+    { id: 'lot-sizing', item_text: 'Lot Sizing Completed', item_order: 15, category: 'inspection', requires_client_approval: false, allows_file_upload: false },
+    { id: 'lot-sizing-questions', item_text: 'Lot Sizing Questions Complete', item_order: 16, category: 'inspection', requires_client_approval: false, allows_file_upload: false },
+    { id: 'data-quality-analysis', item_text: 'Data Quality Analysis', item_order: 17, category: 'analysis', requires_client_approval: false, allows_file_upload: false },
+    { id: 'market-analysis', item_text: 'Market Analysis', item_order: 18, category: 'analysis', requires_client_approval: false, allows_file_upload: false, is_analysis_item: true, sync_from_component: true },
+    { id: 'page-by-page', item_text: 'Page by Page Analysis', item_order: 19, category: 'analysis', requires_client_approval: false, allows_file_upload: false, is_analysis_item: true, sync_from_component: true },
+    { id: 'land-value-tables', item_text: 'Land Value Tables Built', item_order: 20, category: 'analysis', requires_client_approval: false, allows_file_upload: false, is_analysis_item: true, sync_from_component: true },
+    { id: 'land-values-entered', item_text: 'Land Values Entered', item_order: 21, category: 'analysis', requires_client_approval: true, allows_file_upload: false, is_analysis_item: true, sync_from_component: true },
+    { id: 'economic-obsolescence', item_text: 'Economic Obsolescence Study', item_order: 22, category: 'analysis', requires_client_approval: false, allows_file_upload: false, is_analysis_item: true, sync_from_component: true },
+    { id: 'vcs-reviewed', item_text: 'VCS Reviewed/Reset', item_order: 23, category: 'analysis', requires_client_approval: true, allows_file_upload: false },
+    { id: 'cost-conversion', item_text: 'Cost Conversion Factor Set', item_order: 24, category: 'analysis', requires_client_approval: true, allows_file_upload: false, is_analysis_item: true, sync_from_component: true },
+    { id: 'building-class-review', item_text: 'Building Class Review/Updated', item_order: 25, category: 'analysis', requires_client_approval: false, allows_file_upload: false, is_analysis_item: true, sync_from_component: true },
+    { id: 'effective-age', item_text: 'Effective Age Loaded/Set', item_order: 26, category: 'analysis', requires_client_approval: false, allows_file_upload: false, is_analysis_item: true, sync_from_component: true },
+    { id: 'final-values', item_text: 'Final Values Ready', item_order: 27, category: 'completion', requires_client_approval: true, allows_file_upload: false, is_analysis_item: true, sync_from_component: true },
+    { id: 'turnover-document', item_text: 'Generate Turnover Document', item_order: 28, category: 'completion', requires_client_approval: false, allows_file_upload: true },
+    { id: 'turnover-date', item_text: 'Turnover Date', item_order: 29, category: 'completion', requires_client_approval: false, allows_file_upload: false, input_type: 'date', special_action: 'archive_trigger' }
+  ];
+
   // Load checklist items from database
   const loadChecklistItems = async () => {
     try {
       setIsLoadingItems(true);
       
-      // First, try to load existing items from checklist_items
-      let items = await checklistService.getChecklistItems(jobData.id);
+      // First, check if we need to migrate data from old checklist_items table
+      const { data: oldItems, error: oldError } = await supabase
+        .from('checklist_items')
+        .select('*')
+        .eq('job_id', jobData.id);
       
-      // If no items exist, create them from template
-      if (!items || items.length === 0) {
+      if (oldItems && oldItems.length > 0) {
+        console.log('Migrating data from old checklist_items table...');
         
-        // Get the standard revaluation template
-        const { data: template, error: templateError } = await supabase
-          .from('checklist_templates')
-          .select('id')
-          .eq('name', 'Standard Revaluation Checklist')
-          .single();
-
-        if (templateError || !template) {
-          console.error('Template not found:', templateError);
-          throw new Error('Checklist template not found');
+        // Migrate old data to new table
+        for (const oldItem of oldItems) {
+          // Convert item_text to id format (matching our template IDs)
+          const templateItem = CHECKLIST_TEMPLATE.find(t => t.item_text === oldItem.item_text);
+          if (templateItem) {
+            // Only migrate if there's actual data to preserve
+            if (oldItem.status !== 'pending' || oldItem.client_approved || oldItem.file_attachment_path) {
+              await supabase
+                .from('checklist_item_status')
+                .upsert({
+                  job_id: jobData.id,
+                  item_id: templateItem.id,
+                  status: oldItem.status || 'pending',
+                  completed_at: oldItem.completed_at,
+                  completed_by: oldItem.completed_by,
+                  client_approved: oldItem.client_approved || false,
+                  client_approved_date: oldItem.client_approved_date,
+                  client_approved_by: oldItem.client_approved_by,
+                  file_attachment_path: oldItem.file_attachment_path,
+                  notes: oldItem.notes,
+                  created_at: oldItem.created_at,
+                  updated_at: oldItem.updated_at
+                }, {
+                  onConflict: 'job_id,item_id',
+                  ignoreDuplicates: false // Overwrite if exists
+                });
+            }
+          }
         }
-
-        // Get all template items
-        const { data: templateItems, error: templateItemsError } = await supabase
-          .from('checklist_template_items')
-          .select('*')
-          .eq('template_id', template.id)
-          .order('item_order');
-
-        if (templateItemsError || !templateItems) {
-          console.error('Template items not found:', templateItemsError);
-          throw new Error('Template items not found');
-        }
-
-        // Create checklist items for this job based on template
-        const itemsToCreate = templateItems.map(templateItem => ({
-          job_id: jobData.id,
-          template_item_id: templateItem.id,
-          item_text: templateItem.item_text,
-          item_order: templateItem.item_order,
-          category: templateItem.category,
-          status: 'pending',
-          requires_client_approval: templateItem.requires_client_approval || false,
-          allows_file_upload: templateItem.allows_file_upload || false,
-          auto_update_source: templateItem.auto_update_source,
-          created_at: new Date().toISOString()
-        }));
-
-        const { data: createdItems, error: createError } = await supabase
-          .from('checklist_items')
-          .insert(itemsToCreate)
-          .select();
-
-        if (createError) {
-          console.error('Error creating checklist items:', createError);
-          throw createError;
-        }
-
-        items = createdItems;
+        console.log('Migration complete');
       }
+      
+      // Load the status data from the database (what's been completed, approved, etc.)
+      const { data: statusData, error: statusError } = await supabase
+        .from('checklist_item_status')
+        .select('*')
+        .eq('job_id', jobData.id);
+      
+      if (statusError) {
+        console.error('Error loading checklist status:', statusError);
+      }
+      
+      // Create a map of status data by item_id
+      const statusMap = new Map();
+      if (statusData) {
+        statusData.forEach(status => {
+          statusMap.set(status.item_id, status);
+        });
+      }
+      
+      // Merge template with status data
+      const items = CHECKLIST_TEMPLATE.map(templateItem => {
+        const status = statusMap.get(templateItem.id) || {};
+        return {
+          ...templateItem,
+          status: status.status || 'pending',
+          completed_at: status.completed_at,
+          completed_by: status.completed_by,
+          client_approved: status.client_approved || false,
+          client_approved_date: status.client_approved_date,
+          client_approved_by: status.client_approved_by,
+          file_attachment_path: status.file_attachment_path,
+          notes: status.notes
+        };
+      });
       
       // Load all documents for items that can have multiple files
       const { data: documents, error: docsError } = await supabase
@@ -310,39 +366,6 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
         }, {});
         setChecklistDocuments(docsByItem);
       }
-      
-      // Add special action flags based on item text
-      items = items.map(item => {
-        // Check if this is an analysis phase item that should be synced
-        const analysisItems = [
-          'Cost Conversion Factor',
-          'Land Value Analysis',
-          'Market Analysis',
-          'Depreciation Analysis',
-          'Final Value Review'
-        ];
-        
-        if (analysisItems.includes(item.item_text)) {
-          item.is_analysis_item = true;
-          item.sync_from_component = true;
-        }
-        
-        // Add special actions based on item text
-        if (item.item_text === 'Initial Mailing List') {
-          item.special_action = 'generate_mailing_list';
-        } else if (item.item_text === 'Second Attempt Inspections') {
-          item.special_action = 'generate_second_attempt_mailer';
-        } else if (item.item_text === 'Third Attempt Inspections') {
-          item.special_action = 'generate_third_attempt_mailer';
-        } else if (item.item_text === 'Generate Turnover Document') {
-          item.special_action = 'generate_turnover_pdf';
-        } else if (item.item_text === 'Turnover Date') {
-          item.input_type = 'date';
-          item.special_action = 'archive_trigger';
-        }
-        
-        return item;
-      });
       
       // Update First Attempt Inspections item with workflow stats if available
       if (jobData?.workflow_stats?.validInspections) {
@@ -369,8 +392,8 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
   };
 
   useEffect(() => {
-    setHasClientNameChanges(editableClientName !== jobData?.client_name);
-  }, [editableClientName, jobData?.client_name]);
+    setHasAssessorNameChanges(editableAssessorName !== jobData?.assessor_name);
+  }, [editableAssessorName, jobData?.assessor_name]);
 
   useEffect(() => {
     setHasAssessorEmailChanges(editableAssessorEmail !== jobData?.assessor_email);
@@ -419,16 +442,30 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
 
   const handleItemStatusChange = async (itemId, newStatus) => {
     try {
-      // Update in database first
-      const updatedItem = await checklistService.updateItemStatus(
-        itemId, 
-        newStatus, 
-        currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad'
-      );
+      // Save to checklist_item_status table (upsert)
+      const { error } = await supabase
+        .from('checklist_item_status')
+        .upsert({
+          job_id: jobData.id,
+          item_id: itemId,
+          status: newStatus,
+          completed_at: newStatus === 'completed' ? new Date().toISOString() : null,
+          completed_by: newStatus === 'completed' ? (currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad') : null,
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'job_id,item_id'
+        });
       
-      // Then update local state with the response
+      if (error) throw error;
+      
+      // Update local state
       setChecklistItems(items => items.map(item => 
-        item.id === itemId ? { ...item, ...updatedItem } : item
+        item.id === itemId ? { 
+          ...item, 
+          status: newStatus,
+          completed_at: newStatus === 'completed' ? new Date().toISOString() : null,
+          completed_by: newStatus === 'completed' ? (currentUser?.name || 'Jim Duda') : null
+        } : item
       ));
 
     } catch (error) {
@@ -444,34 +481,31 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
       
       console.log(`Client approval change for item ${itemId}: ${approved ? 'APPROVED' : 'NOT APPROVED'}`);
       
-      // Update in database first
-      const updatedItem = await checklistService.updateClientApproval(
-        itemId, 
-        approved, 
-        currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad'
-      );
-      
-      console.log('Updated item from service:', updatedItem);
-      
-      // Then update local state with the response
-      setChecklistItems(items => {
-        const newItems = items.map(item => {
-          if (item.id === itemId) {
-            // Ensure we're properly updating the client_approved field
-            const updated = { 
-              ...item, 
-              ...updatedItem,
-              client_approved: approved, // Explicitly set this
-              client_approved_at: approved ? new Date().toISOString() : null,
-              client_approved_by: approved ? (currentUser?.name || 'Jim Duda') : null
-            };
-            console.log('Local state update for item:', updated);
-            return updated;
-          }
-          return item;
+      // Save to checklist_item_status table (upsert)
+      const { error } = await supabase
+        .from('checklist_item_status')
+        .upsert({
+          job_id: jobData.id,
+          item_id: itemId,
+          client_approved: approved,
+          client_approved_date: approved ? new Date().toISOString() : null,
+          client_approved_by: approved ? (currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad') : null,
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'job_id,item_id'
         });
-        return newItems;
-      });
+      
+      if (error) throw error;
+      
+      // Update local state
+      setChecklistItems(items => items.map(item => 
+        item.id === itemId ? { 
+          ...item, 
+          client_approved: approved,
+          client_approved_date: approved ? new Date().toISOString() : null,
+          client_approved_by: approved ? (currentUser?.name || 'Jim Duda') : null
+        } : item
+      ));
 
     } catch (error) {
       console.error('Error updating client approval:', error);
@@ -512,17 +546,32 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
         try {
           console.log(`⬆️ Starting multiple file upload for item ${itemId}: ${itemText}`);
           
-          // Upload all files
-          const uploadPromises = files.map(file => 
-            checklistService.uploadFile(
-              itemId, 
-              jobData.id, 
-              file, 
-              currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad'
-            )
-          );
-          
-          await Promise.all(uploadPromises);
+          // Upload files to storage bucket
+          const uploadedPaths = [];
+          for (const file of files) {
+            const fileName = `${Date.now()}_${file.name}`;
+            const filePath = `${jobData.id}/${itemId}/${fileName}`;
+            
+            const { data, error } = await supabase.storage
+              .from('checklist-documents')
+              .upload(filePath, file);
+            
+            if (error) throw error;
+            
+            uploadedPaths.push(filePath);
+            
+            // Save to checklist_documents table for multiple files
+            await supabase
+              .from('checklist_documents')
+              .insert({
+                job_id: jobData.id,
+                checklist_item_id: itemId,
+                file_path: filePath,
+                file_name: file.name,
+                uploaded_by: currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad',
+                uploaded_at: new Date().toISOString()
+              });
+          }
           
           console.log(`✅ All uploads complete for ${itemText}`);
           
@@ -538,7 +587,7 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
           setUploadingItems(prev => ({ ...prev, [itemId]: false }));
         }
       } else {
-        // Single file upload (existing logic)
+        // Single file upload
         const file = files[0];
         console.log(`📄 File selected for ${itemText}: ${file.name}`);
         
@@ -552,19 +601,33 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
         try {
           console.log(`⬆️ Starting upload for item ${itemId}: ${itemText}`);
           
-          // Upload file and update item
-          const updatedItem = await checklistService.uploadFile(
-            itemId, 
-            jobData.id, 
-            file, 
-            currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad'
-          );
+          // Upload file to storage bucket
+          const fileName = `${Date.now()}_${file.name}`;
+          const filePath = `${jobData.id}/${itemId}/${fileName}`;
           
-          console.log(`✅ Upload complete for ${itemText}`, updatedItem);
+          const { data, error } = await supabase.storage
+            .from('checklist-documents')
+            .upload(filePath, file);
+          
+          if (error) throw error;
+          
+          console.log(`✅ Upload complete for ${itemText}`, filePath);
+          
+          // Update checklist_item_status table with file path
+          await supabase
+            .from('checklist_item_status')
+            .upsert({
+              job_id: jobData.id,
+              item_id: itemId,
+              file_attachment_path: filePath,
+              updated_at: new Date().toISOString()
+            }, {
+              onConflict: 'job_id,item_id'
+            });
           
           // Update local state
           setChecklistItems(items => items.map(item => 
-            item.id === itemId ? { ...item, ...updatedItem } : item
+            item.id === itemId ? { ...item, file_attachment_path: filePath } : item
           ));
           
           // Mark this file as valid
@@ -585,26 +648,32 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
     fileInput.click();
   };
 
-  const saveClientName = async () => {
+  const saveAssessorName = async () => {
     try {
-      // Save to database
-      await checklistService.updateClientName(jobData.id, editableClientName);
+      // Save to database - update assessor_name field
+      await supabase
+        .from('jobs')
+        .update({ assessor_name: editableAssessorName })
+        .eq('id', jobData.id);
       
       // Update local state
-      setHasClientNameChanges(false);
+      setHasAssessorNameChanges(false);
       
       // Success feedback
-      alert('Client/Assessor name updated successfully!');
+      alert('Assessor name updated successfully!');
     } catch (error) {
-      console.error('Error saving client name:', error);
-      alert('Failed to save client name. Please try again.');
+      console.error('Error saving assessor name:', error);
+      alert('Failed to save assessor name. Please try again.');
     }
   };
 
   const saveAssessorEmail = async () => {
     try {
-      // Save to database
-      await checklistService.updateAssessorEmail(jobData.id, editableAssessorEmail);
+      // Save to database - update assessor_email field
+      await supabase
+        .from('jobs')
+        .update({ assessor_email: editableAssessorEmail })
+        .eq('id', jobData.id);
       
       // Update local state
       setHasAssessorEmailChanges(false);
@@ -635,8 +704,8 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
           return true;
         }
         
-        // Include class 15 with specific facility names
-        if (propClass === '15' && record.property_facility) {
+        // Include class 15 variants (15A, 15B, 15C, 15D, 15E, 15F) with specific facility names
+        if (propClass.startsWith('15') && record.property_facility) {
           const facilityLower = record.property_facility.toLowerCase();
           return facilityLower.includes('residence') ||
                  facilityLower.includes('vet') ||
@@ -654,10 +723,11 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
       const excelData = filteredData.map(record => ({
         'Block': record.property_block,
         'Lot': record.property_lot,
+        'Qualifier': record.property_qualifier || '',
         'Property Class': record.property_m4_class,
         'Location': record.property_location,
         'Owner': record.owner_name,
-        'Mailing Address': `${record.owner_street} ${record.owner_csz}`.trim()
+        'Mailing Address': `${record.owner_street || ''} ${record.owner_csz || ''}`.trim()
       }));
       
       // Create workbook and worksheet
@@ -665,19 +735,23 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Mailing List');
       
-      // Auto-size columns
+      // Set column widths to fit content properly
       const colWidths = [
-        { wch: 10 }, // Block
-        { wch: 10 }, // Lot
+        { wch: 12 }, // Block
+        { wch: 15 }, // Lot
+        { wch: 12 }, // Qualifier
         { wch: 15 }, // Property Class
-        { wch: 30 }, // Location
-        { wch: 25 }, // Owner
-        { wch: 35 }  // Mailing Address
+        { wch: 45 }, // Location - wider for full addresses
+        { wch: 35 }, // Owner - good width for names
+        { wch: 50 }  // Mailing Address - wide for full addresses
       ];
       ws['!cols'] = colWidths;
       
       // Generate Excel file and download
-      XLSX.writeFile(wb, `${jobData.job_name}_Initial_Mailing_List.xlsx`);
+      const fileName = jobData?.job_name ? 
+        `${jobData.job_name.replace(/[^a-z0-9]/gi, '_')}_Initial_Mailing_List.xlsx` : 
+        `Initial_Mailing_List_${new Date().toISOString().split('T')[0]}.xlsx`;
+      XLSX.writeFile(wb, fileName);
       
       console.log(`✅ Excel file downloaded with ${excelData.length} properties`);
       
@@ -704,37 +778,38 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
       
       if (jobError) throw jobError;
       
-      const refusalCategories = jobConfig?.infoby_category_config?.refusal_categories || [];
-      console.log('📋 Refusal categories:', refusalCategories);
+      const refusalCategories = jobConfig?.infoby_category_config?.refusal || [];
+      console.log('📋 Refusal codes for this job:', refusalCategories);
       
       // Get ALL property records with pagination
       const propertyData = await getAllPropertyRecords(jobData.id);
       
       // Get ALL inspection data with pagination
       const inspectionData = await getAllInspectionData(jobData.id);
+      console.log(`🔍 Found ${inspectionData.length} inspection records`);
       
-      // Create a map of inspection data by property key (block-lot)
+      // Create a map of inspection data by composite key
       const inspectionMap = new Map();
       inspectionData.forEach(inspection => {
-        const key = `${inspection.property_block}-${inspection.property_lot}`;
-        inspectionMap.set(key, inspection);
+        if (inspection.property_composite_key) {
+          inspectionMap.set(inspection.property_composite_key, inspection);
+        }
       });
       
       // Filter properties for 2nd attempt
       const secondAttemptProperties = propertyData.filter(property => {
         const propClass = property.property_m4_class?.toUpperCase() || '';
-        const propertyKey = `${property.property_block}-${property.property_lot}`;
-        const inspection = inspectionMap.get(propertyKey);
+        const inspection = property.property_composite_key ? 
+          inspectionMap.get(property.property_composite_key) : null;
         
         // Check if it's a refusal based on job config
-        if (inspection && refusalCategories.includes(inspection.inspection_info_by)) {
+        if (inspection && refusalCategories.includes(inspection.info_by_code)) {
           return true;
         }
         
-        // Check if it's class 2 or 3A with no inspection
+        // Check if it's class 2 or 3A with no inspection (list_by is null or empty)
         if (['2', '3A'].includes(propClass)) {
-          const hasInspection = property.inspection_info_by || inspection?.inspection_info_by;
-          if (!hasInspection || hasInspection.trim() === '') {
+          if (!inspection || !inspection.list_by || inspection.list_by.trim() === '') {
             return true;
           }
         }
@@ -745,29 +820,43 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
       console.log(`✅ Found ${secondAttemptProperties.length} properties for 2nd attempt`);
       
       // Transform data for Excel
-      const excelData = secondAttemptProperties.map(property => ({
-        'Block': property.property_block,
-        'Lot': property.property_lot,
-        'Property Class': property.property_m4_class,
-        'Location': property.property_location,
-        'Owner': property.owner_name,
-        'Mailing Address': `${property.owner_street} ${property.owner_csz}`.trim(),
-        'Reason': inspectionMap.get(`${property.property_block}-${property.property_lot}`)?.inspection_info_by || 'Not Inspected'
-      }));
+      const excelData = secondAttemptProperties.map(property => {
+        const inspection = property.property_composite_key ? 
+          inspectionMap.get(property.property_composite_key) : null;
+        
+        let reason = 'Not Inspected';
+        if (inspection) {
+          if (refusalCategories.includes(inspection.info_by_code)) {
+            reason = inspection.info_by_code;
+          }
+        }
+        
+        return {
+          'Block': property.property_block,
+          'Lot': property.property_lot,
+          'Qualifier': property.property_qualifier || '',
+          'Property Class': property.property_m4_class,
+          'Location': property.property_location,
+          'Owner': property.owner_name,
+          'Mailing Address': `${property.owner_street || ''} ${property.owner_csz || ''}`.trim(),
+          'Reason': reason
+        };
+      });
       
       // Create workbook and worksheet
       const ws = XLSX.utils.json_to_sheet(excelData);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, '2nd Attempt Mailer');
       
-      // Auto-size columns
+      // Set column widths to fit content properly
       const colWidths = [
-        { wch: 10 }, // Block
-        { wch: 10 }, // Lot
+        { wch: 12 }, // Block
+        { wch: 15 }, // Lot
+        { wch: 12 }, // Qualifier
         { wch: 15 }, // Property Class
-        { wch: 30 }, // Location
-        { wch: 25 }, // Owner
-        { wch: 35 }, // Mailing Address
+        { wch: 45 }, // Location
+        { wch: 35 }, // Owner
+        { wch: 50 }, // Mailing Address
         { wch: 20 }  // Reason
       ];
       ws['!cols'] = colWidths;
@@ -800,7 +889,8 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
       
       if (jobError) throw jobError;
       
-      const refusalCategories = jobConfig?.infoby_category_config?.refusal_categories || [];
+      const refusalCategories = jobConfig?.infoby_category_config?.refusal || [];
+      console.log('📋 Refusal codes for this job:', refusalCategories);
       
       // Get ALL property records with pagination
       const propertyData = await getAllPropertyRecords(jobData.id);
@@ -808,28 +898,28 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
       // Get ALL inspection data with pagination
       const inspectionData = await getAllInspectionData(jobData.id);
       
-      // Create a map of inspection data by property key (block-lot)
+      // Create a map of inspection data by composite key
       const inspectionMap = new Map();
       inspectionData.forEach(inspection => {
-        const key = `${inspection.block}-${inspection.lot}`;
-        inspectionMap.set(key, inspection);
+        if (inspection.property_composite_key) {
+          inspectionMap.set(inspection.property_composite_key, inspection);
+        }
       });
       
       // Filter properties for 3rd attempt (same logic as 2nd for now)
       const thirdAttemptProperties = propertyData.filter(property => {
         const propClass = property.property_m4_class?.toUpperCase() || '';
-        const propertyKey = `${property.property_block}-${property.property_lot}`;
-        const inspection = inspectionMap.get(propertyKey);
+        const inspection = property.property_composite_key ? 
+          inspectionMap.get(property.property_composite_key) : null;
         
         // Check if it's a refusal based on job config
         if (inspection && refusalCategories.includes(inspection.info_by_code)) {
           return true;
         }
         
-        // Check if it's class 2 or 3A with no inspection
+        // Check if it's class 2 or 3A with no inspection (list_by is null or empty)
         if (['2', '3A'].includes(propClass)) {
-          const hasInspection = property.inspection_info_by || inspection?.info_by_code;
-          if (!hasInspection || hasInspection.trim() === '') {
+          if (!inspection || !inspection.list_by || inspection.list_by.trim() === '') {
             return true;
           }
         }
@@ -840,29 +930,43 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
       console.log(`✅ Found ${thirdAttemptProperties.length} properties for 3rd attempt`);
       
       // Transform data for Excel
-      const excelData = thirdAttemptProperties.map(property => ({
-        'Block': property.property_block,
-        'Lot': property.property_lot,
-        'Property Class': property.property_m4_class,
-        'Location': property.property_location,
-        'Owner': property.owner_name,
-        'Mailing Address': `${property.owner_street} ${property.owner_csz}`.trim(),
-        'Reason': inspectionMap.get(`${property.property_block}-${property.property_lot}`)?.info_by_code || 'Not Inspected'
-      }));
+      const excelData = thirdAttemptProperties.map(property => {
+        const inspection = property.property_composite_key ? 
+          inspectionMap.get(property.property_composite_key) : null;
+        
+        let reason = 'Not Inspected';
+        if (inspection) {
+          if (refusalCategories.includes(inspection.info_by_code)) {
+            reason = inspection.info_by_code;
+          }
+        }
+        
+        return {
+          'Block': property.property_block,
+          'Lot': property.property_lot,
+          'Qualifier': property.property_qualifier || '',
+          'Property Class': property.property_m4_class,
+          'Location': property.property_location,
+          'Owner': property.owner_name,
+          'Mailing Address': `${property.owner_street || ''} ${property.owner_csz || ''}`.trim(),
+          'Reason': reason
+        };
+      });
       
       // Create workbook and worksheet
       const ws = XLSX.utils.json_to_sheet(excelData);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, '3rd Attempt Mailer');
       
-      // Auto-size columns
+      // Set column widths to fit content properly
       const colWidths = [
-        { wch: 10 }, // Block
-        { wch: 10 }, // Lot
+        { wch: 12 }, // Block
+        { wch: 15 }, // Lot
+        { wch: 12 }, // Qualifier
         { wch: 15 }, // Property Class
-        { wch: 30 }, // Location
-        { wch: 25 }, // Owner
-        { wch: 35 }, // Mailing Address
+        { wch: 45 }, // Location
+        { wch: 35 }, // Owner
+        { wch: 50 }, // Mailing Address
         { wch: 20 }  // Reason
       ];
       ws['!cols'] = colWidths;
@@ -879,7 +983,6 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
       setGeneratingLists(prev => ({ ...prev, third: false }));
     }
   };
-
   const handleTurnoverDate = async (itemId, date) => {
     if (date) {
       // First update the item status
@@ -892,20 +995,73 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
 
   const downloadFile = async (filePath, fileName) => {
     try {
-      // Get public URL for the file
-      const { data } = supabase.storage
+      console.log('🔽 Download initiated for:', filePath);
+      
+      // Method 1: Try to create a signed URL for download (more secure)
+      console.log('Attempting signed URL method...');
+      const { data: signedUrlData, error: signedUrlError } = await supabase.storage
+        .from('checklist-documents')
+        .createSignedUrl(filePath, 3600); // URL valid for 1 hour
+      
+      if (signedUrlError) {
+        console.error('Signed URL error:', signedUrlError);
+      }
+      
+      if (signedUrlData?.signedUrl) {
+        console.log('✅ Signed URL created successfully');
+        // Create a temporary anchor element to trigger download
+        const link = document.createElement('a');
+        link.href = signedUrlData.signedUrl;
+        link.download = fileName || filePath.split('/').pop();
+        link.target = '_blank';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        console.log('✅ Download triggered via signed URL');
+        return;
+      }
+      
+      // Method 2: If signed URL fails, try direct download
+      console.log('Attempting direct download method...');
+      const { data: downloadData, error: downloadError } = await supabase.storage
+        .from('checklist-documents')
+        .download(filePath);
+      
+      if (downloadError) {
+        console.error('Direct download error:', downloadError);
+      }
+      
+      if (downloadData) {
+        console.log('✅ File downloaded as blob, size:', downloadData.size);
+        // Create blob URL and trigger download
+        const url = URL.createObjectURL(downloadData);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName || filePath.split('/').pop();
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        console.log('✅ Download triggered via blob');
+        return;
+      }
+      
+      // If both methods fail, try public URL as last resort
+      console.log('Attempting public URL method...');
+      const { data: publicUrlData } = supabase.storage
         .from('checklist-documents')
         .getPublicUrl(filePath);
       
-      if (data?.publicUrl) {
-        // Open in new tab or trigger download
-        window.open(data.publicUrl, '_blank');
+      if (publicUrlData?.publicUrl) {
+        console.log('✅ Opening public URL:', publicUrlData.publicUrl);
+        window.open(publicUrlData.publicUrl, '_blank');
       } else {
-        throw new Error('Could not get file URL');
+        throw new Error('Could not download file - all methods failed');
       }
     } catch (error) {
-      console.error('Error downloading file:', error);
-      alert('Failed to download file. Please try again.');
+      console.error('❌ Error downloading file:', error);
+      console.error('File path was:', filePath);
+      alert(`Failed to download file: ${error.message}\n\nFile path: ${filePath}\n\nCheck the console for more details.`);
     }
   };
 
@@ -966,18 +1122,18 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
             <h2 className="text-2xl font-bold text-gray-800 mb-4">{jobData.job_name}</h2>
             <div className="space-y-3">
               <div className="flex items-center gap-3">
-                <label className="text-sm font-medium text-gray-700 w-32">Client/Assessor:</label>
+                <label className="text-sm font-medium text-gray-700 w-32">Assessor Name:</label>
                 <div className="flex items-center gap-2 flex-1">
                   <input
                     type="text"
-                    value={editableClientName}
-                    onChange={(e) => setEditableClientName(e.target.value)}
+                    value={editableAssessorName}
+                    onChange={(e) => setEditableAssessorName(e.target.value)}
                     className="px-3 py-2 border border-gray-300 rounded-md text-sm flex-1"
-                    placeholder="Enter client/assessor name"
+                    placeholder="Enter assessor name"
                   />
-                  {hasClientNameChanges && (
+                  {hasAssessorNameChanges && (
                     <button
-                      onClick={saveClientName}
+                      onClick={saveAssessorName}
                       className="px-3 py-2 bg-blue-500 text-white rounded-md text-sm hover:bg-blue-600 flex items-center gap-1"
                     >
                       <Save className="w-4 h-4" />
@@ -1201,12 +1357,12 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
                     </div>
                     {item.completed_at && (
                       <div className="text-sm text-gray-500 mb-2">
-                        Completed on {new Date(item.completed_at).toLocaleDateString()} by {item.completed_by}
+                        Completed on {new Date(item.completed_at).toLocaleDateString()}
                       </div>
                     )}
-                    {item.client_approved === true && item.client_approved_at && (
+                    {item.client_approved === true && item.client_approved_date && (
                       <div className="text-sm text-purple-600 bg-purple-50 px-2 py-1 rounded mb-2 inline-block">
-                        ✓ Client approved on {new Date(item.client_approved_at).toLocaleDateString()} by {item.client_approved_by || 'Unknown'}
+                        ✓ Client approved on {new Date(item.client_approved_date).toLocaleDateString()}
                       </div>
                     )}
                     {hasValidFile && (
@@ -1217,33 +1373,39 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
                             checklistDocuments[item.id].map((doc, idx) => (
                               <div key={idx} className="flex items-center gap-2 text-sm text-blue-600">
                                 <FileText className="w-4 h-4" />
-                                <span>{doc.file_name || doc.file_path.split('/').pop()}</span>
-                                <ExternalLink 
-                                  className="w-4 h-4 cursor-pointer hover:text-blue-800" 
+                                <button
                                   onClick={() => downloadFile(doc.file_path, doc.file_name || doc.file_path.split('/').pop())}
-                                />
+                                  className="hover:text-blue-800 hover:underline text-left"
+                                >
+                                  {doc.file_name || doc.file_path.split('/').pop()}
+                                </button>
+                                <ExternalLink className="w-4 h-4" />
                               </div>
                             ))
                           ) : (
                             // Fallback to single file display
                             <div className="flex items-center gap-2 text-sm text-blue-600">
                               <FileText className="w-4 h-4" />
-                              <span>{item.file_attachment_path.split('/').pop()}</span>
-                              <ExternalLink 
-                                className="w-4 h-4 cursor-pointer hover:text-blue-800" 
+                              <button
                                 onClick={() => downloadFile(item.file_attachment_path, item.file_attachment_path.split('/').pop())}
-                              />
+                                className="hover:text-blue-800 hover:underline text-left"
+                              >
+                                {item.file_attachment_path.split('/').pop()}
+                              </button>
+                              <ExternalLink className="w-4 h-4" />
                             </div>
                           )
                         ) : (
                           // Single file display for other items
                           <div className="flex items-center gap-2 text-sm text-blue-600">
                             <FileText className="w-4 h-4" />
-                            <span>{item.file_attachment_path.split('/').pop()}</span>
-                            <ExternalLink 
-                              className="w-4 h-4 cursor-pointer hover:text-blue-800" 
+                            <button
                               onClick={() => downloadFile(item.file_attachment_path, item.file_attachment_path.split('/').pop())}
-                            />
+                              className="hover:text-blue-800 hover:underline text-left"
+                            >
+                              {item.file_attachment_path.split('/').pop()}
+                            </button>
+                            <ExternalLink className="w-4 h-4" />
                           </div>
                         )}
                       </div>
@@ -1357,12 +1519,6 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
                     >
                       <Download className="w-4 h-4" />
                       {generatingLists.third ? 'Generating...' : '3rd Attempt Excel'}
-                    </button>
-                  )}
-                  {item.special_action === 'generate_turnover_pdf' && (
-                    <button className="px-3 py-1 bg-orange-500 text-white rounded-md text-sm hover:bg-orange-600 flex items-center gap-1">
-                      <Printer className="w-4 h-4" />
-                      Generate PDF
                     </button>
                   )}
                   {item.input_type === 'date' && (

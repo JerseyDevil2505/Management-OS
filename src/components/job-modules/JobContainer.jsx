@@ -22,8 +22,14 @@ const JobContainer = ({
   const [propertyRecordsCount, setPropertyRecordsCount] = useState(0);
   const [isLoadingVersion, setIsLoadingVersion] = useState(true);
   const [versionError, setVersionError] = useState(null);
+  
+  // NEW: Property loading states
+  const [properties, setProperties] = useState([]);
+  const [isLoadingProperties, setIsLoadingProperties] = useState(false);
+  const [loadingProgress, setLoadingProgress] = useState(0);
+  const [loadedCount, setLoadedCount] = useState(0);
 
-  // Load latest file versions and property count
+  // Load latest file versions and properties
   useEffect(() => {
     if (selectedJob) {
       loadLatestFileVersions();
@@ -42,6 +48,9 @@ const JobContainer = ({
 
     setIsLoadingVersion(true);
     setVersionError(null);
+    setIsLoadingProperties(false); // Don't set this to true yet
+    setLoadingProgress(0);
+    setLoadedCount(0);
 
     try {
       // Get data version AND source file date from property_records table
@@ -53,10 +62,10 @@ const JobContainer = ({
         .limit(1)
         .single();
 
-      // Get code version, end_date, and workflow_stats from jobs table 
+      // Get job data including assignment status
       const { data: jobData, error: jobError } = await supabase
         .from('jobs')
-        .select('code_file_version, updated_at, end_date, workflow_stats')
+        .select('code_file_version, updated_at, end_date, workflow_stats, parsed_code_definitions, vendor_type, has_property_assignments')
         .eq('id', selectedJob.id)
         .single();
 
@@ -69,26 +78,89 @@ const JobContainer = ({
         .limit(1)
         .single();
 
-
       if (dataVersionError && dataVersionError.code !== 'PGRST116') throw dataVersionError;
       if (jobError) throw jobError;
       // Don't throw on inspection error - it might not exist yet
 
       const currentFileVersion = dataVersionData?.file_version || 1;
       const currentCodeVersion = jobData?.code_file_version || 1;
+      const hasAssignments = jobData?.has_property_assignments || false;
       
       setLatestFileVersion(currentFileVersion);
       setLatestCodeVersion(currentCodeVersion);
+      
+      // Now we're done with initial loading, start property loading
+      setIsLoadingVersion(false);
+      setIsLoadingProperties(true);
 
-      // Get count of records from property_records for this job
-      const { count, error: countError } = await supabase
+      // Build query for property count
+      let propertyCountQuery = supabase
         .from('property_records')
         .select('*', { count: 'exact', head: true })
         .eq('job_id', selectedJob.id);
 
+      // Apply assignment filter if needed
+      if (hasAssignments) {
+        propertyCountQuery = propertyCountQuery.eq('is_assigned_property', true);
+        console.log('📋 Loading only assigned properties (has_property_assignments = true)');
+      } else {
+        console.log('📋 Loading all properties (no assignments)');
+      }
+
+      // Get count first
+      const { count, error: countError } = await propertyCountQuery;
       if (countError) throw countError;
 
       setPropertyRecordsCount(count || 0);
+      console.log(`📊 Total properties to load: ${count}`);
+
+      // Now load the actual properties with pagination
+      if (count && count > 0) {
+        const allProperties = [];
+        const pageSize = 1000;
+        const totalPages = Math.ceil(count / pageSize);
+
+        for (let page = 0; page < totalPages; page++) {
+          const start = page * pageSize;
+          const end = Math.min(start + pageSize - 1, count - 1);
+          
+          console.log(`📥 Loading batch ${page + 1}/${totalPages} (${start}-${end})...`);
+          
+          // Build the query again for actual data
+          let dataQuery = supabase
+            .from('property_records')
+            .select('*')
+            .eq('job_id', selectedJob.id)
+            .order('property_composite_key')
+            .range(start, end);
+
+          // Apply assignment filter if needed
+          if (hasAssignments) {
+            dataQuery = dataQuery.eq('is_assigned_property', true);
+          }
+
+          const { data, error } = await dataQuery;
+          
+          if (error) throw error;
+          
+          if (data) {
+            allProperties.push(...data);
+            const loaded = allProperties.length;
+            setLoadedCount(loaded);
+            setLoadingProgress(Math.round((loaded / count) * 100));
+          }
+          
+          // Small delay between batches to prevent overwhelming the server
+          if (page < totalPages - 1) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+        }
+
+        setProperties(allProperties);
+        console.log(`✅ Successfully loaded ${allProperties.length} properties`);
+      } else {
+        setProperties([]);
+      }
 
       // Prepare enriched job data with all the fetched info
       const enrichedJobData = {
@@ -104,11 +176,15 @@ const JobContainer = ({
         asOfDate: inspectionData?.upload_date || null,
         sourceFileDate: dataVersionData?.updated_at || null,
         end_date: jobData?.end_date || selectedJob.end_date,
-        workflow_stats: jobData?.workflow_stats || selectedJob.workflowStats || null
+        workflow_stats: jobData?.workflow_stats || selectedJob.workflowStats || null,
+
+        // ADD THESE TWO LINES:
+        parsed_code_definitions: jobData?.parsed_code_definitions || null,
+        vendor_type: jobData?.vendor_type || null,
+        has_property_assignments: hasAssignments
       };
       
       setJobData(enrichedJobData);
-
 
     } catch (error) {
       console.error('Error loading file versions:', error);
@@ -127,13 +203,17 @@ const JobContainer = ({
         workflow_stats: selectedJob.workflowStats || null
       };
       setJobData(fallbackJobData);
+      setProperties([]);
     } finally {
       setIsLoadingVersion(false);
+      setIsLoadingProperties(false);
+      setLoadingProgress(100);
     }
   };
 
   // Handle file upload completion - refresh version data
   const handleFileProcessed = async (fileType, fileName) => {
+    console.log(`📁 File processed: ${fileType} - ${fileName}`);
     
     // Refresh file version data when new files are uploaded
     await loadLatestFileVersions();
@@ -157,6 +237,7 @@ const JobContainer = ({
   const handleAnalyticsUpdate = (analyticsData) => {
     if (!onUpdateWorkflowStats || !selectedJob?.id) return;
 
+    console.log('📊 Updating workflow stats from ProductionTracker');
 
     // Transform ProductionTracker data to App.js format
     const transformedStats = {
@@ -182,7 +263,45 @@ const JobContainer = ({
 
     // 🔧 ENHANCED: Update App.js state with database persistence flag
     onUpdateWorkflowStats(transformedStats, true);
-    
+  };
+
+  // Determine which props to pass based on active module
+  const getModuleProps = () => {
+    const baseProps = {
+      jobData,
+      properties,  // NEW: Pass loaded properties
+      onBackToJobs,
+      activeSubModule: activeModule,
+      onSubModuleChange: setActiveModule,
+      latestFileVersion,
+      latestCodeVersion,
+      propertyRecordsCount,
+      onFileProcessed: handleFileProcessed
+    };
+
+    // 🔧 CRITICAL: Pass App.js state management to ProductionTracker
+    if (activeModule === 'production' && onUpdateWorkflowStats) {
+      return {
+        ...baseProps,
+        // Pass current workflow stats from App.js
+        currentWorkflowStats: workflowStats,
+        // Pass update function for analytics completion
+        onAnalyticsUpdate: handleAnalyticsUpdate,
+        // Direct access to App.js state updater if needed
+        onUpdateWorkflowStats
+      };
+    }
+
+    // 🔧 Future modules can get their specific props here
+    if (activeModule === 'checklist') {
+      return {
+        ...baseProps,
+        // ManagementChecklist could also update workflow stats
+        onUpdateWorkflowStats
+      };
+    }
+
+    return baseProps;
   };
 
   if (!selectedJob) {
@@ -238,145 +357,172 @@ const JobContainer = ({
   const activeModuleData = modules.find(m => m.id === activeModule);
   const ActiveComponent = activeModuleData?.component;
 
-  // 🔧 ENHANCED: Determine which props to pass based on active module
-  const getModuleProps = () => {
-    const baseProps = {
-      jobData,
-      onBackToJobs,
-      activeSubModule: activeModule,
-      onSubModuleChange: setActiveModule,
-      latestFileVersion,
-      latestCodeVersion,
-      propertyRecordsCount,
-      onFileProcessed: handleFileProcessed
-    };
-
-    // 🔧 CRITICAL: Pass App.js state management to ProductionTracker
-    if (activeModule === 'production' && onUpdateWorkflowStats) {
-      return {
-        ...baseProps,
-        // Pass current workflow stats from App.js
-        currentWorkflowStats: workflowStats,
-        // Pass update function for analytics completion
-        onAnalyticsUpdate: handleAnalyticsUpdate,
-        // Direct access to App.js state updater if needed
-        onUpdateWorkflowStats
-      };
-    }
-
-    // 🔧 Future modules can get their specific props here
-    if (activeModule === 'checklist') {
-      return {
-        ...baseProps,
-        // ManagementChecklist could also update workflow stats
-        onUpdateWorkflowStats
-      };
-    }
-
-    return baseProps;
-  };
-
   return (
-    <div className="max-w-6xl mx-auto p-6 bg-white">
-      {/* File Version Status Banner */}
-      {!isLoadingVersion && (
-        <div className={`mb-6 rounded-lg border p-4 ${
-          versionError 
-            ? 'bg-red-50 border-red-200' 
-            : 'bg-blue-50 border-blue-200'
-        }`}>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              {versionError ? (
-                <AlertCircle className="w-5 h-5 text-red-600 mr-2" />
+    <div className="bg-white">
+      {/* Enhanced File Version Status Banner with Progress Bar */}
+      <div className="max-w-6xl mx-auto p-6">
+        {/* IMPROVED: Clean loading banner with progress bar */}
+        {(isLoadingVersion || isLoadingProperties) && (
+          <div className="mb-6 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-lg font-semibold text-gray-800">
+                {isLoadingVersion ? 'Initializing job data...' : 'Loading property records'}
+              </h3>
+              {isLoadingVersion ? (
+                <div className="animate-spin rounded-full h-5 w-5 border-2 border-gray-300 border-t-blue-600"></div>
               ) : (
-                <Database className="w-5 h-5 text-blue-600 mr-2" />
+                <span className={`text-sm font-medium ${
+                  loadingProgress > 90 ? 'text-green-600' : 'text-blue-600'
+                }`}>
+                  {loadingProgress}%
+                </span>
               )}
-              <span className={`font-medium ${
-                versionError ? 'text-red-800' : 'text-blue-800'
-              }`}>
-                {versionError 
-                  ? 'Data Loading Error' 
-                  : `Current Data Version: ${latestFileVersion} | Current Code Version: ${latestCodeVersion}`
-                }
-              </span>
             </div>
-            {!versionError && (
-              <div className="text-sm text-blue-600">
-                <span>{propertyRecordsCount.toLocaleString()} properties available</span>
+            
+            {!isLoadingVersion && propertyRecordsCount > 0 && (
+              <>
+                {/* Progress bar */}
+                <div className="mb-3">
+                  <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                    <div 
+                      className={`h-full transition-all duration-300 ease-out rounded-full ${
+                        loadingProgress > 90 
+                          ? 'bg-gradient-to-r from-green-500 to-green-600' 
+                          : 'bg-gradient-to-r from-blue-500 to-blue-600'
+                      }`}
+                      style={{ width: `${loadingProgress}%` }}
+                    />
+                  </div>
+                </div>
+                
+                {/* Status text */}
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-600">
+                    <span className="font-semibold text-gray-800">
+                      {loadedCount.toLocaleString()}
+                    </span> of <span className="font-semibold text-gray-800">
+                      {propertyRecordsCount.toLocaleString()}
+                    </span> records loaded
+                    {jobData?.has_property_assignments && (
+                      <span className="ml-2 text-amber-600">(assigned only)</span>
+                    )}
+                  </span>
+                  {loadingProgress > 90 && (
+                    <span className="text-green-600 flex items-center">
+                      <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      Finalizing...
+                    </span>
+                  )}
+                </div>
+              </>
+            )}
+            
+            {isLoadingVersion && (
+              <div className="text-sm text-gray-500">
+                Connecting to database and fetching job information
               </div>
             )}
           </div>
-          {versionError && (
-            <div className="mt-2">
-              <p className="text-sm text-red-700">
-                {versionError}
-              </p>
-              <button
-                onClick={loadLatestFileVersions}
-                className="mt-2 text-sm text-red-600 hover:text-red-800 underline"
-              >
-                Retry Loading
-              </button>
+        )}
+
+        {/* Show version info banner AFTER loading */}
+        {!isLoadingVersion && !isLoadingProperties && (
+          <div className={`mb-6 rounded-lg border p-4 ${
+            versionError 
+              ? 'bg-red-50 border-red-200' 
+              : 'bg-blue-50 border-blue-200'
+          }`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                {versionError ? (
+                  <AlertCircle className="w-5 h-5 text-red-600 mr-2" />
+                ) : (
+                  <Database className="w-5 h-5 text-blue-600 mr-2" />
+                )}
+                <span className={`font-medium ${
+                  versionError ? 'text-red-800' : 'text-blue-800'
+                }`}>
+                  {versionError 
+                    ? 'Data Loading Error' 
+                    : `Current Data Version: ${latestFileVersion} | Current Code Version: ${latestCodeVersion}`
+                  }
+                </span>
+                {jobData?.has_property_assignments && (
+                  <span className="ml-3 px-2 py-1 bg-yellow-100 text-yellow-800 text-xs font-medium rounded">
+                    Assigned Properties Only
+                  </span>
+                )}
+              </div>
+              {!versionError && (
+                <div className="text-sm text-blue-600">
+                  <span>{propertyRecordsCount.toLocaleString()} properties available</span>
+                </div>
+              )}
             </div>
-          )}
-        </div>
-      )}
-
-      {/* Loading State */}
-      {isLoadingVersion && (
-        <div className="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
-          <div className="flex items-center">
-            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-3"></div>
-            <span className="text-gray-600">Loading latest data version...</span>
-          </div>
-        </div>
-      )}
-
-      {/* Module Navigation Tabs */}
-      <div className="mb-6">
-        <div className="border-b border-gray-200">
-          <nav className="-mb-px flex space-x-8">
-            {modules.map((module) => {
-              const IconComponent = module.icon;
-              const isActive = activeModule === module.id;
-              const isAvailable = module.component !== null;
-              
-              return (
+            
+            {versionError && (
+              <div className="mt-2">
+                <p className="text-sm text-red-700">
+                  {versionError}
+                </p>
                 <button
-                  key={module.id}
-                  onClick={() => isAvailable && setActiveModule(module.id)}
-                  disabled={!isAvailable || isLoadingVersion}
-                  className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center gap-2 transition-colors ${
-                    isActive
-                      ? 'border-blue-500 text-blue-600'
-                      : isAvailable && !isLoadingVersion
-                      ? 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                      : 'border-transparent text-gray-300 cursor-not-allowed'
-                  }`}
-                  title={!isAvailable ? 'Coming soon' : module.description}
+                  onClick={loadLatestFileVersions}
+                  className="mt-2 text-sm text-red-600 hover:text-red-800 underline"
                 >
-                  <IconComponent className="w-4 h-4" />
-                  {module.name}
-                  {!isAvailable && (
-                    <span className="text-xs bg-gray-200 text-gray-600 px-2 py-1 rounded-full ml-1">
-                      Soon
-                    </span>
-                  )}
-                  {/* 🔧 NEW: Show analytics indicator for ProductionTracker */}
-                  {module.id === 'production' && workflowStats?.isProcessed && (
-                    <span className="text-xs bg-green-500 text-white px-2 py-1 rounded-full ml-1">
-                      ✓
-                    </span>
-                  )}
+                  Retry Loading
                 </button>
-              );
-            })}
-          </nav>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Module Navigation Tabs */}
+        <div className="mb-6">
+          <div className="border-b border-gray-200">
+            <nav className="-mb-px flex space-x-8">
+              {modules.map((module) => {
+                const IconComponent = module.icon;
+                const isActive = activeModule === module.id;
+                const isAvailable = module.component !== null;
+                
+                return (
+                  <button
+                    key={module.id}
+                    onClick={() => isAvailable && setActiveModule(module.id)}
+                    disabled={!isAvailable || isLoadingVersion}
+                    className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center gap-2 transition-colors ${
+                      isActive
+                        ? 'border-blue-500 text-blue-600'
+                        : isAvailable && !isLoadingVersion
+                        ? 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                        : 'border-transparent text-gray-300 cursor-not-allowed'
+                    }`}
+                    title={!isAvailable ? 'Coming soon' : module.description}
+                  >
+                    <IconComponent className="w-4 h-4" />
+                    {module.name}
+                    {!isAvailable && (
+                      <span className="text-xs bg-gray-200 text-gray-600 px-2 py-1 rounded-full ml-1">
+                        Soon
+                      </span>
+                    )}
+                    {/* 🔧 NEW: Show analytics indicator for ProductionTracker */}
+                    {module.id === 'production' && workflowStats?.isProcessed && (
+                      <span className="text-xs bg-green-500 text-white px-2 py-1 rounded-full ml-1">
+                        ✓
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </nav>
+          </div>
         </div>
       </div>
 
-      {/* Active Module Content */}
+      {/* Active Module Content - Each module controls its own container */}
       <div className="min-h-96">
         {ActiveComponent && jobData ? (
           <ActiveComponent

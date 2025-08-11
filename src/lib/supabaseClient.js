@@ -3,7 +3,74 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = process.env.REACT_APP_SUPABASE_URL || 'https://zxvavttfvpsagzluqqwn.supabase.co';
 const supabaseKey = process.env.REACT_APP_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp4dmF2dHRmdnBzYWd6bHVxcXduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIzNDA4NjcsImV4cCI6MjA2NzkxNjg2N30.Rrn2pTnImCpBIoKPcdlzzZ9hMwnYtIO5s7i1ejwQReg';
 
-export const supabase = createClient(supabaseUrl, supabaseKey);
+// Enhanced Supabase client with custom fetch options for better timeout handling
+export const supabase = createClient(supabaseUrl, supabaseKey, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+  },
+  global: {
+    headers: {
+      'x-client-info': 'property-app'
+    },
+    // Custom fetch with timeout and retry logic
+    fetch: async (url, options = {}) => {
+      const timeout = options.timeout || 60000; // Default 60 seconds, can be overridden
+      const maxRetries = 3;
+      
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          // Create an AbortController for timeout
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), timeout);
+          
+          const response = await fetch(url, {
+            ...options,
+            signal: controller.signal
+          });
+          
+          clearTimeout(timeoutId);
+          
+          // If response is ok, return it
+          if (response.ok) {
+            return response;
+          }
+          
+          // If it's a server error (5xx), retry
+          if (response.status >= 500 && attempt < maxRetries) {
+            console.log(`🔄 Server error (${response.status}), retrying attempt ${attempt + 1}/${maxRetries}...`);
+            await new Promise(resolve => setTimeout(resolve, 1000 * attempt)); // Exponential backoff
+            continue;
+          }
+          
+          // For client errors (4xx), don't retry
+          return response;
+          
+        } catch (error) {
+          // If it's an abort error (timeout), retry if we have attempts left
+          if (error.name === 'AbortError' && attempt < maxRetries) {
+            console.log(`⏱️ Request timeout, retrying attempt ${attempt + 1}/${maxRetries}...`);
+            await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+            continue;
+          }
+          
+          // If it's a network error and we have retries left, try again
+          if (error.name === 'TypeError' && error.message === 'Failed to fetch' && attempt < maxRetries) {
+            console.log(`🌐 Network error, retrying attempt ${attempt + 1}/${maxRetries}...`);
+            await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+            continue;
+          }
+          
+          // If we're out of retries or it's a different error, throw it
+          if (attempt === maxRetries) {
+            console.error(`❌ Failed after ${maxRetries} attempts:`, error);
+          }
+          throw error;
+        }
+      }
+    }
+  }
+});
 
 // Define fields that must be preserved during file updates
 const PRESERVED_FIELDS = [
@@ -22,6 +89,571 @@ const PRESERVED_FIELDS = [
   'values_norm_size',       // Valuation adjustments
   'values_norm_time'        // Valuation adjustments
 ];
+
+// ===== CODE INTERPRETATION UTILITIES =====
+// Utilities for interpreting vendor-specific codes in MarketLandAnalysis
+export const interpretCodes = {
+  // Microsystems field to prefix mapping
+  microsystemsPrefixMap: {
+    'inspection_info_by': '140',
+    'asset_building_class': '345',
+    'asset_ext_cond': '490',
+    'asset_int_cond': '491',
+    'asset_type_use': '500',
+    'asset_stories': '510',
+    'asset_design_style': '520',
+    // Raw data fields
+    'topo': '115',
+    'road': '120',
+    'curbing': '125',
+    'sidewalk': '130',
+    'utilities': '135',
+    'zone_table': '205',
+    'vcs': '210',
+    'farmland_override': '212',
+    'land_adjustments': '220',
+    'renovation_impr': '235',
+    'bath_kitchen_dep': '245',
+    'functional_depr': '250',
+    'locational_depr': '260',
+    'item_adjustment': '346',
+    'exterior': '530',
+    'roof_type': '540',
+    'roof_material': '545',
+    'foundation': '550',
+    'interior_wall': '555',
+    'electric': '557',
+    'roof_pitch': '559',
+    'heat_source': '565',
+    'built_ins_590': '590',
+    'built_ins_591': '591',
+    'detached_items': '680'
+  },
+  // BRT section to field mapping
+  brtSectionMap: {
+    'asset_design_style': '23',
+    'asset_building_class': '20',
+    'asset_type_use': '21',
+    'asset_stories': '22',
+    'asset_ext_cond': '60',
+    'asset_int_cond': '60',  // Same section, different codes
+    'inspection_info_by': '53',
+    // Raw data fields
+    'roof_type': '24',
+    'roof_material': '25',
+    'exterior_finish': '26',
+    'foundation': '27',
+    'interior_finish': '28',
+    'floor_finish': '29',
+    'basement': '30',
+    'heat_source': '31',
+    'heat_system': '32',
+    'electric': '33',
+    'air_cond': '34',
+    'plumbing': '35',
+    'fireplace': '36',
+    'attic_dormer': '37',
+    'garages': '41',
+    'neighborhood': '50',
+    'view': '51',
+    'utilities': '52',
+    'road': '54',
+    'curbing': '55',
+    'sidewalk': '56',
+    'condition': '60',
+    'vcs': 'special'  // Handle VCS differently
+  },
+
+  // Get decoded value for Microsystems property field
+  getMicrosystemsValue: function(property, codeDefinitions, fieldName) {
+    if (!property || !codeDefinitions) return null;
+    
+    const prefix = this.microsystemsPrefixMap[fieldName];
+    if (!prefix) return null;
+    
+    // Get the code value from property (check both column and raw_data)
+    let code = property[fieldName];
+    if (!code && property.raw_data) {
+      code = property.raw_data[fieldName];
+    }
+    
+    if (!code || code.trim() === '') return null;
+    
+    // Build lookup key - Microsystems format: "PREFIX+CODE+SPACES+9999"
+    const paddedCode = code.padEnd(4);
+    const lookupKey = `${prefix}${paddedCode}9999`;
+    
+    // Return decoded value or original code if not found
+    return codeDefinitions[lookupKey] || code;
+  },
+    // ADD THIS: Core BRT lookup function
+  getBRTValue: function(property, codeDefinitions, fieldName, sectionNumber) {
+    if (!property || !codeDefinitions) return null;
+    
+    // Check both the property field and raw_data
+    let code = property[fieldName];
+    if (!code && property.raw_data) {
+      code = property.raw_data[fieldName];
+    }
+    
+    if (!code || code.trim() === '') return null;
+    
+    // Check if we have sections (BRT structure)
+    if (!codeDefinitions.sections || !codeDefinitions.sections[sectionNumber]) {
+      return code;
+    }
+    
+    const section = codeDefinitions.sections[sectionNumber];
+    const sectionMap = section.MAP || {};
+    
+    // Look through the MAP for matching code
+    for (const [key, value] of Object.entries(sectionMap)) {
+      if (value.KEY === code || value.DATA?.KEY === code) {
+        return value.DATA?.VALUE || value.VALUE || code;
+      }
+    }
+       
+    return code; // Return original if no match found
+  },
+
+  // REPLACE the existing getDesignName with this:
+  getDesignName: function(property, codeDefinitions, vendorType) {
+    if (!property || !codeDefinitions) return null;
+    
+    const designCode = property.asset_design_style;
+    if (!designCode || designCode.trim() === '') return null;
+    
+    if (vendorType === 'Microsystems') {
+      return this.getMicrosystemsValue(property, codeDefinitions, 'asset_design_style');
+    } else if (vendorType === 'BRT') {
+      return this.getBRTValue(property, codeDefinitions, 'asset_design_style', '23');
+    }
+    
+    return designCode;
+  },
+
+  // REPLACE the existing getTypeName with this:
+  getTypeName: function(property, codeDefinitions, vendorType) {
+    if (!property || !codeDefinitions) return null;
+    
+    const typeCode = property.asset_type_use;
+    if (!typeCode || typeCode.trim() === '') return null;
+    
+    if (vendorType === 'Microsystems') {
+      return this.getMicrosystemsValue(property, codeDefinitions, 'asset_type_use');
+    } else if (vendorType === 'BRT') {
+      return this.getBRTValue(property, codeDefinitions, 'asset_type_use', '21');
+    }
+    
+    return typeCode;
+  },
+
+  // Check if a field is empty (handles spaces, null, undefined)
+  isFieldEmpty: function(value) {
+    return !value || value.toString().trim() === '';
+  }, 
+ 
+// Fix getExteriorConditionName:
+getExteriorConditionName: function(property, codeDefinitions, vendorType) {
+  if (!property || !codeDefinitions) return null;
+  
+  const condCode = property.asset_ext_cond;
+  if (!condCode || condCode.trim() === '') return null;
+  
+  if (vendorType === 'Microsystems') {
+    return this.getMicrosystemsValue(property, codeDefinitions, 'asset_ext_cond');
+  } else if (vendorType === 'BRT') {
+    // ADD THE SECTION NUMBER HERE - need to find what section exterior condition is in
+    return this.getBRTValue(property, codeDefinitions, 'asset_ext_cond', '60'); 
+  }
+  
+  return condCode;
+},
+
+// Fix getInteriorConditionName:
+getInteriorConditionName: function(property, codeDefinitions, vendorType) {
+  if (!property || !codeDefinitions) return null;
+  
+  const condCode = property.asset_int_cond;
+  if (!condCode || condCode.trim() === '') return null;
+  
+  if (vendorType === 'Microsystems') {
+    return this.getMicrosystemsValue(property, codeDefinitions, 'asset_int_cond');
+  } else if (vendorType === 'BRT') {
+    // ADD THE SECTION NUMBER HERE - need to find what section interior condition is in
+    return this.getBRTValue(property, codeDefinitions, 'asset_int_cond', '60'); 
+  }
+  
+  return condCode;
+},
+  // Get raw data value with vendor awareness
+  getRawDataValue: function(property, fieldName, vendorType) {
+    if (!property || !property.raw_data) return null;
+    
+    const rawData = property.raw_data;
+    
+    // Handle vendor-specific field name differences
+    if (vendorType === 'BRT') {
+      const brtFieldMap = {
+        'bedrooms': 'BEDTOT',
+        'bathrooms': 'BATHTOT',
+        'stories': 'STORYHGT',
+        'year_built': 'YEARBUILT',
+        'building_class': 'BLDGCLASS',
+        'design': 'DESIGN',
+        'type_use': 'TYPEUSE',
+        'exterior_condition': 'EXTERIORNC',
+        'interior_condition': 'INTERIORNC',
+        'info_by': 'INFOBY'
+      };
+      const brtField = brtFieldMap[fieldName] || fieldName;
+      return rawData[brtField];
+    } else if (vendorType === 'Microsystems') {
+      const microFieldMap = {
+        'bedrooms': 'Total Bedrms',
+        'stories': 'Story Height',
+        'year_built': 'Year Built',
+        'building_class': 'Bldg Qual Class Code',
+        'design': 'Style Code',
+        'type_use': 'Type Use Code',
+        'condition': 'Condition',
+        'info_by': 'Information By'
+      };
+      const microField = microFieldMap[fieldName] || fieldName;
+      return rawData[microField];
+    }
+    
+    return rawData[fieldName];
+  },
+
+  // Get total lot size (aggregates multiple fields)
+  getTotalLotSize: function(property, vendorType) {
+    if (!property) return 0;
+    
+    // First check standard fields
+    let totalAcres = property.asset_lot_acre || 0;
+    let totalSf = property.asset_lot_sf || 0;
+    
+    // Convert SF to acres if we have SF but no acres
+    if (totalSf > 0 && totalAcres === 0) {
+      totalAcres = totalSf / 43560;
+    }
+    
+    // For BRT, also check LANDUR fields in raw_data
+    if (vendorType === 'BRT' && property.raw_data) {
+      for (let i = 1; i <= 6; i++) {
+        const landField = property.raw_data[`LANDUR_${i}`];
+        if (landField) {
+          const upperField = landField.toUpperCase();
+          const value = parseFloat(landField.replace(/[^0-9.]/g, ''));
+          
+          if (!isNaN(value)) {
+            if (upperField.includes('AC') || upperField.includes('ACRE')) {
+              totalAcres += value;
+            } else if (upperField.includes('SF') || upperField.includes('SITE')) {
+              totalSf += value;
+            }
+          }
+        }
+      }
+    }
+    
+    // Return total in acres
+    return totalAcres + (totalSf / 43560);
+  },
+// Get bathroom plumbing sum (BRT only)
+  getBathroomPlumbingSum: function(property, vendorType) {
+    if (!property || !property.raw_data || vendorType !== 'BRT') return 0;
+    
+    let sum = 0;
+    for (let i = 2; i <= 6; i++) {
+      sum += parseInt(property.raw_data[`PLUMBING${i}FIX`]) || 0;
+    }
+    return sum;
+  },
+
+  // Get bathroom fixture sum (Microsystems only - summary fields)
+  getBathroomFixtureSum: function(property, vendorType) {
+    if (!property || !property.raw_data || vendorType !== 'Microsystems') return 0;
+    
+    return (parseInt(property.raw_data['4 Fixture Bath']) || 0) +
+           (parseInt(property.raw_data['3 Fixture Bath']) || 0) +
+           (parseInt(property.raw_data['2 Fixture Bath']) || 0) +
+           (parseInt(property.raw_data['Num 5 Fixture Baths']) || 0);
+  },
+
+  // Get bathroom room sum (Microsystems only - floor-specific fields)
+  getBathroomRoomSum: function(property, vendorType) {
+    if (!property || !property.raw_data || vendorType !== 'Microsystems') return 0;
+    
+    let sum = 0;
+    const floorSuffixes = ['B', '1', '2', '3'];
+    const fixtureTypes = ['2 Fixture Bath', '3 Fixture Bath', '4 Fixture Bath'];
+    
+    for (const fixture of fixtureTypes) {
+      for (const floor of floorSuffixes) {
+        const fieldName = `${fixture} ${floor}`;
+        sum += parseInt(property.raw_data[fieldName]) || 0;
+      }
+    }
+    
+    // Add the summary 5-fixture field since there are no floor-specific ones
+    sum += parseInt(property.raw_data['Num 5 Fixture Baths']) || 0;
+    
+    return sum;
+  },
+
+  // Get bedroom room sum (Microsystems only)
+  getBedroomRoomSum: function(property, vendorType) {
+    if (!property || !property.raw_data || vendorType !== 'Microsystems') return 0;
+    
+    return (parseInt(property.raw_data['Bedrm B']) || 0) +
+           (parseInt(property.raw_data['Bedrm 1']) || 0) +
+           (parseInt(property.raw_data['Bedrm 2']) || 0) +
+           (parseInt(property.raw_data['Bedrm 3']) || 0);
+  },
+
+  // Get VCS (Valuation Control Sector) description - aka Neighborhood
+  getVCSDescription: function(property, codeDefinitions, vendorType) {
+    if (!property || !codeDefinitions) return null;
+    
+    // Get VCS code from property (check multiple possible fields)
+    let vcsCode = property.newVCS || property.new_vcs || property.vcs;
+    if (!vcsCode && property.raw_data) {
+      vcsCode = property.raw_data.vcs || 
+                property.raw_data.VCS || 
+                property.raw_data.NEIGHBORHOOD ||
+                property.raw_data.neighborhood;
+    }  
+    
+    if (!vcsCode || vcsCode.toString().trim() === '') return null;
+    
+    // Clean the VCS code
+    vcsCode = vcsCode.toString().trim();
+    
+    if (vendorType === 'Microsystems') {
+      // Microsystems: Direct lookup with 210 prefix
+      // The codes have format: 210XXXX9999 where XXXX is the VCS code
+      // We need to pad the code to 4 characters
+      const paddedCode = vcsCode.padEnd(4, ' ');
+      
+      // Try multiple lookup patterns (1000, 5000, 9999 suffixes)
+      const suffixes = ['9999', '5000', '1000'];
+      
+      for (const suffix of suffixes) {
+        const lookupKey = `210${paddedCode}${suffix}`;
+        if (codeDefinitions[lookupKey]) {
+          return codeDefinitions[lookupKey];
+        }
+      }
+      
+      // If no match found, return the original code
+      return vcsCode;
+      
+    } else if (vendorType === 'BRT') {
+      // BRT: Navigate the nested structure
+      // Structure: sections.VCS[number]["9"]["DATA"]["VALUE"]
+      
+      if (!codeDefinitions.sections || !codeDefinitions.sections.VCS) {
+        return vcsCode;
+      }
+      
+      const vcsSection = codeDefinitions.sections.VCS;
+      
+      // VCS code in BRT is typically the key number (1-55 in your example)
+      // Check if the code is a direct key in the VCS section
+      if (vcsSection[vcsCode]) {
+        // Navigate to the neighborhood value
+        const entry = vcsSection[vcsCode];
+        if (entry['9'] && entry['9']['DATA'] && entry['9']['DATA']['VALUE']) {
+          return entry['9']['DATA']['VALUE'];
+        }
+      }
+      
+      // If not found by direct key, search through all entries
+      for (const key in vcsSection) {
+        const entry = vcsSection[key];
+        // Check if this entry's KEY matches our VCS code
+        if (entry.KEY === vcsCode || entry.DATA?.KEY === vcsCode) {
+          if (entry['9'] && entry['9']['DATA'] && entry['9']['DATA']['VALUE']) {
+            return entry['9']['DATA']['VALUE'];
+          }
+        }
+      }
+      
+      // Return original code if no match found
+      return vcsCode;
+    }
+    
+    return vcsCode;
+  },
+  // Get all available VCS codes and descriptions for a job
+  getAllVCSCodes: function(codeDefinitions, vendorType) {
+    const vcsCodes = [];
+    
+    if (!codeDefinitions) return vcsCodes;
+    
+    if (vendorType === 'Microsystems') {
+      // Extract all 210-prefixed codes
+      for (const key in codeDefinitions) {
+        if (key.startsWith('210') && key.endsWith('9999')) {
+          // Extract the VCS code part (characters 3-7)
+          const vcsCode = key.substring(3, 7).trim();
+          const description = codeDefinitions[key];
+          
+          // Avoid duplicates
+          if (!vcsCodes.find(v => v.code === vcsCode)) {
+            vcsCodes.push({
+              code: vcsCode,
+              description: description
+            });
+          }
+        }
+      }
+      
+    } else if (vendorType === 'BRT') {
+      // Extract from nested VCS section
+      if (codeDefinitions.sections && codeDefinitions.sections.VCS) {
+        const vcsSection = codeDefinitions.sections.VCS;
+        
+        for (const key in vcsSection) {
+          const entry = vcsSection[key];
+          if (entry['9'] && entry['9']['DATA'] && entry['9']['DATA']['VALUE']) {
+            vcsCodes.push({
+              code: key,
+              description: entry['9']['DATA']['VALUE']
+            });
+          }
+        }
+      }
+    }
+    
+    // Sort by code
+    return vcsCodes.sort((a, b) => {
+      // Try numeric sort first
+      const numA = parseInt(a.code);
+      const numB = parseInt(b.code);
+      if (!isNaN(numA) && !isNaN(numB)) {
+        return numA - numB;
+      }
+      // Fall back to string sort
+      return a.code.localeCompare(b.code);
+    });
+  },
+
+  // ===== PACKAGE SALE AGGREGATOR =====
+  getPackageSaleData: function(properties, targetProperty) {
+    // Check if we have the required fields for package sale detection
+    if (!targetProperty?.sales_date || !targetProperty?.sales_book || !targetProperty?.sales_page) {
+      return null;
+    }
+    
+    // Find all properties in the same package (same date, book, and page)
+    const packageProperties = properties.filter(p => 
+      p.sales_date === targetProperty.sales_date &&
+      p.sales_book === targetProperty.sales_book &&
+      p.sales_page === targetProperty.sales_page
+    );
+    
+    // If only one property, it's not a package sale
+    if (packageProperties.length <= 1) {
+      return null;
+    }
+    
+    // Check if any properties have "Keep Both" decisions in sales_history
+    const hasKeepBothHistory = packageProperties.some(p => 
+      p.sales_history?.sales_decision?.decision_type === 'Keep Both'
+    );
+    
+    // Sort by building class to find primary property (lowest class number)
+    const sortedByClass = [...packageProperties].sort((a, b) => {
+      const classA = parseInt(a.asset_building_class) || 999;
+      const classB = parseInt(b.asset_building_class) || 999;
+      return classA - classB;
+    });
+    
+    const primary = sortedByClass[0];
+    
+    // Calculate combined lot size (sum of sf and acres converted)
+    const combinedLotSF = packageProperties.reduce((sum, p) => {
+      const sf = parseFloat(p.asset_lot_sf) || 0;
+      const acres = parseFloat(p.asset_lot_acre) || 0;
+      return sum + sf + (acres * 43560); // Convert acres to SF
+    }, 0);
+    
+    // Calculate combined assessed value
+    const combinedAssessed = packageProperties.reduce((sum, p) => {
+      const assessed = parseFloat(p.values_mod_total) || 0;
+      return sum + assessed;
+    }, 0);
+    
+    // Get unique property classes
+    const propertyClasses = [...new Set(packageProperties.map(p => p.asset_building_class))];
+    
+    // Check for specific class types
+    const hasVacant = packageProperties.some(p => 
+      p.asset_building_class === '1' || p.asset_building_class === '3B'
+    );
+    
+    const hasFarmland = packageProperties.some(p => 
+      p.asset_building_class === '3B'
+    );
+    
+    const hasResidential = packageProperties.some(p => {
+      const propClass = p.asset_building_class;
+      return propClass === '2' || propClass === '3A';
+    });
+    
+    const hasCommercial = packageProperties.some(p => {
+      const propClass = p.asset_building_class;
+      return propClass === '4A' || propClass === '4B' || propClass === '4C';
+    });
+    
+    // Create package ID for grouping
+    const packageId = `${targetProperty.sales_book}-${targetProperty.sales_page}-${targetProperty.sales_date}`;
+    
+    // Check for previous individual sales (from Keep Both decisions in sales_history)
+    const previousIndividualSales = packageProperties
+      .filter(p => p.sales_history?.sales_decision?.old_price)
+      .map(p => ({
+        composite_key: p.property_composite_key,
+        old_price: p.sales_history.sales_decision.old_price,
+        old_date: p.sales_history.sales_decision.old_date,
+        package_discount: p.sales_history.sales_decision.old_price - (p.sales_price / packageProperties.length)
+      }));
+    
+    return {
+      is_package_sale: true,
+      package_count: packageProperties.length,
+      package_id: packageId,
+      combined_lot_sf: combinedLotSF,
+      combined_lot_acres: combinedLotSF / 43560,
+      combined_assessed: combinedAssessed,
+      primary_type_use: primary.asset_type_use,
+      primary_building_class: primary.asset_building_class,
+      property_classes: propertyClasses,
+      has_vacant: hasVacant,
+      has_farmland: hasFarmland,
+      has_residential: hasResidential,
+      has_commercial: hasCommercial,
+      has_keep_both_history: hasKeepBothHistory,
+      sale_price: parseFloat(targetProperty.sales_price), // Use original, not multiplied
+      sales_nu: targetProperty.sales_nu,
+      previous_individual_sales: previousIndividualSales,
+      package_properties: packageProperties.map(p => ({
+        composite_key: p.property_composite_key,
+        building_class: p.asset_building_class,
+        lot_sf: p.asset_lot_sf,
+        lot_acre: p.asset_lot_acre,
+        assessed_value: p.values_mod_total,
+        has_sales_history: !!p.sales_history,
+        location: p.property_location,
+        block: p.property_block,
+        lot: p.property_lot
+      }))
+    };
+  }
+};  
 
 // ===== EMPLOYEE MANAGEMENT SERVICES =====
 export const employeeService = {
@@ -1572,6 +2204,151 @@ export const authHelpers = {
       console.error('Error updating has_account:', error);
       return { success: false, error };
     }
+  }
+};
+
+// ===== WORKSHEET SERVICE FOR PRE-VALUATION SETUP =====
+export const worksheetService = {
+  // Initialize or get existing market_land_valuation record
+  async initializeMarketLandRecord(jobId) {
+    const { data, error } = await supabase
+      .from('market_land_valuation')
+      .select('*')
+      .eq('job_id', jobId)
+      .single();
+    
+    if (error && error.code === 'PGRST116') {
+      // Record doesn't exist, create it
+      const { data: newRecord, error: createError } = await supabase
+        .from('market_land_valuation')
+        .insert({
+          job_id: jobId,
+          normalization_config: {},
+          time_normalized_sales: [],
+          normalization_stats: {},
+          worksheet_data: {},
+          worksheet_stats: {
+            last_saved: new Date().toISOString(),
+            entries_completed: 0,
+            ready_to_process: 0,
+            location_variations: {}
+          }
+        })
+        .select()
+        .single();
+      
+      if (createError) throw createError;
+      return newRecord;
+    }
+    
+    if (error) throw error;
+    return data;
+  },
+
+  // Save normalization configuration
+  async saveNormalizationConfig(jobId, config) {
+    await this.initializeMarketLandRecord(jobId);
+    
+    const { error } = await supabase
+      .from('market_land_valuation')
+      .update({
+        normalization_config: config,
+        updated_at: new Date().toISOString()
+      })
+      .eq('job_id', jobId);
+    
+    if (error) throw error;
+  },
+
+  // Save time normalized sales results
+  async saveTimeNormalizedSales(jobId, sales, stats) {
+    const { error } = await supabase
+      .from('market_land_valuation')
+      .update({
+        time_normalized_sales: sales,
+        normalization_stats: stats,
+        last_normalization_run: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('job_id', jobId);
+    
+    if (error) throw error;
+  },
+
+  // Load saved normalization data
+  async loadNormalizationData(jobId) {
+    const { data, error } = await supabase
+      .from('market_land_valuation')
+      .select('normalization_config, time_normalized_sales, normalization_stats, last_normalization_run')
+      .eq('job_id', jobId)
+      .single();
+    
+    if (error && error.code === 'PGRST116') {
+      // No record exists yet
+      return null;
+    }
+    
+    if (error) throw error;
+    return data;
+  },
+
+  // Save worksheet stats
+  async saveWorksheetStats(jobId, stats) {
+    const { error } = await supabase
+      .from('market_land_valuation')
+      .update({
+        worksheet_stats: stats,
+        last_worksheet_save: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('job_id', jobId);
+    
+    if (error) throw error;
+  },
+
+  // Save worksheet data changes
+  async saveWorksheetData(jobId, worksheetData) {
+    const { error } = await supabase
+      .from('market_land_valuation')
+      .update({
+        worksheet_data: worksheetData,
+        last_worksheet_save: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('job_id', jobId);
+    
+    if (error) throw error;
+  },
+
+  // Load saved worksheet data
+  async loadWorksheetData(jobId) {
+    const { data, error } = await supabase
+      .from('market_land_valuation')
+      .select('worksheet_data, worksheet_stats, last_worksheet_save')
+      .eq('job_id', jobId)
+      .single();
+    
+    if (error && error.code === 'PGRST116') {
+      // No record exists yet
+      return null;
+    }
+    
+    if (error) throw error;
+    return data;
+  },
+
+  // Update location standards
+  async updateLocationStandards(jobId, locationVariations) {
+    const { error } = await supabase
+      .from('market_land_valuation')
+      .update({
+        worksheet_stats: {
+          location_variations: locationVariations
+        }
+      })
+      .eq('job_id', jobId);
+    
+    if (error) throw error;
   }
 };
 

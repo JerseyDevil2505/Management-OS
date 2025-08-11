@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Factory, Settings, Download, RefreshCw, AlertTriangle, CheckCircle, TrendingUp, DollarSign, Users, Calendar, X, ChevronDown, ChevronUp, Eye, FileText, Lock, Unlock, Save } from 'lucide-react';
 import { supabase, jobService } from '../../lib/supabaseClient';
+import * as XLSX from 'xlsx';
 
 const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyRecordsCount, onUpdateWorkflowStats, currentWorkflowStats }) => {
   const [loading, setLoading] = useState(true);
@@ -1315,8 +1316,12 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         const externalInspectors = externalInspectorsList.split(',').map(code => code.trim()).filter(code => code);
         const isExternalInspector = externalInspectors.includes(inspector);
         
+        // Special case: "PO" (Per Office) is valid for refusals
+        const isPORefusal = inspector === 'PO' && 
+                           (infoByCategoryConfig.refusal || []).includes(actualVendor === 'BRT' ? normalizedInfoBy || infoByCode : infoByCode);
+        
         // Skip inspectors with invalid initials (not in employee database)
-        if (!employeeData[inspector] && !isExternalInspector) {
+        if (!employeeData[inspector] && !isExternalInspector && !isPORefusal) {
           reasonNotAdded = `Inspector ${inspector} not found in employee database`;
           missingProperties.push({
             composite_key: propertyKey,
@@ -1344,6 +1349,14 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
               name: `${inspector} (External)`,
               fullName: `${inspector} (External Inspector)`,
               inspector_type: 'external'
+            };
+          }
+          // Handle "PO" (Per Office) refusals
+          else if (inspector === 'PO' && isPORefusal) {
+            employeeInfo = {
+              name: 'Per Office',
+              fullName: 'Per Office Refusal',
+              inspector_type: 'special'
             };
           }
           inspectorStats[inspector] = {
@@ -2205,76 +2218,177 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
     }
   };
 
-  const exportValidationReport = () => {
+const exportValidationReport = () => {
     if (!validationReport || !validationReport.detailed_issues) return;
 
-    let csvContent = "Inspector,Total Issues,Inspector Name\n";
-    
-    validationReport.summary.inspector_breakdown.forEach(inspector => {
-      csvContent += `"${inspector.inspector_code}","${inspector.total_issues}","${inspector.inspector_name}"\n`;
-    });
+    // Create a new workbook
+    const wb = XLSX.utils.book_new();
 
-    csvContent += "\n\nDetailed Issues:\n";
-    csvContent += "Inspector,Block,Lot,Qualifier,Card,Property Location,Warning Message\n";
-    
-    Object.keys(validationReport.detailed_issues).forEach(inspector => {
-      const issues = validationReport.detailed_issues[inspector];
-      issues.forEach(issue => {
-        csvContent += `"${inspector}","${issue.block}","${issue.lot}","${issue.qualifier}","${issue.card}","${issue.property_location}","${issue.warning_message}"\n`;
+    // Sheet 1: Summary
+    const summaryData = [
+      ['VALIDATION REPORT'],
+      [`Job: ${jobData.name || jobData.ccdd}`],
+      [`Generated: ${new Date().toLocaleDateString()}`],
+      [`Total Issues: ${validationReport.summary.total_issues}`],
+      [],
+      ['Inspector Code', 'Inspector Name', 'Total Issues']
+    ];
+
+    validationReport.summary.inspector_breakdown
+      .sort((a, b) => b.total_issues - a.total_issues)
+      .forEach(inspector => {
+        summaryData.push([
+          inspector.inspector_code,
+          inspector.inspector_name,
+          inspector.total_issues
+        ]);
       });
-    });
 
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Inspection_Validation_Report_${jobData.ccdd || jobData.ccddCode}_${new Date().toISOString().split('T')[0].replace(/-/g, '')}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
+    summaryData.push([]);
+    summaryData.push(['STATISTICS']);
+    summaryData.push(['Total Validation Issues', validationReport.summary.total_issues]);
+    summaryData.push(['Total Inspectors with Issues', validationReport.summary.total_inspectors]);
+    summaryData.push(['Manager Overrides Applied', validationOverrides.length]);
 
-    addNotification('📊 Validation report exported', 'success');
+    const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+    XLSX.utils.book_append_sheet(wb, summarySheet, 'Summary');
+
+    // Create a sheet for each inspector
+    Object.keys(validationReport.detailed_issues)
+      .sort((a, b) => validationReport.detailed_issues[b].length - validationReport.detailed_issues[a].length)
+      .forEach(inspector => {
+        const issues = validationReport.detailed_issues[inspector];
+        const inspectorInfo = validationReport.summary.inspector_breakdown.find(i => i.inspector_code === inspector);
+        
+        const inspectorData = [
+          [`Inspector: ${inspector}`],
+          [`Name: ${inspectorInfo?.inspector_name || 'Unknown'}`],
+          [`Total Issues: ${issues.length}`],
+          [],
+          ['Block', 'Lot', 'Qualifier', 'Card', 'Property Location', 'Issues', 'Override Status']
+        ];
+
+        issues.forEach(issue => {
+          const propertyKey = issue.composite_key || `${issue.block}-${issue.lot}-${issue.qualifier || ''}`;
+          const isOverridden = overrideMap && overrideMap[propertyKey]?.override_applied;
+          const overrideStatus = isOverridden ? `Overridden: ${overrideMap[propertyKey]?.override_reason}` : 'Not Overridden';
+          
+          inspectorData.push([
+            issue.block,
+            issue.lot,
+            issue.qualifier || '',
+            issue.card || '1',
+            issue.property_location || '',
+            issue.warning_message,
+            overrideStatus
+          ]);
+        });
+
+        const inspectorSheet = XLSX.utils.aoa_to_sheet(inspectorData);
+        // Truncate sheet name if too long (Excel limit is 31 characters)
+        const sheetName = inspector.length > 31 ? inspector.substring(0, 31) : inspector;
+        XLSX.utils.book_append_sheet(wb, inspectorSheet, sheetName);
+      });
+
+    // Write the file
+    XLSX.writeFile(wb, `Validation_Report_${jobData.ccdd || jobData.ccddCode}_${new Date().toISOString().split('T')[0].replace(/-/g, '')}.xlsx`);
+
+    addNotification('📊 Validation report exported with inspector tabs', 'success');
   };
-
-  const exportMissingPropertiesReport = () => {
+const exportMissingPropertiesReport = () => {
     if (!missingPropertiesReport || !missingPropertiesReport.detailed_missing) return;
 
-    let csvContent = "Summary\n";
-    csvContent += `Total Missing Properties,${missingPropertiesReport.summary.total_missing}\n`;
-    csvContent += `Uninspected Count,${missingPropertiesReport.summary.uninspected_count}\n`;
-    csvContent += `Validation Failed Count,${missingPropertiesReport.summary.validation_failed_count}\n\n`;
+    // Create a new workbook
+    const wb = XLSX.utils.book_new();
 
-    csvContent += "Breakdown by Reason\n";
-    csvContent += "Reason,Count\n";
-    Object.entries(missingPropertiesReport.summary.by_reason).forEach(([reason, count]) => {
-      csvContent += `"${reason}","${count}"\n`;
-    });
+    // Sheet 1: Summary
+    const summaryData = [
+      ['MISSING PROPERTIES REPORT'],
+      [`Job: ${jobData.name || jobData.ccdd}`],
+      [`Generated: ${new Date().toLocaleDateString()}`],
+      [],
+      ['OVERVIEW'],
+      ['Total Missing Properties', missingPropertiesReport.summary.total_missing],
+      ['Not Yet Inspected', missingPropertiesReport.summary.not_yet_inspected],
+      ['Old Inspections (Before Project Start)', missingPropertiesReport.summary.old_inspections],
+      ['Validation Failed', missingPropertiesReport.summary.validation_failed_count || 0],
+      ['Missing Inspector', missingPropertiesReport.summary.missing_inspector || 0],
+      ['Invalid Employee', missingPropertiesReport.summary.invalid_employee || 0]
+    ];
 
-    csvContent += "\nBreakdown by Inspector\n";
-    csvContent += "Inspector,Count\n";
-    Object.entries(missingPropertiesReport.summary.by_inspector).forEach(([inspector, count]) => {
-      csvContent += `"${inspector}","${count}"\n`;
-    });
+    const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+    XLSX.utils.book_append_sheet(wb, summarySheet, 'Summary');
 
-    csvContent += "\nDetailed Missing Properties\n";
-    csvContent += "Block,Lot,Qualifier,Card,Property Location,Class,Inspector,InfoBy Code,Measure Date,Reason\n";
-    
-    missingPropertiesReport.detailed_missing.forEach(property => {
-      csvContent += `"${property.block}","${property.lot}","${property.qualifier}","${property.card || '1'}","${property.property_location}","${property.property_class}","${property.inspector}","${property.info_by_code || ''}","${property.measure_date || ''}","${property.reason}"\n`;
-    });
+    // Sheet 2: By Reason
+    const reasonData = [
+      ['BREAKDOWN BY REASON'],
+      [],
+      ['Reason', 'Count']
+    ];
 
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Missing_Properties_Report_${jobData.ccdd || jobData.ccddCode}_${new Date().toISOString().split('T')[0].replace(/-/g, '')}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
+    Object.entries(missingPropertiesReport.summary.by_reason)
+      .sort((a, b) => b[1] - a[1])
+      .forEach(([reason, count]) => {
+        reasonData.push([reason, count]);
+      });
 
-    addNotification('📊 Missing properties report exported', 'success');
+    const reasonSheet = XLSX.utils.aoa_to_sheet(reasonData);
+    XLSX.utils.book_append_sheet(wb, reasonSheet, 'By Reason');
+
+    // Sheet 3: By Inspector
+    const inspectorData = [
+      ['BREAKDOWN BY INSPECTOR'],
+      [],
+      ['Inspector', 'Count']
+    ];
+
+    Object.entries(missingPropertiesReport.summary.by_inspector)
+      .sort((a, b) => b[1] - a[1])
+      .forEach(([inspector, count]) => {
+        inspectorData.push([inspector || 'None', count]);
+      });
+
+    const inspectorSheet = XLSX.utils.aoa_to_sheet(inspectorData);
+    XLSX.utils.book_append_sheet(wb, inspectorSheet, 'By Inspector');
+
+    // Sheet 4: Detailed Missing Properties (Most important for managers)
+    const detailedData = [
+      ['DETAILED MISSING PROPERTIES'],
+      ['*** This list is for distribution to field inspectors ***'],
+      [],
+      ['Block', 'Lot', 'Qualifier', 'Card', 'Property Location', 'Class', 'Inspector', 'InfoBy Code', 'Measure Date', 'Reason']
+    ];
+
+    missingPropertiesReport.detailed_missing
+      .sort((a, b) => {
+        // Sort by block, then lot for easier field navigation
+        if (a.block !== b.block) {
+          return parseInt(a.block) - parseInt(b.block) || a.block.localeCompare(b.block);
+        }
+        return parseInt(a.lot) - parseInt(b.lot) || a.lot.localeCompare(b.lot);
+      })
+      .forEach(property => {
+        detailedData.push([
+          property.block,
+          property.lot,
+          property.qualifier || '',
+          property.card || '1',
+          property.property_location || '',
+          property.property_class || '',
+          property.inspector || '',
+          property.info_by_code || '',
+          property.measure_date || '',
+          property.reason
+        ]);
+      });
+
+    const detailedSheet = XLSX.utils.aoa_to_sheet(detailedData);
+    XLSX.utils.book_append_sheet(wb, detailedSheet, 'Detailed Missing');
+
+    // Write the file
+    XLSX.writeFile(wb, `Missing_Properties_Report_${jobData.ccdd || jobData.ccddCode}_${new Date().toISOString().split('T')[0].replace(/-/g, '')}.xlsx`);
+
+    addNotification('📊 Missing properties report exported with multiple sheets', 'success');
   };
 
   // Progress bar component
@@ -2535,8 +2649,18 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
             <div className="bg-white p-4 rounded-lg border shadow-sm">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-gray-600">Total Properties</p>
-                  <p className="text-2xl font-bold text-blue-600">{propertyRecordsCount?.toLocaleString() || analytics.totalRecords.toLocaleString()}</p>
+                  <p className="text-sm text-gray-600">
+                    Total Properties
+                    {jobData.has_property_assignments && (
+                      <span className="ml-1 text-xs text-purple-600">(Assigned)</span>
+                    )}
+                  </p>
+                  <p className="text-2xl font-bold text-blue-600">
+                    {jobData.has_property_assignments 
+                      ? (jobData.assignedPropertyCount?.toLocaleString() || '0')
+                      : (propertyRecordsCount?.toLocaleString() || analytics.totalRecords.toLocaleString())
+                    }
+                  </p>
                 </div>
                 <TrendingUp className="w-8 h-8 text-blue-500" />
               </div>
