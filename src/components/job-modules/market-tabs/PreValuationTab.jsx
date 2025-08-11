@@ -356,7 +356,15 @@ const runTimeNormalization = useCallback(async () => {
         const hpiMultiplier = getHPIMultiplier(saleYear, normalizeToYear);
         const timeNormalizedPrice = Math.round(prop.sales_price * hpiMultiplier);
         
-        // ... your existing calculation logic ...
+        // Calculate sales ratio
+        const assessedValue = prop.values_mod_total || 0;
+        const salesRatio = assessedValue > 0 && timeNormalizedPrice > 0 
+          ? assessedValue / timeNormalizedPrice 
+          : 0;
+        
+        // Determine if outlier based on equalization ratio
+        const isOutlier = equalizationRatio && outlierThreshold ? 
+          Math.abs((salesRatio * 100) - equalizationRatio) > outlierThreshold : false;
         
         // Check if we have an existing decision for this property
         const existingDecision = existingDecisions[prop.id];
@@ -373,6 +381,19 @@ const runTimeNormalization = useCallback(async () => {
       });
 
       setTimeNormalizedSales(normalized);
+      
+      // Calculate excluded count (properties that didn't meet criteria)
+      const excludedCount = properties.filter(p => {
+        if (!p.sales_price || p.sales_price <= minSalePrice) return true;
+        if (!p.sales_date) return true;
+        const saleYear = new Date(p.sales_date).getFullYear();
+        if (saleYear < salesFromYear) return true;
+        return false;
+      }).length;
+      
+      // Calculate average ratio
+      const totalRatio = normalized.reduce((sum, s) => sum + (s.sales_ratio || 0), 0);
+      const avgRatio = normalized.length > 0 ? totalRatio / normalized.length : 0;
       
       // Calculate stats including preserved decisions
       const newStats = {
