@@ -545,13 +545,7 @@ const saveSizeNormalizedValues = async (sales) => {
       console.log(`✅ Saved size normalization batch ${Math.floor(i/500) + 1} of ${Math.ceil(salesToUpdate.length/500)}`);
     }
   };
-  const saveBatchDecisions = async () => {
-    try {
-      const keeps = timeNormalizedSales.filter(s => s.keep_reject === 'keep');
-      const rejects = timeNormalizedSales.filter(s => s.keep_reject === 'reject');
-      
-      console.log(`💾 Saving ${keeps.length} keeps and ${rejects.length} rejects...`);
-      
+     
 const saveBatchDecisions = async () => {
     try {
       const keeps = timeNormalizedSales.filter(s => s.keep_reject === 'keep');
@@ -591,7 +585,19 @@ const saveBatchDecisions = async () => {
             .update({ values_norm_time: null })
             .in('id', rejectIds);
           
-          console.log(`✅ Cleared bat
+          console.log(`✅ Cleared batch ${Math.floor(i/500) + 1} of ${Math.ceil(rejects.length/500)}`);
+        }
+      }
+      
+      // Save the entire state to market_land_valuation for persistence
+      await worksheetService.saveTimeNormalizedSales(jobData.id, timeNormalizedSales, normalizationStats);
+      
+      alert(`✅ Successfully saved ${keeps.length} keeps and ${rejects.length} rejects`);
+    } catch (error) {
+      console.error('❌ Error saving batch decisions:', error);
+      alert('Error saving decisions. Please check the console and try again.');
+    }
+  };
 
   // ==================== WORKSHEET FUNCTIONS ====================
   
