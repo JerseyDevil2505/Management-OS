@@ -470,12 +470,12 @@ const runTimeNormalization = useCallback(async () => {
         if (groupSales.length === 0) return;
         
         // Calculate average LIVING size for the group
-        const totalSize = groupSales.reduce((sum, s) => sum + (s.asset_living_sf || 0), 0);
+        const totalSize = groupSales.reduce((sum, s) => sum + (s.asset_sfla || 0), 0);
         const avgSize = totalSize / groupSales.length;
         
         // Apply 50% method to each sale
         groupSales.forEach(sale => {
-          const currentSize = sale.asset_living_sf || 0;
+          const currentSize = sale.asset_sfla || 0;
           
           // Skip if no living size data
           if (currentSize <= 0) {
