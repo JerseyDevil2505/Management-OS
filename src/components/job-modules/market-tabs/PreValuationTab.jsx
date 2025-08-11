@@ -465,13 +465,13 @@ const runTimeNormalization = useCallback(async () => {
       Object.entries(groups).forEach(([groupName, groupSales]) => {
         if (groupSales.length === 0) return;
         
-        // Calculate average size for the group
-        const totalSize = groupSales.reduce((sum, s) => sum + (s.asset_lot_sf || 0), 0);
+        // Calculate average LIVING size for the group
+        const totalSize = groupSales.reduce((sum, s) => sum + (s.asset_living_sf || 0), 0);
         const avgSize = totalSize / groupSales.length;
         
         // Apply 50% method to each sale
         groupSales.forEach(sale => {
-          const currentSize = sale.asset_lot_sf || 0;
+          const currentSize = sale.asset_living_sf || 0;
           const sizeDiff = avgSize - currentSize;
           const pricePerSf = sale.time_normalized_price / currentSize;
           const adjustment = sizeDiff * pricePerSf * 0.5;
