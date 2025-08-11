@@ -59,6 +59,8 @@ const PreValuationTab = ({ jobData, properties }) => {
   const [worksheetFilter, setWorksheetFilter] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(50);
+  const [normCurrentPage, setNormCurrentPage] = useState(1);
+  const [normItemsPerPage] = useState(100);
   const [unsavedChanges, setUnsavedChanges] = useState(false);
   const [lastAutoSave, setLastAutoSave] = useState(null);
   const [readyProperties, setReadyProperties] = useState(new Set());
@@ -1257,7 +1259,7 @@ const analyzeImportFile = async (file) => {
                           if (salesReviewFilter === 'type-6') return sale.asset_type_use?.toString().trim().startsWith('6');
                           return true;
                         })
-                        .slice(0, 50)
+                        .slice((normCurrentPage - 1) * normItemsPerPage, normCurrentPage * normItemsPerPage)
                         .map((sale) => {
                           const parsed = parseCompositeKey(sale.property_composite_key);
                           return (
@@ -1349,7 +1351,46 @@ const analyzeImportFile = async (file) => {
                         })}
                     </tbody>
                   </table>
-                </div>
+</div>
+
+                {/* Pagination Controls */}
+                {(() => {
+                  const filteredSales = timeNormalizedSales.filter(sale => {
+                    if (salesReviewFilter === 'all') return true;
+                    if (salesReviewFilter === 'flagged') return sale.is_outlier;
+                    if (salesReviewFilter === 'pending') return sale.keep_reject === 'pending';
+                    if (salesReviewFilter.startsWith('type-')) {
+                      const typeNum = salesReviewFilter.split('-')[1];
+                      return sale.asset_type_use?.toString().trim().startsWith(typeNum);
+                    }
+                    return true;
+                  });
+                  const totalNormPages = Math.ceil(filteredSales.length / normItemsPerPage);
+                  
+                  return totalNormPages > 1 && (
+                    <div className="flex justify-between items-center mt-4">
+                      <div className="text-sm text-gray-600">
+                        Page {normCurrentPage} of {totalNormPages} ({filteredSales.length} sales)
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setNormCurrentPage(Math.max(1, normCurrentPage - 1))}
+                          disabled={normCurrentPage === 1}
+                          className="px-3 py-1 border border-gray-300 rounded disabled:opacity-50"
+                        >
+                          <ChevronLeft size={16} />
+                        </button>
+                        <button
+                          onClick={() => setNormCurrentPage(Math.min(totalNormPages, normCurrentPage + 1))}
+                          disabled={normCurrentPage === totalNormPages}
+                          className="px-3 py-1 border border-gray-300 rounded disabled:opacity-50"
+                        >
+                          <ChevronRight size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 <div className="mt-4 p-4 bg-blue-50 rounded">
                   <p className="text-sm">
