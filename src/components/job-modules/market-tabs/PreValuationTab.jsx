@@ -2091,10 +2091,6 @@ const analyzeImportFile = async (file) => {
                    // Apply matched updates
                    const allUpdates = [...(importPreview.matched || []), ...(importPreview.fuzzyMatched || [])];
                    
-                try {
-                   // Apply matched updates
-                   const allUpdates = [...(importPreview.matched || []), ...(importPreview.fuzzyMatched || [])];
-                   
                    // Batch update to database
                    const batchSize = 50;
                    for (let i = 0; i < allUpdates.length; i += batchSize) {
