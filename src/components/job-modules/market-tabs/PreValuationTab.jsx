@@ -2082,7 +2082,7 @@ const analyzeImportFile = async (file) => {
              >
                Cancel
              </button>
-<button
+              <button
                onClick={async () => {
                  // Process the import - actually apply the updates
                  console.log('Processing import with options:', importOptions);
@@ -2091,7 +2091,7 @@ const analyzeImportFile = async (file) => {
                    // Apply matched updates
                    const allUpdates = [...(importPreview.matched || []), ...(importPreview.fuzzyMatched || [])];
                    
-try {
+                try {
                    // Apply matched updates
                    const allUpdates = [...(importPreview.matched || []), ...(importPreview.fuzzyMatched || [])];
                    
