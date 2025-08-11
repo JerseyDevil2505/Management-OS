@@ -652,6 +652,116 @@ getInteriorConditionName: function(property, codeDefinitions, vendorType) {
         lot: p.property_lot
       }))
     };
+  },
+    // ===== DEPTH FACTOR INTERPRETERS =====
+  // Get depth factors from parsed code definitions
+  getDepthFactors: function(codeDefinitions, vendorType) {
+    if (!codeDefinitions) return null;
+    
+    if (vendorType === 'BRT') {
+      // BRT stores depth factors in the "Depth" section
+      const depthSection = codeDefinitions.sections?.['Depth'];
+      if (!depthSection) return null;
+      
+      // Extract all depth tables
+      const depthTables = {};
+      
+      Object.keys(depthSection).forEach(tableKey => {
+        const table = depthSection[tableKey];
+        if (table.DATA?.VALUE && table.MAP) {
+          // Table name like "100FT Table", "125FT Table"
+          const tableName = table.DATA.VALUE;
+          const factors = {};
+          
+          // Extract depth factors from the MAP
+          Object.values(table.MAP).forEach(entry => {
+            const depth = parseInt(entry.KEY);
+            const factor = parseFloat(entry.DATA.VALUE);
+            if (!isNaN(depth) && !isNaN(factor)) {
+              factors[depth] = factor;
+            }
+          });
+          
+          depthTables[tableName] = {
+            standardDepth: parseInt(tableName.match(/(\d+)FT/)?.[1]) || 100,
+            factors: factors
+          };
+        }
+      });
+      
+      return depthTables;
+      
+    } else if (vendorType === 'Microsystems') {
+      // Microsystems uses prefix 200 for depth factors
+      const depthTables = {};
+      
+      Object.keys(codeDefinitions).forEach(key => {
+        if (key.startsWith('200')) {
+          // Parse: 200[Type][StandardDepth][ActualDepth]
+          const match = key.match(/^200([CR])(\d{3})(\d{4})$/);
+          if (match) {
+            const [, type, standardDepth, actualDepth] = match;
+            const tableType = type === 'C' ? 'Commercial' : 'Residential';
+            const tableName = `${tableType}-${standardDepth}FT`;
+            
+            if (!depthTables[tableName]) {
+              depthTables[tableName] = {
+                standardDepth: parseInt(standardDepth),
+                factors: {}
+              };
+            }
+            
+            // Only add if there's a value (not empty string)
+            const factor = codeDefinitions[key];
+            if (factor !== '') {
+              depthTables[tableName].factors[parseInt(actualDepth)] = parseFloat(factor);
+            }
+          }
+        }
+      });
+      
+      // Return null if no factors loaded (rural town case)
+      return Object.keys(depthTables).length > 0 ? depthTables : null;
+    }
+    
+    return null;
+  },
+
+  // Get depth factor for a specific depth using bracket system
+  getDepthFactor: function(depth, selectedTable, depthTables) {
+    const table = depthTables[selectedTable];
+    if (!table || !table.factors) return 1.0;
+    
+    // Find the appropriate bracket
+    const depths = Object.keys(table.factors).map(Number).sort((a, b) => a - b);
+    
+    // Find the bracket this depth falls into
+    for (let i = depths.length - 1; i >= 0; i--) {
+      if (depth >= depths[i]) {
+        return table.factors[depths[i]];
+      }
+    }
+    
+    // If smaller than smallest depth, use the smallest factor
+    return table.factors[depths[0]];
+  },
+
+  // Get front foot configuration with depth factors
+  getFrontFootConfig: function(codeDefinitions, vendorType) {
+    const depthTables = this.getDepthFactors(codeDefinitions, vendorType);
+    
+    if (!depthTables) return null;
+    
+    // Return the first table as default, or let manager select
+    const defaultTable = Object.values(depthTables)[0];
+    
+    return {
+      availableTables: depthTables,
+      defaultTable: defaultTable,
+      standardDepth: defaultTable?.standardDepth || 100,
+      depthFactors: defaultTable?.factors || {},
+      minimumFrontage: null // Manager must set this
+    };
   }
 };  
 

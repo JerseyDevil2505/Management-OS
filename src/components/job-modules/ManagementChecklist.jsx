@@ -1330,10 +1330,18 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
           const statusColor = getStatusColor(item.status);
           const hasValidFile = item.file_attachment_path && validFiles[item.id];
           const isProcessingApproval = processingApprovals[item.id];
+          
+          // Check if this item should be disabled for reassessment
+          const isNotApplicableForReassessment = checklistType === 'reassessment' && 
+            (item.category === 'analysis' || item.category === 'completion');
 
           return (
-            <div key={item.id} className={`bg-white border rounded-lg p-4 hover:shadow-md transition-shadow ${
-              item.status === 'completed' ? 'border-green-200 bg-green-50' : 'border-gray-200'
+            <div key={item.id} className={`bg-white border rounded-lg p-4 transition-shadow ${
+              isNotApplicableForReassessment 
+                ? 'border-gray-100 bg-gray-50 opacity-60' 
+                : item.status === 'completed' 
+                  ? 'border-green-200 bg-green-50 hover:shadow-md' 
+                  : 'border-gray-200 hover:shadow-md'
             }`}>
               <div className="flex items-start justify-between">
                 <div className="flex items-start gap-3 flex-1">
@@ -1342,9 +1350,17 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
                   </div>
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
-                      <h3 className="font-medium text-gray-800">{item.item_text}</h3>
+                      <h3 className={`font-medium ${isNotApplicableForReassessment ? 'text-gray-500' : 'text-gray-800'}`}>
+                        {item.item_text}
+                      </h3>
+                      {/* Show Not Applicable badge for reassessment */}
+                      {isNotApplicableForReassessment && (
+                        <span className="px-2 py-1 bg-gray-200 text-gray-600 text-xs rounded-full">
+                          Not Applicable - Reassessment
+                        </span>
+                      )}
                       {/* Analysis items show sync badge instead of auto-update */}
-                      {item.is_analysis_item && (
+                      {item.is_analysis_item && !isNotApplicableForReassessment && (
                         <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded-full">
                           Synced from Analysis
                         </span>
@@ -1418,6 +1434,11 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
                   </div>
                 </div>
                 <div className="flex flex-col gap-2 ml-4">
+                  {/* Don't show any buttons if not applicable for reassessment */}
+                  {isNotApplicableForReassessment ? (
+                    <span className="text-sm text-gray-500 italic">N/A</span>
+                  ) : (
+                    <>
                   {/* Don't show Mark Complete button for analysis items that sync from other components */}
                   {!item.is_analysis_item && (
                     <button
@@ -1528,6 +1549,8 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
                       className="px-2 py-1 border border-gray-300 rounded-md text-sm"
                       placeholder="Select turnover date"
                     />
+                  )}
+                    </>
                   )}
                 </div>
               </div>
