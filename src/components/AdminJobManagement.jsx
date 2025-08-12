@@ -1415,9 +1415,9 @@ useEffect(() => {
     setActiveTab(tab);
   };
 
-  const getManagerWorkload = (manager) => {
+   const getManagerWorkload = (manager) => {
     const assignedJobs = jobs.filter(job => 
-      job.assigned_manager?.some(am => am.id === manager.id)
+      job.assignedManagers?.some(am => am.id === manager.id)
     );
     
     const totalProperties = assignedJobs.reduce((sum, job) => sum + (job.totalProperties || 0), 0);
@@ -2365,6 +2365,17 @@ useEffect(() => {
                             </span>
                           </div>
 
+                          {/* Lead Manager Display */}
+                          {job.assignedManagers && job.assignedManagers.length > 0 && (
+                            <div className="flex items-center space-x-2 text-sm text-gray-600 mb-2">
+                              <Users className="w-4 h-4 text-gray-500" />
+                              <span className="font-medium">
+                                Lead: {job.assignedManagers.find(m => m.role === 'Lead Manager')?.name || 
+                                       job.assignedManagers[0]?.name || 'No Lead Assigned'}
+                              </span>
+                            </div>
+                          )}
+
                           {/* Production Metrics with LIVE DATA */}
                           <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-3 p-3 bg-gray-50 rounded-lg">
                             <div className="text-center">
@@ -2502,7 +2513,7 @@ useEffect(() => {
                                 county: job.county,
                                 state: job.state,
                                 dueDate: job.dueDate,
-                                assignedManagers: job.assigned_manager || [],  // Changed to assigned_manager
+                                assignedManagers: job.assignedManagers || [],
                                 sourceFile: null,
                                 codeFile: null,
                                 vendor: job.vendor,
