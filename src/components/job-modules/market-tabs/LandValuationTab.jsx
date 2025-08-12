@@ -2063,6 +2063,8 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
               </button>
             </div>
           </div>
+        </>
+      )}
 
       {/* ALLOCATION STUDY SUB-TAB */}
       {activeSubTab === 'allocation' && (
