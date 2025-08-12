@@ -1247,44 +1247,21 @@ useEffect(() => {
     }
   };
 
-const editJob = async () => {
+  const editJob = async () => {
     if (!newJob.name || !newJob.municipality || !newJob.dueDate) {
       addNotification('Please fill all required fields', 'error');
       return;
     }
 
     try {
-      // Update the main job data
       const updateData = {
-        job_name: newJob.name,  // Note: it's job_name not name
+        name: newJob.name,
         municipality: newJob.municipality,
-        end_date: newJob.dueDate,  // Note: it's end_date not dueDate
+        dueDate: newJob.dueDate,
         percent_billed: newJob.percentBilled
       };
 
       await jobService.update(editingJob.id, updateData);
-      
-      // Handle manager assignments - delete old ones and insert new ones
-      await supabase
-        .from('job_assignments')
-        .delete()
-        .eq('job_id', editingJob.id);
-      
-      // Insert new assignments if any
-      if (newJob.assignedManagers && newJob.assignedManagers.length > 0) {
-        const assignments = newJob.assignedManagers.map(manager => ({
-          job_id: editingJob.id,
-          employee_id: manager.id,
-          role: manager.role,
-          assigned_date: new Date().toISOString().split('T')[0],
-          is_active: true,
-          assigned_by: currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad'
-        }));
-        
-        await supabase
-          .from('job_assignments')
-          .insert(assignments);
-      }
       
       // Refresh with assigned property counts
       await refreshJobsWithAssignedCounts();
@@ -2387,17 +2364,7 @@ const editJob = async () => {
                               <span>Due: {job.dueDate ? job.dueDate.split('-')[0] : 'TBD'}</span>
                             </span>
                           </div>
-                          
-                          {/* Lead Manager Display */}
-                          {job.assigned_manager && job.assigned_manager.length > 0 && (
-                            <div className="flex items-center space-x-2 text-sm text-gray-600">
-                              <Users className="w-4 h-4 text-gray-500" />
-                              <span className="font-medium">
-                                Lead: {job.assigned_manager.find(m => m.role === 'Lead Manager')?.name || 
-                                       job.assigned_manager[0]?.name || 'No Lead Assigned'}
-                              </span>
-                            </div>
-                          )}
+
                           {/* Production Metrics with LIVE DATA */}
                           <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-3 p-3 bg-gray-50 rounded-lg">
                             <div className="text-center">
@@ -2853,13 +2820,18 @@ const editJob = async () => {
                     {workload.jobs.length > 0 && (
                       <div className="border-t pt-3">
                         <div className="text-xs text-gray-600 mb-2">Assigned Jobs:</div>
-                        <div className="space-y-1 max-h-32 overflow-y-auto">
-                          {workload.jobs.map(job => (
+                        <div className="space-y-1">
+                          {workload.jobs.slice(0, 3).map(job => (
                             <div key={job.id} className="text-xs text-gray-700 flex justify-between">
                               <span className="truncate">{job.municipality}</span>
                               <span className="text-gray-500">{(job.totalProperties || 0).toLocaleString()}</span>
                             </div>
                           ))}
+                          {workload.jobs.length > 3 && (
+                            <div className="text-xs text-gray-500">
+                              ...and {workload.jobs.length - 3} more
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}
