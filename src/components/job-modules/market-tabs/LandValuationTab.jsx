@@ -463,7 +463,7 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
     return specialRates;
   };
 
-  const generateRecommendation = () => {
+const generateRecommendation = () => {
     // Get raw land rates from Method 1
     const rawLandSales = vacantSales.filter(s => 
       includedSales.has(s.id) && saleCategories[s.id] === 'raw_land'
@@ -477,10 +477,53 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
       const rates = rawLandSales.map(s => s.pricePerAcre).filter(r => r > 0);
       if (rates.length > 0) {
         recommendedPrime = rates.reduce((sum, r) => sum + r, 0) / rates.length;
-        message = `Based on ${rawLandSales.length} raw land sales from Method 1`;
         source = 'method1';
       }
     }
+    
+    // If no raw land sales, use Method 2
+    if (recommendedPrime === 0) {
+      // Get all positive implied rates from VCS analysis
+      const positiveRates = [];
+      Object.values(bracketAnalysis).forEach(vcs => {
+        if (vcs.impliedRates) {
+          vcs.impliedRates.forEach(r => {
+            if (r.rate > 0) {
+              positiveRates.push(r.rate);
+            }
+          });
+        }
+      });
+      
+      if (positiveRates.length > 0) {
+        recommendedPrime = positiveRates.reduce((sum, r) => sum + r, 0) / positiveRates.length;
+        source = 'method2';
+      } else {
+        recommendedPrime = 50000; // Default fallback
+        source = 'default';
+      }
+    }
+    
+    // Calculate cascade based on user settings
+    const { cascadeSteps, cascadeDivision } = cascadeConfig;
+    let rates = { prime: recommendedPrime };
+    
+    if (cascadeSteps >= 2) {
+      rates.secondary = recommendedPrime / cascadeDivision;
+    }
+    if (cascadeSteps >= 3) {
+      rates.excess = rates.secondary / cascadeDivision;
+    }
+    if (cascadeSteps >= 4) {
+      rates.residual = rates.excess / cascadeDivision;
+    }
+    
+    return {
+      source,
+      ...rates,
+      specialRates: calculateSpecialRates()
+    };
+  };
     
     // If no raw land sales, use Method 2
     if (recommendedPrime === 0) {
