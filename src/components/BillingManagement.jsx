@@ -2972,7 +2972,7 @@ Thank you for your immediate attention to this matter.`;
                 </p>
               </div>
               <div className="bg-white rounded-lg p-4 shadow-sm">
-                <p className="text-sm text-gray-600">Kristine Duda (45%)</p>
+                <p className="text-sm text-gray-600">James&Kristine Duda (45%)</p>
                 <p className="text-xs text-gray-500 mb-1">Actual Balance / Projected</p>
                 <p className="text-lg font-semibold text-gray-900">
                   ${Math.floor(((globalMetrics.totalPaid + globalMetrics.totalOpen) - globalMetrics.currentExpenses - distributionMetrics.ytdDistributions) * 0.45).toLocaleString()} / 
@@ -2987,7 +2987,7 @@ Thank you for your immediate attention to this matter.`;
                 <h3 className="text-lg font-semibold text-gray-900 p-6 pb-4">{new Date().getFullYear()} Distribution Summary</h3>
                 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 p-6">
-                  {['Thomas Davis', 'Brian Schneider', 'Kristine Duda'].map(partner => {
+                  {['Thomas Davis', 'Brian Schneider', 'James&Kristine Duda'].map(partner => {
                     const ownership = partner === 'Thomas Davis' ? 0.10 : 0.45;
                     const partnerDistributions = distributions.filter(d => 
                       d.shareholder_name === partner && d.status === 'paid'
@@ -2995,7 +2995,7 @@ Thank you for your immediate attention to this matter.`;
                     const totalTaken = partnerDistributions.reduce((sum, d) => sum + d.amount, 0);
                     
                     // Calculate the highest distribution level to ensure tax matching
-                    const allPartners = ['Thomas Davis', 'Brian Schneider', 'Kristine Duda'];
+                    const allPartners = ['Thomas Davis', 'Brian Schneider', 'James&Kristine Duda'];
                     let maxImpliedTotal = 0;
                     
                     allPartners.forEach(p => {
@@ -3077,7 +3077,7 @@ Thank you for your immediate attention to this matter.`;
                       <p className="text-2xl font-bold text-gray-900">
                         {formatCurrency((() => {
                           // Calculate the highest distribution level
-                          const allPartners = ['Thomas Davis', 'Brian Schneider', 'Kristine Duda'];
+                          const allPartners = ['Thomas Davis', 'Brian Schneider', 'James&Kristine Duda'];
                           let maxImpliedTotal = 0;
                           
                           allPartners.forEach(p => {
@@ -4090,7 +4090,7 @@ Thank you for your immediate attention to this matter.`;
                   <option value="">Select shareholder...</option>
                   <option value="Thomas Davis">Thomas Davis (10%)</option>
                   <option value="Brian Schneider">Brian Schneider (45%)</option>
-                  <option value="Kristine Duda">Kristine Duda (45%)</option>
+                  <option value="James&Kristine Duda">James&Kristine Duda (45%)</option>
                 </select>
               </div>
 
