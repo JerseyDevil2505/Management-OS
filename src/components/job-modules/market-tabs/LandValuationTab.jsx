@@ -176,6 +176,28 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
     return () => clearInterval(interval);
   }, [valuationMethod, cascadeConfig, landNotes, saleCategories, actualAllocations]);
 
+  const convertRate = (acreRate, toMethod) => {
+    if (!acreRate) return 0;
+    
+    switch(toMethod) {
+      case 'sf':
+        return acreRate / 43560; // Convert acre to SF
+      case 'ff':
+        // Assuming 100ft depth standard for front foot
+        return (acreRate / 43560) * 100;
+      case 'acre':
+      default:
+        return acreRate;
+    }
+  };
+
+  const formatRateDisplay = (acreRate) => {
+    const rate = convertRate(acreRate, valuationMethod);
+    const suffix = valuationMethod === 'acre' ? '/acre' : 
+                   valuationMethod === 'sf' ? '/SF' : '/FF';
+    return `$${Math.round(rate).toLocaleString()}${suffix}`;
+  };
+
   // ========== LAND RATES FUNCTIONS ==========
   const filterVacantSales = () => {
     if (!properties) return;
@@ -360,7 +382,28 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
     setShowAddModal(false);
     setSearchResults([]);
   };
-
+  const handlePropertyResearch = async (property) => {
+    // Open in side panel or new window
+    const researchPrompt = `
+      Research this vacant land sale in ${jobData?.municipality || 'the township'}, ${jobData?.county || 'Salem'} County, NJ:
+      Block ${property.property_block} Lot ${property.property_lot}
+      Address: ${property.property_location || 'Not provided'}
+      Sale Date: ${property.sales_date}
+      Sale Price: $${property.sales_price?.toLocaleString()}
+      Acres: ${property.totalAcres?.toFixed(2)}
+      Price/Acre: $${Math.round(property.pricePerAcre).toLocaleString()}
+      
+      Investigate why this property sold at this price. Look for:
+      - Environmental constraints (wetlands, flood zones)
+      - Access issues (landlocked, easements needed)
+      - Tax status (farmland assessment, liens)
+      - Special circumstances affecting value
+    `;
+    
+    // TODO: Implement Claude API call here
+    console.log('Research requested for:', property);
+    alert('Research feature coming soon! Will analyze: ' + property.property_location);
+  };
   const calculateRates = () => {
     const included = vacantSales.filter(s => 
       includedSales.has(s.id) && 
@@ -1005,48 +1048,12 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
     );
   }
 
-  if (!valuationMethod) {
-    return (
-      <div style={{ padding: '20px' }}>
-        <div style={{ 
-          background: '#EFF6FF', 
-          border: '2px solid #3B82F6', 
-          borderRadius: '8px', 
-          padding: '20px',
-          marginBottom: '20px' 
-        }}>
-          <h3>Select Valuation Method</h3>
-          <p style={{ color: '#6B7280', marginBottom: '15px' }}>
-            This choice determines how land values will be calculated throughout the analysis
-          </p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px' }}>
-            {[
-              { value: 'acre', label: 'Per Acre', desc: 'Large lots, rural areas' },
-              { value: 'sf', label: 'Per Square Foot', desc: 'Standard residential' },
-              { value: 'ff', label: 'Front Foot', desc: 'Commercial, waterfront' },
-              { value: 'site', label: 'Site Value', desc: 'Condos, no lot size' }
-            ].map(method => (
-              <button
-                key={method.value}
-                onClick={() => setValuationMethod(method.value)}
-                style={{
-                  padding: '15px',
-                  border: '2px solid #E5E7EB',
-                  borderRadius: '8px',
-                  background: 'white',
-                  cursor: 'pointer',
-                  textAlign: 'left'
-                }}
-              >
-                <div style={{ fontWeight: 'bold' }}>{method.label}</div>
-                <div style={{ fontSize: '12px', color: '#6B7280' }}>{method.desc}</div>
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // Set default methodology to acre
+  useEffect(() => {
+    if (!valuationMethod) {
+      setValuationMethod('acre');
+    }
+  }, [valuationMethod]);
 
   const recommendation = generateRecommendation();
   const allocationStats = activeSubTab === 'allocation' ? calculateAllocationStats() : null;
@@ -1148,8 +1155,66 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
             >
               <Download size={16} /> Export Analysis to Excel
             </button>
+
+            {/* Methodology Display Toggle */}
+            <div style={{ 
+              display: 'flex', 
+              gap: '10px', 
+              alignItems: 'center',
+              marginLeft: 'auto'
+            }}>
+              <span style={{ fontWeight: '500' }}>Display as:</span>
+              <button 
+                onClick={() => setValuationMethod('acre')}
+                style={{
+                  padding: '6px 12px',
+                  backgroundColor: valuationMethod === 'acre' ? '#3B82F6' : 'white',
+                  color: valuationMethod === 'acre' ? 'white' : '#6B7280',
+                  border: '1px solid #E5E7EB',
+                  borderRadius: '4px',
+                  cursor: 'pointer'
+                }}
+              >
+                Per Acre
+              </button>
+              <button 
+                onClick={() => setValuationMethod('sf')}
+                style={{
+                  padding: '6px 12px',
+                  backgroundColor: valuationMethod === 'sf' ? '#3B82F6' : 'white',
+                  color: valuationMethod === 'sf' ? 'white' : '#6B7280',
+                  border: '1px solid #E5E7EB',
+                  borderRadius: '4px',
+                  cursor: 'pointer'
+                }}
+              >
+                Per SF
+              </button>
+              <button 
+                onClick={() => setValuationMethod('ff')}
+                style={{
+                  padding: '6px 12px',
+                  backgroundColor: valuationMethod === 'ff' ? '#3B82F6' : 'white',
+                  color: valuationMethod === 'ff' ? 'white' : '#6B7280',
+                  border: '1px solid #E5E7EB',
+                  borderRadius: '4px',
+                  cursor: 'pointer'
+                }}
+              >
+                Front Foot
+              </button>
+            </div>
             
             {lastSaved && (
+              <div style={{ 
+                fontSize: '12px',
+                color: '#6B7280'
+              }}>
+                {isSaving ? 'Saving...' : `Last saved: ${lastSaved.toLocaleTimeString()}`}
+              </div>
+            )}
+          </div>
+            
               <div style={{ 
                 fontSize: '12px',
                 color: '#6B7280'
@@ -1251,16 +1316,22 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
               <thead>
                 <tr style={{ backgroundColor: '#F9FAFB' }}>
                   <th style={{ padding: '8px', textAlign: 'left' }}>Include</th>
-                  <th style={{ padding: '8px', textAlign: 'left' }}>Block/Lot/Qual</th>
+                  <th style={{ padding: '8px', textAlign: 'left' }}>Block</th>
+                  <th style={{ padding: '8px', textAlign: 'left' }}>Lot</th>
+                  <th style={{ padding: '8px', textAlign: 'left' }}>Qual</th>
                   <th style={{ padding: '8px', textAlign: 'left' }}>Address</th>
+                  <th style={{ padding: '8px', textAlign: 'left' }}>VCS</th>
                   <th style={{ padding: '8px', textAlign: 'left' }}>Class</th>
-                  <th style={{ padding: '8px', textAlign: 'left', width: '120px' }}>Category*</th>
+                  <th style={{ padding: '8px', textAlign: 'left', width: '150px' }}>Category*</th>
                   <th style={{ padding: '8px', textAlign: 'left' }}>Sale Date</th>
                   <th style={{ padding: '8px', textAlign: 'left' }}>Sale Price</th>
                   <th style={{ padding: '8px', textAlign: 'left' }}>NU</th>
                   <th style={{ padding: '8px', textAlign: 'left' }}>Acres</th>
-                  <th style={{ padding: '8px', textAlign: 'left' }}>$/Acre</th>
-                  <th style={{ padding: '8px', textAlign: 'left', width: '100px' }}>Notes</th>
+                  <th style={{ padding: '8px', textAlign: 'left' }}>
+                    {valuationMethod === 'acre' ? '$/Acre' : valuationMethod === 'sf' ? '$/SF' : '$/FF'}
+                  </th>
+                  <th style={{ padding: '8px', textAlign: 'left', width: '150px' }}>Notes</th>
+                  <th style={{ padding: '8px', textAlign: 'center' }}>Research</th>
                 </tr>
               </thead>
               <tbody>
@@ -1286,15 +1357,24 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
                       />
                     </td>
                     <td style={{ padding: '8px' }}>
-                      {sale.property_block}/{sale.property_lot}{sale.property_qualifier ? `/${sale.property_qualifier}` : ''}
+                      {sale.property_block}
                       {sale.packageData && (
                         <div style={{ fontSize: '11px', color: '#F59E0B' }}>
-                          Package: {sale.packageData.package_count} properties
+                          Package: {sale.packageData.package_count}
                         </div>
                       )}
                     </td>
+                    <td style={{ padding: '8px' }}>
+                      {sale.property_lot}
+                    </td>
+                    <td style={{ padding: '8px' }}>
+                      {sale.property_qualifier || '-'}
+                    </td>
                     <td style={{ padding: '8px', fontSize: '12px' }}>
                       {sale.property_location || '-'}
+                    </td>
+                    <td style={{ padding: '8px' }}>
+                      {sale.new_vcs || '-'}
                     </td>
                     <td style={{ padding: '8px' }}>
                       {sale.property_m4_class}
@@ -1326,7 +1406,7 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
                     <td style={{ padding: '8px' }}>{sale.sales_nu || ''}</td>
                     <td style={{ padding: '8px' }}>{sale.totalAcres?.toFixed(2)}</td>
                     <td style={{ padding: '8px', fontWeight: 'bold' }}>
-                      ${Math.round(sale.pricePerAcre).toLocaleString()}
+                      {formatRateDisplay(sale.pricePerAcre)}
                     </td>
                     <td style={{ padding: '8px' }}>
                       <input
@@ -1336,6 +1416,22 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
                         placeholder="Notes..."
                         style={{ width: '100%', padding: '4px', fontSize: '12px' }}
                       />
+                    </td>
+                    <td style={{ padding: '8px', textAlign: 'center' }}>
+                      <button
+                        onClick={() => handlePropertyResearch(sale)}
+                        style={{
+                          padding: '4px 8px',
+                          backgroundColor: '#3B82F6',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '12px'
+                        }}
+                      >
+                        Research
+                      </button>
                     </td>
                   </tr>
                 ))}
