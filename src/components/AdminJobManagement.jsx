@@ -1258,7 +1258,8 @@ useEffect(() => {
         name: newJob.name,
         municipality: newJob.municipality,
         dueDate: newJob.dueDate,
-        percent_billed: newJob.percentBilled
+        percent_billed: newJob.percentBilled,
+        assignedManagers: newJob.assignedManagers  // ADD THIS LINE!
       };
 
       await jobService.update(editingJob.id, updateData);
@@ -1273,7 +1274,6 @@ useEffect(() => {
       addNotification('Error updating job: ' + error.message, 'error');
     }
   };
-
   const editPlanningJob = async () => {
     if (!newPlanningJob.municipality || !newPlanningJob.dueDate) {
       addNotification('Please fill all required fields', 'error');
@@ -2366,6 +2366,16 @@ useEffect(() => {
                             </span>
                           </div>
                           
+                          {/* Lead Manager Display */}
+                          {job.assignedManagers && job.assignedManagers.length > 0 && (
+                            <div className="flex items-center space-x-2 text-sm text-gray-600">
+                              <Users className="w-4 h-4 text-gray-500" />
+                              <span className="font-medium">
+                                Lead: {job.assignedManagers.find(m => m.role === 'Lead Manager')?.name || 
+                                       job.assignedManagers[0]?.name || 'No Lead Assigned'}
+                              </span>
+                            </div>
+                          )}
                           {/* Production Metrics with LIVE DATA */}
                           <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-3 p-3 bg-gray-50 rounded-lg">
                             <div className="text-center">
@@ -2821,18 +2831,13 @@ useEffect(() => {
                     {workload.jobs.length > 0 && (
                       <div className="border-t pt-3">
                         <div className="text-xs text-gray-600 mb-2">Assigned Jobs:</div>
-                        <div className="space-y-1">
-                          {workload.jobs.slice(0, 3).map(job => (
+                        <div className="space-y-1 max-h-32 overflow-y-auto">
+                          {workload.jobs.map(job => (
                             <div key={job.id} className="text-xs text-gray-700 flex justify-between">
                               <span className="truncate">{job.municipality}</span>
                               <span className="text-gray-500">{(job.totalProperties || 0).toLocaleString()}</span>
                             </div>
                           ))}
-                          {workload.jobs.length > 3 && (
-                            <div className="text-xs text-gray-500">
-                              ...and {workload.jobs.length - 3} more
-                            </div>
-                          )}
                         </div>
                       </div>
                     )}
