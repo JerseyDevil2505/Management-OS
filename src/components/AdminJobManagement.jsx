@@ -656,8 +656,9 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
     
     try {
       const updatedJobs = await jobService.getAll();
-      const activeJobs = updatedJobs.filter(job => job.status !== 'archived');
-      const archived = updatedJobs.filter(job => job.status === 'archived');
+    // NEW - Match the initializeData logic
+      const activeJobs = updatedJobs.filter(job => job.status === 'active');
+      const archived = updatedJobs.filter(job => job.status === 'archived' || job.status === 'draft');
       
       // Calculate assigned property counts for jobs with assignments
       const jobsWithAssignedCounts = await Promise.all(
