@@ -524,54 +524,6 @@ const generateRecommendation = () => {
       specialRates: calculateSpecialRates()
     };
   };
-    
-    // If no raw land sales, use Method 2
-    if (recommendedPrime === 0) {
-      // Get all positive implied rates from VCS analysis
-      const positiveRates = [];
-      Object.values(bracketAnalysis).forEach(vcs => {
-        if (vcs.impliedRates) {
-          vcs.impliedRates.forEach(r => {
-            if (r.rate > 0) {
-              positiveRates.push(r.rate);
-            }
-          });
-        }
-      });
-      
-      if (positiveRates.length > 0) {
-        recommendedPrime = positiveRates.reduce((sum, r) => sum + r, 0) / positiveRates.length;
-        confidence = positiveRates.length >= 10 ? 'MEDIUM' : 'LOW';
-        message = `Derived from ${positiveRates.length} positive implied rates in Method 2 (lot size bracketing)`;
-        source = 'method2';
-      } else {
-        recommendedPrime = 50000; // Default fallback
-        confidence = 'LOW';
-        message = 'Insufficient data - using default value. Manual review required.';
-        source = 'default';
-      }
-    }
-    
-    // Calculate cascade based on user settings
-    const { cascadeSteps, cascadeDivision } = cascadeConfig;
-    let rates = { prime: recommendedPrime };
-    
-    if (cascadeSteps >= 2) {
-      rates.secondary = recommendedPrime / cascadeDivision;
-    }
-    if (cascadeSteps >= 3) {
-      rates.excess = rates.secondary / cascadeDivision;
-    }
-    if (cascadeSteps >= 4) {
-      rates.residual = rates.excess / cascadeDivision;
-    }
-    
-    return {
-      source,
-      ...rates,
-      specialRates: calculateSpecialRates()
-    };
-  };
 
   const calculateTestValues = () => {
     if (!testAcres || !cascadeConfig.prime) return;
