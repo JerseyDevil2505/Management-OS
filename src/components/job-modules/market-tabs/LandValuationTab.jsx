@@ -1242,42 +1242,6 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
               </p>
             </div>
           )}
-              <h4>Front Foot Configuration</h4>
-              <div style={{ display: 'flex', gap: '20px' }}>
-                <div>
-                  <label>Prime Frontage Minimum:</label>
-                  <select 
-                    value={frontFootConfig.primeFrontage}
-                    onChange={(e) => setFrontFootConfig({
-                      ...frontFootConfig, 
-                      primeFrontage: parseInt(e.target.value)
-                    })}
-                    style={{ marginLeft: '10px', padding: '4px' }}
-                  >
-                    <option value="50">50 feet</option>
-                    <option value="75">75 feet</option>
-                    <option value="100">100 feet</option>
-                    <option value="125">125 feet</option>
-                    <option value="150">150 feet</option>
-                  </select>
-                </div>
-                
-                <div>
-                  <label>Depth Table:</label>
-                  <input
-                    type="text"
-                    value={frontFootConfig.depthTable}
-                    onChange={(e) => setFrontFootConfig({
-                      ...frontFootConfig,
-                      depthTable: e.target.value
-                    })}
-                    placeholder="e.g., 100FT"
-                    style={{ marginLeft: '10px', padding: '4px', width: '100px' }}
-                  />
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* Section 1: Vacant Land Sales */}
           <div style={{ marginBottom: '30px' }}>
