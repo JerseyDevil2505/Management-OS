@@ -48,10 +48,6 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
     cascadeDivision: 2
   });
   
-  // Test Calculator State
-  const [testAcres, setTestAcres] = useState('');
-  const [testResult, setTestResult] = useState(null);
-  
   // ========== ALLOCATION STUDY SUB-TAB STATE ==========
   const [vacantTestSales, setVacantTestSales] = useState([]);
   const [improvedTestSales, setImprovedTestSales] = useState([]);
@@ -250,8 +246,8 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
     
     setVacantSales(enriched);
     
-    const included = new Set(enriched.map(s => s.id));
-    setIncludedSales(included);
+    // Start with all sales unchecked - let user decide what's valid
+    setIncludedSales(new Set());
   };
 
   const performBracketAnalysis = () => {
@@ -464,47 +460,85 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
   };
 
 const generateRecommendation = () => {
-    // Get raw land rates from Method 1
+    // Method 1: Direct vacant land sales
     const rawLandSales = vacantSales.filter(s => 
       includedSales.has(s.id) && saleCategories[s.id] === 'raw_land'
     );
     
-    let recommendedPrime = 0;
-    let source = '';
+    let method1Rate = 0;
+    let method1Confidence = 0;
     
-    // Check if we have raw land sales
-    if (rawLandSales.length >= 3) {
+    if (rawLandSales.length > 0) {
       const rates = rawLandSales.map(s => s.pricePerAcre).filter(r => r > 0);
       if (rates.length > 0) {
-        recommendedPrime = rates.reduce((sum, r) => sum + r, 0) / rates.length;
-        source = 'method1';
+        method1Rate = rates.reduce((sum, r) => sum + r, 0) / rates.length;
+        // Confidence: 10% per sale, max 100% at 10 sales
+        method1Confidence = Math.min(rates.length * 0.1, 1);
       }
     }
     
-    // If no raw land sales, use Method 2
-    if (recommendedPrime === 0) {
-      // Get all positive implied rates from VCS analysis
-      const positiveRates = [];
-      Object.values(bracketAnalysis).forEach(vcs => {
-        if (vcs.impliedRates) {
-          vcs.impliedRates.forEach(r => {
-            if (r.rate > 0) {
-              positiveRates.push(r.rate);
-            }
-          });
-        }
-      });
+    // Method 2: Bracket analysis
+    let method2Rate = 0;
+    let method2Confidence = 0;
+    const positiveRates = [];
+    let totalBracketSales = 0;
+    
+    Object.values(bracketAnalysis).forEach(vcs => {
+      if (vcs.impliedRates) {
+        vcs.impliedRates.forEach(r => {
+          if (r.rate > 0) {
+            positiveRates.push({
+              rate: r.rate,
+              sales: vcs.totalSales
+            });
+            totalBracketSales += vcs.totalSales;
+          }
+        });
+      }
+    });
+    
+    if (positiveRates.length > 0) {
+      // Weight each VCS rate by its sample size
+      const weightedSum = positiveRates.reduce((sum, r) => sum + (r.rate * r.sales), 0);
+      method2Rate = weightedSum / totalBracketSales;
+      // Confidence: Based on total sales, max 100% at 100 sales
+      method2Confidence = Math.min(totalBracketSales * 0.01, 1);
+    }
+    
+    // SMART COMBINATION
+    let recommendedPrime = 0;
+    let source = '';
+    let variance = 0;
+    
+    if (method1Rate > 0 && method2Rate > 0) {
+      // We have BOTH methods - weight by confidence
+      const totalConfidence = method1Confidence + method2Confidence;
       
-      if (positiveRates.length > 0) {
-        recommendedPrime = positiveRates.reduce((sum, r) => sum + r, 0) / positiveRates.length;
-        source = 'method2';
-      } else {
-        recommendedPrime = 50000; // Default fallback
-        source = 'default';
-      }
+      recommendedPrime = (
+        (method1Rate * method1Confidence) + 
+        (method2Rate * method2Confidence)
+      ) / totalConfidence;
+      
+      const m1Weight = Math.round((method1Confidence / totalConfidence) * 100);
+      const m2Weight = Math.round((method2Confidence / totalConfidence) * 100);
+      
+      source = `Weighted: ${m1Weight}% M1, ${m2Weight}% M2`;
+      
+      // Calculate variance between methods
+      variance = Math.abs(method1Rate - method2Rate) / Math.min(method1Rate, method2Rate);
+      
+    } else if (method1Rate > 0) {
+      recommendedPrime = method1Rate;
+      source = 'Method 1 (Direct Sales)';
+    } else if (method2Rate > 0) {
+      recommendedPrime = method2Rate;
+      source = 'Method 2 (Bracketing)';
+    } else {
+      recommendedPrime = 50000;
+      source = 'Default (No Data)';
     }
     
-    // Calculate cascade based on user settings
+    // Calculate cascade
     const { cascadeSteps, cascadeDivision } = cascadeConfig;
     let rates = { prime: recommendedPrime };
     
@@ -521,52 +555,38 @@ const generateRecommendation = () => {
     return {
       source,
       ...rates,
+      method1: {
+        rate: method1Rate,
+        samples: rawLandSales.length,
+        confidence: method1Confidence
+      },
+      method2: {
+        rate: method2Rate,
+        brackets: positiveRates.length,
+        totalSales: totalBracketSales,
+        confidence: method2Confidence
+      },
+      variance,
       specialRates: calculateSpecialRates()
     };
   };
-
-  const calculateTestValues = () => {
-    if (!testAcres || !cascadeConfig.prime) return;
+    // Get raw land rates from Method 1
+    const rawLandSales = vacantSales.filter(s => 
+      includedSales.has(s.id) && saleCategories[s.id] === 'raw_land'
+    );
     
-    const acres = parseFloat(testAcres);
-    let value = 0;
-    let breakdown = {};
+    let recommendedPrime = 0;
+    let source = '';
     
-    // Apply cascade based on acreage
-    let remainingAcres = acres;
-    
-    // Prime (0-1 acre)
-    const primeAcres = Math.min(remainingAcres, 1);
-    breakdown.prime = primeAcres * cascadeConfig.prime;
-    remainingAcres -= primeAcres;
-    
-    // Secondary (1-5 acres)
-    if (remainingAcres > 0 && cascadeConfig.secondary) {
-      const secondaryAcres = Math.min(remainingAcres, 4);
-      breakdown.secondary = secondaryAcres * cascadeConfig.secondary;
-      remainingAcres -= secondaryAcres;
+    // Check if we have raw land sales
+    if (rawLandSales.length >= 3) {
+      const rates = rawLandSales.map(s => s.pricePerAcre).filter(r => r > 0);
+      if (rates.length > 0) {
+        recommendedPrime = rates.reduce((sum, r) => sum + r, 0) / rates.length;
+        source = 'method1';
+      }
     }
-    
-    // Excess (5-10 acres)
-    if (remainingAcres > 0 && cascadeConfig.excess) {
-      const excessAcres = Math.min(remainingAcres, 5);
-      breakdown.excess = excessAcres * cascadeConfig.excess;
-      remainingAcres -= excessAcres;
-    }
-    
-    // Residual (>10 acres)
-    if (remainingAcres > 0 && cascadeConfig.residual) {
-      breakdown.residual = remainingAcres * cascadeConfig.residual;
-    }
-    
-    value = Object.values(breakdown).reduce((sum, v) => sum + v, 0);
-    
-    setTestResult({
-      totalValue: value,
-      breakdown: breakdown,
-      acres: acres
-    });
-  };
+;
 
   // ========== ALLOCATION STUDY FUNCTIONS ==========
   const loadAllocationStudyData = async () => {
@@ -1198,15 +1218,25 @@ const generateRecommendation = () => {
                 Per SF
               </button>
               <button 
-                onClick={() => setValuationMethod('ff')}
+                onClick={() => {
+                  // Check if we have frontage data
+                  const hasFrontageData = vacantSales.some(s => s.asset_frontage && s.asset_frontage !== 'N/A');
+                  if (!hasFrontageData) {
+                    alert('Front Foot valuation not available - no frontage data in properties');
+                    return;
+                  }
+                  setValuationMethod('ff');
+                }}
                 style={{
                   padding: '6px 12px',
                   backgroundColor: valuationMethod === 'ff' ? '#3B82F6' : 'white',
                   color: valuationMethod === 'ff' ? 'white' : '#6B7280',
                   border: '1px solid #E5E7EB',
                   borderRadius: '4px',
-                  cursor: 'pointer'
+                  cursor: vacantSales.some(s => s.asset_frontage && s.asset_frontage !== 'N/A') ? 'pointer' : 'not-allowed',
+                  opacity: vacantSales.some(s => s.asset_frontage && s.asset_frontage !== 'N/A') ? 1 : 0.5
                 }}
+                title={!vacantSales.some(s => s.asset_frontage && s.asset_frontage !== 'N/A') ? 'No frontage data available' : ''}
               >
                 Front Foot
               </button>
@@ -1544,7 +1574,7 @@ const generateRecommendation = () => {
                         <>
                           <strong>Positive Implied Rates:</strong> {positiveRates.length} found
                           <br/>
-                          <strong>Average Implied Rate:</strong> ${Math.round(avgPositiveRate).toLocaleString()}/acre*
+                          <strong>Average Calculated Rate:</strong> ${Math.round(avgPositiveRate).toLocaleString()}/acre
                           <br/>
                           <div style={{ fontSize: '12px', color: '#6B7280', marginTop: '5px' }}>
                             Note: Negative values are excluded from land rate calculations
@@ -1577,7 +1607,7 @@ const generateRecommendation = () => {
                             <th style={{ padding: '8px', textAlign: 'right' }}>Avg Price</th>
                             <th style={{ padding: '8px', textAlign: 'right' }}>Delta $</th>
                             <th style={{ padding: '8px', textAlign: 'right' }}>Delta Acres</th>
-                            <th style={{ padding: '8px', textAlign: 'right', fontWeight: 'bold' }}>$/Acre</th>
+                            <th style={{ padding: '8px', textAlign: 'right', fontWeight: 'bold' }}>Calculated $/Acre</th>
                             <th style={{ padding: '8px', textAlign: 'right', fontWeight: 'bold' }}>$/SF</th>
                           </tr>
                         </thead>
@@ -1663,11 +1693,45 @@ const generateRecommendation = () => {
                               </td>
                             </tr>
                           )}
+                          {data.brackets.xlarge.count > 0 && (
+                            <tr style={{ backgroundColor: '#F9FAFB' }}>
+                              <td style={{ padding: '8px' }}>&gt;10.00</td>
+                              <td style={{ padding: '8px', textAlign: 'right' }}>
+                                {data.brackets.xlarge.avgAcres?.toFixed(2) || '-'}
+                              </td>
+                              <td style={{ padding: '8px', textAlign: 'right' }}>
+                                ${Math.round(data.brackets.xlarge.avgPrice || 0).toLocaleString() || '-'}
+                              </td>
+                              <td style={{ padding: '8px', textAlign: 'right', color: '#059669' }}>
+                                {data.brackets.xlarge.avgPrice && data.brackets.large.avgPrice ? 
+                                  `${Math.round(data.brackets.xlarge.avgPrice - data.brackets.large.avgPrice).toLocaleString()}` : '-'}
+                              </td>
+                              <td style={{ padding: '8px', textAlign: 'right' }}>
+                                {data.brackets.xlarge.avgAcres && data.brackets.large.avgAcres ? 
+                                  (data.brackets.xlarge.avgAcres - data.brackets.large.avgAcres).toFixed(2) : '-'}
+                              </td>
+                              <td style={{ padding: '8px', textAlign: 'right', fontWeight: 'bold', color: '#3B82F6' }}>
+                                {(() => {
+                                  const priceDiff = (data.brackets.xlarge.avgPrice || 0) - (data.brackets.large.avgPrice || 0);
+                                  const acresDiff = (data.brackets.xlarge.avgAcres || 0) - (data.brackets.large.avgAcres || 0);
+                                  return (acresDiff > 0 && priceDiff > 0) ? 
+                                    `${Math.round(priceDiff / acresDiff).toLocaleString()}` : '-';
+                                })()}
+                              </td>
+                              <td style={{ padding: '8px', textAlign: 'right', fontWeight: 'bold', color: '#3B82F6' }}>
+                                {(() => {
+                                  const priceDiff = (data.brackets.xlarge.avgPrice || 0) - (data.brackets.large.avgPrice || 0);
+                                  const acresDiff = (data.brackets.xlarge.avgAcres || 0) - (data.brackets.large.avgAcres || 0);
+                                  return (acresDiff > 0 && priceDiff > 0) ? 
+                                    `${((priceDiff / acresDiff) / 43560).toFixed(2)}` : '-';
+                                })()}
+                              </td>
+                            </tr>
+                          )}
                         </tbody>
                       </table>
                       <div style={{ marginTop: '10px', fontSize: '12px', color: '#6B7280' }}>
-                        * Implied rate calculated from price difference between lot size brackets<br/>
-                        Implied land rate shows diminishing returns on larger lots
+                        Calculated land rate shows diminishing returns on larger lots
                       </div>
                     </div>
                   ))}
@@ -1797,9 +1861,9 @@ const generateRecommendation = () => {
                       </div>
                     )}
                     <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #E5E7EB' }}>
-                      <strong>Average Implied Rate (Method 2):</strong> ${Math.round(avgRate).toLocaleString()}/acre*
+                      <strong>Average Calculated Rate (Method 2):</strong> ${Math.round(avgRate).toLocaleString()}/acre
                       <div style={{ fontSize: '12px', color: '#6B7280', marginTop: '5px' }}>
-                        * Calculated from price differences between lot size brackets
+                        Calculated from actual price differences between lot size brackets
                       </div>
                     </div>
                   </div>
@@ -2452,7 +2516,7 @@ const generateRecommendation = () => {
         </>
       )}
 
-      {/* Add Property Modal */}
+{/* Add Property Modal */}
       {showAddModal && (
         <div style={{
           position: 'fixed',
@@ -2470,42 +2534,48 @@ const generateRecommendation = () => {
             background: 'white',
             padding: '20px',
             borderRadius: '8px',
-            width: '600px',
+            width: '90%',
+            maxWidth: '1200px',
             maxHeight: '80vh',
-            overflow: 'auto'
+            display: 'flex',
+            flexDirection: 'column'
           }}>
-            <h3>Add Properties to Land Analysis</h3>
+            <h3 style={{ marginBottom: '15px' }}>Property Search - Add to Land Analysis</h3>
             
+            {/* Search Inputs */}
             <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
-              <select 
-                value={searchFilters.class}
-                onChange={(e) => setSearchFilters({...searchFilters, class: e.target.value})}
-                style={{ padding: '8px' }}
-              >
-                <option value="">All Classes</option>
-                <option value="1">1 - Vacant</option>
-                <option value="2">2 - Residential</option>
-                <option value="3A">3A - Farm Regular</option>
-                <option value="3B">3B - Farm Qualified</option>
-                <option value="4A">4A - Commercial</option>
-                <option value="4B">4B - Industrial</option>
-              </select>
-              
               <input 
                 placeholder="Block" 
                 value={searchFilters.block}
                 onChange={(e) => setSearchFilters({...searchFilters, block: e.target.value})}
-                style={{ width: '80px', padding: '8px' }}
+                style={{ width: '100px', padding: '8px', border: '1px solid #E5E7EB', borderRadius: '4px' }}
               />
               <input 
                 placeholder="Lot" 
                 value={searchFilters.lot}
                 onChange={(e) => setSearchFilters({...searchFilters, lot: e.target.value})}
-                style={{ width: '80px', padding: '8px' }}
+                style={{ width: '100px', padding: '8px', border: '1px solid #E5E7EB', borderRadius: '4px' }}
               />
-              
               <button 
-                onClick={searchProperties}
+                onClick={() => {
+                  // Search ALL properties matching block/lot
+                  if (!properties) return;
+                  let results = properties;
+                  
+                  if (searchFilters.block) {
+                    results = results.filter(p => 
+                      p.property_block?.toString().includes(searchFilters.block)
+                    );
+                  }
+                  if (searchFilters.lot) {
+                    results = results.filter(p => 
+                      p.property_lot?.toString().includes(searchFilters.lot)
+                    );
+                  }
+                  
+                  // Don't filter by anything else initially - show everything
+                  setSearchResults(results.slice(0, 100)); // Limit to 100 for performance
+                }}
                 style={{
                   backgroundColor: '#3B82F6',
                   color: 'white',
@@ -2522,88 +2592,219 @@ const generateRecommendation = () => {
               </button>
             </div>
 
-            <div style={{ fontSize: '12px', color: '#6B7280', marginBottom: '10px' }}>
-              Showing sales from {dateRange.start.toLocaleDateString()} to {dateRange.end.toLocaleDateString()}
+            {/* Filter Toggles */}
+            <div style={{ 
+              display: 'flex', 
+              gap: '15px', 
+              marginBottom: '10px',
+              padding: '10px',
+              background: '#F9FAFB',
+              borderRadius: '4px',
+              flexWrap: 'wrap'
+            }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
+                <input 
+                  type="checkbox" 
+                  checked={searchFilters.hideNU !== false}
+                  onChange={(e) => setSearchFilters({...searchFilters, hideNU: e.target.checked})}
+                />
+                Hide NU sales
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
+                <input 
+                  type="checkbox" 
+                  checked={searchFilters.dateFilter !== false}
+                  onChange={(e) => setSearchFilters({...searchFilters, dateFilter: e.target.checked})}
+                />
+                Sales within date range
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
+                <input 
+                  type="checkbox" 
+                  checked={searchFilters.priceFilter !== false}
+                  onChange={(e) => setSearchFilters({...searchFilters, priceFilter: e.target.checked})}
+                />
+                Sales &gt; $0
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
+                <input 
+                  type="checkbox" 
+                  checked={searchFilters.hideIncluded}
+                  onChange={(e) => setSearchFilters({...searchFilters, hideIncluded: e.target.checked})}
+                />
+                Hide already included
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
+                <input 
+                  type="checkbox" 
+                  checked={searchFilters.vacantOnly}
+                  onChange={(e) => setSearchFilters({...searchFilters, vacantOnly: e.target.checked})}
+                />
+                Class 1/3B only
+              </label>
             </div>
 
-            {searchResults.length > 0 ? (
-              <div style={{ maxHeight: '400px', overflow: 'auto', border: '1px solid #E5E7EB', borderRadius: '4px' }}>
-                {searchResults.map(prop => (
-                  <div key={prop.id} style={{ 
-                    padding: '10px', 
-                    borderBottom: '1px solid #E5E7EB',
-                    backgroundColor: selectedToAdd.has(prop.id) ? '#EFF6FF' : 'white',
+            {/* Results Table */}
+            <div style={{ flex: 1, overflow: 'auto', border: '1px solid #E5E7EB', borderRadius: '4px' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                <thead style={{ position: 'sticky', top: 0, backgroundColor: '#F9FAFB' }}>
+                  <tr>
+                    <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #E5E7EB' }}>✓</th>
+                    <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #E5E7EB' }}>Block</th>
+                    <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #E5E7EB' }}>Lot</th>
+                    <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #E5E7EB' }}>Qual</th>
+                    <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #E5E7EB' }}>Address</th>
+                    <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #E5E7EB' }}>Class</th>
+                    <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #E5E7EB' }}>Sale Date</th>
+                    <th style={{ padding: '8px', textAlign: 'right', borderBottom: '2px solid #E5E7EB' }}>Sale Price</th>
+                    <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #E5E7EB' }}>NU</th>
+                    <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #E5E7EB' }}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(() => {
+                    let filtered = searchResults;
+                    const existingIds = new Set(vacantSales.map(s => s.id));
+                    
+                    // Apply filters based on toggles
+                    if (searchFilters.hideNU !== false) {
+                      filtered = filtered.filter(p => !p.sales_nu || p.sales_nu === '' || p.sales_nu === '00');
+                    }
+                    if (searchFilters.dateFilter !== false) {
+                      filtered = filtered.filter(p => 
+                        p.sales_date >= dateRange.start.toISOString().split('T')[0] &&
+                        p.sales_date <= dateRange.end.toISOString().split('T')[0]
+                      );
+                    }
+                    if (searchFilters.priceFilter !== false) {
+                      filtered = filtered.filter(p => p.sales_price && p.sales_price > 0);
+                    }
+                    if (searchFilters.hideIncluded) {
+                      filtered = filtered.filter(p => !existingIds.has(p.id));
+                    }
+                    if (searchFilters.vacantOnly) {
+                      filtered = filtered.filter(p => p.property_m4_class === '1' || p.property_m4_class === '3B');
+                    }
+                    
+                    return filtered.map(prop => {
+                      const isIncluded = existingIds.has(prop.id);
+                      const canAdd = !isIncluded;
+                      let status = '';
+                      let statusColor = '#059669';
+                      
+                      if (isIncluded) {
+                        status = '✅ Already included';
+                        statusColor = '#6B7280';
+                      } else if (!prop.sales_price || prop.sales_price === 0) {
+                        status = '⚠️ No sale price';
+                        statusColor = '#F59E0B';
+                      } else if (prop.sales_date < dateRange.start.toISOString().split('T')[0]) {
+                        status = '⚠️ Sale before date range';
+                        statusColor = '#F59E0B';
+                      } else if (prop.sales_nu && prop.sales_nu !== '' && prop.sales_nu !== '00') {
+                        status = `⚠️ NU: ${prop.sales_nu}`;
+                        statusColor = '#F59E0B';
+                      } else if (prop.property_m4_class === '2') {
+                        status = '➕ Class 2 - Check if teardown';
+                        statusColor = '#3B82F6';
+                      } else {
+                        status = '➕ Available to add';
+                        statusColor = '#059669';
+                      }
+                      
+                      return (
+                        <tr key={prop.id} style={{ 
+                          borderBottom: '1px solid #E5E7EB',
+                          backgroundColor: selectedToAdd.has(prop.id) ? '#EFF6FF' : 
+                                         isIncluded ? '#F9FAFB' : 'white'
+                        }}>
+                          <td style={{ padding: '8px' }}>
+                            <input 
+                              type="checkbox"
+                              checked={selectedToAdd.has(prop.id)}
+                              disabled={isIncluded}
+                              onChange={(e) => {
+                                const newSelected = new Set(selectedToAdd);
+                                if (e.target.checked) {
+                                  newSelected.add(prop.id);
+                                } else {
+                                  newSelected.delete(prop.id);
+                                }
+                                setSelectedToAdd(newSelected);
+                              }}
+                              style={{ cursor: isIncluded ? 'not-allowed' : 'pointer' }}
+                            />
+                          </td>
+                          <td style={{ padding: '8px' }}>{prop.property_block}</td>
+                          <td style={{ padding: '8px' }}>{prop.property_lot}</td>
+                          <td style={{ padding: '8px' }}>{prop.property_qualifier || ''}</td>
+                          <td style={{ padding: '8px', fontSize: '12px' }}>{prop.property_location || '-'}</td>
+                          <td style={{ padding: '8px' }}>{prop.property_m4_class || '-'}</td>
+                          <td style={{ padding: '8px' }}>{prop.sales_date || '-'}</td>
+                          <td style={{ padding: '8px', textAlign: 'right' }}>
+                            {prop.sales_price ? `$${prop.sales_price.toLocaleString()}` : '-'}
+                          </td>
+                          <td style={{ padding: '8px' }}>{prop.sales_nu || ''}</td>
+                          <td style={{ padding: '8px', color: statusColor, fontSize: '12px' }}>
+                            {status}
+                          </td>
+                        </tr>
+                      );
+                    });
+                  })()}
+                </tbody>
+              </table>
+              
+              {searchResults.length === 0 && (
+                <div style={{ padding: '40px', textAlign: 'center', color: '#6B7280' }}>
+                  {searchFilters.block || searchFilters.lot ? 
+                    'No properties found. Try adjusting your search or filters.' : 
+                    'Enter block and/or lot to search'}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '15px' }}>
+              <div style={{ fontSize: '12px', color: '#6B7280' }}>
+                {selectedToAdd.size > 0 && `${selectedToAdd.size} properties selected`}
+              </div>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button 
+                  onClick={() => {
+                    setShowAddModal(false);
+                    setSearchResults([]);
+                    setSelectedToAdd(new Set());
+                    setSearchFilters({ class: '', block: '', lot: '' });
+                  }}
+                  style={{
+                    padding: '8px 16px',
+                    border: '1px solid #E5E7EB',
+                    borderRadius: '4px',
+                    background: 'white',
                     cursor: 'pointer'
                   }}
-                  onClick={() => {
-                    const newSelected = new Set(selectedToAdd);
-                    if (newSelected.has(prop.id)) {
-                      newSelected.delete(prop.id);
-                    } else {
-                      newSelected.add(prop.id);
-                    }
-                    setSelectedToAdd(newSelected);
-                  }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <div>
-                        <div>Block {prop.property_block} Lot {prop.property_lot}</div>
-                        <div style={{ fontSize: '12px', color: '#6B7280' }}>{prop.property_location}</div>
-                        <div style={{ fontSize: '12px' }}>
-                          Class: {prop.property_m4_class} | Sale: ${prop.sales_price?.toLocaleString()}
-                        </div>
-                      </div>
-                      <div>
-                        {selectedToAdd.has(prop.id) && <Check size={20} style={{ color: '#10B981' }} />}
-                      </div>
-                    </div>
-                  </div>
-                ))}
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={addSelectedProperties}
+                  disabled={selectedToAdd.size === 0}
+                  style={{
+                    padding: '8px 16px',
+                    backgroundColor: selectedToAdd.size > 0 ? '#3B82F6' : '#E5E7EB',
+                    color: 'white',
+                    borderRadius: '4px',
+                    border: 'none',
+                    cursor: selectedToAdd.size > 0 ? 'pointer' : 'not-allowed'
+                  }}
+                >
+                  Add {selectedToAdd.size} Selected Properties
+                </button>
               </div>
-            ) : (
-              <div style={{ padding: '20px', textAlign: 'center', color: '#6B7280' }}>
-                {searchFilters.class || searchFilters.block || searchFilters.lot ? 
-                  'No properties found matching criteria' : 
-                  'Enter search criteria above'}
-              </div>
-            )}
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '15px' }}>
-              <button 
-                onClick={() => {
-                  setShowAddModal(false);
-                  setSearchResults([]);
-                  setSelectedToAdd(new Set());
-                }}
-                style={{
-                  padding: '8px 16px',
-                  border: '1px solid #E5E7EB',
-                  borderRadius: '4px',
-                  background: 'white',
-                  cursor: 'pointer'
-                }}
-              >
-                Cancel
-              </button>
-              <button 
-                onClick={addSelectedProperties}
-                disabled={selectedToAdd.size === 0}
-                style={{
-                  padding: '8px 16px',
-                  backgroundColor: selectedToAdd.size > 0 ? '#3B82F6' : '#E5E7EB',
-                  color: 'white',
-                  borderRadius: '4px',
-                  border: 'none',
-                  cursor: selectedToAdd.size > 0 ? 'pointer' : 'not-allowed'
-                }}
-              >
-                Add {selectedToAdd.size} Selected
-              </button>
             </div>
           </div>
         </div>
       )}
-    </div>
-  );
-};
 
 export default LandValuationTab;
