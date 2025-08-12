@@ -714,7 +714,7 @@ const runSizeNormalization = useCallback(async () => {
         return blockA - blockB;
       });
       
-      setBlockAnalysisData(blockData);
+      setMarketAnalysisData(blockData);
     } catch (error) {
       console.error('Error processing block analysis:', error);
       alert('Error processing block analysis. Please check the console.');
