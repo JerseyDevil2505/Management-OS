@@ -12,8 +12,8 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
   const [editableAssessorName, setEditableAssessorName] = useState(jobData?.assessor_name || '');
   const [editableAssessorEmail, setEditableAssessorEmail] = useState(jobData?.assessor_email || '');
   const [hasAssessorNameChanges, setHasAssessorNameChanges] = useState(false);
+  const [checklistType, setChecklistType] = useState(jobData?.project_type || 'revaluation');
   const [hasAssessorEmailChanges, setHasAssessorEmailChanges] = useState(false);
-  const [checklistType, setChecklistType] = useState('revaluation');
   const [checklistItems, setChecklistItems] = useState([]);
   const [filterCategory, setFilterCategory] = useState('all');
   const [showCompleted, setShowCompleted] = useState(true);
@@ -53,13 +53,14 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
         // Fetch the latest job data to get saved assessor info
         const { data, error } = await supabase
           .from('jobs')
-          .select('assessor_name, assessor_email')
+          .select('assessor_name, assessor_email, project_type')  
           .eq('id', jobData.id)
           .single();
         
         if (data && !error) {
           setEditableAssessorName(data.assessor_name || '');
           setEditableAssessorEmail(data.assessor_email || '');
+          setChecklistType(data.project_type || 'revaluation');          
         }
       }
     };
@@ -436,8 +437,13 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
     return matchesCategory && matchesSearch && matchesCompleted;
   }).sort((a, b) => a.item_order - b.item_order);
 
-  const completedCount = checklistItems.filter(item => item.status === 'completed').length;
-  const totalCount = checklistItems.length;
+// For reassessment, exclude analysis and completion items from counts
+  const applicableItems = checklistType === 'reassessment' 
+    ? checklistItems.filter(item => item.category !== 'analysis' && item.category !== 'completion')
+    : checklistItems;
+  
+  const completedCount = applicableItems.filter(item => item.status === 'completed').length;
+  const totalCount = applicableItems.length;
   const completionPercentage = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
 
   const handleItemStatusChange = async (itemId, newStatus) => {
@@ -1186,7 +1192,14 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
               <label className="block text-sm font-medium text-gray-700 mb-2">Project Type</label>
               <div className="flex gap-4">
                 <button
-                  onClick={() => setChecklistType('revaluation')}
+                  onClick={async () => {
+                    setChecklistType('revaluation');
+                    // Save to database
+                    await supabase
+                      .from('jobs')
+                      .update({ project_type: 'revaluation' })
+                      .eq('id', jobData.id);
+                  }}
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                     checklistType === 'revaluation' 
                       ? 'bg-blue-500 text-white' 
@@ -1196,7 +1209,14 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
                   🏢 Revaluation
                 </button>
                 <button
-                  onClick={() => setChecklistType('reassessment')}
+                  onClick={async () => {
+                    setChecklistType('reassessment');
+                    // Save to database
+                    await supabase
+                      .from('jobs')
+                      .update({ project_type: 'reassessment' })
+                      .eq('id', jobData.id);
+                  }}
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                     checklistType === 'reassessment' 
                       ? 'bg-blue-500 text-white' 
@@ -1253,13 +1273,13 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
               <div>
                 <p className="text-sm text-gray-600">Client Approvals</p>
                 <p className="text-2xl font-bold text-purple-600">
-                  {checklistItems.filter(item => item.client_approved === true).length}
+                  {applicableItems.filter(item => item.client_approved === true).length}
                 </p>
               </div>
               <UserCheck className="w-8 h-8 text-purple-500" />
             </div>
             <p className="text-xs text-gray-500 mt-1">
-              of {checklistItems.filter(item => item.requires_client_approval).length} required
+              of {applicableItems.filter(item => item.requires_client_approval).length} required
             </p>
           </div>
           <div className="bg-white p-4 rounded-lg border">
@@ -1267,13 +1287,13 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
               <div>
                 <p className="text-sm text-gray-600">Files Uploaded</p>
                 <p className="text-2xl font-bold text-orange-600">
-                  {checklistItems.filter(item => item.file_attachment_path && validFiles[item.id]).length}
+                  {applicableItems.filter(item => item.file_attachment_path && validFiles[item.id]).length}
                 </p>
               </div>
               <Upload className="w-8 h-8 text-orange-500" />
             </div>
             <p className="text-xs text-gray-500 mt-1">
-              of {checklistItems.filter(item => item.allows_file_upload).length} allowed
+              of {applicableItems.filter(item => item.allows_file_upload).length} allowed
             </p>
           </div>
         </div>
