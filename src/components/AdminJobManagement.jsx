@@ -2631,7 +2631,6 @@ useEffect(() => {
                         <span>Delete</span>
                       </button>
                     </div>                   
-                    </div>
                   </div>
                 ))
               )}
