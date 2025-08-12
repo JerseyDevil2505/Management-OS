@@ -6,7 +6,9 @@ import {
   BarChart, TrendingUp, Home, Building, RefreshCw, Save, AlertCircle,
   Download, Filter, MapPin, DollarSign, Activity, Target, 
   FileSpreadsheet, Eye, ChevronDown, ChevronUp, Info, CheckCircle, 
-  XCircle, ArrowUpRight, ArrowDownRight, Minus, Zap
+  XCircle, ArrowUpRight, ArrowDownRight, Minus, Zap,
+  Layers,
+  Calendar
 } from 'lucide-react';
 
 const OverallAnalysisTab = ({ properties, jobData, vendorType, codeDefinitions }) => {
