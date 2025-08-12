@@ -1254,6 +1254,7 @@ useEffect(() => {
     }
 
     try {
+      // Update the main job data
       const updateData = {
         name: newJob.name,
         municipality: newJob.municipality,
@@ -1262,6 +1263,28 @@ useEffect(() => {
       };
 
       await jobService.update(editingJob.id, updateData);
+      
+      // Handle manager assignments - delete old ones and insert new ones
+      await supabase
+        .from('job_assignments')
+        .delete()
+        .eq('job_id', editingJob.id);
+      
+      // Insert new assignments if any
+      if (newJob.assignedManagers && newJob.assignedManagers.length > 0) {
+        const assignments = newJob.assignedManagers.map(manager => ({
+          job_id: editingJob.id,
+          employee_id: manager.id,
+          role: manager.role,
+          assigned_date: new Date().toISOString().split('T')[0],
+          is_active: true,
+          assigned_by: currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad'
+        }));
+        
+        await supabase
+          .from('job_assignments')
+          .insert(assignments);
+      }
       
       // Refresh with assigned property counts
       await refreshJobsWithAssignedCounts();
