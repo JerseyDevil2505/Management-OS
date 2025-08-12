@@ -1,7 +1,7 @@
 // OverallAnalysisTab.jsx - CLEANED UP BEAST VERSION with REAL DATA
 import React, { useState, useEffect, useMemo } from 'react';
-import { supabase } from '../../lib/supabaseClient';
-import { interpretCodes } from '../../lib/supabaseClient';
+import { supabase } from '../../../lib/supabaseClient';
+import { interpretCodes } from '../../../lib/supabaseClient';
 import { 
   BarChart, TrendingUp, Home, Building, RefreshCw, Save, AlertCircle,
   Download, Filter, MapPin, DollarSign, Activity, Target, 
