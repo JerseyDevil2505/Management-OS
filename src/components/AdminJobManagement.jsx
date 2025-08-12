@@ -1259,9 +1259,7 @@ useEffect(() => {
         municipality: newJob.municipality,
         dueDate: newJob.dueDate,
         percent_billed: newJob.percentBilled,
-        assignedManagers: newJob.assignedManagers  
-        assigned_managers: newJob.assignedManagers
-
+        assigned_manager: newJob.assignedManagers  // Changed to assigned_manager
       };
 
       await jobService.update(editingJob.id, updateData);
@@ -1420,7 +1418,7 @@ useEffect(() => {
 
   const getManagerWorkload = (manager) => {
     const assignedJobs = jobs.filter(job => 
-      job.assignedManagers?.some(am => am.id === manager.id)
+      job.assigned_manager?.some(am => am.id === manager.id)
     );
     
     const totalProperties = assignedJobs.reduce((sum, job) => sum + (job.totalProperties || 0), 0);
@@ -2369,12 +2367,12 @@ useEffect(() => {
                           </div>
                           
                           {/* Lead Manager Display */}
-                          {job.assignedManagers && job.assignedManagers.length > 0 && (
+                          {job.assigned_manager && job.assigned_manager.length > 0 && (
                             <div className="flex items-center space-x-2 text-sm text-gray-600">
                               <Users className="w-4 h-4 text-gray-500" />
                               <span className="font-medium">
-                                Lead: {job.assignedManagers.find(m => m.role === 'Lead Manager')?.name || 
-                                       job.assignedManagers[0]?.name || 'No Lead Assigned'}
+                                Lead: {job.assigned_manager.find(m => m.role === 'Lead Manager')?.name || 
+                                       job.assigned_manager[0]?.name || 'No Lead Assigned'}
                               </span>
                             </div>
                           )}
@@ -2508,15 +2506,6 @@ useEffect(() => {
                           <button 
                             onClick={() => {
                               setEditingJob(job);
-                              
-                              // Debug: Check what's in the job object
-                              console.log('Job being edited:', job);
-                              console.log('Assigned managers in job:', job.assignedManagers);
-                              console.log('Job assigned_managers:', job.assigned_managers);
-                              
-                              // Try both possible field names
-                              const managers = job.assignedManagers || job.assigned_managers || [];
-                              
                               setNewJob({
                                 name: job.name,
                                 ccddCode: job.ccdd || job.ccddCode,
@@ -2524,7 +2513,7 @@ useEffect(() => {
                                 county: job.county,
                                 state: job.state,
                                 dueDate: job.dueDate,
-                                assignedManagers: managers,
+                                assignedManagers: job.assigned_manager || [],  // Changed to assigned_manager
                                 sourceFile: null,
                                 codeFile: null,
                                 vendor: job.vendor,
