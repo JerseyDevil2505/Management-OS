@@ -176,6 +176,13 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
     return () => clearInterval(interval);
   }, [valuationMethod, cascadeConfig, landNotes, saleCategories, actualAllocations]);
 
+  // Set default methodology to acre
+  useEffect(() => {
+    if (!valuationMethod) {
+      setValuationMethod('acre');
+    }
+  }, [valuationMethod]);
+
   const convertRate = (acreRate, toMethod) => {
     if (!acreRate) return 0;
     
@@ -1048,12 +1055,7 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
     );
   }
 
-  // Set default methodology to acre
-  useEffect(() => {
-    if (!valuationMethod) {
-      setValuationMethod('acre');
-    }
-  }, [valuationMethod]);
+
 
   const recommendation = generateRecommendation();
   const allocationStats = activeSubTab === 'allocation' ? calculateAllocationStats() : null;
