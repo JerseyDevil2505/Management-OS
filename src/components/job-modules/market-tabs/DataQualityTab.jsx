@@ -230,140 +230,260 @@ const DataQualityTab = ({
     console.log('✅ Excel report exported successfully');
   };
 
-  const generateQCFormPDF = () => {
-    // Create the form HTML
-    const formHTML = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>QC Form Template</title>
-        <style>
-          @page {
-            size: letter;
-            margin: 0.5in;
-          }
+const generateQCFormPDF = () => {
+  // Create the form HTML with full-page layout
+  const formHTML = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>QC Form Template</title>
+      <style>
+        @page {
+          size: letter;
+          margin: 0.5in;
+        }
+        
+        @media print {
           body {
-            font-family: Arial, sans-serif;
-            line-height: 1.5;
+            margin: 0;
+            padding: 0;
           }
-          h1 {
-            text-align: center;
-            font-size: 16px;
-            margin-bottom: 5px;
+          .form-container {
+            page-break-inside: avoid;
           }
-          h2 {
-            text-align: center;
-            font-size: 14px;
-            margin-bottom: 20px;
-          }
-          .field {
-            margin-bottom: 15px;
-          }
-          .field-inline {
-            display: inline-block;
-            margin-right: 30px;
-          }
-          .label {
-            font-weight: bold;
-            display: inline-block;
-            margin-right: 10px;
-          }
-          .line {
-            display: inline-block;
-            border-bottom: 1px solid black;
-            min-width: 200px;
-            height: 20px;
-          }
-          .line-short {
-            min-width: 80px;
-          }
-          .box {
-            border: 1px solid black;
-            min-height: 60px;
-            margin-top: 5px;
-            padding: 5px;
-          }
-        </style>
-      </head>
-      <body>
+        }
+        
+        body {
+          font-family: Arial, sans-serif;
+          font-size: 12pt;
+          line-height: 1.2;
+          margin: 0;
+          padding: 0;
+        }
+        
+        .form-container {
+          width: 100%;
+          height: 100vh;
+          display: flex;
+          flex-direction: column;
+          padding: 0.5in;
+          box-sizing: border-box;
+        }
+        
+        h1 {
+          text-align: center;
+          font-size: 18pt;
+          font-weight: bold;
+          margin: 0 0 10px 0;
+          letter-spacing: 1px;
+        }
+        
+        h2 {
+          text-align: center;
+          font-size: 16pt;
+          font-weight: normal;
+          margin: 0 0 30px 0;
+          letter-spacing: 0.5px;
+        }
+        
+        .field-row {
+          margin-bottom: 20px;
+          display: flex;
+          align-items: center;
+          width: 100%;
+        }
+        
+        .field-group {
+          display: flex;
+          align-items: center;
+          gap: 20px;
+          width: 100%;
+        }
+        
+        .field-inline {
+          display: flex;
+          align-items: center;
+          flex: 1;
+        }
+        
+        .label {
+          font-weight: normal;
+          font-size: 12pt;
+          margin-right: 8px;
+          white-space: nowrap;
+        }
+        
+        .line {
+          flex: 1;
+          border: none;
+          border-bottom: 1px solid black;
+          height: 25px;
+          min-width: 100px;
+          background: transparent;
+        }
+        
+        .line-short {
+          flex: 0 0 100px;
+          max-width: 100px;
+        }
+        
+        .line-medium {
+          flex: 0 0 150px;
+          max-width: 150px;
+        }
+        
+        .box-container {
+          margin-bottom: 20px;
+        }
+        
+        .box-label {
+          font-weight: normal;
+          font-size: 12pt;
+          margin-bottom: 5px;
+        }
+        
+        .box {
+          width: 100%;
+          border: 1px solid black;
+          box-sizing: border-box;
+          background: white;
+        }
+        
+        .box-small {
+          height: 80px;
+        }
+        
+        .box-medium {
+          height: 100px;
+        }
+        
+        .box-large {
+          height: 120px;
+        }
+        
+        /* Ensure the form takes full page height */
+        .content {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          justify-content: space-between;
+        }
+        
+        .top-fields {
+          flex: 0 0 auto;
+        }
+        
+        .main-boxes {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          justify-content: space-evenly;
+          margin: 20px 0;
+        }
+        
+        .bottom-fields {
+          flex: 0 0 auto;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="form-container">
         <h1>PROFESSIONAL PROPERTY APPRAISERS</h1>
         <h2>QUALITY CONTROL FORM</h2>
         
-        <div class="field">
-          <span class="label">MUNICIPALITY:</span>
-          <span class="line"></span>
-        </div>
-        
-        <div class="field">
-          <div class="field-inline">
-            <span class="label">BLOCK:</span>
-            <span class="line line-short"></span>
+        <div class="content">
+          <div class="top-fields">
+            <div class="field-row">
+              <div class="field-inline">
+                <span class="label">MUNICIPALITY:</span>
+                <span class="line"></span>
+              </div>
+            </div>
+            
+            <div class="field-row">
+              <div class="field-group">
+                <div class="field-inline">
+                  <span class="label">BLOCK:</span>
+                  <span class="line line-short"></span>
+                </div>
+                <div class="field-inline">
+                  <span class="label">LOT:</span>
+                  <span class="line line-short"></span>
+                </div>
+                <div class="field-inline">
+                  <span class="label">QUAL:</span>
+                  <span class="line line-short"></span>
+                </div>
+              </div>
+            </div>
+            
+            <div class="field-row">
+              <div class="field-inline">
+                <span class="label">INSPECTOR:</span>
+                <span class="line"></span>
+              </div>
+            </div>
           </div>
-          <div class="field-inline">
-            <span class="label">LOT:</span>
-            <span class="line line-short"></span>
+          
+          <div class="main-boxes">
+            <div class="box-container">
+              <div class="box-label">SKETCH:</div>
+              <div class="box box-large"></div>
+            </div>
+            
+            <div class="box-container">
+              <div class="box-label">EXTERIOR:</div>
+              <div class="box box-medium"></div>
+            </div>
+            
+            <div class="box-container">
+              <div class="box-label">INTERIOR:</div>
+              <div class="box box-medium"></div>
+            </div>
+            
+            <div class="box-container">
+              <div class="box-label">DETACHED & NOTES:</div>
+              <div class="box box-medium"></div>
+            </div>
           </div>
-          <div class="field-inline">
-            <span class="label">QUAL:</span>
-            <span class="line line-short"></span>
+          
+          <div class="bottom-fields">
+            <div class="field-row">
+              <div class="field-group">
+                <div class="field-inline">
+                  <span class="label">PHOTO:</span>
+                  <span class="line line-medium"></span>
+                </div>
+                <div class="field-inline">
+                  <span class="label">DATE:</span>
+                  <span class="line line-medium"></span>
+                </div>
+              </div>
+            </div>
+            
+            <div class="field-row">
+              <div class="field-inline">
+                <span class="label">SUPERVISOR:</span>
+                <span class="line"></span>
+              </div>
+            </div>
           </div>
         </div>
-        
-        <div class="field">
-          <span class="label">INSPECTOR:</span>
-          <span class="line"></span>
-        </div>
-        
-        <div class="field">
-          <div class="label">SKETCH:</div>
-          <div class="box"></div>
-        </div>
-        
-        <div class="field">
-          <div class="label">EXTERIOR:</div>
-          <div class="box"></div>
-        </div>
-        
-        <div class="field">
-          <div class="label">INTERIOR:</div>
-          <div class="box"></div>
-        </div>
-        
-        <div class="field">
-          <div class="label">DETACHED & NOTES:</div>
-          <div class="box"></div>
-        </div>
-        
-        <div class="field">
-          <div class="field-inline">
-            <span class="label">PHOTO:</span>
-            <span class="line line-short"></span>
-          </div>
-          <div class="field-inline">
-            <span class="label">DATE:</span>
-            <span class="line line-short"></span>
-          </div>
-        </div>
-        
-        <div class="field">
-          <span class="label">SUPERVISOR:</span>
-          <span class="line"></span>
-        </div>
-      </body>
-      </html>
-    `;
-    
-    // Open in new window and trigger print dialog (save as PDF option)
-    const printWindow = window.open('', '_blank', 'width=800,height=1000');
-    printWindow.document.write(formHTML);
-    printWindow.document.close();
-    
-    // Auto-trigger print dialog after load
-    printWindow.onload = function() {
-      printWindow.print();
-    };
-  };
+      </div>
+    </body>
+    </html>
+  `;
   
+  // Open in new window and trigger print dialog (save as PDF option)
+  const printWindow = window.open('', '_blank', 'width=850,height=1100');
+  printWindow.document.write(formHTML);
+  printWindow.document.close();
+  
+  // Auto-trigger print dialog after load
+  printWindow.onload = function() {
+    printWindow.print();
+  };
+};
   const runQualityChecks = async () => {
     setIsRunningChecks(true);
     const results = {
