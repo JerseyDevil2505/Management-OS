@@ -1766,7 +1766,6 @@ const analyzeImportFile = async (file) => {
                                       Pkg ({packageData.package_count})
                                     </span>
                                   );
-                                  }
                                 })()}
                               </td>
                               <td className="px-4 py-3 text-sm">
