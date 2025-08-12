@@ -1247,22 +1247,44 @@ useEffect(() => {
     }
   };
 
-  const editJob = async () => {
+const editJob = async () => {
     if (!newJob.name || !newJob.municipality || !newJob.dueDate) {
       addNotification('Please fill all required fields', 'error');
       return;
     }
 
     try {
+      // Update the main job data
       const updateData = {
-        name: newJob.name,
+        job_name: newJob.name,  // Note: it's job_name not name
         municipality: newJob.municipality,
-        dueDate: newJob.dueDate,
-        percent_billed: newJob.percentBilled,
-        assigned_manager: newJob.assignedManagers  // Changed to assigned_manager
+        end_date: newJob.dueDate,  // Note: it's end_date not dueDate
+        percent_billed: newJob.percentBilled
       };
 
       await jobService.update(editingJob.id, updateData);
+      
+      // Handle manager assignments - delete old ones and insert new ones
+      await supabase
+        .from('job_assignments')
+        .delete()
+        .eq('job_id', editingJob.id);
+      
+      // Insert new assignments if any
+      if (newJob.assignedManagers && newJob.assignedManagers.length > 0) {
+        const assignments = newJob.assignedManagers.map(manager => ({
+          job_id: editingJob.id,
+          employee_id: manager.id,
+          role: manager.role,
+          assigned_date: new Date().toISOString().split('T')[0],
+          is_active: true,
+          assigned_by: currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad'
+        }));
+        
+        await supabase
+          .from('job_assignments')
+          .insert(assignments);
+      }
       
       // Refresh with assigned property counts
       await refreshJobsWithAssignedCounts();
