@@ -1259,7 +1259,9 @@ useEffect(() => {
         municipality: newJob.municipality,
         dueDate: newJob.dueDate,
         percent_billed: newJob.percentBilled,
-        assignedManagers: newJob.assignedManagers  // ADD THIS LINE!
+        assignedManagers: newJob.assignedManagers  
+        assigned_managers: newJob.assignedManagers
+
       };
 
       await jobService.update(editingJob.id, updateData);
@@ -2506,6 +2508,15 @@ useEffect(() => {
                           <button 
                             onClick={() => {
                               setEditingJob(job);
+                              
+                              // Debug: Check what's in the job object
+                              console.log('Job being edited:', job);
+                              console.log('Assigned managers in job:', job.assignedManagers);
+                              console.log('Job assigned_managers:', job.assigned_managers);
+                              
+                              // Try both possible field names
+                              const managers = job.assignedManagers || job.assigned_managers || [];
+                              
                               setNewJob({
                                 name: job.name,
                                 ccddCode: job.ccdd || job.ccddCode,
@@ -2513,7 +2524,7 @@ useEffect(() => {
                                 county: job.county,
                                 state: job.state,
                                 dueDate: job.dueDate,
-                                assignedManagers: job.assignedManagers || [],
+                                assignedManagers: managers,
                                 sourceFile: null,
                                 codeFile: null,
                                 vendor: job.vendor,
