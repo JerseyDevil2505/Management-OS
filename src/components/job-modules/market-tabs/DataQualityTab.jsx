@@ -1426,7 +1426,7 @@ const DataQualityTab = ({
     saveCustomChecksToDb(customChecks.filter(check => check.id !== checkId));
   };
   
-  const editCustomCheck = (check) => {
+const editCustomCheck = (check) => {
     customCheckNameInputRef.current.value = check.name;
     customCheckSeveritySelectRef.current.value = check.severity;
     setCurrentCustomCheck({
@@ -1436,16 +1436,6 @@ const DataQualityTab = ({
     // Remove from list so it can be re-saved with same or new name
     setCustomChecks(prev => prev.filter(c => c.id !== check.id));
   };
-
-      const updatedChecks = [...customChecks, newCheck];
-      setCustomChecks(updatedChecks);
-      saveCustomChecksToDb(updatedChecks);
-      
-      console.log(`✅ Added "${template.name}" from template library`);
-    } catch (error) {
-      console.error('Error adding template:', error);
-    }
-  };  
   
   const runCustomCheck = async (check) => {
     const results = { custom: [] };
