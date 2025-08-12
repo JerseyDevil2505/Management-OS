@@ -1,5 +1,5 @@
   import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { supabase, interpretCodes, worksheetService } from '../../../lib/supabaseClient';
+import { supabase, interpretCodes, worksheetService, checklistService } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx';
 import { 
   TrendingUp, 
@@ -10,6 +10,9 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
+  Copy,
   FileSpreadsheet,
   ArrowRight,
   AlertCircle
@@ -533,6 +536,25 @@ const runTimeNormalization = useCallback(async () => {
       setIsProcessingTime(false);
     }
   }, [properties, salesFromYear, minSalePrice, normalizeToYear, equalizationRatio, outlierThreshold, getHPIMultiplier, timeNormalizedSales, normalizationStats, vendorType, parseCompositeKey, jobData.id, selectedCounty, worksheetService]);
+
+const saveSizeNormalizedValues = async (normalizedSales) => {
+  try {
+    // Save size normalized values to database
+    for (const sale of normalizedSales) {
+      if (sale.size_normalized_price) {
+        await supabase
+          .from('property_records')
+          .update({ 
+            values_norm_size: sale.size_normalized_price 
+          })
+          .eq('id', sale.id);
+      }
+    }
+    console.log('✅ Size normalized values saved to database');
+  } catch (error) {
+    console.error('Error saving size normalized values:', error);
+  }
+};
 
 const runSizeNormalization = useCallback(async () => {
     setIsProcessingSize(true);
