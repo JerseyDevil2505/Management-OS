@@ -3084,12 +3084,58 @@ const analyzeImportFile = async (file) => {
               </p>
             </div>
 
-            {/* Get unique zones from worksheet data */}
+            {/* Get unique zones from worksheet data with smart processing */}
             {(() => {
-              const uniqueZones = [...new Set(worksheetProperties
+              // Get all zones and clean them up
+              const allZones = worksheetProperties
                 .map(p => p.asset_zoning)
-                .filter(z => z && z.trim())
-              )].sort();
+                .filter(z => z && z.trim());
+              
+              // Process zones to handle compounds and clean up
+              const processedZones = new Set();
+              
+              allZones.forEach(zone => {
+                // Trim whitespace
+                const cleanZone = zone.trim();
+                
+                // Check for compound zones (with & or ,)
+                if (cleanZone.includes('&')) {
+                  // Split by & and add each zone separately
+                  cleanZone.split('&').forEach(subZone => {
+                    processedZones.add(subZone.trim());
+                  });
+                } else if (cleanZone.includes(',')) {
+                  // Split by comma and add each zone separately
+                  cleanZone.split(',').forEach(subZone => {
+                    processedZones.add(subZone.trim());
+                  });
+                } else {
+                  // Single zone - just add the cleaned version
+                  processedZones.add(cleanZone);
+                }
+              });
+              
+              // Convert to sorted array and remove any empty strings
+              const uniqueZones = [...processedZones].filter(z => z).sort();
+              
+              // Also create a mapping of how many properties are in each zone
+              const zoneCount = {};
+              allZones.forEach(zone => {
+                const cleanZone = zone.trim();
+                if (cleanZone.includes('&')) {
+                  cleanZone.split('&').forEach(subZone => {
+                    const trimmed = subZone.trim();
+                    zoneCount[trimmed] = (zoneCount[trimmed] || 0) + 1;
+                  });
+                } else if (cleanZone.includes(',')) {
+                  cleanZone.split(',').forEach(subZone => {
+                    const trimmed = subZone.trim();
+                    zoneCount[trimmed] = (zoneCount[trimmed] || 0) + 1;
+                  });
+                } else {
+                  zoneCount[cleanZone] = (zoneCount[cleanZone] || 0) + 1;
+                }
+              });
 
               if (uniqueZones.length === 0) {
                 return (
@@ -3105,6 +3151,7 @@ const analyzeImportFile = async (file) => {
                     <thead className="bg-gray-50 border-b">
                       <tr>
                         <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Zone</th>
+                        <th className="px-4 py-3 text-center text-sm font-medium text-gray-700"># Props</th>
                         <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Description</th>
                         <th className="px-4 py-3 text-center text-sm font-medium text-gray-700">Min Size (SF)</th>
                         <th className="px-4 py-3 text-center text-sm font-medium text-gray-700">Min Frontage (FT)</th>
@@ -3118,6 +3165,9 @@ const analyzeImportFile = async (file) => {
                         return (
                           <tr key={zone} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                             <td className="px-4 py-3 text-sm font-medium">{zone}</td>
+                            <td className="px-4 py-3 text-sm text-center text-gray-500">
+                              {zoneCount[zone] || 0}
+                            </td>
                             <td className="px-4 py-3">
                               <input
                                 type="text"
@@ -3186,6 +3236,10 @@ const analyzeImportFile = async (file) => {
 
                   <div className="mt-4 text-sm text-gray-600">
                     <strong>Found {uniqueZones.length} unique zoning types</strong> from Page by Page Worksheet
+                    <br/>
+                    <span className="text-xs text-gray-500">
+                      (Compound zones like "AR & C-P" have been split into individual zones)
+                    </span>
                   </div>
                 </div>
               );
