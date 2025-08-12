@@ -97,9 +97,58 @@ const PreValuationTab = ({ jobData, properties }) => {
   const [isProcessingImport, setIsProcessingImport] = useState(false);
   const [importProgress, setImportProgress] = useState({ current: 0, total: 0, message: '' });
 
+  // Market Analysis State
+  const [marketAnalysisData, setMarketAnalysisData] = useState([]);
+  const [blockTypeFilter, setBlockTypeFilter] = useState('single_family');
+  const [colorScaleStart, setColorScaleStart] = useState(100000);
+  const [colorScaleIncrement, setColorScaleIncrement] = useState(50000);
+  const [selectedBlockDetails, setSelectedBlockDetails] = useState(null);
+  const [showBlockDetailModal, setShowBlockDetailModal] = useState(false);
+  const [isProcessingBlocks, setIsProcessingBlocks] = useState(false);
+
   // Vendor detection
   const vendorType = jobData?.vendor_source || jobData?.vendor_type || 'BRT';
   const codeDefinitions = jobData?.parsed_code_definitions;
+
+  // Bluebeam Revu 32-color palette
+  const bluebeamPalette = [
+    // Row 1 - Light colors
+    { hex: "#FFFFFF", name: "White", row: 1, col: 1 },
+    { hex: "#FFCCCC", name: "Light Pink", row: 1, col: 2 },
+    { hex: "#FFE6CC", name: "Light Orange", row: 1, col: 3 },
+    { hex: "#FFFFCC", name: "Light Yellow", row: 1, col: 4 },
+    { hex: "#E6FFCC", name: "Light Green", row: 1, col: 5 },
+    { hex: "#CCFFFF", name: "Light Cyan", row: 1, col: 6 },
+    { hex: "#CCE6FF", name: "Light Blue", row: 1, col: 7 },
+    { hex: "#E6CCFF", name: "Light Purple", row: 1, col: 8 },
+    // Row 2 - Medium colors
+    { hex: "#CCCCCC", name: "Light Gray", row: 2, col: 1 },
+    { hex: "#FF9999", name: "Pink", row: 2, col: 2 },
+    { hex: "#FFCC99", name: "Peach", row: 2, col: 3 },
+    { hex: "#FFFF99", name: "Yellow", row: 2, col: 4 },
+    { hex: "#CCFF99", name: "Light Green", row: 2, col: 5 },
+    { hex: "#99FFFF", name: "Cyan", row: 2, col: 6 },
+    { hex: "#99CCFF", name: "Sky Blue", row: 2, col: 7 },
+    { hex: "#CC99FF", name: "Purple", row: 2, col: 8 },
+    // Row 3 - Darker colors
+    { hex: "#999999", name: "Gray", row: 3, col: 1 },
+    { hex: "#FF6666", name: "Red", row: 3, col: 2 },
+    { hex: "#FF9966", name: "Orange", row: 3, col: 3 },
+    { hex: "#FFFF66", name: "Bright Yellow", row: 3, col: 4 },
+    { hex: "#99FF66", name: "Green", row: 3, col: 5 },
+    { hex: "#66FFFF", name: "Bright Cyan", row: 3, col: 6 },
+    { hex: "#6699FF", name: "Bright Blue", row: 3, col: 7 },
+    { hex: "#9966FF", name: "Bright Purple", row: 3, col: 8 },
+    // Row 4 - Saturated colors
+    { hex: "#666666", name: "Dark Gray", row: 4, col: 1 },
+    { hex: "#FF3333", name: "Bright Red", row: 4, col: 2 },
+    { hex: "#FF6633", name: "Bright Orange", row: 4, col: 3 },
+    { hex: "#FFFF33", name: "Neon Yellow", row: 4, col: 4 },
+    { hex: "#66FF33", name: "Neon Green", row: 4, col: 5 },
+    { hex: "#33FFFF", name: "Electric Cyan", row: 4, col: 6 },
+    { hex: "#3366FF", name: "Electric Blue", row: 4, col: 7 },
+    { hex: "#6633FF", name: "Electric Purple", row: 4, col: 8 }
+  ];
 
   // ==================== HELPER FUNCTIONS USING interpretCodes ====================
   
@@ -275,6 +324,11 @@ useEffect(() => {
           asset_map_page: prop.asset_map_page || '',
           asset_key_page: prop.asset_key_page || '',
           worksheet_notes: prop.worksheet_notes || '',
+          // Add raw fields for decoding
+          asset_building_class: prop.asset_building_class,
+          asset_type_use: prop.asset_type_use,
+          asset_design_style: prop.asset_design_style,
+          sections: prop.sections,  // For BRT
           // Display values
           building_class_display: getBuildingClassDisplay(prop),
           type_use_display: getTypeUseDisplay(prop),
@@ -538,6 +592,169 @@ const runSizeNormalization = useCallback(async () => {
       setIsProcessingSize(false);
     }
   }, [timeNormalizedSales]);
+
+  const processBlockAnalysis = useCallback(async () => {
+    setIsProcessingBlocks(true);
+    
+    try {
+      // Get all properties with size-normalized values
+      const normalizedProps = properties.filter(p => p.values_norm_size && p.values_norm_size > 0);
+      
+      // Filter by property type
+      const filteredProps = normalizedProps.filter(p => {
+        const typeUse = p.asset_type_use?.toString().trim();
+        if (!typeUse) return false;
+        
+        switch (blockTypeFilter) {
+          case 'single_family':
+            return typeUse.startsWith('1');
+          case 'multifamily':
+            return ['42', '43', '44'].some(code => typeUse === code || typeUse.startsWith(code));
+          case 'commercial':
+            return ['50', '51', '52'].some(code => typeUse === code || typeUse.startsWith(code));
+          case 'all_residential':
+            return typeUse.startsWith('1') || ['42', '43', '44'].some(code => typeUse === code || typeUse.startsWith(code));
+          default:
+            return true;
+        }
+      });
+      
+      // Group by block
+      const blockGroups = {};
+      filteredProps.forEach(prop => {
+        const parsed = parseCompositeKey(prop.property_composite_key);
+        const block = parsed.block;
+        
+        if (!blockGroups[block]) {
+          blockGroups[block] = [];
+        }
+        blockGroups[block].push(prop);
+      });
+      
+      // Calculate metrics for each block
+      const blockData = Object.entries(blockGroups).map(([block, props]) => {
+        // Average normalized value
+        const avgValue = props.reduce((sum, p) => sum + p.values_norm_size, 0) / props.length;
+        
+        // Age consistency
+        const years = props.map(p => p.asset_year_built).filter(y => y);
+        const ageRange = years.length > 0 ? Math.max(...years) - Math.min(...years) : 0;
+        const avgYear = years.length > 0 ? years.reduce((sum, y) => sum + y, 0) / years.length : 0;
+        const ageStdDev = calculateStandardDeviation(years);
+        
+        let ageConsistency = 'Mixed';
+        if (ageRange <= 10) ageConsistency = 'High';
+        else if (ageRange <= 25) ageConsistency = 'Medium';
+        else if (ageRange <= 50) ageConsistency = 'Low';
+        
+        // Size consistency
+        const sizes = props.map(p => p.asset_sfla || 0).filter(s => s > 0);
+        const avgSize = sizes.length > 0 ? sizes.reduce((sum, s) => sum + s, 0) / sizes.length : 0;
+        const sizeStdDev = calculateStandardDeviation(sizes);
+        const sizeCV = avgSize > 0 ? sizeStdDev / avgSize : 0;
+        
+        let sizeConsistency = 'Mixed';
+        if (sizeCV <= 0.15) sizeConsistency = 'High';
+        else if (sizeCV <= 0.30) sizeConsistency = 'Medium';
+        else if (sizeCV <= 0.50) sizeConsistency = 'Low';
+        
+        // Design consistency
+        const designs = props.map(p => p.asset_design_style).filter(d => d);
+        const uniqueDesigns = [...new Set(designs)].length;
+        const dominantDesign = mode(designs);
+        const dominantPercent = designs.length > 0 ? 
+          (designs.filter(d => d === dominantDesign).length / designs.length) * 100 : 0;
+        
+        let designConsistency = 'Mixed';
+        if (uniqueDesigns <= 2 && dominantPercent >= 75) designConsistency = 'High';
+        else if (uniqueDesigns <= 3 && dominantPercent >= 50) designConsistency = 'Medium';
+        else if (uniqueDesigns <= 4 && dominantPercent >= 25) designConsistency = 'Low';
+        
+        // Assign color based on value
+        const colorIndex = Math.min(
+          Math.floor((avgValue - colorScaleStart) / colorScaleIncrement),
+          bluebeamPalette.length - 1
+        );
+        const assignedColor = bluebeamPalette[Math.max(0, colorIndex)];
+        
+        return {
+          block,
+          propertyCount: props.length,
+          avgNormalizedValue: Math.round(avgValue),
+          color: assignedColor,
+          ageConsistency,
+          ageDetails: {
+            range: ageRange,
+            avgYear: Math.round(avgYear),
+            stdDev: ageStdDev.toFixed(1),
+            minYear: Math.min(...years),
+            maxYear: Math.max(...years)
+          },
+          sizeConsistency,
+          sizeDetails: {
+            avgSize: Math.round(avgSize),
+            stdDev: sizeStdDev.toFixed(0),
+            cv: (sizeCV * 100).toFixed(1),
+            minSize: Math.min(...sizes),
+            maxSize: Math.max(...sizes)
+          },
+          designConsistency,
+          designDetails: {
+            uniqueDesigns,
+            dominantDesign: interpretCodes.getDesignName?.({ asset_design_style: dominantDesign }, codeDefinitions, vendorType) || dominantDesign,
+            dominantPercent: dominantPercent.toFixed(0)
+          }
+        };
+      });
+      
+      // Sort by block number
+      blockData.sort((a, b) => {
+        const blockA = parseInt(a.block) || 0;
+        const blockB = parseInt(b.block) || 0;
+        return blockA - blockB;
+      });
+      
+      setBlockAnalysisData(blockData);
+    } catch (error) {
+      console.error('Error processing block analysis:', error);
+      alert('Error processing block analysis. Please check the console.');
+    } finally {
+      setIsProcessingBlocks(false);
+    }
+  }, [properties, blockTypeFilter, colorScaleStart, colorScaleIncrement, codeDefinitions, vendorType]);
+
+// Helper functions
+  const calculateStandardDeviation = (values) => {
+    if (values.length === 0) return 0;
+    const avg = values.reduce((sum, v) => sum + v, 0) / values.length;
+    const squareDiffs = values.map(v => Math.pow(v - avg, 2));
+    const avgSquareDiff = squareDiffs.reduce((sum, v) => sum + v, 0) / values.length;
+    return Math.sqrt(avgSquareDiff);
+  };
+  
+  const mode = (arr) => {
+    if (arr.length === 0) return null;
+    const frequency = {};
+    let maxFreq = 0;
+    let mode = arr[0];
+    
+    arr.forEach(item => {
+      frequency[item] = (frequency[item] || 0) + 1;
+      if (frequency[item] > maxFreq) {
+        maxFreq = frequency[item];
+        mode = item;
+      }
+    });
+    
+    return mode;
+  };
+  
+  // Auto-process when filter or scale changes
+  useEffect(() => {
+    if (normalizationStats.sizeNormalized > 0) {
+      processBlockAnalysis();
+    }
+  }, [blockTypeFilter, colorScaleStart, colorScaleIncrement, normalizationStats.sizeNormalized, processBlockAnalysis]);
 
 const handleSalesDecision = (saleId, decision) => {
     const updatedSales = timeNormalizedSales.map(sale =>
@@ -1105,6 +1322,17 @@ const analyzeImportFile = async (file) => {
           Normalization
         </button>
         <button
+          onClick={() => setActiveSubTab('marketAnalysis')}
+          disabled={!normalizationStats.sizeNormalized || normalizationStats.sizeNormalized === 0}
+          className={`px-4 py-2 font-medium border-b-2 transition-colors ${
+            activeSubTab === 'marketAnalysis'
+              ? 'border-blue-500 text-blue-600'
+              : 'border-transparent text-gray-600 hover:text-gray-800'
+          } ${!normalizationStats.sizeNormalized ? 'opacity-50 cursor-not-allowed' : ''}`}
+        >
+          Market Analysis
+        </button>
+        <button
           onClick={() => setActiveSubTab('worksheet')}
           className={`px-4 py-2 font-medium border-b-2 transition-colors ${
             activeSubTab === 'worksheet'
@@ -1490,7 +1718,7 @@ const analyzeImportFile = async (file) => {
                               </td>
                               <td className="px-4 py-3 text-sm text-center">
                                 {(() => {
-                                  const packageData = interpretCodes.getPackageSaleData(timeNormalizedSales, sale);
+                                  const packageData = interpretCodes.getPackageSaleData(properties, sale);
                                   if (!packageData) return '-';
                                   
                                   // Check if it's a farm package (has 3B)
@@ -1503,6 +1731,41 @@ const analyzeImportFile = async (file) => {
                                         Farm ({packageData.package_count})
                                       </span>
                                     );
+                                  }
+                                  
+                                  // Check if it's additional cards (same property, different cards)
+                                  const parsed = parseCompositeKey(sale.property_composite_key);
+                                  const samePropertyDifferentCards = packageData.properties?.filter(p => {
+                                    const pParsed = parseCompositeKey(p.property_composite_key);
+                                    return pParsed.block === parsed.block && 
+                                           pParsed.lot === parsed.lot && 
+                                           pParsed.card !== parsed.card;
+                                  });
+                                  
+                                  // Check if main card (M for Microsystems, 1 for BRT)
+                                  const isMainCard = (vendorType === 'Microsystems' && parsed.card === 'M') || 
+                                                    (vendorType === 'BRT' && parsed.card === '1');
+                                  
+                                  if (samePropertyDifferentCards && samePropertyDifferentCards.length > 0 && isMainCard) {
+                                    // It's the main card with additional cards on same property
+                                    return (
+                                      <span className="px-2 py-1 bg-yellow-100 text-yellow-700 rounded text-xs font-medium" 
+                                            title={`Additional cards on same property`}>
+                                        Addl Card ({samePropertyDifferentCards.length})
+                                      </span>
+                                    );
+                                  } else if (samePropertyDifferentCards && samePropertyDifferentCards.length > 0 && !isMainCard) {
+                                    // It's an additional card, don't show package indicator
+                                    return '-';
+                                  }
+                                  
+                                  // Regular package (multiple properties)
+                                  return (
+                                    <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs font-medium" 
+                                          title={`Package sale: ${packageData.package_count} properties`}>
+                                      Pkg ({packageData.package_count})
+                                    </span>
+                                  );
                                   }
                                   
                                   // Regular package (no farmland)
@@ -1569,7 +1832,7 @@ const analyzeImportFile = async (file) => {
                         })}
                     </tbody>
                   </table>
-</div>
+                </div>
 
                 {/* Pagination Controls */}
                 {(() => {
@@ -1663,7 +1926,7 @@ const analyzeImportFile = async (file) => {
                   </ul>
                 </div>
 
-{normalizationStats.sizeNormalized > 0 && (
+                {normalizationStats.sizeNormalized > 0 && (
                   <div className="space-y-4">
                     {/* Main Stats */}
                     <div className="grid grid-cols-3 gap-4">
@@ -1738,7 +2001,186 @@ const analyzeImportFile = async (file) => {
         </div>
       )}
 
-      {/* Property Worksheet Tab Content */}
+      {/* Block Analysis Tab Content */}
+      {activeSubTab === 'marketAnalysis' && (
+        <div className="space-y-6">
+          {/* Configuration Section */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">Block Market Analysis</h3>
+              <button
+                onClick={() => {
+                  // Export to CSV
+                  let csv = 'Block,Properties,Avg Value,Color,Bluebeam Position,Age,Size,Design\n';
+                  marketAnalysisData.forEach(block => {
+                    csv += `"${block.block}","${block.propertyCount}","$${block.avgNormalizedValue.toLocaleString()}",`;
+                    csv += `"${block.color.name}","Row ${block.color.row} Col ${block.color.col}",`;
+                    csv += `"${block.ageConsistency}","${block.sizeConsistency}","${block.designConsistency}"\n`;
+                  });
+                  
+                  const blob = new Blob([csv], { type: 'text/csv' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `BlockAnalysis_${jobData.job_number}_${new Date().toISOString().split('T')[0]}.csv`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}
+                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+              >
+                Export Color Map
+              </button>
+            </div>
+            
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Property Type Filter
+                </label>
+                <select
+                  value={blockTypeFilter}
+                  onChange={(e) => setBlockTypeFilter(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded"
+                >
+                  <option value="single_family">Single Family</option>
+                  <option value="multifamily">Multifamily</option>
+                  <option value="commercial">Commercial</option>
+                  <option value="all_residential">All Residential</option>
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Color Scale Start
+                </label>
+                <input
+                  type="number"
+                  value={colorScaleStart}
+                  onChange={(e) => setColorScaleStart(parseInt(e.target.value) || 100000)}
+                  step="25000"
+                  className="w-full px-3 py-2 border border-gray-300 rounded"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Color Increment
+                </label>
+                <input
+                  type="number"
+                  value={colorScaleIncrement}
+                  onChange={(e) => setColorScaleIncrement(parseInt(e.target.value) || 50000)}
+                  step="10000"
+                  className="w-full px-3 py-2 border border-gray-300 rounded"
+                />
+              </div>
+            </div>
+            
+            <div className="mt-4 p-3 bg-blue-50 rounded text-sm">
+              <strong>Color Scale:</strong> Starting at ${colorScaleStart.toLocaleString()}, 
+              incrementing by ${colorScaleIncrement.toLocaleString()} per color. 
+              Total of {marketAnalysisData.length} blocks analyzed.
+            </div>
+          </div>
+          
+          {/* Block Cards Grid */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <h3 className="text-lg font-semibold mb-4">Block Analysis Results</h3>
+            
+            {isProcessingBlocks ? (
+              <div className="flex items-center justify-center py-8">
+                <RefreshCw className="animate-spin text-blue-600 mr-2" size={20} />
+                <span>Processing block analysis...</span>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {marketAnalysisData.map((block) => (
+                  <div
+                    key={block.block}
+                    className="border border-gray-200 rounded-lg p-4 hover:shadow-lg transition-shadow"
+                  >
+                    <div className="flex justify-between items-start mb-3">
+                      <div>
+                        <h4 className="text-lg font-semibold">Block {block.block}</h4>
+                        <p className="text-sm text-gray-600">{block.propertyCount} properties</p>
+                      </div>
+                      <div
+                        className="w-12 h-12 rounded border-2 border-gray-300"
+                        style={{ backgroundColor: block.color.hex }}
+                        title={`${block.color.name} - Row ${block.color.row}, Col ${block.color.col}`}
+                      />
+                    </div>
+                    
+                    <div className="mb-3">
+                      <div className="text-2xl font-bold">${block.avgNormalizedValue.toLocaleString()}</div>
+                      <div className="text-sm text-gray-500">Average Normalized Value</div>
+                    </div>
+                    
+                    <div className="space-y-2 border-t pt-3">
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-gray-600">Age Consistency:</span>
+                        <button
+                          onClick={() => {
+                            setSelectedBlockDetails({
+                              ...block,
+                              metric: 'age'
+                            });
+                            setShowBlockDetailModal(true);
+                          }}
+                          className="text-sm font-medium text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                        >
+                          {block.ageConsistency}
+                          <AlertCircle size={14} />
+                        </button>
+                      </div>
+                      
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-gray-600">Size Consistency:</span>
+                        <button
+                          onClick={() => {
+                            setSelectedBlockDetails({
+                              ...block,
+                              metric: 'size'
+                            });
+                            setShowBlockDetailModal(true);
+                          }}
+                          className="text-sm font-medium text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                        >
+                          {block.sizeConsistency}
+                          <AlertCircle size={14} />
+                        </button>
+                      </div>
+                      
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-gray-600">Design Consistency:</span>
+                        <button
+                          onClick={() => {
+                            setSelectedBlockDetails({
+                              ...block,
+                              metric: 'design'
+                            });
+                            setShowBlockDetailModal(true);
+                          }}
+                          className="text-sm font-medium text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                        >
+                          {block.designConsistency}
+                          <AlertCircle size={14} />
+                        </button>
+                      </div>
+                    </div>
+                    
+                    <div className="mt-3 pt-3 border-t">
+                      <div className="text-xs text-gray-500">
+                        Bluebeam: {block.color.name} (Row {block.color.row}, Col {block.color.col})
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Property Worksheet Tab Content */}
       {activeSubTab === 'worksheet' && (
@@ -1804,10 +2246,10 @@ const analyzeImportFile = async (file) => {
                 <div className="text-sm text-gray-600">Ready to Process</div>
               </div>
               <div className="text-center">
-                <div className="text-2xl font-bold">
-                  {lastAutoSave ? `${Math.floor((Date.now() - lastAutoSave) / 60000)} min ago` : 'Never'}
+                <div className="text-2xl font-bold text-blue-600">
+                  {Math.round((worksheetStats.vcsAssigned / worksheetStats.totalProperties) * 100) || 0}%
                 </div>
-                <div className="text-sm text-gray-600">Last Auto-Save</div>
+                <div className="text-sm text-gray-600">Completion</div>
               </div>
             </div>
 
@@ -1883,13 +2325,7 @@ const analyzeImportFile = async (file) => {
                           className="px-3 py-2 text-left text-xs font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
                           onClick={() => handleSort('location')}
                         >
-                          Loc {sortConfig.field === 'location' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                        </th>
-                        <th 
-                          className="px-3 py-2 text-left text-xs font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
-                          onClick={() => handleSort('property_location')}
-                        >
-                          Address {sortConfig.field === 'property_location' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                          Location {sortConfig.field === 'location' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
                         </th>
                         <th 
                           className="px-3 py-2 text-left text-xs font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
@@ -2379,7 +2815,143 @@ const analyzeImportFile = async (file) => {
          </div>
        </div>
      )}
-     
+
+      {/* Block Detail Modal */}
+     {showBlockDetailModal && selectedBlockDetails && (
+       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+         <div className="bg-white rounded-lg p-6 max-w-md w-full">
+           <div className="flex justify-between items-center mb-4">
+             <h3 className="text-lg font-semibold">
+               Block {selectedBlockDetails.block} - {
+                 selectedBlockDetails.metric === 'age' ? 'Age' :
+                 selectedBlockDetails.metric === 'size' ? 'Size' :
+                 'Design'
+               } Consistency
+             </h3>
+             <button
+               onClick={() => {
+                 setShowBlockDetailModal(false);
+                 setSelectedBlockDetails(null);
+               }}
+               className="text-gray-500 hover:text-gray-700"
+             >
+               <X size={20} />
+             </button>
+           </div>
+           
+           {selectedBlockDetails.metric === 'age' && (
+             <div className="space-y-3">
+               <div className="flex justify-between">
+                 <span className="font-medium">Rating:</span>
+                 <span className={`font-semibold ${
+                   selectedBlockDetails.ageConsistency === 'High' ? 'text-green-600' :
+                   selectedBlockDetails.ageConsistency === 'Medium' ? 'text-yellow-600' :
+                   selectedBlockDetails.ageConsistency === 'Low' ? 'text-orange-600' :
+                   'text-red-600'
+                 }`}>
+                   {selectedBlockDetails.ageConsistency}
+                 </span>
+               </div>
+               <div className="flex justify-between">
+                 <span className="text-gray-600">Year Range:</span>
+                 <span>{selectedBlockDetails.ageDetails.minYear} - {selectedBlockDetails.ageDetails.maxYear}</span>
+               </div>
+               <div className="flex justify-between">
+                 <span className="text-gray-600">Average Year:</span>
+                 <span>{selectedBlockDetails.ageDetails.avgYear}</span>
+               </div>
+               <div className="flex justify-between">
+                 <span className="text-gray-600">Std Deviation:</span>
+                 <span>±{selectedBlockDetails.ageDetails.stdDev} years</span>
+               </div>
+               <div className="mt-4 p-3 bg-gray-50 rounded text-sm">
+                 {selectedBlockDetails.ageConsistency === 'High' ? 
+                   'Very uniform age - excellent for comparables' :
+                  selectedBlockDetails.ageConsistency === 'Medium' ?
+                   'Moderate age variation - group similar ages' :
+                  selectedBlockDetails.ageConsistency === 'Low' ?
+                   'Wide age variation - careful comparable selection' :
+                   'Mixed ages - requires detailed analysis'}
+               </div>
+             </div>
+           )}
+           
+           {selectedBlockDetails.metric === 'size' && (
+             <div className="space-y-3">
+               <div className="flex justify-between">
+                 <span className="font-medium">Rating:</span>
+                 <span className={`font-semibold ${
+                   selectedBlockDetails.sizeConsistency === 'High' ? 'text-green-600' :
+                   selectedBlockDetails.sizeConsistency === 'Medium' ? 'text-yellow-600' :
+                   selectedBlockDetails.sizeConsistency === 'Low' ? 'text-orange-600' :
+                   'text-red-600'
+                 }`}>
+                   {selectedBlockDetails.sizeConsistency}
+                 </span>
+               </div>
+               <div className="flex justify-between">
+                 <span className="text-gray-600">Size Range:</span>
+                 <span>{selectedBlockDetails.sizeDetails.minSize.toLocaleString()} - {selectedBlockDetails.sizeDetails.maxSize.toLocaleString()} sf</span>
+               </div>
+               <div className="flex justify-between">
+                 <span className="text-gray-600">Average Size:</span>
+                 <span>{selectedBlockDetails.sizeDetails.avgSize.toLocaleString()} sf</span>
+               </div>
+               <div className="flex justify-between">
+                 <span className="text-gray-600">Variation (CV):</span>
+                 <span>{selectedBlockDetails.sizeDetails.cv}%</span>
+               </div>
+               <div className="mt-4 p-3 bg-gray-50 rounded text-sm">
+                 {selectedBlockDetails.sizeConsistency === 'High' ? 
+                   'Very uniform sizes - excellent comparables' :
+                  selectedBlockDetails.sizeConsistency === 'Medium' ?
+                   'Moderate size variation - reasonable comparables' :
+                  selectedBlockDetails.sizeConsistency === 'Low' ?
+                   'Wide size variation - adjust for size differences' :
+                   'Mixed sizes - requires careful analysis'}
+               </div>
+             </div>
+           )}
+           
+           {selectedBlockDetails.metric === 'design' && (
+             <div className="space-y-3">
+               <div className="flex justify-between">
+                 <span className="font-medium">Rating:</span>
+                 <span className={`font-semibold ${
+                   selectedBlockDetails.designConsistency === 'High' ? 'text-green-600' :
+                   selectedBlockDetails.designConsistency === 'Medium' ? 'text-yellow-600' :
+                   selectedBlockDetails.designConsistency === 'Low' ? 'text-orange-600' :
+                   'text-red-600'
+                 }`}>
+                   {selectedBlockDetails.designConsistency}
+                 </span>
+               </div>
+               <div className="flex justify-between">
+                 <span className="text-gray-600">Unique Designs:</span>
+                 <span>{selectedBlockDetails.designDetails.uniqueDesigns} types</span>
+               </div>
+               <div className="flex justify-between">
+                 <span className="text-gray-600">Dominant Style:</span>
+                 <span>{selectedBlockDetails.designDetails.dominantDesign}</span>
+               </div>
+               <div className="flex justify-between">
+                 <span className="text-gray-600">Dominance:</span>
+                 <span>{selectedBlockDetails.designDetails.dominantPercent}%</span>
+               </div>
+               <div className="mt-4 p-3 bg-gray-50 rounded text-sm">
+                 {selectedBlockDetails.designConsistency === 'High' ? 
+                   'Very uniform design - excellent comparables' :
+                  selectedBlockDetails.designConsistency === 'Medium' ?
+                   'Similar designs - good comparable pool' :
+                  selectedBlockDetails.designConsistency === 'Low' ?
+                   'Varied designs - consider style adjustments' :
+                   'Mixed designs - requires detailed analysis'}
+               </div>
+             </div>
+           )}
+         </div>
+       </div>
+     )}  
    </div>
  );
 };
