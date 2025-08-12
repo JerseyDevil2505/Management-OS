@@ -2612,6 +2612,25 @@ useEffect(() => {
                         <Edit3 className="w-4 h-4" />
                         <span>Edit</span>
                       </button>
+                      <button 
+                        onClick={async () => {
+                          if (window.confirm(`Delete planning job for ${planningJob.municipality}?`)) {
+                            try {
+                              await planningJobService.delete(planningJob.id);
+                              const updatedPlanningJobs = await planningJobService.getAll();
+                              setPlanningJobs(updatedPlanningJobs);
+                              addNotification('Planning job deleted successfully', 'success');
+                            } catch (error) {
+                              addNotification('Error deleting planning job: ' + error.message, 'error');
+                            }
+                          }
+                        }}
+                        className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        <span>Delete</span>
+                      </button>
+                    </div>                   
                     </div>
                   </div>
                 ))
