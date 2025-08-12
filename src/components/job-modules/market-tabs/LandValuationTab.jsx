@@ -2806,5 +2806,8 @@ const generateRecommendation = () => {
           </div>
         </div>
       )}
+    </div>
+  );
+};
 
 export default LandValuationTab;
