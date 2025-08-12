@@ -1214,15 +1214,6 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
               </div>
             )}
           </div>
-            
-              <div style={{ 
-                fontSize: '12px',
-                color: '#6B7280'
-              }}>
-                {isSaving ? 'Saving...' : `Last saved: ${lastSaved.toLocaleTimeString()}`}
-              </div>
-            )}
-          </div>
 
           {/* Front Foot Configuration */}
           {valuationMethod === 'ff' && (
@@ -1784,303 +1775,294 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
             )}
           </div>
 
-          {/* Section 3: Rate Analysis & Recommendation */}
+{/* Section 3: Rate Analysis & Recommendation */}
           <div style={{ 
-            background: 'linear-gradient(135deg, #667EEA 0%, #764BA2 100%)',
-            color: 'white',
+            background: 'white',
+            border: '1px solid #E5E7EB',
             padding: '20px',
             borderRadius: '12px',
             marginBottom: '30px'
           }}>
-            <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <h3 style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '8px',
+              marginBottom: '20px',
+              color: '#1F2937'
+            }}>
               <TrendingUp size={24} /> Rate Analysis & Recommendation
             </h3>
             
-            <div style={{ 
-              background: 'rgba(255, 255, 255, 0.1)', 
-              padding: '10px', 
-              borderRadius: '8px',
-              marginBottom: '15px'
-            }}>
-              <div style={{ 
+            {/* Confidence Badge */}
+            <div style={{ marginBottom: '20px' }}>
+              <span style={{ 
                 display: 'inline-block',
-                padding: '4px 8px',
+                padding: '6px 12px',
                 background: recommendation.confidence === 'HIGH' ? '#10B981' :
                           recommendation.confidence === 'MEDIUM' ? '#F59E0B' : '#EF4444',
+                color: 'white',
                 borderRadius: '4px',
+                fontWeight: '500',
                 marginBottom: '10px'
               }}>
                 {recommendation.confidence} CONFIDENCE
+              </span>
+              <div style={{ color: '#6B7280', marginTop: '8px' }}>
+                {recommendation.message}
               </div>
-              <div>{recommendation.message}</div>
             </div>
-            
-            {/* Cascade Configuration */}
+
+            {/* Method 2 Summary Display */}
             <div style={{ 
-              background: 'rgba(255, 255, 255, 0.1)', 
+              background: '#F0F9FF', 
               padding: '15px', 
               borderRadius: '8px',
-              marginBottom: '15px'
+              marginBottom: '20px' 
             }}>
-              <h4>Cascade Configuration</h4>
-              <div style={{ display: 'flex', gap: '20px', marginBottom: '10px' }}>
+              <h4 style={{ color: '#1F2937', marginBottom: '10px' }}>
+                Method 2: Lot Size Bracketing Results
+              </h4>
+              {(() => {
+                const allImpliedRates = [];
+                Object.values(bracketAnalysis).forEach(vcs => {
+                  if (vcs.impliedRates) {
+                    vcs.impliedRates.forEach(r => {
+                      if (r.rate > 0) {
+                        allImpliedRates.push({
+                          rate: r.rate,
+                          transition: r.transition,
+                          vcs: Object.keys(bracketAnalysis).find(k => bracketAnalysis[k] === vcs)
+                        });
+                      }
+                    });
+                  }
+                });
+                
+                const avgRate = allImpliedRates.length > 0 ? 
+                  allImpliedRates.reduce((sum, r) => sum + r.rate, 0) / allImpliedRates.length : 0;
+                
+                return (
+                  <div style={{ fontSize: '14px' }}>
+                    <div style={{ marginBottom: '8px' }}>
+                      <strong>Analysis Summary:</strong> {allImpliedRates.length} positive implied rates found
+                    </div>
+                    {allImpliedRates.slice(0, 3).map((r, idx) => (
+                      <div key={idx} style={{ marginLeft: '20px', fontSize: '13px', color: '#6B7280' }}>
+                        • {r.vcs} ({r.transition}): ${Math.round(r.rate).toLocaleString()}/acre
+                      </div>
+                    ))}
+                    {allImpliedRates.length > 3 && (
+                      <div style={{ marginLeft: '20px', fontSize: '13px', color: '#6B7280' }}>
+                        • ...and {allImpliedRates.length - 3} more
+                      </div>
+                    )}
+                    <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #E5E7EB' }}>
+                      <strong>Average Implied Rate (Method 2):</strong> ${Math.round(avgRate).toLocaleString()}/acre
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Clean Rate Input Section */}
+            <div style={{ 
+              background: '#F9FAFB', 
+              padding: '20px', 
+              borderRadius: '8px',
+              marginBottom: '20px'
+            }}>
+              <h4 style={{ color: '#1F2937', marginBottom: '15px' }}>Enter Land Rates</h4>
+              
+              {/* Standard Rates */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '15px', marginBottom: '20px' }}>
                 <div>
-                  <label>Number of Steps:</label>
-                  <select 
-                    value={cascadeConfig.cascadeSteps}
-                    onChange={(e) => {
-                      const steps = parseInt(e.target.value);
-                      const newConfig = { ...cascadeConfig, cascadeSteps: steps };
-                      const rec = generateRecommendation();
-                      
-                      newConfig.prime = rec.prime;
-                      newConfig.secondary = steps >= 2 ? rec.prime / cascadeConfig.cascadeDivision : null;
-                      newConfig.excess = steps >= 3 ? newConfig.secondary / cascadeConfig.cascadeDivision : null;
-                      newConfig.residual = steps >= 4 ? newConfig.excess / cascadeConfig.cascadeDivision : null;
-                      
-                      setCascadeConfig(newConfig);
-                    }}
-                    style={{ 
-                      marginLeft: '10px', 
-                      padding: '4px',
-                      background: 'rgba(255, 255, 255, 0.2)',
-                      border: '1px solid rgba(255, 255, 255, 0.3)',
-                      color: 'white'
-                    }}
-                  >
-                    <option value="2">2 Steps (Prime, Secondary)</option>
-                    <option value="3">3 Steps (Prime, Secondary, Excess)</option>
-                    <option value="4">4 Steps (All)</option>
-                  </select>
+                  <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
+                    Prime Rate (0-1 acre)
+                  </label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '12px', color: '#6B7280' }}>$</span>
+                    <input
+                      type="number"
+                      value={cascadeConfig.prime || ''}
+                      onChange={(e) => setCascadeConfig({...cascadeConfig, prime: parseFloat(e.target.value) || 0})}
+                      placeholder={Math.round(recommendation.prime).toString()}
+                      style={{ 
+                        flex: 1,
+                        padding: '8px', 
+                        border: '1px solid #E5E7EB',
+                        borderRadius: '4px',
+                        color: '#1F2937',
+                        backgroundColor: 'white'
+                      }}
+                    />
+                    <span style={{ fontSize: '12px', color: '#6B7280' }}>/acre</span>
+                  </div>
                 </div>
                 
                 <div>
-                  <label>Division Factor:</label>
-                  <select 
-                    value={cascadeConfig.cascadeDivision}
-                    onChange={(e) => {
-                      const division = parseInt(e.target.value);
-                      const newConfig = { ...cascadeConfig, cascadeDivision: division };
-                      
-                      if (newConfig.prime) {
-                        newConfig.secondary = newConfig.cascadeSteps >= 2 ? newConfig.prime / division : null;
-                        newConfig.excess = newConfig.cascadeSteps >= 3 ? newConfig.secondary / division : null;
-                        newConfig.residual = newConfig.cascadeSteps >= 4 ? newConfig.excess / division : null;
-                      }
-                      
-                      setCascadeConfig(newConfig);
-                    }}
-                    style={{ 
-                      marginLeft: '10px', 
-                      padding: '4px',
-                      background: 'rgba(255, 255, 255, 0.2)',
-                      border: '1px solid rgba(255, 255, 255, 0.3)',
-                      color: 'white'
-                    }}
-                  >
-                    <option value="2">Divide by 2</option>
-                    <option value="3">Divide by 3</option>
-                  </select>
+                  <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
+                    Secondary Rate (1-5 acres)
+                  </label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '12px', color: '#6B7280' }}>$</span>
+                    <input
+                      type="number"
+                      value={cascadeConfig.secondary || ''}
+                      onChange={(e) => setCascadeConfig({...cascadeConfig, secondary: parseFloat(e.target.value) || 0})}
+                      placeholder={Math.round(recommendation.secondary).toString()}
+                      style={{ 
+                        flex: 1,
+                        padding: '8px', 
+                        border: '1px solid #E5E7EB',
+                        borderRadius: '4px',
+                        color: '#1F2937',
+                        backgroundColor: 'white'
+                      }}
+                    />
+                    <span style={{ fontSize: '12px', color: '#6B7280' }}>/acre</span>
+                  </div>
+                </div>
+                
+                <div>
+                  <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
+                    Excess Rate (5-10 acres)
+                  </label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '12px', color: '#6B7280' }}>$</span>
+                    <input
+                      type="number"
+                      value={cascadeConfig.excess || ''}
+                      onChange={(e) => setCascadeConfig({...cascadeConfig, excess: parseFloat(e.target.value) || 0})}
+                      placeholder={Math.round(recommendation.excess).toString()}
+                      style={{ 
+                        flex: 1,
+                        padding: '8px', 
+                        border: '1px solid #E5E7EB',
+                        borderRadius: '4px',
+                        color: '#1F2937',
+                        backgroundColor: 'white'
+                      }}
+                    />
+                    <span style={{ fontSize: '12px', color: '#6B7280' }}>/acre</span>
+                  </div>
+                </div>
+                
+                <div>
+                  <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
+                    Residual Rate (10+ acres)
+                  </label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '12px', color: '#6B7280' }}>$</span>
+                    <input
+                      type="number"
+                      value={cascadeConfig.residual || ''}
+                      onChange={(e) => setCascadeConfig({...cascadeConfig, residual: parseFloat(e.target.value) || 0})}
+                      placeholder={Math.round(recommendation.residual).toString()}
+                      style={{ 
+                        flex: 1,
+                        padding: '8px', 
+                        border: '1px solid #E5E7EB',
+                        borderRadius: '4px',
+                        color: '#1F2937',
+                        backgroundColor: 'white'
+                      }}
+                    />
+                    <span style={{ fontSize: '12px', color: '#6B7280' }}>/acre</span>
+                  </div>
                 </div>
               </div>
-            </div>
-            
-            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cascadeConfig.cascadeSteps}, 1fr)`, gap: '15px' }}>
-              <div>
-                <div style={{ fontSize: '12px', opacity: 0.9 }}>Prime Rate (0-1 acre)</div>
-                <div style={{ fontSize: '24px', fontWeight: 'bold' }}>
-                  ${Math.round(recommendation.prime).toLocaleString()}/acre
-                </div>
-                <input
-                  type="number"
-                  value={cascadeConfig.prime || recommendation.prime}
-                  onChange={(e) => setCascadeConfig({...cascadeConfig, prime: parseFloat(e.target.value)})}
-                  style={{ 
-                    width: '100%', 
-                    padding: '4px', 
-                    marginTop: '5px',
-                    background: 'rgba(255, 255, 255, 0.2)',
-                    border: '1px solid rgba(255, 255, 255, 0.3)',
-                    color: 'white'
-                  }}
-                  placeholder="Override..."
-                />
-              </div>
               
-              {cascadeConfig.cascadeSteps >= 2 && (
-                <div>
-                  <div style={{ fontSize: '12px', opacity: 0.9 }}>Secondary Rate (1-5 acres)</div>
-                  <div style={{ fontSize: '24px', fontWeight: 'bold' }}>
-                    ${Math.round(recommendation.secondary).toLocaleString()}/acre
-                  </div>
-                  <input
-                    type="number"
-                    value={cascadeConfig.secondary || recommendation.secondary}
-                    onChange={(e) => setCascadeConfig({...cascadeConfig, secondary: parseFloat(e.target.value)})}
-                    style={{ 
-                      width: '100%', 
-                      padding: '4px', 
-                      marginTop: '5px',
-                      background: 'rgba(255, 255, 255, 0.2)',
-                      border: '1px solid rgba(255, 255, 255, 0.3)',
-                      color: 'white'
-                    }}
-                    placeholder="Override..."
-                  />
-                </div>
-              )}
-              
-              {cascadeConfig.cascadeSteps >= 3 && (
-                <div>
-                  <div style={{ fontSize: '12px', opacity: 0.9 }}>Excess Rate (5-10 acres)</div>
-                  <div style={{ fontSize: '24px', fontWeight: 'bold' }}>
-                    ${Math.round(recommendation.excess).toLocaleString()}/acre
-                  </div>
-                  <input
-                    type="number"
-                    value={cascadeConfig.excess || recommendation.excess}
-                    onChange={(e) => setCascadeConfig({...cascadeConfig, excess: parseFloat(e.target.value)})}
-                    style={{ 
-                      width: '100%', 
-                      padding: '4px', 
-                      marginTop: '5px',
-                      background: 'rgba(255, 255, 255, 0.2)',
-                      border: '1px solid rgba(255, 255, 255, 0.3)',
-                      color: 'white'
-                    }}
-                    placeholder="Override..."
-                  />
-                </div>
-              )}
-              
-              {cascadeConfig.cascadeSteps >= 4 && (
-                <div>
-                  <div style={{ fontSize: '12px', opacity: 0.9 }}>Residual Rate (>10 acres)</div>
-                  <div style={{ fontSize: '24px', fontWeight: 'bold' }}>
-                    ${Math.round(recommendation.residual).toLocaleString()}/acre
-                  </div>
-                  <input
-                    type="number"
-                    value={cascadeConfig.residual || recommendation.residual}
-                    onChange={(e) => setCascadeConfig({...cascadeConfig, residual: parseFloat(e.target.value)})}
-                    style={{ 
-                      width: '100%', 
-                      padding: '4px', 
-                      marginTop: '5px',
-                      background: 'rgba(255, 255, 255, 0.2)',
-                      border: '1px solid rgba(255, 255, 255, 0.3)',
-                      color: 'white'
-                    }}
-                    placeholder="Override..."
-                  />
-                </div>
-              )}
-            </div>
-            
-            {/* Special Rates Display */}
-            {recommendation.specialRates && Object.keys(recommendation.specialRates).length > 0 && (
-              <div style={{ 
-                marginTop: '15px', 
-                paddingTop: '15px', 
-                borderTop: '1px solid rgba(255, 255, 255, 0.3)' 
-              }}>
-                <h4>Special Category Rates</h4>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
-                  {Object.entries(recommendation.specialRates).map(([category, data]) => (
-                    <div key={category}>
-                      <div style={{ fontSize: '12px', opacity: 0.9 }}>
-                        {category.charAt(0).toUpperCase() + category.slice(1).replace('_', ' ')}
-                      </div>
-                      <div style={{ fontSize: '18px', fontWeight: 'bold' }}>
-                        ${Math.round(data.rate).toLocaleString()}/acre
-                      </div>
-                      <div style={{ fontSize: '11px', opacity: 0.7 }}>
-                        ({data.count} sales)
-                      </div>
+              {/* Special Categories */}
+              <div style={{ paddingTop: '20px', borderTop: '1px solid #E5E7EB' }}>
+                <h4 style={{ color: '#1F2937', marginBottom: '15px' }}>Special Category Rates</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '15px' }}>
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
+                      Wetlands
+                    </label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '12px', color: '#6B7280' }}>$</span>
+                      <input
+                        type="number"
+                        placeholder="1000"
+                        style={{ 
+                          flex: 1,
+                          padding: '8px', 
+                          border: '1px solid #E5E7EB',
+                          borderRadius: '4px',
+                          color: '#1F2937',
+                          backgroundColor: 'white'
+                        }}
+                      />
+                      <span style={{ fontSize: '12px', color: '#6B7280' }}>/acre</span>
                     </div>
-                  ))}
+                  </div>
+                  
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
+                      Conservation
+                    </label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '12px', color: '#6B7280' }}>$</span>
+                      <input
+                        type="number"
+                        placeholder="500"
+                        style={{ 
+                          flex: 1,
+                          padding: '8px', 
+                          border: '1px solid #E5E7EB',
+                          borderRadius: '4px',
+                          color: '#1F2937',
+                          backgroundColor: 'white'
+                        }}
+                      />
+                      <span style={{ fontSize: '12px', color: '#6B7280' }}>/acre</span>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
+                      Landlocked
+                    </label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '12px', color: '#6B7280' }}>$</span>
+                      <input
+                        type="number"
+                        placeholder="250"
+                        style={{ 
+                          flex: 1,
+                          padding: '8px', 
+                          border: '1px solid #E5E7EB',
+                          borderRadius: '4px',
+                          color: '#1F2937',
+                          backgroundColor: 'white'
+                        }}
+                      />
+                      <span style={{ fontSize: '12px', color: '#6B7280' }}>/acre</span>
+                    </div>
+                  </div>
                 </div>
               </div>
-            )}
-            
-            <button 
-              onClick={saveAnalysis}
-              style={{
-                marginTop: '15px',
-                padding: '10px 20px',
-                background: 'white',
-                color: '#764BA2',
-                border: 'none',
-                borderRadius: '6px',
-                fontWeight: 'bold',
-                cursor: 'pointer'
-              }}
-            >
-              Save Land Rates
-            </button>
-          </div>
-
-          {/* Test Calculator */}
-          <div style={{ 
-            background: 'linear-gradient(135deg, #667EEA 0%, #764BA2 100%)',
-            padding: '20px',
-            borderRadius: '12px'
-          }}>
-            <h4 style={{ color: 'white', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Calculator size={20} /> Test Your Rates
-            </h4>
-            
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-              <input 
-                type="number"
-                placeholder="Enter lot size in acres"
-                value={testAcres}
-                onChange={(e) => setTestAcres(e.target.value)}
-                style={{ padding: '8px', borderRadius: '4px', border: 'none' }}
-              />
+              
               <button 
-                onClick={calculateTestValues}
+                onClick={saveAnalysis}
                 style={{
-                  padding: '8px 16px',
-                  background: 'white',
-                  color: '#764BA2',
+                  marginTop: '20px',
+                  width: '100%',
+                  padding: '12px',
+                  backgroundColor: '#3B82F6',
+                  color: 'white',
                   border: 'none',
-                  borderRadius: '4px',
+                  borderRadius: '6px',
                   fontWeight: 'bold',
-                  cursor: 'pointer'
+                  cursor: 'pointer',
+                  fontSize: '16px'
                 }}
               >
-                Calculate
+                Save Land Rates
               </button>
             </div>
-            
-            {testResult && (
-              <div style={{ marginTop: '15px', color: 'white' }}>
-                <div style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '10px' }}>
-                  Total Land Value: ${Math.round(testResult.totalValue).toLocaleString()}
-                </div>
-                <div style={{ fontSize: '14px' }}>
-                  <strong>Breakdown for {testResult.acres} acres:</strong>
-                  <div style={{ marginLeft: '10px', marginTop: '5px' }}>
-                    {testResult.breakdown.prime > 0 && (
-                      <div>Prime (0-1 acre): ${Math.round(testResult.breakdown.prime).toLocaleString()}</div>
-                    )}
-                    {testResult.breakdown.secondary > 0 && (
-                      <div>Secondary (1-5 acres): ${Math.round(testResult.breakdown.secondary).toLocaleString()}</div>
-                    )}
-                    {testResult.breakdown.excess > 0 && (
-                      <div>Excess (5-10 acres): ${Math.round(testResult.breakdown.excess).toLocaleString()}</div>
-                    )}
-                    {testResult.breakdown.residual > 0 && (
-                      <div>Residual (>10 acres): ${Math.round(testResult.breakdown.residual).toLocaleString()}</div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
-        </>
-      )}
 
       {/* ALLOCATION STUDY SUB-TAB */}
       {activeSubTab === 'allocation' && (
