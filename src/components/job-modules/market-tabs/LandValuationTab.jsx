@@ -60,6 +60,8 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
   const [yearFilter, setYearFilter] = useState('all');
   const [actualAllocations, setActualAllocations] = useState({});
   const [vcsSiteValues, setVcsSiteValues] = useState({});
+  const [specialCategoryRates, setSpecialCategoryRates] = useState({});
+  const [customCategoryName, setCustomCategoryName] = useState('');
   
   // ========== SHARED STATE ==========
   const [isSaving, setIsSaving] = useState(false);
@@ -124,9 +126,12 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
             setIncludedSales(savedIncluded);
           }
           
-          // Restore cascade rates if they exist
-          if (data.cascade_rates) {
-            setCascadeConfig(data.cascade_rates);
+          // Restore special category rates
+          if (data.special_category_rates) {
+            setSpecialCategoryRates(data.special_category_rates);
+            if (data.special_category_rates.custom_name) {
+              setCustomCategoryName(data.special_category_rates.custom_name);
+            }
           }
           
           // Restore allocation study
@@ -432,7 +437,10 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
   };
 
   const calculateSpecialRates = () => {
-    const specialCategories = ['wetlands', 'conservation', 'green_acres'];
+    const specialCategories = ['wetlands', 'conservation', 'green_acres', 'water', 'landlocked'];
+    if (customCategoryName) {
+      specialCategories.push('custom');
+    }
     const specialRates = {};
     
     specialCategories.forEach(category => {
@@ -462,8 +470,6 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
     );
     
     let recommendedPrime = 0;
-    let confidence = 'LOW';
-    let message = '';
     let source = '';
     
     // Check if we have raw land sales
@@ -471,7 +477,6 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
       const rates = rawLandSales.map(s => s.pricePerAcre).filter(r => r > 0);
       if (rates.length > 0) {
         recommendedPrime = rates.reduce((sum, r) => sum + r, 0) / rates.length;
-        confidence = rawLandSales.length >= 5 ? 'HIGH' : 'MEDIUM';
         message = `Based on ${rawLandSales.length} raw land sales from Method 1`;
         source = 'method1';
       }
@@ -519,8 +524,6 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
     }
     
     return {
-      confidence,
-      message,
       source,
       ...rates,
       specialRates: calculateSpecialRates()
@@ -901,6 +904,10 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
         bracket_analysis: bracketAnalysis,
         land_rate_recommendation: generateRecommendation(),
         cascade_rates: cascadeConfig,
+        special_category_rates: {
+          ...specialCategoryRates,
+          custom_name: customCategoryName
+        },
         allocation_study: {
           vcs_site_values: vcsSiteValues,
           actual_allocations: actualAllocations,
@@ -936,7 +943,10 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
   const exportLandRatesToExcel = () => {
     let vacantSalesCSV = 'Block,Lot,Qualifier,Address,Class,Sale Date,Sale Price,NU,Acres,$/Acre,Category,Package,Notes\n';
     vacantSales.forEach(sale => {
-      const category = saleCategories[sale.id] || 'Not Categorized';
+      let category = saleCategories[sale.id] || 'Not Categorized';
+      if (category === 'custom' && customCategoryName) {
+        category = customCategoryName;
+      }
       const isPackage = sale.packageData ? `Package (${sale.packageData.package_count})` : 'Single';
       const notes = landNotes[sale.id] || '';
       const qualifier = sale.property_qualifier || '';
@@ -1217,14 +1227,21 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
             )}
           </div>
 
-          {/* Front Foot Configuration */}
+          {/* Front Foot Configuration - Disabled (use Zoning tab instead) */}
           {valuationMethod === 'ff' && (
             <div style={{ 
-              background: '#FEF3C7', 
+              background: '#F3F4F6', 
               padding: '15px', 
               borderRadius: '8px',
-              marginBottom: '20px' 
+              marginBottom: '20px',
+              opacity: 0.5
             }}>
+              <h4 style={{ color: '#9CA3AF' }}>Front Foot Configuration</h4>
+              <p style={{ fontSize: '14px', color: '#9CA3AF' }}>
+                Configure zoning requirements in the Pre-Valuation → Zoning tab
+              </p>
+            </div>
+          )}
               <h4>Front Foot Configuration</h4>
               <div style={{ display: 'flex', gap: '20px' }}>
                 <div>
@@ -1313,13 +1330,16 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
                   <th style={{ padding: '8px', textAlign: 'left' }}>Lot</th>
                   <th style={{ padding: '8px', textAlign: 'left' }}>Qual</th>
                   <th style={{ padding: '8px', textAlign: 'left' }}>Address</th>
+                  <th style={{ padding: '8px', textAlign: 'left' }}>Zoning</th>
                   <th style={{ padding: '8px', textAlign: 'left' }}>VCS</th>
                   <th style={{ padding: '8px', textAlign: 'left' }}>Class</th>
                   <th style={{ padding: '8px', textAlign: 'left', width: '150px' }}>Category*</th>
                   <th style={{ padding: '8px', textAlign: 'left' }}>Sale Date</th>
                   <th style={{ padding: '8px', textAlign: 'left' }}>Sale Price</th>
                   <th style={{ padding: '8px', textAlign: 'left' }}>NU</th>
-                  <th style={{ padding: '8px', textAlign: 'left' }}>Acres</th>
+                  <th style={{ padding: '8px', textAlign: 'left' }}>
+                    {valuationMethod === 'acre' ? 'Acres' : valuationMethod === 'sf' ? 'Square' : 'Frontage'}
+                  </th>
                   <th style={{ padding: '8px', textAlign: 'left' }}>
                     {valuationMethod === 'acre' ? '$/Acre' : valuationMethod === 'sf' ? '$/SF' : '$/FF'}
                   </th>
@@ -1365,10 +1385,13 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
                     </td>
                     <td style={{ padding: '8px', fontSize: '12px' }}>
                       {sale.property_location || '-'}
+                    </td>                
+                    <td style={{ padding: '8px' }}>
+                      {sale.asset_zoning || '-'}
                     </td>
                     <td style={{ padding: '8px' }}>
                       {sale.new_vcs || '-'}
-                    </td>
+                    </td>        
                     <td style={{ padding: '8px' }}>
                       {sale.property_m4_class}
                     </td>
@@ -1389,15 +1412,21 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
                         <option value="building_lot">Building Lot</option>
                         <option value="wetlands">Wetlands</option>
                         <option value="conservation">Conservation</option>
-                        <option value="green_acres">Green Acres</option>
+                        <option value="green_acres">Green Acres/Open Space</option>
+                        <option value="water">Water</option>
                         <option value="landlocked">Landlocked</option>
+                        {customCategoryName && <option value="custom">{customCategoryName}</option>}
                         <option value="other">Other</option>
                       </select>
                     </td>
                     <td style={{ padding: '8px' }}>{sale.sales_date}</td>
                     <td style={{ padding: '8px' }}>${(sale.sales_price || 0).toLocaleString()}</td>
                     <td style={{ padding: '8px' }}>{sale.sales_nu || ''}</td>
-                    <td style={{ padding: '8px' }}>{sale.totalAcres?.toFixed(2)}</td>
+                    <td style={{ padding: '8px' }}>
+                      {valuationMethod === 'acre' ? sale.totalAcres?.toFixed(2) : 
+                       valuationMethod === 'sf' ? Math.round(sale.totalAcres * 43560).toLocaleString() :
+                       sale.asset_frontage || 'N/A'}
+                    </td>
                     <td style={{ padding: '8px', fontWeight: 'bold' }}>
                       {formatRateDisplay(sale.pricePerAcre)}
                     </td>
@@ -1447,7 +1476,7 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
             }}>
               <h4>Vacant Sales Summary</h4>
               <div>
-                <strong>All Included Sales:</strong> {calculateRates().count} sales
+                <strong>All Checked Sales (excluding Other):</strong> {calculateRates().count} sales
                 <br/>
                 <strong>Average Price/Acre:</strong> ${Math.round(calculateRates().average).toLocaleString()}
                 <br/>
@@ -1529,38 +1558,6 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
             {!showAllVCS ? (
               /* Summary View */
               <div>
-                {/* Summary Statistics */}
-                <div style={{ display: 'grid', gap: '15px', marginBottom: '20px' }}>
-                  <div style={{ background: '#D1FAE5', padding: '15px', borderRadius: '8px' }}>
-                    <strong>Strong Evidence VCS</strong> (10+ sales per bracket):
-                    <div>
-                      {Object.entries(bracketAnalysis)
-                        .filter(([vcs, data]) => data.totalSales >= 10)
-                        .map(([vcs]) => vcs)
-                        .join(', ') || 'None'}
-                    </div>
-                  </div>
-                  
-                  <div style={{ background: '#FEF3C7', padding: '15px', borderRadius: '8px' }}>
-                    <strong>Moderate Evidence</strong> (5-10 sales):
-                    <div>
-                      {Object.entries(bracketAnalysis)
-                        .filter(([vcs, data]) => data.totalSales >= 5 && data.totalSales < 10)
-                        .map(([vcs]) => vcs)
-                        .join(', ') || 'None'}
-                    </div>
-                  </div>
-                  
-                  <div style={{ background: '#FEE2E2', padding: '15px', borderRadius: '8px' }}>
-                    <strong>Weak Evidence</strong> (&lt;5 sales):
-                    <div>
-                      {Object.entries(bracketAnalysis)
-                        .filter(([vcs, data]) => data.totalSales < 5)
-                        .map(([vcs]) => vcs)
-                        .join(', ') || 'None'}
-                    </div>
-                  </div>
-                </div>
 
                 {/* Method 2 Summary */}
                 <div style={{ 
@@ -1588,7 +1585,7 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
                         <>
                           <strong>Positive Implied Rates:</strong> {positiveRates.length} found
                           <br/>
-                          <strong>Average Positive Rate:</strong> ${Math.round(avgPositiveRate).toLocaleString()}/acre
+                          <strong>Average Implied Rate:</strong> ${Math.round(avgPositiveRate).toLocaleString()}/acre*
                           <br/>
                           <div style={{ fontSize: '12px', color: '#6B7280', marginTop: '5px' }}>
                             Note: Negative values are excluded from land rate calculations
@@ -1660,7 +1657,7 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
                                 const priceDiff = (data.brackets.medium.avgPrice || 0) - (data.brackets.small.avgPrice || 0);
                                 const acresDiff = (data.brackets.medium.avgAcres || 0) - (data.brackets.small.avgAcres || 0);
                                 return (acresDiff > 0 && priceDiff > 0) ? 
-                                  `${Math.round(priceDiff / acresDiff).toLocaleString()}` : '-';
+                                  `${Math.round(priceDiff / acresDiff).toLocaleString()}*` : '-';
                               })()}
                             </td>
                             <td style={{ padding: '8px', textAlign: 'right', fontWeight: 'bold', color: '#3B82F6' }}>
@@ -1710,6 +1707,7 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
                         </tbody>
                       </table>
                       <div style={{ marginTop: '10px', fontSize: '12px', color: '#6B7280' }}>
+                        * Implied rate calculated from price difference between lot size brackets<br/>
                         Implied land rate shows diminishing returns on larger lots
                       </div>
                     </div>
@@ -1794,25 +1792,6 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
             }}>
               <TrendingUp size={24} /> Rate Analysis & Recommendation
             </h3>
-            
-            {/* Confidence Badge */}
-            <div style={{ marginBottom: '20px' }}>
-              <span style={{ 
-                display: 'inline-block',
-                padding: '6px 12px',
-                background: recommendation.confidence === 'HIGH' ? '#10B981' :
-                          recommendation.confidence === 'MEDIUM' ? '#F59E0B' : '#EF4444',
-                color: 'white',
-                borderRadius: '4px',
-                fontWeight: '500',
-                marginBottom: '10px'
-              }}>
-                {recommendation.confidence} CONFIDENCE
-              </span>
-              <div style={{ color: '#6B7280', marginTop: '8px' }}>
-                {recommendation.message}
-              </div>
-            </div>
 
             {/* Method 2 Summary Display */}
             <div style={{ 
@@ -1859,7 +1838,10 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
                       </div>
                     )}
                     <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #E5E7EB' }}>
-                      <strong>Average Implied Rate (Method 2):</strong> ${Math.round(avgRate).toLocaleString()}/acre
+                      <strong>Average Implied Rate (Method 2):</strong> ${Math.round(avgRate).toLocaleString()}/acre*
+                      <div style={{ fontSize: '12px', color: '#6B7280', marginTop: '5px' }}>
+                        * Calculated from price differences between lot size brackets
+                      </div>
                     </div>
                   </div>
                 );
@@ -1986,6 +1968,8 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
                       <span style={{ fontSize: '12px', color: '#6B7280' }}>$</span>
                       <input
                         type="number"
+                        value={specialCategoryRates?.wetlands || ''}
+                        onChange={(e) => setSpecialCategoryRates({...specialCategoryRates, wetlands: parseFloat(e.target.value) || 0})}
                         placeholder="1000"
                         style={{ 
                           flex: 1,
@@ -2008,7 +1992,57 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
                       <span style={{ fontSize: '12px', color: '#6B7280' }}>$</span>
                       <input
                         type="number"
+                        value={specialCategoryRates?.conservation || ''}
+                        onChange={(e) => setSpecialCategoryRates({...specialCategoryRates, conservation: parseFloat(e.target.value) || 0})}
                         placeholder="500"
+                        style={{ 
+                          flex: 1,
+                          padding: '8px', 
+                          border: '1px solid #E5E7EB',
+                          borderRadius: '4px',
+                          color: '#1F2937',
+                          backgroundColor: 'white'
+                        }}
+                      />
+                      <span style={{ fontSize: '12px', color: '#6B7280' }}>/acre</span>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
+                      Green Acres/Open Space
+                    </label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '12px', color: '#6B7280' }}>$</span>
+                      <input
+                        type="number"
+                        value={specialCategoryRates?.green_acres || ''}
+                        onChange={(e) => setSpecialCategoryRates({...specialCategoryRates, green_acres: parseFloat(e.target.value) || 0})}
+                        placeholder="750"
+                        style={{ 
+                          flex: 1,
+                          padding: '8px', 
+                          border: '1px solid #E5E7EB',
+                          borderRadius: '4px',
+                          color: '#1F2937',
+                          backgroundColor: 'white'
+                        }}
+                      />
+                      <span style={{ fontSize: '12px', color: '#6B7280' }}>/acre</span>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
+                      Water
+                    </label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '12px', color: '#6B7280' }}>$</span>
+                      <input
+                        type="number"
+                        value={specialCategoryRates?.water || ''}
+                        onChange={(e) => setSpecialCategoryRates({...specialCategoryRates, water: parseFloat(e.target.value) || 0})}
+                        placeholder="100"
                         style={{ 
                           flex: 1,
                           padding: '8px', 
@@ -2030,7 +2064,46 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
                       <span style={{ fontSize: '12px', color: '#6B7280' }}>$</span>
                       <input
                         type="number"
+                        value={specialCategoryRates?.landlocked || ''}
+                        onChange={(e) => setSpecialCategoryRates({...specialCategoryRates, landlocked: parseFloat(e.target.value) || 0})}
                         placeholder="250"
+                        style={{ 
+                          flex: 1,
+                          padding: '8px', 
+                          border: '1px solid #E5E7EB',
+                          borderRadius: '4px',
+                          color: '#1F2937',
+                          backgroundColor: 'white'
+                        }}
+                      />
+                      <span style={{ fontSize: '12px', color: '#6B7280' }}>/acre</span>
+                    </div>
+                  </div>
+                  
+                  {/* Custom Category */}
+                  <div>
+                    <input
+                      type="text"
+                      value={customCategoryName || ''}
+                      onChange={(e) => setCustomCategoryName(e.target.value)}
+                      placeholder="Custom category..."
+                      style={{ 
+                        width: '100%',
+                        padding: '4px', 
+                        marginBottom: '4px',
+                        border: '1px solid #E5E7EB',
+                        borderRadius: '4px',
+                        fontSize: '12px',
+                        color: '#1F2937'
+                      }}
+                    />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '12px', color: '#6B7280' }}>$</span>
+                      <input
+                        type="number"
+                        value={specialCategoryRates?.custom || ''}
+                        onChange={(e) => setSpecialCategoryRates({...specialCategoryRates, custom: parseFloat(e.target.value) || 0})}
+                        placeholder="Enter rate"
                         style={{ 
                           flex: 1,
                           padding: '8px', 
