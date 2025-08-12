@@ -1924,7 +1924,7 @@ const analyzeImportFile = async (file) => {
                       </table>
                     </div>
 
-                    {/* Pagination Controls */}
+    
                     {(() => {
                       const filteredSales = timeNormalizedSales.filter(sale => {
                         if (salesReviewFilter === 'all') return true;
@@ -1981,63 +1981,6 @@ const analyzeImportFile = async (file) => {
                     </div>
                   </>
                 )}
-              </div>
-
-                {/* Pagination Controls */}
-                {(() => {
-                  const filteredSales = timeNormalizedSales.filter(sale => {
-                    if (salesReviewFilter === 'all') return true;
-                    if (salesReviewFilter === 'flagged') return sale.is_outlier;
-                    if (salesReviewFilter === 'pending') return sale.keep_reject === 'pending';
-                    if (salesReviewFilter.startsWith('type-')) {
-                      const typeNum = salesReviewFilter.split('-')[1];
-                      return sale.asset_type_use?.toString().trim().startsWith(typeNum);
-                    }
-                    return true;
-                  });
-                  const totalNormPages = Math.ceil(filteredSales.length / normItemsPerPage);
-                  
-                  return totalNormPages > 1 && (
-                    <div className="flex justify-between items-center mt-4">
-                      <div className="text-sm text-gray-600">
-                        Page {normCurrentPage} of {totalNormPages} ({filteredSales.length} sales)
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => setNormCurrentPage(Math.max(1, normCurrentPage - 1))}
-                          disabled={normCurrentPage === 1}
-                          className="px-3 py-1 border border-gray-300 rounded disabled:opacity-50"
-                        >
-                          <ChevronLeft size={16} />
-                        </button>
-                        <button
-                          onClick={() => setNormCurrentPage(Math.min(totalNormPages, normCurrentPage + 1))}
-                          disabled={normCurrentPage === totalNormPages}
-                          className="px-3 py-1 border border-gray-300 rounded disabled:opacity-50"
-                        >
-                          <ChevronRight size={16} />
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                <div className="mt-4 p-4 bg-blue-50 rounded">
-                  <p className="text-sm">
-                    <strong>Review Guidelines:</strong> Sales with ratios outside {((equalizationRatio * (1 - outlierThreshold/100))).toFixed(2)}%-{((equalizationRatio * (1 + outlierThreshold/100))).toFixed(2)}% are flagged.
-                    Consider property condition, special circumstances, and market conditions when making keep/reject decisions.
-                  </p>
-                </div>
-                
-                {/* Save All Decisions Button */}
-                <div className="mt-4 flex justify-center">
-                  <button
-                    onClick={saveBatchDecisions}
-                    className="px-6 py-2 bg-green-600 text-white rounded hover:bg-green-700"
-                  >
-                    Save All Keep/Reject Decisions
-                  </button>
-                </div>
               </div>
 
               {/* Size Normalization Section */}
