@@ -1767,14 +1767,6 @@ const analyzeImportFile = async (file) => {
                                     </span>
                                   );
                                   }
-                                  
-                                  // Regular package (no farmland)
-                                  return (
-                                    <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs font-medium" 
-                                          title={`Package sale: ${packageData.package_count} properties`}>
-                                      Pkg ({packageData.package_count})
-                                    </span>
-                                  );
                                 })()}
                               </td>
                               <td className="px-4 py-3 text-sm">
