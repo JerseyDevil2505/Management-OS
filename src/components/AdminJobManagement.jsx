@@ -2832,17 +2832,12 @@ useEffect(() => {
                       <div className="border-t pt-3">
                         <div className="text-xs text-gray-600 mb-2">Assigned Jobs:</div>
                         <div className="space-y-1">
-                          {workload.jobs.slice(0, 3).map(job => (
+                          {workload.jobs.map(job => (
                             <div key={job.id} className="text-xs text-gray-700 flex justify-between">
                               <span className="truncate">{job.municipality}</span>
                               <span className="text-gray-500">{(job.totalProperties || 0).toLocaleString()}</span>
                             </div>
                           ))}
-                          {workload.jobs.length > 3 && (
-                            <div className="text-xs text-gray-500">
-                              ...and {workload.jobs.length - 3} more
-                            </div>
-                          )}
                         </div>
                       </div>
                     )}
