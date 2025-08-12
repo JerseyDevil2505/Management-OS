@@ -739,12 +739,12 @@ const PayrollManagement = () => {
       localStorage.setItem('lastPayrollProcessed', JSON.stringify(processInfo));
       
       setSuccessMessage(`Successfully marked ${allInspectionIds.length} inspections as processed for period ending ${payrollPeriod.endDate}`);
-      
+
       const nextPeriod = getNextPayrollPeriod(payrollPeriod.endDate);
       setPayrollPeriod({
-        startDate: payrollPeriod.processedDate,
+        startDate: payrollPeriod.processedDate,  // This moves processing date to start
         endDate: nextPeriod.endDate,
-        processedDate: new Date().toISOString().split('T')[0],
+        processedDate: new Date().toISOString().split('T')[0],  // This resets to today
         expectedHours: nextPeriod.expectedHours
       });
       
@@ -790,12 +790,37 @@ const PayrollManagement = () => {
     return email;
   };
 
-  const copyEmailToClipboard = () => {
+  const copyEmailToClipboard = async () => {
     const email = generateEmailFeedback();
-    navigator.clipboard.writeText(email);
-    setSuccessMessage('Email text copied to clipboard!');
+    
+    if (!email) {
+      setError('No issues to copy');
+      return;
+    }
+    
+    try {
+      await navigator.clipboard.writeText(email);
+      setSuccessMessage('Email text copied to clipboard!');
+    } catch (err) {
+      // Fallback method if clipboard API fails
+      const textArea = document.createElement("textarea");
+      textArea.value = email;
+      textArea.style.position = "fixed";
+      textArea.style.left = "-999999px";
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      
+      try {
+        document.execCommand('copy');
+        setSuccessMessage('Email text copied to clipboard!');
+      } catch (err) {
+        setError('Failed to copy to clipboard');
+      }
+      
+      textArea.remove();
+    }
   };
-
   const getRowColor = (employee) => {
     if (employee.issues?.length > 0) return 'bg-amber-50';
     return '';
