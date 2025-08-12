@@ -801,6 +801,7 @@ const PayrollManagement = () => {
     try {
       await navigator.clipboard.writeText(email);
       setSuccessMessage('Email text copied to clipboard!');
+      setTimeout(() => setSuccessMessage(null), 2000);  // Reset after 2 seconds
     } catch (err) {
       // Fallback method if clipboard API fails
       const textArea = document.createElement("textarea");
@@ -814,6 +815,7 @@ const PayrollManagement = () => {
       try {
         document.execCommand('copy');
         setSuccessMessage('Email text copied to clipboard!');
+        setTimeout(() => setSuccessMessage(null), 2000);  // Reset after 2 seconds
       } catch (err) {
         setError('Failed to copy to clipboard');
       }
@@ -1037,7 +1039,7 @@ const PayrollManagement = () => {
                       onClick={copyEmailToClipboard}
                       className="text-sm text-blue-600 hover:text-blue-500"
                     >
-                      Copy as Email
+                      {successMessage === 'Email text copied to clipboard!' ? '✓ Copied!' : 'Copy as Email'}
                     </button>
                   </div>
                   <div className="space-y-3">
