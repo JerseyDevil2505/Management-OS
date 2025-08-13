@@ -183,7 +183,6 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
       setValuationMethod('acre');
     }
   }, [valuationMethod]);
-
   const convertRate = (acreRate, toMethod) => {
     if (!acreRate) return 0;
     
@@ -222,7 +221,7 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
       return isVacantClass && hasValidSale && inDateRange && validNu;
     });
     
-// Group package sales together
+    // Group package sales together
     const packageGroups = {};
     const processedIds = new Set();
     
@@ -360,7 +359,6 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
     
     setBracketAnalysis(analysis);
   };
-
   const searchProperties = () => {
     if (!properties) return;
     
@@ -406,6 +404,7 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
     setShowAddModal(false);
     setSearchResults([]);
   };
+
   const handlePropertyResearch = async (property) => {
     // Open in side panel or new window
     const researchPrompt = `
@@ -428,6 +427,7 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
     console.log('Research requested for:', property);
     alert('Research feature coming soon! Will analyze: ' + property.property_location);
   };
+
   const calculateRates = () => {
     const included = vacantSales.filter(s => 
       includedSales.has(s.id) && 
@@ -475,7 +475,7 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
     return specialRates;
   };
 
-const generateRecommendation = () => {
+  const generateRecommendation = () => {
     // Method 1: Direct vacant land sales
     const rawLandSales = vacantSales.filter(s => 
       includedSales.has(s.id) && saleCategories[s.id] === 'raw_land'
@@ -586,7 +586,6 @@ const generateRecommendation = () => {
       specialRates: calculateSpecialRates()
     };
   };
-
   // ========== ALLOCATION STUDY FUNCTIONS ==========
   const loadAllocationStudyData = async () => {
     if (!cascadeConfig.prime) return;
@@ -883,7 +882,6 @@ const generateRecommendation = () => {
       }
     };
   };
-
   // ========== SAVE FUNCTIONS ==========
   const saveAnalysis = async () => {
     if (!jobData?.id || !valuationMethod) return;
@@ -1063,7 +1061,6 @@ const generateRecommendation = () => {
     document.body.removeChild(a);
     window.URL.revokeObjectURL(url);
   };
-
   // ========== RENDER FUNCTIONS ==========
   if (isLoading) {
     return (
@@ -1264,7 +1261,6 @@ const generateRecommendation = () => {
               </p>
             </div>
           )}
-
           {/* Section 1: Vacant Land Sales */}
           <div style={{ marginBottom: '30px' }}>
             <h3>Method 1: Direct Vacant Land Sales</h3>
@@ -1452,7 +1448,6 @@ const generateRecommendation = () => {
                 Limited data: Only {vacantSales.length} vacant sales found
               </div>
             )}
-
             {/* Summary */}
             <div style={{ 
               marginTop: '20px', 
@@ -1509,7 +1504,7 @@ const generateRecommendation = () => {
                 return null;
               })()}
             </div>
-          </div>
+          </div>  {/* This closes Section 1 */}
 
           {/* Section 2: VCS Lot Size Bracketing */}
           <div style={{ marginBottom: '30px' }}>
@@ -1546,74 +1541,73 @@ const generateRecommendation = () => {
               <>
                 {/* Combined Analysis Results */}
                 <div style={{
-              background: '#F0F9FF', 
-              padding: '15px', 
-              borderRadius: '8px',
-              marginBottom: '20px' 
-            }}>
-              <h4 style={{ color: '#1F2937', marginBottom: '10px' }}>
-                Analysis Results - Both Methods
-              </h4>
-              {(() => {
-                const rec = recommendation;
-                
-                return (
-                  <div style={{ fontSize: '14px' }}>
-                    {/* Method 1 Results */}
-                    <div style={{ marginBottom: '10px' }}>
-                      <strong>Method 1 (Direct Vacant Sales):</strong> 
-                      {rec.method1 && rec.method1.rate > 0 ? (
-                        <>
-                          ${Math.round(rec.method1.rate).toLocaleString()}/acre
-                          <div style={{ marginLeft: '20px', fontSize: '13px', color: '#6B7280' }}>
-                            • {rec.method1.samples} raw land sales
-                            • Confidence: {Math.round((rec.method1.confidence || 0) * 100)}%
-                          </div>
-                        </>
-                      ) : (
-                        <span style={{ color: '#6B7280' }}> No raw land sales</span>
-                      )}
-                    </div>
+                  background: '#F0F9FF', 
+                  padding: '15px', 
+                  borderRadius: '8px',
+                  marginBottom: '20px' 
+                }}>
+                  <h4 style={{ color: '#1F2937', marginBottom: '10px' }}>
+                    Analysis Results - Both Methods
+                  </h4>
+                  {(() => {
+                    const rec = recommendation;
                     
-                    {/* Method 2 Results */}
-                    <div style={{ marginBottom: '10px' }}>
-                      <strong>Method 2 (Lot Size Bracketing):</strong> 
-                      {rec.method2 && rec.method2.rate > 0 ? (
-                        <>
-                          ${Math.round(rec.method2.rate).toLocaleString()}/acre
-                          <div style={{ marginLeft: '20px', fontSize: '13px', color: '#6B7280' }}>
-                            • {rec.method2.brackets} bracket calculations
-                            • {rec.method2.totalSales} total improved sales
-                            • Confidence: {Math.round((rec.method2.confidence || 0) * 100)}%
+                    return (
+                      <div style={{ fontSize: '14px' }}>
+                        {/* Method 1 Results */}
+                        <div style={{ marginBottom: '10px' }}>
+                          <strong>Method 1 (Direct Vacant Sales):</strong> 
+                          {rec.method1 && rec.method1.rate > 0 ? (
+                            <>
+                              ${Math.round(rec.method1.rate).toLocaleString()}/acre
+                              <div style={{ marginLeft: '20px', fontSize: '13px', color: '#6B7280' }}>
+                                • {rec.method1.samples} raw land sales
+                                • Confidence: {Math.round((rec.method1.confidence || 0) * 100)}%
+                              </div>
+                            </>
+                          ) : (
+                            <span style={{ color: '#6B7280' }}> No raw land sales</span>
+                          )}
+                        </div>
+                        
+                        {/* Method 2 Results */}
+                        <div style={{ marginBottom: '10px' }}>
+                          <strong>Method 2 (Lot Size Bracketing):</strong> 
+                          {rec.method2 && rec.method2.rate > 0 ? (
+                            <>
+                              ${Math.round(rec.method2.rate).toLocaleString()}/acre
+                              <div style={{ marginLeft: '20px', fontSize: '13px', color: '#6B7280' }}>
+                                • {rec.method2.brackets} bracket calculations
+                                • {rec.method2.totalSales} total improved sales
+                                • Confidence: {Math.round((rec.method2.confidence || 0) * 100)}%
+                              </div>
+                            </>
+                          ) : (
+                            <span style={{ color: '#6B7280' }}> Insufficient data</span>
+                          )}
+                        </div>
+                        
+                        {/* Combined Recommendation */}
+                        <div style={{ 
+                          marginTop: '10px', 
+                          paddingTop: '10px', 
+                          borderTop: '1px solid #E5E7EB',
+                          fontWeight: 'bold'
+                        }}>
+                          <strong>Recommended Prime Rate:</strong> ${Math.round(rec.prime).toLocaleString()}/acre
+                          <div style={{ fontSize: '12px', color: '#6B7280', marginTop: '5px', fontWeight: 'normal' }}>
+                            Source: {rec.source}
+                            {rec.variance > 0.3 && (
+                              <div style={{ color: '#F59E0B', marginTop: '5px' }}>
+                                ⚠️ Methods differ by {Math.round(rec.variance * 100)}% - manual review recommended
+                              </div>
+                            )}
                           </div>
-                        </>
-                      ) : (
-                        <span style={{ color: '#6B7280' }}> Insufficient data</span>
-                      )}
-                    </div>
-                    
-                    {/* Combined Recommendation */}
-                    <div style={{ 
-                      marginTop: '10px', 
-                      paddingTop: '10px', 
-                      borderTop: '1px solid #E5E7EB',
-                      fontWeight: 'bold'
-                    }}>
-                      <strong>Recommended Prime Rate:</strong> ${Math.round(rec.prime).toLocaleString()}/acre
-                      <div style={{ fontSize: '12px', color: '#6B7280', marginTop: '5px', fontWeight: 'normal' }}>
-                        Source: {rec.source}
-                        {rec.variance > 0.3 && (
-                          <div style={{ color: '#F59E0B', marginTop: '5px' }}>
-                            ⚠️ Methods differ by {Math.round(rec.variance * 100)}% - manual review recommended
-                          </div>
-                        )}
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
-
+                    );
+                  })()}
+                </div>
                 {/* Top VCS Lot Size Comparisons */}
                 <h4>Lot Size Comparison Analysis (Top VCS)</h4>
                 {Object.entries(bracketAnalysis)
@@ -1767,67 +1761,67 @@ const generateRecommendation = () => {
               </>
             ) : (
               /* Detailed VCS Table */
-            <>  
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ backgroundColor: '#F9FAFB' }}>
-                    <th style={{ padding: '8px', textAlign: 'left' }}>VCS</th>
-                    <th style={{ padding: '8px', textAlign: 'left' }}>&lt;1 acre</th>
-                    <th style={{ padding: '8px', textAlign: 'left' }}>1-5 acres</th>
-                    <th style={{ padding: '8px', textAlign: 'left' }}>5-10 acres</th>
-                    <th style={{ padding: '8px', textAlign: 'left' }}>&gt;10 acres</th>
-                    <th style={{ padding: '8px', textAlign: 'left' }}>Implied Rate</th>
-                    <th style={{ padding: '8px', textAlign: 'left' }}>Sample Size</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {Object.entries(bracketAnalysis)
-                    .filter(([vcs]) => !vcsFilter || vcs.includes(vcsFilter.toUpperCase()))
-                    .map(([vcs, data]) => {
-                      const evidenceStrength = data.totalSales >= 10 ? 'strong' : 
-                                              data.totalSales >= 5 ? 'moderate' : 'weak';
-                      const bgColor = evidenceStrength === 'strong' ? '#D1FAE5' :
-                                     evidenceStrength === 'moderate' ? '#FEF3C7' : '#FEE2E2';
-                      
-                      return (
-                        <tr key={vcs} style={{ borderBottom: '1px solid #E5E7EB', backgroundColor: bgColor }}>
-                          <td style={{ padding: '8px' }}>{vcs}</td>
-                          <td style={{ padding: '8px' }}>
-                            {data.brackets.small.count > 0 ? 
-                              `${data.brackets.small.count} sales` : 'N/A'}
-                          </td>
-                          <td style={{ padding: '8px' }}>
-                            {data.brackets.medium.count > 0 ? 
-                              `${data.brackets.medium.count} sales` : 'N/A'}
-                          </td>
-                          <td style={{ padding: '8px' }}>
-                            {data.brackets.large.count > 0 ? 
-                              `${data.brackets.large.count} sales` : 'N/A'}
-                          </td>
-                          <td style={{ padding: '8px' }}>
-                            {data.brackets.xlarge.count > 0 ? 
-                              `${data.brackets.xlarge.count} sales` : 'N/A'}
-                          </td>
-                          <td style={{ padding: '8px', fontWeight: 'bold' }}>
-                            {data.averageImpliedRate ? 
-                              `${Math.round(data.averageImpliedRate).toLocaleString()}/ac` : 'N/A'}
-                          </td>
-                          <td style={{ padding: '8px' }}>
-                            <span style={{ 
-                              color: data.totalSales >= 10 ? '#10B981' : 
-                                     data.totalSales >= 5 ? '#F59E0B' : '#EF4444' 
-                            }}>
-                              {data.totalSales} sales
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                </tbody>
-              </table>
               <>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: '#F9FAFB' }}>
+                      <th style={{ padding: '8px', textAlign: 'left' }}>VCS</th>
+                      <th style={{ padding: '8px', textAlign: 'left' }}>&lt;1 acre</th>
+                      <th style={{ padding: '8px', textAlign: 'left' }}>1-5 acres</th>
+                      <th style={{ padding: '8px', textAlign: 'left' }}>5-10 acres</th>
+                      <th style={{ padding: '8px', textAlign: 'left' }}>&gt;10 acres</th>
+                      <th style={{ padding: '8px', textAlign: 'left' }}>Implied Rate</th>
+                      <th style={{ padding: '8px', textAlign: 'left' }}>Sample Size</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(bracketAnalysis)
+                      .filter(([vcs]) => !vcsFilter || vcs.includes(vcsFilter.toUpperCase()))
+                      .map(([vcs, data]) => {
+                        const evidenceStrength = data.totalSales >= 10 ? 'strong' : 
+                                                data.totalSales >= 5 ? 'moderate' : 'weak';
+                        const bgColor = evidenceStrength === 'strong' ? '#D1FAE5' :
+                                       evidenceStrength === 'moderate' ? '#FEF3C7' : '#FEE2E2';
+                        
+                        return (
+                          <tr key={vcs} style={{ borderBottom: '1px solid #E5E7EB', backgroundColor: bgColor }}>
+                            <td style={{ padding: '8px' }}>{vcs}</td>
+                            <td style={{ padding: '8px' }}>
+                              {data.brackets.small.count > 0 ? 
+                                `${data.brackets.small.count} sales` : 'N/A'}
+                            </td>
+                            <td style={{ padding: '8px' }}>
+                              {data.brackets.medium.count > 0 ? 
+                                `${data.brackets.medium.count} sales` : 'N/A'}
+                            </td>
+                            <td style={{ padding: '8px' }}>
+                              {data.brackets.large.count > 0 ? 
+                                `${data.brackets.large.count} sales` : 'N/A'}
+                            </td>
+                            <td style={{ padding: '8px' }}>
+                              {data.brackets.xlarge.count > 0 ? 
+                                `${data.brackets.xlarge.count} sales` : 'N/A'}
+                            </td>
+                            <td style={{ padding: '8px', fontWeight: 'bold' }}>
+                              {data.averageImpliedRate ? 
+                                `${Math.round(data.averageImpliedRate).toLocaleString()}/ac` : 'N/A'}
+                            </td>
+                            <td style={{ padding: '8px' }}>
+                              <span style={{ 
+                                color: data.totalSales >= 10 ? '#10B981' : 
+                                       data.totalSales >= 5 ? '#F59E0B' : '#EF4444' 
+                              }}>
+                                {data.totalSales} sales
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              </>
             )}
-
+          </div>  {/* This closes Section 2 */}
           {/* Section 3: Rate Analysis & Recommendation */}
           <div style={{ 
             background: 'white',
@@ -1845,57 +1839,57 @@ const generateRecommendation = () => {
             }}>
               <TrendingUp size={24} /> Rate Analysis & Recommendation
             </h3>
-              {(() => {
-                const allImpliedRates = [];
-                Object.values(bracketAnalysis).forEach(vcs => {
-                  if (vcs.impliedRates) {
-                    vcs.impliedRates.forEach(r => {
-                      if (r.rate > 0) {
-                        allImpliedRates.push({
-                          rate: r.rate,
-                          transition: r.transition,
-                          vcs: Object.keys(bracketAnalysis).find(k => bracketAnalysis[k] === vcs)
-                        });
-                      }
-                    });
-                  }
-                });
-                
-                const avgRate = allImpliedRates.length > 0 ? 
-                  allImpliedRates.reduce((sum, r) => sum + r.rate, 0) / allImpliedRates.length : 0;
-                
-                return (
-                  <div style={{ fontSize: '14px' }}>
-                    <div style={{ marginBottom: '8px' }}>
-                      <strong>Analysis Summary:</strong> {allImpliedRates.length} positive implied rates found
+            {(() => {
+              const allImpliedRates = [];
+              Object.values(bracketAnalysis).forEach(vcs => {
+                if (vcs.impliedRates) {
+                  vcs.impliedRates.forEach(r => {
+                    if (r.rate > 0) {
+                      allImpliedRates.push({
+                        rate: r.rate,
+                        transition: r.transition,
+                        vcs: Object.keys(bracketAnalysis).find(k => bracketAnalysis[k] === vcs)
+                      });
+                    }
+                  });
+                }
+              });
+              
+              const avgRate = allImpliedRates.length > 0 ? 
+                allImpliedRates.reduce((sum, r) => sum + r.rate, 0) / allImpliedRates.length : 0;
+              
+              return (
+                <div style={{ fontSize: '14px' }}>
+                  <div style={{ marginBottom: '8px' }}>
+                    <strong>Analysis Summary:</strong> {allImpliedRates.length} positive implied rates found
+                  </div>
+                  {allImpliedRates.slice(0, 3).map((r, idx) => (
+                    <div key={idx} style={{ marginLeft: '20px', fontSize: '13px', color: '#6B7280' }}>
+                      • {r.vcs} ({r.transition}): ${Math.round(r.rate).toLocaleString()}/acre
                     </div>
-                    {allImpliedRates.slice(0, 3).map((r, idx) => (
-                      <div key={idx} style={{ marginLeft: '20px', fontSize: '13px', color: '#6B7280' }}>
-                        • {r.vcs} ({r.transition}): ${Math.round(r.rate).toLocaleString()}/acre
-                      </div>
-                    ))}
-                    {allImpliedRates.length > 3 && (
-                      <div style={{ marginLeft: '20px', fontSize: '13px', color: '#6B7280' }}>
-                        • ...and {allImpliedRates.length - 3} more
-                      </div>
-                    )}
-                    <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #E5E7EB' }}>
-                      <strong>Average Calculated Rate (Method 2):</strong> ${Math.round(avgRate).toLocaleString()}/acre
-                      <div style={{ fontSize: '12px', color: '#6B7280', marginTop: '5px' }}>
-                        Calculated from actual price differences between lot size brackets
-                      </div>
+                  ))}
+                  {allImpliedRates.length > 3 && (
+                    <div style={{ marginLeft: '20px', fontSize: '13px', color: '#6B7280' }}>
+                      • ...and {allImpliedRates.length - 3} more
+                    </div>
+                  )}
+                  <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #E5E7EB' }}>
+                    <strong>Average Calculated Rate (Method 2):</strong> ${Math.round(avgRate).toLocaleString()}/acre
+                    <div style={{ fontSize: '12px', color: '#6B7280', marginTop: '5px' }}>
+                      Calculated from actual price differences between lot size brackets
                     </div>
                   </div>
-                );
-              })()}
-            </div>
+                </div>
+              );
+            })()}
 
             {/* Clean Rate Input Section */}
             <div style={{ 
               background: '#F9FAFB', 
               padding: '20px', 
               borderRadius: '8px',
-              marginBottom: '20px'
+              marginBottom: '20px',
+              marginTop: '20px'
             }}>
               <h4 style={{ color: '#1F2937', marginBottom: '15px' }}>Enter Land Rates</h4>
               
@@ -1997,7 +1991,6 @@ const generateRecommendation = () => {
                   </div>
                 </div>
               </div>
-              
               {/* Special Categories */}
               <div style={{ paddingTop: '20px', borderTop: '1px solid #E5E7EB' }}>
                 <h4 style={{ color: '#1F2937', marginBottom: '15px' }}>Special Category Rates</h4>
@@ -2178,10 +2171,10 @@ const generateRecommendation = () => {
               >
                 Save Land Rates
               </button>
-            </div>
-        </>
-      )}
-
+            </div>  {/* Closes Clean Rate Input Section */}
+          </div>  {/* Closes Section 3 */}
+        </>  {/* Closes fragment for land-rates */}
+      )}  {/* Closes land-rates conditional */}
       {/* ALLOCATION STUDY SUB-TAB */}
       {activeSubTab === 'allocation' && (
         <>
@@ -2364,7 +2357,6 @@ const generateRecommendation = () => {
               </div>
             </div>
           )}
-
           {/* Vacant Land Test Table */}
           <div style={{ marginBottom: '30px' }}>
             <h3>Vacant Land Test (Filtered: {getFilteredVacantTestSales().length} of {vacantTestSales.length})</h3>
@@ -2533,7 +2525,6 @@ const generateRecommendation = () => {
           </div>
         </>
       )}
-
       {/* Add Property Modal */}
       {showAddModal && (
         <div style={{
@@ -2829,7 +2820,14 @@ const generateRecommendation = () => {
           </div>
         </div>
       )}
-    );
-  };
+    </div>  {/* Closes main wrapper */}
+  );
+};
 
 export default LandValuationTab;
+      
+
+              
+          
+                
+  
