@@ -1827,7 +1827,6 @@ const generateRecommendation = () => {
               </table>
               <>
             )}
-          </div>
 
           {/* Section 3: Rate Analysis & Recommendation */}
           <div style={{ 
