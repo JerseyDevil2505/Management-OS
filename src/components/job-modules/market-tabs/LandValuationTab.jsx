@@ -264,30 +264,6 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
     const enriched = Object.values(packageGroups);
     setVacantSales(enriched);
     setIncludedSales(new Set()); // Start unchecked
-      
-      let totalAcres = prop.asset_lot_acre || 0;
-      let totalSf = prop.asset_lot_sf || 0;
-      
-      if (packageData && packageData.is_land_only) {
-        totalAcres = packageData.combined_lot_acres;
-        totalSf = packageData.combined_lot_sf;
-      }
-      
-      const totalInAcres = totalAcres + (totalSf / 43560);
-      
-      return {
-        ...prop,
-        packageData,
-        totalAcres: totalInAcres,
-        pricePerAcre: totalInAcres > 0 ? (prop.sales_price / totalInAcres) : 0,
-        included: true
-      };
-    });
-    
-    setVacantSales(enriched);
-    
-    // Start with all sales unchecked - let user decide what's valid
-    setIncludedSales(new Set());
   };
 
   const performBracketAnalysis = () => {
