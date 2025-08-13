@@ -351,6 +351,67 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
     return { average, median, count: included.length };
   };
 
+  const handlePropertyResearch = async (property) => {
+    // Show loading state
+    const originalNotes = landNotes[property.id] || '';
+    setLandNotes({...landNotes, [property.id]: 'Researching...'});
+    
+    try {
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "claude-3-5-sonnet-20241022",
+          max_tokens: 1000,
+          messages: [
+            {
+              role: "user",
+              content: `You are a property valuation expert. Research and analyze this vacant land sale in ${jobData?.municipality || 'the township'}, ${jobData?.county || 'the'} County, NJ:
+
+Block ${property.property_block} Lot ${property.property_lot}
+Address: ${property.property_location || 'Not provided'}
+Sale Date: ${property.sales_date}
+Sale Price: $${property.sales_price?.toLocaleString()}
+Acres: ${property.totalAcres?.toFixed(2)}
+Price/Acre: $${Math.round(property.pricePerAcre).toLocaleString()}
+
+Based on typical patterns in NJ property sales, identify likely reasons this property sold at this price. Consider:
+1. Environmental constraints (wetlands, flood zones, steep slopes)
+2. Access issues (landlocked, easement requirements)
+3. Development potential (zoning, utilities availability)
+4. Tax status (farmland assessment, liens, back taxes)
+5. Market conditions at time of sale
+
+Provide a brief 2-3 sentence assessment of the most likely factors affecting this sale price. Be specific and actionable for valuation purposes.`
+            }
+          ]
+        })
+      });
+      
+      const data = await response.json();
+      const claudeResponse = data.content[0].text;
+      
+      // Update the notes with Claude's response
+      setLandNotes({...landNotes, [property.id]: claudeResponse});
+      
+      // Also update the category if Claude identifies specific issues
+      if (claudeResponse.toLowerCase().includes('wetland')) {
+        setSaleCategories({...saleCategories, [property.id]: 'wetlands'});
+      } else if (claudeResponse.toLowerCase().includes('landlocked')) {
+        setSaleCategories({...saleCategories, [property.id]: 'landlocked'});
+      } else if (claudeResponse.toLowerCase().includes('conservation') || claudeResponse.toLowerCase().includes('preserved')) {
+        setSaleCategories({...saleCategories, [property.id]: 'conservation'});
+      }
+      
+    } catch (error) {
+      console.error('Research failed:', error);
+      setLandNotes({...landNotes, [property.id]: originalNotes + ' [Research failed]'});
+      alert('Research failed. Please try again.');
+    }
+  };
+    
   const generateRecommendation = () => {
     const vacantRates = calculateRates();
     const vcsWithGoodData = Object.keys(bracketAnalysis).filter(vcs => 
@@ -1167,18 +1228,19 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
 
             {/* Vacant Sales Table */}
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ backgroundColor: '#F9FAFB' }}>
-                  <th style={{ padding: '8px', textAlign: 'left' }}>Include</th>
-                  <th style={{ padding: '8px', textAlign: 'left' }}>Block/Lot</th>
-                  <th style={{ padding: '8px', textAlign: 'left' }}>Category*</th>
-                  <th style={{ padding: '8px', textAlign: 'left' }}>Sale Date</th>
-                  <th style={{ padding: '8px', textAlign: 'left' }}>Sale Price</th>
-                  <th style={{ padding: '8px', textAlign: 'left' }}>Acres</th>
-                  <th style={{ padding: '8px', textAlign: 'left' }}>$/Acre</th>
-                  <th style={{ padding: '8px', textAlign: 'left' }}>Notes</th>
-                </tr>
-              </thead>
+            <thead>
+              <tr style={{ backgroundColor: '#F9FAFB' }}>
+                <th style={{ padding: '8px', textAlign: 'left' }}>Include</th>
+                <th style={{ padding: '8px', textAlign: 'left' }}>Block/Lot</th>
+                <th style={{ padding: '8px', textAlign: 'left' }}>Category*</th>
+                <th style={{ padding: '8px', textAlign: 'left' }}>Sale Date</th>
+                <th style={{ padding: '8px', textAlign: 'left' }}>Sale Price</th>
+                <th style={{ padding: '8px', textAlign: 'left' }}>Acres</th>
+                <th style={{ padding: '8px', textAlign: 'left' }}>$/Acre</th>
+                <th style={{ padding: '8px', textAlign: 'left' }}>Notes</th>
+                <th style={{ padding: '8px', textAlign: 'center' }}>Research</th>
+              </tr>
+            </thead>
               <tbody>
                 {vacantSales.map(sale => (
                   <tr key={sale.id} style={{ 
@@ -1244,6 +1306,22 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
                         placeholder="Add notes..."
                         style={{ width: '100%', padding: '4px' }}
                       />
+                    </td>
+                    <td style={{ padding: '8px', textAlign: 'center' }}>
+                      <button
+                        onClick={() => handlePropertyResearch(sale)}
+                        style={{
+                          padding: '4px 8px',
+                          backgroundColor: '#3B82F6',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '12px'
+                        }}
+                      >
+                        Research
+                      </button>
                     </td>
                   </tr>
                 ))}
