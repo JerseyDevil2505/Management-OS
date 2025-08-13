@@ -1755,7 +1755,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                             <p className="text-gray-600 text-sm">{change.property_location}</p>
                           </div>
                           
-{/* Sales Comparison */}
+                          {/* Sales Comparison */}
                           <div className="grid grid-cols-2 gap-4 p-3 bg-white rounded-lg border border-gray-200">
                             {/* Old Sale */}
                             <div className="text-center">
@@ -1799,6 +1799,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                               </div>
                             </div>
                           </div>
+                        </div>
                         
                         <div className="flex gap-2">
                           <button
