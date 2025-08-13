@@ -2200,6 +2200,12 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     const fetchSourceFileVersion = async () => {
       if (!job?.id) return;
       
+      // Don't overwrite if we already have a version set locally
+      if (sourceFileVersion !== null) {
+        setIsInitialized(true);
+        return;
+      }
+      
       try {
         const { data, error } = await supabase
           .from('property_records')
@@ -2217,13 +2223,12 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         console.error('🔍 DEBUG - Error fetching source file version:', error);
         setSourceFileVersion(1);
       } finally {
-        // Mark as initialized after fetching version
         setIsInitialized(true);
       }
     };
 
     fetchSourceFileVersion();
-  }, [job?.id]);
+  }, [job?.id]);  // Remove sourceFileVersion from dependencies
 
   const getFileStatusWithRealVersion = (timestamp, type) => {
     if (!timestamp) return 'Never';
