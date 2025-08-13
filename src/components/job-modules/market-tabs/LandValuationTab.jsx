@@ -1510,7 +1510,6 @@ const generateRecommendation = () => {
               })()}
             </div>
           </div>
-        </div>
 
           {/* Section 2: VCS Lot Size Bracketing */}
           <div style={{ marginBottom: '30px' }}>
@@ -1768,6 +1767,7 @@ const generateRecommendation = () => {
               </>
             ) : (
               /* Detailed VCS Table */
+            <>  
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ backgroundColor: '#F9FAFB' }}>
@@ -1825,6 +1825,7 @@ const generateRecommendation = () => {
                     })}
                 </tbody>
               </table>
+              <>
             )}
           </div>
 
