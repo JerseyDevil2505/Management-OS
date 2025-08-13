@@ -1545,10 +1545,9 @@ const generateRecommendation = () => {
             
             {!showAllVCS ? (
               /* Summary View */
-              <div>
-
-{/* Combined Analysis Results */}
-            <div style={{ 
+              <>
+                {/* Combined Analysis Results */}
+                <div style={{
               background: '#F0F9FF', 
               padding: '15px', 
               borderRadius: '8px',
