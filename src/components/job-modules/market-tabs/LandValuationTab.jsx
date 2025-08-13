@@ -1079,8 +1079,6 @@ const generateRecommendation = () => {
     );
   }
 
-
-
   const recommendation = generateRecommendation();
   const allocationStats = activeSubTab === 'allocation' ? calculateAllocationStats() : null;
 
@@ -1766,7 +1764,7 @@ const generateRecommendation = () => {
                       </div>
                     </div>
                   ))}
-              </div>
+              </>
             ) : (
               /* Detailed VCS Table */
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -1829,7 +1827,7 @@ const generateRecommendation = () => {
             )}
           </div>
 
-{/* Section 3: Rate Analysis & Recommendation */}
+          {/* Section 3: Rate Analysis & Recommendation */}
           <div style={{ 
             background: 'white',
             border: '1px solid #E5E7EB',
@@ -2537,7 +2535,7 @@ const generateRecommendation = () => {
         </>
       )}
 
-{/* Add Property Modal */}
+      {/* Add Property Modal */}
       {showAddModal && (
         <div style={{
           position: 'fixed',
