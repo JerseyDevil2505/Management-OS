@@ -74,21 +74,19 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
 
 // Define fields that must be preserved during file updates
 const PRESERVED_FIELDS = [
-  'project_start_date',      // ProductionTracker
-  'is_assigned_property',    // AdminJobManagement  
-  'validation_status',       // ProductionTracker
-  'asset_building_class',    // FinalValuation
-  'asset_design_style',      // FinalValuation
-  'asset_ext_cond',         // FinalValuation
-  'asset_int_cond',         // FinalValuation
-  'asset_type_use',         // FinalValuation
-  'asset_year_built',       // FinalValuation
-  'asset_zoning',           // FinalValuation
-  'location_analysis',      // MarketAnalysis
-  'new_vcs',                // AppealCoverage
-  'values_norm_size',       // Valuation adjustments
-  'values_norm_time'        // Valuation adjustments
-];
+  'project_start_date',      // ProductionTracker - user set
+  'is_assigned_property',    // AdminJobManagement - from assignments
+  'validation_status',       // ProductionTracker - validation state
+  'location_analysis',       // MarketAnalysis - manually entered
+  'new_vcs',                 // AppealCoverage - manually set
+  'asset_map_page',          // MarketAnalysis worksheet - manually entered
+  'asset_key_page',          // MarketAnalysis worksheet - manually entered
+  'asset_zoning',            // MarketAnalysis worksheet - manually entered
+  'values_norm_size',        // MarketAnalysis - calculated value
+  'values_norm_time',        // MarketAnalysis - calculated value
+  'sales_history',           // FileUploadButton - sales decisions
+  'processing_notes'         // User notes - if added should be kept
+]
 
 // ===== CODE INTERPRETATION UTILITIES =====
 // Utilities for interpreting vendor-specific codes in MarketLandAnalysis
