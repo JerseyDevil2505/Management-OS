@@ -15,9 +15,10 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
   const [showResultsModal, setShowResultsModal] = useState(false);
   const [comparisonResults, setComparisonResults] = useState(null);
   const [salesDecisions, setSalesDecisions] = useState(new Map());
-  const [sourceFileVersion, setSourceFileVersion] = useState(1);
+  const [sourceFileVersion, setSourceFileVersion] = useState(null);  // Changed from 1 to null
   const [lastSourceProcessedDate, setLastSourceProcessedDate] = useState(null);
   const [lastCodeProcessedDate, setLastCodeProcessedDate] = useState(null);
+  const [isInitialized, setIsInitialized] = useState(false);  // Added new state
   
   // NEW: Batch processing modal state
   const [showBatchModal, setShowBatchModal] = useState(false);
@@ -1119,6 +1120,12 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
 
   // ENHANCED: Process changes with batch logging modal
   const handleProcessChanges = async () => {
+    // Wait for initialization
+    if (!isInitialized || sourceFileVersion === null) {
+      addNotification('System initializing, please try again in a moment', 'warning');
+      return;
+    }
+    
     if (!sourceFile || !sourceFileContent) {
       addNotification('No source file to process', 'error');
       return;
@@ -2182,6 +2189,9 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       } catch (error) {
         console.error('🔍 DEBUG - Error fetching source file version:', error);
         setSourceFileVersion(1);
+      } finally {
+        // Mark as initialized after fetching version
+        setIsInitialized(true);
       }
     };
 
