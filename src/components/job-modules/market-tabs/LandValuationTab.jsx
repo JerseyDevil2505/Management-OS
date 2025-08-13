@@ -1633,35 +1633,6 @@ const generateRecommendation = () => {
                 );
               })()}
             </div>
-                  <h4>Method 2 Summary</h4>
-                  <div>
-                    {(() => {
-                      const positiveRates = [];
-                      Object.values(bracketAnalysis).forEach(vcs => {
-                        if (vcs.impliedRates) {
-                          vcs.impliedRates.forEach(r => {
-                            if (r.rate > 0) positiveRates.push(r.rate);
-                          });
-                        }
-                      });
-                      
-                      const avgPositiveRate = positiveRates.length > 0 ? 
-                        positiveRates.reduce((sum, r) => sum + r, 0) / positiveRates.length : 0;
-                      
-                      return (
-                        <>
-                          <strong>Positive Implied Rates:</strong> {positiveRates.length} found
-                          <br/>
-                          <strong>Average Calculated Rate:</strong> ${Math.round(avgPositiveRate).toLocaleString()}/acre
-                          <br/>
-                          <div style={{ fontSize: '12px', color: '#6B7280', marginTop: '5px' }}>
-                            Note: Negative values are excluded from land rate calculations
-                          </div>
-                        </>
-                      );
-                    })()}
-                  </div>
-                </div>
 
                 {/* Top VCS Lot Size Comparisons */}
                 <h4>Lot Size Comparison Analysis (Top VCS)</h4>
