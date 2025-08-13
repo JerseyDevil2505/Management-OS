@@ -1820,7 +1820,7 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
                   </tbody>
                 </table>
               </>
-            )}
+            )
           </div>  {/* This closes Section 2 */}
           {/* Section 3: Rate Analysis & Recommendation */}
           <div style={{ 
