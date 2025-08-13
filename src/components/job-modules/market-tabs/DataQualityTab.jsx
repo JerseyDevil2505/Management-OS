@@ -38,37 +38,6 @@ const DataQualityTab = ({
   const [isRunningChecks, setIsRunningChecks] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [modalData, setModalData] = useState({ title: '', properties: [] });
-  const [showTemplateLibrary, setShowTemplateLibrary] = useState(false);
-  const [templateLibrary, setTemplateLibrary] = useState([]);
-
-  // Load custom checks into template library
-  useEffect(() => {
-    if (customChecks.length > 0) {
-      // Group checks by category based on their names
-      const categorizedTemplates = [
-        {
-          category: 'Building Class Validation',
-          templates: customChecks.filter(check => 
-            check.name.toLowerCase().includes('building class')
-          )
-        },
-        {
-          category: 'Data Integrity',
-          templates: customChecks.filter(check => 
-            check.name.toLowerCase().includes('missing') || 
-            check.name.toLowerCase().includes('zero')
-          )
-        },
-        {
-          category: 'All Checks',
-          templates: customChecks
-        }
-      ];
-      
-      setTemplateLibrary(categorizedTemplates.filter(cat => cat.templates.length > 0));
-    }
-  }, [customChecks]);
-  const [isDraggingOver, setIsDraggingOver] = useState(false);
 
   // Refs for uncontrolled inputs
   const customCheckNameInputRef = useRef(null);
@@ -260,7 +229,261 @@ const DataQualityTab = ({
     
     console.log('✅ Excel report exported successfully');
   };
+
+const generateQCFormPDF = () => {
+  // Create the form HTML with full-page layout
+  const formHTML = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>QC Form Template</title>
+      <style>
+        @page {
+          size: letter;
+          margin: 0.5in;
+        }
+        
+        @media print {
+          body {
+            margin: 0;
+            padding: 0;
+          }
+          .form-container {
+            page-break-inside: avoid;
+          }
+        }
+        
+        body {
+          font-family: Arial, sans-serif;
+          font-size: 12pt;
+          line-height: 1.2;
+          margin: 0;
+          padding: 0;
+        }
+        
+        .form-container {
+          width: 100%;
+          height: 100vh;
+          display: flex;
+          flex-direction: column;
+          padding: 0.5in;
+          box-sizing: border-box;
+        }
+        
+        h1 {
+          text-align: center;
+          font-size: 18pt;
+          font-weight: bold;
+          margin: 0 0 10px 0;
+          letter-spacing: 1px;
+        }
+        
+        h2 {
+          text-align: center;
+          font-size: 16pt;
+          font-weight: normal;
+          margin: 0 0 30px 0;
+          letter-spacing: 0.5px;
+        }
+        
+        .field-row {
+          margin-bottom: 20px;
+          display: flex;
+          align-items: center;
+          width: 100%;
+        }
+        
+        .field-group {
+          display: flex;
+          align-items: center;
+          gap: 20px;
+          width: 100%;
+        }
+        
+        .field-inline {
+          display: flex;
+          align-items: center;
+          flex: 1;
+        }
+        
+        .label {
+          font-weight: normal;
+          font-size: 12pt;
+          margin-right: 8px;
+          white-space: nowrap;
+        }
+        
+        .line {
+          flex: 1;
+          border: none;
+          border-bottom: 1px solid black;
+          height: 25px;
+          min-width: 100px;
+          background: transparent;
+        }
+        
+        .line-short {
+          flex: 0 0 100px;
+          max-width: 100px;
+        }
+        
+        .line-medium {
+          flex: 0 0 150px;
+          max-width: 150px;
+        }
+        
+        .box-container {
+          margin-bottom: 20px;
+        }
+        
+        .box-label {
+          font-weight: normal;
+          font-size: 12pt;
+          margin-bottom: 5px;
+        }
+        
+        .box {
+          width: 100%;
+          border: 1px solid black;
+          box-sizing: border-box;
+          background: white;
+        }
+        
+        .box-small {
+          height: 80px;
+        }
+        
+        .box-medium {
+          height: 100px;
+        }
+        
+        .box-large {
+          height: 120px;
+        }
+        
+        /* Ensure the form takes full page height */
+        .content {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          justify-content: space-between;
+        }
+        
+        .top-fields {
+          flex: 0 0 auto;
+        }
+        
+        .main-boxes {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          justify-content: space-evenly;
+          margin: 20px 0;
+        }
+        
+        .bottom-fields {
+          flex: 0 0 auto;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="form-container">
+        <h1>PROFESSIONAL PROPERTY APPRAISERS</h1>
+        <h2>QUALITY CONTROL FORM</h2>
+        
+        <div class="content">
+          <div class="top-fields">
+            <div class="field-row">
+              <div class="field-inline">
+                <span class="label">MUNICIPALITY:</span>
+                <span class="line"></span>
+              </div>
+            </div>
+            
+            <div class="field-row">
+              <div class="field-group">
+                <div class="field-inline">
+                  <span class="label">BLOCK:</span>
+                  <span class="line line-short"></span>
+                </div>
+                <div class="field-inline">
+                  <span class="label">LOT:</span>
+                  <span class="line line-short"></span>
+                </div>
+                <div class="field-inline">
+                  <span class="label">QUAL:</span>
+                  <span class="line line-short"></span>
+                </div>
+              </div>
+            </div>
+            
+            <div class="field-row">
+              <div class="field-inline">
+                <span class="label">INSPECTOR:</span>
+                <span class="line"></span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="main-boxes">
+            <div class="box-container">
+              <div class="box-label">SKETCH:</div>
+              <div class="box box-large"></div>
+            </div>
+            
+            <div class="box-container">
+              <div class="box-label">EXTERIOR:</div>
+              <div class="box box-medium"></div>
+            </div>
+            
+            <div class="box-container">
+              <div class="box-label">INTERIOR:</div>
+              <div class="box box-medium"></div>
+            </div>
+            
+            <div class="box-container">
+              <div class="box-label">DETACHED & NOTES:</div>
+              <div class="box box-medium"></div>
+            </div>
+          </div>
+          
+          <div class="bottom-fields">
+            <div class="field-row">
+              <div class="field-group">
+                <div class="field-inline">
+                  <span class="label">PHOTO:</span>
+                  <span class="line line-medium"></span>
+                </div>
+                <div class="field-inline">
+                  <span class="label">DATE:</span>
+                  <span class="line line-medium"></span>
+                </div>
+              </div>
+            </div>
+            
+            <div class="field-row">
+              <div class="field-inline">
+                <span class="label">SUPERVISOR:</span>
+                <span class="line"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
   
+  // Open in new window and trigger print dialog (save as PDF option)
+  const printWindow = window.open('', '_blank', 'width=850,height=1100');
+  printWindow.document.write(formHTML);
+  printWindow.document.close();
+  
+  // Auto-trigger print dialog after load
+  printWindow.onload = function() {
+    printWindow.print();
+  };
+};
   const runQualityChecks = async () => {
     setIsRunningChecks(true);
     const results = {
@@ -406,6 +629,48 @@ const DataQualityTab = ({
     const buildingClass = property.asset_building_class;
     const typeUse = property.asset_type_use;
     const designStyle = property.asset_design_style;
+    
+    // TYPE USE / BUILDING CLASS VALIDATION
+    const typeUseStr = typeUse?.toString().trim();
+    const buildingClassStr = buildingClass?.toString().trim();
+    
+    if (typeUseStr && buildingClassStr && parseInt(buildingClassStr) > 10) {
+      let validBuildingClasses = [];
+      const firstChar = typeUseStr.charAt(0);
+      
+      // Define valid building classes based on type/use first character
+      switch(firstChar) {
+        case '1':  // Single Family (10, 11, 12, etc.)
+          validBuildingClasses = ['11','12','13','14','15','16','17','18','19','20','21','22','23'];
+          break;
+        case '2':  // Semi-Detached (20, 21, etc.)
+          validBuildingClasses = ['25','27','29','31'];
+          break;
+        case '3':  // Row/Townhouse (30, 31, 3E, 3I, etc.)
+          validBuildingClasses = ['33','35','37','39'];
+          break;
+        case '4':  // Multi-Family (42, 43, 44, etc.)
+          validBuildingClasses = ['43','45','47','49'];
+          break;
+        case '5':  // Conversions (51, 52, 53, etc.)
+          validBuildingClasses = ['11','12','13','14','15','16','17','18','19','20','21','22','23'];
+          break;
+        case '6':  // Condominiums (60, etc.)
+          validBuildingClasses = ['25','27','29','31','33','35','37','39'];
+          break;
+      }
+      
+      // Check if current building class is valid for this type/use
+      if (validBuildingClasses.length > 0 && !validBuildingClasses.includes(buildingClassStr)) {
+        results.characteristics.push({
+          check: 'type_use_building_class_invalid',
+          severity: 'critical',
+          property_key: property.property_composite_key,
+          message: `Type/Use ${typeUseStr} has invalid Building Class ${buildingClassStr}. Valid classes for Type ${firstChar}x: ${validBuildingClasses.join(', ')}`,
+          details: property
+        });
+      }
+    }
     
     if (m4Class && m4Class !== '2' && m4Class !== '3A') {
       if (buildingClass && parseInt(buildingClass) !== 10) {
@@ -1177,6 +1442,7 @@ const DataQualityTab = ({
       'residential_building_class_10': 'Residential Properties with Building Class 10',
       'missing_design_style': 'Missing Design Style',
       'missing_type_use': 'Missing Type Use',
+      'type_use_building_class_invalid': 'Invalid Building Class for Type/Use',
       'design_without_proper_building_class': 'Has Design but Wrong Building Class',
       'design_without_type_use': 'Has Design but Missing Type Use',
       'type_use_building_class_mismatch': 'Type Use/Building Class Mismatch',
@@ -1280,7 +1546,7 @@ const DataQualityTab = ({
     saveCustomChecksToDb(customChecks.filter(check => check.id !== checkId));
   };
   
-  const editCustomCheck = (check) => {
+const editCustomCheck = (check) => {
     customCheckNameInputRef.current.value = check.name;
     customCheckSeveritySelectRef.current.value = check.severity;
     setCurrentCustomCheck({
@@ -1290,55 +1556,6 @@ const DataQualityTab = ({
     // Remove from list so it can be re-saved with same or new name
     setCustomChecks(prev => prev.filter(c => c.id !== check.id));
   };
-
-    // Add these drag and drop handler functions HERE:
-  const handleDragStart = (e, template) => {
-    e.dataTransfer.effectAllowed = 'copy';
-    e.dataTransfer.setData('template', JSON.stringify(template));
-  }; 
-
-    const handleDragOver = (e) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'copy';
-    setIsDraggingOver(true);
-  };
-
-  const handleDragLeave = (e) => {
-    // Only set to false if we're leaving the drop zone entirely
-    if (e.currentTarget === e.target) {
-      setIsDraggingOver(false);
-    }
-  };
-
-  const handleDrop = (e) => {
-    e.preventDefault();
-    setIsDraggingOver(false);
-    
-    try {
-      const template = JSON.parse(e.dataTransfer.getData('template'));
-      
-      // Check if this check already exists
-      const exists = customChecks.some(c => c.name === template.name);
-      if (exists) {
-        alert(`"${template.name}" already exists in saved checks`);
-        return;
-      }
-      
-      // Add to custom checks with new ID
-      const newCheck = {
-        ...template,
-        id: Date.now()
-      };
-      
-      const updatedChecks = [...customChecks, newCheck];
-      setCustomChecks(updatedChecks);
-      saveCustomChecksToDb(updatedChecks);
-      
-      console.log(`✅ Added "${template.name}" from template library`);
-    } catch (error) {
-      console.error('Error adding template:', error);
-    }
-  };  
   
   const runCustomCheck = async (check) => {
     const results = { custom: [] };
@@ -1654,6 +1871,12 @@ const DataQualityTab = ({
               <Download size={16} />
               Export to Excel
             </button>
+            <button 
+              onClick={generateQCFormPDF}
+              className="px-4 py-2 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-all flex items-center gap-2"
+            >
+              📋 QC Form Template
+            </button>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
@@ -1806,64 +2029,12 @@ const DataQualityTab = ({
         </div>
       )}
       
-{/* CUSTOM CHECKS TAB CONTENT */}
+      {/* CUSTOM CHECKS TAB CONTENT */}
       {dataQualityActiveSubTab === 'custom' && (
         <div>
-          {/* View Template Library Button */}
-          <div className="mb-4">
-            <button
-              onClick={() => setShowTemplateLibrary(!showTemplateLibrary)}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
-            >
-              {showTemplateLibrary ? 'Hide' : 'View'} Template Library
-            </button>
-          </div>
-
-          <div className="flex gap-6">
-            {/* Template Library Panel */}
-            {showTemplateLibrary && (
-              <div className="w-1/3 bg-white border border-gray-200 rounded-lg p-4">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4">
-                  📚 Template Library
-                </h3>
-                <p className="text-sm text-gray-600 mb-4">
-                  Drag templates to saved checks →
-                </p>
-                
-                {templateLibrary.map((category) => (
-                  <div key={category.category} className="mb-4">
-                    <h4 className="font-medium text-gray-700 mb-2">
-                      {category.category}
-                    </h4>
-                    {category.templates.map((template) => (
-                      <div
-                        key={template.id}
-                        draggable
-                        onDragStart={(e) => handleDragStart(e, template)}
-                        className="p-2 mb-2 bg-blue-50 border border-blue-200 rounded cursor-move hover:bg-blue-100 transition-colors"
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm">📋</span>
-                          <span className="text-sm font-medium text-gray-800">
-                            {template.name}
-                          </span>
-                        </div>
-                        <span className={`text-xs ml-6 ${
-                          template.severity === 'critical' ? 'text-red-600' :
-                          template.severity === 'warning' ? 'text-yellow-600' :
-                          'text-blue-600'
-                        }`}>
-                          {template.severity}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                ))}
-              </div>
-            )}
-
+          <div>
             {/* Main Content Area */}
-            <div className={showTemplateLibrary ? 'w-2/3' : 'w-full'}>
+            <div className="w-full">
               {/* Custom Check Builder */}
               <div className="bg-white border border-gray-200 rounded-lg p-6 mb-6">
                 <h3 className="text-lg font-semibold text-gray-800 mb-4">
@@ -2057,23 +2228,14 @@ const DataQualityTab = ({
                 </div>
               </div>
 
-              {/* Saved Custom Checks with Drop Zone */}
-              <div 
-                className={`bg-white border-2 rounded-lg p-6 transition-all ${
-                  isDraggingOver 
-                    ? 'border-blue-400 bg-blue-50 border-dashed' 
-                    : 'border-gray-200'
-                }`}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-              >
+              {/* Saved Custom Checks */}
+              <div className="bg-white border-2 border-gray-200 rounded-lg p-6">
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-lg font-semibold text-gray-800">
                     ✅ Saved Custom Checks/Definitions
                   </h3>
                   <div className="flex items-center gap-4">
-                    {customChecks.length > 0 && !isDraggingOver && (
+                    {customChecks.length > 0 && (
                       <>
                         <span className="text-sm text-gray-600">
                           {customChecks.length} custom check{customChecks.length !== 1 ? 's' : ''} will run with analysis
@@ -2147,9 +2309,7 @@ const DataQualityTab = ({
                   </div>
                 ) : (
                   <p className="text-gray-500 text-center py-8">
-                    {isDraggingOver 
-                      ? "Drop templates here to add them" 
-                      : "No custom checks saved yet"}
+                    No custom checks saved yet
                   </p>
                 )}
               </div>

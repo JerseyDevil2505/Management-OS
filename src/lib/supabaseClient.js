@@ -286,6 +286,155 @@ getInteriorConditionName: function(property, codeDefinitions, vendorType) {
   
   return condCode;
 },
+
+  // ===== NEW: STORY HEIGHT / FLOOR INTERPRETER =====
+  getStoryHeight: function(property, codeDefinitions, vendorType) {
+    if (!property) return null;
+    
+    // First check raw_data for the original text value
+    if (property.raw_data) {
+      if (vendorType === 'BRT') {
+        // BRT stores in various possible field names
+        const rawStory = property.raw_data.STORYHGT || 
+                        property.raw_data.STORY_HEIGHT ||
+                        property.raw_data['Story Height'] ||
+                        property.raw_data.STORIES;
+        if (rawStory) return rawStory;
+      } else if (vendorType === 'Microsystems') {
+        // Look for 510-prefixed fields in raw_data
+        for (const key in property.raw_data) {
+          if (key.startsWith('510')) {
+            const value = property.raw_data[key];
+            if (value) return value;
+          }
+        }
+        // Also check common field names
+        const rawStory = property.raw_data['Story Height'] ||
+                        property.raw_data.STORY_HEIGHT ||
+                        property.raw_data.STORIES;
+        if (rawStory) return rawStory;
+      }
+    }
+    
+    // If no raw_data, try to decode from asset_stories using code definitions
+    const storyCode = property.asset_stories;
+    if (storyCode && codeDefinitions) {
+      if (vendorType === 'Microsystems') {
+        // Look up in code definitions with 510 prefix
+        const lookupKey = `510${String(storyCode).padEnd(4)}9999`;
+        if (codeDefinitions[lookupKey]) {
+          return codeDefinitions[lookupKey];
+        }
+      } else if (vendorType === 'BRT') {
+        // Look in section 22 for story height
+        if (codeDefinitions.sections && codeDefinitions.sections['22']) {
+          const section = codeDefinitions.sections['22'];
+          const sectionMap = section.MAP || {};
+          
+          for (const [key, value] of Object.entries(sectionMap)) {
+            if (value.KEY === storyCode || value.DATA?.KEY === storyCode) {
+              return value.DATA?.VALUE || value.VALUE || storyCode;
+            }
+          }
+        }
+      }
+    }
+    
+    // Return whatever we have
+    return storyCode;
+  },
+
+  // ===== SNEAKY CONDO FLOOR EXTRACTOR =====
+  getCondoFloor: function(property, codeDefinitions, vendorType) {
+    // First get the story height description
+    const storyHeight = this.getStoryHeight(property, codeDefinitions, vendorType);
+    
+    if (!storyHeight) return null;
+    
+    // Convert to string to handle both text and numeric values
+    const storyStr = String(storyHeight).toUpperCase();
+    
+    // SNEAKY PART: Look for ANY description with "FLOOR" in it!
+    if (storyStr.includes('FLOOR')) {
+      // Try to extract floor number from various patterns:
+      // "CONDO 1ST FLOOR", "1ST FLOOR", "FLOOR 1", "3RD FLOOR UNIT", etc.
+      
+      // Pattern 1: "1ST FLOOR", "2ND FLOOR", "3RD FLOOR", "4TH FLOOR"
+      const ordinalMatch = storyStr.match(/(\d+)(ST|ND|RD|TH)\s*FLOOR/);
+      if (ordinalMatch) {
+        return parseInt(ordinalMatch[1]);
+      }
+      
+      // Pattern 2: "FLOOR 1", "FLOOR 2", etc.
+      const floorNumMatch = storyStr.match(/FLOOR\s*(\d+)/);
+      if (floorNumMatch) {
+        return parseInt(floorNumMatch[1]);
+      }
+      
+      // Pattern 3: Just a number before FLOOR
+      const numberBeforeMatch = storyStr.match(/(\d+)\s*FLOOR/);
+      if (numberBeforeMatch) {
+        return parseInt(numberBeforeMatch[1]);
+      }
+      
+      // Pattern 4: Written out floors
+      if (storyStr.includes('FIRST FLOOR') || storyStr.includes('GROUND FLOOR')) return 1;
+      if (storyStr.includes('SECOND FLOOR')) return 2;
+      if (storyStr.includes('THIRD FLOOR')) return 3;
+      if (storyStr.includes('FOURTH FLOOR')) return 4;
+      if (storyStr.includes('FIFTH FLOOR')) return 5;
+      if (storyStr.includes('SIXTH FLOOR')) return 6;
+      if (storyStr.includes('SEVENTH FLOOR')) return 7;
+      if (storyStr.includes('EIGHTH FLOOR')) return 8;
+      if (storyStr.includes('NINTH FLOOR')) return 9;
+      if (storyStr.includes('TENTH FLOOR')) return 10;
+      
+      // Pattern 5: Penthouse or top floor
+      if (storyStr.includes('PENTHOUSE') || storyStr.includes('PH')) return 99; // Special code for penthouse
+      
+      // If we found "FLOOR" but couldn't extract a number, return -1 to indicate unknown floor
+      return -1;
+    }
+    
+    // Also check for "CONDO" patterns even without "FLOOR"
+    if (storyStr.includes('CONDO')) {
+      // "CONDO 1", "CONDO 2", "CONDO 1ST", etc.
+      const condoMatch = storyStr.match(/CONDO\s*(\d+)/);
+      if (condoMatch) {
+        return parseInt(condoMatch[1]);
+      }
+    }
+    
+    // Check property_location or property_qualifier for unit numbers that might indicate floor
+    if (property.property_location) {
+      const location = String(property.property_location).toUpperCase();
+      // Common pattern: "3A", "2B" where first digit is floor
+      const unitMatch = location.match(/^(\d)[A-Z]/);
+      if (unitMatch) {
+        const floor = parseInt(unitMatch[1]);
+        if (floor >= 1 && floor <= 9) return floor;
+      }
+    }
+    
+    if (property.property_qualifier) {
+      const qualifier = String(property.property_qualifier).toUpperCase();
+      // Check for floor indicators in qualifier
+      const qualMatch = qualifier.match(/(\d)(ST|ND|RD|TH)|FLOOR\s*(\d)|^(\d)[A-Z]/);
+      if (qualMatch) {
+        const floor = parseInt(qualMatch[1] || qualMatch[3] || qualMatch[4]);
+        if (floor >= 1 && floor <= 99) return floor;
+      }
+    }
+    
+    return null;
+  },
+
+  // ===== CONDO-SPECIFIC DATA QUALITY CHECK =====
+  hasCondoFloorData: function(property, codeDefinitions, vendorType) {
+    const floor = this.getCondoFloor(property, codeDefinitions, vendorType);
+    return floor !== null && floor !== -1; // -1 means we found "FLOOR" but couldn't parse
+  },
+
   // Get raw data value with vendor awareness
   getRawDataValue: function(property, fieldName, vendorType) {
     if (!property || !property.raw_data) return null;

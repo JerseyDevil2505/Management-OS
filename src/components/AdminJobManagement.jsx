@@ -656,8 +656,9 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
     
     try {
       const updatedJobs = await jobService.getAll();
-      const activeJobs = updatedJobs.filter(job => job.status !== 'archived');
-      const archived = updatedJobs.filter(job => job.status === 'archived');
+    // NEW - Match the initializeData logic
+      const activeJobs = updatedJobs.filter(job => job.status === 'active');
+      const archived = updatedJobs.filter(job => job.status === 'archived' || job.status === 'draft');
       
       // Calculate assigned property counts for jobs with assignments
       const jobsWithAssignedCounts = await Promise.all(
@@ -1253,6 +1254,7 @@ useEffect(() => {
     }
 
     try {
+      // Update the main job data
       const updateData = {
         name: newJob.name,
         municipality: newJob.municipality,
@@ -1261,6 +1263,28 @@ useEffect(() => {
       };
 
       await jobService.update(editingJob.id, updateData);
+      
+      // Handle manager assignments - delete old ones and insert new ones
+      await supabase
+        .from('job_assignments')
+        .delete()
+        .eq('job_id', editingJob.id);
+      
+      // Insert new assignments if any
+      if (newJob.assignedManagers && newJob.assignedManagers.length > 0) {
+        const assignments = newJob.assignedManagers.map(manager => ({
+          job_id: editingJob.id,
+          employee_id: manager.id,
+          role: manager.role,
+          assigned_date: new Date().toISOString().split('T')[0],
+          is_active: true,
+          assigned_by: currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad'
+        }));
+        
+        await supabase
+          .from('job_assignments')
+          .insert(assignments);
+      }
       
       // Refresh with assigned property counts
       await refreshJobsWithAssignedCounts();
@@ -1272,7 +1296,6 @@ useEffect(() => {
       addNotification('Error updating job: ' + error.message, 'error');
     }
   };
-
   const editPlanningJob = async () => {
     if (!newPlanningJob.municipality || !newPlanningJob.dueDate) {
       addNotification('Please fill all required fields', 'error');
@@ -1415,7 +1438,7 @@ useEffect(() => {
     setActiveTab(tab);
   };
 
-  const getManagerWorkload = (manager) => {
+   const getManagerWorkload = (manager) => {
     const assignedJobs = jobs.filter(job => 
       job.assignedManagers?.some(am => am.id === manager.id)
     );
@@ -2364,7 +2387,18 @@ useEffect(() => {
                               <span>Due: {job.dueDate ? job.dueDate.split('-')[0] : 'TBD'}</span>
                             </span>
                           </div>
-                          
+
+                          {/* Lead Manager Display */}
+                          {job.assignedManagers && job.assignedManagers.length > 0 && (
+                            <div className="flex items-center space-x-2 text-sm text-gray-600 mb-2">
+                              <Users className="w-4 h-4 text-gray-500" />
+                              <span className="font-medium">
+                                Lead: {job.assignedManagers.find(m => m.role === 'Lead Manager')?.name || 
+                                       job.assignedManagers[0]?.name || 'No Lead Assigned'}
+                              </span>
+                            </div>
+                          )}
+
                           {/* Production Metrics with LIVE DATA */}
                           <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-3 p-3 bg-gray-50 rounded-lg">
                             <div className="text-center">
@@ -2611,7 +2645,25 @@ useEffect(() => {
                         <Edit3 className="w-4 h-4" />
                         <span>Edit</span>
                       </button>
-                    </div>
+                      <button 
+                        onClick={async () => {
+                          if (window.confirm(`Delete planning job for ${planningJob.municipality}?`)) {
+                            try {
+                              await planningJobService.delete(planningJob.id);
+                              const updatedPlanningJobs = await planningJobService.getAll();
+                              setPlanningJobs(updatedPlanningJobs);
+                              addNotification('Planning job deleted successfully', 'success');
+                            } catch (error) {
+                              addNotification('Error deleting planning job: ' + error.message, 'error');
+                            }
+                          }
+                        }}
+                        className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        <span>Delete</span>
+                      </button>
+                    </div>                   
                   </div>
                 ))
               )}
@@ -2803,17 +2855,12 @@ useEffect(() => {
                       <div className="border-t pt-3">
                         <div className="text-xs text-gray-600 mb-2">Assigned Jobs:</div>
                         <div className="space-y-1">
-                          {workload.jobs.slice(0, 3).map(job => (
+                          {workload.jobs.map(job => (
                             <div key={job.id} className="text-xs text-gray-700 flex justify-between">
                               <span className="truncate">{job.municipality}</span>
                               <span className="text-gray-500">{(job.totalProperties || 0).toLocaleString()}</span>
                             </div>
                           ))}
-                          {workload.jobs.length > 3 && (
-                            <div className="text-xs text-gray-500">
-                              ...and {workload.jobs.length - 3} more
-                            </div>
-                          )}
                         </div>
                       </div>
                     )}

@@ -1,5 +1,5 @@
   import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { supabase, interpretCodes, worksheetService } from '../../../lib/supabaseClient';
+import { supabase, interpretCodes, worksheetService, checklistService } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx';
 import { 
   TrendingUp, 
@@ -10,6 +10,9 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
+  Copy,
   FileSpreadsheet,
   ArrowRight,
   AlertCircle
@@ -76,6 +79,8 @@ const PreValuationTab = ({ jobData, properties }) => {
     locationAnalysis: 0,
     readyToProcess: 0
   });
+  const [zoningData, setZoningData] = useState([]);
+  const [editingZoning, setEditingZoning] = useState({});
   const [autoSaveTimer, setAutoSaveTimer] = useState(null);
   
   // Import Modal State (from our discussion)
@@ -97,9 +102,60 @@ const PreValuationTab = ({ jobData, properties }) => {
   const [isProcessingImport, setIsProcessingImport] = useState(false);
   const [importProgress, setImportProgress] = useState({ current: 0, total: 0, message: '' });
 
+  // Market Analysis State
+  const [marketAnalysisData, setMarketAnalysisData] = useState([]);
+  const [blockTypeFilter, setBlockTypeFilter] = useState('single_family');
+  const [colorScaleStart, setColorScaleStart] = useState(100000);
+  const [colorScaleIncrement, setColorScaleIncrement] = useState(50000);
+  const [selectedBlockDetails, setSelectedBlockDetails] = useState(null);
+  const [showBlockDetailModal, setShowBlockDetailModal] = useState(false);
+  const [isProcessingBlocks, setIsProcessingBlocks] = useState(false);
+
   // Vendor detection
   const vendorType = jobData?.vendor_source || jobData?.vendor_type || 'BRT';
   const codeDefinitions = jobData?.parsed_code_definitions;
+
+  // Bluebeam Revu 32-color palette
+  const bluebeamPalette = [
+    // Row 1 - Light colors
+    { hex: "#FFFFFF", name: "White", row: 1, col: 1 },
+    { hex: "#FFCCCC", name: "Light Pink", row: 1, col: 2 },
+    { hex: "#FFE6CC", name: "Light Orange", row: 1, col: 3 },
+    { hex: "#FFFFCC", name: "Light Yellow", row: 1, col: 4 },
+    { hex: "#E6FFCC", name: "Light Green", row: 1, col: 5 },
+    { hex: "#CCFFFF", name: "Light Cyan", row: 1, col: 6 },
+    { hex: "#CCE6FF", name: "Light Blue", row: 1, col: 7 },
+    { hex: "#E6CCFF", name: "Light Purple", row: 1, col: 8 },
+    // Row 2 - Medium colors
+    { hex: "#CCCCCC", name: "Light Gray", row: 2, col: 1 },
+    { hex: "#FF9999", name: "Pink", row: 2, col: 2 },
+    { hex: "#FFCC99", name: "Peach", row: 2, col: 3 },
+    { hex: "#FFFF99", name: "Yellow", row: 2, col: 4 },
+    { hex: "#CCFF99", name: "Light Green", row: 2, col: 5 },
+    { hex: "#99FFFF", name: "Cyan", row: 2, col: 6 },
+    { hex: "#99CCFF", name: "Sky Blue", row: 2, col: 7 },
+    { hex: "#CC99FF", name: "Purple", row: 2, col: 8 },
+    // Row 3 - Darker colors
+    { hex: "#999999", name: "Gray", row: 3, col: 1 },
+    { hex: "#FF6666", name: "Red", row: 3, col: 2 },
+    { hex: "#FF9966", name: "Orange", row: 3, col: 3 },
+    { hex: "#FFFF66", name: "Bright Yellow", row: 3, col: 4 },
+    { hex: "#99FF66", name: "Green", row: 3, col: 5 },
+    { hex: "#66FFFF", name: "Bright Cyan", row: 3, col: 6 },
+    { hex: "#6699FF", name: "Bright Blue", row: 3, col: 7 },
+    { hex: "#9966FF", name: "Bright Purple", row: 3, col: 8 },
+    // Row 4 - Saturated colors
+    { hex: "#666666", name: "Dark Gray", row: 4, col: 1 },
+    { hex: "#FF3333", name: "Bright Red", row: 4, col: 2 },
+    { hex: "#FF6633", name: "Bright Orange", row: 4, col: 3 },
+    { hex: "#FFFF33", name: "Neon Yellow", row: 4, col: 4 },
+    { hex: "#66FF33", name: "Neon Green", row: 4, col: 5 },
+    { hex: "#33FFFF", name: "Electric Cyan", row: 4, col: 6 },
+    { hex: "#3366FF", name: "Electric Blue", row: 4, col: 7 },
+    { hex: "#6633FF", name: "Electric Purple", row: 4, col: 8 }
+  ];
+  const [isResultsCollapsed, setIsResultsCollapsed] = useState(false);
+
 
   // ==================== HELPER FUNCTIONS USING interpretCodes ====================
   
@@ -275,6 +331,11 @@ useEffect(() => {
           asset_map_page: prop.asset_map_page || '',
           asset_key_page: prop.asset_key_page || '',
           worksheet_notes: prop.worksheet_notes || '',
+          // Add raw fields for decoding
+          asset_building_class: prop.asset_building_class,
+          asset_type_use: prop.asset_type_use,
+          asset_design_style: prop.asset_design_style,
+          sections: prop.sections,  // For BRT
           // Display values
           building_class_display: getBuildingClassDisplay(prop),
           type_use_display: getTypeUseDisplay(prop),
@@ -349,7 +410,41 @@ const runTimeNormalization = useCallback(async () => {
       
       // Filter for VALID residential sales only
       const validSales = properties.filter(p => {
-        // ... your existing filter logic ...
+        // Check for valid sales price
+        if (!p.sales_price || p.sales_price <= minSalePrice) return false;
+        
+        // Check for valid sales date
+        if (!p.sales_date) return false;
+        
+        const saleYear = new Date(p.sales_date).getFullYear();
+        if (saleYear < salesFromYear) return false;
+        
+        // Check sales_nu conditions (empty, null, 00, 7, or 07 are valid)
+        const nu = p.sales_nu?.toString().trim();
+        const validNU = !nu || nu === '' || nu === '00' || nu === '7' || nu === '07';
+        if (!validNU) return false;
+        
+        // Parse composite key for card filtering
+        const parsed = parseCompositeKey(p.property_composite_key);
+        const card = parsed.card?.toUpperCase();
+        
+        // Card filter based on vendor
+        if (vendorType === 'Microsystems') {
+          if (card !== 'M') return false;
+        } else { // BRT
+          if (card !== '1') return false;
+        }
+        
+        // Check for required fields
+        const buildingClass = p.asset_building_class?.toString().trim();
+        const typeUse = p.asset_type_use?.toString().trim();
+        const designStyle = p.asset_design_style?.toString().trim();
+        
+        if (!buildingClass || parseInt(buildingClass) <= 10) return false;
+        if (!typeUse) return false;
+        if (!designStyle) return false;
+        
+        return true;
       });
       
       // Process each valid sale
@@ -407,7 +502,15 @@ const runTimeNormalization = useCallback(async () => {
         pendingReview: normalized.filter(s => s.keep_reject === 'pending').length,
         keptCount: normalized.filter(s => s.keep_reject === 'keep').length,
         rejectedCount: normalized.filter(s => s.keep_reject === 'reject').length,
-        averageRatio: avgRatio.toFixed(2)
+        averageRatio: avgRatio.toFixed(2),
+        // DON'T RESET SIZE NORMALIZATION STATS!
+        sizeNormalized: normalizationStats.sizeNormalized || 0,
+        acceptedSales: normalizationStats.acceptedSales || 0,
+        singleFamily: normalizationStats.singleFamily || 0,
+        multifamily: normalizationStats.multifamily || 0,
+        townhouses: normalizationStats.townhouses || 0,
+        conversions: normalizationStats.conversions || 0,
+        avgSizeAdjustment: normalizationStats.avgSizeAdjustment || 0
       };
       
       setNormalizationStats(newStats);
@@ -432,7 +535,26 @@ const runTimeNormalization = useCallback(async () => {
     } finally {
       setIsProcessingTime(false);
     }
-  }, [properties, salesFromYear, minSalePrice, normalizeToYear, equalizationRatio, outlierThreshold, getHPIMultiplier, timeNormalizedSales]);
+  }, [properties, salesFromYear, minSalePrice, normalizeToYear, equalizationRatio, outlierThreshold, getHPIMultiplier, timeNormalizedSales, normalizationStats, vendorType, parseCompositeKey, jobData.id, selectedCounty, worksheetService]);
+
+const saveSizeNormalizedValues = async (normalizedSales) => {
+  try {
+    // Save size normalized values to database
+    for (const sale of normalizedSales) {
+      if (sale.size_normalized_price) {
+        await supabase
+          .from('property_records')
+          .update({ 
+            values_norm_size: sale.size_normalized_price 
+          })
+          .eq('id', sale.id);
+      }
+    }
+    console.log('✅ Size normalized values saved to database');
+  } catch (error) {
+    console.error('Error saving size normalized values:', error);
+  }
+};
 
 const runSizeNormalization = useCallback(async () => {
     setIsProcessingSize(true);
@@ -539,13 +661,177 @@ const runSizeNormalization = useCallback(async () => {
     }
   }, [timeNormalizedSales]);
 
-const handleSalesDecision = (saleId, decision) => {
+  const processBlockAnalysis = useCallback(async () => {
+    setIsProcessingBlocks(true);
+    
+    try {
+      // Get all properties with size-normalized values
+      const normalizedProps = properties.filter(p => p.values_norm_size && p.values_norm_size > 0);
+      
+      // Filter by property type
+      const filteredProps = normalizedProps.filter(p => {
+        const typeUse = p.asset_type_use?.toString().trim();
+        if (!typeUse) return false;
+        
+        switch (blockTypeFilter) {
+          case 'single_family':
+            return typeUse.startsWith('1');
+          case 'multifamily':
+            return ['42', '43', '44'].some(code => typeUse === code || typeUse.startsWith(code));
+          case 'commercial':
+            return ['50', '51', '52'].some(code => typeUse === code || typeUse.startsWith(code));
+          case 'all_residential':
+            return typeUse.startsWith('1') || ['42', '43', '44'].some(code => typeUse === code || typeUse.startsWith(code));
+          default:
+            return true;
+        }
+      });
+      
+      // Group by block
+      const blockGroups = {};
+      filteredProps.forEach(prop => {
+        const parsed = parseCompositeKey(prop.property_composite_key);
+        const block = parsed.block;
+        
+        if (!blockGroups[block]) {
+          blockGroups[block] = [];
+        }
+        blockGroups[block].push(prop);
+      });
+      
+      // Calculate metrics for each block
+      const blockData = Object.entries(blockGroups).map(([block, props]) => {
+        // Average normalized value
+        const avgValue = props.reduce((sum, p) => sum + p.values_norm_size, 0) / props.length;
+        
+        // Age consistency
+        const years = props.map(p => p.asset_year_built).filter(y => y);
+        const ageRange = years.length > 0 ? Math.max(...years) - Math.min(...years) : 0;
+        const avgYear = years.length > 0 ? years.reduce((sum, y) => sum + y, 0) / years.length : 0;
+        const ageStdDev = calculateStandardDeviation(years);
+        
+        let ageConsistency = 'Mixed';
+        if (ageRange <= 10) ageConsistency = 'High';
+        else if (ageRange <= 25) ageConsistency = 'Medium';
+        else if (ageRange <= 50) ageConsistency = 'Low';
+        
+        // Size consistency
+        const sizes = props.map(p => p.asset_sfla || 0).filter(s => s > 0);
+        const avgSize = sizes.length > 0 ? sizes.reduce((sum, s) => sum + s, 0) / sizes.length : 0;
+        const sizeStdDev = calculateStandardDeviation(sizes);
+        const sizeCV = avgSize > 0 ? sizeStdDev / avgSize : 0;
+        
+        let sizeConsistency = 'Mixed';
+        if (sizeCV <= 0.15) sizeConsistency = 'High';
+        else if (sizeCV <= 0.30) sizeConsistency = 'Medium';
+        else if (sizeCV <= 0.50) sizeConsistency = 'Low';
+        
+        // Design consistency
+        const designs = props.map(p => p.asset_design_style).filter(d => d);
+        const uniqueDesigns = [...new Set(designs)].length;
+        const dominantDesign = mode(designs);
+        const dominantPercent = designs.length > 0 ? 
+          (designs.filter(d => d === dominantDesign).length / designs.length) * 100 : 0;
+        
+        let designConsistency = 'Mixed';
+        if (uniqueDesigns <= 2 && dominantPercent >= 75) designConsistency = 'High';
+        else if (uniqueDesigns <= 3 && dominantPercent >= 50) designConsistency = 'Medium';
+        else if (uniqueDesigns <= 4 && dominantPercent >= 25) designConsistency = 'Low';
+        
+        // Assign color based on value
+        const colorIndex = Math.min(
+          Math.floor((avgValue - colorScaleStart) / colorScaleIncrement),
+          bluebeamPalette.length - 1
+        );
+        const assignedColor = bluebeamPalette[Math.max(0, colorIndex)];
+        
+        return {
+          block,
+          propertyCount: props.length,
+          salesCount: props.filter(p => p.sales_price && p.sales_date).length,
+          avgNormalizedValue: Math.round(avgValue),
+          color: assignedColor,
+          ageConsistency,
+          ageDetails: {
+            range: ageRange,
+            avgYear: Math.round(avgYear),
+            stdDev: ageStdDev.toFixed(1),
+            minYear: Math.min(...years),
+            maxYear: Math.max(...years)
+          },
+          sizeConsistency,
+          sizeDetails: {
+            avgSize: Math.round(avgSize),
+            stdDev: sizeStdDev.toFixed(0),
+            cv: (sizeCV * 100).toFixed(1),
+            minSize: Math.min(...sizes),
+            maxSize: Math.max(...sizes)
+          },
+          designConsistency,
+          designDetails: {
+            uniqueDesigns,
+            dominantDesign: interpretCodes.getDesignName?.({ asset_design_style: dominantDesign }, codeDefinitions, vendorType) || dominantDesign,
+            dominantPercent: dominantPercent.toFixed(0)
+          }
+        };
+      });
+      
+      // Sort by block number
+      blockData.sort((a, b) => {
+        const blockA = parseInt(a.block) || 0;
+        const blockB = parseInt(b.block) || 0;
+        return blockA - blockB;
+      });
+      
+      setMarketAnalysisData(blockData);
+    } catch (error) {
+      console.error('Error processing block analysis:', error);
+      alert('Error processing block analysis. Please check the console.');
+    } finally {
+      setIsProcessingBlocks(false);
+    }
+  }, [properties, blockTypeFilter, colorScaleStart, colorScaleIncrement, codeDefinitions, vendorType]);
+
+// Helper functions
+  const calculateStandardDeviation = (values) => {
+    if (values.length === 0) return 0;
+    const avg = values.reduce((sum, v) => sum + v, 0) / values.length;
+    const squareDiffs = values.map(v => Math.pow(v - avg, 2));
+    const avgSquareDiff = squareDiffs.reduce((sum, v) => sum + v, 0) / values.length;
+    return Math.sqrt(avgSquareDiff);
+  };
+  
+  const mode = (arr) => {
+    if (arr.length === 0) return null;
+    const frequency = {};
+    let maxFreq = 0;
+    let mode = arr[0];
+    
+    arr.forEach(item => {
+      frequency[item] = (frequency[item] || 0) + 1;
+      if (frequency[item] > maxFreq) {
+        maxFreq = frequency[item];
+        mode = item;
+      }
+    });
+    
+    return mode;
+  };
+  
+  // Auto-process when filter or scale changes
+  useEffect(() => {
+    if (normalizationStats.sizeNormalized > 0) {
+      processBlockAnalysis();
+    }
+  }, [blockTypeFilter, colorScaleStart, colorScaleIncrement, normalizationStats.sizeNormalized, processBlockAnalysis]);
+
+const handleSalesDecision = async (saleId, decision) => {
     const updatedSales = timeNormalizedSales.map(sale =>
       sale.id === saleId ? { ...sale, keep_reject: decision } : sale
     );
     setTimeNormalizedSales(updatedSales);
 
-    // Just update stats, no DB calls
+    // Update stats
     const newStats = {
       ...normalizationStats,
       pendingReview: updatedSales.filter(s => s.keep_reject === 'pending').length,
@@ -553,23 +839,49 @@ const handleSalesDecision = (saleId, decision) => {
       rejectedCount: updatedSales.filter(s => s.keep_reject === 'reject').length
     };
     setNormalizationStats(newStats);
-  };
 
-const saveSizeNormalizedValues = async (sales) => {
-    const salesToUpdate = sales.filter(s => s.size_normalized_price);
-    
-    // Batch update in chunks of 500
-    for (let i = 0; i < salesToUpdate.length; i += 500) {
-      const batch = salesToUpdate.slice(i, i + 500);
-      
-      await Promise.all(batch.map(sale => 
-        supabase
+    // If changing to reject, immediately remove from database
+    if (decision === 'reject') {
+      try {
+        const { error } = await supabase
           .from('property_records')
-          .update({ values_norm_size: sale.size_normalized_price })
-          .eq('id', sale.id)
-      ));
-      
-      console.log(`✅ Saved size normalization batch ${Math.floor(i/500) + 1} of ${Math.ceil(salesToUpdate.length/500)}`);
+          .update({ 
+            values_norm_time: null,
+            values_norm_size: null 
+          })
+          .eq('id', saleId);
+        
+        if (error) {
+          console.error('Error removing normalized values:', error);
+        } else {
+          console.log(`✅ Immediately removed normalized values for property ${saleId}`);
+        }
+      } catch (error) {
+        console.error('Error updating database:', error);
+      }
+    }
+    
+    // If changing to keep, immediately save to database
+    if (decision === 'keep') {
+      try {
+        const sale = updatedSales.find(s => s.id === saleId);
+        if (sale && sale.time_normalized_price) {
+          const { error } = await supabase
+            .from('property_records')
+            .update({ 
+              values_norm_time: sale.time_normalized_price 
+            })
+            .eq('id', saleId);
+          
+          if (error) {
+            console.error('Error saving normalized value:', error);
+          } else {
+            console.log(`✅ Immediately saved normalized value for property ${saleId}`);
+          }
+        }
+      } catch (error) {
+        console.error('Error updating database:', error);
+      }
     }
   };
      
@@ -1105,6 +1417,17 @@ const analyzeImportFile = async (file) => {
           Normalization
         </button>
         <button
+          onClick={() => setActiveSubTab('marketAnalysis')}
+          disabled={!normalizationStats.sizeNormalized || normalizationStats.sizeNormalized === 0}
+          className={`px-4 py-2 font-medium border-b-2 transition-colors ${
+            activeSubTab === 'marketAnalysis'
+              ? 'border-blue-500 text-blue-600'
+              : 'border-transparent text-gray-600 hover:text-gray-800'
+          } ${!normalizationStats.sizeNormalized ? 'opacity-50 cursor-not-allowed' : ''}`}
+        >
+          Market Analysis
+        </button>
+        <button
           onClick={() => setActiveSubTab('worksheet')}
           className={`px-4 py-2 font-medium border-b-2 transition-colors ${
             activeSubTab === 'worksheet'
@@ -1113,6 +1436,16 @@ const analyzeImportFile = async (file) => {
           }`}
         >
           Page by Page Worksheet
+        </button>
+        <button
+          onClick={() => setActiveSubTab('zoning')}
+          className={`px-4 py-2 font-medium border-b-2 transition-colors ${
+            activeSubTab === 'zoning'
+              ? 'border-blue-500 text-blue-600'
+              : 'border-transparent text-gray-600 hover:text-gray-800'
+          }`}
+        >
+          Zoning Requirements
         </button>
       </div>
 
@@ -1331,301 +1664,345 @@ const analyzeImportFile = async (file) => {
 
               {/* Sales Review Table */}
               <div className="bg-white rounded-lg shadow p-6">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-semibold">Sales Review</h3>
-                  <div className="flex gap-2">
-                  <select
-                      value={salesReviewFilter}
-                      onChange={(e) => setSalesReviewFilter(e.target.value)}
-                      className="px-3 py-2 border border-gray-300 rounded"
-                    >
-                      <option value="all">All Sales</option>
-                      <option value="flagged">Flagged Only</option>
-                      <option value="pending">Pending Review</option>
-                      {timeNormalizedSales.some(s => s.asset_type_use?.toString().trim().startsWith('1')) && (
-                        <option value="type-1">Single Family</option>
-                      )}
-                      {timeNormalizedSales.some(s => s.asset_type_use?.toString().trim().startsWith('2')) && (
-                        <option value="type-2">Semi-Detached</option>
-                      )}
-                      {timeNormalizedSales.some(s => s.asset_type_use?.toString().trim().startsWith('3')) && (
-                        <option value="type-3">Row/Townhomes</option>
-                      )}
-                      {timeNormalizedSales.some(s => s.asset_type_use?.toString().trim().startsWith('4')) && (
-                        <option value="type-4">MultiFamily</option>
-                      )}
-                      {timeNormalizedSales.some(s => s.asset_type_use?.toString().trim().startsWith('5')) && (
-                        <option value="type-5">Conversions</option>
-                      )}
-                      {timeNormalizedSales.some(s => s.asset_type_use?.toString().trim().startsWith('6')) && (
-                        <option value="type-6">Condominiums</option>
-                      )}
-                    </select>
+                <div 
+                  className="flex justify-between items-center mb-4 cursor-pointer hover:bg-gray-50 p-2 rounded"
+                  onClick={() => setIsResultsCollapsed(!isResultsCollapsed)}
+                >
+                  <h3 className="text-lg font-semibold">Sales Review ({timeNormalizedSales.length} sales)</h3>
+                  <div className="flex gap-2 items-center">
+                    {isResultsCollapsed ? (
+                      <ChevronDown size={20} className="text-gray-500" />
+                    ) : (
+                      <ChevronUp size={20} className="text-gray-500" />
+                    )}
                   </div>
                 </div>
 
-                <div className="overflow-x-auto max-w-full">
-                  <table className="min-w-full table-fixed">
-                      <thead className="bg-gray-50 border-b">
-                        <tr>
-                          <th 
-                            className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
-                            onClick={() => handleNormalizationSort('block')}
-                          >
-                            Block {normSortConfig.field === 'block' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
-                          </th>
-                          <th 
-                            className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
-                            onClick={() => handleNormalizationSort('lot')}
-                          >
-                            Lot {normSortConfig.field === 'lot' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
-                          </th>
-                          <th 
-                            className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
-                            onClick={() => handleNormalizationSort('qualifier')}
-                          >
-                            Qual {normSortConfig.field === 'qualifier' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
-                          </th>
-                          <th 
-                            className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
-                            onClick={() => handleNormalizationSort('card')}
-                          >
-                            Card {normSortConfig.field === 'card' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
-                          </th>
-                          <th 
-                            className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-32 cursor-pointer hover:bg-gray-100"
-                            onClick={() => handleNormalizationSort('property_location')}
-                          >
-                            Location {normSortConfig.field === 'property_location' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
-                          </th>
-                          <th 
-                            className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
-                            onClick={() => handleNormalizationSort('property_class')}
-                          >
-                            Class {normSortConfig.field === 'property_class' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
-                          </th>
-                          <th 
-                            className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-20 cursor-pointer hover:bg-gray-100"
-                            onClick={() => handleNormalizationSort('asset_type_use')}
-                          >
-                            Type {normSortConfig.field === 'asset_type_use' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
-                          </th>
-                          <th 
-                            className="px-4 py-3 text-center text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
-                            onClick={() => handleNormalizationSort('package')}
-                          >
-                            Package {normSortConfig.field === 'package' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
-                          </th>
-                          <th 
-                            className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-24 cursor-pointer hover:bg-gray-100"
-                            onClick={() => handleNormalizationSort('sales_date')}
-                          >
-                            Sale Date {normSortConfig.field === 'sales_date' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
-                          </th>
-                          <th 
-                            className="px-4 py-3 text-right text-sm font-medium text-gray-700 w-24 cursor-pointer hover:bg-gray-100"
-                            onClick={() => handleNormalizationSort('sales_price')}
-                          >
-                            Sale Price {normSortConfig.field === 'sales_price' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
-                          </th>
-                          <th 
-                            className="px-4 py-3 text-right text-sm font-medium text-gray-700 w-24 cursor-pointer hover:bg-gray-100"
-                            onClick={() => handleNormalizationSort('time_normalized_price')}
-                          >
-                            Time Norm {normSortConfig.field === 'time_normalized_price' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
-                          </th>
-                          <th 
-                            className="px-4 py-3 text-right text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
-                            onClick={() => handleNormalizationSort('sales_nu')}
-                          >
-                            Sale NU {normSortConfig.field === 'sales_nu' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
-                          </th>
-                          <th 
-                            className="px-4 py-3 text-center text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
-                            onClick={() => handleNormalizationSort('sales_ratio')}
-                          >
-                            Ratio {normSortConfig.field === 'sales_ratio' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
-                          </th>
-                          <th 
-                            className="px-4 py-3 text-center text-sm font-medium text-gray-700 w-20 cursor-pointer hover:bg-gray-100"
-                            onClick={() => handleNormalizationSort('is_outlier')}
-                          >
-                            Status {normSortConfig.field === 'is_outlier' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
-                          </th>
-                          <th 
-                            className="px-4 py-3 text-center text-sm font-medium text-gray-700 w-28 cursor-pointer hover:bg-gray-100"
-                            onClick={() => handleNormalizationSort('keep_reject')}
-                          >
-                            Decision {normSortConfig.field === 'keep_reject' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
-                          </th>
-                        </tr>
-                      </thead>
-                    <tbody>
-                      {timeNormalizedSales
-                        .filter(sale => {
-                          if (salesReviewFilter === 'all') return true;
-                          if (salesReviewFilter === 'flagged') return sale.is_outlier;
-                          if (salesReviewFilter === 'pending') return sale.keep_reject === 'pending';
-                          if (salesReviewFilter === 'type-1') return sale.asset_type_use?.toString().trim().startsWith('1');
-                          if (salesReviewFilter === 'type-2') return sale.asset_type_use?.toString().trim().startsWith('2');
-                          if (salesReviewFilter === 'type-3') return sale.asset_type_use?.toString().trim().startsWith('3');
-                          if (salesReviewFilter === 'type-4') return sale.asset_type_use?.toString().trim().startsWith('4');
-                          if (salesReviewFilter === 'type-5') return sale.asset_type_use?.toString().trim().startsWith('5');
-                          if (salesReviewFilter === 'type-6') return sale.asset_type_use?.toString().trim().startsWith('6');
-                          return true;
-                        })
-                        .slice((normCurrentPage - 1) * normItemsPerPage, normCurrentPage * normItemsPerPage)
-                        .map((sale) => {
-                          const parsed = parseCompositeKey(sale.property_composite_key);
-                          return (
-                          <tr key={sale.id} className="border-b hover:bg-gray-50">
-                              <td className="px-4 py-3 text-sm">{parsed.block}</td>
-                              <td className="px-4 py-3 text-sm">{parsed.lot}</td>
-                              <td className="px-4 py-3 text-sm">{parsed.qualifier || ''}</td>
-                              <td className="px-4 py-3 text-sm">{parsed.card || '1'}</td>
-                              <td className="px-4 py-3 text-sm">{sale.property_location}</td>
-                              <td className="px-4 py-3 text-sm">{sale.property_class || sale.property_m4_class}</td>
-                              <td className="px-4 py-3 text-sm">
-                                {getTypeUseDisplay(sale)}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-center">
-                                {(() => {
-                                  const packageData = interpretCodes.getPackageSaleData(timeNormalizedSales, sale);
-                                  if (!packageData) return '-';
-                                  
-                                  // Check if it's a farm package (has 3B)
-                                  const isFarmPackage = packageData.has_farmland;
-                                  
-                                  if (isFarmPackage) {
-                                    return (
-                                      <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-medium" 
-                                            title={`Farm package: ${packageData.package_count} properties (includes farmland)`}>
-                                        Farm ({packageData.package_count})
-                                      </span>
-                                    );
-                                  }
-                                  
-                                  // Regular package (no farmland)
-                                  return (
-                                    <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs font-medium" 
-                                          title={`Package sale: ${packageData.package_count} properties`}>
-                                      Pkg ({packageData.package_count})
-                                    </span>
-                                  );
-                                })()}
-                              </td>
-                              <td className="px-4 py-3 text-sm">
-                                {sale.sales_date ? new Date(sale.sales_date).toLocaleDateString() : ''}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-right">
-                                ${sale.sales_price?.toLocaleString()}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-right">
-                                ${sale.time_normalized_price?.toLocaleString()}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-right">
-                                {sale.sales_nu || ''}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-center">
-                                {sale.sales_ratio ? `${(sale.sales_ratio * 100).toFixed(0)}%` : ''}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-center">
-                                {sale.is_outlier ? (
-                                  <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded text-xs">
-                                    Outlier
-                                  </span>
-                                ) : (
-                                  <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs">
-                                    Valid
-                                  </span>
-                                )}
-                              </td>
-                              <td className="px-4 py-3">
-                                <div className="flex gap-1 justify-center">
-                                  <button
-                                    onClick={() => handleSalesDecision(sale.id, 'keep')}
-                                    className={`px-2 py-1 rounded text-xs ${
-                                      sale.keep_reject === 'keep'
-                                        ? 'bg-green-600 text-white'
-                                        : 'bg-gray-200 hover:bg-green-100'
-                                    }`}
-                                  >
-                                    Keep
-                                  </button>
-                                  <button
-                                    onClick={() => handleSalesDecision(sale.id, 'reject')}
-                                    className={`px-2 py-1 rounded text-xs ${
-                                      sale.keep_reject === 'reject'
-                                        ? 'bg-red-600 text-white'
-                                        : 'bg-gray-200 hover:bg-red-100'
-                                    }`}
-                                  >
-                                    Reject
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                    </tbody>
-                  </table>
-</div>
-
-                {/* Pagination Controls */}
-                {(() => {
-                  const filteredSales = timeNormalizedSales.filter(sale => {
-                    if (salesReviewFilter === 'all') return true;
-                    if (salesReviewFilter === 'flagged') return sale.is_outlier;
-                    if (salesReviewFilter === 'pending') return sale.keep_reject === 'pending';
-                    if (salesReviewFilter.startsWith('type-')) {
-                      const typeNum = salesReviewFilter.split('-')[1];
-                      return sale.asset_type_use?.toString().trim().startsWith(typeNum);
-                    }
-                    return true;
-                  });
-                  const totalNormPages = Math.ceil(filteredSales.length / normItemsPerPage);
-                  
-                  return totalNormPages > 1 && (
-                    <div className="flex justify-between items-center mt-4">
-                      <div className="text-sm text-gray-600">
-                        Page {normCurrentPage} of {totalNormPages} ({filteredSales.length} sales)
-                      </div>
+                {/* Only show table content if not collapsed */}
+                {!isResultsCollapsed && (
+                  <>
+                    <div className="flex justify-between items-center mb-4">
                       <div className="flex gap-2">
-                        <button
-                          onClick={() => setNormCurrentPage(Math.max(1, normCurrentPage - 1))}
-                          disabled={normCurrentPage === 1}
-                          className="px-3 py-1 border border-gray-300 rounded disabled:opacity-50"
+                        <select
+                          value={salesReviewFilter}
+                          onChange={(e) => setSalesReviewFilter(e.target.value)}
+                          className="px-3 py-2 border border-gray-300 rounded"
                         >
-                          <ChevronLeft size={16} />
-                        </button>
-                        <button
-                          onClick={() => setNormCurrentPage(Math.min(totalNormPages, normCurrentPage + 1))}
-                          disabled={normCurrentPage === totalNormPages}
-                          className="px-3 py-1 border border-gray-300 rounded disabled:opacity-50"
-                        >
-                          <ChevronRight size={16} />
-                        </button>
+                          <option value="all">All Sales</option>
+                          <option value="flagged">Flagged Only</option>
+                          <option value="pending">Pending Review</option>
+                          {timeNormalizedSales.some(s => s.asset_type_use?.toString().trim().startsWith('1')) && (
+                            <option value="type-1">Single Family</option>
+                          )}
+                          {timeNormalizedSales.some(s => s.asset_type_use?.toString().trim().startsWith('2')) && (
+                            <option value="type-2">Semi-Detached</option>
+                          )}
+                          {timeNormalizedSales.some(s => s.asset_type_use?.toString().trim().startsWith('3')) && (
+                            <option value="type-3">Row/Townhomes</option>
+                          )}
+                          {timeNormalizedSales.some(s => s.asset_type_use?.toString().trim().startsWith('4')) && (
+                            <option value="type-4">MultiFamily</option>
+                          )}
+                          {timeNormalizedSales.some(s => s.asset_type_use?.toString().trim().startsWith('5')) && (
+                            <option value="type-5">Conversions</option>
+                          )}
+                          {timeNormalizedSales.some(s => s.asset_type_use?.toString().trim().startsWith('6')) && (
+                            <option value="type-6">Condominiums</option>
+                          )}
+                        </select>
                       </div>
                     </div>
-                  );
-                })()}
 
-                <div className="mt-4 p-4 bg-blue-50 rounded">
-                  <p className="text-sm">
-                    <strong>Review Guidelines:</strong> Sales with ratios outside {((equalizationRatio * (1 - outlierThreshold/100))).toFixed(2)}%-{((equalizationRatio * (1 + outlierThreshold/100))).toFixed(2)}% are flagged.
-                    Consider property condition, special circumstances, and market conditions when making keep/reject decisions.
-                  </p>
-                </div>
-                
-                {/* Save All Decisions Button */}
-                <div className="mt-4 flex justify-center">
-                  <button
-                    onClick={saveBatchDecisions}
-                    className="px-6 py-2 bg-green-600 text-white rounded hover:bg-green-700"
-                  >
-                    Save All Keep/Reject Decisions
-                  </button>
-                </div>
+                    <div className="overflow-x-auto max-w-full">
+                      <table className="min-w-full table-fixed">
+                        <thead className="bg-gray-50 border-b">
+                          <tr>
+                            <th 
+                              className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
+                              onClick={() => handleNormalizationSort('block')}
+                            >
+                              Block {normSortConfig.field === 'block' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
+                            </th>
+                            <th 
+                              className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
+                              onClick={() => handleNormalizationSort('lot')}
+                            >
+                              Lot {normSortConfig.field === 'lot' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
+                            </th>
+                            <th 
+                              className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
+                              onClick={() => handleNormalizationSort('qualifier')}
+                            >
+                              Qual {normSortConfig.field === 'qualifier' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
+                            </th>
+                            <th 
+                              className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
+                              onClick={() => handleNormalizationSort('card')}
+                            >
+                              Card {normSortConfig.field === 'card' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
+                            </th>
+                            <th 
+                              className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-32 cursor-pointer hover:bg-gray-100"
+                              onClick={() => handleNormalizationSort('property_location')}
+                            >
+                              Location {normSortConfig.field === 'property_location' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
+                            </th>
+                            <th 
+                              className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
+                              onClick={() => handleNormalizationSort('property_class')}
+                            >
+                              Class {normSortConfig.field === 'property_class' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
+                            </th>
+                            <th 
+                              className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-20 cursor-pointer hover:bg-gray-100"
+                              onClick={() => handleNormalizationSort('asset_type_use')}
+                            >
+                              Type {normSortConfig.field === 'asset_type_use' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
+                            </th>
+                            <th 
+                              className="px-4 py-3 text-center text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
+                              onClick={() => handleNormalizationSort('package')}
+                            >
+                              Package {normSortConfig.field === 'package' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
+                            </th>
+                            <th 
+                              className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-24 cursor-pointer hover:bg-gray-100"
+                              onClick={() => handleNormalizationSort('sales_date')}
+                            >
+                              Sale Date {normSortConfig.field === 'sales_date' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
+                            </th>
+                            <th 
+                              className="px-4 py-3 text-right text-sm font-medium text-gray-700 w-24 cursor-pointer hover:bg-gray-100"
+                              onClick={() => handleNormalizationSort('sales_price')}
+                            >
+                              Sale Price {normSortConfig.field === 'sales_price' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
+                            </th>
+                            <th 
+                              className="px-4 py-3 text-right text-sm font-medium text-gray-700 w-24 cursor-pointer hover:bg-gray-100"
+                              onClick={() => handleNormalizationSort('time_normalized_price')}
+                            >
+                              Time Norm {normSortConfig.field === 'time_normalized_price' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
+                            </th>
+                            <th 
+                              className="px-4 py-3 text-right text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
+                              onClick={() => handleNormalizationSort('sales_nu')}
+                            >
+                              Sale NU {normSortConfig.field === 'sales_nu' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
+                            </th>
+                            <th 
+                              className="px-4 py-3 text-center text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
+                              onClick={() => handleNormalizationSort('sales_ratio')}
+                            >
+                              Ratio {normSortConfig.field === 'sales_ratio' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
+                            </th>
+                            <th 
+                              className="px-4 py-3 text-center text-sm font-medium text-gray-700 w-20 cursor-pointer hover:bg-gray-100"
+                              onClick={() => handleNormalizationSort('is_outlier')}
+                            >
+                              Status {normSortConfig.field === 'is_outlier' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
+                            </th>
+                            <th 
+                              className="px-4 py-3 text-center text-sm font-medium text-gray-700 w-28 cursor-pointer hover:bg-gray-100"
+                              onClick={() => handleNormalizationSort('keep_reject')}
+                            >
+                              Decision {normSortConfig.field === 'keep_reject' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {timeNormalizedSales
+                            .filter(sale => {
+                              if (salesReviewFilter === 'all') return true;
+                              if (salesReviewFilter === 'flagged') return sale.is_outlier;
+                              if (salesReviewFilter === 'pending') return sale.keep_reject === 'pending';
+                              if (salesReviewFilter === 'type-1') return sale.asset_type_use?.toString().trim().startsWith('1');
+                              if (salesReviewFilter === 'type-2') return sale.asset_type_use?.toString().trim().startsWith('2');
+                              if (salesReviewFilter === 'type-3') return sale.asset_type_use?.toString().trim().startsWith('3');
+                              if (salesReviewFilter === 'type-4') return sale.asset_type_use?.toString().trim().startsWith('4');
+                              if (salesReviewFilter === 'type-5') return sale.asset_type_use?.toString().trim().startsWith('5');
+                              if (salesReviewFilter === 'type-6') return sale.asset_type_use?.toString().trim().startsWith('6');
+                              return true;
+                            })
+                            .slice((normCurrentPage - 1) * normItemsPerPage, normCurrentPage * normItemsPerPage)
+                            .map((sale) => {
+                              const parsed = parseCompositeKey(sale.property_composite_key);
+                              return (
+                                <tr key={sale.id} className="border-b hover:bg-gray-50">
+                                  <td className="px-4 py-3 text-sm">{parsed.block}</td>
+                                  <td className="px-4 py-3 text-sm">{parsed.lot}</td>
+                                  <td className="px-4 py-3 text-sm">{parsed.qualifier || ''}</td>
+                                  <td className="px-4 py-3 text-sm">{parsed.card || '1'}</td>
+                                  <td className="px-4 py-3 text-sm">{sale.property_location}</td>
+                                  <td className="px-4 py-3 text-sm">{sale.property_class || sale.property_m4_class}</td>
+                                  <td className="px-4 py-3 text-sm">
+                                    {getTypeUseDisplay(sale)}
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-center">
+                                    {(() => {
+                                      const packageData = interpretCodes.getPackageSaleData(properties, sale);
+                                      if (!packageData) return '-';
+                                      
+                                      // Check if it's a farm package (has 3B)
+                                      const isFarmPackage = packageData.has_farmland;
+                                      
+                                      if (isFarmPackage) {
+                                        return (
+                                          <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-medium" 
+                                                title={`Farm package: ${packageData.package_count} properties (includes farmland)`}>
+                                            Farm ({packageData.package_count})
+                                          </span>
+                                        );
+                                      }
+                                      
+                                      // Check if it's additional cards (same property, different cards)
+                                      const parsed = parseCompositeKey(sale.property_composite_key);
+                                      const samePropertyDifferentCards = packageData.properties?.filter(p => {
+                                        const pParsed = parseCompositeKey(p.property_composite_key);
+                                        return pParsed.block === parsed.block && 
+                                               pParsed.lot === parsed.lot && 
+                                               pParsed.card !== parsed.card;
+                                      });
+                                      
+                                      // Check if main card (M for Microsystems, 1 for BRT)
+                                      const isMainCard = (vendorType === 'Microsystems' && parsed.card === 'M') || 
+                                                        (vendorType === 'BRT' && parsed.card === '1');
+                                      
+                                      if (samePropertyDifferentCards && samePropertyDifferentCards.length > 0 && isMainCard) {
+                                        // It's the main card with additional cards on same property
+                                        return (
+                                          <span className="px-2 py-1 bg-yellow-100 text-yellow-700 rounded text-xs font-medium" 
+                                                title={`Additional cards on same property`}>
+                                            Addl Card ({samePropertyDifferentCards.length})
+                                          </span>
+                                        );
+                                      } else if (samePropertyDifferentCards && samePropertyDifferentCards.length > 0 && !isMainCard) {
+                                        // It's an additional card, don't show package indicator
+                                        return '-';
+                                      }
+                                      
+                                      // Regular package (multiple properties)
+                                      return (
+                                        <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs font-medium" 
+                                              title={`Package sale: ${packageData.package_count} properties`}>
+                                          Pkg ({packageData.package_count})
+                                        </span>
+                                      );
+                                    })()}
+                                  </td>
+                                  <td className="px-4 py-3 text-sm">
+                                    {sale.sales_date ? new Date(sale.sales_date).toLocaleDateString() : ''}
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-right">
+                                    ${sale.sales_price?.toLocaleString()}
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-right">
+                                    ${sale.time_normalized_price?.toLocaleString()}
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-right">
+                                    {sale.sales_nu || ''}
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-center">
+                                    {sale.sales_ratio ? `${(sale.sales_ratio * 100).toFixed(0)}%` : ''}
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-center">
+                                    {sale.is_outlier ? (
+                                      <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded text-xs">
+                                        Outlier
+                                      </span>
+                                    ) : (
+                                      <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs">
+                                        Valid
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <div className="flex gap-1 justify-center">
+                                      <button
+                                        onClick={() => handleSalesDecision(sale.id, 'keep')}
+                                        className={`px-2 py-1 rounded text-xs ${
+                                          sale.keep_reject === 'keep'
+                                            ? 'bg-green-600 text-white'
+                                            : 'bg-gray-200 hover:bg-green-100'
+                                        }`}
+                                      >
+                                        Keep
+                                      </button>
+                                      <button
+                                        onClick={() => handleSalesDecision(sale.id, 'reject')}
+                                        className={`px-2 py-1 rounded text-xs ${
+                                          sale.keep_reject === 'reject'
+                                            ? 'bg-red-600 text-white'
+                                            : 'bg-gray-200 hover:bg-red-100'
+                                        }`}
+                                      >
+                                        Reject
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                        </tbody>
+                      </table>
+                    </div>
+
+    
+                    {(() => {
+                      const filteredSales = timeNormalizedSales.filter(sale => {
+                        if (salesReviewFilter === 'all') return true;
+                        if (salesReviewFilter === 'flagged') return sale.is_outlier;
+                        if (salesReviewFilter === 'pending') return sale.keep_reject === 'pending';
+                        if (salesReviewFilter.startsWith('type-')) {
+                          const typeNum = salesReviewFilter.split('-')[1];
+                          return sale.asset_type_use?.toString().trim().startsWith(typeNum);
+                        }
+                        return true;
+                      });
+                      const totalNormPages = Math.ceil(filteredSales.length / normItemsPerPage);
+                      
+                      return totalNormPages > 1 && (
+                        <div className="flex justify-between items-center mt-4">
+                          <div className="text-sm text-gray-600">
+                            Page {normCurrentPage} of {totalNormPages} ({filteredSales.length} sales)
+                          </div>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => setNormCurrentPage(Math.max(1, normCurrentPage - 1))}
+                              disabled={normCurrentPage === 1}
+                              className="px-3 py-1 border border-gray-300 rounded disabled:opacity-50"
+                            >
+                              <ChevronLeft size={16} />
+                            </button>
+                            <button
+                              onClick={() => setNormCurrentPage(Math.min(totalNormPages, normCurrentPage + 1))}
+                              disabled={normCurrentPage === totalNormPages}
+                              className="px-3 py-1 border border-gray-300 rounded disabled:opacity-50"
+                            >
+                              <ChevronRight size={16} />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    <div className="mt-4 p-4 bg-blue-50 rounded">
+                      <p className="text-sm">
+                        <strong>Review Guidelines:</strong> Sales with ratios outside {((equalizationRatio * (1 - outlierThreshold/100))).toFixed(2)}%-{((equalizationRatio * (1 + outlierThreshold/100))).toFixed(2)}% are flagged.
+                        Consider property condition, special circumstances, and market conditions when making keep/reject decisions.
+                      </p>
+                    </div>
+                    
+                    {/* Save All Decisions Button */}
+                    <div className="mt-4 flex justify-center">
+                      <button
+                        onClick={saveBatchDecisions}
+                        className="px-6 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+                      >
+                        Save All Keep/Reject Decisions
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* Size Normalization Section */}
@@ -1663,7 +2040,7 @@ const analyzeImportFile = async (file) => {
                   </ul>
                 </div>
 
-{normalizationStats.sizeNormalized > 0 && (
+                {normalizationStats.sizeNormalized > 0 && (
                   <div className="space-y-4">
                     {/* Main Stats */}
                     <div className="grid grid-cols-3 gap-4">
@@ -1738,7 +2115,235 @@ const analyzeImportFile = async (file) => {
         </div>
       )}
 
-      {/* Property Worksheet Tab Content */}
+      {/* Block Analysis Tab Content */}
+      {activeSubTab === 'marketAnalysis' && (
+        <div className="space-y-6">
+          {/* Configuration Section */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">Block Market Analysis</h3>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    // Mark complete in checklist
+                    if (window.confirm('Mark Market Analysis as complete in Management Checklist?')) {
+                      checklistService.updateChecklistItem(jobData.id, 'market_analysis', true);
+                      alert('✅ Market Analysis marked complete in checklist');
+                    }
+                  }}
+                  className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+                >
+                  Mark Complete
+                </button>
+                <button
+                  onClick={() => {
+                    // Export to CSV
+                    let csv = 'Block,Total Properties,# of Sales,Avg Normalized Value,Avg Age,Avg Size,Most Repeated Design,Age Consistency,Size Consistency,Design Consistency,Color,Bluebeam Position\n';
+                    marketAnalysisData.forEach(block => {
+                      csv += `"${block.block}","${block.propertyCount}","${block.salesCount || 0}","$${block.avgNormalizedValue.toLocaleString()}",`;
+                      csv += `"${block.ageDetails.avgYear}","${block.sizeDetails.avgSize}","${block.designDetails.dominantDesign}",`;
+                      csv += `"${block.ageConsistency}","${block.sizeConsistency}","${block.designConsistency}",`;
+                      csv += `"${block.color.name}","Row ${block.color.row} Col ${block.color.col}"\n`;
+                    });
+                    
+                    const blob = new Blob([csv], { type: 'text/csv' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `BlockAnalysis_${jobData.job_number}_${new Date().toISOString().split('T')[0]}.csv`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }}
+                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                >
+                  Export to CSV
+                </button>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Property Type Filter
+                </label>
+                <select
+                  value={blockTypeFilter}
+                  onChange={(e) => setBlockTypeFilter(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded"
+                >
+                  <option value="single_family">Single Family</option>
+                  <option value="multifamily">Multifamily</option>
+                  <option value="all_residential">All Residential</option>
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Color Scale Start (0-99K = first color)
+                </label>
+                <input
+                  type="number"
+                  value={colorScaleStart}
+                  onChange={(e) => setColorScaleStart(parseInt(e.target.value) || 0)}
+                  step="100000"
+                  className="w-full px-3 py-2 border border-gray-300 rounded"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Color Increment (100K intervals)
+                </label>
+                <input
+                  type="number"
+                  value={colorScaleIncrement}
+                  onChange={(e) => setColorScaleIncrement(parseInt(e.target.value) || 100000)}
+                  step="100000"
+                  className="w-full px-3 py-2 border border-gray-300 rounded"
+                />
+              </div>
+            </div>
+            
+            <div className="mt-4 p-3 bg-blue-50 rounded text-sm">
+              <strong>Color Scale:</strong> 
+              <br/>• First color: $0 - ${(colorScaleIncrement - 1).toLocaleString()}
+              <br/>• Second color: ${colorScaleIncrement.toLocaleString()} - ${((colorScaleIncrement * 2) - 1).toLocaleString()}
+              <br/>• Third color: ${(colorScaleIncrement * 2).toLocaleString()} - ${((colorScaleIncrement * 3) - 1).toLocaleString()}
+              <br/>• And so on... Total of {marketAnalysisData.length} blocks analyzed.
+            </div>
+          </div>
+          
+          {/* Block Analysis Table */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <h3 className="text-lg font-semibold mb-4">Block Analysis Results</h3>
+            
+            {isProcessingBlocks ? (
+              <div className="flex items-center justify-center py-8">
+                <RefreshCw className="animate-spin text-blue-600 mr-2" size={20} />
+                <span>Processing block analysis...</span>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full">
+                  <thead className="bg-gray-50 border-b">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Block</th>
+                      <th className="px-4 py-3 text-center text-sm font-medium text-gray-700">Total Props</th>
+                      <th className="px-4 py-3 text-center text-sm font-medium text-gray-700"># Sales</th>
+                      <th className="px-4 py-3 text-right text-sm font-medium text-gray-700">Avg Norm Value</th>
+                      <th className="px-4 py-3 text-center text-sm font-medium text-gray-700">Avg Age</th>
+                      <th className="px-4 py-3 text-right text-sm font-medium text-gray-700">Avg Size</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Most Common Design</th>
+                      <th className="px-4 py-3 text-center text-sm font-medium text-gray-700">Age</th>
+                      <th className="px-4 py-3 text-center text-sm font-medium text-gray-700">Size</th>
+                      <th className="px-4 py-3 text-center text-sm font-medium text-gray-700">Design</th>
+                      <th className="px-4 py-3 text-center text-sm font-medium text-gray-700">Color</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {marketAnalysisData.map((block, index) => {
+                      // Determine background color based on consistency ratings
+                      const getConsistencyColor = (consistency) => {
+                        switch(consistency) {
+                          case 'High': return '#10B981'; // green
+                          case 'Medium': return '#F59E0B'; // yellow
+                          case 'Low': return '#FB923C'; // orange
+                          case 'Mixed': return '#EF4444'; // red
+                          default: return '#6B7280'; // gray
+                        }
+                      };
+                      
+                      // Count sales in this block
+                      const salesCount = properties.filter(p => {
+                        const parsed = parseCompositeKey(p.property_composite_key);
+                        return parsed.block === block.block && p.sales_price && p.sales_date;
+                      }).length;
+                      
+                      return (
+                        <tr key={block.block} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                          <td className="px-4 py-3 text-sm font-medium">{block.block}</td>
+                          <td className="px-4 py-3 text-sm text-center">{block.propertyCount}</td>
+                          <td className="px-4 py-3 text-sm text-center">{salesCount}</td>
+                          <td className="px-4 py-3 text-sm text-right font-medium">
+                            ${block.avgNormalizedValue.toLocaleString()}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-center">{block.ageDetails.avgYear}</td>
+                          <td className="px-4 py-3 text-sm text-right">{block.sizeDetails.avgSize.toLocaleString()} sf</td>
+                          <td className="px-4 py-3 text-sm">{block.designDetails.dominantDesign}</td>
+                          <td className="px-4 py-3 text-center">
+                            <button
+                              onClick={() => {
+                                setSelectedBlockDetails({
+                                  ...block,
+                                  salesCount,
+                                  metric: 'age'
+                                });
+                                setShowBlockDetailModal(true);
+                              }}
+                              className="px-2 py-1 rounded text-xs text-white font-medium hover:opacity-80"
+                              style={{ backgroundColor: getConsistencyColor(block.ageConsistency) }}
+                            >
+                              {block.ageConsistency}
+                            </button>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <button
+                              onClick={() => {
+                                setSelectedBlockDetails({
+                                  ...block,
+                                  salesCount,
+                                  metric: 'size'
+                                });
+                                setShowBlockDetailModal(true);
+                              }}
+                              className="px-2 py-1 rounded text-xs text-white font-medium hover:opacity-80"
+                              style={{ backgroundColor: getConsistencyColor(block.sizeConsistency) }}
+                            >
+                              {block.sizeConsistency}
+                            </button>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <button
+                              onClick={() => {
+                                setSelectedBlockDetails({
+                                  ...block,
+                                  salesCount,
+                                  metric: 'design'
+                                });
+                                setShowBlockDetailModal(true);
+                              }}
+                              className="px-2 py-1 rounded text-xs text-white font-medium hover:opacity-80"
+                              style={{ backgroundColor: getConsistencyColor(block.designConsistency) }}
+                            >
+                              {block.designConsistency}
+                            </button>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              <div
+                                className="w-8 h-8 rounded border-2 border-gray-300"
+                                style={{ backgroundColor: block.color.hex }}
+                                title={`${block.color.name} - Row ${block.color.row}, Col ${block.color.col}`}
+                              />
+                              <span className="text-xs text-gray-500">R{block.color.row}C{block.color.col}</span>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            
+            {marketAnalysisData.length === 0 && !isProcessingBlocks && (
+              <div className="text-center py-8 text-gray-500">
+                Run Size Normalization first to see block analysis
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Property Worksheet Tab Content */}
       {activeSubTab === 'worksheet' && (
@@ -1804,10 +2409,10 @@ const analyzeImportFile = async (file) => {
                 <div className="text-sm text-gray-600">Ready to Process</div>
               </div>
               <div className="text-center">
-                <div className="text-2xl font-bold">
-                  {lastAutoSave ? `${Math.floor((Date.now() - lastAutoSave) / 60000)} min ago` : 'Never'}
+                <div className="text-2xl font-bold text-blue-600">
+                  {Math.round((worksheetStats.vcsAssigned / worksheetStats.totalProperties) * 100) || 0}%
                 </div>
-                <div className="text-sm text-gray-600">Last Auto-Save</div>
+                <div className="text-sm text-gray-600">Completion</div>
               </div>
             </div>
 
@@ -1883,13 +2488,7 @@ const analyzeImportFile = async (file) => {
                           className="px-3 py-2 text-left text-xs font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
                           onClick={() => handleSort('location')}
                         >
-                          Loc {sortConfig.field === 'location' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                        </th>
-                        <th 
-                          className="px-3 py-2 text-left text-xs font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
-                          onClick={() => handleSort('property_location')}
-                        >
-                          Address {sortConfig.field === 'property_location' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                          Location {sortConfig.field === 'location' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
                         </th>
                         <th 
                           className="px-3 py-2 text-left text-xs font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
@@ -1972,7 +2571,42 @@ const analyzeImportFile = async (file) => {
                       <td className="px-3 py-2 text-sm">{prop.block}</td>
                       <td className="px-3 py-2 text-sm">{prop.lot}</td>
                       <td className="px-3 py-2 text-sm">{prop.qualifier}</td>
-                      <td className="px-3 py-2 text-sm">{prop.card || '1'}</td>
+                      <td className="px-3 py-2 text-sm">
+                        <div className="flex items-center gap-1">
+                          <span>{prop.card || '1'}</span>
+                          {/* Show copy button for secondary cards */}
+                          {((vendorType === 'Microsystems' && prop.card && prop.card !== 'M' && prop.card !== 'NONE') ||
+                            (vendorType === 'BRT' && prop.card && prop.card !== '1' && prop.card !== 'NONE')) && (
+                            <button
+                              onClick={() => {
+                                // Find the parent card (M for Microsystems, 1 for BRT)
+                                const parentCard = worksheetProperties.find(p => {
+                                  const pParsed = parseCompositeKey(p.property_composite_key);
+                                  const propParsed = parseCompositeKey(prop.property_composite_key);
+                                  return pParsed.block === propParsed.block && 
+                                         pParsed.lot === propParsed.lot &&
+                                         pParsed.qualifier === propParsed.qualifier &&
+                                         ((vendorType === 'Microsystems' && pParsed.card === 'M') ||
+                                          (vendorType === 'BRT' && pParsed.card === '1'));
+                                });
+                                
+                                if (parentCard && parentCard.new_vcs) {
+                                  handleWorksheetChange(prop.property_composite_key, 'new_vcs', parentCard.new_vcs);
+                                  console.log(`✅ Copied VCS "${parentCard.new_vcs}" from parent card to ${prop.card}`);
+                                } else if (parentCard) {
+                                  alert('Parent card does not have a New VCS value to copy');
+                                } else {
+                                  alert('Could not find parent card for this property');
+                                }
+                              }}
+                              className="px-1 py-0.5 text-xs bg-blue-100 hover:bg-blue-200 rounded"
+                              title="Copy VCS from parent card"
+                            >
+                              <Copy size={12} />
+                            </button>
+                          )}
+                        </div>
+                      </td>
                       <td className="px-3 py-2 text-sm">{prop.location || '-'}</td>
                       <td className="px-3 py-2 text-sm">{prop.property_class}</td>
                       <td className="px-3 py-2 text-sm">{prop.building_class_display}</td>
@@ -2097,17 +2731,30 @@ const analyzeImportFile = async (file) => {
                </div>
              )}
 
-           <div className="mt-6 flex justify-between items-center">
+            <div className="mt-6 flex justify-between items-center">
              <div>
                <strong>Selected for Processing:</strong> {readyProperties.size} properties
              </div>
-             <button
-               onClick={processSelectedProperties}
-               disabled={readyProperties.size === 0}
-               className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-             >
-               Process Selected Properties
-             </button>
+             <div className="flex gap-2">
+               <button
+                 onClick={processSelectedProperties}
+                 disabled={readyProperties.size === 0}
+                 className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+               >
+                 Process Selected Properties
+               </button>
+               <button
+                 onClick={() => {
+                   if (window.confirm('Mark Page by Page Worksheet as complete in Management Checklist?')) {
+                     checklistService.updateChecklistItem(jobData.id, 'page_by_page', true);
+                     alert('✅ Page by Page Worksheet marked complete in checklist');
+                   }
+                 }}
+                 className="px-6 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+               >
+                 Mark Complete
+               </button>
+             </div>
            </div>
          </div>
        </div>
@@ -2379,7 +3026,364 @@ const analyzeImportFile = async (file) => {
          </div>
        </div>
      )}
-     
+
+      {/* Zoning Requirements Tab Content */}
+      {activeSubTab === 'zoning' && (
+        <div className="space-y-6">
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">Zoning Requirements Configuration</h3>
+              <div className="flex gap-2">
+                <button
+                  onClick={async () => {
+                    // Save all zoning data
+                    try {
+                      for (const zone of Object.keys(editingZoning)) {
+                        if (editingZoning[zone]) {
+                          await supabase
+                            .from('market_land_valuation')
+                            .upsert({
+                              job_id: jobData.id,
+                              zone: zone,
+                              zone_description: editingZoning[zone].description || '',
+                              zone_min_size: editingZoning[zone].minSize || null,
+                              zone_min_frontage: editingZoning[zone].minFrontage || null,
+                              zone_min_depth: editingZoning[zone].minDepth || null,
+                              zone_depth_table: editingZoning[zone].depthTable || ''
+                            });
+                        }
+                      }
+                      alert('✅ Zoning requirements saved successfully');
+                    } catch (error) {
+                      console.error('Error saving zoning data:', error);
+                      alert('Error saving zoning data');
+                    }
+                  }}
+                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                >
+                  Save All
+                </button>
+                <button
+                  onClick={() => {
+                    if (window.confirm('Mark Zoning Configuration as complete in Management Checklist?')) {
+                      checklistService.updateChecklistItem(jobData.id, 'zoning_config', true);
+                      alert('✅ Zoning Configuration marked complete in checklist');
+                    }
+                  }}
+                  className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+                >
+                  Mark Complete
+                </button>
+              </div>
+            </div>
+
+            <div className="mb-4 p-4 bg-blue-50 rounded">
+              <p className="text-sm">
+                <strong>Instructions:</strong> Configure minimum requirements for each zoning type found in your properties. 
+                These values will be used for land valuation calculations and compliance checking.
+              </p>
+            </div>
+
+            {/* Get unique zones from worksheet data with smart processing */}
+            {(() => {
+              // Get all zones and clean them up
+              const allZones = worksheetProperties
+                .map(p => p.asset_zoning)
+                .filter(z => z && z.trim());
+              
+              // Process zones to handle compounds and clean up
+              const processedZones = new Set();
+              
+              allZones.forEach(zone => {
+                // Trim whitespace
+                const cleanZone = zone.trim();
+                
+                // Check for compound zones (with & or ,)
+                if (cleanZone.includes('&')) {
+                  // Split by & and add each zone separately
+                  cleanZone.split('&').forEach(subZone => {
+                    processedZones.add(subZone.trim());
+                  });
+                } else if (cleanZone.includes(',')) {
+                  // Split by comma and add each zone separately
+                  cleanZone.split(',').forEach(subZone => {
+                    processedZones.add(subZone.trim());
+                  });
+                } else {
+                  // Single zone - just add the cleaned version
+                  processedZones.add(cleanZone);
+                }
+              });
+              
+              // Convert to sorted array and remove any empty strings
+              const uniqueZones = [...processedZones].filter(z => z).sort();
+              
+              // Also create a mapping of how many properties are in each zone
+              const zoneCount = {};
+              allZones.forEach(zone => {
+                const cleanZone = zone.trim();
+                if (cleanZone.includes('&')) {
+                  cleanZone.split('&').forEach(subZone => {
+                    const trimmed = subZone.trim();
+                    zoneCount[trimmed] = (zoneCount[trimmed] || 0) + 1;
+                  });
+                } else if (cleanZone.includes(',')) {
+                  cleanZone.split(',').forEach(subZone => {
+                    const trimmed = subZone.trim();
+                    zoneCount[trimmed] = (zoneCount[trimmed] || 0) + 1;
+                  });
+                } else {
+                  zoneCount[cleanZone] = (zoneCount[cleanZone] || 0) + 1;
+                }
+              });
+
+              if (uniqueZones.length === 0) {
+                return (
+                  <div className="text-center py-8 text-gray-500">
+                    No zoning data found. Please enter zoning information in the Page by Page Worksheet first.
+                  </div>
+                );
+              }
+
+              return (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full">
+                    <thead className="bg-gray-50 border-b">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Zone</th>
+                        <th className="px-4 py-3 text-center text-sm font-medium text-gray-700"># Props</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Description</th>
+                        <th className="px-4 py-3 text-center text-sm font-medium text-gray-700">Min Size (SF)</th>
+                        <th className="px-4 py-3 text-center text-sm font-medium text-gray-700">Min Frontage (FT)</th>
+                        <th className="px-4 py-3 text-center text-sm font-medium text-gray-700">Min Depth (FT)</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Depth Table</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {uniqueZones.map((zone, index) => {
+                        const zoneData = editingZoning[zone] || {};
+                        return (
+                          <tr key={zone} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                            <td className="px-4 py-3 text-sm font-medium">{zone}</td>
+                            <td className="px-4 py-3 text-sm text-center text-gray-500">
+                              {zoneCount[zone] || 0}
+                            </td>
+                            <td className="px-4 py-3">
+                              <input
+                                type="text"
+                                value={zoneData.description || ''}
+                                onChange={(e) => setEditingZoning(prev => ({
+                                  ...prev,
+                                  [zone]: { ...prev[zone], description: e.target.value }
+                                }))}
+                                placeholder="e.g., Residential Single Family"
+                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                              />
+                            </td>
+                            <td className="px-4 py-3">
+                              <input
+                                type="number"
+                                value={zoneData.minSize || ''}
+                                onChange={(e) => setEditingZoning(prev => ({
+                                  ...prev,
+                                  [zone]: { ...prev[zone], minSize: e.target.value }
+                                }))}
+                                placeholder="e.g., 7500"
+                                className="w-24 px-2 py-1 border border-gray-300 rounded text-sm text-center"
+                              />
+                            </td>
+                            <td className="px-4 py-3">
+                              <input
+                                type="number"
+                                value={zoneData.minFrontage || ''}
+                                onChange={(e) => setEditingZoning(prev => ({
+                                  ...prev,
+                                  [zone]: { ...prev[zone], minFrontage: e.target.value }
+                                }))}
+                                placeholder="e.g., 75"
+                                className="w-20 px-2 py-1 border border-gray-300 rounded text-sm text-center"
+                              />
+                            </td>
+                            <td className="px-4 py-3">
+                              <input
+                                type="number"
+                                value={zoneData.minDepth || ''}
+                                onChange={(e) => setEditingZoning(prev => ({
+                                  ...prev,
+                                  [zone]: { ...prev[zone], minDepth: e.target.value }
+                                }))}
+                                placeholder="e.g., 100"
+                                className="w-20 px-2 py-1 border border-gray-300 rounded text-sm text-center"
+                              />
+                            </td>
+                            <td className="px-4 py-3">
+                              <input
+                                type="text"
+                                value={zoneData.depthTable || ''}
+                                onChange={(e) => setEditingZoning(prev => ({
+                                  ...prev,
+                                  [zone]: { ...prev[zone], depthTable: e.target.value }
+                                }))}
+                                placeholder="e.g., Table A-1"
+                                className="w-32 px-2 py-1 border border-gray-300 rounded text-sm"
+                              />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+
+                  <div className="mt-4 text-sm text-gray-600">
+                    <strong>Found {uniqueZones.length} unique zoning types</strong> from Page by Page Worksheet
+                    <br/>
+                    <span className="text-xs text-gray-500">
+                      (Compound zones like "AR & C-P" have been split into individual zones)
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
+      {/* Block Detail Modal */}
+     {showBlockDetailModal && selectedBlockDetails && (
+       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+         <div className="bg-white rounded-lg p-6 max-w-md w-full">
+           <div className="flex justify-between items-center mb-4">
+             <h3 className="text-lg font-semibold">
+               Block {selectedBlockDetails.block} - {
+                 selectedBlockDetails.metric === 'age' ? 'Age' :
+                 selectedBlockDetails.metric === 'size' ? 'Size' :
+                 'Design'
+               } Consistency
+             </h3>
+             <button
+               onClick={() => {
+                 setShowBlockDetailModal(false);
+                 setSelectedBlockDetails(null);
+               }}
+               className="text-gray-500 hover:text-gray-700"
+             >
+               <X size={20} />
+             </button>
+           </div>
+           
+           {selectedBlockDetails.metric === 'age' && (
+             <div className="space-y-3">
+               <div className="flex justify-between">
+                 <span className="font-medium">Rating:</span>
+                 <span className={`font-semibold ${
+                   selectedBlockDetails.ageConsistency === 'High' ? 'text-green-600' :
+                   selectedBlockDetails.ageConsistency === 'Medium' ? 'text-yellow-600' :
+                   selectedBlockDetails.ageConsistency === 'Low' ? 'text-orange-600' :
+                   'text-red-600'
+                 }`}>
+                   {selectedBlockDetails.ageConsistency}
+                 </span>
+               </div>
+               <div className="flex justify-between">
+                 <span className="text-gray-600">Year Range:</span>
+                 <span>{selectedBlockDetails.ageDetails.minYear} - {selectedBlockDetails.ageDetails.maxYear}</span>
+               </div>
+               <div className="flex justify-between">
+                 <span className="text-gray-600">Average Year:</span>
+                 <span>{selectedBlockDetails.ageDetails.avgYear}</span>
+               </div>
+               <div className="flex justify-between">
+                 <span className="text-gray-600">Std Deviation:</span>
+                 <span>±{selectedBlockDetails.ageDetails.stdDev} years</span>
+               </div>
+               <div className="mt-4 p-3 bg-gray-50 rounded text-sm">
+                 {selectedBlockDetails.ageConsistency === 'High' ? 
+                   'Very uniform age - excellent for comparables' :
+                  selectedBlockDetails.ageConsistency === 'Medium' ?
+                   'Moderate age variation - group similar ages' :
+                  selectedBlockDetails.ageConsistency === 'Low' ?
+                   'Wide age variation - careful comparable selection' :
+                   'Mixed ages - requires detailed analysis'}
+               </div>
+             </div>
+           )}
+           
+           {selectedBlockDetails.metric === 'size' && (
+             <div className="space-y-3">
+               <div className="flex justify-between">
+                 <span className="font-medium">Rating:</span>
+                 <span className={`font-semibold ${
+                   selectedBlockDetails.sizeConsistency === 'High' ? 'text-green-600' :
+                   selectedBlockDetails.sizeConsistency === 'Medium' ? 'text-yellow-600' :
+                   selectedBlockDetails.sizeConsistency === 'Low' ? 'text-orange-600' :
+                   'text-red-600'
+                 }`}>
+                   {selectedBlockDetails.sizeConsistency}
+                 </span>
+               </div>
+               <div className="flex justify-between">
+                 <span className="text-gray-600">Size Range:</span>
+                 <span>{selectedBlockDetails.sizeDetails.minSize.toLocaleString()} - {selectedBlockDetails.sizeDetails.maxSize.toLocaleString()} sf</span>
+               </div>
+               <div className="flex justify-between">
+                 <span className="text-gray-600">Average Size:</span>
+                 <span>{selectedBlockDetails.sizeDetails.avgSize.toLocaleString()} sf</span>
+               </div>
+               <div className="flex justify-between">
+                 <span className="text-gray-600">Variation (CV):</span>
+                 <span>{selectedBlockDetails.sizeDetails.cv}%</span>
+               </div>
+               <div className="mt-4 p-3 bg-gray-50 rounded text-sm">
+                 {selectedBlockDetails.sizeConsistency === 'High' ? 
+                   'Very uniform sizes - excellent comparables' :
+                  selectedBlockDetails.sizeConsistency === 'Medium' ?
+                   'Moderate size variation - reasonable comparables' :
+                  selectedBlockDetails.sizeConsistency === 'Low' ?
+                   'Wide size variation - adjust for size differences' :
+                   'Mixed sizes - requires careful analysis'}
+               </div>
+             </div>
+           )}
+           
+           {selectedBlockDetails.metric === 'design' && (
+             <div className="space-y-3">
+               <div className="flex justify-between">
+                 <span className="font-medium">Rating:</span>
+                 <span className={`font-semibold ${
+                   selectedBlockDetails.designConsistency === 'High' ? 'text-green-600' :
+                   selectedBlockDetails.designConsistency === 'Medium' ? 'text-yellow-600' :
+                   selectedBlockDetails.designConsistency === 'Low' ? 'text-orange-600' :
+                   'text-red-600'
+                 }`}>
+                   {selectedBlockDetails.designConsistency}
+                 </span>
+               </div>
+               <div className="flex justify-between">
+                 <span className="text-gray-600">Unique Designs:</span>
+                 <span>{selectedBlockDetails.designDetails.uniqueDesigns} types</span>
+               </div>
+               <div className="flex justify-between">
+                 <span className="text-gray-600">Dominant Style:</span>
+                 <span>{selectedBlockDetails.designDetails.dominantDesign}</span>
+               </div>
+               <div className="flex justify-between">
+                 <span className="text-gray-600">Dominance:</span>
+                 <span>{selectedBlockDetails.designDetails.dominantPercent}%</span>
+               </div>
+               <div className="mt-4 p-3 bg-gray-50 rounded text-sm">
+                 {selectedBlockDetails.designConsistency === 'High' ? 
+                   'Very uniform design - excellent comparables' :
+                  selectedBlockDetails.designConsistency === 'Medium' ?
+                   'Similar designs - good comparable pool' :
+                  selectedBlockDetails.designConsistency === 'Low' ?
+                   'Varied designs - consider style adjustments' :
+                   'Mixed designs - requires detailed analysis'}
+               </div>
+             </div>
+           )}
+         </div>
+       </div>
+     )}  
    </div>
  );
 };

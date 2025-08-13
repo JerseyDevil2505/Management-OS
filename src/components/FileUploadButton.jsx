@@ -15,9 +15,10 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
   const [showResultsModal, setShowResultsModal] = useState(false);
   const [comparisonResults, setComparisonResults] = useState(null);
   const [salesDecisions, setSalesDecisions] = useState(new Map());
-  const [sourceFileVersion, setSourceFileVersion] = useState(1);
+  const [sourceFileVersion, setSourceFileVersion] = useState(null);  // Changed from 1 to null
   const [lastSourceProcessedDate, setLastSourceProcessedDate] = useState(null);
   const [lastCodeProcessedDate, setLastCodeProcessedDate] = useState(null);
+  const [isInitialized, setIsInitialized] = useState(false);  // Added new state
   
   // NEW: Batch processing modal state
   const [showBatchModal, setShowBatchModal] = useState(false);
@@ -888,9 +889,19 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     }
   };
 
-  // NEW: Handle sales decisions
   const handleSalesDecision = (propertyKey, decision) => {
+    // Save current scroll position
+    const container = document.getElementById('sales-changes-container');
+    const scrollPos = container ? container.scrollTop : 0;
+    
     setSalesDecisions(prev => new Map(prev.set(propertyKey, decision)));
+    
+    // Restore scroll position after React re-renders
+    setTimeout(() => {
+      if (container) {
+        container.scrollTop = scrollPos;
+      }
+    }, 0);
   };
 
   // FIXED: Compare only (don't process yet) - show modal for review
@@ -1109,6 +1120,12 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
 
   // ENHANCED: Process changes with batch logging modal
   const handleProcessChanges = async () => {
+    // Wait for initialization
+    if (!isInitialized || sourceFileVersion === null) {
+      addNotification('System initializing, please try again in a moment', 'warning');
+      return;
+    }
+    
     if (!sourceFile || !sourceFileContent) {
       addNotification('No source file to process', 'error');
       return;
@@ -1715,15 +1732,21 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
             {/* Sales Changes Section (if any) */}
             {hasSalesChanges && (
               <div className="mb-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Sales Changes Requiring Decisions:</h3>
-                <div className="space-y-4 max-h-60 overflow-y-auto">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                  Sales Changes Requiring Decisions: 
+                  <span className="ml-2 text-blue-600">
+                    ({details.salesChanges.filter(change => !salesDecisions.has(change.property_composite_key)).length} remaining)
+                  </span>
+                </h3>
+                <div id="sales-changes-container" className="space-y-4 max-h-60 overflow-y-auto">
                   {details.salesChanges.map((change, idx) => {
                     const currentDecision = salesDecisions.get(change.property_composite_key);
                     
                     return (
                       <div key={idx} className="border border-blue-200 rounded-lg p-4 bg-blue-50">
-                        <div className="flex justify-between items-start mb-3">
-                          <div>
+                          <div className="mb-3">
+                          {/* Property Info */}
+                          <div className="mb-2">
                             <h4 className="font-bold text-gray-900">
                               Property {change.property_block}-{change.property_lot}
                               {change.property_qualifier && change.property_qualifier !== 'NONE' && 
@@ -1731,58 +1754,48 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                             </h4>
                             <p className="text-gray-600 text-sm">{change.property_location}</p>
                           </div>
-                          <div className="text-right">
-                            <div className="text-sm text-gray-600 font-semibold mb-1">Sale Price Change</div>
-                            <div className="flex items-center gap-2">
-                              <div>
-                                <div className="text-xs text-gray-500">Old</div>
-                                <div className="text-sm font-bold text-red-600">
-                                  ${change.differences.sales_price.old?.toLocaleString() || 0}
-                                </div>
-                                <div className="text-xs text-gray-500">
-                                  {change.differences.sales_date.old || 'No Date'}
-                                </div>
-                                {change.differences.sales_nu?.old && (
-                                  <div className="text-xs text-gray-500">
-                                    NU: {change.differences.sales_nu.old}
-                                  </div>
-                                )}
-                                {change.differences.sales_book?.old && (
-                                  <div className="text-xs text-gray-500">
-                                    Book: {change.differences.sales_book.old}
-                                  </div>
-                                )}
-                                {change.differences.sales_page?.old && (
-                                  <div className="text-xs text-gray-500">
-                                    Page: {change.differences.sales_page.old}
-                                  </div>
-                                )}                           
+                          
+                          {/* Sales Comparison */}
+                          <div className="grid grid-cols-2 gap-4 p-3 bg-white rounded-lg border border-gray-200">
+                            {/* Old Sale */}
+                            <div className="text-center">
+                              <div className="text-xs font-semibold text-gray-500 mb-1">OLD SALE</div>
+                              <div className="text-lg font-bold text-red-600">
+                                ${change.differences.sales_price.old?.toLocaleString() || 0}
                               </div>
-                              <div className="text-gray-400">→</div>
-                              <div>
-                                <div className="text-xs text-gray-500">New</div>
-                                <div className="text-sm font-bold text-green-600">
-                                  ${change.differences.sales_price.new?.toLocaleString() || 0}
-                                </div>
-                                <div className="text-xs text-gray-500">
-                                  {change.differences.sales_date.new || 'No Date'}
-                                </div>
-                                {change.differences.sales_nu?.new && (
-                                  <div className="text-xs text-gray-500">
-                                    NU: {change.differences.sales_nu.new}
-                                  </div>
-                                )}
-                                {change.differences.sales_book?.new && (
-                                  <div className="text-xs text-gray-500">
-                                    Book: {change.differences.sales_book.new}
-                                  </div>
-                                )}
-                                {change.differences.sales_page?.new && (
-                                  <div className="text-xs text-gray-500">
-                                    Page: {change.differences.sales_page.new}
-                                  </div>
-                                )}   
-                                )}                                
+                              <div className="text-xs text-gray-500 mt-1">
+                                {change.differences.sales_date.old || 'No Date'}
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                Book: {change.differences.sales_book?.old || '--'} Page: {change.differences.sales_page?.old || '--'}
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                NU: {(() => {
+                                  const nu = change.differences.sales_nu?.old;
+                                  if (!nu || nu === '' || nu === ' ' || nu === '0' || nu === '00') return '--';
+                                  return nu;
+                                })()}
+                              </div>
+                            </div>
+                            
+                            {/* New Sale */}
+                            <div className="text-center">
+                              <div className="text-xs font-semibold text-gray-500 mb-1">NEW SALE</div>
+                              <div className="text-lg font-bold text-green-600">
+                                ${change.differences.sales_price.new?.toLocaleString() || 0}
+                              </div>
+                              <div className="text-xs text-gray-500 mt-1">
+                                {change.differences.sales_date.new || 'No Date'}
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                Book: {change.differences.sales_book?.new || '--'} Page: {change.differences.sales_page?.new || '--'}
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                NU: {(() => {
+                                  const nu = change.differences.sales_nu?.new;
+                                  if (!nu || nu === '' || nu === ' ' || nu === '0' || nu === '00') return '--';
+                                  return nu;
+                                })()}
                               </div>
                             </div>
                           </div>
@@ -2186,6 +2199,9 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       } catch (error) {
         console.error('🔍 DEBUG - Error fetching source file version:', error);
         setSourceFileVersion(1);
+      } finally {
+        // Mark as initialized after fetching version
+        setIsInitialized(true);
       }
     };
 
