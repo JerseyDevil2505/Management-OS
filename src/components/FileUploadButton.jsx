@@ -11,6 +11,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
   const [comparing, setComparing] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [processingStatus, setProcessingStatus] = useState('');
+  const [isProcessingLocked, setIsProcessingLocked] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [showResultsModal, setShowResultsModal] = useState(false);
   const [comparisonResults, setComparisonResults] = useState(null);
@@ -1134,14 +1135,23 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
 
   // ENHANCED: Process changes with batch logging modal
   const handleProcessChanges = async () => {
+    // Prevent double processing
+    if (isProcessingLocked) {
+      console.log('⚠️ Processing already in progress, ignoring duplicate request');
+      return;
+    }
+    setIsProcessingLocked(true);
+    
     // Wait for initialization
     if (!isInitialized || sourceFileVersion === null) {
       addNotification('System initializing, please try again in a moment', 'warning');
+      setIsProcessingLocked(false); // Reset lock on early return
       return;
     }
     
     if (!sourceFile || !sourceFileContent) {
       addNotification('No source file to process', 'error');
+      setIsProcessingLocked(false); // Reset lock on early return
       return;
     }
     
@@ -1416,6 +1426,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     } finally {
       setProcessing(false);
       setProcessingStatus('');
+      setIsProcessingLocked(false);  // Add this line
     }
   };
   const handleSourceFileUpload = async (event) => {
