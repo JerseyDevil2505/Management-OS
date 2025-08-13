@@ -1,3 +1,4 @@
+                    <span style={{ fontSize: '12px', color: '#6B7280' }}>/acre</span>
 import React, { useState, useEffect } from 'react';
 import { Check, X, Plus, Search, TrendingUp, AlertCircle, Calculator, Download, Trash2, RefreshCw, Filter } from 'lucide-react';
 import { supabase, interpretCodes } from '../../../lib/supabaseClient';
@@ -1992,6 +1993,169 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
                   </div>
                 </div>
               </div>
+
+              {/* Special Categories */}
+              <div style={{ paddingTop: '20px', borderTop: '1px solid #E5E7EB' }}>
+                <h4 style={{ color: '#1F2937', marginBottom: '15px' }}>Special Category Rates</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '15px' }}>
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
+                      Wetlands
+                    </label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '12px', color: '#6B7280' }}>$</span>
+                      <input
+                        type="number"
+                        value={specialCategoryRates?.wetlands || ''}
+                        onChange={(e) => setSpecialCategoryRates({...specialCategoryRates, wetlands: parseFloat(e.target.value) || 0})}
+                        placeholder="1000"
+                        style={{ 
+                          flex: 1,
+                          padding: '8px', 
+                          border: '1px solid #E5E7EB',
+                          borderRadius: '4px',
+                          color: '#1F2937',
+                          backgroundColor: 'white'
+                        }}
+                      />
+                      <span style={{ fontSize: '12px', color: '#6B7280' }}>/acre</span>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
+                      Conservation
+                    </label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '12px', color: '#6B7280' }}>$</span>
+                      <input
+                        type="number"
+                        value={specialCategoryRates?.conservation || ''}
+                        onChange={(e) => setSpecialCategoryRates({...specialCategoryRates, conservation: parseFloat(e.target.value) || 0})}
+                        placeholder="500"
+                        style={{ 
+                          flex: 1,
+                          padding: '8px', 
+                          border: '1px solid #E5E7EB',
+                          borderRadius: '4px',
+                          color: '#1F2937',
+                          backgroundColor: 'white'
+                        }}
+                      />
+                      <span style={{ fontSize: '12px', color: '#6B7280' }}>/acre</span>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
+                      Green Acres/Open Space
+                    </label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '12px', color: '#6B7280' }}>$</span>
+                      <input
+                        type="number"
+                        value={specialCategoryRates?.green_acres || ''}
+                        onChange={(e) => setSpecialCategoryRates({...specialCategoryRates, green_acres: parseFloat(e.target.value) || 0})}
+                        placeholder="750"
+                        style={{ 
+                          flex: 1,
+                          padding: '8px', 
+                          border: '1px solid #E5E7EB',
+                          borderRadius: '4px',
+                          color: '#1F2937',
+                          backgroundColor: 'white'
+                        }}
+                      />
+                      <span style={{ fontSize: '12px', color: '#6B7280' }}>/acre</span>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
+                      Water
+                    </label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '12px', color: '#6B7280' }}>$</span>
+                      <input
+                        type="number"
+                        value={specialCategoryRates?.water || ''}
+                        onChange={(e) => setSpecialCategoryRates({...specialCategoryRates, water: parseFloat(e.target.value) || 0})}
+                        placeholder="100"
+                        style={{ 
+                          flex: 1,
+                          padding: '8px', 
+                          border: '1px solid #E5E7EB',
+                          borderRadius: '4px',
+                          color: '#1F2937',
+                          backgroundColor: 'white'
+                        }}
+                      />
+                      <span style={{ fontSize: '12px', color: '#6B7280' }}>/acre</span>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
+                      Landlocked
+                    </label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '12px', color: '#6B7280' }}>$</span>
+                      <input
+                        type="number"
+                        value={specialCategoryRates?.landlocked || ''}
+                        onChange={(e) => setSpecialCategoryRates({...specialCategoryRates, landlocked: parseFloat(e.target.value) || 0})}
+                        placeholder="250"
+                        style={{ 
+                          flex: 1,
+                          padding: '8px', 
+                          border: '1px solid #E5E7EB',
+                          borderRadius: '4px',
+                          color: '#1F2937',
+                          backgroundColor: 'white'
+                        }}
+                      />
+                      <span style={{ fontSize: '12px', color: '#6B7280' }}>/acre</span>
+                    </div>
+                  </div>
+                  
+                  {/* Custom Category */}
+                  <div>
+                    <input
+                      type="text"
+                      value={customCategoryName || ''}
+                      onChange={(e) => setCustomCategoryName(e.target.value)}
+                      placeholder="Custom category..."
+                      style={{ 
+                        width: '100%',
+                        padding: '4px', 
+                        marginBottom: '4px',
+                        border: '1px solid #E5E7EB',
+                        borderRadius: '4px',
+                        fontSize: '12px',
+                        color: '#1F2937'
+                      }}
+                    />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '12px', color: '#6B7280' }}>$</span>
+                      <input
+                        type="number"
+                        value={specialCategoryRates?.custom || ''}
+                        onChange={(e) => setSpecialCategoryRates({...specialCategoryRates, custom: parseFloat(e.target.value) || 0})}
+                        placeholder="Enter rate"
+                        style={{ 
+                          flex: 1,
+                          padding: '8px', 
+                          border: '1px solid #E5E7EB',
+                          borderRadius: '4px',
+                          color: '#1F2937',
+                          backgroundColor: 'white'
+                        }}
+                      />
+                      <span style={{ fontSize: '12px', color: '#6B7280' }}>/acre</span>
+                    </div>
+                  </div>
+                </div>
+              </div>                          
 
                   {/* Custom Category */}
                   <div>
