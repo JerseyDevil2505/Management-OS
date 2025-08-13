@@ -762,9 +762,9 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         // ADD: Get sales_nu values
         const sourceSalesNu = sourceRecord[detectedVendor === 'BRT' ? 'CURRENTSALE_NU' : 'Sale Nu'] || '';
         const dbSalesNu = dbRecord.sales_nu || '';
-        const sourceSalesBook = sourceRecord[detectedVendor === 'BRT' ? 'CURRENTSALE_BOOK' : 'Sale Book'] || '';
+        const sourceSalesBook = sourceRecord[detectedVendor === 'BRT' ? 'CURRENTSALE_DEEDBOOK' : 'Sale Book'] || '';
         const dbSalesBook = dbRecord.sales_book || '';
-        const sourceSalesPage = sourceRecord[detectedVendor === 'BRT' ? 'CURRENTSALE_PAGE' : 'Sale Page'] || '';
+        const sourceSalesPage = sourceRecord[detectedVendor === 'BRT' ? 'CURRENTSALE_DEEDPAGE' : 'Sale Page'] || '';
         const dbSalesPage = dbRecord.sales_page || '';
           
         // FIXED: Normalize both dates for accurate comparison using processor method
