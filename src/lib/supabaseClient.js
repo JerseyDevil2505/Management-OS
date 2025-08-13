@@ -1263,11 +1263,14 @@ export const jobService = {
 
 
       const { data, error } = await supabase
-        .from('jobs')
-        .update(dbFields)
-        .eq('id', id)
-        .select()
-        .single();
+       .from('jobs')
+       .update({
+         ...dbFields,
+         updated_at: new Date().toISOString()
+       })
+       .eq('id', id)
+       .select()
+       .single();
       
       if (error) {
         console.error('❌ DEBUG - Supabase update error:', error);
