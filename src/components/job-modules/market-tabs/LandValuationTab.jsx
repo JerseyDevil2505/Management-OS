@@ -1,4 +1,3 @@
-                    <span style={{ fontSize: '12px', color: '#6B7280' }}>/acre</span>
 import React, { useState, useEffect } from 'react';
 import { Check, X, Plus, Search, TrendingUp, AlertCircle, Calculator, Download, Trash2, RefreshCw, Filter } from 'lucide-react';
 import { supabase, interpretCodes } from '../../../lib/supabaseClient';
