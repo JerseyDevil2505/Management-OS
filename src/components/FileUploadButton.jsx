@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+  import React, { useState, useEffect } from 'react';
 import { Upload, FileText, CheckCircle, AlertTriangle, X, Database, Settings, Download, Eye, Calendar, RefreshCw } from 'lucide-react';
 import { jobService, propertyService, supabase } from '../lib/supabaseClient';
 
@@ -15,14 +15,17 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
   const [showResultsModal, setShowResultsModal] = useState(false);
   const [comparisonResults, setComparisonResults] = useState(null);
   const [salesDecisions, setSalesDecisions] = useState(new Map());
-  const [sourceFileVersion, setSourceFileVersion] = useState(1);
+  const [sourceFileVersion, setSourceFileVersion] = useState(null);  // Changed from 1 to null
+  const [lastSourceProcessedDate, setLastSourceProcessedDate] = useState(null);
+  const [lastCodeProcessedDate, setLastCodeProcessedDate] = useState(null);
+  const [isInitialized, setIsInitialized] = useState(false);  // Added new state
   
   // NEW: Batch processing modal state
   const [showBatchModal, setShowBatchModal] = useState(false);
   const [batchLogs, setBatchLogs] = useState([]);
   const [currentBatch, setCurrentBatch] = useState(null);
   const [batchComplete, setBatchComplete] = useState(false);
-  
+ 
   // ENHANCED: Add batch insert progress tracking
   const [batchInsertProgress, setBatchInsertProgress] = useState({
     totalBatches: 0,
@@ -216,7 +219,6 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         } else {
           // Mixed format with headers - extract JSON sections
           const sections = parseBRTMixedFormat(fileContent);
-          console.log(`✅ Parsed BRT mixed format with sections: ${Object.keys(sections).join(', ')}`);
           return sections;
         }
       } else if (vendor === 'Microsystems') {
@@ -259,10 +261,6 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       setProcessing(true);
       setProcessingStatus('Processing code file...');
 
-      console.log('🔍 DEBUG - Starting code file update');
-      console.log('🔍 DEBUG - Current job.code_file_version:', job.code_file_version);
-      console.log('🔍 DEBUG - Detected vendor:', detectedVendor);
-
       // Parse the code file
       const parsedCodes = parseCodeFile(codeFileContent, detectedVendor);
       
@@ -282,8 +280,6 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         codeCount = Object.keys(parsedCodes).length;
       }
 
-      console.log('🔍 DEBUG - Parsed codes count:', codeCount);
-
       // FIXED: Properly escape special characters to prevent Unicode errors
       const sanitizedContent = codeFileContent
         .replace(/\\/g, '\\\\')  // Escape backslashes first
@@ -295,7 +291,6 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         .replace(/\t/g, '\\t');  // Escape tabs
 
       const newVersion = (job.code_file_version || 1) + 1;
-      console.log('🔍 DEBUG - New version will be:', newVersion);
 
       // Update jobs table directly
       const { error } = await supabase
@@ -312,20 +307,16 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         .eq('id', job.id);
 
       if (error) {
-        console.log('🔍 DEBUG - Database update error:', error);
         throw new Error(`Failed to update job: ${error.message}`);
       }
 
-      console.log('🔍 DEBUG - Database update successful');
-
       addNotification(`✅ Successfully updated ${codeCount} code definitions for ${detectedVendor}`, 'success');
+      setLastCodeProcessedDate(new Date().toISOString());  // Track code file update date
       
       // Clear code file selection
       setCodeFile(null);
       setCodeFileContent(null);
       document.getElementById('code-file-upload').value = '';
-
-      console.log('🔍 DEBUG - About to call onFileProcessed');
 
       // Notify parent component of the update
       if (onFileProcessed) {
@@ -335,8 +326,6 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
           vendor: detectedVendor 
         });
       }
-
-      console.log('🔍 DEBUG - Code file update completed');
 
     } catch (error) {
       console.error('❌ Code file update failed:', error);
@@ -565,12 +554,10 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         console.error('Error saving comparison report:', error);
         addNotification('⚠️ Comparison completed but report save failed', 'warning');
       } else {
-        console.log('✅ Comparison report saved:', data.id);
       }
 
       return data;
     } catch (error) {
-      console.error('Failed to save comparison report:', error);
     }
   };
 
@@ -635,7 +622,6 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
 
       if (error) throw error;
 
-      console.log('📊 All reports for job:', reports);
       addNotification(`Found ${reports.length} comparison reports for this job`, 'info');
       
       // Export all reports in old CSV format
@@ -679,7 +665,6 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       
       // Parse source file
       const sourceRecords = parseSourceFile(sourceFileContent, detectedVendor);
-      console.log(`📊 Parsed ${sourceRecords.length} source records`);
       
       // FIXED: Get ALL database records from property_records table directly
       setProcessingStatus('Fetching current database records...');
@@ -689,13 +674,8 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         .from('property_records')
         .select('*', { count: 'exact', head: true })
         .eq('job_id', job.id);
-
-      console.log('🔍 DEBUG - Actual database count:', actualCount);
-      console.log('🔍 DEBUG - Count error:', countError);
-      
-      // DEBUG: Log the exact query we're about to make
-      console.log('🔍 DEBUG - About to execute main query with pagination...');
-      
+   
+     
       // FIXED: Use pagination to get ALL records instead of relying on limit
       let allDbRecords = [];
       let rangeStart = 0;
@@ -705,7 +685,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       while (hasMore) {
         const { data: batch, error: batchError } = await supabase
           .from('property_records')
-          .select('property_composite_key, property_block, property_lot, property_qualifier, property_location, sales_price, sales_date, property_m4_class, property_cama_class')
+          .select('property_composite_key, property_block, property_lot, property_qualifier, property_location, sales_price, sales_date, sales_nu, sales_book, sales_page, property_m4_class, property_cama_class')
           .eq('job_id', job.id)
           .range(rangeStart, rangeStart + batchSize - 1);
           
@@ -713,9 +693,8 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
           console.error('🔍 DEBUG - Batch error:', batchError);
           break;
         }
-        
-        console.log(`🔍 DEBUG - Batch ${Math.floor(rangeStart/batchSize) + 1}: got ${batch?.length || 0} records`);
-        
+       
+     
         if (batch && batch.length > 0) {
           allDbRecords = allDbRecords.concat(batch);
           rangeStart += batchSize;
@@ -728,14 +707,11 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       const dbRecords = allDbRecords;
       const dbError = null;
         
-      // DEBUG: Log what we actually got back
-      console.log('🔍 DEBUG - Pagination completed, total records:', dbRecords?.length);
       
       if (dbError) {
         throw new Error(`Database fetch failed: ${dbError.message}`);
       }
       
-      console.log(`📊 Found ${dbRecords.length} current database records`);
       
       // Generate composite keys for source records using EXACT processor logic
       setProcessingStatus('Generating composite keys...');
@@ -753,13 +729,11 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         }
       });
       
-      console.log(`🔑 Generated ${sourceKeys.size} source composite keys`);
       
       // Create database key sets
       const dbKeys = new Set(dbRecords.map(r => r.property_composite_key));
       const dbKeyMap = new Map(dbRecords.map(r => [r.property_composite_key, r]));
       
-      console.log(`🔑 Found ${dbKeys.size} database composite keys`);
       
       // Find differences
       setProcessingStatus('Comparing records...');
@@ -784,7 +758,15 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         // FIXED: Check for sales changes with proper number and date comparison
         const sourceSalesPrice = parseFloat(String(sourceRecord[detectedVendor === 'BRT' ? 'CURRENTSALE_PRICE' : 'Sale Price'] || 0).replace(/[,$]/g, '')) || 0;
         const dbSalesPrice = parseFloat(dbRecord.sales_price || 0);
-        
+
+        // ADD: Get sales_nu values
+        const sourceSalesNu = sourceRecord[detectedVendor === 'BRT' ? 'CURRENTSALE_NU' : 'Sale Nu'] || '';
+        const dbSalesNu = dbRecord.sales_nu || '';
+        const sourceSalesBook = sourceRecord[detectedVendor === 'BRT' ? 'CURRENTSALE_DEEDBOOK' : 'Sale Book'] || '';
+        const dbSalesBook = dbRecord.sales_book || '';
+        const sourceSalesPage = sourceRecord[detectedVendor === 'BRT' ? 'CURRENTSALE_DEEDPAGE' : 'Sale Page'] || '';
+        const dbSalesPage = dbRecord.sales_page || '';
+          
         // FIXED: Normalize both dates for accurate comparison using processor method
         const sourceSalesDate = parseDate(sourceRecord[detectedVendor === 'BRT' ? 'CURRENTSALE_DATE' : 'Sale Date']);
         const dbSalesDate = parseDate(dbRecord.sales_date);
@@ -792,8 +774,10 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         // FIXED: Use proper number comparison with reasonable tolerance AND normalized date comparison
         const pricesDifferent = Math.abs(sourceSalesPrice - dbSalesPrice) > 0.01;
         const datesDifferent = sourceSalesDate !== dbSalesDate;
+        const booksDifferent = sourceSalesBook !== dbSalesBook;
+        const pagesDifferent = sourceSalesPage !== dbSalesPage;
         
-        // DEBUG: Log the first few sales comparisons to see what's happening
+        /* DEBUG: Log the first few sales comparisons to see what's happening
         if ((pricesDifferent || datesDifferent) && salesChanges.length < 3) {
           console.log(`🔍 Sales difference detected for ${key}:`, {
             sourcePrice: sourceSalesPrice,
@@ -806,7 +790,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
             datesDifferent
           });
         }
-        
+        */
         if (pricesDifferent || datesDifferent) {
           salesChanges.push({
             property_composite_key: key,
@@ -816,7 +800,10 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
             property_location: dbRecord.property_location,
             differences: {
               sales_price: { old: dbSalesPrice, new: sourceSalesPrice },
-              sales_date: { old: dbSalesDate, new: sourceSalesDate }
+              sales_date: { old: dbSalesDate, new: sourceSalesDate },
+              sales_nu: { old: dbSalesNu, new: sourceSalesNu },
+              sales_book: { old: dbSalesBook, new: sourceSalesBook },
+              sales_page: { old: dbSalesPage, new: sourceSalesPage }
             }
           });
         }
@@ -894,7 +881,6 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         }
       };
       
-      console.log('📊 Comparison Results:', results.summary);
       return results;
       
     } catch (error) {
@@ -903,9 +889,33 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     }
   };
 
-  // NEW: Handle sales decisions
   const handleSalesDecision = (propertyKey, decision) => {
+    // Save current scroll position of BOTH containers
+    const salesContainer = document.getElementById('sales-changes-container');
+    const modalBody = document.querySelector('.fixed .overflow-y-auto');
+    
+    const salesScrollPos = salesContainer ? salesContainer.scrollTop : 0;
+    const modalScrollPos = modalBody ? modalBody.scrollTop : 0;
+    
+    // Update the decision
     setSalesDecisions(prev => new Map(prev.set(propertyKey, decision)));
+    
+    // Force restore scroll position with multiple attempts
+    const restoreScroll = () => {
+      if (salesContainer) salesContainer.scrollTop = salesScrollPos;
+      if (modalBody) modalBody.scrollTop = modalScrollPos;
+    };
+    
+    // Try immediately
+    restoreScroll();
+    
+    // Try after React renders
+    requestAnimationFrame(restoreScroll);
+    
+    // Try after a short delay
+    setTimeout(restoreScroll, 10);
+    setTimeout(restoreScroll, 50);
+    setTimeout(restoreScroll, 100);
   };
 
   // FIXED: Compare only (don't process yet) - show modal for review
@@ -950,7 +960,6 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
   // CRITICAL FIX: Refresh banner state immediately after processing
   const refreshBannerState = async () => {
     try {
-      console.log('🔄 REFRESH - Starting banner state refresh...');
       
       // Refresh source file version from property_records
       const { data: sourceVersionData, error: sourceVersionError } = await supabase
@@ -961,23 +970,176 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         .single();
         
       if (sourceVersionData && !sourceVersionError) {
-        console.log('🔄 REFRESH - Updated sourceFileVersion to:', sourceVersionData.file_version);
         setSourceFileVersion(sourceVersionData.file_version || 1);
       } else {
-        console.log('🔄 REFRESH - No property_records found, keeping version 1');
         setSourceFileVersion(1);
       }
       
       // Force a re-render of the component to update banner display
-      console.log('🔄 REFRESH - Banner state refresh completed');
       
     } catch (error) {
       console.error('🔄 REFRESH - Error refreshing banner state:', error);
     }
   };
 
+  // ENHANCED: Track batch insert operations from propertyService with better capture
+  const trackBatchInserts = (operation) => {
+    return new Promise((resolve, reject) => {
+      // Create a listener for console messages
+      const originalLog = console.log;
+      const originalError = console.error;
+      let batchCount = 0;
+      let totalRecords = 0;
+      
+      // Override console.log to capture batch messages
+      console.log = function(...args) {
+        const message = args.join(' ');
+        
+        // Capture various batch-related messages
+        if (message.includes('Processing batch') || 
+            message.includes('Batch') || 
+            message.includes('UPSERT') || 
+            message.includes('records processed') ||
+            message.includes('Attempting') ||
+            message.includes('Retry') ||
+            message.includes('batch of')) {
+          
+          // Parse batch information
+          const batchMatch = message.match(/batch (\d+) of (\d+)/i) || 
+                            message.match(/Batch (\d+)\/(\d+)/);
+          const recordMatch = message.match(/(\d+) records/);
+          const retryMatch = message.match(/retry|attempt/i);
+          
+          if (batchMatch) {
+            const currentBatch = parseInt(batchMatch[1]);
+            const totalBatches = parseInt(batchMatch[2]);
+            batchCount = totalBatches;
+            
+            setBatchInsertProgress(prev => ({
+              ...prev,
+              currentBatch,
+              totalBatches,
+              isInserting: true,
+              currentOperation: message
+            }));
+            
+            // Add attempt to log
+            setBatchInsertProgress(prev => {
+              const attemptExists = prev.insertAttempts.find(a => a.batchNumber === currentBatch);
+              if (!attemptExists) {
+                return {
+                  ...prev,
+                  insertAttempts: [...prev.insertAttempts, {
+                    batchNumber: currentBatch,
+                    size: recordMatch ? parseInt(recordMatch[1]) : prev.batchSize,
+                    startTime: new Date().toISOString(),
+                    status: retryMatch ? 'retrying' : 'attempting',
+                    retries: retryMatch ? 1 : 0
+                  }]
+                };
+              } else if (retryMatch) {
+                return {
+                  ...prev,
+                  insertAttempts: prev.insertAttempts.map(a => 
+                    a.batchNumber === currentBatch 
+                      ? { ...a, status: 'retrying', retries: a.retries + 1 }
+                      : a
+                  )
+                };
+              }
+              return prev;
+            });
+          }
+          
+          if (recordMatch) {
+            totalRecords += parseInt(recordMatch[1]);
+          }
+          
+          // Log the batch operation
+          addBatchLog(message, 
+            message.includes('Error') ? 'error' : 
+            message.includes('Success') || message.includes('successfully') ? 'success' : 
+            message.includes('Retry') ? 'warning' : 
+            'info'
+          );
+        }
+        
+        // Also capture general processing messages
+        if (message.includes('Processing') || message.includes('Updating') || message.includes('UPSERT')) {
+          addBatchLog(message, 'info');
+        }
+        
+        // Call original console.log
+        originalLog.apply(console, args);
+      };
+      
+      // Override console.error too
+      console.error = function(...args) {
+        const message = args.join(' ');
+        if (message.includes('batch') || message.includes('UPSERT')) {
+          addBatchLog(`Error: ${message}`, 'error');
+        }
+        originalError.apply(console, args);
+      };
+      
+      // Set initial state
+      setBatchInsertProgress(prev => ({
+        ...prev,
+        isInserting: true,
+        currentOperation: 'Initializing batch processing...'
+      }));
+      
+      // Execute the operation
+      operation().then(result => {
+        // Restore original console methods
+        console.log = originalLog;
+        console.error = originalError;
+        
+        // Mark all batches as complete
+        setBatchInsertProgress(prev => ({
+          ...prev,
+          isInserting: false,
+          currentOperation: `Batch processing complete - ${totalRecords} records processed`,
+          insertAttempts: prev.insertAttempts.map(a => ({
+            ...a,
+            status: 'success',
+            endTime: new Date().toISOString()
+          }))
+        }));
+        
+        addBatchLog(`✅ All batches complete - Total records: ${totalRecords}`, 'success');
+        
+        resolve(result);
+      }).catch(error => {
+        // Restore original console methods
+        console.log = originalLog;
+        console.error = originalError;
+        
+        setBatchInsertProgress(prev => ({
+          ...prev,
+          isInserting: false,
+          currentOperation: 'Batch processing failed',
+          insertAttempts: prev.insertAttempts.map(a => ({
+            ...a,
+            status: a.status === 'success' ? 'success' : 'failed'
+          }))
+        }));
+        
+        addBatchLog(`❌ Batch processing failed: ${error.message}`, 'error');
+        
+        reject(error);
+      });
+    });
+  };
+
   // ENHANCED: Process changes with batch logging modal
   const handleProcessChanges = async () => {
+    // Wait for initialization
+    if (!isInitialized || sourceFileVersion === null) {
+      addNotification('System initializing, please try again in a moment', 'warning');
+      return;
+    }
+    
     if (!sourceFile || !sourceFileContent) {
       addNotification('No source file to process', 'error');
       return;
@@ -988,7 +1150,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       clearBatchLogs();
       setShowBatchModal(true);
       setProcessing(true);
-      setProcessingStatus(`Processing ${detectedVendor} data via processor...`);
+      setProcessingStatus(`Processing ${detectedVendor} data via updater...`);
       
       addBatchLog('🚀 Starting file processing workflow', 'batch_start', {
         vendor: detectedVendor,
@@ -997,169 +1159,185 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         salesDecisions: salesDecisions.size
       });
       
-      console.log('🚀 Processing approved changes...');
       
       // Call the updater to UPSERT the database
       addBatchLog(`📊 Calling ${detectedVendor} updater (UPSERT mode)...`, 'info');
       
-      // ENHANCED: Mock the batch insert progress
-      const totalRecords = comparisonResults.summary.missing + comparisonResults.summary.changes + comparisonResults.summary.salesChanges + comparisonResults.summary.classChanges;
-      if (totalRecords > 0) {
-        const batchSize = 500;
-        const totalBatches = Math.ceil(totalRecords / batchSize);
-        
-        setBatchInsertProgress({
-          totalBatches,
-          currentBatch: 0,
-          batchSize,
-          insertAttempts: [],
-          isInserting: true,
-          currentOperation: 'Preparing batch insert...'
-        });
-        
-        // Simulate batch processing
-        for (let i = 0; i < totalBatches; i++) {
-          const batchNumber = i + 1;
-          const recordsInBatch = Math.min(batchSize, totalRecords - (i * batchSize));
-          
-          const attemptLog = {
-            batchNumber,
-            size: recordsInBatch,
-            startTime: new Date().toISOString(),
-            status: 'attempting',
-            retries: 0
-          };
-          
-          setBatchInsertProgress(prev => ({
-            ...prev,
-            currentBatch: batchNumber,
-            currentOperation: `Processing batch ${batchNumber} of ${totalBatches} (${recordsInBatch} records)`,
-            insertAttempts: [...prev.insertAttempts, attemptLog]
-          }));
-          
-          // Simulate processing time
-          await new Promise(resolve => setTimeout(resolve, 500));
-          
-          // Simulate retry on first batch
-          if (batchNumber === 1) {
-            attemptLog.retries = 1;
-            attemptLog.status = 'retrying';
-            
-            setBatchInsertProgress(prev => ({
-              ...prev,
-              currentOperation: `Retrying batch ${batchNumber} (attempt 2 of 3)`,
-              insertAttempts: prev.insertAttempts.map(a => 
-                a.batchNumber === batchNumber ? { ...a, ...attemptLog } : a
-              )
-            }));
-            
-            await new Promise(resolve => setTimeout(resolve, 1000));
+      // FIX 1: Calculate new file_version for property_records
+      const newFileVersion = sourceFileVersion + 1;
+      
+      // Track batch operations
+      const result = await trackBatchInserts(async () => {
+        return await propertyService.updateCSVData(
+          sourceFileContent,
+          codeFileContent,
+          job.id,
+          job.year_created || new Date().getFullYear(),
+          job.ccdd_code || job.ccddCode,
+          detectedVendor,
+          {
+            source_file_name: sourceFile?.name,
+            source_file_version_id: crypto.randomUUID(),
+            source_file_uploaded_at: new Date().toISOString(),
+            file_version: newFileVersion  // FIX 1: Pass file_version, not source_file_version
           }
-          
-          // Mark as success
-          attemptLog.status = 'success';
-          attemptLog.endTime = new Date().toISOString();
-          
-          setBatchInsertProgress(prev => ({
-            ...prev,
-            insertAttempts: prev.insertAttempts.map(a => 
-              a.batchNumber === batchNumber ? { ...a, ...attemptLog } : a
-            )
-          }));
-          
-          addBatchLog(`✅ Batch ${batchNumber} successfully processed ${recordsInBatch} records`, 'success');
-        }
-        
-        setBatchInsertProgress(prev => ({
-          ...prev,
-          isInserting: false,
-          currentOperation: 'Batch processing complete'
-        }));
-      }
+        );
+      });
       
-      const result = await propertyService.updateCSVData(
-        sourceFileContent,
-        codeFileContent,
-        job.id,
-        job.year_created || new Date().getFullYear(),
-        job.ccdd_code || job.ccddCode,
-        detectedVendor,
-        {
-          source_file_name: sourceFile?.name,
-          source_file_version_id: crypto.randomUUID(),
-          source_file_uploaded_at: new Date().toISOString(),
-          file_version: (job.source_file_version || 1) + 1
-        }
-      );
-      
-      console.log('📊 Processor completed with result:', result);
       addBatchLog('✅ Property data processing completed', 'success', {
         processed: result.processed,
         errors: result.errors,
-        newVersion: (job.source_file_version || 1) + 1
+        newVersion: newFileVersion  // FIX 1: Show correct version
       });
       
       // Save comparison report with sales decisions
       addBatchLog('💾 Saving comparison report to database...', 'info');
       await saveComparisonReport(comparisonResults, salesDecisions);
       addBatchLog('✅ Comparison report saved successfully', 'success');
-      
+          
       // Store sales decisions as JSON in property records
       if (salesDecisions.size > 0) {
         setProcessingStatus('Saving sales decisions...');
         addBatchLog(`💰 Processing ${salesDecisions.size} sales decisions...`, 'info');
         
         let salesProcessed = 0;
+        let salesReverted = 0;
+        let salesBothStored = 0;
+        
         for (const [compositeKey, decision] of salesDecisions.entries()) {
           const salesChange = comparisonResults.details.salesChanges.find(sc => sc.property_composite_key === compositeKey);
           
+          if (!salesChange) {
+            console.error('Could not find sales change data for:', compositeKey);
+            continue;
+          }
+          
           try {
-            const { error } = await supabase
-              .from('property_records')
-              .update({ 
+            let updateData = {};
+            
+            if (decision === 'Keep Old') {
+              // REVERT to old sales data
+              updateData = {
+                sales_price: salesChange.differences.sales_price.old,
+                sales_date: salesChange.differences.sales_date.old,
+                sales_nu: salesChange.differences.sales_nu.old,
+                sales_book: salesChange.differences.sales_book.old,
+                sales_page: salesChange.differences.sales_page.old,
                 sales_history: {
                   comparison_date: new Date().toISOString().split('T')[0],
                   sales_decision: {
                     decision_type: decision,
-                    old_price: salesChange?.differences.sales_price.old,
-                    new_price: salesChange?.differences.sales_price.new,
-                    old_date: salesChange?.differences.sales_date.old,
-                    new_date: salesChange?.differences.sales_date.new,
-                    decided_by: 'user', // TODO: Get actual user ID
-                    decided_at: new Date().toISOString()
+                    old_price: salesChange.differences.sales_price.old,
+                    new_price: salesChange.differences.sales_price.new,
+                    old_date: salesChange.differences.sales_date.old,
+                    new_date: salesChange.differences.sales_date.new,
+                    old_book: salesChange.differences.sales_book.old,
+                    new_book: salesChange.differences.sales_book.new,
+                    old_page: salesChange.differences.sales_page.old,
+                    new_page: salesChange.differences.sales_page.new,
+                    decided_by: 'user',
+                    decided_at: new Date().toISOString(),
+                    action_taken: 'Reverted to old values'
                   }
                 }
-              })
+              };
+              salesReverted++;
+              
+            } else if (decision === 'Keep New') {
+              // Just store the decision - new values already in place
+              updateData = {
+                sales_history: {
+                  comparison_date: new Date().toISOString().split('T')[0],
+                  sales_decision: {
+                    decision_type: decision,
+                    old_price: salesChange.differences.sales_price.old,
+                    new_price: salesChange.differences.sales_price.new,
+                    old_date: salesChange.differences.sales_date.old,
+                    new_date: salesChange.differences.sales_date.new,
+                    old_book: salesChange.differences.sales_book.old,
+                    new_book: salesChange.differences.sales_book.new,
+                    old_page: salesChange.differences.sales_page.old,
+                    new_page: salesChange.differences.sales_page.new,
+                    decided_by: 'user',
+                    decided_at: new Date().toISOString(),
+                    action_taken: 'Kept new values'
+                  }
+                }
+              };
+              
+            } else if (decision === 'Keep Both') {
+              // Store both sales in history, keep new as current
+              updateData = {
+                sales_history: {
+                  comparison_date: new Date().toISOString().split('T')[0],
+                  sales_decision: {
+                    decision_type: decision,
+                    old_price: salesChange.differences.sales_price.old,
+                    new_price: salesChange.differences.sales_price.new,
+                    old_date: salesChange.differences.sales_date.old,
+                    new_date: salesChange.differences.sales_date.new,
+                    old_book: salesChange.differences.sales_book.old,
+                    new_book: salesChange.differences.sales_book.new,
+                    old_page: salesChange.differences.sales_page.old,
+                    new_page: salesChange.differences.sales_page.new,
+                    decided_by: 'user',
+                    decided_at: new Date().toISOString(),
+                    action_taken: 'Kept both - new as current, old in history'
+                  },
+                  previous_sales: [
+                    {
+                      sales_price: salesChange.differences.sales_price.old,
+                      sales_date: salesChange.differences.sales_date.old,
+                      sales_nu: salesChange.differences.sales_nu.old,
+                      sales_book: salesChange.differences.sales_book.old,
+                      sales_page: salesChange.differences.sales_page.old,
+                      recorded_date: new Date().toISOString()
+                    }
+                  ]
+                }
+              };
+              salesBothStored++;
+            }
+            
+            const { error } = await supabase
+              .from('property_records')
+              .update(updateData)
               .eq('property_composite_key', compositeKey)
               .eq('job_id', job.id);
             
             if (error) {
-              console.error('Error updating sales history:', error);
+              console.error('Error updating sales decision:', error);
               addBatchLog(`❌ Error saving sales decision for ${compositeKey}`, 'error', { error: error.message });
             } else {
               salesProcessed++;
             }
           } catch (updateError) {
-            console.error('Failed to update sales history for property:', compositeKey, updateError);
-            addBatchLog(`❌ Failed to update sales history for ${compositeKey}`, 'error', { error: updateError.message });
+            console.error('Failed to update sales decision for property:', compositeKey, updateError);
+            addBatchLog(`❌ Failed to update sales decision for ${compositeKey}`, 'error', { error: updateError.message });
           }
         }
         
-        addBatchLog(`✅ Saved ${salesProcessed}/${salesDecisions.size} sales decisions`, 'success');
-        console.log(`✅ Saved ${salesDecisions.size} sales decisions to property records`);
+        addBatchLog(`✅ Processed ${salesProcessed}/${salesDecisions.size} sales decisions`, 'success', {
+          reverted: salesReverted,
+          keptNew: salesProcessed - salesReverted - salesBothStored,
+          keptBoth: salesBothStored
+        });
+        
+        if (salesReverted > 0) {
+          addNotification(`↩️ Reverted ${salesReverted} sales to old values`, 'info');
+        }
       }
       
-      // Update job with new file version info
+       // Update job with new file info - removed source_file_version update
       addBatchLog('🔄 Updating job metadata...', 'info');
       try {
         await jobService.update(job.id, {
           sourceFileStatus: result.errors > 0 ? 'error' : 'imported',
           totalProperties: result.processed,
-          source_file_version: (job.source_file_version || 1) + 1,
           source_file_uploaded_at: new Date().toISOString()
+          // FIX 1: Removed source_file_version update - it's handled in property_records now
         });
         addBatchLog('✅ Job metadata updated successfully', 'success');
-        console.log('✅ Job updated with new version info');
       } catch (updateError) {
         console.error('❌ Failed to update job:', updateError);
         addBatchLog('⚠️ Job metadata update failed', 'warning', { error: updateError.message });
@@ -1181,16 +1359,24 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
           vendor: detectedVendor,
           salesDecisions: salesDecisions.size
         });
-        addNotification(`✅ Successfully processed ${totalProcessed} records via ${detectedVendor} processor`, 'success');
+        addNotification(`✅ Successfully processed ${totalProcessed} records via ${detectedVendor} updater`, 'success');
         
         if (salesDecisions.size > 0) {
           addNotification(`💾 Saved ${salesDecisions.size} sales decisions`, 'success');
         }
       }
+      // Check if rollback occurred
+      if (result.warnings && result.warnings.some(w => w.includes('rolled back'))) {
+        addBatchLog('⚠️ UPDATE FAILED - All changes have been rolled back', 'error', {
+          message: 'The update encountered errors and all changes were automatically reversed'
+        });
+        addNotification('❌ Update failed - all changes rolled back. Check logs for details.', 'error');
+      }
       
-      // CRITICAL FIX: Refresh banner state immediately
+      // CRITICAL FIX: Update banner state immediately
       addBatchLog('🔄 Refreshing UI state...', 'info');
-      await refreshBannerState();
+      setSourceFileVersion(newFileVersion);  // Use the newFileVersion we already calculated
+      setLastSourceProcessedDate(new Date().toISOString());  // Track our own date!
       addBatchLog('✅ UI state refreshed successfully', 'success');
       
       setBatchComplete(true);
@@ -1213,16 +1399,27 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       
     } catch (error) {
       console.error('❌ Processing failed:', error);
-      addBatchLog('❌ Processing workflow failed', 'error', { error: error.message });
-      addNotification(`Processing failed: ${error.message}`, 'error');
+      
+      // Check if this was a rollback error
+      const isRollback = error.message && (error.message.includes('rolled back') || error.message.includes('reverted'));
+      
+      if (isRollback) {
+        addBatchLog('❌ CRITICAL FAILURE - Update rolled back', 'error', { 
+          error: error.message,
+          details: 'All database changes have been reversed'
+        });
+        addNotification(`❌ ${error.message}`, 'error');
+      } else {
+        addBatchLog('❌ Processing workflow failed', 'error', { error: error.message });
+        addNotification(`Processing failed: ${error.message}`, 'error');
+      }
     } finally {
       setProcessing(false);
       setProcessingStatus('');
     }
   };
-
-  const handleSourceFileUpload = async (e) => {
-    const file = e.target.files[0];
+  const handleSourceFileUpload = async (event) => {
+    const file = event.target.files[0];
     if (!file) return;
     
     setSourceFile(file);
@@ -1232,19 +1429,21 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       setSourceFileContent(content);
       
       const vendor = detectVendorType(content, file.name);
+      setDetectedVendor(vendor);
+      
       if (vendor) {
-        setDetectedVendor(vendor);
-        addNotification(`✅ ${vendor} format detected`, 'success');
+        addNotification(`✅ Detected ${vendor} file format`, 'success');
       } else {
-        addNotification('⚠️ Could not detect vendor format - check file extension (.csv for BRT, .txt for Microsystems)', 'warning');
+        addNotification('⚠️ Could not detect vendor type', 'warning');
       }
     } catch (error) {
-      addNotification(`Error reading file: ${error.message}`, 'error');
+      console.error('Error reading file:', error);
+      addNotification('Error reading file', 'error');
     }
   };
 
-  const handleCodeFileUpload = async (e) => {
-    const file = e.target.files[0];
+  const handleCodeFileUpload = async (event) => {
+    const file = event.target.files[0];
     if (!file) return;
     
     setCodeFile(file);
@@ -1253,16 +1452,13 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       const content = await file.text();
       setCodeFileContent(content);
       
-      // Detect vendor for code file too
       const vendor = detectVendorType(content, file.name);
       if (vendor) {
-        setDetectedVendor(vendor);
-        addNotification(`✅ ${vendor} code file format detected`, 'success');
-      } else {
-        addNotification('⚠️ Could not detect vendor format for code file', 'warning');
+        addNotification(`✅ Detected ${vendor} code file`, 'success');
       }
     } catch (error) {
-      addNotification(`Error reading code file: ${error.message}`, 'error');
+      console.error('Error reading code file:', error);
+      addNotification('Error reading code file', 'error');
     }
   };
 
@@ -1322,33 +1518,37 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
               </div>
             )}
 
-            {/* Batch Insert Progress Section */}
+            {/* Batch Insert Progress Section - FIX 2: Now shows real progress */}
             {batchInsertProgress.isInserting && (
               <div className="mb-4 bg-purple-50 border border-purple-200 rounded-lg p-4">
                 <div className="flex items-center mb-2">
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-600 mr-2"></div>
-                  <h4 className="font-medium text-purple-800">Database Batch Insert Progress</h4>
+                  <h4 className="font-medium text-gray-900">Database Batch Insert Progress</h4>
                 </div>
                 
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
-                    <span className="text-purple-700">{batchInsertProgress.currentOperation}</span>
-                    <span className="text-purple-800 font-medium">
-                      Batch {batchInsertProgress.currentBatch} of {batchInsertProgress.totalBatches}
-                    </span>
+                    <span className="text-gray-900">{batchInsertProgress.currentOperation}</span>
+                    {batchInsertProgress.totalBatches > 0 && (
+                      <span className="text-gray-900 font-medium">
+                        Batch {batchInsertProgress.currentBatch} of {batchInsertProgress.totalBatches}
+                      </span>
+                    )}
                   </div>
                   
-                  <div className="w-full bg-purple-200 rounded-full h-2">
-                    <div 
-                      className="bg-purple-600 h-2 rounded-full transition-all duration-300"
-                      style={{ width: `${(batchInsertProgress.currentBatch / batchInsertProgress.totalBatches) * 100}%` }}
-                    />
-                  </div>
+                  {batchInsertProgress.totalBatches > 0 && (
+                    <div className="w-full bg-purple-200 rounded-full h-2">
+                      <div 
+                        className="bg-purple-600 h-2 rounded-full transition-all duration-300"
+                        style={{ width: `${(batchInsertProgress.currentBatch / batchInsertProgress.totalBatches) * 100}%` }}
+                      />
+                    </div>
+                  )}
                   
                   {/* Batch Insert Attempts Log */}
                   {batchInsertProgress.insertAttempts.length > 0 && (
                     <div className="mt-3 max-h-32 overflow-y-auto">
-                      <div className="text-xs font-medium text-purple-700 mb-1">Batch Insert Log:</div>
+                      <div className="text-xs font-medium text-gray-900 mb-1">Batch Insert Log:</div>
                       <div className="space-y-1">
                         {batchInsertProgress.insertAttempts.map((attempt, idx) => (
                           <div key={idx} className="text-xs flex items-center justify-between bg-white rounded px-2 py-1">
@@ -1356,7 +1556,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                             <span className={`flex items-center ${
                               attempt.status === 'success' ? 'text-green-600' :
                               attempt.status === 'retrying' ? 'text-yellow-600' :
-                              attempt.status === 'attempting' ? 'text-purple-600' :
+                              attempt.status === 'attempting' ? 'text-gray-900' :
                               attempt.status === 'failed' ? 'text-red-600' :
                               'text-gray-600'
                             }`}>
@@ -1527,7 +1727,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
 
               {/* Class Changes */}
               <div className={`p-4 rounded-lg border-2 text-center ${hasClassChanges ? 'border-purple-400 bg-purple-50' : 'border-gray-200 bg-gray-50'}`}>
-                <div className={`text-2xl font-bold ${hasClassChanges ? 'text-purple-600' : 'text-gray-500'}`}>
+                <div className={`text-2xl font-bold ${hasClassChanges ? 'text-gray-900' : 'text-gray-500'}`}>
                   {summary.classChanges || 0}
                 </div>
                 <div className="text-sm text-gray-600">Class Changes</div>
@@ -1546,30 +1746,71 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
             {/* Sales Changes Section (if any) */}
             {hasSalesChanges && (
               <div className="mb-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Sales Changes Requiring Decisions:</h3>
-                <div className="space-y-4 max-h-60 overflow-y-auto">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                  Sales Changes Requiring Decisions: 
+                  <span className="ml-2 text-blue-600">
+                    ({details.salesChanges.filter(change => !salesDecisions.has(change.property_composite_key)).length} remaining)
+                  </span>
+                </h3>
+                <div id="sales-changes-container" className="space-y-4 max-h-60 overflow-y-auto">
                   {details.salesChanges.map((change, idx) => {
                     const currentDecision = salesDecisions.get(change.property_composite_key);
                     
                     return (
                       <div key={idx} className="border border-blue-200 rounded-lg p-4 bg-blue-50">
-                        <div className="flex justify-between items-start mb-3">
-                          <div>
+                          <div className="mb-3">
+                          {/* Property Info */}
+                          <div className="mb-2">
                             <h4 className="font-bold text-gray-900">
                               Property {change.property_block}-{change.property_lot}
+                              {change.property_qualifier && change.property_qualifier !== 'NONE' && 
+                                <span className="text-gray-600"> (Qual: {change.property_qualifier})</span>}
                             </h4>
                             <p className="text-gray-600 text-sm">{change.property_location}</p>
                           </div>
-                          <div className="text-right">
-                            <div className="text-sm text-gray-600">Price Change</div>
-                            <div className="text-sm font-bold text-red-600">
-                              ${change.differences.sales_price.old?.toLocaleString() || 0} 
+                          
+                          {/* Sales Comparison */}
+                          <div className="grid grid-cols-2 gap-4 p-3 bg-white rounded-lg border border-gray-200">
+                            {/* Old Sale */}
+                            <div className="text-center">
+                              <div className="text-xs font-semibold text-gray-500 mb-1">OLD SALE</div>
+                              <div className="text-lg font-bold text-red-600">
+                                ${change.differences.sales_price.old?.toLocaleString() || 0}
+                              </div>
+                              <div className="text-xs text-gray-500 mt-1">
+                                {change.differences.sales_date.old || 'No Date'}
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                Book: {change.differences.sales_book?.old || '--'} Page: {change.differences.sales_page?.old || '--'}
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                NU: {(() => {
+                                  const nu = change.differences.sales_nu?.old;
+                                  if (!nu || nu === '' || nu === ' ' || nu === '0' || nu === '00') return '--';
+                                  return nu;
+                                })()}
+                              </div>
                             </div>
-                            <div className="text-sm font-bold text-green-600">
-                              → ${change.differences.sales_price.new?.toLocaleString() || 0}
-                            </div>
-                            <div className="text-xs text-gray-500 mt-1">
-                              {change.differences.sales_date.old || 'No Date'} → {change.differences.sales_date.new || 'No Date'}
+                            
+                            {/* New Sale */}
+                            <div className="text-center">
+                              <div className="text-xs font-semibold text-gray-500 mb-1">NEW SALE</div>
+                              <div className="text-lg font-bold text-green-600">
+                                ${change.differences.sales_price.new?.toLocaleString() || 0}
+                              </div>
+                              <div className="text-xs text-gray-500 mt-1">
+                                {change.differences.sales_date.new || 'No Date'}
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                Book: {change.differences.sales_book?.new || '--'} Page: {change.differences.sales_page?.new || '--'}
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                NU: {(() => {
+                                  const nu = change.differences.sales_nu?.new;
+                                  if (!nu || nu === '' || nu === ' ' || nu === '0' || nu === '00') return '--';
+                                  return nu;
+                                })()}
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -1619,6 +1860,110 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                       </div>
                     );
                   })}
+                </div>
+              </div>
+            )}
+
+            {/* Class Changes Section (if any) */}
+            {hasClassChanges && (
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Property Class Changes:</h3>
+                <div className="space-y-3 max-h-60 overflow-y-auto">
+                  {details.classChanges.map((change, idx) => (
+                    <div key={idx} className="border border-purple-200 rounded-lg p-3 bg-purple-50">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h4 className="font-bold text-gray-900">
+                            Property {change.property_block}-{change.property_lot}
+                            {change.property_qualifier && change.property_qualifier !== 'NONE' && 
+                              <span className="text-gray-600"> (Qual: {change.property_qualifier})</span>}
+                          </h4>
+                          <p className="text-gray-600 text-sm">{change.property_location}</p>
+                        </div>
+                        <div className="text-right">
+                          {change.changes.map((classChange, cidx) => (
+                            <div key={cidx} className="mb-1">
+                              <div className="text-xs text-gray-600">{classChange.field}</div>
+                              <div className="text-sm">
+                                <span className="font-medium text-red-600">{classChange.old || 'None'}</span>
+                                <span className="mx-1">→</span>
+                                <span className="font-medium text-green-600">{classChange.new || 'None'}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* New Records Section (if any) */}
+            {hasNewRecords && (
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">New Properties to Add:</h3>
+                <div className="text-sm text-gray-600 mb-2">
+                  Showing first 10 of {summary.missing} new properties
+                </div>
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {details.missing.slice(0, 10).map((record, idx) => {
+                    const blockField = detectedVendor === 'BRT' ? 'BLOCK' : 'Block';
+                    const lotField = detectedVendor === 'BRT' ? 'LOT' : 'Lot';
+                    const qualifierField = detectedVendor === 'BRT' ? 'QUALIFIER' : 'Qual';
+                    const locationField = detectedVendor === 'BRT' ? 'PROPERTY_LOCATION' : 'Location';
+                    const classField = detectedVendor === 'BRT' ? 'PROPERTY_CLASS' : 'Class';
+                    const priceField = detectedVendor === 'BRT' ? 'CURRENTSALE_PRICE' : 'Sale Price';
+                    const dateField = detectedVendor === 'BRT' ? 'CURRENTSALE_DATE' : 'Sale Date';
+                    
+                    const salePrice = parseFloat(String(record[priceField] || 0).replace(/[,$]/g, '')) || 0;
+                    
+                    return (
+                      <div key={idx} className="border border-green-200 rounded p-2 bg-green-50 text-sm">
+                        <div className="flex justify-between">
+                          <div>
+                            <span className="font-medium">{record[blockField]}-{record[lotField]}</span>
+                            {record[qualifierField] && record[qualifierField] !== 'NONE' && 
+                              <span className="text-gray-600"> (Qual: {record[qualifierField]})</span>}
+                            <span className="text-gray-600 ml-2">{record[locationField]}</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-gray-600">Class: {record[classField]}</span>
+                            {salePrice > 0 && (
+                              <span className="ml-3 font-medium">${salePrice.toLocaleString()}</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Deletions Section (if any) */}
+            {hasDeletions && (
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Properties to Remove:</h3>
+                <div className="text-sm text-gray-600 mb-2">
+                  Showing first 10 of {summary.deletions} properties not in source file
+                </div>
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {details.deletions.slice(0, 10).map((record, idx) => (
+                    <div key={idx} className="border border-red-200 rounded p-2 bg-red-50 text-sm">
+                      <div className="flex justify-between">
+                        <div>
+                          <span className="font-medium">{record.property_block}-{record.property_lot}</span>
+                          {record.property_qualifier && record.property_qualifier !== 'NONE' && 
+                            <span className="text-gray-600"> (Qual: {record.property_qualifier})</span>}
+                          <span className="text-gray-600 ml-2">{record.property_location}</span>
+                        </div>
+                        <div className="text-right text-gray-600">
+                          Will be removed
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
@@ -1674,6 +2019,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
               <button
                 onClick={viewAllReports}
                 className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 flex items-center space-x-2"
+                style={{color: 'white' }}
               >
                 <Eye className="w-4 h-4" />
                 <span>View All Reports</span>
@@ -1682,6 +2028,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
               <button
                 onClick={exportComparisonReport}
                 className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 flex items-center space-x-2"
+                style={{ color: 'white'}}
               >
                 <Download className="w-4 h-4" />
                 <span>Export This Report</span>
@@ -1710,7 +2057,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                     clearBatchLogs();
                     setShowBatchModal(true);
                     setProcessing(true);
-                    setProcessingStatus(`Processing ${detectedVendor} data via processor...`);
+                    setProcessingStatus(`Processing ${detectedVendor} data via updater...`);
                     
                     addBatchLog('🚀 Processing file with no changes detected', 'batch_start', {
                       vendor: detectedVendor,
@@ -1719,31 +2066,34 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                       salesDecisions: 0
                     });
                     
-                    console.log('🚀 Processing acknowledged file (no changes detected)...');
                     
                     // Call the updater to UPSERT the database with latest data
                     addBatchLog(`📊 Calling ${detectedVendor} updater for version refresh...`, 'info');
                     
-                    const result = await propertyService.updateCSVData(
-                      sourceFileContent,
-                      codeFileContent,
-                      job.id,
-                      job.year_created || new Date().getFullYear(),
-                      job.ccdd_code || job.ccddCode,
-                      detectedVendor,
-                      {
-                        source_file_name: sourceFile?.name,
-                        source_file_version_id: crypto.randomUUID(),
-                        source_file_uploaded_at: new Date().toISOString(),
-                        file_version: (job.source_file_version || 1) + 1
-                      }
-                    );
+                    // FIX 1: Calculate new file_version for property_records
+                    const newFileVersion = sourceFileVersion + 1;
                     
-                    console.log('📊 Processor completed with result:', result);
+                    const result = await trackBatchInserts(async () => {
+                      return await propertyService.updateCSVData(
+                        sourceFileContent,
+                        codeFileContent,
+                        job.id,
+                        job.year_created || new Date().getFullYear(),
+                        job.ccdd_code || job.ccddCode,
+                        detectedVendor,
+                        {
+                          source_file_name: sourceFile?.name,
+                          source_file_version_id: crypto.randomUUID(),
+                          source_file_uploaded_at: new Date().toISOString(),
+                          file_version: newFileVersion  // FIX 1: Pass file_version, not source_file_version
+                        }
+                      );
+                    });
+                    
                     addBatchLog('✅ Data refresh completed', 'success', {
                       processed: result.processed,
                       errors: result.errors,
-                      newVersion: (job.source_file_version || 1) + 1
+                      newVersion: newFileVersion  // FIX 1: Show correct version
                     });
                     
                     // Save comparison report (showing no changes)
@@ -1751,13 +2101,13 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                     await saveComparisonReport(comparisonResults, salesDecisions);
                     addBatchLog('✅ Comparison report saved', 'success');
                     
-                    // Update job with new file version info
+                    // Update job with new file info - removed source_file_version update
                     addBatchLog('🔄 Updating job metadata...', 'info');
                     await jobService.update(job.id, {
                       sourceFileStatus: result.errors > 0 ? 'error' : 'imported',
                       totalProperties: result.processed,
-                      source_file_version: (job.source_file_version || 1) + 1,
                       source_file_uploaded_at: new Date().toISOString()
+                      // FIX 1: Removed source_file_version update - it's handled in property_records now
                     });
                     addBatchLog('✅ Job metadata updated', 'success');
                     
@@ -1769,13 +2119,18 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                       addNotification(`⚠️ Processing completed with ${errorCount} errors. ${totalProcessed} records updated.`, 'warning');
                     } else {
                       addBatchLog('🎉 File version refresh completed successfully!', 'success');
-                      addNotification(`✅ Successfully updated ${totalProcessed} records with latest data via ${detectedVendor} processor`, 'success');
+                      addNotification(`✅ Successfully updated ${totalProcessed} records with latest data via ${detectedVendor} updater`, 'success');
+                    }
+                    // Check if rollback occurred during refresh
+                    if (result.warnings && result.warnings.some(w => w.includes('rolled back'))) {
+                      addBatchLog('⚠️ REFRESH FAILED - All changes have been rolled back', 'error');
+                      addNotification('❌ Refresh failed - all changes rolled back. Check logs for details.', 'error');
                     }
                     
-                    // CRITICAL FIX: Refresh banner state immediately
+                    // CRITICAL FIX: Update banner state immediately
                     addBatchLog('🔄 Refreshing UI state...', 'info');
-                    await refreshBannerState();
-                    addBatchLog('✅ UI state refreshed', 'success');
+                    setSourceFileVersion(newFileVersion);  // Use the newFileVersion we already calculated
+                    addBatchLog('✅ UI state refreshed successfully', 'success');
                     
                     setBatchComplete(true);
                     
@@ -1797,8 +2152,19 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                     
                   } catch (error) {
                     console.error('❌ Processing failed:', error);
-                    addBatchLog('❌ File refresh failed', 'error', { error: error.message });
-                    addNotification(`Processing failed: ${error.message}`, 'error');
+                    
+                    const isRollback = error.message && (error.message.includes('rolled back') || error.message.includes('reverted'));
+                    
+                    if (isRollback) {
+                      addBatchLog('❌ CRITICAL FAILURE - Refresh rolled back', 'error', { 
+                        error: error.message,
+                        details: 'All database changes have been reversed'
+                      });
+                      addNotification(`❌ ${error.message}`, 'error');
+                    } else {
+                      addBatchLog('❌ File refresh failed', 'error', { error: error.message });
+                      addNotification(`Processing failed: ${error.message}`, 'error');
+                    }
                   } finally {
                     setProcessing(false);
                     setProcessingStatus('');
@@ -1806,6 +2172,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                 }}
                 disabled={processing}
                 className="px-6 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 disabled:opacity-50 font-medium"
+                style={{ color: 'white'}}
               >
                 {processing ? 'Processing...' : 'Acknowledge & Close'}
               </button>
@@ -1833,6 +2200,12 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     const fetchSourceFileVersion = async () => {
       if (!job?.id) return;
       
+      // Don't overwrite if we already have a version set locally
+      if (sourceFileVersion !== null) {
+        setIsInitialized(true);
+        return;
+      }
+      
       try {
         const { data, error } = await supabase
           .from('property_records')
@@ -1842,40 +2215,38 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
           .single();
           
         if (data && !error) {
-          console.log('🔍 DEBUG - Fetched source file_version from property_records:', data.file_version);
           setSourceFileVersion(data.file_version || 1);
         } else {
-          console.log('🔍 DEBUG - No property_records found or error:', error);
           setSourceFileVersion(1);
         }
       } catch (error) {
         console.error('🔍 DEBUG - Error fetching source file version:', error);
         setSourceFileVersion(1);
+      } finally {
+        setIsInitialized(true);
       }
     };
 
     fetchSourceFileVersion();
-  }, [job?.id]);
+  }, [job?.id]);  // Remove sourceFileVersion from dependencies
 
-  // UPDATED: Use fetched source file version for banner
   const getFileStatusWithRealVersion = (timestamp, type) => {
     if (!timestamp) return 'Never';
     
-    console.log('🔍 DEBUG - sourceFileVersion from property_records:', sourceFileVersion);
-    console.log('🔍 DEBUG - job.code_file_version from jobs:', job.code_file_version);
-    
     if (type === 'source') {
+      // Use our local date if we just processed, otherwise use job date
+      const displayDate = lastSourceProcessedDate || timestamp;
       const result = sourceFileVersion === 1 
-        ? `Imported at Job Creation (${formatDate(timestamp)})`
-        : `Updated via FileUpload (${formatDate(timestamp)})`;
-      console.log('🔍 DEBUG - source result with real version:', result);
+        ? `Imported at Job Creation (${formatDate(displayDate)})`
+        : `Updated via FileUpload (${formatDate(displayDate)})`;
       return result;
     } else if (type === 'code') {
+      // Use our local date if we just processed, otherwise use job date
+      const displayDate = lastCodeProcessedDate || timestamp;
       const codeVersion = job.code_file_version || 1;
       const result = codeVersion === 1 
-        ? `Imported at Job Creation (${formatDate(timestamp)})`
-        : `Updated via FileUpload (${formatDate(timestamp)})`;
-      console.log('🔍 DEBUG - code result:', result);
+        ? `Imported at Job Creation (${formatDate(displayDate)})`
+        : `Updated via FileUpload (${formatDate(displayDate)})`;
       return result;
     }
     
@@ -1922,7 +2293,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       <div className="flex items-center gap-3 text-gray-300">
         <FileText className="w-4 h-4 text-blue-400" />
         <span className="text-sm min-w-0 flex-1">
-          📄 Source: {getFileStatusWithRealVersion(job.source_file_uploaded_at || job.created_at, 'source')}
+          📄 Source: {getFileStatusWithRealVersion(job.updated_at || job.created_at, 'source')}
         </span>
         
         <input
