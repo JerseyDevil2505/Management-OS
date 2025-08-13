@@ -586,23 +586,6 @@ const generateRecommendation = () => {
       specialRates: calculateSpecialRates()
     };
   };
-    // Get raw land rates from Method 1
-    const rawLandSales = vacantSales.filter(s => 
-      includedSales.has(s.id) && saleCategories[s.id] === 'raw_land'
-    );
-    
-    let recommendedPrime = 0;
-    let source = '';
-    
-    // Check if we have raw land sales
-    if (rawLandSales.length >= 3) {
-      const rates = rawLandSales.map(s => s.pricePerAcre).filter(r => r > 0);
-      if (rates.length > 0) {
-        recommendedPrime = rates.reduce((sum, r) => sum + r, 0) / rates.length;
-        source = 'method1';
-      }
-    }
-;
 
   // ========== ALLOCATION STUDY FUNCTIONS ==========
   const loadAllocationStudyData = async () => {
