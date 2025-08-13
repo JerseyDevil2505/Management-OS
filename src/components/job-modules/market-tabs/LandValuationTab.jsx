@@ -2179,7 +2179,6 @@ const generateRecommendation = () => {
                 Save Land Rates
               </button>
             </div>
-          </div>
         </>
       )}
 
