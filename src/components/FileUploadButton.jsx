@@ -2046,12 +2046,11 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
               </button>
             </div>
             
-            {hasAnyChanges ? (
+              {hasAnyChanges ? (
               <button
                 onClick={handleProcessChanges}
                 disabled={processing}
                 className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-colors"
-                title={hasSalesChanges && details.salesChanges.some(change => !salesDecisions.has(change.property_composite_key)) ? "Please make decisions for all sales changes" : ""}
               >
                 {processing ? 'Processing...' : 'Mark Reviewed & Process'}
               </button>
