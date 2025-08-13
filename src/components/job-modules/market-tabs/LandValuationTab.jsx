@@ -2067,7 +2067,6 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
                       <span style={{ fontSize: '12px', color: '#6B7280' }}>/acre</span>
                     </div>
                   </div>
-                  
                   <div>
                     <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
                       Water
