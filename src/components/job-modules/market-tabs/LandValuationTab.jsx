@@ -1510,6 +1510,7 @@ const generateRecommendation = () => {
               })()}
             </div>
           </div>
+        </div>
 
           {/* Section 2: VCS Lot Size Bracketing */}
           <div style={{ marginBottom: '30px' }}>
