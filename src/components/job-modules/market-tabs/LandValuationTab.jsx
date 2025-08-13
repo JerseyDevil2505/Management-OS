@@ -222,8 +222,48 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
       return isVacantClass && hasValidSale && inDateRange && validNu;
     });
     
-    const enriched = vacant.map(prop => {
+// Group package sales together
+    const packageGroups = {};
+    const processedIds = new Set();
+    
+    vacant.forEach(prop => {
+      if (processedIds.has(prop.id)) return;
+      
       const packageData = interpretCodes.getPackageSaleData?.(properties, prop);
+      
+      if (packageData && packageData.is_package_sale) {
+        // This is part of a package - combine all parts
+        const packageKey = `${prop.sales_date}_${prop.sales_price}_${prop.sales_book}_${prop.sales_page}`;
+        
+        if (!packageGroups[packageKey]) {
+          packageGroups[packageKey] = {
+            ...prop,
+            packageData,
+            totalAcres: packageData.combined_lot_acres,
+            totalSf: packageData.combined_lot_sf,
+            packageComponents: packageData.package_properties,
+            pricePerAcre: packageData.combined_lot_acres > 0 ? 
+              (prop.sales_price / packageData.combined_lot_acres) : 0
+          };
+          
+          // Mark all package components as processed
+          packageData.package_properties.forEach(p => processedIds.add(p.id));
+        }
+      } else {
+        // Single sale
+        const totalAcres = (prop.asset_lot_acre || 0) + ((prop.asset_lot_sf || 0) / 43560);
+        packageGroups[prop.id] = {
+          ...prop,
+          totalAcres,
+          pricePerAcre: totalAcres > 0 ? (prop.sales_price / totalAcres) : 0
+        };
+        processedIds.add(prop.id);
+      }
+    });
+    
+    const enriched = Object.values(packageGroups);
+    setVacantSales(enriched);
+    setIncludedSales(new Set()); // Start unchecked
       
       let totalAcres = prop.asset_lot_acre || 0;
       let totalSf = prop.asset_lot_sf || 0;
@@ -1548,13 +1588,75 @@ const generateRecommendation = () => {
               /* Summary View */
               <div>
 
-                {/* Method 2 Summary */}
-                <div style={{ 
-                  background: '#F0F9FF', 
-                  padding: '15px', 
-                  borderRadius: '8px',
-                  marginBottom: '20px' 
-                }}>
+{/* Combined Analysis Results */}
+            <div style={{ 
+              background: '#F0F9FF', 
+              padding: '15px', 
+              borderRadius: '8px',
+              marginBottom: '20px' 
+            }}>
+              <h4 style={{ color: '#1F2937', marginBottom: '10px' }}>
+                Analysis Results - Both Methods
+              </h4>
+              {(() => {
+                const rec = recommendation;
+                
+                return (
+                  <div style={{ fontSize: '14px' }}>
+                    {/* Method 1 Results */}
+                    <div style={{ marginBottom: '10px' }}>
+                      <strong>Method 1 (Direct Vacant Sales):</strong> 
+                      {rec.method1 && rec.method1.rate > 0 ? (
+                        <>
+                          ${Math.round(rec.method1.rate).toLocaleString()}/acre
+                          <div style={{ marginLeft: '20px', fontSize: '13px', color: '#6B7280' }}>
+                            • {rec.method1.samples} raw land sales
+                            • Confidence: {Math.round((rec.method1.confidence || 0) * 100)}%
+                          </div>
+                        </>
+                      ) : (
+                        <span style={{ color: '#6B7280' }}> No raw land sales</span>
+                      )}
+                    </div>
+                    
+                    {/* Method 2 Results */}
+                    <div style={{ marginBottom: '10px' }}>
+                      <strong>Method 2 (Lot Size Bracketing):</strong> 
+                      {rec.method2 && rec.method2.rate > 0 ? (
+                        <>
+                          ${Math.round(rec.method2.rate).toLocaleString()}/acre
+                          <div style={{ marginLeft: '20px', fontSize: '13px', color: '#6B7280' }}>
+                            • {rec.method2.brackets} bracket calculations
+                            • {rec.method2.totalSales} total improved sales
+                            • Confidence: {Math.round((rec.method2.confidence || 0) * 100)}%
+                          </div>
+                        </>
+                      ) : (
+                        <span style={{ color: '#6B7280' }}> Insufficient data</span>
+                      )}
+                    </div>
+                    
+                    {/* Combined Recommendation */}
+                    <div style={{ 
+                      marginTop: '10px', 
+                      paddingTop: '10px', 
+                      borderTop: '1px solid #E5E7EB',
+                      fontWeight: 'bold'
+                    }}>
+                      <strong>Recommended Prime Rate:</strong> ${Math.round(rec.prime).toLocaleString()}/acre
+                      <div style={{ fontSize: '12px', color: '#6B7280', marginTop: '5px', fontWeight: 'normal' }}>
+                        Source: {rec.source}
+                        {rec.variance > 0.3 && (
+                          <div style={{ color: '#F59E0B', marginTop: '5px' }}>
+                            ⚠️ Methods differ by {Math.round(rec.variance * 100)}% - manual review recommended
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
                   <h4>Method 2 Summary</h4>
                   <div>
                     {(() => {
@@ -1815,17 +1917,6 @@ const generateRecommendation = () => {
             }}>
               <TrendingUp size={24} /> Rate Analysis & Recommendation
             </h3>
-
-            {/* Method 2 Summary Display */}
-            <div style={{ 
-              background: '#F0F9FF', 
-              padding: '15px', 
-              borderRadius: '8px',
-              marginBottom: '20px' 
-            }}>
-              <h4 style={{ color: '#1F2937', marginBottom: '10px' }}>
-                Method 2: Lot Size Bracketing Results
-              </h4>
               {(() => {
                 const allImpliedRates = [];
                 Object.values(bracketAnalysis).forEach(vcs => {
@@ -2560,6 +2651,11 @@ const generateRecommendation = () => {
                 onClick={() => {
                   // Search ALL properties matching block/lot
                   if (!properties) return;
+                  // If no search criteria, show first 100 properties
+                  if (!searchFilters.block && !searchFilters.lot) {
+                    setSearchResults(properties.slice(0, 100));
+                    return;
+                  }
                   let results = properties;
                   
                   if (searchFilters.block) {
