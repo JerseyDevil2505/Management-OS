@@ -1998,7 +1998,10 @@ export const propertyService = {
   // Helper method to create a preserved fields handler for the updaters
   async createPreservedFieldsHandler(jobId, compositeKeys) {
     const preservedDataMap = new Map();
-    
+
+    //Add a small delay to ensure component is fully mounted
+    await new Promise(resolve => setTimeout(resolve, 500));
+        
     try {
       // Batch fetch in chunks to avoid query limits
       const chunkSize = 500;
