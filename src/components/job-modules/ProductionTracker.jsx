@@ -1381,7 +1381,9 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         let isValidInspection = true;
         let hasValidMeasuredBy = inspector && inspector !== 'UNASSIGNED' && inspector.trim() !== '';
         let hasValidMeasuredDate = measuredDate && measuredDate >= startDate;
-        
+        let normalizedInfoBy = actualVendor === 'BRT' ? infoByCode?.toString().padStart(2, '0') : infoByCode;
+        let hasValidInfoBy;
+
         // Vendor-specific validation logic - no padding for Microsystems!
         let hasValidInfoBy;
         let normalizedInfoBy;
