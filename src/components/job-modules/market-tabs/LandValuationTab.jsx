@@ -48,6 +48,10 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
     cascadeDivision: 2
   });
   
+  // Test Calculator State
+  const [testAcres, setTestAcres] = useState('');
+  const [testResult, setTestResult] = useState(null);
+  
   // ========== ALLOCATION STUDY SUB-TAB STATE ==========
   const [vacantTestSales, setVacantTestSales] = useState([]);
   const [improvedTestSales, setImprovedTestSales] = useState([]);
@@ -56,8 +60,6 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
   const [yearFilter, setYearFilter] = useState('all');
   const [actualAllocations, setActualAllocations] = useState({});
   const [vcsSiteValues, setVcsSiteValues] = useState({});
-  const [specialCategoryRates, setSpecialCategoryRates] = useState({});
-  const [customCategoryName, setCustomCategoryName] = useState('');
   
   // ========== SHARED STATE ==========
   const [isSaving, setIsSaving] = useState(false);
@@ -122,12 +124,9 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
             setIncludedSales(savedIncluded);
           }
           
-          // Restore special category rates
-          if (data.special_category_rates) {
-            setSpecialCategoryRates(data.special_category_rates);
-            if (data.special_category_rates.custom_name) {
-              setCustomCategoryName(data.special_category_rates.custom_name);
-            }
+          // Restore cascade rates if they exist
+          if (data.cascade_rates) {
+            setCascadeConfig(data.cascade_rates);
           }
           
           // Restore allocation study
@@ -177,12 +176,6 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
     return () => clearInterval(interval);
   }, [valuationMethod, cascadeConfig, landNotes, saleCategories, actualAllocations]);
 
-  // Set default methodology to acre
-  useEffect(() => {
-    if (!valuationMethod) {
-      setValuationMethod('acre');
-    }
-  }, [valuationMethod]);
   const convertRate = (acreRate, toMethod) => {
     if (!acreRate) return 0;
     
@@ -221,48 +214,32 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
       return isVacantClass && hasValidSale && inDateRange && validNu;
     });
     
-    // Group package sales together
-    const packageGroups = {};
-    const processedIds = new Set();
-    
-    vacant.forEach(prop => {
-      if (processedIds.has(prop.id)) return;
-      
+    const enriched = vacant.map(prop => {
       const packageData = interpretCodes.getPackageSaleData?.(properties, prop);
       
-      if (packageData && packageData.is_package_sale) {
-        // This is part of a package - combine all parts
-        const packageKey = `${prop.sales_date}_${prop.sales_price}_${prop.sales_book}_${prop.sales_page}`;
-        
-        if (!packageGroups[packageKey]) {
-          packageGroups[packageKey] = {
-            ...prop,
-            packageData,
-            totalAcres: packageData.combined_lot_acres,
-            totalSf: packageData.combined_lot_sf,
-            packageComponents: packageData.package_properties,
-            pricePerAcre: packageData.combined_lot_acres > 0 ? 
-              (prop.sales_price / packageData.combined_lot_acres) : 0
-          };
-          
-          // Mark all package components as processed
-          packageData.package_properties.forEach(p => processedIds.add(p.id));
-        }
-      } else {
-        // Single sale
-        const totalAcres = (prop.asset_lot_acre || 0) + ((prop.asset_lot_sf || 0) / 43560);
-        packageGroups[prop.id] = {
-          ...prop,
-          totalAcres,
-          pricePerAcre: totalAcres > 0 ? (prop.sales_price / totalAcres) : 0
-        };
-        processedIds.add(prop.id);
+      let totalAcres = prop.asset_lot_acre || 0;
+      let totalSf = prop.asset_lot_sf || 0;
+      
+      if (packageData && packageData.is_land_only) {
+        totalAcres = packageData.combined_lot_acres;
+        totalSf = packageData.combined_lot_sf;
       }
+      
+      const totalInAcres = totalAcres + (totalSf / 43560);
+      
+      return {
+        ...prop,
+        packageData,
+        totalAcres: totalInAcres,
+        pricePerAcre: totalInAcres > 0 ? (prop.sales_price / totalInAcres) : 0,
+        included: true
+      };
     });
     
-    const enriched = Object.values(packageGroups);
     setVacantSales(enriched);
-    setIncludedSales(new Set()); // Start unchecked
+    
+    const included = new Set(enriched.map(s => s.id));
+    setIncludedSales(included);
   };
 
   const performBracketAnalysis = () => {
@@ -359,6 +336,7 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
     
     setBracketAnalysis(analysis);
   };
+
   const searchProperties = () => {
     if (!properties) return;
     
@@ -404,7 +382,6 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
     setShowAddModal(false);
     setSearchResults([]);
   };
-
   const handlePropertyResearch = async (property) => {
     // Open in side panel or new window
     const researchPrompt = `
@@ -427,7 +404,6 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
     console.log('Research requested for:', property);
     alert('Research feature coming soon! Will analyze: ' + property.property_location);
   };
-
   const calculateRates = () => {
     const included = vacantSales.filter(s => 
       includedSales.has(s.id) && 
@@ -449,10 +425,7 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
   };
 
   const calculateSpecialRates = () => {
-    const specialCategories = ['wetlands', 'conservation', 'green_acres', 'water', 'landlocked'];
-    if (customCategoryName) {
-      specialCategories.push('custom');
-    }
+    const specialCategories = ['wetlands', 'conservation', 'green_acres'];
     const specialRates = {};
     
     specialCategories.forEach(category => {
@@ -476,85 +449,55 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
   };
 
   const generateRecommendation = () => {
-    // Method 1: Direct vacant land sales
+    // Get raw land rates from Method 1
     const rawLandSales = vacantSales.filter(s => 
       includedSales.has(s.id) && saleCategories[s.id] === 'raw_land'
     );
     
-    let method1Rate = 0;
-    let method1Confidence = 0;
+    let recommendedPrime = 0;
+    let confidence = 'LOW';
+    let message = '';
+    let source = '';
     
-    if (rawLandSales.length > 0) {
+    // Check if we have raw land sales
+    if (rawLandSales.length >= 3) {
       const rates = rawLandSales.map(s => s.pricePerAcre).filter(r => r > 0);
       if (rates.length > 0) {
-        method1Rate = rates.reduce((sum, r) => sum + r, 0) / rates.length;
-        // Confidence: 10% per sale, max 100% at 10 sales
-        method1Confidence = Math.min(rates.length * 0.1, 1);
+        recommendedPrime = rates.reduce((sum, r) => sum + r, 0) / rates.length;
+        confidence = rawLandSales.length >= 5 ? 'HIGH' : 'MEDIUM';
+        message = `Based on ${rawLandSales.length} raw land sales from Method 1`;
+        source = 'method1';
       }
     }
     
-    // Method 2: Bracket analysis
-    let method2Rate = 0;
-    let method2Confidence = 0;
-    const positiveRates = [];
-    let totalBracketSales = 0;
-    
-    Object.values(bracketAnalysis).forEach(vcs => {
-      if (vcs.impliedRates) {
-        vcs.impliedRates.forEach(r => {
-          if (r.rate > 0) {
-            positiveRates.push({
-              rate: r.rate,
-              sales: vcs.totalSales
-            });
-            totalBracketSales += vcs.totalSales;
-          }
-        });
+    // If no raw land sales, use Method 2
+    if (recommendedPrime === 0) {
+      // Get all positive implied rates from VCS analysis
+      const positiveRates = [];
+      Object.values(bracketAnalysis).forEach(vcs => {
+        if (vcs.impliedRates) {
+          vcs.impliedRates.forEach(r => {
+            if (r.rate > 0) {
+              positiveRates.push(r.rate);
+            }
+          });
+        }
+      });
+      
+      if (positiveRates.length > 0) {
+        recommendedPrime = positiveRates.reduce((sum, r) => sum + r, 0) / positiveRates.length;
+        confidence = positiveRates.length >= 10 ? 'MEDIUM' : 'LOW';
+        message = `Derived from ${positiveRates.length} positive implied rates in Method 2 (lot size bracketing)`;
+        source = 'method2';
+      } else {
+        recommendedPrime = 50000; // Default fallback
+        confidence = 'LOW';
+        message = 'Insufficient data - using default value. Manual review required.';
+        source = 'default';
       }
-    });
-    
-    if (positiveRates.length > 0) {
-      // Weight each VCS rate by its sample size
-      const weightedSum = positiveRates.reduce((sum, r) => sum + (r.rate * r.sales), 0);
-      method2Rate = weightedSum / totalBracketSales;
-      // Confidence: Based on total sales, max 100% at 100 sales
-      method2Confidence = Math.min(totalBracketSales * 0.01, 1);
     }
     
-    // SMART COMBINATION
-    let recommendedPrime = 0;
-    let source = '';
-    let variance = 0;
-    
-    if (method1Rate > 0 && method2Rate > 0) {
-      // We have BOTH methods - weight by confidence
-      const totalConfidence = method1Confidence + method2Confidence;
-      
-      recommendedPrime = (
-        (method1Rate * method1Confidence) + 
-        (method2Rate * method2Confidence)
-      ) / totalConfidence;
-      
-      const m1Weight = Math.round((method1Confidence / totalConfidence) * 100);
-      const m2Weight = Math.round((method2Confidence / totalConfidence) * 100);
-      
-      source = `Weighted: ${m1Weight}% M1, ${m2Weight}% M2`;
-      
-      // Calculate variance between methods
-      variance = Math.abs(method1Rate - method2Rate) / Math.min(method1Rate, method2Rate);
-      
-    } else if (method1Rate > 0) {
-      recommendedPrime = method1Rate;
-      source = 'Method 1 (Direct Sales)';
-    } else if (method2Rate > 0) {
-      recommendedPrime = method2Rate;
-      source = 'Method 2 (Bracketing)';
-    } else {
-      recommendedPrime = 50000;
-      source = 'Default (No Data)';
-    }
-    
-    // Calculate cascade
+    // Calculate cascade based on user settings
     const { cascadeSteps, cascadeDivision } = cascadeConfig;
     let rates = { prime: recommendedPrime };
     
@@ -569,23 +512,57 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
     }
     
     return {
+      confidence,
+      message,
       source,
       ...rates,
-      method1: {
-        rate: method1Rate,
-        samples: rawLandSales.length,
-        confidence: method1Confidence
-      },
-      method2: {
-        rate: method2Rate,
-        brackets: positiveRates.length,
-        totalSales: totalBracketSales,
-        confidence: method2Confidence
-      },
-      variance,
       specialRates: calculateSpecialRates()
     };
   };
+
+  const calculateTestValues = () => {
+    if (!testAcres || !cascadeConfig.prime) return;
+    
+    const acres = parseFloat(testAcres);
+    let value = 0;
+    let breakdown = {};
+    
+    // Apply cascade based on acreage
+    let remainingAcres = acres;
+    
+    // Prime (0-1 acre)
+    const primeAcres = Math.min(remainingAcres, 1);
+    breakdown.prime = primeAcres * cascadeConfig.prime;
+    remainingAcres -= primeAcres;
+    
+    // Secondary (1-5 acres)
+    if (remainingAcres > 0 && cascadeConfig.secondary) {
+      const secondaryAcres = Math.min(remainingAcres, 4);
+      breakdown.secondary = secondaryAcres * cascadeConfig.secondary;
+      remainingAcres -= secondaryAcres;
+    }
+    
+    // Excess (5-10 acres)
+    if (remainingAcres > 0 && cascadeConfig.excess) {
+      const excessAcres = Math.min(remainingAcres, 5);
+      breakdown.excess = excessAcres * cascadeConfig.excess;
+      remainingAcres -= excessAcres;
+    }
+    
+    // Residual (>10 acres)
+    if (remainingAcres > 0 && cascadeConfig.residual) {
+      breakdown.residual = remainingAcres * cascadeConfig.residual;
+    }
+    
+    value = Object.values(breakdown).reduce((sum, v) => sum + v, 0);
+    
+    setTestResult({
+      totalValue: value,
+      breakdown: breakdown,
+      acres: acres
+    });
+  };
+
   // ========== ALLOCATION STUDY FUNCTIONS ==========
   const loadAllocationStudyData = async () => {
     if (!cascadeConfig.prime) return;
@@ -882,6 +859,7 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
       }
     };
   };
+
   // ========== SAVE FUNCTIONS ==========
   const saveAnalysis = async () => {
     if (!jobData?.id || !valuationMethod) return;
@@ -916,10 +894,6 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
         bracket_analysis: bracketAnalysis,
         land_rate_recommendation: generateRecommendation(),
         cascade_rates: cascadeConfig,
-        special_category_rates: {
-          ...specialCategoryRates,
-          custom_name: customCategoryName
-        },
         allocation_study: {
           vcs_site_values: vcsSiteValues,
           actual_allocations: actualAllocations,
@@ -955,10 +929,7 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
   const exportLandRatesToExcel = () => {
     let vacantSalesCSV = 'Block,Lot,Qualifier,Address,Class,Sale Date,Sale Price,NU,Acres,$/Acre,Category,Package,Notes\n';
     vacantSales.forEach(sale => {
-      let category = saleCategories[sale.id] || 'Not Categorized';
-      if (category === 'custom' && customCategoryName) {
-        category = customCategoryName;
-      }
+      const category = saleCategories[sale.id] || 'Not Categorized';
       const isPackage = sale.packageData ? `Package (${sale.packageData.package_count})` : 'Single';
       const notes = landNotes[sale.id] || '';
       const qualifier = sale.property_qualifier || '';
@@ -1061,6 +1032,7 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
     document.body.removeChild(a);
     window.URL.revokeObjectURL(url);
   };
+
   // ========== RENDER FUNCTIONS ==========
   if (isLoading) {
     return (
@@ -1075,6 +1047,13 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
       </div>
     );
   }
+
+  // Set default methodology to acre
+  useEffect(() => {
+    if (!valuationMethod) {
+      setValuationMethod('acre');
+    }
+  }, [valuationMethod]);
 
   const recommendation = generateRecommendation();
   const allocationStats = activeSubTab === 'allocation' ? calculateAllocationStats() : null;
@@ -1212,25 +1191,15 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
                 Per SF
               </button>
               <button 
-                onClick={() => {
-                  // Check if we have frontage data
-                  const hasFrontageData = vacantSales.some(s => s.asset_frontage && s.asset_frontage !== 'N/A');
-                  if (!hasFrontageData) {
-                    alert('Front Foot valuation not available - no frontage data in properties');
-                    return;
-                  }
-                  setValuationMethod('ff');
-                }}
+                onClick={() => setValuationMethod('ff')}
                 style={{
                   padding: '6px 12px',
                   backgroundColor: valuationMethod === 'ff' ? '#3B82F6' : 'white',
                   color: valuationMethod === 'ff' ? 'white' : '#6B7280',
                   border: '1px solid #E5E7EB',
                   borderRadius: '4px',
-                  cursor: vacantSales.some(s => s.asset_frontage && s.asset_frontage !== 'N/A') ? 'pointer' : 'not-allowed',
-                  opacity: vacantSales.some(s => s.asset_frontage && s.asset_frontage !== 'N/A') ? 1 : 0.5
+                  cursor: 'pointer'
                 }}
-                title={!vacantSales.some(s => s.asset_frontage && s.asset_frontage !== 'N/A') ? 'No frontage data available' : ''}
               >
                 Front Foot
               </button>
@@ -1245,22 +1214,61 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
               </div>
             )}
           </div>
+            
+              <div style={{ 
+                fontSize: '12px',
+                color: '#6B7280'
+              }}>
+                {isSaving ? 'Saving...' : `Last saved: ${lastSaved.toLocaleTimeString()}`}
+              </div>
+            )}
+          </div>
 
-          {/* Front Foot Configuration - Disabled (use Zoning tab instead) */}
+          {/* Front Foot Configuration */}
           {valuationMethod === 'ff' && (
             <div style={{ 
-              background: '#F3F4F6', 
+              background: '#FEF3C7', 
               padding: '15px', 
               borderRadius: '8px',
-              marginBottom: '20px',
-              opacity: 0.5
+              marginBottom: '20px' 
             }}>
-              <h4 style={{ color: '#9CA3AF' }}>Front Foot Configuration</h4>
-              <p style={{ fontSize: '14px', color: '#9CA3AF' }}>
-                Configure zoning requirements in the Pre-Valuation → Zoning tab
-              </p>
+              <h4>Front Foot Configuration</h4>
+              <div style={{ display: 'flex', gap: '20px' }}>
+                <div>
+                  <label>Prime Frontage Minimum:</label>
+                  <select 
+                    value={frontFootConfig.primeFrontage}
+                    onChange={(e) => setFrontFootConfig({
+                      ...frontFootConfig, 
+                      primeFrontage: parseInt(e.target.value)
+                    })}
+                    style={{ marginLeft: '10px', padding: '4px' }}
+                  >
+                    <option value="50">50 feet</option>
+                    <option value="75">75 feet</option>
+                    <option value="100">100 feet</option>
+                    <option value="125">125 feet</option>
+                    <option value="150">150 feet</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label>Depth Table:</label>
+                  <input
+                    type="text"
+                    value={frontFootConfig.depthTable}
+                    onChange={(e) => setFrontFootConfig({
+                      ...frontFootConfig,
+                      depthTable: e.target.value
+                    })}
+                    placeholder="e.g., 100FT"
+                    style={{ marginLeft: '10px', padding: '4px', width: '100px' }}
+                  />
+                </div>
+              </div>
             </div>
           )}
+
           {/* Section 1: Vacant Land Sales */}
           <div style={{ marginBottom: '30px' }}>
             <h3>Method 1: Direct Vacant Land Sales</h3>
@@ -1312,16 +1320,13 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
                   <th style={{ padding: '8px', textAlign: 'left' }}>Lot</th>
                   <th style={{ padding: '8px', textAlign: 'left' }}>Qual</th>
                   <th style={{ padding: '8px', textAlign: 'left' }}>Address</th>
-                  <th style={{ padding: '8px', textAlign: 'left' }}>Zoning</th>
                   <th style={{ padding: '8px', textAlign: 'left' }}>VCS</th>
                   <th style={{ padding: '8px', textAlign: 'left' }}>Class</th>
                   <th style={{ padding: '8px', textAlign: 'left', width: '150px' }}>Category*</th>
                   <th style={{ padding: '8px', textAlign: 'left' }}>Sale Date</th>
                   <th style={{ padding: '8px', textAlign: 'left' }}>Sale Price</th>
                   <th style={{ padding: '8px', textAlign: 'left' }}>NU</th>
-                  <th style={{ padding: '8px', textAlign: 'left' }}>
-                    {valuationMethod === 'acre' ? 'Acres' : valuationMethod === 'sf' ? 'Square' : 'Frontage'}
-                  </th>
+                  <th style={{ padding: '8px', textAlign: 'left' }}>Acres</th>
                   <th style={{ padding: '8px', textAlign: 'left' }}>
                     {valuationMethod === 'acre' ? '$/Acre' : valuationMethod === 'sf' ? '$/SF' : '$/FF'}
                   </th>
@@ -1367,13 +1372,10 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
                     </td>
                     <td style={{ padding: '8px', fontSize: '12px' }}>
                       {sale.property_location || '-'}
-                    </td>                
-                    <td style={{ padding: '8px' }}>
-                      {sale.asset_zoning || '-'}
                     </td>
                     <td style={{ padding: '8px' }}>
                       {sale.new_vcs || '-'}
-                    </td>        
+                    </td>
                     <td style={{ padding: '8px' }}>
                       {sale.property_m4_class}
                     </td>
@@ -1394,21 +1396,15 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
                         <option value="building_lot">Building Lot</option>
                         <option value="wetlands">Wetlands</option>
                         <option value="conservation">Conservation</option>
-                        <option value="green_acres">Green Acres/Open Space</option>
-                        <option value="water">Water</option>
+                        <option value="green_acres">Green Acres</option>
                         <option value="landlocked">Landlocked</option>
-                        {customCategoryName && <option value="custom">{customCategoryName}</option>}
                         <option value="other">Other</option>
                       </select>
                     </td>
                     <td style={{ padding: '8px' }}>{sale.sales_date}</td>
                     <td style={{ padding: '8px' }}>${(sale.sales_price || 0).toLocaleString()}</td>
                     <td style={{ padding: '8px' }}>{sale.sales_nu || ''}</td>
-                    <td style={{ padding: '8px' }}>
-                      {valuationMethod === 'acre' ? sale.totalAcres?.toFixed(2) : 
-                       valuationMethod === 'sf' ? Math.round(sale.totalAcres * 43560).toLocaleString() :
-                       sale.asset_frontage || 'N/A'}
-                    </td>
+                    <td style={{ padding: '8px' }}>{sale.totalAcres?.toFixed(2)}</td>
                     <td style={{ padding: '8px', fontWeight: 'bold' }}>
                       {formatRateDisplay(sale.pricePerAcre)}
                     </td>
@@ -1448,6 +1444,7 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
                 Limited data: Only {vacantSales.length} vacant sales found
               </div>
             )}
+
             {/* Summary */}
             <div style={{ 
               marginTop: '20px', 
@@ -1457,7 +1454,7 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
             }}>
               <h4>Vacant Sales Summary</h4>
               <div>
-                <strong>All Checked Sales (excluding Other):</strong> {calculateRates().count} sales
+                <strong>All Included Sales:</strong> {calculateRates().count} sales
                 <br/>
                 <strong>Average Price/Acre:</strong> ${Math.round(calculateRates().average).toLocaleString()}
                 <br/>
@@ -1504,7 +1501,7 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
                 return null;
               })()}
             </div>
-          </div>  {/* This closes Section 1 */}
+          </div>
 
           {/* Section 2: VCS Lot Size Bracketing */}
           <div style={{ marginBottom: '30px' }}>
@@ -1538,76 +1535,77 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
             
             {!showAllVCS ? (
               /* Summary View */
-              <>
-                {/* Combined Analysis Results */}
-                <div style={{
+              <div>
+                {/* Summary Statistics */}
+                <div style={{ display: 'grid', gap: '15px', marginBottom: '20px' }}>
+                  <div style={{ background: '#D1FAE5', padding: '15px', borderRadius: '8px' }}>
+                    <strong>Strong Evidence VCS</strong> (10+ sales per bracket):
+                    <div>
+                      {Object.entries(bracketAnalysis)
+                        .filter(([vcs, data]) => data.totalSales >= 10)
+                        .map(([vcs]) => vcs)
+                        .join(', ') || 'None'}
+                    </div>
+                  </div>
+                  
+                  <div style={{ background: '#FEF3C7', padding: '15px', borderRadius: '8px' }}>
+                    <strong>Moderate Evidence</strong> (5-10 sales):
+                    <div>
+                      {Object.entries(bracketAnalysis)
+                        .filter(([vcs, data]) => data.totalSales >= 5 && data.totalSales < 10)
+                        .map(([vcs]) => vcs)
+                        .join(', ') || 'None'}
+                    </div>
+                  </div>
+                  
+                  <div style={{ background: '#FEE2E2', padding: '15px', borderRadius: '8px' }}>
+                    <strong>Weak Evidence</strong> (&lt;5 sales):
+                    <div>
+                      {Object.entries(bracketAnalysis)
+                        .filter(([vcs, data]) => data.totalSales < 5)
+                        .map(([vcs]) => vcs)
+                        .join(', ') || 'None'}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Method 2 Summary */}
+                <div style={{ 
                   background: '#F0F9FF', 
                   padding: '15px', 
                   borderRadius: '8px',
                   marginBottom: '20px' 
                 }}>
-                  <h4 style={{ color: '#1F2937', marginBottom: '10px' }}>
-                    Analysis Results - Both Methods
-                  </h4>
-                  {(() => {
-                    const rec = recommendation;
-                    
-                    return (
-                      <div style={{ fontSize: '14px' }}>
-                        {/* Method 1 Results */}
-                        <div style={{ marginBottom: '10px' }}>
-                          <strong>Method 1 (Direct Vacant Sales):</strong> 
-                          {rec.method1 && rec.method1.rate > 0 ? (
-                            <>
-                              ${Math.round(rec.method1.rate).toLocaleString()}/acre
-                              <div style={{ marginLeft: '20px', fontSize: '13px', color: '#6B7280' }}>
-                                • {rec.method1.samples} raw land sales
-                                • Confidence: {Math.round((rec.method1.confidence || 0) * 100)}%
-                              </div>
-                            </>
-                          ) : (
-                            <span style={{ color: '#6B7280' }}> No raw land sales</span>
-                          )}
-                        </div>
-                        
-                        {/* Method 2 Results */}
-                        <div style={{ marginBottom: '10px' }}>
-                          <strong>Method 2 (Lot Size Bracketing):</strong> 
-                          {rec.method2 && rec.method2.rate > 0 ? (
-                            <>
-                              ${Math.round(rec.method2.rate).toLocaleString()}/acre
-                              <div style={{ marginLeft: '20px', fontSize: '13px', color: '#6B7280' }}>
-                                • {rec.method2.brackets} bracket calculations
-                                • {rec.method2.totalSales} total improved sales
-                                • Confidence: {Math.round((rec.method2.confidence || 0) * 100)}%
-                              </div>
-                            </>
-                          ) : (
-                            <span style={{ color: '#6B7280' }}> Insufficient data</span>
-                          )}
-                        </div>
-                        
-                        {/* Combined Recommendation */}
-                        <div style={{ 
-                          marginTop: '10px', 
-                          paddingTop: '10px', 
-                          borderTop: '1px solid #E5E7EB',
-                          fontWeight: 'bold'
-                        }}>
-                          <strong>Recommended Prime Rate:</strong> ${Math.round(rec.prime).toLocaleString()}/acre
-                          <div style={{ fontSize: '12px', color: '#6B7280', marginTop: '5px', fontWeight: 'normal' }}>
-                            Source: {rec.source}
-                            {rec.variance > 0.3 && (
-                              <div style={{ color: '#F59E0B', marginTop: '5px' }}>
-                                ⚠️ Methods differ by {Math.round(rec.variance * 100)}% - manual review recommended
-                              </div>
-                            )}
+                  <h4>Method 2 Summary</h4>
+                  <div>
+                    {(() => {
+                      const positiveRates = [];
+                      Object.values(bracketAnalysis).forEach(vcs => {
+                        if (vcs.impliedRates) {
+                          vcs.impliedRates.forEach(r => {
+                            if (r.rate > 0) positiveRates.push(r.rate);
+                          });
+                        }
+                      });
+                      
+                      const avgPositiveRate = positiveRates.length > 0 ? 
+                        positiveRates.reduce((sum, r) => sum + r, 0) / positiveRates.length : 0;
+                      
+                      return (
+                        <>
+                          <strong>Positive Implied Rates:</strong> {positiveRates.length} found
+                          <br/>
+                          <strong>Average Positive Rate:</strong> ${Math.round(avgPositiveRate).toLocaleString()}/acre
+                          <br/>
+                          <div style={{ fontSize: '12px', color: '#6B7280', marginTop: '5px' }}>
+                            Note: Negative values are excluded from land rate calculations
                           </div>
-                        </div>
-                      </div>
-                    );
-                  })()}
+                        </>
+                      );
+                    })()}
+                  </div>
                 </div>
+
                 {/* Top VCS Lot Size Comparisons */}
                 <h4>Lot Size Comparison Analysis (Top VCS)</h4>
                 {Object.entries(bracketAnalysis)
@@ -1630,7 +1628,7 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
                             <th style={{ padding: '8px', textAlign: 'right' }}>Avg Price</th>
                             <th style={{ padding: '8px', textAlign: 'right' }}>Delta $</th>
                             <th style={{ padding: '8px', textAlign: 'right' }}>Delta Acres</th>
-                            <th style={{ padding: '8px', textAlign: 'right', fontWeight: 'bold' }}>Calculated $/Acre</th>
+                            <th style={{ padding: '8px', textAlign: 'right', fontWeight: 'bold' }}>$/Acre</th>
                             <th style={{ padding: '8px', textAlign: 'right', fontWeight: 'bold' }}>$/SF</th>
                           </tr>
                         </thead>
@@ -1669,7 +1667,7 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
                                 const priceDiff = (data.brackets.medium.avgPrice || 0) - (data.brackets.small.avgPrice || 0);
                                 const acresDiff = (data.brackets.medium.avgAcres || 0) - (data.brackets.small.avgAcres || 0);
                                 return (acresDiff > 0 && priceDiff > 0) ? 
-                                  `${Math.round(priceDiff / acresDiff).toLocaleString()}*` : '-';
+                                  `${Math.round(priceDiff / acresDiff).toLocaleString()}` : '-';
                               })()}
                             </td>
                             <td style={{ padding: '8px', textAlign: 'right', fontWeight: 'bold', color: '#3B82F6' }}>
@@ -1716,506 +1714,374 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
                               </td>
                             </tr>
                           )}
-                          {data.brackets.xlarge.count > 0 && (
-                            <tr style={{ backgroundColor: '#F9FAFB' }}>
-                              <td style={{ padding: '8px' }}>&gt;10.00</td>
-                              <td style={{ padding: '8px', textAlign: 'right' }}>
-                                {data.brackets.xlarge.avgAcres?.toFixed(2) || '-'}
-                              </td>
-                              <td style={{ padding: '8px', textAlign: 'right' }}>
-                                ${Math.round(data.brackets.xlarge.avgPrice || 0).toLocaleString() || '-'}
-                              </td>
-                              <td style={{ padding: '8px', textAlign: 'right', color: '#059669' }}>
-                                {data.brackets.xlarge.avgPrice && data.brackets.large.avgPrice ? 
-                                  `${Math.round(data.brackets.xlarge.avgPrice - data.brackets.large.avgPrice).toLocaleString()}` : '-'}
-                              </td>
-                              <td style={{ padding: '8px', textAlign: 'right' }}>
-                                {data.brackets.xlarge.avgAcres && data.brackets.large.avgAcres ? 
-                                  (data.brackets.xlarge.avgAcres - data.brackets.large.avgAcres).toFixed(2) : '-'}
-                              </td>
-                              <td style={{ padding: '8px', textAlign: 'right', fontWeight: 'bold', color: '#3B82F6' }}>
-                                {(() => {
-                                  const priceDiff = (data.brackets.xlarge.avgPrice || 0) - (data.brackets.large.avgPrice || 0);
-                                  const acresDiff = (data.brackets.xlarge.avgAcres || 0) - (data.brackets.large.avgAcres || 0);
-                                  return (acresDiff > 0 && priceDiff > 0) ? 
-                                    `${Math.round(priceDiff / acresDiff).toLocaleString()}` : '-';
-                                })()}
-                              </td>
-                              <td style={{ padding: '8px', textAlign: 'right', fontWeight: 'bold', color: '#3B82F6' }}>
-                                {(() => {
-                                  const priceDiff = (data.brackets.xlarge.avgPrice || 0) - (data.brackets.large.avgPrice || 0);
-                                  const acresDiff = (data.brackets.xlarge.avgAcres || 0) - (data.brackets.large.avgAcres || 0);
-                                  return (acresDiff > 0 && priceDiff > 0) ? 
-                                    `${((priceDiff / acresDiff) / 43560).toFixed(2)}` : '-';
-                                })()}
-                              </td>
-                            </tr>
-                          )}
                         </tbody>
                       </table>
                       <div style={{ marginTop: '10px', fontSize: '12px', color: '#6B7280' }}>
-                        Calculated land rate shows diminishing returns on larger lots
+                        Implied land rate shows diminishing returns on larger lots
                       </div>
                     </div>
                   ))}
-              </>
+              </div>
             ) : (
               /* Detailed VCS Table */
-              <>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr style={{ backgroundColor: '#F9FAFB' }}>
-                      <th style={{ padding: '8px', textAlign: 'left' }}>VCS</th>
-                      <th style={{ padding: '8px', textAlign: 'left' }}>&lt;1 acre</th>
-                      <th style={{ padding: '8px', textAlign: 'left' }}>1-5 acres</th>
-                      <th style={{ padding: '8px', textAlign: 'left' }}>5-10 acres</th>
-                      <th style={{ padding: '8px', textAlign: 'left' }}>&gt;10 acres</th>
-                      <th style={{ padding: '8px', textAlign: 'left' }}>Implied Rate</th>
-                      <th style={{ padding: '8px', textAlign: 'left' }}>Sample Size</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {Object.entries(bracketAnalysis)
-                      .filter(([vcs]) => !vcsFilter || vcs.includes(vcsFilter.toUpperCase()))
-                      .map(([vcs, data]) => {
-                        const evidenceStrength = data.totalSales >= 10 ? 'strong' : 
-                                                data.totalSales >= 5 ? 'moderate' : 'weak';
-                        const bgColor = evidenceStrength === 'strong' ? '#D1FAE5' :
-                                       evidenceStrength === 'moderate' ? '#FEF3C7' : '#FEE2E2';
-                        
-                        return (
-                          <tr key={vcs} style={{ borderBottom: '1px solid #E5E7EB', backgroundColor: bgColor }}>
-                            <td style={{ padding: '8px' }}>{vcs}</td>
-                            <td style={{ padding: '8px' }}>
-                              {data.brackets.small.count > 0 ? 
-                                `${data.brackets.small.count} sales` : 'N/A'}
-                            </td>
-                            <td style={{ padding: '8px' }}>
-                              {data.brackets.medium.count > 0 ? 
-                                `${data.brackets.medium.count} sales` : 'N/A'}
-                            </td>
-                            <td style={{ padding: '8px' }}>
-                              {data.brackets.large.count > 0 ? 
-                                `${data.brackets.large.count} sales` : 'N/A'}
-                            </td>
-                            <td style={{ padding: '8px' }}>
-                              {data.brackets.xlarge.count > 0 ? 
-                                `${data.brackets.xlarge.count} sales` : 'N/A'}
-                            </td>
-                            <td style={{ padding: '8px', fontWeight: 'bold' }}>
-                              {data.averageImpliedRate ? 
-                                `${Math.round(data.averageImpliedRate).toLocaleString()}/ac` : 'N/A'}
-                            </td>
-                            <td style={{ padding: '8px' }}>
-                              <span style={{ 
-                                color: data.totalSales >= 10 ? '#10B981' : 
-                                       data.totalSales >= 5 ? '#F59E0B' : '#EF4444' 
-                              }}>
-                                {data.totalSales} sales
-                              </span>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                  </tbody>
-                </table>
-              </>
-            )
-            }
-          </div>  {/* This closes Section 2 */}
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#F9FAFB' }}>
+                    <th style={{ padding: '8px', textAlign: 'left' }}>VCS</th>
+                    <th style={{ padding: '8px', textAlign: 'left' }}>&lt;1 acre</th>
+                    <th style={{ padding: '8px', textAlign: 'left' }}>1-5 acres</th>
+                    <th style={{ padding: '8px', textAlign: 'left' }}>5-10 acres</th>
+                    <th style={{ padding: '8px', textAlign: 'left' }}>&gt;10 acres</th>
+                    <th style={{ padding: '8px', textAlign: 'left' }}>Implied Rate</th>
+                    <th style={{ padding: '8px', textAlign: 'left' }}>Sample Size</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(bracketAnalysis)
+                    .filter(([vcs]) => !vcsFilter || vcs.includes(vcsFilter.toUpperCase()))
+                    .map(([vcs, data]) => {
+                      const evidenceStrength = data.totalSales >= 10 ? 'strong' : 
+                                              data.totalSales >= 5 ? 'moderate' : 'weak';
+                      const bgColor = evidenceStrength === 'strong' ? '#D1FAE5' :
+                                     evidenceStrength === 'moderate' ? '#FEF3C7' : '#FEE2E2';
+                      
+                      return (
+                        <tr key={vcs} style={{ borderBottom: '1px solid #E5E7EB', backgroundColor: bgColor }}>
+                          <td style={{ padding: '8px' }}>{vcs}</td>
+                          <td style={{ padding: '8px' }}>
+                            {data.brackets.small.count > 0 ? 
+                              `${data.brackets.small.count} sales` : 'N/A'}
+                          </td>
+                          <td style={{ padding: '8px' }}>
+                            {data.brackets.medium.count > 0 ? 
+                              `${data.brackets.medium.count} sales` : 'N/A'}
+                          </td>
+                          <td style={{ padding: '8px' }}>
+                            {data.brackets.large.count > 0 ? 
+                              `${data.brackets.large.count} sales` : 'N/A'}
+                          </td>
+                          <td style={{ padding: '8px' }}>
+                            {data.brackets.xlarge.count > 0 ? 
+                              `${data.brackets.xlarge.count} sales` : 'N/A'}
+                          </td>
+                          <td style={{ padding: '8px', fontWeight: 'bold' }}>
+                            {data.averageImpliedRate ? 
+                              `${Math.round(data.averageImpliedRate).toLocaleString()}/ac` : 'N/A'}
+                          </td>
+                          <td style={{ padding: '8px' }}>
+                            <span style={{ 
+                              color: data.totalSales >= 10 ? '#10B981' : 
+                                     data.totalSales >= 5 ? '#F59E0B' : '#EF4444' 
+                            }}>
+                              {data.totalSales} sales
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+            )}
+          </div>
+
           {/* Section 3: Rate Analysis & Recommendation */}
           <div style={{ 
-            background: 'white',
-            border: '1px solid #E5E7EB',
+            background: 'linear-gradient(135deg, #667EEA 0%, #764BA2 100%)',
+            color: 'white',
             padding: '20px',
             borderRadius: '12px',
             marginBottom: '30px'
           }}>
-            <h3 style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: '8px',
-              marginBottom: '20px',
-              color: '#1F2937'
-            }}>
+            <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <TrendingUp size={24} /> Rate Analysis & Recommendation
             </h3>
-            {(() => {
-              const allImpliedRates = [];
-              Object.values(bracketAnalysis).forEach(vcs => {
-                if (vcs.impliedRates) {
-                  vcs.impliedRates.forEach(r => {
-                    if (r.rate > 0) {
-                      allImpliedRates.push({
-                        rate: r.rate,
-                        transition: r.transition,
-                        vcs: Object.keys(bracketAnalysis).find(k => bracketAnalysis[k] === vcs)
-                      });
-                    }
-                  });
-                }
-              });
+            
+            <div style={{ 
+              background: 'rgba(255, 255, 255, 0.1)', 
+              padding: '10px', 
+              borderRadius: '8px',
+              marginBottom: '15px'
+            }}>
+              <div style={{ 
+                display: 'inline-block',
+                padding: '4px 8px',
+                background: recommendation.confidence === 'HIGH' ? '#10B981' :
+                          recommendation.confidence === 'MEDIUM' ? '#F59E0B' : '#EF4444',
+                borderRadius: '4px',
+                marginBottom: '10px'
+              }}>
+                {recommendation.confidence} CONFIDENCE
+              </div>
+              <div>{recommendation.message}</div>
+            </div>
+            
+            {/* Cascade Configuration */}
+            <div style={{ 
+              background: 'rgba(255, 255, 255, 0.1)', 
+              padding: '15px', 
+              borderRadius: '8px',
+              marginBottom: '15px'
+            }}>
+              <h4>Cascade Configuration</h4>
+              <div style={{ display: 'flex', gap: '20px', marginBottom: '10px' }}>
+                <div>
+                  <label>Number of Steps:</label>
+                  <select 
+                    value={cascadeConfig.cascadeSteps}
+                    onChange={(e) => {
+                      const steps = parseInt(e.target.value);
+                      const newConfig = { ...cascadeConfig, cascadeSteps: steps };
+                      const rec = generateRecommendation();
+                      
+                      newConfig.prime = rec.prime;
+                      newConfig.secondary = steps >= 2 ? rec.prime / cascadeConfig.cascadeDivision : null;
+                      newConfig.excess = steps >= 3 ? newConfig.secondary / cascadeConfig.cascadeDivision : null;
+                      newConfig.residual = steps >= 4 ? newConfig.excess / cascadeConfig.cascadeDivision : null;
+                      
+                      setCascadeConfig(newConfig);
+                    }}
+                    style={{ 
+                      marginLeft: '10px', 
+                      padding: '4px',
+                      background: 'rgba(255, 255, 255, 0.2)',
+                      border: '1px solid rgba(255, 255, 255, 0.3)',
+                      color: 'white'
+                    }}
+                  >
+                    <option value="2">2 Steps (Prime, Secondary)</option>
+                    <option value="3">3 Steps (Prime, Secondary, Excess)</option>
+                    <option value="4">4 Steps (All)</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label>Division Factor:</label>
+                  <select 
+                    value={cascadeConfig.cascadeDivision}
+                    onChange={(e) => {
+                      const division = parseInt(e.target.value);
+                      const newConfig = { ...cascadeConfig, cascadeDivision: division };
+                      
+                      if (newConfig.prime) {
+                        newConfig.secondary = newConfig.cascadeSteps >= 2 ? newConfig.prime / division : null;
+                        newConfig.excess = newConfig.cascadeSteps >= 3 ? newConfig.secondary / division : null;
+                        newConfig.residual = newConfig.cascadeSteps >= 4 ? newConfig.excess / division : null;
+                      }
+                      
+                      setCascadeConfig(newConfig);
+                    }}
+                    style={{ 
+                      marginLeft: '10px', 
+                      padding: '4px',
+                      background: 'rgba(255, 255, 255, 0.2)',
+                      border: '1px solid rgba(255, 255, 255, 0.3)',
+                      color: 'white'
+                    }}
+                  >
+                    <option value="2">Divide by 2</option>
+                    <option value="3">Divide by 3</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cascadeConfig.cascadeSteps}, 1fr)`, gap: '15px' }}>
+              <div>
+                <div style={{ fontSize: '12px', opacity: 0.9 }}>Prime Rate (0-1 acre)</div>
+                <div style={{ fontSize: '24px', fontWeight: 'bold' }}>
+                  ${Math.round(recommendation.prime).toLocaleString()}/acre
+                </div>
+                <input
+                  type="number"
+                  value={cascadeConfig.prime || recommendation.prime}
+                  onChange={(e) => setCascadeConfig({...cascadeConfig, prime: parseFloat(e.target.value)})}
+                  style={{ 
+                    width: '100%', 
+                    padding: '4px', 
+                    marginTop: '5px',
+                    background: 'rgba(255, 255, 255, 0.2)',
+                    border: '1px solid rgba(255, 255, 255, 0.3)',
+                    color: 'white'
+                  }}
+                  placeholder="Override..."
+                />
+              </div>
               
-              const avgRate = allImpliedRates.length > 0 ? 
-                allImpliedRates.reduce((sum, r) => sum + r.rate, 0) / allImpliedRates.length : 0;
-              
-              return (
-                <div style={{ fontSize: '14px' }}>
-                  <div style={{ marginBottom: '8px' }}>
-                    <strong>Analysis Summary:</strong> {allImpliedRates.length} positive implied rates found
+              {cascadeConfig.cascadeSteps >= 2 && (
+                <div>
+                  <div style={{ fontSize: '12px', opacity: 0.9 }}>Secondary Rate (1-5 acres)</div>
+                  <div style={{ fontSize: '24px', fontWeight: 'bold' }}>
+                    ${Math.round(recommendation.secondary).toLocaleString()}/acre
                   </div>
-                  {allImpliedRates.slice(0, 3).map((r, idx) => (
-                    <div key={idx} style={{ marginLeft: '20px', fontSize: '13px', color: '#6B7280' }}>
-                      • {r.vcs} ({r.transition}): ${Math.round(r.rate).toLocaleString()}/acre
+                  <input
+                    type="number"
+                    value={cascadeConfig.secondary || recommendation.secondary}
+                    onChange={(e) => setCascadeConfig({...cascadeConfig, secondary: parseFloat(e.target.value)})}
+                    style={{ 
+                      width: '100%', 
+                      padding: '4px', 
+                      marginTop: '5px',
+                      background: 'rgba(255, 255, 255, 0.2)',
+                      border: '1px solid rgba(255, 255, 255, 0.3)',
+                      color: 'white'
+                    }}
+                    placeholder="Override..."
+                  />
+                </div>
+              )}
+              
+              {cascadeConfig.cascadeSteps >= 3 && (
+                <div>
+                  <div style={{ fontSize: '12px', opacity: 0.9 }}>Excess Rate (5-10 acres)</div>
+                  <div style={{ fontSize: '24px', fontWeight: 'bold' }}>
+                    ${Math.round(recommendation.excess).toLocaleString()}/acre
+                  </div>
+                  <input
+                    type="number"
+                    value={cascadeConfig.excess || recommendation.excess}
+                    onChange={(e) => setCascadeConfig({...cascadeConfig, excess: parseFloat(e.target.value)})}
+                    style={{ 
+                      width: '100%', 
+                      padding: '4px', 
+                      marginTop: '5px',
+                      background: 'rgba(255, 255, 255, 0.2)',
+                      border: '1px solid rgba(255, 255, 255, 0.3)',
+                      color: 'white'
+                    }}
+                    placeholder="Override..."
+                  />
+                </div>
+              )}
+              
+              {cascadeConfig.cascadeSteps >= 4 && (
+                <div>
+                  <div style={{ fontSize: '12px', opacity: 0.9 }}>Residual Rate (>10 acres)</div>
+                  <div style={{ fontSize: '24px', fontWeight: 'bold' }}>
+                    ${Math.round(recommendation.residual).toLocaleString()}/acre
+                  </div>
+                  <input
+                    type="number"
+                    value={cascadeConfig.residual || recommendation.residual}
+                    onChange={(e) => setCascadeConfig({...cascadeConfig, residual: parseFloat(e.target.value)})}
+                    style={{ 
+                      width: '100%', 
+                      padding: '4px', 
+                      marginTop: '5px',
+                      background: 'rgba(255, 255, 255, 0.2)',
+                      border: '1px solid rgba(255, 255, 255, 0.3)',
+                      color: 'white'
+                    }}
+                    placeholder="Override..."
+                  />
+                </div>
+              )}
+            </div>
+            
+            {/* Special Rates Display */}
+            {recommendation.specialRates && Object.keys(recommendation.specialRates).length > 0 && (
+              <div style={{ 
+                marginTop: '15px', 
+                paddingTop: '15px', 
+                borderTop: '1px solid rgba(255, 255, 255, 0.3)' 
+              }}>
+                <h4>Special Category Rates</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+                  {Object.entries(recommendation.specialRates).map(([category, data]) => (
+                    <div key={category}>
+                      <div style={{ fontSize: '12px', opacity: 0.9 }}>
+                        {category.charAt(0).toUpperCase() + category.slice(1).replace('_', ' ')}
+                      </div>
+                      <div style={{ fontSize: '18px', fontWeight: 'bold' }}>
+                        ${Math.round(data.rate).toLocaleString()}/acre
+                      </div>
+                      <div style={{ fontSize: '11px', opacity: 0.7 }}>
+                        ({data.count} sales)
+                      </div>
                     </div>
                   ))}
-                  {allImpliedRates.length > 3 && (
-                    <div style={{ marginLeft: '20px', fontSize: '13px', color: '#6B7280' }}>
-                      • ...and {allImpliedRates.length - 3} more
-                    </div>
-                  )}
-                  <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #E5E7EB' }}>
-                    <strong>Average Calculated Rate (Method 2):</strong> ${Math.round(avgRate).toLocaleString()}/acre
-                    <div style={{ fontSize: '12px', color: '#6B7280', marginTop: '5px' }}>
-                      Calculated from actual price differences between lot size brackets
-                    </div>
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Clean Rate Input Section */}
-            <div style={{ 
-              background: '#F9FAFB', 
-              padding: '20px', 
-              borderRadius: '8px',
-              marginBottom: '20px',
-              marginTop: '20px'
-            }}>
-              <h4 style={{ color: '#1F2937', marginBottom: '15px' }}>Enter Land Rates</h4>
-              
-              {/* Standard Rates */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '15px', marginBottom: '20px' }}>
-                <div>
-                  <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
-                    Prime Rate (0-1 acre)
-                  </label>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontSize: '12px', color: '#6B7280' }}>$</span>
-                    <input
-                      type="number"
-                      value={cascadeConfig.prime || ''}
-                      onChange={(e) => setCascadeConfig({...cascadeConfig, prime: parseFloat(e.target.value) || 0})}
-                      placeholder={Math.round(recommendation.prime).toString()}
-                      style={{ 
-                        flex: 1,
-                        padding: '8px', 
-                        border: '1px solid #E5E7EB',
-                        borderRadius: '4px',
-                        color: '#1F2937',
-                        backgroundColor: 'white'
-                      }}
-                    />
-                    <span style={{ fontSize: '12px', color: '#6B7280' }}>/acre</span>
-                  </div>
-                </div>
-                
-                <div>
-                  <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
-                    Secondary Rate (1-5 acres)
-                  </label>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontSize: '12px', color: '#6B7280' }}>$</span>
-                    <input
-                      type="number"
-                      value={cascadeConfig.secondary || ''}
-                      onChange={(e) => setCascadeConfig({...cascadeConfig, secondary: parseFloat(e.target.value) || 0})}
-                      placeholder={Math.round(recommendation.secondary).toString()}
-                      style={{ 
-                        flex: 1,
-                        padding: '8px', 
-                        border: '1px solid #E5E7EB',
-                        borderRadius: '4px',
-                        color: '#1F2937',
-                        backgroundColor: 'white'
-                      }}
-                    />
-                    <span style={{ fontSize: '12px', color: '#6B7280' }}>/acre</span>
-                  </div>
-                </div>
-                
-                <div>
-                  <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
-                    Excess Rate (5-10 acres)
-                  </label>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontSize: '12px', color: '#6B7280' }}>$</span>
-                    <input
-                      type="number"
-                      value={cascadeConfig.excess || ''}
-                      onChange={(e) => setCascadeConfig({...cascadeConfig, excess: parseFloat(e.target.value) || 0})}
-                      placeholder={Math.round(recommendation.excess).toString()}
-                      style={{ 
-                        flex: 1,
-                        padding: '8px', 
-                        border: '1px solid #E5E7EB',
-                        borderRadius: '4px',
-                        color: '#1F2937',
-                        backgroundColor: 'white'
-                      }}
-                    />
-                    <span style={{ fontSize: '12px', color: '#6B7280' }}>/acre</span>
-                  </div>
-                </div>
-                
-                <div>
-                  <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
-                    Residual Rate (10+ acres)
-                  </label>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontSize: '12px', color: '#6B7280' }}>$</span>
-                    <input
-                      type="number"
-                      value={cascadeConfig.residual || ''}
-                      onChange={(e) => setCascadeConfig({...cascadeConfig, residual: parseFloat(e.target.value) || 0})}
-                      placeholder={Math.round(recommendation.residual).toString()}
-                      style={{ 
-                        flex: 1,
-                        padding: '8px', 
-                        border: '1px solid #E5E7EB',
-                        borderRadius: '4px',
-                        color: '#1F2937',
-                        backgroundColor: 'white'
-                      }}
-                    />
-                    <span style={{ fontSize: '12px', color: '#6B7280' }}>/acre</span>
-                  </div>
                 </div>
               </div>
+            )}
+            
+            <button 
+              onClick={saveAnalysis}
+              style={{
+                marginTop: '15px',
+                padding: '10px 20px',
+                background: 'white',
+                color: '#764BA2',
+                border: 'none',
+                borderRadius: '6px',
+                fontWeight: 'bold',
+                cursor: 'pointer'
+              }}
+            >
+              Save Land Rates
+            </button>
+          </div>
 
-              {/* Special Categories */}
-              <div style={{ paddingTop: '20px', borderTop: '1px solid #E5E7EB' }}>
-                <h4 style={{ color: '#1F2937', marginBottom: '15px' }}>Special Category Rates</h4>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '15px' }}>
-                  <div>
-                    <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
-                      Wetlands
-                    </label>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '12px', color: '#6B7280' }}>$</span>
-                      <input
-                        type="number"
-                        value={specialCategoryRates?.wetlands || ''}
-                        onChange={(e) => setSpecialCategoryRates({...specialCategoryRates, wetlands: parseFloat(e.target.value) || 0})}
-                        placeholder="1000"
-                        style={{ 
-                          flex: 1,
-                          padding: '8px', 
-                          border: '1px solid #E5E7EB',
-                          borderRadius: '4px',
-                          color: '#1F2937',
-                          backgroundColor: 'white'
-                        }}
-                      />
-                      <span style={{ fontSize: '12px', color: '#6B7280' }}>/acre</span>
-                    </div>
-                  </div>
-                  
-                  <div>
-                    <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
-                      Conservation
-                    </label>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '12px', color: '#6B7280' }}>$</span>
-                      <input
-                        type="number"
-                        value={specialCategoryRates?.conservation || ''}
-                        onChange={(e) => setSpecialCategoryRates({...specialCategoryRates, conservation: parseFloat(e.target.value) || 0})}
-                        placeholder="500"
-                        style={{ 
-                          flex: 1,
-                          padding: '8px', 
-                          border: '1px solid #E5E7EB',
-                          borderRadius: '4px',
-                          color: '#1F2937',
-                          backgroundColor: 'white'
-                        }}
-                      />
-                      <span style={{ fontSize: '12px', color: '#6B7280' }}>/acre</span>
-                    </div>
-                  </div>
-                  
-                  <div>
-                    <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
-                      Green Acres/Open Space
-                    </label>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '12px', color: '#6B7280' }}>$</span>
-                      <input
-                        type="number"
-                        value={specialCategoryRates?.green_acres || ''}
-                        onChange={(e) => setSpecialCategoryRates({...specialCategoryRates, green_acres: parseFloat(e.target.value) || 0})}
-                        placeholder="750"
-                        style={{ 
-                          flex: 1,
-                          padding: '8px', 
-                          border: '1px solid #E5E7EB',
-                          borderRadius: '4px',
-                          color: '#1F2937',
-                          backgroundColor: 'white'
-                        }}
-                      />
-                      <span style={{ fontSize: '12px', color: '#6B7280' }}>/acre</span>
-                    </div>
-                  </div>
-                  
-                  <div>
-                    <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
-                      Water
-                    </label>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '12px', color: '#6B7280' }}>$</span>
-                      <input
-                        type="number"
-                        value={specialCategoryRates?.water || ''}
-                        onChange={(e) => setSpecialCategoryRates({...specialCategoryRates, water: parseFloat(e.target.value) || 0})}
-                        placeholder="100"
-                        style={{ 
-                          flex: 1,
-                          padding: '8px', 
-                          border: '1px solid #E5E7EB',
-                          borderRadius: '4px',
-                          color: '#1F2937',
-                          backgroundColor: 'white'
-                        }}
-                      />
-                      <span style={{ fontSize: '12px', color: '#6B7280' }}>/acre</span>
-                    </div>
-                  </div>
-                  
-                  <div>
-                    <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
-                      Landlocked
-                    </label>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '12px', color: '#6B7280' }}>$</span>
-                      <input
-                        type="number"
-                        value={specialCategoryRates?.landlocked || ''}
-                        onChange={(e) => setSpecialCategoryRates({...specialCategoryRates, landlocked: parseFloat(e.target.value) || 0})}
-                        placeholder="250"
-                        style={{ 
-                          flex: 1,
-                          padding: '8px', 
-                          border: '1px solid #E5E7EB',
-                          borderRadius: '4px',
-                          color: '#1F2937',
-                          backgroundColor: 'white'
-                        }}
-                      />
-                      <span style={{ fontSize: '12px', color: '#6B7280' }}>/acre</span>
-                    </div>
-                  </div>
-                  
-                  {/* Custom Category */}
-                  <div>
-                    <input
-                      type="text"
-                      value={customCategoryName || ''}
-                      onChange={(e) => setCustomCategoryName(e.target.value)}
-                      placeholder="Custom category..."
-                      style={{ 
-                        width: '100%',
-                        padding: '4px', 
-                        marginBottom: '4px',
-                        border: '1px solid #E5E7EB',
-                        borderRadius: '4px',
-                        fontSize: '12px',
-                        color: '#1F2937'
-                      }}
-                    />
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '12px', color: '#6B7280' }}>$</span>
-                      <input
-                        type="number"
-                        value={specialCategoryRates?.custom || ''}
-                        onChange={(e) => setSpecialCategoryRates({...specialCategoryRates, custom: parseFloat(e.target.value) || 0})}
-                        placeholder="Enter rate"
-                        style={{ 
-                          flex: 1,
-                          padding: '8px', 
-                          border: '1px solid #E5E7EB',
-                          borderRadius: '4px',
-                          color: '#1F2937',
-                          backgroundColor: 'white'
-                        }}
-                      />
-                      <span style={{ fontSize: '12px', color: '#6B7280' }}>/acre</span>
-                    </div>
-                  </div>
-                </div>
-              </div>                          
-
-                  {/* Custom Category */}
-                  <div>
-                    <input
-                      type="text"
-                      value={customCategoryName || ''}
-                      onChange={(e) => setCustomCategoryName(e.target.value)}
-                      placeholder="Custom category..."
-                      style={{ 
-                        width: '100%',
-                        padding: '4px', 
-                        marginBottom: '4px',
-                        border: '1px solid #E5E7EB',
-                        borderRadius: '4px',
-                        fontSize: '12px',
-                        color: '#1F2937'
-                      }}
-                    />
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '12px', color: '#6B7280' }}>$</span>
-                      <input
-                        type="number"
-                        value={specialCategoryRates?.custom || ''}
-                        onChange={(e) => setSpecialCategoryRates({...specialCategoryRates, custom: parseFloat(e.target.value) || 0})}
-                        placeholder="Enter rate"
-                        style={{ 
-                          flex: 1,
-                          padding: '8px', 
-                          border: '1px solid #E5E7EB',
-                          borderRadius: '4px',
-                          color: '#1F2937',
-                          backgroundColor: 'white'
-                        }}
-                      />
-                      <span style={{ fontSize: '12px', color: '#6B7280' }}>/acre</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              
+          {/* Test Calculator */}
+          <div style={{ 
+            background: 'linear-gradient(135deg, #667EEA 0%, #764BA2 100%)',
+            padding: '20px',
+            borderRadius: '12px'
+          }}>
+            <h4 style={{ color: 'white', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Calculator size={20} /> Test Your Rates
+            </h4>
+            
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+              <input 
+                type="number"
+                placeholder="Enter lot size in acres"
+                value={testAcres}
+                onChange={(e) => setTestAcres(e.target.value)}
+                style={{ padding: '8px', borderRadius: '4px', border: 'none' }}
+              />
               <button 
-                onClick={saveAnalysis}
+                onClick={calculateTestValues}
                 style={{
-                  marginTop: '20px',
-                  width: '100%',
-                  padding: '12px',
-                  backgroundColor: '#3B82F6',
-                  color: 'white',
+                  padding: '8px 16px',
+                  background: 'white',
+                  color: '#764BA2',
                   border: 'none',
-                  borderRadius: '6px',
+                  borderRadius: '4px',
                   fontWeight: 'bold',
-                  cursor: 'pointer',
-                  fontSize: '16px'
+                  cursor: 'pointer'
                 }}
               >
-                Save Land Rates
+                Calculate
               </button>
-            </div>  {/* Closes Clean Rate Input Section */}
-          </div>  {/* Closes Section 3 */}
-        </>  {/* Closes fragment for land-rates */}
-      )}  {/* Closes land-rates conditional */}
+            </div>
+            
+            {testResult && (
+              <div style={{ marginTop: '15px', color: 'white' }}>
+                <div style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '10px' }}>
+                  Total Land Value: ${Math.round(testResult.totalValue).toLocaleString()}
+                </div>
+                <div style={{ fontSize: '14px' }}>
+                  <strong>Breakdown for {testResult.acres} acres:</strong>
+                  <div style={{ marginLeft: '10px', marginTop: '5px' }}>
+                    {testResult.breakdown.prime > 0 && (
+                      <div>Prime (0-1 acre): ${Math.round(testResult.breakdown.prime).toLocaleString()}</div>
+                    )}
+                    {testResult.breakdown.secondary > 0 && (
+                      <div>Secondary (1-5 acres): ${Math.round(testResult.breakdown.secondary).toLocaleString()}</div>
+                    )}
+                    {testResult.breakdown.excess > 0 && (
+                      <div>Excess (5-10 acres): ${Math.round(testResult.breakdown.excess).toLocaleString()}</div>
+                    )}
+                    {testResult.breakdown.residual > 0 && (
+                      <div>Residual (>10 acres): ${Math.round(testResult.breakdown.residual).toLocaleString()}</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
       {/* ALLOCATION STUDY SUB-TAB */}
       {activeSubTab === 'allocation' && (
         <>
@@ -2398,6 +2264,7 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
               </div>
             </div>
           )}
+
           {/* Vacant Land Test Table */}
           <div style={{ marginBottom: '30px' }}>
             <h3>Vacant Land Test (Filtered: {getFilteredVacantTestSales().length} of {vacantTestSales.length})</h3>
@@ -2566,6 +2433,7 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
           </div>
         </>
       )}
+
       {/* Add Property Modal */}
       {showAddModal && (
         <div style={{
@@ -2584,53 +2452,42 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
             background: 'white',
             padding: '20px',
             borderRadius: '8px',
-            width: '90%',
-            maxWidth: '1200px',
+            width: '600px',
             maxHeight: '80vh',
-            display: 'flex',
-            flexDirection: 'column'
+            overflow: 'auto'
           }}>
-            <h3 style={{ marginBottom: '15px' }}>Property Search - Add to Land Analysis</h3>
+            <h3>Add Properties to Land Analysis</h3>
             
-            {/* Search Inputs */}
             <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
+              <select 
+                value={searchFilters.class}
+                onChange={(e) => setSearchFilters({...searchFilters, class: e.target.value})}
+                style={{ padding: '8px' }}
+              >
+                <option value="">All Classes</option>
+                <option value="1">1 - Vacant</option>
+                <option value="2">2 - Residential</option>
+                <option value="3A">3A - Farm Regular</option>
+                <option value="3B">3B - Farm Qualified</option>
+                <option value="4A">4A - Commercial</option>
+                <option value="4B">4B - Industrial</option>
+              </select>
+              
               <input 
                 placeholder="Block" 
                 value={searchFilters.block}
                 onChange={(e) => setSearchFilters({...searchFilters, block: e.target.value})}
-                style={{ width: '100px', padding: '8px', border: '1px solid #E5E7EB', borderRadius: '4px' }}
+                style={{ width: '80px', padding: '8px' }}
               />
               <input 
                 placeholder="Lot" 
                 value={searchFilters.lot}
                 onChange={(e) => setSearchFilters({...searchFilters, lot: e.target.value})}
-                style={{ width: '100px', padding: '8px', border: '1px solid #E5E7EB', borderRadius: '4px' }}
+                style={{ width: '80px', padding: '8px' }}
               />
+              
               <button 
-                onClick={() => {
-                  // Search ALL properties matching block/lot
-                  if (!properties) return;
-                  // If no search criteria, show first 100 properties
-                  if (!searchFilters.block && !searchFilters.lot) {
-                    setSearchResults(properties.slice(0, 100));
-                    return;
-                  }
-                  let results = properties;
-                  
-                  if (searchFilters.block) {
-                    results = results.filter(p => 
-                      p.property_block?.toString().includes(searchFilters.block)
-                    );
-                  }
-                  if (searchFilters.lot) {
-                    results = results.filter(p => 
-                      p.property_lot?.toString().includes(searchFilters.lot)
-                    );
-                  }
-                  
-                  // Don't filter by anything else initially - show everything
-                  setSearchResults(results.slice(0, 100)); // Limit to 100 for performance
-                }}
+                onClick={searchProperties}
                 style={{
                   backgroundColor: '#3B82F6',
                   color: 'white',
@@ -2647,228 +2504,88 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
               </button>
             </div>
 
-            {/* Filter Toggles */}
-            <div style={{ 
-              display: 'flex', 
-              gap: '15px', 
-              marginBottom: '10px',
-              padding: '10px',
-              background: '#F9FAFB',
-              borderRadius: '4px',
-              flexWrap: 'wrap'
-            }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
-                <input 
-                  type="checkbox" 
-                  checked={searchFilters.hideNU !== false}
-                  onChange={(e) => setSearchFilters({...searchFilters, hideNU: e.target.checked})}
-                />
-                Hide NU sales
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
-                <input 
-                  type="checkbox" 
-                  checked={searchFilters.dateFilter !== false}
-                  onChange={(e) => setSearchFilters({...searchFilters, dateFilter: e.target.checked})}
-                />
-                Sales within date range
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
-                <input 
-                  type="checkbox" 
-                  checked={searchFilters.priceFilter !== false}
-                  onChange={(e) => setSearchFilters({...searchFilters, priceFilter: e.target.checked})}
-                />
-                Sales &gt; $0
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
-                <input 
-                  type="checkbox" 
-                  checked={searchFilters.hideIncluded}
-                  onChange={(e) => setSearchFilters({...searchFilters, hideIncluded: e.target.checked})}
-                />
-                Hide already included
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
-                <input 
-                  type="checkbox" 
-                  checked={searchFilters.vacantOnly}
-                  onChange={(e) => setSearchFilters({...searchFilters, vacantOnly: e.target.checked})}
-                />
-                Class 1/3B only
-              </label>
+            <div style={{ fontSize: '12px', color: '#6B7280', marginBottom: '10px' }}>
+              Showing sales from {dateRange.start.toLocaleDateString()} to {dateRange.end.toLocaleDateString()}
             </div>
 
-            {/* Results Table */}
-            <div style={{ flex: 1, overflow: 'auto', border: '1px solid #E5E7EB', borderRadius: '4px' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-                <thead style={{ position: 'sticky', top: 0, backgroundColor: '#F9FAFB' }}>
-                  <tr>
-                    <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #E5E7EB' }}>✓</th>
-                    <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #E5E7EB' }}>Block</th>
-                    <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #E5E7EB' }}>Lot</th>
-                    <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #E5E7EB' }}>Qual</th>
-                    <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #E5E7EB' }}>Address</th>
-                    <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #E5E7EB' }}>Class</th>
-                    <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #E5E7EB' }}>Sale Date</th>
-                    <th style={{ padding: '8px', textAlign: 'right', borderBottom: '2px solid #E5E7EB' }}>Sale Price</th>
-                    <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #E5E7EB' }}>NU</th>
-                    <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #E5E7EB' }}>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(() => {
-                    let filtered = searchResults;
-                    const existingIds = new Set(vacantSales.map(s => s.id));
-                    
-                    // Apply filters based on toggles
-                    if (searchFilters.hideNU !== false) {
-                      filtered = filtered.filter(p => !p.sales_nu || p.sales_nu === '' || p.sales_nu === '00');
-                    }
-                    if (searchFilters.dateFilter !== false) {
-                      filtered = filtered.filter(p => 
-                        p.sales_date >= dateRange.start.toISOString().split('T')[0] &&
-                        p.sales_date <= dateRange.end.toISOString().split('T')[0]
-                      );
-                    }
-                    if (searchFilters.priceFilter !== false) {
-                      filtered = filtered.filter(p => p.sales_price && p.sales_price > 0);
-                    }
-                    if (searchFilters.hideIncluded) {
-                      filtered = filtered.filter(p => !existingIds.has(p.id));
-                    }
-                    if (searchFilters.vacantOnly) {
-                      filtered = filtered.filter(p => p.property_m4_class === '1' || p.property_m4_class === '3B');
-                    }
-                    
-                    return filtered.map(prop => {
-                      const isIncluded = existingIds.has(prop.id);
-                      const canAdd = !isIncluded;
-                      let status = '';
-                      let statusColor = '#059669';
-                      
-                      if (isIncluded) {
-                        status = '✅ Already included';
-                        statusColor = '#6B7280';
-                      } else if (!prop.sales_price || prop.sales_price === 0) {
-                        status = '⚠️ No sale price';
-                        statusColor = '#F59E0B';
-                      } else if (prop.sales_date < dateRange.start.toISOString().split('T')[0]) {
-                        status = '⚠️ Sale before date range';
-                        statusColor = '#F59E0B';
-                      } else if (prop.sales_nu && prop.sales_nu !== '' && prop.sales_nu !== '00') {
-                        status = `⚠️ NU: ${prop.sales_nu}`;
-                        statusColor = '#F59E0B';
-                      } else if (prop.property_m4_class === '2') {
-                        status = '➕ Class 2 - Check if teardown';
-                        statusColor = '#3B82F6';
-                      } else {
-                        status = '➕ Available to add';
-                        statusColor = '#059669';
-                      }
-                      
-                      return (
-                        <tr key={prop.id} style={{ 
-                          borderBottom: '1px solid #E5E7EB',
-                          backgroundColor: selectedToAdd.has(prop.id) ? '#EFF6FF' : 
-                                         isIncluded ? '#F9FAFB' : 'white'
-                        }}>
-                          <td style={{ padding: '8px' }}>
-                            <input 
-                              type="checkbox"
-                              checked={selectedToAdd.has(prop.id)}
-                              disabled={isIncluded}
-                              onChange={(e) => {
-                                const newSelected = new Set(selectedToAdd);
-                                if (e.target.checked) {
-                                  newSelected.add(prop.id);
-                                } else {
-                                  newSelected.delete(prop.id);
-                                }
-                                setSelectedToAdd(newSelected);
-                              }}
-                              style={{ cursor: isIncluded ? 'not-allowed' : 'pointer' }}
-                            />
-                          </td>
-                          <td style={{ padding: '8px' }}>{prop.property_block}</td>
-                          <td style={{ padding: '8px' }}>{prop.property_lot}</td>
-                          <td style={{ padding: '8px' }}>{prop.property_qualifier || ''}</td>
-                          <td style={{ padding: '8px', fontSize: '12px' }}>{prop.property_location || '-'}</td>
-                          <td style={{ padding: '8px' }}>{prop.property_m4_class || '-'}</td>
-                          <td style={{ padding: '8px' }}>{prop.sales_date || '-'}</td>
-                          <td style={{ padding: '8px', textAlign: 'right' }}>
-                            {prop.sales_price ? `$${prop.sales_price.toLocaleString()}` : '-'}
-                          </td>
-                          <td style={{ padding: '8px' }}>{prop.sales_nu || ''}</td>
-                          <td style={{ padding: '8px', color: statusColor, fontSize: '12px' }}>
-                            {status}
-                          </td>
-                        </tr>
-                      );
-                    });
-                  })()}
-                </tbody>
-              </table>
-              
-              {searchResults.length === 0 && (
-                <div style={{ padding: '40px', textAlign: 'center', color: '#6B7280' }}>
-                  {searchFilters.block || searchFilters.lot ? 
-                    'No properties found. Try adjusting your search or filters.' : 
-                    'Enter block and/or lot to search'}
-                </div>
-              )}
-            </div>
-
-            {/* Footer */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '15px' }}>
-              <div style={{ fontSize: '12px', color: '#6B7280' }}>
-                {selectedToAdd.size > 0 && `${selectedToAdd.size} properties selected`}
-              </div>
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <button 
-                  onClick={() => {
-                    setShowAddModal(false);
-                    setSearchResults([]);
-                    setSelectedToAdd(new Set());
-                    setSearchFilters({ class: '', block: '', lot: '' });
-                  }}
-                  style={{
-                    padding: '8px 16px',
-                    border: '1px solid #E5E7EB',
-                    borderRadius: '4px',
-                    background: 'white',
+            {searchResults.length > 0 ? (
+              <div style={{ maxHeight: '400px', overflow: 'auto', border: '1px solid #E5E7EB', borderRadius: '4px' }}>
+                {searchResults.map(prop => (
+                  <div key={prop.id} style={{ 
+                    padding: '10px', 
+                    borderBottom: '1px solid #E5E7EB',
+                    backgroundColor: selectedToAdd.has(prop.id) ? '#EFF6FF' : 'white',
                     cursor: 'pointer'
                   }}
-                >
-                  Cancel
-                </button>
-                <button 
-                  onClick={addSelectedProperties}
-                  disabled={selectedToAdd.size === 0}
-                  style={{
-                    padding: '8px 16px',
-                    backgroundColor: selectedToAdd.size > 0 ? '#3B82F6' : '#E5E7EB',
-                    color: 'white',
-                    borderRadius: '4px',
-                    border: 'none',
-                    cursor: selectedToAdd.size > 0 ? 'pointer' : 'not-allowed'
-                  }}
-                >
-                  Add {selectedToAdd.size} Selected Properties
-                </button>
+                  onClick={() => {
+                    const newSelected = new Set(selectedToAdd);
+                    if (newSelected.has(prop.id)) {
+                      newSelected.delete(prop.id);
+                    } else {
+                      newSelected.add(prop.id);
+                    }
+                    setSelectedToAdd(newSelected);
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <div>
+                        <div>Block {prop.property_block} Lot {prop.property_lot}</div>
+                        <div style={{ fontSize: '12px', color: '#6B7280' }}>{prop.property_location}</div>
+                        <div style={{ fontSize: '12px' }}>
+                          Class: {prop.property_m4_class} | Sale: ${prop.sales_price?.toLocaleString()}
+                        </div>
+                      </div>
+                      <div>
+                        {selectedToAdd.has(prop.id) && <Check size={20} style={{ color: '#10B981' }} />}
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
+            ) : (
+              <div style={{ padding: '20px', textAlign: 'center', color: '#6B7280' }}>
+                {searchFilters.class || searchFilters.block || searchFilters.lot ? 
+                  'No properties found matching criteria' : 
+                  'Enter search criteria above'}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '15px' }}>
+              <button 
+                onClick={() => {
+                  setShowAddModal(false);
+                  setSearchResults([]);
+                  setSelectedToAdd(new Set());
+                }}
+                style={{
+                  padding: '8px 16px',
+                  border: '1px solid #E5E7EB',
+                  borderRadius: '4px',
+                  background: 'white',
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={addSelectedProperties}
+                disabled={selectedToAdd.size === 0}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: selectedToAdd.size > 0 ? '#3B82F6' : '#E5E7EB',
+                  color: 'white',
+                  borderRadius: '4px',
+                  border: 'none',
+                  cursor: selectedToAdd.size > 0 ? 'pointer' : 'not-allowed'
+                }}
+              >
+                Add {selectedToAdd.size} Selected
+              </button>
             </div>
           </div>
         </div>
       )}
-    </div>  {/* Closes main wrapper */}
+    </div>
   );
 };
 
 export default LandValuationTab;
-      
-
-              
-          
-                
-  
