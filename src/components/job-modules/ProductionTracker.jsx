@@ -1432,11 +1432,11 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         }
 
         // Business logic validation - ENHANCED for special codes
-        const isEntryCode = (infoByCategoryConfig.entry || []).includes(actualVendor === 'BRT' ? normalizedInfoBy || infoByCode : infoByCode);
-        const isRefusalCode = (infoByCategoryConfig.refusal || []).includes(actualVendor === 'BRT' ? normalizedInfoBy || infoByCode : infoByCode);
-        const isEstimationCode = (infoByCategoryConfig.estimation || []).includes(actualVendor === 'BRT' ? normalizedInfoBy || infoByCode : infoByCode);
-        const isPricedCode = (infoByCategoryConfig.priced || []).includes(actualVendor === 'BRT' ? normalizedInfoBy || infoByCode : infoByCode);
-        const isSpecialCode = (infoByCategoryConfig.special || []).includes(actualVendor === 'BRT' ? normalizedInfoBy || infoByCode : infoByCode);
+        const isEntryCode = (infoByCategoryConfig.entry || []).includes(normalizedInfoBy) || (infoByCategoryConfig.entry || []).includes(infoByCode);
+        const isRefusalCode = (infoByCategoryConfig.refusal || []).includes(normalizedInfoBy) || (infoByCategoryConfig.refusal || []).includes(infoByCode);
+        const isEstimationCode = (infoByCategoryConfig.estimation || []).includes(normalizedInfoBy) || (infoByCategoryConfig.estimation || []).includes(infoByCode);
+        const isPricedCode = (infoByCategoryConfig.priced || []).includes(normalizedInfoBy) || (infoByCategoryConfig.priced || []).includes(infoByCode);
+        const isSpecialCode = (infoByCategoryConfig.special || []).includes(normalizedInfoBy) || (infoByCategoryConfig.special || []).includes(infoByCode);
         const hasListingData = record.inspection_list_by && record.inspection_list_date;
         // NEW: List_by/List_date integrity validation
         const listByValue = record.inspection_list_by;
