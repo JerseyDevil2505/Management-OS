@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Check, X, Plus, Search, TrendingUp, AlertCircle, Calculator, Download, Trash2, RefreshCw, Filter } from 'lucide-react';
-import { supabase, interpretCodes } from '../../lib/supabaseClient';
+import { supabase, interpretCodes } from '../../../lib/supabaseClient';
 
 const LandValuationTab = ({ properties, jobData, vendorType }) => {
   // Main tab state
