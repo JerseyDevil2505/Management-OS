@@ -1755,7 +1755,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                             <p className="text-gray-600 text-sm">{change.property_location}</p>
                           </div>
                           
-                          {/* Sales Comparison */}
+{/* Sales Comparison */}
                           <div className="grid grid-cols-2 gap-4 p-3 bg-white rounded-lg border border-gray-200">
                             {/* Old Sale */}
                             <div className="text-center">
@@ -1766,11 +1766,16 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                               <div className="text-xs text-gray-500 mt-1">
                                 {change.differences.sales_date.old || 'No Date'}
                               </div>
-                              {change.differences.sales_book?.old && (
-                                <div className="text-xs text-gray-500">
-                                  Book/Page: {change.differences.sales_book.old}/{change.differences.sales_page?.old || ''}
-                                </div>
-                              )}
+                              <div className="text-xs text-gray-500">
+                                Book: {change.differences.sales_book?.old || '--'} Page: {change.differences.sales_page?.old || '--'}
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                NU: {(() => {
+                                  const nu = change.differences.sales_nu?.old;
+                                  if (!nu || nu === '' || nu === ' ' || nu === '0' || nu === '00') return '--';
+                                  return nu;
+                                })()}
+                              </div>
                             </div>
                             
                             {/* New Sale */}
@@ -1782,14 +1787,18 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                               <div className="text-xs text-gray-500 mt-1">
                                 {change.differences.sales_date.new || 'No Date'}
                               </div>
-                              {change.differences.sales_book?.new && (
-                                <div className="text-xs text-gray-500">
-                                  Book/Page: {change.differences.sales_book.new}/{change.differences.sales_page?.new || ''}
-                                </div>
-                              )}
+                              <div className="text-xs text-gray-500">
+                                Book: {change.differences.sales_book?.new || '--'} Page: {change.differences.sales_page?.new || '--'}
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                NU: {(() => {
+                                  const nu = change.differences.sales_nu?.new;
+                                  if (!nu || nu === '' || nu === ' ' || nu === '0' || nu === '00') return '--';
+                                  return nu;
+                                })()}
+                              </div>
                             </div>
                           </div>
-                        </div>
                         
                         <div className="flex gap-2">
                           <button
