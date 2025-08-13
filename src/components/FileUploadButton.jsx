@@ -890,18 +890,32 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
   };
 
   const handleSalesDecision = (propertyKey, decision) => {
-    // Save current scroll position
-    const container = document.getElementById('sales-changes-container');
-    const scrollPos = container ? container.scrollTop : 0;
+    // Save current scroll position of BOTH containers
+    const salesContainer = document.getElementById('sales-changes-container');
+    const modalBody = document.querySelector('.fixed .overflow-y-auto');
     
+    const salesScrollPos = salesContainer ? salesContainer.scrollTop : 0;
+    const modalScrollPos = modalBody ? modalBody.scrollTop : 0;
+    
+    // Update the decision
     setSalesDecisions(prev => new Map(prev.set(propertyKey, decision)));
     
-    // Restore scroll position after React re-renders
-    setTimeout(() => {
-      if (container) {
-        container.scrollTop = scrollPos;
-      }
-    }, 0);
+    // Force restore scroll position with multiple attempts
+    const restoreScroll = () => {
+      if (salesContainer) salesContainer.scrollTop = salesScrollPos;
+      if (modalBody) modalBody.scrollTop = modalScrollPos;
+    };
+    
+    // Try immediately
+    restoreScroll();
+    
+    // Try after React renders
+    requestAnimationFrame(restoreScroll);
+    
+    // Try after a short delay
+    setTimeout(restoreScroll, 10);
+    setTimeout(restoreScroll, 50);
+    setTimeout(restoreScroll, 100);
   };
 
   // FIXED: Compare only (don't process yet) - show modal for review
@@ -2005,6 +2019,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
               <button
                 onClick={viewAllReports}
                 className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 flex items-center space-x-2"
+                style={{color: 'white' }}
               >
                 <Eye className="w-4 h-4" />
                 <span>View All Reports</span>
@@ -2013,6 +2028,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
               <button
                 onClick={exportComparisonReport}
                 className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 flex items-center space-x-2"
+                style={{ color: 'white'}}
               >
                 <Download className="w-4 h-4" />
                 <span>Export This Report</span>
@@ -2156,6 +2172,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                 }}
                 disabled={processing}
                 className="px-6 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 disabled:opacity-50 font-medium"
+                style={{ color: 'white'}}
               >
                 {processing ? 'Processing...' : 'Acknowledge & Close'}
               </button>
