@@ -1888,7 +1888,6 @@ const generateRecommendation = () => {
                 );
               })()}
             </div>
-          </div>
 
             {/* Clean Rate Input Section */}
             <div style={{ 
