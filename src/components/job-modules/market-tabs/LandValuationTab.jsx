@@ -1992,6 +1992,7 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
                   </div>
                 </div>
               </div>
+              
               {/* Special Categories */}
               <div style={{ paddingTop: '20px', borderTop: '1px solid #E5E7EB' }}>
                 <h4 style={{ color: '#1F2937', marginBottom: '15px' }}>Special Category Rates</h4>
