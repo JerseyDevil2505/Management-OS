@@ -1318,8 +1318,8 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         
         // Special case: "PO" (Per Office) is valid for refusals
         const isPORefusal = inspector === 'PO' && 
-                           (infoByCategoryConfig.refusal || []).includes(actualVendor === 'BRT' ? normalizedInfoBy || infoByCode : infoByCode);
-                            (infoByCategoryConfig.refusal || []).includes(infoByCode));             
+                           ((infoByCategoryConfig.refusal || []).includes(normalizedInfoBy) || 
+                            (infoByCategoryConfig.refusal || []).includes(infoByCode));            
         
         // Skip inspectors with invalid initials (not in employee database)
         if (!employeeData[inspector] && !isExternalInspector && !isPORefusal) {
