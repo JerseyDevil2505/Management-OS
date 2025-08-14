@@ -3,17 +3,32 @@ import {
   Upload, Plus, Edit3, Users, FileText, Calendar, MapPin, Database, Settings, Eye,
   DollarSign, Trash2, CheckCircle, Archive, TrendingUp, Target, AlertTriangle, X, Clock 
 } from 'lucide-react';
-import { employeeService, jobService, planningJobService, utilityService, authService, propertyService, supabase } from '../lib/supabaseClient';
+import { employeeService, jobService, planningJobService, utilityService, authService, propertyService, } from '../lib/supabaseClient';
 
 // Accept jobMetrics props for live metrics integration
-const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobProcessingComplete }) => {
+const AdminJobManagement = ({ 
+  onJobSelect, 
+  jobMetrics, 
+  isLoadingMetrics, 
+  onJobProcessingComplete,
+  jobs: propsJobs,
+  planningJobs: propsPlanningJobs,
+  archivedJobs: propsArchivedJobs,
+  managers: propsManagers,
+  countyHpiData: propsCountyHpiData,
+  jobResponsibilities: propsJobResponsibilities,
+  workflowStats,
+  jobFreshness,
+  onDataUpdate,
+  onRefresh
+}) => {
   const [activeTab, setActiveTab] = useState('jobs');
   const [currentUser, setCurrentUser] = useState({ role: 'admin', canAccessBilling: true });
   
-  const [jobs, setJobs] = useState([]);
-  const [archivedJobs, setArchivedJobs] = useState([]);
-  const [planningJobs, setPlanningJobs] = useState([]);
-  const [managers, setManagers] = useState([]);
+  const [jobs, setJobs] = useState(propsJobs || []);
+  const [archivedJobs, setArchivedJobs] = useState(propsArchivedJobs || []);
+  const [planningJobs, setPlanningJobs] = useState(propsPlanningJobs || []);
+  const [managers, setManagers] = useState(propsManagers || []);
   const [showCreateJob, setShowCreateJob] = useState(false);
   const [showCreatePlanning, setShowCreatePlanning] = useState(false);
   const [showEditPlanning, setShowEditPlanning] = useState(false);
@@ -40,8 +55,19 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
   const [notifications, setNotifications] = useState([]);
   const [processingResults, setProcessingResults] = useState(null);
 
-  // County HPI state
-  const [countyHpiData, setCountyHpiData] = useState({});
+  // County HPI stateconst [countyHpiData, setCountyHpiData] = useState(() => {
+    // Convert array to object grouped by county
+    const hpiByCounty = {};
+    if (propsCountyHpiData) {
+      propsCountyHpiData.forEach(record => {
+        if (!hpiByCounty[record.county_name]) {
+          hpiByCounty[record.county_name] = [];
+        }
+        hpiByCounty[record.county_name].push(record);
+      });
+    }
+    return hpiByCounty;
+  });
   const [showHpiImport, setShowHpiImport] = useState(null);
   const [hpiFile, setHpiFile] = useState(null);
   const [importingHpi, setImportingHpi] = useState(false);
@@ -85,16 +111,16 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
 
   const [dbConnected, setDbConnected] = useState(false);
   const [dbStats, setDbStats] = useState({ 
-    employees: 0, 
-    jobs: 0, 
-    properties: 0,
+    employees: propsManagers?.length || 0, 
+    jobs: propsJobs?.length || 0, 
+    properties: propsJobs?.reduce((sum, job) => sum + (job.totalProperties || 0), 0) || 0,
     propertiesBreakdown: {
-      total: 0,
-      residential: 0,
-      commercial: 0,
+      total: propsJobs?.reduce((sum, job) => sum + (job.totalProperties || 0), 0) || 0,
+      residential: propsJobs?.reduce((sum, job) => sum + (job.totalresidential || 0), 0) || 0,
+      commercial: propsJobs?.reduce((sum, job) => sum + (job.totalcommercial || 0), 0) || 0,
       other: 0
     }
-  });
+  });;
 
   // Use refs AFTER all useState hooks
   const isMountedRef = useRef(true);
@@ -277,34 +303,6 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
       label: "Properties Inspected (Assigned Scope)",
       isAssigned: true
     };
-  };
-
-  // Load HPI data from database on component mount
-  const loadCountyHpiData = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('county_hpi_data')
-        .select('*')
-        .order('county_name, observation_year');
-      
-      if (error) {
-        console.error('Error loading HPI data:', error);
-        return;
-      }
-      
-      // Group HPI data by county
-      const hpiByCounty = {};
-      data.forEach(record => {
-        if (!hpiByCounty[record.county_name]) {
-          hpiByCounty[record.county_name] = [];
-        }
-        hpiByCounty[record.county_name].push(record);
-      });
-      
-      setCountyHpiData(hpiByCounty);
-    } catch (error) {
-      console.error('Failed to load HPI data:', error);
-    }
   };
 
   // Load freshness data for all jobs
@@ -650,12 +648,23 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
     }
   };
 
-  // Refresh jobs with dynamically calculated assigned property counts
-  const refreshJobsWithAssignedCounts = async () => {
-    if (!isMountedRef.current) return;
-    
+// Refresh both jobs and freshness data
+  const refreshAllJobData = async () => {
     try {
-      const updatedJobs = await jobService.getAll();
+      // Call parent's refresh
+      if (onRefresh) {
+        await onRefresh();
+      }
+      
+      // Then refresh the freshness data with the updated jobs
+      if (jobs.length > 0) {
+        await loadJobFreshness(jobs);
+      }
+    } catch (error) {
+      console.error('Error refreshing job data:', error);
+    }
+  };
+
     // NEW - Match the initializeData logic
       const activeJobs = updatedJobs.filter(job => job.status === 'active');
       const archived = updatedJobs.filter(job => job.status === 'archived' || job.status === 'draft');
@@ -815,100 +824,45 @@ const AdminJobManagement = ({ onJobSelect, jobMetrics, isLoadingMetrics, onJobPr
     }
   };
 
-// Load real data from database with assigned property counts
-useEffect(() => {
-  const initializeData = async () => {
-    if (!isMountedRef.current) return;
+// Update state when props change
+  useEffect(() => {
+    setJobs(propsJobs || []);
+    setArchivedJobs(propsArchivedJobs || []);
+    setPlanningJobs(propsPlanningJobs || []);
+    setManagers(propsManagers || []);
     
-    try {
-      setLoading(true);
-      
-      // PARALLEL LOADING - Load everything at once!
-      const [
-        connectionTest,
-        jobsData,
-        planningData,
-        managersData,
-        statsData,
-        userData
-      ] = await Promise.all([
-        utilityService.testConnection(),
-        jobService.getAll(),
-        planningJobService.getAll(),
-        employeeService.getManagers(),
-        utilityService.getStats(),
-        authService.getCurrentUser()
-      ]);
-      
-      setDbConnected(connectionTest.success);
-      
-      if (connectionTest.success) {
-        const activeJobs = jobsData.filter(job => job.status === 'active');
-        const archived = jobsData.filter(job => job.status === 'archived' || job.status === 'draft');
-
-        
-        // Set jobs immediately without waiting for counts
-        const jobsWithPlaceholders = activeJobs.map(job => ({
-          ...job,
-          status: job.status === 'active' ? 'Active' : (job.status || 'Active'),
-          county: capitalizeCounty(job.county),
-          percentBilled: job.percent_billed || 0.00,
-          assignedPropertyCount: job.has_property_assignments ? 0 : 0 // Temporary placeholder
-        }));
-        
-        const processedArchivedJobs = archived.map(job => ({
-          ...job,
-          county: capitalizeCounty(job.county)
-        }));
-        
-        if (!isMountedRef.current) return;
-        
-        setJobs(jobsWithPlaceholders);
-        setArchivedJobs(processedArchivedJobs);
-        setPlanningJobs(planningData);
-        setManagers(managersData);
-        setDbStats(statsData);
-        setCurrentUser(userData || { role: 'admin', canAccessBilling: true });
-        
-        // Load HPI data and freshness data AFTER showing the UI
-        setTimeout(async () => {
-          await loadCountyHpiData();
-          await loadJobFreshness(jobsWithPlaceholders);
-          
-          // Now load the assigned property counts
-          const jobsWithAssignedCounts = await Promise.all(
-            jobsWithPlaceholders.map(async (job) => {
-              if (job.has_property_assignments) {
-                // Get the count for this job
-                const { count, error } = await supabase
-                  .from('property_records')
-                  .select('id', { count: 'exact' })
-                  .eq('job_id', job.id)
-                  .eq('is_assigned_property', true);
-
-                if (!error) {
-                  job.assignedPropertyCount = count;
-                }
-              }
-              return job;
-            })
-          );
-          
-          if (isMountedRef.current) {
-            setJobs(jobsWithAssignedCounts);
-          }
-        }, 100); // Small delay to let UI render first
-      }
-    } catch (error) {
-      console.error('Data initialization error:', error);
-      setDbConnected(false);
-    } finally {
-      setLoading(false);
+    // Convert county HPI data array to grouped object
+    const hpiByCounty = {};
+    if (propsCountyHpiData) {
+      propsCountyHpiData.forEach(record => {
+        if (!hpiByCounty[record.county_name]) {
+          hpiByCounty[record.county_name] = [];
+        }
+        hpiByCounty[record.county_name].push(record);
+      });
     }
-  };
-
-  initializeData();
-}, []);
+    setCountyHpiData(hpiByCounty);
+    
+    // Load job freshness data
+    if (propsJobs && propsJobs.length > 0) {
+      loadJobFreshness(propsJobs);
+    }
+    
+    // Update database stats
+    setDbStats({
+      employees: propsManagers?.length || 0,
+      jobs: propsJobs?.length || 0,
+      properties: propsJobs?.reduce((sum, job) => sum + (job.totalProperties || 0), 0) || 0,
+      propertiesBreakdown: {
+        total: propsJobs?.reduce((sum, job) => sum + (job.totalProperties || 0), 0) || 0,
+        residential: propsJobs?.reduce((sum, job) => sum + (job.totalresidential || 0), 0) || 0,
+        commercial: propsJobs?.reduce((sum, job) => sum + (job.totalcommercial || 0), 0) || 0,
+        other: 0
+      }
+    });   
+    
+    setLoading(false);
+  }, [propsJobs, propsArchivedJobs, propsPlanningJobs, propsManagers, propsCountyHpiData]);
 
   // File analysis
   const analyzeFile = async (file, type) => {
