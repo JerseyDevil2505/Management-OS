@@ -304,49 +304,6 @@ const AdminJobManagement = ({
     };
   };
 
-  // Load freshness data for all jobs
-  const loadJobFreshness = async (jobList) => {
-    const freshnessData = {};
-    
-    for (const job of jobList) {
-      try {
-        // Get last file upload time from property_records
-        const { data: fileData, error: fileError } = await supabase
-          .from('property_records')
-          .select('updated_at')
-          .eq('job_id', job.id)
-          .order('updated_at', { ascending: false })
-          .limit(1);
-        
-        // Get last production run time from inspection_data
-        const { data: prodData, error: prodError } = await supabase
-          .from('inspection_data')
-          .select('upload_date')
-          .eq('job_id', job.id)
-          .order('upload_date', { ascending: false })
-          .limit(1);
-        
-        freshnessData[job.id] = {
-          lastFileUpload: fileData?.[0]?.updated_at || null,
-          lastProductionRun: prodData?.[0]?.upload_date || null,
-          needsUpdate: needsProductionUpdate(
-            prodData?.[0]?.upload_date,
-            fileData?.[0]?.updated_at,
-            job.percentBilled || 0
-          )
-        };
-      } catch (error) {
-        console.error(`Error loading freshness for job ${job.id}:`, error);
-        freshnessData[job.id] = {
-          lastFileUpload: null,
-          lastProductionRun: null,
-          needsUpdate: false
-        };
-      }
-    }
-    
-    setJobFreshness(freshnessData);
-  };
   // Refresh both jobs and freshness data
   const refreshAllJobData = async () => {
     try {
@@ -841,11 +798,6 @@ const AdminJobManagement = ({
       });
     }
     setCountyHpiData(hpiByCounty);
-    
-    // Load job freshness data
-    if (propsJobs && propsJobs.length > 0) {
-      loadJobFreshness(propsJobs);
-    }
     
     // Update database stats
     setDbStats({
