@@ -42,8 +42,9 @@ const App = () => {
 // REPLACE WITH:
   const [activeView, setActiveView] = useState(() => {
     // Read from URL on initial load
-    const path = window.location.pathname.slice(1) || 'employees';
+    const path = window.location.pathname.slice(1) || 'admin-jobs';
     const validViews = ['admin-jobs', 'billing', 'employees', 'payroll'];
+    return validViews.includes(path) ? path : 'admin-jobs';
   });
 
   // Update URL when view changes
@@ -517,7 +518,8 @@ const App = () => {
             case 'employees':
               updates.employees = result.data || [];
               updates.managers = (result.data || []).filter(e => 
-                e.role === 'Manager' || e.can_be_lead
+                e.inspector_type === 'management' || 
+                e.inspector_type === 'Management'
               );
               break;
           
