@@ -465,7 +465,16 @@ const loadInitialData = async () => {
               totalHoursSum += hours;
               console.log(`  Added ${hours} to total, new sum: ${totalHoursSum}`);
               
-              const isPartTime = comments && comments.toLowerCase().includes('part');
+              // Look up the employee in our employees data to check their actual status
+              const employee = employees.find(emp => {
+                const empFullName = `${emp.last_name}, ${emp.first_name}`.toLowerCase();
+                const worksheetName = employeeName.toLowerCase();
+                return worksheetName.includes(emp.last_name.toLowerCase()) && 
+                       worksheetName.includes(emp.first_name.toLowerCase());
+              });
+              
+              // Use employment_status from database
+              const isPartTime = employee && employee.employment_status === 'part_time';
               
               // Simple check: if not part-time and hours don't match expected, flag it
               if (!isPartTime && hours !== payrollPeriod.expectedHours) {
