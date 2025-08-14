@@ -162,16 +162,14 @@ const PayrollManagement = ({
       // Use jobs from props instead of fetching
       const activeJobs = jobs; // jobs prop is already filtered for active
       
-      if (jobsError) throw jobsError;
-      
-      if (!activeJobs || activeJobs.length === 0) {
+      if (!jobs || jobs.length === 0) {
         setDataRecency([]);
         return;
       }
       
       // Get latest upload date for each job
       const recencyData = await Promise.all(
-        activeJobs.map(async (job) => {
+        jobs.map(async (job) => {
           const { data: latestUpload, error: uploadError } = await supabase
             .from('inspection_data')
             .select('upload_date')
