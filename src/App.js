@@ -371,7 +371,7 @@ const App = () => {
               job_assignments(
                 employee_id,
                 role,
-                employee:employees(id, first_name, last_name)
+                employees!employee_id(id, first_name, last_name)
               )
             `)
             .order('created_at', { ascending: false })
@@ -400,10 +400,10 @@ const App = () => {
             .from('employees')
             .select(`
               *,
-              job_assignments(
+              job_assignments!employee_id(
                 job_id,
                 role,
-                job:jobs(id, job_name, status)
+                jobs!job_id(id, job_name, status)
               )
             `)
             .order('last_name')
