@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from './lib/supabaseClient';
-import { openDB } from 'idb'; // npm install idb
+import { openDB } from 'idb';
 import AdminJobManagement from './components/AdminJobManagement';
 import EmployeeManagement from './components/EmployeeManagement';
 import BillingManagement from './components/BillingManagement';
@@ -35,6 +35,37 @@ const initDB = () => {
 };
 
 const App = () => {
+  // ==========================================
+  // URL-BASED VIEW STATE (FIXES F5 ISSUE!)
+  // ==========================================
+  const [activeView, setActiveView] = useState(() => {
+    // Read from URL on initial load
+    const path = window.location.pathname.slice(1) || 'admin-jobs';
+    const validViews = ['dashboard', 'admin-jobs', 'billing', 'employees', 'payroll'];
+    return validViews.includes(path) ? path : 'admin-jobs';
+  });
+
+  // Update URL when view changes
+  const handleViewChange = useCallback((view) => {
+    setActiveView(view);
+    // Update URL without page reload
+    window.history.pushState({}, '', `/${view}`);
+  }, []);
+
+  // Listen for browser back/forward buttons
+  useEffect(() => {
+    const handlePopState = () => {
+      const path = window.location.pathname.slice(1) || 'admin-jobs';
+      const validViews = ['dashboard', 'admin-jobs', 'billing', 'employees', 'payroll'];
+      if (validViews.includes(path)) {
+        setActiveView(path);
+      }
+    };
+    
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
   // ==========================================
   // PERFORMANCE MONITORING
   // ==========================================
@@ -965,8 +996,6 @@ const App = () => {
   // ==========================================
   // RENDER UI
   // ==========================================
-  const [activeView, setActiveView] = useState('dashboard');
-
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Cache Status Bar */}
@@ -990,7 +1019,7 @@ const App = () => {
           <div className="flex justify-between h-16">
             <div className="flex space-x-8">
               <button
-                onClick={() => setActiveView('dashboard')}
+                onClick={() => handleViewChange('dashboard')}
                 className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
                   activeView === 'dashboard' 
                     ? 'border-blue-500 text-gray-900' 
@@ -1000,7 +1029,7 @@ const App = () => {
                 Dashboard
               </button>
               <button
-                onClick={() => setActiveView('admin-jobs')}
+                onClick={() => handleViewChange('admin-jobs')}
                 className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
                   activeView === 'admin-jobs' 
                     ? 'border-blue-500 text-gray-900' 
@@ -1010,7 +1039,7 @@ const App = () => {
                 Jobs ({masterCache.jobs.length})
               </button>
               <button
-                onClick={() => setActiveView('billing')}
+                onClick={() => handleViewChange('billing')}
                 className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
                   activeView === 'billing' 
                     ? 'border-blue-500 text-gray-900' 
@@ -1020,7 +1049,7 @@ const App = () => {
                 Billing
               </button>
               <button
-                onClick={() => setActiveView('employees')}
+                onClick={() => handleViewChange('employees')}
                 className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
                   activeView === 'employees' 
                     ? 'border-blue-500 text-gray-900' 
@@ -1030,7 +1059,7 @@ const App = () => {
                 Employees ({masterCache.employees.length})
               </button>
               <button
-                onClick={() => setActiveView('payroll')}
+                onClick={() => handleViewChange('payroll')}
                 className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
                   activeView === 'payroll' 
                     ? 'border-blue-500 text-gray-900' 
