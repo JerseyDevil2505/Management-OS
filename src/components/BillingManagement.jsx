@@ -1944,7 +1944,7 @@ const loadJobs = async () => {
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {planningJobsState
-                    .filter(job => !job.is_archived))
+                    .filter(job => !job.is_archived)
                     .sort((a, b) => {
                       // First priority: Jobs without contract amounts go to top
                       if (!a.contract_amount && b.contract_amount) return -1;
