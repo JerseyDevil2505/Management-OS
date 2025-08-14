@@ -2134,13 +2134,28 @@ const AdminJobManagement = ({
       <div className="mb-6 p-4 bg-gray-50 rounded-lg border">
         <div className="flex items-center justify-center gap-6 text-sm">
           <span className="font-medium text-blue-700">
-            📊 Total: {jobs.reduce((sum, job) => sum + (job.totalProperties || 0), 0).toLocaleString()}
+            📊 Total Properties: {jobs.reduce((sum, job) => sum + (job.totalProperties || 0), 0).toLocaleString()}
           </span>
           <span className="font-medium text-green-600">
-            🏠 Residential: {jobs.reduce((sum, job) => sum + (job.totalresidential || 0), 0).toLocaleString()}
+            🏠 Residential: {jobs.reduce((sum, job) => {
+              if (job.workflowStats?.classBreakdown) {
+                const residential = (job.workflowStats.classBreakdown['1']?.total || 0) + 
+                                  (job.workflowStats.classBreakdown['2']?.total || 0);
+                return sum + residential;
+              }
+              return sum + (job.totalresidential || 0);
+            }, 0).toLocaleString()}
           </span>
           <span className="font-medium text-purple-600">
-            🏢 Commercial: {jobs.reduce((sum, job) => sum + (job.totalcommercial || 0), 0).toLocaleString()}
+            🏢 Commercial: {jobs.reduce((sum, job) => {
+              if (job.workflowStats?.classBreakdown) {
+                const commercial = (job.workflowStats.classBreakdown['4A']?.total || 0) + 
+                                 (job.workflowStats.classBreakdown['4B']?.total || 0) + 
+                                 (job.workflowStats.classBreakdown['4C']?.total || 0);
+                return sum + commercial;
+              }
+              return sum + (job.totalcommercial || 0);
+            }, 0).toLocaleString()}
           </span>
         </div>
       </div>
