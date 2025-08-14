@@ -2,7 +2,17 @@
 import { supabase } from '../lib/supabaseClient';
 import * as XLSX from 'xlsx';
 
-const BillingManagement = () => {
+const BillingManagement = ({ 
+  activeJobs = [], 
+  legacyJobs = [], 
+  planningJobs = [], 
+  expenses = [], 
+  receivables = [], 
+  distributions = [], 
+  billingMetrics = null,
+  onDataUpdate,
+  onRefresh 
+}) => {
   const [activeTab, setActiveTab] = useState('active');
   const [jobs, setJobs] = useState([]);
   const [legacyJobs, setLegacyJobs] = useState([]);
@@ -210,11 +220,13 @@ Thank you for your immediate attention to this matter.`;
   });
 
   useEffect(() => {
-    // Load job counts on initial mount
+    // Set initial data from props
     loadJobCounts();
-    calculateGlobalMetrics();
-  }, []);
-
+    if (billingMetrics) {
+      setGlobalMetrics(billingMetrics);
+    }
+  }, [activeJobs, legacyJobs, planningJobs, billingMetrics]);
+  
   useEffect(() => {
     // Load specific data when tab changes
     loadJobs();
@@ -236,270 +248,27 @@ Thank you for your immediate attention to this matter.`;
   }, [globalMetrics, activeTab, reserveSettings]);
 
   const calculateGlobalMetrics = async () => {
-    try {
-      // Get all active jobs with contracts
-      const { data: activeJobs } = await supabase
-        .from('jobs')
-        .select(`
-          job_contracts(contract_amount, retainer_amount),
-          billing_events(amount_billed, retainer_amount, status, percentage_billed)
-        `)
-        .eq('job_type', 'standard');
-
-      // Get planning jobs with contract amounts
-      const { data: planningJobsData } = await supabase
-        .from('planning_jobs')
-        .select('contract_amount')
-        .not('contract_amount', 'is', null)
-        .eq('is_archived', false);
-
-      // Calculate planned contracts total for projection formula
-      const plannedContractsTotal = planningJobsData?.reduce((sum, job) => sum + (job.contract_amount || 0), 0) || 0;
-
-      // Get current year expenses
-      const currentYear = new Date().getFullYear();
-      const currentMonth = new Date().getMonth() + 1;
-      const { data: expenseData } = await supabase
-        .from('expenses')
-        .select('*')
-        .eq('year', currentYear);
-
-      let totalSigned = 0;
-      let totalPaid = 0;
-      let totalOpen = 0;
-      let totalRemaining = 0;
-      let totalRemainingExcludingRetainer = 0;
-
-      // Calculate from active jobs
-      if (activeJobs) {
-        activeJobs.forEach(job => {
-          if (job.job_contracts?.[0]) {
-            const contract = job.job_contracts[0];
-            const contractAmount = contract.contract_amount;
-            const totalRetainerAmount = contract.retainer_amount;
-            
-            totalSigned += contractAmount;
-
-            let jobPaid = 0;
-            let jobOpen = 0;  // ADD THIS LINE
-            let totalPercentageBilled = 0;
-
-            if (job.billing_events) {
-              job.billing_events.forEach(event => {
-                if (event.status === 'P') {
-                  jobPaid += event.amount_billed;                                 
-                } else if (event.status === 'O') {   // Check for multiple possible open statuses
-                  jobOpen += event.amount_billed;
-                }
-                totalPercentageBilled += event.percentage_billed;
-              });
-            }
-
-            totalPaid += jobPaid;
-            totalOpen += jobOpen;  // ADD THIS LINE
-            const jobRemaining = contractAmount - jobPaid;
-            totalRemaining += jobRemaining;
-            
-            // Calculate remaining retainer to be collected
-            const remainingPercentage = 1 - totalPercentageBilled;
-            const remainingRetainer = totalRetainerAmount * remainingPercentage;
-            
-            // Remaining excluding future retainer collections
-            totalRemainingExcludingRetainer += (jobRemaining - remainingRetainer);
-          }
-        });
-      }
-       // Get legacy jobs with open invoices
-      const { data: legacyJobs } = await supabase
-        .from('jobs')
-        .select(`
-          job_contracts(contract_amount),
-          billing_events(amount_billed, status, billing_date)
-        `)
-        .eq('job_type', 'legacy_billing');
-  
-      if (legacyJobs) {
-        const currentYear = new Date().getFullYear();
-        legacyJobs.forEach(job => {
-          if (job.billing_events) {
-            job.billing_events.forEach(event => {
-              const billingYear = new Date(event.billing_date).getFullYear();
-              
-              if (event.status === 'O') {
-                totalOpen += event.amount_billed;
-              } else if (event.status === 'P' && billingYear === currentYear) {
-                // Only count paid invoices that were billed in the current year
-                totalPaid += event.amount_billed;
-              }
-            });
-          }
-          
-          // Add remaining contract balance to totalRemaining
-          if (job.job_contracts?.[0]) {
-            const contract = job.job_contracts[0];
-            const totalBilled = job.billing_events?.reduce((sum, event) => 
-              sum + parseFloat(event.amount_billed || 0), 0) || 0;
-            const jobRemaining = contract.contract_amount - totalBilled;
-            
-            if (jobRemaining > 0) {
-              totalRemaining += jobRemaining;
-              // For legacy jobs, assume standard 10% retainer on the remaining amount
-              totalRemainingExcludingRetainer += jobRemaining * 0.9;
-            }
-          }
-        });
-      }
-      // Get office receivables
-      const { data: receivablesData } = await supabase
-        .from('office_receivables')
-        .select('amount, status');
-
-      if (receivablesData) {
-        receivablesData.forEach(receivable => {
-          if (receivable.status === 'P') {
-            totalPaid += parseFloat(receivable.amount);
-          } else if (receivable.status === 'O') {
-            totalOpen += parseFloat(receivable.amount);
-          }
-        });
-      }
-      // Add planning jobs to total signed
-      if (planningJobsData) {
-        planningJobsData.forEach(job => {
-          if (job.contract_amount) {
-            totalSigned += job.contract_amount;
-            // Planning jobs have no payments yet, so full amount is remaining
-            totalRemaining += job.contract_amount;
-            // Assuming standard 10% retainer for planning jobs
-            totalRemainingExcludingRetainer += (job.contract_amount * 0.9);
-          }
-        });
-      }
-
-      // Calculate expense metrics
-      let currentExpenses = 0;
-      let monthlyExpenses = new Array(12).fill(0);
-      
-      if (expenseData) {
-        expenseData.forEach(expense => {
-          monthlyExpenses[expense.month - 1] += parseFloat(expense.amount);
-          if (expense.month <= currentMonth) {
-            currentExpenses += parseFloat(expense.amount);
-          }
-        });
-      }
-
-      // Calculate working days so far this year
-      let workingDaysSoFar = 0;
-      for (let month = 1; month <= currentMonth; month++) {
-        workingDaysSoFar += workingDays[month] || 21;
-      }
-
-      // Calculate total working days in year
-      const totalWorkingDays = Object.values(workingDays).reduce((sum, days) => sum + days, 0);
-
-      // Calculate daily fringe (expense rate) and projections
-      const revenue = totalPaid; // Use total paid invoices as revenue
-      const dailyFringe = workingDaysSoFar > 0 ? currentExpenses / workingDaysSoFar : 0;
-      
-      // Calculate average of monthly daily rates for better projection
-      let monthlyDailyRates = [];
-      let totalDailyRates = 0;
-      let monthsWithData = 0;
-      
-      for (let month = 1; month <= currentMonth; month++) {
-        const monthExpense = monthlyExpenses[month - 1];
-        if (monthExpense > 0) {
-          const dailyRate = monthExpense / workingDays[month];
-          monthlyDailyRates.push(dailyRate);
-          totalDailyRates += dailyRate;
-          monthsWithData++;
-        }
-      }
-      
-      // Use average of monthly daily rates for projection
-      const avgMonthlyDailyRate = monthsWithData > 0 ? totalDailyRates / monthsWithData : 0;
-      const projectedExpenses = avgMonthlyDailyRate * totalWorkingDays;  // This line stays the same
-      
-      // Keep YTD rate for display
-      const dailyExpenseRate = workingDaysSoFar > 0 ? currentExpenses / workingDaysSoFar : 0;
-      
-      // Calculate profit/loss
-      const projectedRevenue = dailyFringe * totalWorkingDays;
-      const profitLoss = projectedRevenue - projectedExpenses;
-      const profitLossPercent = projectedRevenue > 0 ? (profitLoss / projectedRevenue) * 100 : 0;
-
-      // Calculate projected cash using the new formula
-      const projectedCash = (totalPaid + totalOpen + totalRemaining) - (plannedContractsTotal * 0.6);
-      const projectedProfitLoss = projectedCash - projectedExpenses;
-      const projectedProfitLossPercent = projectedCash > 0 ? (projectedProfitLoss / projectedCash) * 100 : 0;
-
-      setGlobalMetrics({
-        totalSigned,
-        totalPaid,
-        totalOpen,
-        totalRemaining,
-        totalRemainingExcludingRetainer,
-        dailyFringe: avgMonthlyDailyRate || dailyExpenseRate,
-        currentExpenses,
-        projectedExpenses,
-        profitLoss,
-        profitLossPercent,
-        projectedCash,           
-        projectedProfitLoss,     
-        projectedProfitLossPercent 
-      });
-    } catch (error) {
-      console.error('Error calculating global metrics:', error);
+    // Use the pre-calculated metrics from App.js
+    if (billingMetrics) {
+      setGlobalMetrics(billingMetrics);
     }
   };
 
   const loadExpenses = async () => {
-    try {
-      const currentYear = new Date().getFullYear();
-      const { data: expenseData, error } = await supabase
-        .from('expenses')
-        .select('*')
-        .eq('year', currentYear)
-        .order('category')
-        .order('month');
-
-      if (error) throw error;
-      setExpenses(expenseData || []);
-    } catch (error) {
-      console.error('Error loading expenses:', error);
-    }
+    // Just use the expenses from props
+    setExpenses(expenses);
   };
 
   const loadOfficeReceivables = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('office_receivables')
-        .select('*')
-        .order('created_at', { ascending: false });
+    // Just use the receivables from props
+    setOfficeReceivables(receivables);
+  }; 
 
-      if (error) throw error;
-      setOfficeReceivables(data || []);
-    } catch (error) {
-      console.error('Error loading office receivables:', error);
-    }
-  };  
-
-    const loadDistributions = async () => {
-    try {
-      const currentYear = new Date().getFullYear();
-      const { data, error } = await supabase
-        .from('shareholder_distributions')
-        .select('*')
-        .eq('year', currentYear)
-        .order('distribution_date', { ascending: false });
-
-      if (error) throw error;
-      setDistributions(data || [])
-    } catch (error) {
-      console.error('Error loading distributions:', error);
-    }
+  const loadDistributions = async () => {
+    // Just use the distributions from props
+    setDistributions(distributions);
   };
+  
   const calculateDistributionMetrics = async () => {
     try {
       const currentDate = new Date();
@@ -835,82 +604,30 @@ Thank you for your immediate attention to this matter.`;
   };
   
   const loadJobCounts = async () => {
-    try {
-      // Load active jobs count
-      const { data: activeJobsData, error: activeError } = await supabase
-        .from('jobs')
-        .select('id', { count: 'exact' })
-        .eq('job_type', 'standard');
-
-      // Load planned jobs count
-      const { data: planningData, error: planningError } = await supabase
-        .from('planning_jobs')
-        .select('id', { count: 'exact' })
-        .or('is_archived.eq.false,is_archived.is.null');
-
-      // Load legacy jobs count
-      const { data: legacyData, error: legacyError } = await supabase
-        .from('jobs')
-        .select('id', { count: 'exact' })
-        .eq('job_type', 'legacy_billing');
-
-      setJobCounts({
-        active: activeJobsData?.length || 0,
-        planned: planningData?.length || 0,
-        legacy: legacyData?.length || 0
-      });
-    } catch (error) {
-      console.error('Error loading job counts:', error);
-    }
+    // Use counts from props
+    setJobCounts({
+      active: activeJobs.length,
+      planned: planningJobs.length,
+      legacy: legacyJobs.length
+    });
   };
 
-  const loadJobs = async () => {
+const loadJobs = async () => {
     try {
       setLoading(true);
       
       if (activeTab === 'active') {
-        // Load ALL active jobs (no filter on job names)
-        const { data: jobsData, error: jobsError } = await supabase
-          .from('jobs')
-          .select(`
-            *,
-            job_contracts(*),
-            billing_events(*),
-            workflow_stats
-          `)
-          .eq('job_type', 'standard')
-          .order('created_at', { ascending: false });
-
-        if (jobsError) throw jobsError;
-        setJobs(jobsData || []);
-        // Update count after loading
-        setJobCounts(prev => ({ ...prev, active: jobsData?.length || 0 }));
+        // Use cached activeJobs from props
+        setJobs(activeJobs);
+        setJobCounts(prev => ({ ...prev, active: activeJobs.length }));
       } else if (activeTab === 'planned') {
-        // Load planning jobs
-        const { data: planningData, error: planningError } = await supabase
-          .from('planning_jobs')
-          .select('*')
-          .or('is_archived.eq.false,is_archived.is.null');
-
-        if (planningError) throw planningError;
-        setPlanningJobs(planningData || []);
-        // Update count after loading
-        setJobCounts(prev => ({ ...prev, planned: planningData?.length || 0 }));
+        // Use cached planningJobs from props
+        setPlanningJobs(planningJobs);
+        setJobCounts(prev => ({ ...prev, planned: planningJobs.length }));
       } else if (activeTab === 'legacy') {
-        // Load legacy billing-only jobs
-        const { data: legacyData, error: legacyError } = await supabase
-          .from('jobs')
-          .select(`
-            *,
-            job_contracts(*),
-            billing_events(*)
-          `)
-          .eq('job_type', 'legacy_billing');
-
-        if (legacyError) throw legacyError;
-        setLegacyJobs(legacyData || []);
-        // Update count after loading
-        setJobCounts(prev => ({ ...prev, legacy: legacyData?.length || 0 }));
+        // Use cached legacyJobs from props
+        setLegacyJobs(legacyJobs);
+        setJobCounts(prev => ({ ...prev, legacy: legacyJobs.length }));
       }
     } catch (error) {
       console.error('Error loading jobs:', error);
@@ -1088,8 +805,7 @@ Thank you for your immediate attention to this matter.`;
         secondYearAppealsPercentage: 0.02,
         thirdYearAppealsPercentage: 0.00
       });
-      loadJobs();
-      calculateGlobalMetrics();
+      if (onRefresh) onRefresh();
     } catch (error) {
       console.error('Error setting up contract:', error);
     }
@@ -1271,13 +987,11 @@ Thank you for your immediate attention to this matter.`;
         overrideAmount: '',
         billingType: ''
       });
-      await loadJobs()
-      calculateGlobalMetrics();
+      if (onRefresh) onRefresh();
     } catch (error) {
       console.error('Error adding billing event:', error);
     }
   };
-
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -1350,8 +1064,7 @@ Thank you for your immediate attention to this matter.`;
 
       setShowEditBilling(false);
       setEditingEvent(null);
-      loadJobs();
-      calculateGlobalMetrics();
+      if (onRefresh) onRefresh();
     } catch (error) {
       console.error('Error updating billing event:', error);
       alert('Error updating billing event: ' + error.message);
@@ -1366,8 +1079,7 @@ Thank you for your immediate attention to this matter.`;
         .eq('id', planningJobId);
 
       if (error) throw error;
-      loadJobs();
-      calculateGlobalMetrics();  // ADD THIS LINE
+      if (onRefresh) onRefresh();
     } catch (error) {
       console.error('Error updating planned contract:', error);
     }
@@ -1503,8 +1215,7 @@ Thank you for your immediate attention to this matter.`;
 
       alert(`Successfully rolled over "${planningJob.job_name || planningJob.municipality}" to active jobs!`);
       setActiveTab('active');
-      loadJobs();
-      loadJobCounts(); // Refresh counts after rollover
+      if (onRefresh) onRefresh();
     } catch (error) {
       console.error('Error rolling over planning job:', error);
       alert('Error rolling over job: ' + error.message);
@@ -1554,8 +1265,7 @@ Thank you for your immediate attention to this matter.`;
       setShowEditBilling(false);      
       setShowEditBilling(false);
       setEditingEvent(null);
-      loadJobs();
-      calculateGlobalMetrics();
+      if (onRefresh) onRefresh();
     } catch (error) {
       console.error('Error deleting billing event:', error);
     }
@@ -1652,8 +1362,7 @@ Thank you for your immediate attention to this matter.`;
         thirdYearAppealsPercentage: 0.00
       });
       setActiveTab('legacy');
-      loadJobs();
-      loadJobCounts(); // Refresh counts after creating legacy job
+      if (onRefresh) onRefresh();
     } catch (error) {
       console.error('Error creating legacy job:', error);
     }
@@ -1754,8 +1463,7 @@ Thank you for your immediate attention to this matter.`;
         alert(`Successfully imported ${expenseData.length} expense entries`);
         setShowExpenseImport(false);
         setExpenseFile(null);
-        loadExpenses(); // Reload the expenses
-        calculateGlobalMetrics(); // Update metrics
+        if (onRefresh) onRefresh();
       } else {
         alert('No expense data found in the file');
       }
@@ -2392,10 +2100,8 @@ Thank you for your immediate attention to this matter.`;
                                   
                                   if (error) throw error;
                                   
-                  alert('Legacy job deleted successfully');
-                  loadJobs();
-                  loadJobCounts(); // Refresh counts after deletion
-                  calculateGlobalMetrics();    
+                                  alert('Legacy job deleted successfully');
+                                  if (onRefresh) onRefresh();   
                                 } catch (error) {
                                   console.error('Error deleting legacy job:', error);
                                   alert('Error deleting job: ' + error.message);
@@ -2797,8 +2503,7 @@ Thank you for your immediate attention to this matter.`;
                                     
                                     if (error) throw error;
                                     
-                                    loadOfficeReceivables();
-                                    calculateGlobalMetrics();
+                                    if (onRefresh) onRefresh();
                                   } catch (error) {
                                     console.error('Error deleting receivable:', error);
                                     alert('Error deleting receivable');
@@ -4056,8 +3761,7 @@ Thank you for your immediate attention to this matter.`;
                       invoiceNumber: '',
                       amount: ''
                     });
-                    loadOfficeReceivables();
-                    calculateGlobalMetrics();
+                    if (onRefresh) onRefresh();
                   } catch (error) {
                     console.error('Error saving receivable:', error);
                     alert('Error saving receivable');
@@ -4190,8 +3894,7 @@ Thank you for your immediate attention to this matter.`;
                       date: new Date().toISOString().split('T')[0],
                       notes: ''
                     });
-                    loadDistributions();
-                    calculateGlobalMetrics();
+                    if (onRefresh) onRefresh();
                   } catch (error) {
                     console.error('Error recording distribution:', error);
                     alert('Error recording distribution');
