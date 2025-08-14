@@ -502,8 +502,8 @@ const App = () => {
                 // Transform property counts
                 totalProperties: job.total_properties || 0,
                 inspectedProperties: job.inspected_properties || 0,
-                totalresidential: job.total_residential || 0,
-                totalcommercial: job.total_commercial || 0,
+                totalresidential: job.totalresidential || 0,
+                totalcommercial: job.totalcommercial || 0,
                 
                 // Billing and dates
                 percentBilled: job.percent_billed || 0,
