@@ -1317,7 +1317,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         const isExternalInspector = externalInspectors.includes(inspector);
         
         // Skip inspectors with invalid initials (not in employee database)
-        if (!employeeData[inspector] && !isExternalInspector && !isPORefusal) {
+        if (!employeeData[inspector] && !isExternalInspector &&) {
           reasonNotAdded = `Inspector ${inspector} not found in employee database`;
           missingProperties.push({
             composite_key: propertyKey,
@@ -1345,14 +1345,6 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
               name: `${inspector} (External)`,
               fullName: `${inspector} (External Inspector)`,
               inspector_type: 'external'
-            };
-          }
-          // Handle "PO" (Per Office) refusals
-          else if (inspector === 'PO' && isPORefusal) {
-            employeeInfo = {
-              name: 'Per Office',
-              fullName: 'Per Office Refusal',
-              inspector_type: 'special'
             };
           }
           inspectorStats[inspector] = {
