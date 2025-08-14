@@ -1136,17 +1136,9 @@ const App = () => {
   });
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Cache Status Bar */}
-      {cacheStatus.message && (
-        <div className={`fixed top-0 left-0 right-0 z-50 px-4 py-2 text-sm font-medium text-center transition-all ${
-          cacheStatus.isStale ? 'bg-yellow-100 text-yellow-800' :
-          cacheStatus.lastError ? 'bg-red-100 text-red-800' :
-          cacheStatus.isRefreshing ? 'bg-blue-100 text-blue-800' :
-          'bg-green-100 text-green-800'
-        }`}>
-          {cacheStatus.isRefreshing && (
-            <span className="inline-block animate-spin mr-2">🔄</span>
-          )}
+      {/* Cache Status Bar - Errors Only */}
+      {cacheStatus.lastError && (
+        <div className="fixed top-0 left-0 right-0 z-50 px-4 py-2 text-sm font-medium text-center bg-red-100 text-red-800">
           {cacheStatus.message}
         </div>
       )}
