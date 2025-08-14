@@ -456,28 +456,28 @@ const loadInitialData = async () => {
               empData.issues.push(`TOTAL formula error: Shows $${total} but should be $${calculatedTotal} (${apptOT} + ${fieldOT})`);
             }
             
-            if (typeof hours === 'number' && !isNaN(hours)) {
+            // Check for missing, undefined, or invalid hours first
+            if (hours === undefined || hours === null || hours === '') {
+              empData.issues.push(`Missing hours data`);
+            } else if (typeof hours === 'number' && hours < 0) {
+              empData.issues.push(`Negative hours (${hours}) - please check`);
+            } else if (typeof hours === 'number' && !isNaN(hours)) {
               totalHoursSum += hours;
               console.log(`  Added ${hours} to total, new sum: ${totalHoursSum}`);
               
-              const isPartTime = comments.toLowerCase().includes('part');
-              const hasPTO = timeOff.toLowerCase().includes('pto') && !timeOff.toLowerCase().includes('without pto');
-              const hasUnpaidTimeOff = timeOff.toLowerCase().includes('without pto') || 
-                                       timeOff.toLowerCase().includes('unpaid');
+              const isPartTime = comments && comments.toLowerCase().includes('part');
               
-              if (hours !== payrollPeriod.expectedHours && !isPartTime) {
-                if (hasUnpaidTimeOff) {
-                  empData.issues.push(`Has unpaid time off - ${hours} hours instead of ${payrollPeriod.expectedHours}`);
-                } else if (!hasPTO && Math.abs(hours - payrollPeriod.expectedHours) > 8) {
-                  empData.issues.push(`Expected ${payrollPeriod.expectedHours} hours, showing ${hours}`);
-                } else if (hasPTO && hours > payrollPeriod.expectedHours) {
-                  empData.issues.push(`Has PTO but worked ${hours} hours (overtime?)`);
-                }
+              // Simple check: if not part-time and hours don't match expected, flag it
+              if (!isPartTime && hours !== payrollPeriod.expectedHours) {
+                empData.issues.push(`Shows ${hours} hours instead of expected ${payrollPeriod.expectedHours}`);
               }
               
-              if (hours === 0 && !timeOff.toLowerCase().includes('start date')) {
+              if (hours === 0) {
                 empData.issues.push(`Zero hours recorded`);
               }
+            } else if (hours !== 'same' && hours !== 'Salary') {
+              // It's not a number and not "same"/"Salary"
+              empData.issues.push(`Invalid hours value: "${hours}"`);
             }
             
             if (typeof apptOT === 'number' && !isNaN(apptOT)) {
