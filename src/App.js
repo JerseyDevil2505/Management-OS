@@ -106,6 +106,10 @@ const App = () => {
     // Payroll Data
     archivedPayrollPeriods: [],
     dataRecency: [],
+
+    // Additional Data for Components
+    countyHpiData: [],
+    jobResponsibilities: [],
     
     // Cache Metadata
     version: CACHE_VERSION,
@@ -329,6 +333,21 @@ const App = () => {
             `)
             .order('created_at', { ascending: false })
         );
+        
+        loadKeys.push('countyHpi');
+        loadPromises.push(
+          supabase
+            .from('county_hpi_data')
+            .select('*')
+            .order('county_name, observation_year')
+        );
+
+        loadKeys.push('jobResponsibilities');
+        loadPromises.push(
+          supabase
+            .from('job_responsibilities')
+            .select('*')
+        ); 
       }
 
       if (components.includes('all') || components.includes('employees')) {
@@ -457,6 +476,14 @@ const App = () => {
               updates.managers = (result.data || []).filter(e => 
                 e.role === 'Manager' || e.can_be_lead
               );
+              break;
+          
+            case 'countyHpi':
+              updates.countyHpiData = result.data || [];
+              break;
+
+            case 'jobResponsibilities':
+              updates.jobResponsibilities = result.data || [];
               break;
               
             case 'planning':
@@ -1121,6 +1148,9 @@ const App = () => {
             planningJobs={masterCache.planningJobs}
             archivedJobs={masterCache.archivedJobs}
             managers={masterCache.managers}
+            countyHpiData={masterCache.countyHpiData}
+            jobResponsibilities={masterCache.jobResponsibilities}
+            inspectionData={masterCache.inspectionData}
             workflowStats={masterCache.workflowStats}
             jobFreshness={masterCache.jobFreshness}
             onDataUpdate={updateCacheItem}
