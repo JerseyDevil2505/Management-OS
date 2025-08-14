@@ -523,12 +523,14 @@ const App = () => {
                   role: ja.role || 'Lead Manager'
                 })) || [],
                 
-                // Workflow stats - extract from nested rates structure
+              // Workflow stats - extract from nested rates structure AND include classBreakdown
                 workflowStats: job.workflow_stats ? {
-                  jobEntryRate: job.workflow_stats.rates?.entryRate || 0,
-                  jobRefusalRate: job.workflow_stats.rates?.refusalRate || 0,
-                  commercialCompletePercent: job.workflow_stats.rates?.commercialInspectionRate || 0,
-                  pricingCompletePercent: job.workflow_stats.rates?.pricingRate || 0
+                  jobEntryRate: job.workflow_stats.rates?.entryRate || job.workflow_stats.jobEntryRate || 0,
+                  jobRefusalRate: job.workflow_stats.rates?.refusalRate || job.workflow_stats.jobRefusalRate || 0,
+                  commercialCompletePercent: job.workflow_stats.rates?.commercialInspectionRate || job.workflow_stats.commercialCompletePercent || 0,
+                  pricingCompletePercent: job.workflow_stats.rates?.pricingRate || job.workflow_stats.pricingCompletePercent || 0,
+                  classBreakdown: job.workflow_stats.classBreakdown || null,
+                  totalRecords: job.workflow_stats.totalRecords || 0
                 } : null
               }));
               
@@ -1152,40 +1154,40 @@ const App = () => {
               <div className="flex space-x-2">
                 <button
                   onClick={() => handleViewChange('employees')}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                  className={`px-6 py-3 rounded-full text-base font-semibold transition-all ${
                     activeView === 'employees' 
-                      ? 'bg-white bg-opacity-20 text-white shadow-md' 
-                      : 'text-white hover:bg-white hover:bg-opacity-10'
+                      ? 'bg-white text-blue-600 shadow-lg' 
+                      : 'bg-white bg-opacity-20 text-white hover:bg-opacity-30'
                   }`}
                 >
                   👥 Employees ({masterCache.employees.length})
                 </button>
                 <button
                   onClick={() => handleViewChange('admin-jobs')}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                  className={`px-6 py-3 rounded-full text-base font-semibold transition-all ${
                     activeView === 'admin-jobs' 
-                      ? 'bg-white bg-opacity-20 text-white shadow-md' 
-                      : 'text-white hover:bg-white hover:bg-opacity-10'
+                      ? 'bg-white text-blue-600 shadow-lg' 
+                      : 'bg-white bg-opacity-20 text-white hover:bg-opacity-30'
                   }`}
                 >
                   📋 Jobs ({masterCache.jobs.length})
                 </button>
                 <button
                   onClick={() => handleViewChange('billing')}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                  className={`px-6 py-3 rounded-full text-base font-semibold transition-all ${
                     activeView === 'billing' 
-                      ? 'bg-white bg-opacity-20 text-white shadow-md' 
-                      : 'text-white hover:bg-white hover:bg-opacity-10'
+                      ? 'bg-white text-blue-600 shadow-lg' 
+                      : 'bg-white bg-opacity-20 text-white hover:bg-opacity-30'
                   }`}
                 >
                   💰 Billing
                 </button>
                 <button
                   onClick={() => handleViewChange('payroll')}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                  className={`px-6 py-3 rounded-full text-base font-semibold transition-all ${
                     activeView === 'payroll' 
-                      ? 'bg-white bg-opacity-20 text-white shadow-md' 
-                      : 'text-white hover:bg-white hover:bg-opacity-10'
+                      ? 'bg-white text-blue-600 shadow-lg' 
+                      : 'bg-white bg-opacity-20 text-white hover:bg-opacity-30'
                   }`}
                 >
                   💸 Payroll
