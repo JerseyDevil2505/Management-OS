@@ -1228,7 +1228,6 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
             price_by: record.inspection_price_by,
             price_date: record.inspection_price_date,
             project_start_date: projectStartDate,
-            source_file_name: record.source_file_name,
             upload_date: new Date().toISOString(),
             override_applied: true,
             override_reason: overrideMapData[propertyKey].override_reason
@@ -1612,10 +1611,6 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
             price_date: record.inspection_price_date,
             project_start_date: projectStartDate,
             upload_date: new Date().toISOString(),
-            validation_report: propertyIssues[propertyKey] ? {
-              issues: propertyIssues[propertyKey].issues,
-              severity: propertyIssues[propertyKey].issues.length > 2 ? 'high' : 'medium'
-            } : null
           };
 
           // Add to batch - UPSERT will handle whether to insert or update
