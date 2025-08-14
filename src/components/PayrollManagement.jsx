@@ -1,15 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { supabase, employeeService, jobService } from '../lib/supabaseClient';
+import { supabase } from '../lib/supabaseClient';
 import * as XLSX from 'xlsx';
 
-const PayrollManagement = () => {
+const PayrollManagement = ({ 
+  employees = [], 
+  jobs = [], 
+  archivedPeriods = [], 
+  dataRecency: propDataRecency = [],
+  onDataUpdate,
+  onRefresh 
+}) => {
   const [activeTab, setActiveTab] = useState('current');
   const [payrollData, setPayrollData] = useState([]);
   const [uploadedFile, setUploadedFile] = useState(null);
   const [inspectionBonuses, setInspectionBonuses] = useState({});
   const [isProcessing, setIsProcessing] = useState(false);
-  const [employees, setEmployees] = useState([]);
-  const [jobs, setJobs] = useState([]);
   const [selectedJob, setSelectedJob] = useState('all');
   const [bonusRate] = useState(2.00);
   const [error, setError] = useState(null);
@@ -22,7 +27,6 @@ const PayrollManagement = () => {
     expectedHours: 0
   });
   const [lastProcessedInfo, setLastProcessedInfo] = useState(null);
-  const [archivedPeriods, setArchivedPeriods] = useState([]);
   const [dataRecency, setDataRecency] = useState([]);
   const [isLoadingRecency, setIsLoadingRecency] = useState(false);
 
@@ -155,12 +159,8 @@ const PayrollManagement = () => {
     setError(null);
     
     try {
-      // Get all active jobs - SIMPLE QUERY, NO ARCHIVED CHECK
-      const { data: activeJobs, error: jobsError } = await supabase
-        .from('jobs')
-        .select('id, job_name, ccdd')
-        .eq('status', 'active')
-        .order('job_name');
+      // Use jobs from props instead of fetching
+      const activeJobs = jobs; // jobs prop is already filtered for active
       
       if (jobsError) throw jobsError;
       
@@ -258,18 +258,9 @@ const PayrollManagement = () => {
     }
   }, [payrollPeriod.endDate]);
 
-  const loadInitialData = async () => {
+const loadInitialData = async () => {
     try {
-      const employeeData = await employeeService.getAll();
-      const eligibleEmployees = employeeData.filter(emp => 
-        emp.employment_status === 'active' && 
-        ['residential', 'management'].includes(emp.inspector_type?.toLowerCase())
-      );
-      setEmployees(eligibleEmployees);
-
-      const jobData = await jobService.getAll();
-      setJobs(jobData.filter(job => job.status === 'active'));
-
+      // Just check localStorage for last processed info
       const { data: lastInspection, error } = await supabase
         .from('inspection_data')
         .select('payroll_period_end, payroll_processed_date')
@@ -287,22 +278,11 @@ const PayrollManagement = () => {
           }
         }
       }
-      
-      const { data: archived, error: archiveError } = await supabase
-        .from('payroll_periods')
-        .select('*')
-        .order('end_date', { ascending: false })
-        .limit(12);
-      
-      if (!archiveError && archived) {
-        setArchivedPeriods(archived);
-      }
     } catch (error) {
-      console.error('Error loading initial data:', error);
-      setError('Failed to load initial data');
+      console.error('Error loading last processed info:', error);
+      // Don't set error for this, it's not critical
     }
   };
-
   const calculateInspectionBonuses = async () => {
     setIsProcessing(true);
     setError(null);
@@ -753,6 +733,10 @@ const PayrollManagement = () => {
       setWorksheetIssues([]);
       setUploadedFile(null);
       
+      // Refresh data in App.js
+      if (onRefresh) onRefresh();
+      
+      // Still need to check for last processed info
       loadInitialData();
     } catch (error) {
       console.error('Error marking inspections as processed:', error);
