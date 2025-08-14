@@ -1487,26 +1487,12 @@ const loadJobs = async () => {
       <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-6 mb-6">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold text-gray-800">Business Overview</h2>
-          <div className="flex space-x-3">
-            <button
-              onClick={() => {
-                calculateGlobalMetrics();
-                if (activeTab === 'distributions') {
-                  calculateDistributionMetrics();
-                }
-              }}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium"
-              title="Refresh metrics"
-            >
-              🔄 Refresh
-            </button>
-            <button
-              onClick={loadAllOpenInvoices}
-              className="px-4 py-2 bg-gray-800 text-white rounded-md hover:bg-gray-900 text-sm font-bold shadow-md ring-2 ring-gray-600 ring-offset-2"
-            >
-              View All Open Invoices ({formatCurrency(globalMetrics.totalOpen)})
-            </button>
-          </div>
+          <button
+            onClick={loadAllOpenInvoices}
+            className="px-4 py-2 bg-gray-800 text-white rounded-md hover:bg-gray-900 text-sm font-bold shadow-md ring-2 ring-gray-600 ring-offset-2"
+          >
+            View All Open Invoices ({formatCurrency(globalMetrics.totalOpen)})
+          </button>
         </div>
         
         {/* Row 1: Contract & Revenue Status */}
@@ -3608,7 +3594,7 @@ const loadJobs = async () => {
                                   setReminderMessage(generateReminderMessage(invoice, daysOld));
                                   setShowReminderModal(true);
                                 }}
-                                className="px-2 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600"
+                                className="px-2 py-1 text-xs border border-blue-500 text-blue-600 rounded hover:bg-blue-50 bg-transparent"
                               >
                                 Send Reminder
                               </button>
