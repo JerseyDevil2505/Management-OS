@@ -1110,7 +1110,7 @@ export const jobService = {
         ccdd: job.ccdd_code, // ADDED: Alternative accessor for backward compatibility
         municipality: job.municipality || job.client_name,
         job_number: job.job_number,
-        year_created: job.year_created,
+        year_created: job.start_date ? new Date(job.start_date).getFullYear() : new Date().getFullYear(),
         county: job.county,
         state: job.state,
         vendor: job.vendor_type,
