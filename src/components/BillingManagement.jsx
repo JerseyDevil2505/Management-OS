@@ -3521,8 +3521,8 @@ const loadJobs = async () => {
 
       {/* Open Invoices Modal */}
       {showOpenInvoices && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-4xl h-[500px] overflow-hidden flex flex-col">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-8">
+          <div className="bg-white rounded-lg p-6 w-full max-w-4xl" style={{ height: '400px' }}>
             <div className="flex justify-between items-center mb-4 flex-shrink-0">
               <h3 className="text-xl font-semibold">All Open Invoices</h3>
               <div className="flex items-center space-x-4">
@@ -3540,7 +3540,7 @@ const loadJobs = async () => {
               </div>
             </div>
             
-            <div className="flex-1 overflow-auto">
+            <div style={{ height: 'calc(100% - 80px)', overflowY: 'auto', overflowX: 'hidden' }}>
               {allOpenInvoices.length === 0 ? (
                 <div className="text-center py-12">
                   <p className="text-gray-600">No open invoices found.</p>
