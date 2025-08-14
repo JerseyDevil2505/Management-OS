@@ -15,15 +15,15 @@ const BillingManagement = ({
 }) => {
   const [activeTab, setActiveTab] = useState('active');
   const [jobs, setJobs] = useState([]);
-  const [legacyJobs, setLegacyJobs] = useState([]);
-  const [planningJobs, setPlanningJobs] = useState([]);
+  const [legacyJobsState, setLegacyJobs] = useState([]);
+  const [planningJobsState, setPlanningJobs] = useState([]);
   // Add state to track counts for all job types
   const [jobCounts, setJobCounts] = useState({
     active: 0,
     planned: 0,
     legacy: 0
   });
-  const [expenses, setExpenses] = useState([]);
+  const [expensesState, setExpenses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showContractSetup, setShowContractSetup] = useState(false);
   const [selectedJob, setSelectedJob] = useState(null);
@@ -44,7 +44,7 @@ const BillingManagement = ({
     amount: ''
   });
   const [editingReceivable, setEditingReceivable] = useState(null);
-  const [distributions, setDistributions] = useState([]);
+  const [distributionsState, setDistributions] = useState([]);
   const [showDistributionForm, setShowDistributionForm] = useState(false);
   const [distributionForm, setDistributionForm] = useState({
     shareholder: '',
@@ -269,7 +269,7 @@ Thank you for your immediate attention to this matter.`;
     setDistributions(distributions);
   };
   
-  const calculateDistributionMetrics = async () => {
+const calculateDistributionMetrics = async () => {
     try {
       const currentDate = new Date();
       const currentYear = currentDate.getFullYear();
@@ -277,23 +277,15 @@ Thank you for your immediate attention to this matter.`;
       const monthsElapsed = currentMonth;
       const monthsRemaining = 12 - currentMonth;
       
-      // Get YTD distributions
-      const { data: ytdDists } = await supabase
-        .from('shareholder_distributions')
-        .select('amount')
-        .eq('year', currentYear)
-        .eq('status', 'paid');
+      // Use distributions from props instead of fetching
+      const ytdDistributions = distributions
+        ?.filter(d => d.status === 'paid')
+        ?.reduce((sum, dist) => sum + parseFloat(dist.amount), 0) || 0;
       
-      const ytdDistributions = ytdDists?.reduce((sum, dist) => sum + parseFloat(dist.amount), 0) || 0;
-      
-      // Get planning jobs total for the new projection formula
-      const { data: planningJobs } = await supabase
-        .from('planning_jobs')
-        .select('contract_amount')
-        .not('contract_amount', 'is', null)
-        .eq('is_archived', false);
-      
-      const plannedContractsTotal = planningJobs?.reduce((sum, job) => sum + (job.contract_amount || 0), 0) || 0;
+      // Use planning jobs from props for the projection formula
+      const plannedContractsTotal = planningJobs
+        ?.filter(job => job.contract_amount && !job.is_archived)
+        ?.reduce((sum, job) => sum + (job.contract_amount || 0), 0) || 0;
       
       // Calculate monthly collection rate (keep for display purposes)
       const monthlyCollectionRate = monthsElapsed > 0 ? globalMetrics.totalPaid / monthsElapsed : 0;
@@ -1924,7 +1916,7 @@ const loadJobs = async () => {
       {/* Planned Jobs Tab */}
       {activeTab === 'planned' && (
         <div className="space-y-6">
-          {planningJobs.filter(job => !job.is_archived).length === 0 ? (
+          {planningJobsState.filter(job => !job.is_archived).length === 0 ? (
             <div className="text-center py-12 bg-gray-50 rounded-lg">
               <p className="text-gray-600">No planned jobs found. Create them in the Admin Jobs section.</p>
             </div>
@@ -1951,8 +1943,8 @@ const loadJobs = async () => {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {planningJobs
-                    .filter(job => !job.is_archived)
+                  {planningJobsState
+                    .filter(job => !job.is_archived))
                     .sort((a, b) => {
                       // First priority: Jobs without contract amounts go to top
                       if (!a.contract_amount && b.contract_amount) return -1;
@@ -2037,12 +2029,12 @@ const loadJobs = async () => {
                 </button>
               </div>
 
-              {legacyJobs.length === 0 ? (
+              {legacyJobsState.length === 0 ? (
                 <div className="text-center py-12 bg-gray-50 rounded-lg">
                   <p className="text-gray-600">No legacy billing jobs found. Click "Add Legacy Job" to create one.</p>
                 </div>
               ) : (
-                legacyJobs.map(job => {
+                legacyJobsState.map(job => {
                   const totals = calculateBillingTotals(job);
                   const needsContractSetup = !job.job_contracts || job.job_contracts.length === 0;
                   
@@ -2270,7 +2262,7 @@ const loadJobs = async () => {
                 </button>
               </div>
 
-              {expenses.length === 0 ? (
+              {expensesState.length === 0 ? (
                 <div className="text-center py-12 bg-gray-50 rounded-lg">
                   <p className="text-gray-600 mb-4">No expense data found.</p>
                   <p className="text-sm text-gray-500">Click "Import Excel" to upload your expense file.</p>
@@ -2317,7 +2309,7 @@ const loadJobs = async () => {
                           const expensesByCategory = {};
                           const categoryTotals = {};
                           
-                          expenses.forEach(expense => {
+                          expensesState.forEach(expense => {
                             if (!expensesByCategory[expense.category]) {
                               expensesByCategory[expense.category] = new Array(12).fill(0);
                               categoryTotals[expense.category] = 0;
@@ -2350,7 +2342,7 @@ const loadJobs = async () => {
                           </td>
                           {(() => {
                             const monthlyTotals = new Array(12).fill(0);
-                            expenses.forEach(expense => {
+                            expensesState.forEach(expense => {
                               monthlyTotals[expense.month - 1] += parseFloat(expense.amount);
                             });
                             
@@ -2361,7 +2353,7 @@ const loadJobs = async () => {
                             ));
                           })()}
                           <td className="px-6 py-4 text-sm text-right text-gray-900 bg-gray-200">
-                            {formatCurrency(expenses.reduce((sum, exp) => sum + parseFloat(exp.amount), 0))}
+                            {formatCurrency(expensesState.reduce((sum, exp) => sum + parseFloat(exp.amount), 0))}
                           </td>
                         </tr>
                         
@@ -2424,7 +2416,7 @@ const loadJobs = async () => {
                 </button>
               </div>
 
-              {officeReceivables.length === 0 ? (
+              {officeReceivables.map((receivable) => (
                 <div className="text-center py-12 bg-gray-50 rounded-lg">
                   <p className="text-gray-600">No office receivables found. Click "Add Receivable" to create one.</p>
                 </div>
@@ -2694,7 +2686,7 @@ const loadJobs = async () => {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 p-6">
                   {['Thomas Davis', 'Brian Schneider', 'James&Kristine Duda'].map(partner => {
                     const ownership = partner === 'Thomas Davis' ? 0.10 : 0.45;
-                    const partnerDistributions = distributions.filter(d => 
+                    const partnerDistributions = distributionsState.filter(d => 
                       d.shareholder_name === partner && d.status === 'paid'
                     );
                     const totalTaken = partnerDistributions.reduce((sum, d) => sum + d.amount, 0);
@@ -2705,7 +2697,7 @@ const loadJobs = async () => {
                     
                     allPartners.forEach(p => {
                       const pOwnership = p === 'Thomas Davis' ? 0.10 : 0.45;
-                      const pDistributions = distributions.filter(d => d.shareholder_name === p && d.status === 'paid');
+                      const pDistributions = distributionsState.filter(d => d.shareholder_name === p && d.status === 'paid');
                       const pTotal = pDistributions.reduce((sum, d) => sum + d.amount, 0);
                       const impliedTotal = pTotal / pOwnership;
                       if (impliedTotal > maxImpliedTotal) {
@@ -2787,7 +2779,7 @@ const loadJobs = async () => {
                           
                           allPartners.forEach(p => {
                             const pOwnership = p === 'Thomas Davis' ? 0.10 : 0.45;
-                            const pDistributions = distributions.filter(d => d.shareholder_name === p && d.status === 'paid');
+                            const pDistributions = distributionsState.filter(d => d.shareholder_name === p && d.status === 'paid');
                             const pTotal = pDistributions.reduce((sum, d) => sum + d.amount, 0);
                             const impliedTotal = pTotal / pOwnership;
                             if (impliedTotal > maxImpliedTotal) {
