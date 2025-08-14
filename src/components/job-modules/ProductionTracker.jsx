@@ -1611,7 +1611,6 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
             price_by: record.inspection_price_by,
             price_date: record.inspection_price_date,
             project_start_date: projectStartDate,
-            source_file_name: record.source_file_name,
             upload_date: new Date().toISOString(),
             validation_report: propertyIssues[propertyKey] ? {
               issues: propertyIssues[propertyKey].issues,
