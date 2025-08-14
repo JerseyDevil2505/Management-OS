@@ -665,50 +665,6 @@ const AdminJobManagement = ({
     }
   };
 
-    // NEW - Match the initializeData logic
-      const activeJobs = updatedJobs.filter(job => job.status === 'active');
-      const archived = updatedJobs.filter(job => job.status === 'archived' || job.status === 'draft');
-      
-      // Calculate assigned property counts for jobs with assignments
-      const jobsWithAssignedCounts = await Promise.all(
-        activeJobs.map(async (job) => {
-          if (job.has_property_assignments) {
-            // Dynamically count assigned properties
-            const { count, error } = await supabase
-              .from('property_records')
-              .select('id', { count: 'exact' })
-              .eq('job_id', job.id)
-              .eq('is_assigned_property', true);
-
-            if (!error) {
-              job.assignedPropertyCount = count;
-            }
-          }
-          
-          return {
-            ...job,
-            status: job.status === 'active' ? 'Active' : (job.status || 'Active'),
-            county: capitalizeCounty(job.county),
-            percentBilled: job.percent_billed || 0.00
-          };
-        })
-      );
-
-      setJobs(jobsWithAssignedCounts);
-      setArchivedJobs(archived.map(job => ({
-        ...job,
-        county: capitalizeCounty(job.county)
-      })));
-
-      // Refresh property stats to show updated counts
-      const refreshedStats = await utilityService.getStats();
-      setDbStats(refreshedStats);
-
-    } catch (error) {
-      console.error('Error refreshing jobs with assigned counts:', error);
-    }
-  };
-
   // File removal handler
   const removeFile = (fileType) => {
     if (fileType === 'source') {
