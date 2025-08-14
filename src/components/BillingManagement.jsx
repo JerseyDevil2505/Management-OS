@@ -2416,7 +2416,7 @@ const loadJobs = async () => {
                 </button>
               </div>
 
-              {officeReceivables.map((receivable) => (
+              {officeReceivables.length === 0 ? (
                 <div className="text-center py-12 bg-gray-50 rounded-lg">
                   <p className="text-gray-600">No office receivables found. Click "Add Receivable" to create one.</p>
                 </div>
