@@ -1109,25 +1109,6 @@ const App = () => {
           </div>
         </div>
       </nav>
-            
-            {/* Cache Controls */}
-            <div className="flex items-center space-x-2">
-              {masterCache.loadSource === 'cache' && (
-                <span className="text-xs text-gray-500">
-                  📦 Cached {masterCache.cacheAge && `(${Math.floor(masterCache.cacheAge / 60000)}m ago)`}
-                </span>
-              )}
-              <button
-                onClick={() => invalidateCache(['all'])}
-                className="p-2 text-gray-400 hover:text-gray-600"
-                title="Force refresh all data"
-              >
-                🔄
-              </button>
-            </div>
-          </div>
-        </div>
-      </nav>
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
