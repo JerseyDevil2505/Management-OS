@@ -37,7 +37,6 @@ const AdminJobManagement = ({
   const [loading, setLoading] = useState(true);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
   const [processing, setProcessing] = useState(false);
-  const [jobFreshness, setJobFreshness] = useState({}); // Track freshness data for each job
 
   // Processing and notification state
   const [processingStatus, setProcessingStatus] = useState({
