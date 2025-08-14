@@ -506,7 +506,7 @@ const App = () => {
                 totalcommercial: job.total_commercial || 0,
                 
                 // Billing and dates
-                percentBilled: (job.percent_billed || 0) * 100,
+                percentBilled: job.percent_billed || 0,
                 dueDate: job.due_date || job.target_completion_date || '',
                 
                 // Assignment flags
