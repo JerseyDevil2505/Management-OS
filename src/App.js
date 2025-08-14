@@ -1267,9 +1267,9 @@ const App = () => {
         {activeView === 'payroll' && (
           <PayrollManagement
             employees={masterCache.employees.filter(e => 
-              e.employment_status === 'active' && 
+              ['active', 'part_time', 'full_time'].includes(e.employment_status) && 
               ['residential', 'management'].includes(e.inspector_type?.toLowerCase())
-            )}
+            )}      
             jobs={masterCache.jobs}
             archivedPeriods={masterCache.archivedPayrollPeriods}
             dataRecency={masterCache.dataRecency}
