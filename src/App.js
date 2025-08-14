@@ -486,32 +486,74 @@ const App = () => {
           switch(key) {
             case 'jobs':
               const allJobs = result.data || [];
-              updates.jobs = allJobs.filter(j => j.status === 'active');
-              updates.archivedJobs = allJobs.filter(j => 
+              
+              // Transform jobs to match what AdminJobManagement expects
+              const transformedJobs = allJobs.map(job => ({
+                ...job,
+                // Core fields AdminJobManagement needs
+                name: job.job_name || job.name || '',
+                municipality: job.municipality || '',
+                ccdd: job.ccdd || job.ccdd_code || '',
+                county: job.county || '',
+                vendor: job.vendor || '',
+                status: job.status || 'active',
+                
+                // Transform property counts
+                totalProperties: job.total_properties || 0,
+                inspectedProperties: job.inspected_properties || 0,
+                totalresidential: job.total_residential || 0,
+                totalcommercial: job.total_commercial || 0,
+                
+                // Billing and dates
+                percentBilled: job.percent_billed || 0,
+                dueDate: job.due_date || job.target_completion_date || '',
+                
+                // Assignment flags
+                has_property_assignments: job.has_property_assignments || false,
+                assigned_has_commercial: job.assigned_has_commercial || false,
+                assignedPropertyCount: job.assigned_property_count || 0,
+                
+                // Transform assigned managers from job_assignments
+                assignedManagers: job.job_assignments?.map(ja => ({
+                  id: ja.employee_id,
+                  name: ja.employees ? 
+                    `${ja.employees.first_name} ${ja.employees.last_name}` : 
+                    'Unknown',
+                  role: ja.role || 'Lead Manager'
+                })) || [],
+                
+                // Workflow stats - keep the nested structure
+                workflowStats: job.workflow_stats ? {
+                  jobEntryRate: job.workflow_stats.job_entry_rate || 0,
+                  jobRefusalRate: job.workflow_stats.job_refusal_rate || 0,
+                  commercialCompletePercent: job.workflow_stats.commercial_complete_percent || 0,
+                  pricingCompletePercent: job.workflow_stats.pricing_complete_percent || 0
+                } : null
+              }));
+              
+              updates.jobs = transformedJobs.filter(j => j.status === 'active');
+              updates.archivedJobs = transformedJobs.filter(j => 
                 j.status === 'archived' || j.status === 'draft'
               );
-              updates.activeJobs = allJobs.filter(j => j.job_type === 'standard');
-              updates.legacyJobs = allJobs.filter(j => j.job_type === 'legacy_billing');
+              updates.activeJobs = transformedJobs.filter(j => j.job_type === 'standard');
+              updates.legacyJobs = transformedJobs.filter(j => j.job_type === 'legacy_billing');
               
-              // Process workflow stats
+              // Process workflow stats for quick lookup
               updates.workflowStats = {};
-              allJobs.forEach(job => {
-                if (job.workflow_stats) {
-                  updates.workflowStats[job.id] = job.workflow_stats;
+              transformedJobs.forEach(job => {
+                if (job.workflowStats) {
+                  updates.workflowStats[job.id] = job.workflowStats;
                 }
               });
               
-              // Process assigned managers
-              allJobs.forEach(job => {
-                if (job.job_assignments) {
-                  job.assignedManagers = job.job_assignments.map(ja => ({
-                    id: ja.employee_id,
-                    name: ja.employee ? 
-                      `${ja.employee.first_name} ${ja.employee.last_name}` : 
-                      'Unknown',
-                    role: ja.role
-                  }));
-                }
+              // Calculate job freshness
+              updates.jobFreshness = {};
+              transformedJobs.forEach(job => {
+                updates.jobFreshness[job.id] = {
+                  lastFileUpload: job.last_file_upload || null,
+                  lastProductionRun: job.last_production_run || null,
+                  needsUpdate: false
+                };
               });
               break;
               
