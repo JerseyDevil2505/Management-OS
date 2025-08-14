@@ -2130,32 +2130,18 @@ const AdminJobManagement = ({
         </p>
       </div>
 
-      {/* Database Status */}
+      {/* Property Totals */}
       <div className="mb-6 p-4 bg-gray-50 rounded-lg border">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Database className={`w-5 h-5 ${dbConnected ? 'text-green-600' : 'text-red-600'}`} />
-            <span className={`font-medium ${dbConnected ? 'text-green-800' : 'text-red-800'}`}>
-              Database: {dbConnected ? 'Connected' : 'Disconnected'}
-            </span>
-          </div>
-          {dbConnected && (
-            <div className="flex items-center gap-6 text-sm text-gray-600">
-              <span>{dbStats.employees} Employees</span>
-              <span>{jobs.length + archivedJobs.length} Jobs</span>
-              <div className="flex items-center gap-4">
-                <span className="font-medium text-blue-700">
-                  📊 Properties: {jobs.reduce((sum, job) => sum + (job.totalProperties || 0), 0).toLocaleString()}
-                </span>
-                <span className="text-green-600">
-                  🏠 {jobs.reduce((sum, job) => sum + (job.totalresidential || 0), 0).toLocaleString()} Residential
-                </span>
-                <span className="text-purple-600">
-                  🏢 {jobs.reduce((sum, job) => sum + (job.totalcommercial || 0), 0).toLocaleString()} Commercial
-                </span>
-             </div>      
-          </div>      
-        )}
+        <div className="flex items-center justify-center gap-6 text-sm">
+          <span className="font-medium text-blue-700">
+            📊 Total: {jobs.reduce((sum, job) => sum + (job.totalProperties || 0), 0).toLocaleString()}
+          </span>
+          <span className="font-medium text-green-600">
+            🏠 Residential: {jobs.reduce((sum, job) => sum + (job.totalresidential || 0), 0).toLocaleString()}
+          </span>
+          <span className="font-medium text-purple-600">
+            🏢 Commercial: {jobs.reduce((sum, job) => sum + (job.totalcommercial || 0), 0).toLocaleString()}
+          </span>
         </div>
       </div>
 
