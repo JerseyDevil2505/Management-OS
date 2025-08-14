@@ -524,13 +524,11 @@ const App = () => {
                 })) || [],
                 
               // Workflow stats - extract from nested rates structure AND include classBreakdown
-                workflowStats: job.workflow_stats ? {
-                  jobEntryRate: job.workflow_stats.rates?.entryRate || job.workflow_stats.jobEntryRate || 0,
-                  jobRefusalRate: job.workflow_stats.rates?.refusalRate || job.workflow_stats.jobRefusalRate || 0,
-                  commercialCompletePercent: job.workflow_stats.rates?.commercialInspectionRate || job.workflow_stats.commercialCompletePercent || 0,
-                  pricingCompletePercent: job.workflow_stats.rates?.pricingRate || job.workflow_stats.pricingCompletePercent || 0,
-                  classBreakdown: job.workflow_stats.classBreakdown || null,
-                  totalRecords: job.workflow_stats.totalRecords || 0
+                 workflowStats: job.workflow_stats ? {
+                  jobEntryRate: job.workflow_stats.rates?.entryRate || 0,
+                  jobRefusalRate: job.workflow_stats.rates?.refusalRate || 0,
+                  commercialCompletePercent: job.workflow_stats.rates?.commercialInspectionRate || 0,
+                  pricingCompletePercent: job.workflow_stats.rates?.pricingRate || 0
                 } : null
               }));
               
