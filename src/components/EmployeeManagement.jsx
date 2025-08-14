@@ -82,8 +82,14 @@ const loadEmployees = () => {
     const now = Date.now();
     
     if (analyticsCache && cacheTimestamp && (now - cacheTimestamp) < CACHE_DURATION) {
-      console.log('📦 Using cached analytics data');
-      setGlobalAnalytics(analyticsCache);
+      console.log('📦 Using cached data, reprocessing with current filters...');
+      // Reprocess the cached raw data with current filters
+      const reprocessed = processGlobalInspectionData(
+        analyticsCache.rawData || [], 
+        analyticsFilter, 
+        analyticsCache.totalCount || 0
+      );
+      setGlobalAnalytics(reprocessed);
       return; // Use cached data instead of reloading
     }
     
@@ -288,10 +294,14 @@ const loadEmployees = () => {
       processedAnalytics.summary.totalInspections = allInspectionData.length;
       setGlobalAnalytics(processedAnalytics);
 
-      // Cache the results
-      setAnalyticsCache(processedAnalytics);
+      // Cache BOTH the raw data and processed results
+      setAnalyticsCache({
+        rawData: enrichedData,  // Store the raw 45k records
+        processedResults: processedAnalytics,
+        totalCount: allInspectionData.length
+      });
       setCacheTimestamp(Date.now());
-      console.log('💾 Analytics data cached');
+      console.log(`💾 Cached ${enrichedData.length} records for instant filtering`);
 
     } catch (error) {
       console.error('Error loading global analytics:', error);
@@ -676,12 +686,25 @@ const loadEmployees = () => {
     };
   };
 
-  // Load analytics when component mounts or filters change
+  // Load analytics when component mounts only
   useEffect(() => {
     if (employees.length > 0) {
       loadGlobalAnalytics();
     }
-  }, [employees.length, analyticsFilter]);
+  }, [employees.length]);  // Removed analyticsFilter - we'll handle it separately
+
+  // When filters change, reprocess cached data without reloading
+  useEffect(() => {
+    if (analyticsCache && analyticsCache.rawData && !isLoadingAnalytics) {
+      console.log('🔄 Filter changed, reprocessing cached data...');
+      const reprocessed = processGlobalInspectionData(
+        analyticsCache.rawData,
+        analyticsFilter,
+        analyticsCache.totalCount || 0
+      );
+      setGlobalAnalytics(reprocessed);
+    }
+  }, [analyticsFilter]);
 
   const handleFilterChange = (filterType, value) => {
     setAnalyticsFilter(prev => ({
