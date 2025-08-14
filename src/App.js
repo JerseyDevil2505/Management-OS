@@ -39,11 +39,11 @@ const App = () => {
   // ==========================================
   // URL-BASED VIEW STATE (FIXES F5 ISSUE!)
   // ==========================================
+// REPLACE WITH:
   const [activeView, setActiveView] = useState(() => {
     // Read from URL on initial load
-    const path = window.location.pathname.slice(1) || 'admin-jobs';
-    const validViews = ['dashboard', 'admin-jobs', 'billing', 'employees', 'payroll'];
-    return validViews.includes(path) ? path : 'admin-jobs';
+    const path = window.location.pathname.slice(1) || 'employees';
+    const validViews = ['admin-jobs', 'billing', 'employees', 'payroll'];
   });
 
   // Update URL when view changes
@@ -1015,61 +1015,73 @@ const App = () => {
       )}
 
       {/* Navigation */}
-      <nav className="bg-white shadow-sm border-b">
+      <nav className="app-header shadow-lg">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex space-x-8">
+          <div className="flex justify-between items-center h-16">
+            <div className="flex items-center">
+              <h1 className="text-xl font-bold text-white mr-8">Management OS</h1>
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => handleViewChange('employees')}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                    activeView === 'employees' 
+                      ? 'bg-white bg-opacity-20 text-white shadow-md' 
+                      : 'text-white hover:bg-white hover:bg-opacity-10'
+                  }`}
+                >
+                  👥 Employees ({masterCache.employees.length})
+                </button>
+                <button
+                  onClick={() => handleViewChange('admin-jobs')}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                    activeView === 'admin-jobs' 
+                      ? 'bg-white bg-opacity-20 text-white shadow-md' 
+                      : 'text-white hover:bg-white hover:bg-opacity-10'
+                  }`}
+                >
+                  📋 Jobs ({masterCache.jobs.length})
+                </button>
+                <button
+                  onClick={() => handleViewChange('billing')}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                    activeView === 'billing' 
+                      ? 'bg-white bg-opacity-20 text-white shadow-md' 
+                      : 'text-white hover:bg-white hover:bg-opacity-10'
+                  }`}
+                >
+                  💰 Billing
+                </button>
+                <button
+                  onClick={() => handleViewChange('payroll')}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                    activeView === 'payroll' 
+                      ? 'bg-white bg-opacity-20 text-white shadow-md' 
+                      : 'text-white hover:bg-white hover:bg-opacity-10'
+                  }`}
+                >
+                  💸 Payroll
+                </button>
+              </div>
+            </div>
+            
+            {/* Cache Controls */}
+            <div className="flex items-center space-x-3">
+              {masterCache.loadSource === 'cache' && (
+                <span className="text-xs text-white opacity-75">
+                  📦 Cached {masterCache.cacheAge && `(${Math.floor(masterCache.cacheAge / 60000)}m ago)`}
+                </span>
+              )}
               <button
-                onClick={() => handleViewChange('dashboard')}
-                className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
-                  activeView === 'dashboard' 
-                    ? 'border-blue-500 text-gray-900' 
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
+                onClick={() => invalidateCache(['all'])}
+                className="px-4 py-2 bg-white bg-opacity-90 text-blue-600 rounded-md hover:bg-opacity-100 text-sm font-semibold shadow-md transition-all"
+                title="Force refresh all data"
               >
-                Dashboard
-              </button>
-              <button
-                onClick={() => handleViewChange('admin-jobs')}
-                className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
-                  activeView === 'admin-jobs' 
-                    ? 'border-blue-500 text-gray-900' 
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                Jobs ({masterCache.jobs.length})
-              </button>
-              <button
-                onClick={() => handleViewChange('billing')}
-                className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
-                  activeView === 'billing' 
-                    ? 'border-blue-500 text-gray-900' 
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                Billing
-              </button>
-              <button
-                onClick={() => handleViewChange('employees')}
-                className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
-                  activeView === 'employees' 
-                    ? 'border-blue-500 text-gray-900' 
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                Employees ({masterCache.employees.length})
-              </button>
-              <button
-                onClick={() => handleViewChange('payroll')}
-                className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
-                  activeView === 'payroll' 
-                    ? 'border-blue-500 text-gray-900' 
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                Payroll
+                🔄 Refresh Data
               </button>
             </div>
+          </div>
+        </div>
+      </nav>
             
             {/* Cache Controls */}
             <div className="flex items-center space-x-2">
@@ -1103,32 +1115,6 @@ const App = () => {
         )}
 
         {/* Component Views */}
-        {activeView === 'dashboard' && (
-          <div className="bg-white shadow rounded-lg p-6">
-            <h2 className="text-2xl font-bold mb-4">Dashboard</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="bg-blue-50 p-4 rounded-lg">
-                <h3 className="font-semibold text-blue-900">Total Revenue</h3>
-                <p className="text-2xl font-bold text-blue-600">
-                  ${(masterCache.billingMetrics?.totalPaid || 0).toLocaleString()}
-                </p>
-              </div>
-              <div className="bg-green-50 p-4 rounded-lg">
-                <h3 className="font-semibold text-green-900">Active Jobs</h3>
-                <p className="text-2xl font-bold text-green-600">
-                  {masterCache.jobs.length}
-                </p>
-              </div>
-              <div className="bg-purple-50 p-4 rounded-lg">
-                <h3 className="font-semibold text-purple-900">Active Employees</h3>
-                <p className="text-2xl font-bold text-purple-600">
-                  {masterCache.employees.filter(e => e.employment_status === 'active').length}
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
         {activeView === 'admin-jobs' && (
           <AdminJobManagement
             jobs={masterCache.jobs}
