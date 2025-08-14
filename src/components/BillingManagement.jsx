@@ -3520,9 +3520,9 @@ const loadJobs = async () => {
       )}
 
       {/* Open Invoices Modal */}
-        {showOpenInvoices && (
+      {showOpenInvoices && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[60vh] overflow-hidden flex flex-col">
+          <div className="bg-white rounded-lg p-6 w-full max-w-4xl h-[500px] overflow-hidden flex flex-col">
             <div className="flex justify-between items-center mb-4 flex-shrink-0">
               <h3 className="text-xl font-semibold">All Open Invoices</h3>
               <div className="flex items-center space-x-4">
