@@ -37,7 +37,6 @@ const EmployeeManagement = ({
     employmentStatus: 'all'
   });
 
-
 // Load employees from props on component mount or when props change
   useEffect(() => {
     if (propEmployees.length > 0) {
@@ -74,6 +73,8 @@ const loadEmployees = () => {
     }
     
     setIsLoading(false);
+};
+  
   // Fixed Global Analytics Functions
   const loadGlobalAnalytics = async () => {
     // Check if we have cached data less than 5 minutes old
