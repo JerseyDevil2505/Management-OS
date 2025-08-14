@@ -550,7 +550,14 @@ const App = () => {
               break;
           }
         } else {
-          console.error(`Failed to load ${key}:`, result.error);
+          console.error(`Failed to load ${key}:`, result.error?.message || result.error);
+          console.error('Full error details:', {
+            key: key,
+            error: result.error,
+            code: result.error?.code,
+            message: result.error?.message,
+            details: result.error?.details
+          });
         }
       });
       
