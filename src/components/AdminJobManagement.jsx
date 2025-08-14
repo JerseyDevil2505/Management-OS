@@ -54,7 +54,8 @@ const AdminJobManagement = ({
   const [notifications, setNotifications] = useState([]);
   const [processingResults, setProcessingResults] = useState(null);
 
-  // County HPI stateconst [countyHpiData, setCountyHpiData] = useState(() => {
+  // County HPI state
+  const [countyHpiData, setCountyHpiData] = useState(() => {
     // Convert array to object grouped by county
     const hpiByCounty = {};
     if (propsCountyHpiData) {
