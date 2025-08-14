@@ -347,6 +347,7 @@ const App = () => {
             .from('jobs')
             .select(`
               *,
+              job_responsibilities(count),
               job_contracts(
                 contract_amount,
                 retainer_percentage,
@@ -505,13 +506,13 @@ const App = () => {
                 totalcommercial: job.total_commercial || 0,
                 
                 // Billing and dates
-                percentBilled: job.percent_billed || 0,
+                percentBilled: (job.percent_billed || 0) * 100,
                 dueDate: job.due_date || job.target_completion_date || '',
                 
                 // Assignment flags
                 has_property_assignments: job.has_property_assignments || false,
                 assigned_has_commercial: job.assigned_has_commercial || false,
-                assignedPropertyCount: job.assigned_property_count || 0,
+                assignedPropertyCount: job.job_responsibilities?.[0]?.count || 0,
                 
                 // Transform assigned managers from job_assignments
                 assignedManagers: job.job_assignments?.map(ja => ({
@@ -522,12 +523,12 @@ const App = () => {
                   role: ja.role || 'Lead Manager'
                 })) || [],
                 
-                // Workflow stats - keep the nested structure
+                // Workflow stats - extract from nested rates structure
                 workflowStats: job.workflow_stats ? {
-                  jobEntryRate: job.workflow_stats.job_entry_rate || 0,
-                  jobRefusalRate: job.workflow_stats.job_refusal_rate || 0,
-                  commercialCompletePercent: job.workflow_stats.commercial_complete_percent || 0,
-                  pricingCompletePercent: job.workflow_stats.pricing_complete_percent || 0
+                  jobEntryRate: job.workflow_stats.rates?.entryRate || 0,
+                  jobRefusalRate: job.workflow_stats.rates?.refusalRate || 0,
+                  commercialCompletePercent: job.workflow_stats.rates?.commercialInspectionRate || 0,
+                  pricingCompletePercent: job.workflow_stats.rates?.pricingRate || 0
                 } : null
               }));
               
