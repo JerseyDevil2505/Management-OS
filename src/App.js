@@ -1081,6 +1081,14 @@ const App = () => {
   // ==========================================
   // RENDER UI
   // ==========================================
+  // Debug logging
+  console.log('Master Cache Status:', {
+    isInitialized: masterCache.isInitialized,
+    jobsCount: masterCache.jobs?.length || 0,
+    employeesCount: masterCache.employees?.length || 0,
+    managersCount: masterCache.managers?.length || 0,
+    activeView: activeView
+  });
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Cache Status Bar */}
@@ -1191,7 +1199,6 @@ const App = () => {
             jobFreshness={masterCache.jobFreshness}
             inspectionData={masterCache.inspectionData}
             workflowStats={masterCache.workflowStats}
-            jobFreshness={masterCache.jobFreshness}
             onDataUpdate={updateCacheItem}
             onRefresh={() => loadMasterData({ force: true, components: ['jobs'] })}
           />
