@@ -305,21 +305,6 @@ const AdminJobManagement = ({
     };
   };
 
-  // Refresh both jobs and freshness data
-  const refreshAllJobData = async () => {
-    try {
-      // First refresh the jobs list
-      await refreshJobsWithAssignedCounts();
-      
-      // Then refresh the freshness data with the updated jobs
-      if (jobs.length > 0) {
-        await loadJobFreshness(jobs);
-      }
-    } catch (error) {
-      console.error('Error refreshing job data:', error);
-    }
-  };
-
   // Notification system
   const addNotification = (message, type = 'info') => {
     const id = Date.now();
@@ -613,10 +598,7 @@ const AdminJobManagement = ({
         await onRefresh();
       }
       
-      // Then refresh the freshness data with the updated jobs
-      if (jobs.length > 0) {
-        await loadJobFreshness(jobs);
-      }
+      // Job freshness now comes from props, no need to load here
     } catch (error) {
       console.error('Error refreshing job data:', error);
     }
