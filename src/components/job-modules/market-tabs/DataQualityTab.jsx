@@ -44,7 +44,7 @@ const DataQualityTab = ({
   const customCheckNameInputRef = useRef(null);
   const customCheckSeveritySelectRef = useRef(null);
 
-  // Load saved data from props instead of database
+// Load saved data from props instead of database
   useEffect(() => {
     if (marketLandData) {
       // Load run history
@@ -63,6 +63,31 @@ const DataQualityTab = ({
       }
     }
   }, [marketLandData]);
+
+  // Initialize overview stats from last run if available
+  useEffect(() => {
+    if (marketLandData && marketLandData.quality_check_results?.history?.length > 0) {
+      const lastRun = marketLandData.quality_check_results.history[0];
+      
+      // Restore stats from last run
+      setIssueStats({
+        critical: lastRun.criticalCount || 0,
+        warning: lastRun.warningCount || 0,
+        info: lastRun.infoCount || 0,
+        total: lastRun.totalIssues || 0
+      });
+      
+      // Set the quality score from last run
+      if (lastRun.qualityScore) {
+        setQualityScore(lastRun.qualityScore);
+      }
+      
+      console.log(`📊 Restored stats from last run: ${new Date(lastRun.date).toLocaleDateString()}`);
+    }
+  }, [marketLandData]);
+
+  // ESC key handler for modal
+  useEffect(() => {
 
   // ESC key handler for modal
   useEffect(() => {
@@ -1830,6 +1855,11 @@ const editCustomCheck = (check) => {
             <p className="text-gray-600">
               Analyzing {properties.length.toLocaleString()} properties for data integrity issues
             </p>
+            {runHistory.length > 0 && (
+              <p className="text-sm text-gray-500 mt-1">
+                Last analysis run: {new Date(runHistory[0].date).toLocaleString()}
+              </p>
+            )}
           </div>
 
           <div className="flex gap-3 mb-6">
