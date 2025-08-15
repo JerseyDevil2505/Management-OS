@@ -556,6 +556,19 @@ useEffect(() => {
               }));
               
               updates.jobs = transformedJobs.filter(j => j.status === 'active');
+
+              // CHECK URL for job selection after jobs load
+              const path = window.location.pathname;
+              const parts = path.split('/');
+              if (parts[1] === 'job' && parts[2]) {
+                const jobId = parts[2];
+                const job = updates.jobs.find(j => j.id === jobId);
+                if (job) {
+                  setSelectedJob(job);
+                  setActiveView('job-modules');
+                  console.log('📍 Restored job from URL:', jobId);
+                }
+              }
               updates.archivedJobs = transformedJobs.filter(j => 
                 j.status === 'archived' || j.status === 'draft'
               );
