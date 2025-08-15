@@ -31,12 +31,13 @@ const JobContainer = ({
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [loadedCount, setLoadedCount] = useState(0);
 
-    // NEW: State for all additional data tables
+  // NEW: State for all additional data tables
   const [inspectionData, setInspectionData] = useState([]);
   const [marketLandData, setMarketLandData] = useState({});
   const [hpiData, setHpiData] = useState([]);
   const [checklistItems, setChecklistItems] = useState([]);
   const [checklistStatus, setChecklistStatus] = useState([]);
+  const [employees, setEmployees] = useState([]);  // ADD THIS LINE  
 
   // NEW: Data update notification for child components
   const [dataUpdateNotification, setDataUpdateNotification] = useState({
@@ -92,6 +93,7 @@ const JobContainer = ({
         setHpiData(cached.hpiData || []);
         setChecklistItems(cached.checklistItems || []);
         setChecklistStatus(cached.checklistStatus || []);
+        setEmployees(cached.employees || []);  // ADD THIS LINE
         setPropertyRecordsCount(cached.properties?.length || 0);
         setLatestFileVersion(cached.fileVersion || 1);
         setLatestCodeVersion(cached.codeVersion || 1);
@@ -309,12 +311,19 @@ const JobContainer = ({
         .select('*')
         .eq('job_id', selectedJob.id);
 
+      // 5. Load employees (for ProductionTracker inspector names)
+      const { data: employeesData } = await supabase
+        .from('employees')
+        .select('*')
+        .order('last_name', { ascending: true });
+
       // SET ALL THE LOADED DATA TO STATE
       setInspectionData(inspectionDataFull || []);
       setMarketLandData(marketData || {});
       setHpiData(hpiData || []);
       setChecklistItems(checklistItems || []);
       setChecklistStatus(checklistStatus || []);
+      setEmployees(employeesData || []);  // ADD THIS LINE
       console.log('✅ All additional data tables loaded');
 
       // Prepare enriched job data with all the fetched info
@@ -352,6 +361,7 @@ const JobContainer = ({
           hpiData: hpiData || [],
           checklistItems: checklistItems || [],
           checklistStatus: checklistStatus || [],
+          employees: employeesData || [],  // ADD THIS LINE
           fileVersion: currentFileVersion,
           codeVersion: currentCodeVersion,
           timestamp: Date.now()
@@ -461,6 +471,7 @@ const JobContainer = ({
       hpiData,  // NEW: Pass HPI data
       checklistItems,  // NEW: Pass checklist items
       checklistStatus,  // NEW: Pass checklist status
+      employees,  // NEW: Pass employees data
       onBackToJobs,
       activeSubModule: activeModule,
       onSubModuleChange: setActiveModule,
@@ -474,7 +485,6 @@ const JobContainer = ({
         timestamp: null,
         source: null
       }),
-      // ADD THESE TWO LINES:
       onUpdateWorkflowStats: handleAnalyticsUpdate,  // Pass the analytics update handler
       currentWorkflowStats: workflowStats  // Pass current workflow stats
     };
