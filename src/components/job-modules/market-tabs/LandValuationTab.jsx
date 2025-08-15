@@ -6,7 +6,7 @@ import {
   Save, FileDown, ChevronDown, ChevronUp, MapPin, 
   Home, DollarSign 
 } from 'lucide-react';
-import { supabase } from '../../../lib/supabaseClient';
+import { supabase, interpretCodes } from '../../../lib/supabaseClient';
 
 const LandValuationTab = ({
   properties,
@@ -172,37 +172,8 @@ const LandValuationTab = ({
 
   // ========== CALCULATE ACREAGE HELPER ==========
   const calculateAcreage = useCallback((property) => {
-    // Try direct acre field first
-    if (property.asset_lot_acre && property.asset_lot_acre > 0) {
-      return parseFloat(property.asset_lot_acre).toFixed(2);
-    }
-
-    // Try square feet
-    if (property.asset_lot_sf && property.asset_lot_sf > 0) {
-      return (property.asset_lot_sf / 43560).toFixed(2);
-    }
-
-    // Try frontage × depth
-    if (property.asset_lot_frontage && property.asset_lot_depth) {
-      const sf = property.asset_lot_frontage * property.asset_lot_depth;
-      return (sf / 43560).toFixed(2);
-    }
-
-    // Last resort - check raw data for vendor-specific fields
-    if (vendorType === 'BRT' && property.raw_data) {
-      let totalSf = 0;
-      for (let i = 1; i <= 6; i++) {
-        const landur = property.raw_data[`LANDUR_${i}`];
-        if (landur && landur.includes('SF')) {
-          const match = landur.match(/(\d+)\s*SF/);
-          if (match) totalSf += parseInt(match[1]);
-        }
-      }
-      if (totalSf > 0) return (totalSf / 43560).toFixed(2);
-    }
-
-    return '0.00';
-  }, [vendorType]);
+    return interpretCodes.getCalculatedAcreage(property, vendorType);
+  }, [vendorType]););
 
   // ========== GET VCS DESCRIPTION HELPER ==========
   const getVCSDescription = useCallback((vcsCode) => {
