@@ -88,11 +88,9 @@ const JobContainer = ({
         setIsLoadingVersion(false);
         setLoadingProgress(100);
         
-        // Check if cache is fresh enough (optional: add timestamp check)
-        if (cached.timestamp && Date.now() - cached.timestamp < 5 * 60 * 1000) { // 5 minutes
-          console.log('✅ Cache is fresh, skipping database load');
-          return; // Skip database load entirely
-        }
+        // Cache exists? Use it. Period. No time checks.
+        console.log('✅ Using cached data, skipping database load');
+        return; // Skip database load entirely
       }
       
       console.log('📡 Loading from database...');
