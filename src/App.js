@@ -528,9 +528,9 @@ useEffect(() => {
                 vendor: job.vendor || '',
                 status: job.status || 'active',
                 
-                // Transform property counts
-                totalProperties: job.total_properties || 0,
-                inspectedProperties: job.inspected_properties || 0,
+                // Transform property counts - use workflow_stats if available
+                totalProperties: job.workflow_stats?.totalRecords || job.total_properties || 0,
+                inspectedProperties: job.workflow_stats?.validInspections || job.inspected_properties || 0,
                 totalresidential: job.totalresidential || 0,
                 totalcommercial: job.totalcommercial || 0,
                 
