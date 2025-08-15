@@ -17,7 +17,8 @@ const DataQualityTab = ({
   jobData,
   vendorType,
   codeDefinitions,
-  availableFields
+  availableFields,
+  marketLandData    
 }) => {
   // ==================== INTERNAL STATE MANAGEMENT ====================
   const [checkResults, setCheckResults] = useState({});
@@ -43,41 +44,25 @@ const DataQualityTab = ({
   const customCheckNameInputRef = useRef(null);
   const customCheckSeveritySelectRef = useRef(null);
 
-  // Load saved data on mount
+  // Load saved data from props instead of database
   useEffect(() => {
-    const loadSavedData = async () => {
-      if (!jobData?.id) return;
-      
-      try {
-        const { data, error } = await supabase
-          .from('market_land_valuation')
-          .select('*')
-          .eq('job_id', jobData.id)
-          .single();
-        
-        if (data) {
-          // Load run history
-          if (data.quality_check_results?.history) {
-            setRunHistory(data.quality_check_results.history);
-          }
-          
-          // Load custom checks
-          if (data.custom_checks) {
-            setCustomChecks(data.custom_checks);
-          }
-          
-          // Load quality score
-          if (data.quality_score) {
-            setQualityScore(data.quality_score);
-          }
-        }
-      } catch (error) {
-        console.error('Error loading saved data:', error);
+    if (marketLandData) {
+      // Load run history
+      if (marketLandData.quality_check_results?.history) {
+        setRunHistory(marketLandData.quality_check_results.history);
       }
-    };
-    
-    loadSavedData();
-  }, [jobData?.id]);
+      
+      // Load custom checks
+      if (marketLandData.custom_checks) {
+        setCustomChecks(marketLandData.custom_checks);
+      }
+      
+      // Load quality score
+      if (marketLandData.quality_score) {
+        setQualityScore(marketLandData.quality_score);
+      }
+    }
+  }, [marketLandData]);
 
   // ESC key handler for modal
   useEffect(() => {
