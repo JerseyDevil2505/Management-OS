@@ -560,7 +560,7 @@ useEffect(() => {
                   pricingCompletePercent: job.workflow_stats.pricingCompletePercent || 0,
                   validInspections: job.workflow_stats.validInspections || 0,
                   totalRecords: job.workflow_stats.totalRecords || 0
-                } : null
+                } : null,
               
               updates.jobs = transformedJobs.filter(j => j.status === 'active');
 
