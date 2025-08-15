@@ -88,9 +88,6 @@ const DataQualityTab = ({
 
   // ESC key handler for modal
   useEffect(() => {
-
-  // ESC key handler for modal
-  useEffect(() => {
     const handleEsc = (event) => {
       if (event.key === 'Escape') {
         setShowDetailsModal(false);
