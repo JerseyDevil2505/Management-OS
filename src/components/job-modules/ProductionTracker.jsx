@@ -14,6 +14,7 @@ const ProductionTracker = ({
   currentWorkflowStats,
   dataUpdateNotification,  // NEW: Receive notification from JobContainer
   clearDataNotification     // NEW: Receive clear function from JobContainer
+  employees  
 }) => {
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
@@ -48,8 +49,7 @@ const ProductionTracker = ({
     ).length;
     
     setUnassignedPropertyCount(unassignedCount);
-    debugLog('UNASSIGNED', `Calculated ${unassignedCount} unassigned properties from props`);
-  };
+   };
 
   // Settings state - Enhanced InfoBy category configuration
   const [availableInfoByCodes, setAvailableInfoByCodes] = useState([]);
@@ -136,55 +136,34 @@ const ProductionTracker = ({
       priced: priced
     });
     
-    debugLog('COMMERCIAL_COUNTS', `Calculated from props: ${inspected} inspected, ${priced} priced`);
   };
 
-  // Load employee data for inspector details
-  const loadEmployeeData = async () => {
-    try {
-      const { data: employees, error } = await supabase
-        .from('employees')
-        .select('id, first_name, last_name, inspector_type, employment_status, initials')
-        .not('initials', 'is', null)
-        .neq('initials', '');
-
-      if (error) throw error;
-
-      const employeeMap = {};
-      employees.forEach(emp => {
-        // Only use actual initials from database, no generation
-        if (emp.initials) {
-          employeeMap[emp.initials] = {
-            id: emp.id,
-            name: `${emp.first_name} ${emp.last_name}`,
-            fullName: `${emp.last_name}, ${emp.first_name}`,
-            inspector_type: emp.inspector_type,
-            initials: emp.initials
-          };
-        }
-      });
-
-      // Parse external inspectors and add them to employee data
-      const externalCodes = externalInspectorsList.split(',').map(code => code.trim()).filter(code => code);
-      const externalInspectorsMap = {};
-
-      externalCodes.forEach(code => {
-        externalInspectorsMap[code] = {
-          id: `external-${code}`,
-          name: `${code} (External)`,
-          fullName: `${code} (External Inspector)`,
-          inspector_type: 'external',
-          initials: code
+  // Process employee data from props instead of loading from database
+  const processEmployeeData = () => {
+    if (!employees || employees.length === 0) return;
+    
+    const employeeMap = {};
+    employees.forEach(emp => {
+      // Only use actual initials from database, no generation
+      if (emp.initials) {
+        employeeMap[emp.initials] = {
+          id: emp.id,
+          name: `${emp.first_name} ${emp.last_name}`,
+          fullName: `${emp.last_name}, ${emp.first_name}`,
+          inspector_type: emp.inspector_type,
+          initials: emp.initials
         };
-      });
+      }
+    });
 
-      // Merge regular employees with external inspectors
-      setEmployeeData({ ...employeeMap, ...externalInspectorsMap });
-    } catch (error) {
-      console.error('Error loading employee data:', error);
-      addNotification('Error loading employee data', 'error');
-    }
-  };
+    // Parse external inspectors and add them to employee data
+    const externalCodes = externalInspectorsList.split(',').map(code => code.trim()).filter(code => code);
+    const externalInspectorsMap = {};
+
+    externalCodes.forEach(code => {
+      externalInspectorsMap[code] = {
+        id: `external-${code}`,
+        name: `${code} (External)`,
 
   // NEW: Load vendor source from property_records
   const loadVendorSource = async () => {
@@ -256,7 +235,6 @@ const ProductionTracker = ({
     });
     setOverrideMap(overrideMapData);
     
-    debugLog('VALIDATION_OVERRIDES', `Calculated ${processedOverrides.length} validation overrides from props`);
   };
 
   // Enhanced InfoBy code loading with proper Microsystems cleaning
@@ -564,8 +542,6 @@ const ProductionTracker = ({
         setProcessed(true);
         setSettingsLocked(true);
         setLoadedFromDatabase(true); // CRITICAL: Mark that we loaded from database
-        debugLog('PERSISTENCE', '✅ Loaded persisted analytics with override adjustments');
-        addNotification('Previously processed analytics loaded', 'info');
       }
     } catch (error) {
       console.error('Error loading persisted analytics:', error);
@@ -913,17 +889,17 @@ const ProductionTracker = ({
     addNotification('🔄 Session reset - settings unlocked', 'info');
   };
 
-  // Initialize data loading
+// Initialize data loading
   useEffect(() => {
-    if (jobData?.id && properties && properties.length > 0 && inspectionData) {
+    if (jobData?.id && properties && properties.length > 0 && inspectionData && employees) {
       const initializeData = async () => {
         // Load only the things that still need database calls
         await loadAvailableInfoByCodes();
         await loadProjectStartDate();
         await loadVendorSource();
-        await loadEmployeeData();
         
-        // Calculate from props instead of loading
+        // Process from props instead of loading
+        processEmployeeData();  // Uses employees prop
         calculateValidationOverrides();  // Uses inspectionData prop
         calculateCommercialCounts();     // Uses inspectionData prop
         calculateUnassignedPropertyCount(); // Uses properties prop
@@ -936,7 +912,14 @@ const ProductionTracker = ({
       
       initializeData();
     }
-  }, [jobData?.id, properties, inspectionData]); // Added properties and inspectionData to deps
+  }, [jobData?.id, properties, inspectionData, employees]); // Added employees to deps
+
+  // Update employee data when external inspectors list changes
+  useEffect(() => {
+    if (employees && employees.length > 0) {
+      processEmployeeData();
+    }
+  }, [externalInspectorsList, employees]);
 
   // Track unsaved changes
   useEffect(() => {
