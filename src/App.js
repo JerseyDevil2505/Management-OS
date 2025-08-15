@@ -67,7 +67,7 @@ const App = () => {
       const jobId = parts[2];
       
       // Wait for jobs to load, then select the job
-      if (masterCache.jobs.length > 0) {
+      if (masterCache && masterCache.jobs && masterCache.jobs.length > 0) {
         const job = masterCache.jobs.find(j => j.id === jobId);
         if (job) {
           setSelectedJob(job);
