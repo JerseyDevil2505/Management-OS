@@ -1,6 +1,6 @@
   import React, { useState, useEffect } from 'react';
 import { Upload, FileText, CheckCircle, AlertTriangle, X, Database, Settings, Download, Eye, Calendar, RefreshCw } from 'lucide-react';
-import { jobService, propertyService, supabase } from '../../lib/supabaseClient';
+import { jobService, propertyService, supabase, preservedFieldsHandler } from '../../lib/supabaseClient';
 
 const FileUploadButton = ({ job, onFileProcessed, isJobLoading = false, onDataRefresh }) => {
   const [sourceFile, setSourceFile] = useState(null);
@@ -1193,7 +1193,7 @@ const FileUploadButton = ({ job, onFileProcessed, isJobLoading = false, onDataRe
           recordCount: sourceFileContent.split('\n').length - 1
         });
         
-        try {
+try {
           return await propertyService.updateCSVData(
             sourceFileContent,
             codeFileContent,
@@ -1205,7 +1205,20 @@ const FileUploadButton = ({ job, onFileProcessed, isJobLoading = false, onDataRe
               source_file_name: sourceFile?.name,
               source_file_version_id: crypto.randomUUID(),
               source_file_uploaded_at: new Date().toISOString(),
-              file_version: newFileVersion
+              file_version: newFileVersion,
+              preservedFieldsHandler: preservedFieldsHandler,  // ADD THIS!
+              preservedFields: [
+                'project_start_date', 
+                'validation_status',
+                'is_assigned_property',
+                'asset_building_class', 
+                'asset_design_style', 
+                'asset_ext_cond',
+                'location_analysis', 
+                'new_vcs', 
+                'values_norm_time', 
+                'values_norm_size'
+              ]
             }
           );
         } catch (updateError) {
