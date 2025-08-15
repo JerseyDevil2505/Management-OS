@@ -8,7 +8,7 @@ import {
 import { supabase, checklistService } from '../../lib/supabaseClient';
 import * as XLSX from 'xlsx';
 
-const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checklist', onSubModuleChange }) => {
+const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checklist', onSubModuleChange, properties = [], inspectionData = [], onJobUpdate }) => {
   const [editableAssessorName, setEditableAssessorName] = useState(jobData?.assessor_name || '');
   const [editableAssessorEmail, setEditableAssessorEmail] = useState(jobData?.assessor_email || '');
   const [hasAssessorNameChanges, setHasAssessorNameChanges] = useState(false);
@@ -44,29 +44,18 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
     }
   };
 
-  useEffect(() => {
-    const loadJobDetails = async () => {
-      if (jobData?.id) {
-        // Scroll to top when component loads
-        window.scrollTo(0, 0);
-        
-        // Fetch the latest job data to get saved assessor info
-        const { data, error } = await supabase
-          .from('jobs')
-          .select('assessor_name, assessor_email, project_type')  
-          .eq('id', jobData.id)
-          .single();
-        
-        if (data && !error) {
-          setEditableAssessorName(data.assessor_name || '');
-          setEditableAssessorEmail(data.assessor_email || '');
-          setChecklistType(data.project_type || 'revaluation');          
-        }
-      }
-    };
-    
-    loadJobDetails();
-  }, [jobData?.id]);
+useEffect(() => {
+    // Use job data from props instead of loading from database
+    if (jobData) {
+      // Scroll to top when component loads
+      window.scrollTo(0, 0);
+      
+      // Set values from the jobData prop
+      setEditableAssessorName(jobData.assessor_name || '');
+      setEditableAssessorEmail(jobData.assessor_email || '');
+      setChecklistType(jobData.project_type || 'revaluation');
+    }
+  }, [jobData]);
 
   useEffect(() => {
     if (jobData) {
@@ -112,129 +101,58 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
     setValidFiles(fileChecks);
   };
 
-  // Enhanced function to get ALL property records with pagination
+// Use property records from props instead of fetching
   const getAllPropertyRecords = async (jobId) => {
-    console.log('📊 Fetching all property records for job:', jobId);
-    let allRecords = [];
-    let offset = 0;
-    const limit = 1000;
-    let hasMore = true;
+    console.log('📊 Using property records from props');
     
-    // First, get the latest file_version
-    const { data: versionData, error: versionError } = await supabase
-      .from('property_records')
-      .select('file_version')
-      .eq('job_id', jobId)
-      .order('file_version', { ascending: false })
-      .limit(1);
-    
-    if (versionError || !versionData || versionData.length === 0) {
-      console.error('Error getting file version:', versionError);
+    // Use properties from component props
+    if (!properties || properties.length === 0) {
+      console.warn('Properties not passed from JobContainer');
       return [];
     }
     
-    const latestVersion = versionData[0].file_version;
-    console.log('📌 Latest file version:', latestVersion);
+    // Return only the fields we need for mailing lists
+    const mailingFields = properties.map(record => ({
+      property_block: record.property_block,
+      property_lot: record.property_lot,
+      property_qualifier: record.property_qualifier,
+      property_m4_class: record.property_m4_class,
+      property_location: record.property_location,
+      property_facility: record.property_facility,
+      owner_name: record.owner_name,
+      owner_street: record.owner_street,
+      owner_csz: record.owner_csz,
+      property_composite_key: record.property_composite_key,
+      inspection_info_by: record.inspection_info_by
+    }));
     
-    // Now fetch all records with pagination
-    while (hasMore) {
-      const { data, error } = await supabase
-        .from('property_records')
-        .select(`
-          property_block,
-          property_lot,
-          property_qualifier,
-          property_m4_class,
-          property_location,
-          property_facility,
-          owner_name,
-          owner_street,
-          owner_csz,
-          property_composite_key,
-          inspection_info_by
-        `)
-        .eq('job_id', jobId)
-        .eq('file_version', latestVersion)
-        .range(offset, offset + limit - 1);
-      
-      if (error) {
-        console.error('Error fetching property records:', error);
-        break;
-      }
-      
-      if (data && data.length > 0) {
-        allRecords = [...allRecords, ...data];
-        console.log(`📦 Fetched ${data.length} records (total so far: ${allRecords.length})`);
-        hasMore = data.length === limit;
-        offset += limit;
-      } else {
-        hasMore = false;
-      }
-    }
-    
-    console.log(`✅ Total property records fetched: ${allRecords.length}`);
-    return allRecords;
+    console.log(`✅ Using ${mailingFields.length} property records from props`);
+    return mailingFields;
   };
-
-  // Enhanced function to get ALL inspection data with pagination
+  // Use inspection data from props instead of fetching
   const getAllInspectionData = async (jobId) => {
-    console.log('🔍 Fetching all inspection data for job:', jobId);
-    let allRecords = [];
-    let offset = 0;
-    const limit = 1000;
-    let hasMore = true;
+    console.log('🔍 Using inspection data from props');
     
-    // First, get the latest file_version for inspection data
-    const { data: versionData, error: versionError } = await supabase
-      .from('inspection_data')
-      .select('file_version')
-      .eq('job_id', jobId)
-      .order('file_version', { ascending: false })
-      .limit(1);
-    
-    if (versionError || !versionData || versionData.length === 0) {
-      console.error('Error getting inspection file version:', versionError);
-      // Return empty array if no inspection data exists yet
+    // Use inspectionData from component props
+    if (!inspectionData || inspectionData.length === 0) {
+      console.warn('Inspection data not passed from JobContainer - ProductionTracker may need to run first');
       return [];
     }
     
-    const latestVersion = versionData[0].file_version;
-    console.log('📌 Latest inspection file version:', latestVersion);
+    // Return only the fields we need for mailer lists
+    const inspectionFields = inspectionData.map(record => ({
+      block: record.block,
+      lot: record.lot,
+      qualifier: record.qualifier,
+      property_composite_key: record.property_composite_key,
+      info_by_code: record.info_by_code,
+      list_by: record.list_by,
+      measure_date: record.measure_date,
+      list_date: record.list_date
+    }));
     
-    while (hasMore) {
-      const { data, error } = await supabase
-        .from('inspection_data')
-        .select(`
-          block,
-          lot,
-          qualifier,
-          property_composite_key,
-          info_by_code,
-          list_by,
-          measure_date,
-          list_date
-        `)
-        .eq('job_id', jobId)
-        .eq('file_version', latestVersion)
-        .range(offset, offset + limit - 1);
-      
-      if (error) {
-        console.error('Error fetching inspection data:', error);
-        break;
-      }
-      
-      if (data && data.length > 0) {
-        allRecords = [...allRecords, ...data];
-        console.log(`📦 Fetched ${data.length} inspection records (total so far: ${allRecords.length})`);
-        hasMore = data.length === limit;
-        offset += limit;
-      } else {
-        hasMore = false;
-      }
-    }
-    
-    console.log(`✅ Total inspection records fetched: ${allRecords.length}`);
-    return allRecords;
+    console.log(`✅ Using ${inspectionFields.length} inspection records from props`);
+    return inspectionFields;
   };
 
   // Define the checklist template locally in code
@@ -270,52 +188,11 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
     { id: 'turnover-date', item_text: 'Turnover Date', item_order: 29, category: 'completion', requires_client_approval: false, allows_file_upload: false, input_type: 'date', special_action: 'archive_trigger' }
   ];
 
-  // Load checklist items from database
+  // Load checklist items from props or initialize
   const loadChecklistItems = async () => {
     try {
       setIsLoadingItems(true);
-      
-      // First, check if we need to migrate data from old checklist_items table
-      const { data: oldItems, error: oldError } = await supabase
-        .from('checklist_items')
-        .select('*')
-        .eq('job_id', jobData.id);
-      
-      if (oldItems && oldItems.length > 0) {
-        console.log('Migrating data from old checklist_items table...');
-        
-        // Migrate old data to new table
-        for (const oldItem of oldItems) {
-          // Convert item_text to id format (matching our template IDs)
-          const templateItem = CHECKLIST_TEMPLATE.find(t => t.item_text === oldItem.item_text);
-          if (templateItem) {
-            // Only migrate if there's actual data to preserve
-            if (oldItem.status !== 'pending' || oldItem.client_approved || oldItem.file_attachment_path) {
-              await supabase
-                .from('checklist_item_status')
-                .upsert({
-                  job_id: jobData.id,
-                  item_id: templateItem.id,
-                  status: oldItem.status || 'pending',
-                  completed_at: oldItem.completed_at,
-                  completed_by: oldItem.completed_by,
-                  client_approved: oldItem.client_approved || false,
-                  client_approved_date: oldItem.client_approved_date,
-                  client_approved_by: oldItem.client_approved_by,
-                  file_attachment_path: oldItem.file_attachment_path,
-                  notes: oldItem.notes,
-                  created_at: oldItem.created_at,
-                  updated_at: oldItem.updated_at
-                }, {
-                  onConflict: 'job_id,item_id',
-                  ignoreDuplicates: false // Overwrite if exists
-                });
-            }
-          }
-        }
-        console.log('Migration complete');
-      }
-      
+     
       // Load the status data from the database (what's been completed, approved, etc.)
       const { data: statusData, error: statusError } = await supabase
         .from('checklist_item_status')
@@ -345,8 +222,8 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
           client_approved: status.client_approved || false,
           client_approved_date: status.client_approved_date,
           client_approved_by: status.client_approved_by,
-          file_attachment_path: status.file_attachment_path,
-          notes: status.notes
+          file_attachment_path: status.file_attachment_path
+          // notes column deleted from schema
         };
       });
       
@@ -656,11 +533,16 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
 
   const saveAssessorName = async () => {
     try {
-      // Save to database - update assessor_name field
-      await supabase
-        .from('jobs')
-        .update({ assessor_name: editableAssessorName })
-        .eq('id', jobData.id);
+      // Use callback to parent instead of direct save
+      if (onJobUpdate) {
+        await onJobUpdate({ assessor_name: editableAssessorName });
+      } else {
+        // Fallback to direct save if no callback provided
+        await supabase
+          .from('jobs')
+          .update({ assessor_name: editableAssessorName })
+          .eq('id', jobData.id);
+      }
       
       // Update local state
       setHasAssessorNameChanges(false);
@@ -675,11 +557,16 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
 
   const saveAssessorEmail = async () => {
     try {
-      // Save to database - update assessor_email field
-      await supabase
-        .from('jobs')
-        .update({ assessor_email: editableAssessorEmail })
-        .eq('id', jobData.id);
+      // Use callback to parent instead of direct save
+      if (onJobUpdate) {
+        await onJobUpdate({ assessor_email: editableAssessorEmail });
+      } else {
+        // Fallback to direct save if no callback provided
+        await supabase
+          .from('jobs')
+          .update({ assessor_email: editableAssessorEmail })
+          .eq('id', jobData.id);
+      }
       
       // Update local state
       setHasAssessorEmailChanges(false);
