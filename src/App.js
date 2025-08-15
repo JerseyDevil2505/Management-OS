@@ -559,7 +559,7 @@ useEffect(() => {
                   commercialCompletePercent: job.workflow_stats.commercialCompletePercent || 0,
                   pricingCompletePercent: job.workflow_stats.pricingCompletePercent || 0,
                   validInspections: job.workflow_stats.validInspections || 0,
-                  totalRecords: job.workflow_stats.totalRecords || 0
+                  totalRecords: job.workflow_stats.totalRecords || 0,
                 } : null,
               
               updates.jobs = transformedJobs.filter(j => j.status === 'active');
