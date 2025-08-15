@@ -3517,7 +3517,6 @@ const exportMissingPropertiesReport = () => {
                       <span>Export Missing Report</span>
                     </button>
                   )}
-                  )}
                 </div>
 
                 {missingPropertiesReport.summary.total_missing === 0 ? (
