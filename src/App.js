@@ -733,7 +733,7 @@ useEffect(() => {
     }
   }, [masterCache, saveToStorage]);
 
-  // ==========================================
+// ==========================================
   // SURGICAL CACHE UPDATES
   // ==========================================
   const updateCacheItem = useCallback(async (type, id, data, options = {}) => {
@@ -768,6 +768,43 @@ useEffect(() => {
         updates.billingMetrics = calculateBillingMetrics(
           newActiveJobs,
           masterCache.legacyJobs,
+          masterCache.planningJobs,
+          masterCache.expenses,
+          masterCache.receivables
+        );
+        break;  // <-- ADD THIS BREAK STATEMENT!
+        
+      case 'billing_event_status':
+        // Update the billing event status in both activeJobs and legacyJobs
+        updates = {
+          activeJobs: masterCache.activeJobs.map(job => {
+            if (job.billing_events) {
+              return {
+                ...job,
+                billing_events: job.billing_events.map(event => 
+                  event.id === id ? { ...event, status: data.status } : event
+                )
+              };
+            }
+            return job;
+          }),
+          legacyJobs: masterCache.legacyJobs.map(job => {
+            if (job.billing_events) {
+              return {
+                ...job,
+                billing_events: job.billing_events.map(event => 
+                  event.id === id ? { ...event, status: data.status } : event
+                )
+              };
+            }
+            return job;
+          })
+        };
+        
+        // Recalculate billing metrics with updated data
+        updates.billingMetrics = calculateBillingMetrics(
+          updates.activeJobs,
+          updates.legacyJobs,
           masterCache.planningJobs,
           masterCache.expenses,
           masterCache.receivables
@@ -1352,6 +1389,27 @@ useEffect(() => {
               <span className="text-sm text-white opacity-95">
                 {user.employeeData?.name || user.email} ({user.role})
               </span>
+              <button
+                onClick={() => {
+                  setCacheStatus(prev => ({ ...prev, isRefreshing: true, message: 'Refreshing...' }));
+                  loadMasterData({ force: true, components: ['all'] }).then(() => {
+                    setCacheStatus(prev => ({ ...prev, isRefreshing: false, message: 'Data refreshed' }));
+                    setTimeout(() => {
+                      setCacheStatus(prev => ({ ...prev, message: '' }));
+                    }, 2000);
+                  });
+                }}
+                disabled={cacheStatus.isRefreshing}
+                className="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 backdrop-blur-sm rounded-lg text-white font-medium transition-all duration-200 disabled:opacity-50"
+              >
+                {cacheStatus.isRefreshing ? (
+                  <span className="flex items-center gap-2">
+                    <span className="animate-spin">⟳</span> Refreshing...
+                  </span>
+                ) : (
+                  '🔄 Refresh'
+                )}
+              </button>
               <button
                 onClick={handleLogout}
                 className="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 backdrop-blur-sm rounded-lg text-white font-medium transition-all duration-200"
