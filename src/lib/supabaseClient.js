@@ -2402,6 +2402,10 @@ export const authService = {
 // ===== LEGACY COMPATIBILITY =====
 export const signInAsDev = authService.signInAsDev;
 
+// ===== PRESERVED FIELDS HANDLER EXPORT =====
+// Export the handler for FileUploadButton to pass to updaters
+export const preservedFieldsHandler = propertyService.createPreservedFieldsHandler;
+
 // ===== AUTH HELPER FUNCTIONS =====
 export const authHelpers = {
   // Get current user with role
