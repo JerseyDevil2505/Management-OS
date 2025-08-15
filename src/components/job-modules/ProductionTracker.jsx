@@ -39,48 +39,6 @@ const ProductionTracker = ({
     priced: 0
   });
 
-  // Ensure App.js integration works with fresh data
-if (onUpdateWorkflowStats) {
-  // Create adjusted analytics with override counts included
-  const adjustedAnalytics = {
-    ...analyticsResult,
-    // Valid inspections already includes overrides from processing modal
-    validationOverrideCount: freshOverrides.length
-  };
-
-  debugLog('UPDATE_WORKFLOW_STATS', '🚨 Calling onUpdateWorkflowStats from startProcessingSession', {
-    source: 'startProcessingSession',
-    analytics: adjustedAnalytics,
-    validInspections: adjustedAnalytics.validInspections,
-    jobEntryRate: adjustedAnalytics.jobEntryRate,
-    totalRecords: adjustedAnalytics.totalRecords,
-    timestamp: new Date().toISOString()
-  });
-
-  onUpdateWorkflowStats({
-    jobId: jobData.id,
-    analytics: adjustedAnalytics,
-    billingAnalytics: billingResult,
-    validationReport: validationReportData,
-    missingPropertiesReport: missingPropertiesReportData,
-    validationOverrides: freshOverrides,
-    overrideMap: freshOverrideMap,
-    totalValidationOverrides: freshOverrides.length,
-    lastProcessed: new Date().toISOString()
-  });
-  
-  // Calculate unassigned property count from passed properties
-  const calculateUnassignedPropertyCount = () => {
-    if (!properties || properties.length === 0) return;
-    
-    const unassignedCount = properties.filter(p => 
-      p.is_assigned_property === false
-    ).length;
-    
-    setUnassignedPropertyCount(unassignedCount);
-    debugLog('UNASSIGNED', `Calculated ${unassignedCount} unassigned properties from props`);
-  };
-
   // Settings state - Enhanced InfoBy category configuration
   const [availableInfoByCodes, setAvailableInfoByCodes] = useState([]);
   const [infoByCategoryConfig, setInfoByCategoryConfig] = useState({
