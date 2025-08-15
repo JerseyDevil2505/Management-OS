@@ -2,7 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { Check, X, Plus, Search, TrendingUp, AlertCircle, Calculator, Download, Trash2, RefreshCw, Filter } from 'lucide-react';
 import { supabase, interpretCodes } from '../../../lib/supabaseClient';
 
-const LandValuationTab = ({ properties, jobData, vendorType }) => {
+const LandValuationTab = ({ 
+  properties, 
+  jobData, 
+  vendorType,
+  marketLandData,
+  onAnalysisUpdate 
+}) => {
   // Main tab state
   const [activeSubTab, setActiveSubTab] = useState('land-rates');
   
@@ -72,83 +78,70 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
     excessMax: 10
   };
 
-  // ========== LOAD SAVED DATA ==========
+  // ========== INITIALIZE FROM PROPS ==========
   useEffect(() => {
-    const loadSavedAnalysis = async () => {
-      if (!jobData?.id) return;
-      
-      try {
-        const { data, error } = await supabase
-          .from('market_land_valuation')
-          .select('*')
-          .eq('job_id', jobData.id)
-          .single();
-        
-        if (data && !error) {
-          // Restore valuation method
-          if (data.valuation_method) {
-            setValuationMethod(data.valuation_method);
-          }
-          
-          // Restore configurations
-          if (data.raw_land_config) {
-            if (data.raw_land_config.date_range) {
-              setDateRange({
-                start: new Date(data.raw_land_config.date_range.start),
-                end: new Date(data.raw_land_config.date_range.end)
-              });
-            }
-            if (data.raw_land_config.cascade_config) {
-              setCascadeConfig(data.raw_land_config.cascade_config);
-            }
-            if (data.raw_land_config.front_foot_config) {
-              setFrontFootConfig(data.raw_land_config.front_foot_config);
-            }
-          }
-          
-          // Restore vacant sales analysis
-          if (data.vacant_sales_analysis?.sales) {
-            const savedCategories = {};
-            const savedNotes = {};
-            const savedIncluded = new Set();
-            
-            data.vacant_sales_analysis.sales.forEach(s => {
-              if (s.category) savedCategories[s.id] = s.category;
-              if (s.notes) savedNotes[s.id] = s.notes;
-              if (s.included) savedIncluded.add(s.id);
-            });
-            
-            setSaleCategories(savedCategories);
-            setLandNotes(savedNotes);
-            setIncludedSales(savedIncluded);
-          }
-          
-          // Restore cascade rates if they exist
-          if (data.cascade_rates) {
-            setCascadeConfig(data.cascade_rates);
-          }
-          
-          // Restore allocation study
-          if (data.allocation_study) {
-            if (data.allocation_study.actual_allocations) {
-              setActualAllocations(data.allocation_study.actual_allocations);
-            }
-            if (data.allocation_study.vcs_site_values) {
-              setVcsSiteValues(data.allocation_study.vcs_site_values);
-            }
-          }
-          
-          setLastSaved(data.updated_at ? new Date(data.updated_at) : null);
-        }
-      } catch (error) {
-        console.error('Error loading saved analysis:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
+    // If no market land data from parent, just set loading to false
+    if (!marketLandData) {
+      setIsLoading(false);
+      return;
+    }
     
-    loadSavedAnalysis();
-  }, [jobData?.id]);
+    // Restore valuation method
+    if (marketLandData.valuation_method) {
+      setValuationMethod(marketLandData.valuation_method);
+    }
+    
+    // Restore configurations
+    if (marketLandData.raw_land_config) {
+      if (marketLandData.raw_land_config.date_range) {
+        setDateRange({
+          start: new Date(marketLandData.raw_land_config.date_range.start),
+          end: new Date(marketLandData.raw_land_config.date_range.end)
+        });
+      }
+      if (marketLandData.raw_land_config.cascade_config) {
+        setCascadeConfig(marketLandData.raw_land_config.cascade_config);
+      }
+      if (marketLandData.raw_land_config.front_foot_config) {
+        setFrontFootConfig(marketLandData.raw_land_config.front_foot_config);
+      }
+    }
+    
+    // Restore vacant sales analysis
+    if (marketLandData.vacant_sales_analysis?.sales) {
+      const savedCategories = {};
+      const savedNotes = {};
+      const savedIncluded = new Set();
+      
+      marketLandData.vacant_sales_analysis.sales.forEach(s => {
+        if (s.category) savedCategories[s.id] = s.category;
+        if (s.notes) savedNotes[s.id] = s.notes;
+        if (s.included) savedIncluded.add(s.id);
+      });
+      
+      setSaleCategories(savedCategories);
+      setLandNotes(savedNotes);
+      setIncludedSales(savedIncluded);
+    }
+    
+    // Restore cascade rates if they exist
+    if (marketLandData.cascade_rates) {
+      setCascadeConfig(marketLandData.cascade_rates);
+    }
+    
+    // Restore allocation study
+    if (marketLandData.allocation_study) {
+      if (marketLandData.allocation_study.actual_allocations) {
+        setActualAllocations(marketLandData.allocation_study.actual_allocations);
+      }
+      if (marketLandData.allocation_study.vcs_site_values) {
+        setVcsSiteValues(marketLandData.allocation_study.vcs_site_values);
+      }
+    }
+    
+    setLastSaved(marketLandData.updated_at ? new Date(marketLandData.updated_at) : null);
+    setIsLoading(false);
+  }, [marketLandData]);
 
   // Load data when properties change or method selected
   useEffect(() => {
@@ -173,7 +166,7 @@ const LandValuationTab = ({ properties, jobData, vendorType }) => {
       }
     }, 30000);
     return () => clearInterval(interval);
-  }, [valuationMethod, cascadeConfig, landNotes, saleCategories, actualAllocations]);
+  }, [valuationMethod, cascadeConfig, landNotes, saleCategories, actualAllocations, onAnalysisUpdate]);
 
   // ========== LAND RATES FUNCTIONS ==========
   const filterVacantSales = () => {
@@ -830,6 +823,11 @@ Provide a brief 2-3 sentence assessment of the most likely factors affecting thi
       }
       
       setLastSaved(new Date());
+      
+      // Notify parent component of the update
+      if (onAnalysisUpdate) {
+        onAnalysisUpdate(analysisData);
+      }
     } catch (error) {
       console.error('Error saving analysis:', error);
     } finally {
