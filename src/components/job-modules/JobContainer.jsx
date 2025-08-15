@@ -490,7 +490,7 @@ const JobContainer = ({
     };
 
     // 🔧 CRITICAL: Pass App.js state management to ProductionTracker
-    if (activeModule === 'production' && onUpdateWorkflowStats) {
+    if (activeModule === 'production') {
       return {
         ...baseProps,
         // Pass current workflow stats from App.js
@@ -498,7 +498,9 @@ const JobContainer = ({
         // Pass update function for analytics completion
         onAnalyticsUpdate: handleAnalyticsUpdate,
         // Direct access to App.js state updater if needed
-        onUpdateWorkflowStats
+        onUpdateWorkflowStats,
+        // ADD THIS LINE: Pass the job refresh callback
+        onJobProcessingComplete: onWorkflowStatsUpdate
       };
     }
 
