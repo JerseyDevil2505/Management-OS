@@ -8,6 +8,8 @@ import BillingManagement from './components/BillingManagement';
 import PayrollManagement from './components/PayrollManagement';
 import JobContainer from './components/job-modules/JobContainer';
 import FileUploadButton from './components/job-modules/FileUploadButton';
+import LandingPage from './components/LandingPage';
+import UserManagement from './components/UserManagement';
 
 // ==========================================
 // PERSISTENT CACHE CONFIGURATION
@@ -44,7 +46,7 @@ const App = () => {
   const [activeView, setActiveView] = useState(() => {
     // Read from URL on initial load
     const path = window.location.pathname.slice(1) || 'admin-jobs';
-    const validViews = ['admin-jobs', 'billing', 'employees', 'payroll', 'job-modules'];
+    const validViews = ['admin-jobs', 'billing', 'employees', 'payroll', 'job-modules', 'users'];
     return validViews.includes(path) ? path : 'admin-jobs';
   });
 
@@ -135,6 +137,10 @@ const App = () => {
   // Job selection state
   const [selectedJob, setSelectedJob] = useState(null);
   const [fileRefreshTrigger, setFileRefreshTrigger] = useState(0);
+
+    // Authentication state
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);  
 
   // Background refresh control
   const refreshTimerRef = useRef(null);
@@ -1069,6 +1075,75 @@ const App = () => {
     };
   };
 
+  // Check for existing session or dev mode on mount
+  useEffect(() => {
+    checkSession();
+  }, []);
+
+  const checkSession = async () => {
+    try {
+      // Development auto-login
+      if (window.location.hostname.includes('production-black-seven') || 
+          window.location.hostname === 'localhost' ||
+          window.location.hostname.includes('github.dev') ||
+          window.location.hostname.includes('preview')) {
+        setUser({
+          email: 'dev@lojik.com',
+          role: 'admin',
+          employeeData: { 
+            name: 'Development Mode',
+            role: 'admin'
+          }
+        });
+        setLoading(false);
+        return;
+      }
+
+      // Production - check for real session
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session) {
+        // Get employee data for role
+        const { data: employee } = await supabase
+          .from('employees')
+          .select('*')
+          .eq('email', session.user.email.toLowerCase())
+          .single();
+
+        if (employee) {
+          setUser({
+            ...session.user,
+            role: employee.role || 'inspector',
+            employeeData: employee
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Session check error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };  
+
+  const handleLogin = (userData) => {
+    setUser(userData);
+    // Set default tab based on role
+    if (userData.role === 'manager') {
+      setActiveView('employees');
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+      setUser(null);
+      setSelectedJob(null);
+      setActiveView('admin-jobs');
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  };  
+
   // ==========================================
   // INITIAL LOAD WITH CACHE
   // ==========================================
@@ -1183,6 +1258,24 @@ const App = () => {
   // ==========================================
   // RENDER UI
   // ==========================================
+  
+  // Show loading state
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show landing page if not authenticated
+  if (!user) {
+    return <LandingPage onLogin={handleLogin} />;
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Cache Status Bar - Errors Only */}
@@ -1209,9 +1302,10 @@ const App = () => {
             </h1>
             <div className="flex items-center gap-4">
               <span className="text-sm text-white opacity-95">
-                dev@lojik.com (Management)
+                {user.employeeData?.name || user.email} ({user.role})
               </span>
               <button
+                onClick={handleLogout}
                 className="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 backdrop-blur-sm rounded-lg text-white font-medium transition-all duration-200"
               >
                 Logout
@@ -1281,6 +1375,21 @@ const App = () => {
                 } : {}}
               >
                 💸 Payroll
+              </button>
+              <button
+                onClick={() => handleViewChange('users')}
+                className={`px-4 py-2 rounded-xl font-medium text-sm border ${
+                  activeView === 'users'
+                    ? 'text-blue-600 shadow-lg border-white'
+                    : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm border-white border-opacity-30 hover:border-opacity-50'
+                }`}
+                style={activeView === 'users' ? { 
+                  backgroundColor: '#FFFFFF',
+                  opacity: 1,
+                  backdropFilter: 'none'
+                } : {}}
+              >
+                🔐 Users
               </button>
             </nav>
           )}
@@ -1381,6 +1490,10 @@ const App = () => {
             onDataUpdate={updateCacheItem}
             onRefresh={() => loadMasterData({ force: true, components: ['payroll'] })}
           />
+        )}
+
+        {activeView === 'users' && (
+          <UserManagement />
         )}
 
         {activeView === 'job-modules' && selectedJob && (
