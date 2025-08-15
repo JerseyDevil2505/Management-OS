@@ -2,7 +2,7 @@
 import { Upload, FileText, CheckCircle, AlertTriangle, X, Database, Settings, Download, Eye, Calendar, RefreshCw } from 'lucide-react';
 import { jobService, propertyService, supabase } from '../../lib/supabaseClient';
 
-const FileUploadButton = ({ job, onFileProcessed }) => {
+const FileUploadButton = ({ job, onFileProcessed, isJobLoading = false, onDataRefresh }) => {
   const [sourceFile, setSourceFile] = useState(null);
   const [codeFile, setCodeFile] = useState(null);
   const [detectedVendor, setDetectedVendor] = useState(null);
@@ -1135,6 +1135,13 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
 
   // ENHANCED: Process changes with batch logging modal
   const handleProcessChanges = async () => {
+    // Prevent processing while job is loading
+    if (isJobLoading) {
+      console.log('⚠️ Job data is still loading, please wait');
+      addNotification('Job data is still loading, please wait', 'warning');
+      return;
+    }
+    
     // Prevent double processing
     if (isProcessingLocked) {
       console.log('⚠️ Processing already in progress, ignoring duplicate request');
@@ -1178,20 +1185,39 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       
       // Track batch operations
       const result = await trackBatchInserts(async () => {
-        return await propertyService.updateCSVData(
-          sourceFileContent,
-          codeFileContent,
-          job.id,
-          job.year_created || new Date().getFullYear(),
-          job.ccdd_code || job.ccddCode,
-          detectedVendor,
-          {
-            source_file_name: sourceFile?.name,
-            source_file_version_id: crypto.randomUUID(),
-            source_file_uploaded_at: new Date().toISOString(),
-            file_version: newFileVersion  // FIX 1: Pass file_version, not source_file_version
-          }
-        );
+        // Log what we're sending to help debug
+        console.log('📤 Calling updateCSVData with:', {
+          jobId: job.id,
+          vendor: detectedVendor,
+          fileVersion: newFileVersion,
+          recordCount: sourceFileContent.split('\n').length - 1
+        });
+        
+        try {
+          return await propertyService.updateCSVData(
+            sourceFileContent,
+            codeFileContent,
+            job.id,
+            job.year_created || new Date().getFullYear(),
+            job.ccdd_code || job.ccddCode,
+            detectedVendor,
+            {
+              source_file_name: sourceFile?.name,
+              source_file_version_id: crypto.randomUUID(),
+              source_file_uploaded_at: new Date().toISOString(),
+              file_version: newFileVersion
+            }
+          );
+        } catch (updateError) {
+          console.error('❌ updateCSVData failed:', updateError);
+          // Add more specific error info to batch log
+          addBatchLog(`❌ Update failed: ${updateError.message}`, 'error', {
+            error: updateError.message,
+            stack: updateError.stack,
+            vendor: detectedVendor
+          });
+          throw updateError;
+        }
       });
       
       addBatchLog('✅ Property data processing completed', 'success', {
@@ -1401,12 +1427,18 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
           setSalesDecisions(new Map());
         }, 3000);
       }
-      
+        
       // Notify parent component
       if (onFileProcessed) {
         onFileProcessed(result);
       }
       
+      // Trigger data refresh in JobContainer
+      if (onDataRefresh) {
+        addBatchLog('🔄 Triggering data refresh in JobContainer...', 'info');
+        await onDataRefresh();
+        addBatchLog('✅ JobContainer data refreshed', 'success');
+      }
     } catch (error) {
       console.error('❌ Processing failed:', error);
       
@@ -2161,6 +2193,13 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                       onFileProcessed(result);
                     }
                     
+                    // Trigger data refresh in JobContainer
+                    if (onDataRefresh) {
+                      addBatchLog('🔄 Triggering data refresh in JobContainer...', 'info');
+                      await onDataRefresh();
+                      addBatchLog('✅ JobContainer data refreshed', 'success');
+                    }
+                    
                   } catch (error) {
                     console.error('❌ Processing failed:', error);
                     
@@ -2206,40 +2245,21 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     });
   };
 
-  // NEW: Fetch source file version from property_records
+  // Use file version from job prop instead of fetching
   useEffect(() => {
-    const fetchSourceFileVersion = async () => {
-      if (!job?.id) return;
-      
-      // Don't overwrite if we already have a version set locally
-      if (sourceFileVersion !== null) {
-        setIsInitialized(true);
-        return;
-      }
-      
-      try {
-        const { data, error } = await supabase
-          .from('property_records')
-          .select('file_version')
-          .eq('job_id', job.id)
-          .limit(1)
-          .single();
-          
-        if (data && !error) {
-          setSourceFileVersion(data.file_version || 1);
-        } else {
-          setSourceFileVersion(1);
-        }
-      } catch (error) {
-        console.error('🔍 DEBUG - Error fetching source file version:', error);
-        setSourceFileVersion(1);
-      } finally {
-        setIsInitialized(true);
-      }
-    };
-
-    fetchSourceFileVersion();
-  }, [job?.id]);  // Remove sourceFileVersion from dependencies
+    if (!job?.id) return;
+    
+    // Get version from job's property_records or default to 1
+    // This should be passed from JobContainer which already has the data
+    const currentVersion = job.current_file_version || job.source_file_version || 1;
+    
+    // Only set if different to avoid unnecessary renders
+    if (sourceFileVersion !== currentVersion) {
+      setSourceFileVersion(currentVersion);
+    }
+    
+    setIsInitialized(true);
+  }, [job?.id, job?.current_file_version, job?.source_file_version]);
 
   const getFileStatusWithRealVersion = (timestamp, type) => {
     if (!timestamp) return 'Never';
@@ -2317,8 +2337,9 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         
         <button
           onClick={() => document.getElementById('source-file-upload').click()}
-          disabled={comparing || processing}
+          disabled={comparing || processing || isJobLoading}
           className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:bg-gray-500 flex items-center gap-1"
+          title={isJobLoading ? 'Job data is loading...' : ''}
         >
           <Upload className="w-3 h-3" />
           {sourceFile ? sourceFile.name.substring(0, 10) + '...' : 'Select File'}
@@ -2341,8 +2362,9 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
             </button>
             <button
               onClick={() => handleCompareFile('source')}
-              disabled={comparing || processing}
+              disabled={comparing || processing || isJobLoading}
               className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 disabled:bg-gray-500 flex items-center gap-1"
+              title={isJobLoading ? 'Job data is loading...' : ''}
             >
               {comparing ? (
                 <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
