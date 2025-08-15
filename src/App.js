@@ -530,7 +530,7 @@ useEffect(() => {
                 
                 // Transform property counts - use workflow_stats if available
                 totalProperties: job.workflow_stats?.totalRecords || job.total_properties || 0,
-                inspectedProperties: job.workflow_stats?.validInspections || job.inspected_properties || 0,
+                inspectedProperties: (typeof job.workflow_stats === 'string' ? JSON.parse(job.workflow_stats) : job.workflow_stats)?.validInspections || job.inspected_properties || 0,
                 totalresidential: job.totalresidential || 0,
                 totalcommercial: job.totalcommercial || 0,
                 
