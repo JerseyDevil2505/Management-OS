@@ -6,7 +6,8 @@ import AdminJobManagement from './components/AdminJobManagement';
 import EmployeeManagement from './components/EmployeeManagement';
 import BillingManagement from './components/BillingManagement';
 import PayrollManagement from './components/PayrollManagement';
-// ... other component imports
+import JobContainer from './components/job-modules/JobContainer';
+import FileUploadButton from './components/job-modules/FileUploadButton';
 
 // ==========================================
 // PERSISTENT CACHE CONFIGURATION
@@ -43,7 +44,7 @@ const App = () => {
   const [activeView, setActiveView] = useState(() => {
     // Read from URL on initial load
     const path = window.location.pathname.slice(1) || 'admin-jobs';
-    const validViews = ['admin-jobs', 'billing', 'employees', 'payroll'];
+    const validViews = ['admin-jobs', 'billing', 'employees', 'payroll', 'job-modules'];
     return validViews.includes(path) ? path : 'admin-jobs';
   });
 
@@ -130,6 +131,10 @@ const App = () => {
     lastError: null,
     message: ''
   });
+
+  // Job selection state
+  const [selectedJob, setSelectedJob] = useState(null);
+  const [fileRefreshTrigger, setFileRefreshTrigger] = useState(0);
 
   // Background refresh control
   const refreshTimerRef = useRef(null);
@@ -809,6 +814,27 @@ const App = () => {
   }, []);
 
   // ==========================================
+  // JOB SELECTION HANDLERS
+  // ==========================================
+  const handleJobSelect = useCallback((job) => {
+    setSelectedJob(job);
+    setActiveView('job-modules');
+  }, []);
+
+  const handleBackToJobs = useCallback(() => {
+    setSelectedJob(null);
+    setActiveView('admin-jobs');
+  }, []);
+
+  const handleFileProcessed = useCallback(() => {
+    // Clear cache for this job after file upload
+    if (selectedJob) {
+      updateJobCache(selectedJob.id, null);
+      setFileRefreshTrigger(prev => prev + 1);
+    }
+  }, [selectedJob, updateJobCache]);
+
+  // ==========================================
   // BACKGROUND REFRESH MANAGER
   // ==========================================
   const scheduleBackgroundRefresh = useCallback((delay = CACHE_EXPIRY.warm) => {
@@ -1259,6 +1285,7 @@ const App = () => {
         {activeView === 'admin-jobs' && (
           <AdminJobManagement
             jobs={masterCache.jobs}
+            onJobSelect={handleJobSelect}
             planningJobs={masterCache.planningJobs}
             archivedJobs={masterCache.archivedJobs}
             managers={masterCache.managers}
@@ -1288,7 +1315,7 @@ const App = () => {
           />
         )}
 
-        {activeView === 'employees' && (
+{activeView === 'employees' && (
           <EmployeeManagement
             employees={masterCache.employees}
             globalAnalytics={masterCache.globalInspectionAnalytics}
@@ -1296,7 +1323,6 @@ const App = () => {
             onRefresh={() => loadMasterData({ force: true, components: ['employees'] })}
           />
         )}
-
         {activeView === 'payroll' && (
           <PayrollManagement
             employees={masterCache.employees.filter(e => 
@@ -1310,9 +1336,37 @@ const App = () => {
             onRefresh={() => loadMasterData({ force: true, components: ['payroll'] })}
           />
         )}
+        {activeView === 'job-modules' && selectedJob && (
+          <div>
+            {/* File Upload in header */}
+            <div className="max-w-7xl mx-auto px-6 mb-4">
+              <div className="flex items-center justify-between bg-white rounded-lg shadow p-4">
+                <div>
+                  <h2 className="text-lg font-semibold">{selectedJob.job_name || selectedJob.name}</h2>
+                  <p className="text-sm text-gray-600">{selectedJob.municipality}</p>
+                </div>
+                <FileUploadButton 
+                  job={selectedJob}
+                  onFileProcessed={handleFileProcessed}
+                />
+              </div>
+            </div>
+            
+            {/* Job Container */}
+            <JobContainer
+              selectedJob={selectedJob}
+              onBackToJobs={handleBackToJobs}
+              jobCache={masterCache.jobCache}
+              onUpdateJobCache={updateJobCache}
+              fileRefreshTrigger={fileRefreshTrigger}
+            />
+          </div>
+        )}
       </main>
     </div>
   );
 };
+
+
 
 export default App;
