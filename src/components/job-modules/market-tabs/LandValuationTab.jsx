@@ -173,7 +173,7 @@ const LandValuationTab = ({
   // ========== CALCULATE ACREAGE HELPER ==========
   const calculateAcreage = useCallback((property) => {
     return interpretCodes.getCalculatedAcreage(property, vendorType);
-  }, [vendorType]););
+  }, [vendorType]);
 
   // ========== GET VCS DESCRIPTION HELPER ==========
   const getVCSDescription = useCallback((vcsCode) => {
