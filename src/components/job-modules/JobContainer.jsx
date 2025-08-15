@@ -206,6 +206,12 @@ const JobContainer = ({
         setProperties(allProperties);
         console.log(`✅ Successfully loaded ${allProperties.length} properties`);
 
+        // Save to cache immediately while we have the data
+        if (onUpdateJobCache && allProperties.length > 0) {
+          console.log(`💾 Updating cache for job ${selectedJob.id} with ${allProperties.length} properties`);
+          // We'll finish this after you confirm this is the right spot
+        }
+
         // BUILD PRESERVED FIELDS MAP for FileUploadButton
         const preservedMap = {};
         allProperties.forEach(prop => {
@@ -231,7 +237,7 @@ const JobContainer = ({
         setProperties([]);
       }
 
-      // LOAD ADDITIONAL DATA TABLES per the guide
+// LOAD ADDITIONAL DATA TABLES per the guide
       console.log('📊 Loading additional data tables...');
       
       // 1. Load inspection_data with pagination (could be 16K+ records!)
@@ -327,16 +333,11 @@ const JobContainer = ({
       
       setJobData(enrichedJobData);
 
-      // UPDATE CACHE with loaded data
-      console.log('🔍 CACHE SAVE CHECK:', {
-        hasOnUpdateJobCache: !!onUpdateJobCache,
-        propertiesLength: properties.length,
-        willSave: !!(onUpdateJobCache && properties.length > 0)
-      });
-      if (onUpdateJobCache && properties.length > 0) {
-        console.log(`💾 Updating cache for job ${selectedJob.id}`);
+      // UPDATE CACHE with loaded data - NOW WE HAVE EVERYTHING!
+      if (onUpdateJobCache && allProperties && allProperties.length > 0) {
+        console.log(`💾 Updating cache for job ${selectedJob.id} with ${allProperties.length} properties`);
         onUpdateJobCache(selectedJob.id, {
-          properties: properties,
+          properties: allProperties,
           jobData: enrichedJobData,
           inspectionData: inspectionDataFull || [],
           marketLandData: marketData || {},
@@ -348,6 +349,7 @@ const JobContainer = ({
           timestamp: Date.now()
         });
       }
+      
     } catch (error) {
       console.error('Error loading file versions:', error);
       setVersionError(error.message);
