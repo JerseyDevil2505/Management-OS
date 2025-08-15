@@ -328,6 +328,11 @@ const JobContainer = ({
       setJobData(enrichedJobData);
 
       // UPDATE CACHE with loaded data
+      console.log('🔍 CACHE SAVE CHECK:', {
+        hasOnUpdateJobCache: !!onUpdateJobCache,
+        propertiesLength: properties.length,
+        willSave: !!(onUpdateJobCache && properties.length > 0)
+      });
       if (onUpdateJobCache && properties.length > 0) {
         console.log(`💾 Updating cache for job ${selectedJob.id}`);
         onUpdateJobCache(selectedJob.id, {
