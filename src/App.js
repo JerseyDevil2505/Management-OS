@@ -1200,74 +1200,127 @@ const App = () => {
         </div>
       )}
 
-      {/* Navigation */}
-      <nav className="app-header shadow-lg">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center">
-              <h1 className="text-xl font-bold text-white mr-8">Management OS</h1>
-              <div className="flex space-x-2">
-                <button
-                  onClick={() => handleViewChange('employees')}
-                  className={`px-6 py-3 rounded-full text-base font-semibold transition-all ${
-                    activeView === 'employees' 
-                      ? 'bg-white text-blue-600 shadow-lg' 
-                      : 'bg-white bg-opacity-20 text-white hover:bg-opacity-30'
-                  }`}
-                >
-                  👥 Employees ({masterCache.employees.length})
-                </button>
-                <button
-                  onClick={() => handleViewChange('admin-jobs')}
-                  className={`px-6 py-3 rounded-full text-base font-semibold transition-all ${
-                    activeView === 'admin-jobs' 
-                      ? 'bg-white text-blue-600 shadow-lg' 
-                      : 'bg-white bg-opacity-20 text-white hover:bg-opacity-30'
-                  }`}
-                >
-                  📋 Jobs ({masterCache.jobs.length})
-                </button>
-                <button
-                  onClick={() => handleViewChange('billing')}
-                  className={`px-6 py-3 rounded-full text-base font-semibold transition-all ${
-                    activeView === 'billing' 
-                      ? 'bg-white text-blue-600 shadow-lg' 
-                      : 'bg-white bg-opacity-20 text-white hover:bg-opacity-30'
-                  }`}
-                >
-                  💰 Billing
-                </button>
-                <button
-                  onClick={() => handleViewChange('payroll')}
-                  className={`px-6 py-3 rounded-full text-base font-semibold transition-all ${
-                    activeView === 'payroll' 
-                      ? 'bg-white text-blue-600 shadow-lg' 
-                      : 'bg-white bg-opacity-20 text-white hover:bg-opacity-30'
-                  }`}
-                >
-                  💸 Payroll
-                </button>
-              </div>
-            </div>
-            
-            {/* Cache Controls */}
-            <div className="flex items-center space-x-3">
-              {masterCache.loadSource === 'cache' && (
-                <span className="text-xs text-white opacity-75">
-                  📦 Cached {masterCache.cacheAge && `(${Math.floor(masterCache.cacheAge / 60000)}m ago)`}
-                </span>
-              )}
+      {/* Top Navigation - Updated with Management OS styling */}
+      <div className="app-header">
+        <div className="max-w-7xl mx-auto px-4 py-4">
+          <div className="flex justify-between items-center mb-4">
+            <h1 style={{ 
+              color: '#FFFFFF',
+              fontSize: '2rem',
+              fontWeight: 'bold',
+              fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", 
+              letterSpacing: '-0.02em',
+              display: 'flex',
+              alignItems: 'center'
+            }}>
+              Management OS
+            </h1>
+            <div className="flex items-center gap-4">
+              <span className="text-sm text-white opacity-95">
+                dev@lojik.com (Management)
+              </span>
               <button
-                onClick={() => invalidateCache(['all'])}
-                className="px-4 py-2 bg-white bg-opacity-90 text-blue-600 rounded-md hover:bg-opacity-100 text-sm font-semibold shadow-md transition-all"
-                title="Force refresh all data"
+                className="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 backdrop-blur-sm rounded-lg text-white font-medium transition-all duration-200"
               >
-                🔄 Refresh Data
+                Logout
               </button>
             </div>
           </div>
+          
+          {/* Only show main navigation when NOT in job-specific modules */}
+          {activeView !== 'job-modules' && (
+            <nav className="flex space-x-4">
+              <button
+                onClick={() => handleViewChange('employees')}
+                className={`px-4 py-2 rounded-xl font-medium text-sm border ${
+                  activeView === 'employees'
+                    ? 'text-blue-600 shadow-lg border-white'
+                    : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm border-white border-opacity-30 hover:border-opacity-50'
+                }`}
+                style={activeView === 'employees' ? { 
+                  backgroundColor: '#FFFFFF',
+                  opacity: 1,
+                  backdropFilter: 'none'
+                } : {}}
+              >
+                👥 Employees ({masterCache.employees.length})
+              </button>
+              <button
+                onClick={() => handleViewChange('admin-jobs')}
+                className={`px-4 py-2 rounded-xl font-medium text-sm border ${
+                  activeView === 'admin-jobs'
+                    ? 'text-blue-600 shadow-lg border-white'
+                    : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm border-white border-opacity-30 hover:border-opacity-50'
+                }`}
+                style={activeView === 'admin-jobs' ? { 
+                  backgroundColor: '#FFFFFF',
+                  opacity: 1,
+                  backdropFilter: 'none'
+                } : {}}
+              >
+                📋 Jobs ({masterCache.jobs.length})
+              </button>
+              <button
+                onClick={() => handleViewChange('billing')}
+                className={`px-4 py-2 rounded-xl font-medium text-sm border ${
+                  activeView === 'billing'
+                    ? 'text-blue-600 shadow-lg border-white'
+                    : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm border-white border-opacity-30 hover:border-opacity-50'
+                }`}
+                style={activeView === 'billing' ? { 
+                  backgroundColor: '#FFFFFF',
+                  opacity: 1,
+                  backdropFilter: 'none'
+                } : {}}
+              >
+                💰 Billing
+              </button>
+              <button
+                onClick={() => handleViewChange('payroll')}
+                className={`px-4 py-2 rounded-xl font-medium text-sm border ${
+                  activeView === 'payroll'
+                    ? 'text-blue-600 shadow-lg border-white'
+                    : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm border-white border-opacity-30 hover:border-opacity-50'
+                }`}
+                style={activeView === 'payroll' ? { 
+                  backgroundColor: '#FFFFFF',
+                  opacity: 1,
+                  backdropFilter: 'none'
+                } : {}}
+              >
+                💸 Payroll
+              </button>
+            </nav>
+          )}
+          
+          {/* Show job context when in job-specific modules */}
+          {activeView === 'job-modules' && selectedJob && (
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-6">
+                <div>
+                  <p className="text-sm text-white opacity-75">Working on:</p>
+                  <p className="text-lg font-semibold text-white">{selectedJob.job_name || selectedJob.name}</p>
+                </div>
+                
+                {/* File Upload Controls */}
+                <div className="border-l border-white border-opacity-30 pl-6">
+                  <FileUploadButton 
+                    job={selectedJob} 
+                    onFileProcessed={handleFileProcessed} 
+                  />
+                </div>
+              </div>
+              
+              <button
+                onClick={handleBackToJobs}
+                className="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 backdrop-blur-sm rounded-lg text-white font-medium transition-all duration-200"
+              >
+                ← Back to Jobs
+              </button>
+            </div>
+          )}
         </div>
-      </nav>
+      </div>
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
@@ -1352,21 +1405,18 @@ const App = () => {
               </div>
             </div>
             
-            {/* Job Container */}
-            <JobContainer
-              selectedJob={selectedJob}
-              onBackToJobs={handleBackToJobs}
-              jobCache={masterCache.jobCache}
-              onUpdateJobCache={updateJobCache}
-              fileRefreshTrigger={fileRefreshTrigger}
-            />
-          </div>
+        {activeView === 'job-modules' && selectedJob && (
+          <JobContainer
+            selectedJob={selectedJob}
+            onBackToJobs={handleBackToJobs}
+            jobCache={masterCache.jobCache}
+            onUpdateJobCache={updateJobCache}
+            fileRefreshTrigger={fileRefreshTrigger}
+          />
         )}
       </main>
     </div>
   );
 };
-
-
 
 export default App;
