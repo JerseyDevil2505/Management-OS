@@ -3516,6 +3516,7 @@ const exportMissingPropertiesReport = () => {
                       <Download className="w-4 h-4" />
                       <span>Export Missing Report</span>
                     </button>
+                  }  
                   )}
                 </div>
 
