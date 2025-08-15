@@ -13,7 +13,9 @@ const JobContainer = ({
   onBackToJobs, 
   workflowStats, 
   onUpdateWorkflowStats,
-  fileRefreshTrigger 
+  fileRefreshTrigger,
+  jobCache,          
+  onUpdateJobCache    
 }) => {
   const [activeModule, setActiveModule] = useState('checklist');
   const [jobData, setJobData] = useState(null);
@@ -53,6 +55,29 @@ const JobContainer = ({
     setLoadedCount(0);
 
     try {
+      // CHECK CACHE FIRST
+      if (jobCache && jobCache[selectedJob.id]) {
+        const cached = jobCache[selectedJob.id];
+        console.log(`🎯 Using cached data for job ${selectedJob.id}`);
+        
+        // Use cached data immediately
+        setProperties(cached.properties || []);
+        setPropertyRecordsCount(cached.properties?.length || 0);
+        setLatestFileVersion(cached.fileVersion || 1);
+        setLatestCodeVersion(cached.codeVersion || 1);
+        setJobData(cached.jobData || selectedJob);
+        setIsLoadingVersion(false);
+        setLoadingProgress(100);
+        
+        // Check if cache is fresh enough (optional: add timestamp check)
+        if (cached.timestamp && Date.now() - cached.timestamp < 5 * 60 * 1000) { // 5 minutes
+          console.log('✅ Cache is fresh, skipping database load');
+          return; // Skip database load entirely
+        }
+      }
+      
+      console.log('📡 Loading from database...');
+      
       // Get data version AND source file date from property_records table
       const { data: dataVersionData, error: dataVersionError } = await supabase
         .from('property_records')
@@ -62,10 +87,10 @@ const JobContainer = ({
         .limit(1)
         .single();
 
-      // Get job data including assignment status
+      // Get ALL job data in ONE comprehensive query
       const { data: jobData, error: jobError } = await supabase
         .from('jobs')
-        .select('code_file_version, updated_at, end_date, workflow_stats, parsed_code_definitions, vendor_type, has_property_assignments')
+        .select('*')  // Get ALL fields for this job
         .eq('id', selectedJob.id)
         .single();
 
@@ -186,6 +211,17 @@ const JobContainer = ({
       
       setJobData(enrichedJobData);
 
+      // UPDATE CACHE with loaded data
+      if (onUpdateJobCache && allProperties && allProperties.length > 0) {
+        console.log(`💾 Updating cache for job ${selectedJob.id}`);
+        onUpdateJobCache(selectedJob.id, {
+          properties: allProperties,  
+          jobData: enrichedJobData,
+          fileVersion: currentFileVersion,
+          codeVersion: currentCodeVersion,
+          timestamp: Date.now()
+        });
+      }
     } catch (error) {
       console.error('Error loading file versions:', error);
       setVersionError(error.message);
@@ -214,6 +250,12 @@ const JobContainer = ({
   // Handle file upload completion - refresh version data
   const handleFileProcessed = async (fileType, fileName) => {
     console.log(`📁 File processed: ${fileType} - ${fileName}`);
+    
+    // Clear cache for this job since data changed
+    if (onUpdateJobCache && selectedJob?.id) {
+      console.log(`🗑️ Clearing cache for job ${selectedJob.id} after file update`);
+      onUpdateJobCache(selectedJob.id, null);
+    }
     
     // Refresh file version data when new files are uploaded
     await loadLatestFileVersions();
