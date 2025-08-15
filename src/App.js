@@ -89,6 +89,7 @@ const App = () => {
     managers: [],
     planningJobs: [],
     archivedJobs: [],
+    jobCache: {},
     
     // Billing Data
     activeJobs: [],
@@ -778,6 +779,36 @@ const App = () => {
   }, [masterCache, saveToStorage]);
 
   // ==========================================
+  // JOB-LEVEL CACHE MANAGEMENT (SECOND TIER)
+  // ==========================================
+  const updateJobCache = useCallback((jobId, data) => {
+    if (data === null) {
+      // Clear cache for this job (used after FileUpload)
+      console.log(`🗑️ Clearing cache for job ${jobId}`);
+      setMasterCache(prev => ({
+        ...prev,
+        jobCache: {
+          ...prev.jobCache,
+          [jobId]: undefined
+        }
+      }));
+    } else {
+      // Update cache for this job
+      console.log(`📦 Updating cache for job ${jobId}`);
+      setMasterCache(prev => ({
+        ...prev,
+        jobCache: {
+          ...prev.jobCache,
+          [jobId]: {
+            ...data,
+            timestamp: Date.now()
+          }
+        }
+      }));
+    }
+  }, []);
+
+  // ==========================================
   // BACKGROUND REFRESH MANAGER
   // ==========================================
   const scheduleBackgroundRefresh = useCallback((delay = CACHE_EXPIRY.warm) => {
@@ -1237,6 +1268,8 @@ const App = () => {
             inspectionData={masterCache.inspectionData}
             workflowStats={masterCache.workflowStats}
             onDataUpdate={updateCacheItem}
+            jobCache={masterCache.jobCache}
+            onUpdateJobCache={updateJobCache}
             onRefresh={() => loadMasterData({ force: true, components: ['jobs'] })}
           />
         )}
