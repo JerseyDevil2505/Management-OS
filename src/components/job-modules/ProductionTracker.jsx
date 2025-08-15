@@ -13,8 +13,8 @@ const ProductionTracker = ({
   onUpdateWorkflowStats, 
   currentWorkflowStats,
   dataUpdateNotification,  // NEW: Receive notification from JobContainer
-  clearDataNotification     // NEW: Receive clear function from JobContainer
-  employees  
+  clearDataNotification,     // NEW: Receive clear function from JobContainer
+  employees    
 }) => {
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
