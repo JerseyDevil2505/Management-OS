@@ -1208,16 +1208,18 @@ try {
               file_version: newFileVersion,
               preservedFieldsHandler: preservedFieldsHandler,  // ADD THIS!
               preservedFields: [
-                'project_start_date', 
-                'validation_status',
-                'is_assigned_property',
-                'asset_building_class', 
-                'asset_design_style', 
-                'asset_ext_cond',
-                'location_analysis', 
-                'new_vcs', 
-                'values_norm_time', 
-                'values_norm_size'
+                'project_start_date',      // ProductionTracker - user set
+                'is_assigned_property',    // AdminJobManagement - from assignments
+                'validation_status',       // ProductionTracker - validation state
+                'location_analysis',       // MarketAnalysis - manually entered
+                'new_vcs',                 // AppealCoverage - manually set
+                'asset_map_page',          // MarketAnalysis worksheet - manually entered
+                'asset_key_page',          // MarketAnalysis worksheet - manually entered
+                'asset_zoning',            // MarketAnalysis worksheet - manually entered
+                'values_norm_size',        // MarketAnalysis - calculated value
+                'values_norm_time',        // MarketAnalysis - calculated value
+                'sales_history',           // FileUploadButton - sales decisions
+                'processing_notes'         // User notes - if added should be kept
               ]
             }
           );
@@ -2141,7 +2143,22 @@ try {
                           source_file_name: sourceFile?.name,
                           source_file_version_id: crypto.randomUUID(),
                           source_file_uploaded_at: new Date().toISOString(),
-                          file_version: newFileVersion  // FIX 1: Pass file_version, not source_file_version
+                          file_version: newFileVersion,
+                          preservedFieldsHandler: preservedFieldsHandler,
+                          preservedFields: [
+                            'project_start_date',      // ProductionTracker - user set
+                            'is_assigned_property',    // AdminJobManagement - from assignments
+                            'validation_status',       // ProductionTracker - validation state
+                            'location_analysis',       // MarketAnalysis - manually entered
+                            'new_vcs',                 // AppealCoverage - manually set
+                            'asset_map_page',          // MarketAnalysis worksheet - manually entered
+                            'asset_key_page',          // MarketAnalysis worksheet - manually entered
+                            'asset_zoning',            // MarketAnalysis worksheet - manually entered
+                            'values_norm_size',        // MarketAnalysis - calculated value
+                            'values_norm_time',        // MarketAnalysis - calculated value
+                            'sales_history',           // FileUploadButton - sales decisions
+                            'processing_notes'         // User notes - if added should be kept
+                          ]
                         }
                       );
                     });
