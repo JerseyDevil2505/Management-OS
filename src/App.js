@@ -166,7 +166,7 @@ useEffect(() => {
       if (dbRef.current) {
         const dataToStore = {
           ...data,
-          jobCache: data.jobCache || {}
+          jobCache: data.jobCache || {},
           timestamp: Date.now(),
           version: CACHE_VERSION
         };
