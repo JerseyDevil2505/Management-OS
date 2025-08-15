@@ -39,6 +39,18 @@ const ProductionTracker = ({
     priced: 0
   });
 
+  // Calculate unassigned property count from passed properties
+  const calculateUnassignedPropertyCount = () => {
+    if (!properties || properties.length === 0) return;
+    
+    const unassignedCount = properties.filter(p => 
+      p.is_assigned_property === false
+    ).length;
+    
+    setUnassignedPropertyCount(unassignedCount);
+    debugLog('UNASSIGNED', `Calculated ${unassignedCount} unassigned properties from props`);
+  };
+
   // Settings state - Enhanced InfoBy category configuration
   const [availableInfoByCodes, setAvailableInfoByCodes] = useState([]);
   const [infoByCategoryConfig, setInfoByCategoryConfig] = useState({
@@ -748,7 +760,7 @@ const ProductionTracker = ({
       setCustomOverrideReason('');
       
       // Immediately reload validation overrides to get fresh data with all fields
-      await loadValidationOverrides();
+      calculateValidationOverrides();
       
       // Update App.js state immediately with the new override
       if (onUpdateWorkflowStats && analytics) {
