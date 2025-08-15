@@ -1013,6 +1013,11 @@ const loadJobs = async () => {
 
       if (updateError) throw updateError;
 
+      // Call the cache update for status changes
+      if (onDataUpdate) {
+        onDataUpdate('billing_event_status', editingEvent.id, { status: editingEvent.status });
+      }
+
       // Get all billing events for this job ordered by date
       const { data: jobData } = await supabase
         .from('jobs')
