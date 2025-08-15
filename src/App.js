@@ -552,12 +552,14 @@ useEffect(() => {
                   role: ja.role || 'Lead Manager'
                 })) || [],
                 
-              // Workflow stats - extract from nested rates structure AND include classBreakdown
-                 workflowStats: job.workflow_stats ? {
-                  jobEntryRate: job.workflow_stats.rates?.entryRate || 0,
-                  jobRefusalRate: job.workflow_stats.rates?.refusalRate || 0,
-                  commercialCompletePercent: job.workflow_stats.rates?.commercialInspectionRate || 0,
-                  pricingCompletePercent: job.workflow_stats.rates?.pricingRate || 0
+                // Workflow stats - read the ACTUAL fields ProductionTracker saves
+                workflowStats: job.workflow_stats ? {
+                  jobEntryRate: job.workflow_stats.jobEntryRate || 0,
+                  jobRefusalRate: job.workflow_stats.jobRefusalRate || 0,
+                  commercialCompletePercent: job.workflow_stats.commercialCompletePercent || 0,
+                  pricingCompletePercent: job.workflow_stats.pricingCompletePercent || 0,
+                  validInspections: job.workflow_stats.validInspections || 0,
+                  totalRecords: job.workflow_stats.totalRecords || 0
                 } : null
               }));
               
