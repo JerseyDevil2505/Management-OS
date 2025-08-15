@@ -61,6 +61,11 @@ const JobContainer = ({
 
   const loadLatestFileVersions = async () => {
     if (!selectedJob?.id) return;
+    console.log('🔍 CACHE DEBUG:', {
+      hasOnUpdateJobCache: !!onUpdateJobCache,
+      hasJobCache: !!jobCache,
+      jobCacheKeys: jobCache ? Object.keys(jobCache) : 'no cache'
+    });
 
     setIsLoadingVersion(true);
     setVersionError(null);
