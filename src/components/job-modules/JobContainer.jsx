@@ -211,11 +211,11 @@ const JobContainer = ({
       
       setJobData(enrichedJobData);
 
-      // UPDATE CACHE with loaded data
-      if (onUpdateJobCache && allProperties && allProperties.length > 0) {
+      // UPDATE CACHE with loaded data  
+      if (onUpdateJobCache && properties.length > 0) {
         console.log(`💾 Updating cache for job ${selectedJob.id}`);
         onUpdateJobCache(selectedJob.id, {
-          properties: allProperties,  
+          properties: properties,  // Use 'properties' state variable instead 
           jobData: enrichedJobData,
           fileVersion: currentFileVersion,
           codeVersion: currentCodeVersion,
