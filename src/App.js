@@ -1183,14 +1183,6 @@ const App = () => {
   // ==========================================
   // RENDER UI
   // ==========================================
-  // Debug logging
-  console.log('Master Cache Status:', {
-    isInitialized: masterCache.isInitialized,
-    jobsCount: masterCache.jobs?.length || 0,
-    employeesCount: masterCache.employees?.length || 0,
-    managersCount: masterCache.managers?.length || 0,
-    activeView: activeView
-  });
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Cache Status Bar - Errors Only */}
@@ -1368,7 +1360,7 @@ const App = () => {
           />
         )}
 
-{activeView === 'employees' && (
+        {activeView === 'employees' && (
           <EmployeeManagement
             employees={masterCache.employees}
             globalAnalytics={masterCache.globalInspectionAnalytics}
@@ -1376,6 +1368,7 @@ const App = () => {
             onRefresh={() => loadMasterData({ force: true, components: ['employees'] })}
           />
         )}
+
         {activeView === 'payroll' && (
           <PayrollManagement
             employees={masterCache.employees.filter(e => 
@@ -1389,22 +1382,7 @@ const App = () => {
             onRefresh={() => loadMasterData({ force: true, components: ['payroll'] })}
           />
         )}
-        {activeView === 'job-modules' && selectedJob && (
-          <div>
-            {/* File Upload in header */}
-            <div className="max-w-7xl mx-auto px-6 mb-4">
-              <div className="flex items-center justify-between bg-white rounded-lg shadow p-4">
-                <div>
-                  <h2 className="text-lg font-semibold">{selectedJob.job_name || selectedJob.name}</h2>
-                  <p className="text-sm text-gray-600">{selectedJob.municipality}</p>
-                </div>
-                <FileUploadButton 
-                  job={selectedJob}
-                  onFileProcessed={handleFileProcessed}
-                />
-              </div>
-            </div>
-            
+
         {activeView === 'job-modules' && selectedJob && (
           <div>
             <JobContainer
