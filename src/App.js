@@ -161,6 +161,7 @@ useEffect(() => {
   // PERSISTENT STORAGE HELPERS
   // ==========================================
   const saveToStorage = useCallback(async (data) => {
+    console.log('💾 Saving to storage, jobCache keys:', Object.keys(data.jobCache || {}));
     try {
       // Try IndexedDB first (no size limits)
       if (dbRef.current) {
@@ -232,6 +233,7 @@ useEffect(() => {
         
         // Ensure jobCache is loaded
         fullData.jobCache = fullData.jobCache || {};
+        console.log('📦 Loaded from storage, jobCache keys:', Object.keys(fullData.jobCache));
         
         const loadTime = Date.now() - startTime;
         console.log(`⚡ Cache loaded from IndexedDB in ${loadTime}ms (age: ${Math.floor(cacheAge / 60000)} minutes)`);
@@ -822,6 +824,11 @@ useEffect(() => {
   // JOB-LEVEL CACHE MANAGEMENT (SECOND TIER)
   // ==========================================
   const updateJobCache = useCallback((jobId, data) => {
+      console.log('🔍 updateJobCache called:', {
+      jobId,
+      hasData: !!data,
+      currentCacheKeys: Object.keys(masterCache.jobCache || {})
+    });
     if (data === null) {
       // Clear cache for this job (used after FileUpload)
       console.log(`🗑️ Clearing cache for job ${jobId}`);
