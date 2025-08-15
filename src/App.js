@@ -57,13 +57,44 @@ const App = () => {
     window.history.pushState({}, '', `/${view}`);
   }, []);
 
-  // Listen for browser back/forward buttons
+  // Handle job-specific URLs on mount and refresh (F5)
   useEffect(() => {
+    const path = window.location.pathname;
+    const parts = path.split('/');
+    
+    // Check if URL is /job/{jobId}
+    if (parts[1] === 'job' && parts[2]) {
+      const jobId = parts[2];
+      
+      // Wait for jobs to load, then select the job
+      if (masterCache.jobs.length > 0) {
+        const job = masterCache.jobs.find(j => j.id === jobId);
+        if (job) {
+          setSelectedJob(job);
+          setActiveView('job-modules');
+        }
+      }
+    }
+  }, [masterCache.jobs]); // Re-run when jobs are loaded
+
+  // Listen for browser back/forward buttons
+useEffect(() => {
     const handlePopState = () => {
-      const path = window.location.pathname.slice(1) || 'admin-jobs';
-      const validViews = ['dashboard', 'admin-jobs', 'billing', 'employees', 'payroll'];
-      if (validViews.includes(path)) {
-        setActiveView(path);
+      const path = window.location.pathname;
+      const parts = path.split('/');
+      
+      // Handle job-specific URLs
+      if (parts[1] === 'job' && parts[2]) {
+        // Don't do anything here - the other useEffect handles job selection
+        return;
+      }
+      
+      // Handle main navigation
+      const viewPath = path.slice(1) || 'admin-jobs';
+      const validViews = ['dashboard', 'admin-jobs', 'billing', 'employees', 'payroll', 'users'];
+      if (validViews.includes(viewPath)) {
+        setActiveView(viewPath);
+        setSelectedJob(null); // Clear job selection when navigating to main views
       }
     };
     
@@ -825,11 +856,15 @@ const App = () => {
   const handleJobSelect = useCallback((job) => {
     setSelectedJob(job);
     setActiveView('job-modules');
+    // Update URL when job is selected
+    window.history.pushState({}, '', `/job/${job.id}`);
   }, []);
 
   const handleBackToJobs = useCallback(() => {
     setSelectedJob(null);
     setActiveView('admin-jobs');
+    // Reset URL when going back to jobs
+    window.history.pushState({}, '', '/admin-jobs');
   }, []);
 
   const handleFileProcessed = useCallback(() => {
