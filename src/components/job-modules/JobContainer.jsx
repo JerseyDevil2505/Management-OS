@@ -445,7 +445,7 @@ const JobContainer = ({
     onUpdateWorkflowStats(transformedStats, true);
   };
 
-  // Determine which props to pass based on active module
+// Determine which props to pass based on active module
   const getModuleProps = () => {
     const baseProps = {
       jobData,
@@ -467,7 +467,10 @@ const JobContainer = ({
         hasNewData: false,
         timestamp: null,
         source: null
-      })
+      }),
+      // ADD THESE TWO LINES:
+      onUpdateWorkflowStats: handleAnalyticsUpdate,  // Pass the analytics update handler
+      currentWorkflowStats: workflowStats  // Pass current workflow stats
     };
 
     // 🔧 CRITICAL: Pass App.js state management to ProductionTracker
