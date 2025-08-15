@@ -1406,13 +1406,15 @@ const App = () => {
             </div>
             
         {activeView === 'job-modules' && selectedJob && (
-          <JobContainer
-            selectedJob={selectedJob}
-            onBackToJobs={handleBackToJobs}
-            jobCache={masterCache.jobCache}
-            onUpdateJobCache={updateJobCache}
-            fileRefreshTrigger={fileRefreshTrigger}
-          />
+          <div>
+            <JobContainer
+              selectedJob={selectedJob}
+              onBackToJobs={handleBackToJobs}
+              jobCache={masterCache.jobCache}
+              onUpdateJobCache={updateJobCache}
+              fileRefreshTrigger={fileRefreshTrigger}
+            />
+          </div>
         )}
       </main>
     </div>
