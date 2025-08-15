@@ -16,9 +16,9 @@ import UserManagement from './components/UserManagement';
 // ==========================================
 const CACHE_VERSION = '1.0.0';
 const CACHE_EXPIRY = {
-  hot: 5 * 60 * 1000,        // 5 minutes - use without checking
-  warm: 30 * 60 * 1000,      // 30 minutes - use but refresh in background
-  cold: 24 * 60 * 60 * 1000  // 24 hours - show stale warning
+  hot: 2 * 60 * 60 * 1000,        // 2 hours - use without checking
+  warm: 24 * 60 * 60 * 1000,      // 24 hours - use but refresh in background
+  cold: 7 * 24 * 60 * 60 * 1000   // 7 days - show stale warning
 };
 
 // ==========================================
