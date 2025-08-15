@@ -75,7 +75,7 @@ const App = () => {
         }
       }
     }
-  }, [masterCache.jobs]); // Re-run when jobs are loaded
+  }, [masterCache]); // Re-run when masterCache changes
 
   // Listen for browser back/forward buttons
 useEffect(() => {
