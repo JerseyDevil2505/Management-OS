@@ -74,6 +74,12 @@ const JobContainer = ({
     setLoadedCount(0);
 
     try {
+        console.log('🔍 CACHE DEBUG:', {
+        hasJobCache: !!jobCache,
+        jobId: selectedJob.id,
+        hasCachedJob: !!(jobCache && jobCache[selectedJob.id]),
+        cacheKeys: jobCache ? Object.keys(jobCache) : []
+      });
       // CHECK CACHE FIRST
       if (jobCache && jobCache[selectedJob.id]) {
         const cached = jobCache[selectedJob.id];
