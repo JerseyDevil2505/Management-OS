@@ -500,7 +500,7 @@ const JobContainer = ({
         // Direct access to App.js state updater if needed
         onUpdateWorkflowStats,
         // ADD THIS LINE: Pass the job refresh callback
-        onJobProcessingComplete: onWorkflowStatsUpdate
+        onJobProcessingComplete: onUpdateWorkflowStats
       };
     }
 
