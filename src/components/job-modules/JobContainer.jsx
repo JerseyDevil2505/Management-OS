@@ -161,9 +161,11 @@ const JobContainer = ({
       setPropertyRecordsCount(count || 0);
       console.log(`📊 Total properties to load: ${count}`);
 
+      let allProperties = [];  // ADD THIS LINE!
+
       // Now load the actual properties with pagination
       if (count && count > 0) {
-        const allProperties = [];
+        allProperties = [];
         const pageSize = 1000;
         const totalPages = Math.ceil(count / pageSize);
 
