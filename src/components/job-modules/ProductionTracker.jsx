@@ -170,6 +170,10 @@ const ProductionTracker = ({
       };
     });
 
+    // Merge regular employees with external inspectors
+    setEmployeeData({ ...employeeMap, ...externalInspectorsMap });
+  };
+
   // NEW: Load vendor source from property_records
   const loadVendorSource = async () => {
     if (!jobData?.id || !latestFileVersion) return null;
