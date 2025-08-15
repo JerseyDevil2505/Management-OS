@@ -57,26 +57,6 @@ const App = () => {
     window.history.pushState({}, '', `/${view}`);
   }, []);
 
-  // Handle job-specific URLs on mount and refresh (F5)
-  useEffect(() => {
-    const path = window.location.pathname;
-    const parts = path.split('/');
-    
-    // Check if URL is /job/{jobId}
-    if (parts[1] === 'job' && parts[2]) {
-      const jobId = parts[2];
-      
-      // Wait for jobs to load, then select the job
-      if (masterCache && masterCache.jobs && masterCache.jobs.length > 0) {
-        const job = masterCache.jobs.find(j => j.id === jobId);
-        if (job) {
-          setSelectedJob(job);
-          setActiveView('job-modules');
-        }
-      }
-    }
-  }, [masterCache]); // Re-run when masterCache changes
-
   // Listen for browser back/forward buttons
 useEffect(() => {
     const handlePopState = () => {
