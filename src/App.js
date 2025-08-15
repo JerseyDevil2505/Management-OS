@@ -882,6 +882,12 @@ useEffect(() => {
     }
   }, [selectedJob, updateJobCache]);
 
+  const handleWorkflowStatsUpdate = useCallback(() => {
+    // Refresh jobs data when workflow stats change (from ProductionTracker)
+    console.log('🔄 Workflow stats updated, refreshing jobs data...');
+    loadMasterData({ force: true, components: ['jobs'] });
+  }, [loadMasterData]);
+
   // ==========================================
   // BACKGROUND REFRESH MANAGER
   // ==========================================
@@ -1546,6 +1552,7 @@ useEffect(() => {
               jobCache={masterCache.jobCache}
               onUpdateJobCache={updateJobCache}
               fileRefreshTrigger={fileRefreshTrigger}
+              onWorkflowStatsUpdate={handleWorkflowStatsUpdate}
             />
           </div>
         )}
