@@ -127,6 +127,10 @@ const OverallAnalysisTab = ({
   const analyzeTypeUse = useCallback(() => {
     const groups = {};
     
+    // First, separate all properties from valid sales
+    const validSales = filteredProperties.filter(p => p.values_norm_time && p.values_norm_time > 0);
+    
+    // Count ALL properties for inventory
     filteredProperties.forEach(p => {
       const typeCode = p.asset_type_use || 'Unknown';
       const category = getTypeCategory(typeCode);
@@ -138,17 +142,25 @@ const OverallAnalysisTab = ({
           code: typeCode,
           name: typeName,
           category,
-          properties: [],
+          allProperties: [],  // Track ALL properties
+          salesProperties: [], // Track only valid sales
           totalPrice: 0,
           totalSize: 0,
-          count: 0
+          propertyCount: 0,  // Total inventory
+          salesCount: 0      // Valid sales only
         };
       }
       
-      groups[key].properties.push(p);
-      groups[key].count++;
-      groups[key].totalPrice += p.values_norm_time || 0;
-      groups[key].totalSize += p.asset_sfla || 0;
+      groups[key].allProperties.push(p);
+      groups[key].propertyCount++;
+      
+      // Only add to sales if it has valid price
+      if (p.values_norm_time && p.values_norm_time > 0) {
+        groups[key].salesProperties.push(p);
+        groups[key].salesCount++;
+        groups[key].totalPrice += p.values_norm_time;
+        groups[key].totalSize += p.asset_sfla || 0;
+      }
     });
 
     // Calculate averages and adjusted prices
@@ -156,12 +168,12 @@ const OverallAnalysisTab = ({
     let baselineGroup = null;
 
     Object.values(groups).forEach(group => {
-      group.avgPrice = group.count > 0 ? group.totalPrice / group.count : 0;
-      group.avgSize = group.count > 0 ? group.totalSize / group.count : 0;
+      group.avgPrice = group.salesCount > 0 ? group.totalPrice / group.salesCount : 0;
+      group.avgSize = group.salesCount > 0 ? group.totalSize / group.salesCount : 0;
       
       // Calculate adjusted prices using group's average size
       let totalAdjusted = 0;
-      group.properties.forEach(p => {
+      group.salesProperties.forEach(p => {
         const adjusted = calculateAdjustedPrice(
           p.values_norm_time || 0,
           p.asset_sfla || 0,
@@ -170,7 +182,7 @@ const OverallAnalysisTab = ({
         totalAdjusted += adjusted;
       });
       
-      group.avgAdjustedPrice = group.count > 0 ? totalAdjusted / group.count : 0;
+      group.avgAdjustedPrice = group.salesCount > 0 ? totalAdjusted / group.salesCount : 0;
       
       if (group.avgAdjustedPrice > maxAdjustedPrice) {
         maxAdjustedPrice = group.avgAdjustedPrice;
@@ -197,9 +209,12 @@ const OverallAnalysisTab = ({
     return { groups: Object.values(groups), baseline: baselineGroup };
   }, [filteredProperties, codeDefinitions, vendorType]);
 
-  // Design & Style Analysis
+// Design & Style Analysis
   const analyzeDesign = useCallback(() => {
     const groups = {};
+    
+    // Separate valid sales from all properties
+    const validSales = filteredProperties.filter(p => p.values_norm_time && p.values_norm_time > 0);
     
     filteredProperties.forEach(p => {
       const designCode = p.asset_design_style || 'Unknown';
@@ -210,19 +225,27 @@ const OverallAnalysisTab = ({
         groups[key] = {
           code: designCode,
           name: designName,
-          properties: [],
+          allProperties: [],
+          salesProperties: [],
           totalPrice: 0,
           totalSize: 0,
           totalYearBuilt: 0,
-          count: 0
+          propertyCount: 0,
+          salesCount: 0
         };
       }
       
-      groups[key].properties.push(p);
-      groups[key].count++;
-      groups[key].totalPrice += p.values_norm_time || 0;
-      groups[key].totalSize += p.asset_sfla || 0;
-      groups[key].totalYearBuilt += p.asset_year_built || 0;
+      groups[key].allProperties.push(p);
+      groups[key].propertyCount++;
+      
+      // Only add to sales if it has valid price
+      if (p.values_norm_time && p.values_norm_time > 0) {
+        groups[key].salesProperties.push(p);
+        groups[key].salesCount++;
+        groups[key].totalPrice += p.values_norm_time;
+        groups[key].totalSize += p.asset_sfla || 0;
+        groups[key].totalYearBuilt += p.asset_year_built || 0;
+      }
     });
 
     // Calculate averages and adjusted prices
@@ -230,13 +253,13 @@ const OverallAnalysisTab = ({
     let baselineGroup = null;
 
     Object.values(groups).forEach(group => {
-      group.avgPrice = group.count > 0 ? group.totalPrice / group.count : 0;
-      group.avgSize = group.count > 0 ? group.totalSize / group.count : 0;
-      group.avgYearBuilt = group.count > 0 ? Math.round(group.totalYearBuilt / group.count) : 0;
+      group.avgPrice = group.salesCount > 0 ? group.totalPrice / group.salesCount : 0;
+      group.avgSize = group.salesCount > 0 ? group.totalSize / group.salesCount : 0;
+      group.avgYearBuilt = group.salesCount > 0 ? Math.round(group.totalYearBuilt / group.salesCount) : 0;
       
       // Calculate adjusted prices using group's average size
       let totalAdjusted = 0;
-      group.properties.forEach(p => {
+      group.salesProperties.forEach(p => {
         const adjusted = calculateAdjustedPrice(
           p.values_norm_time || 0,
           p.asset_sfla || 0,
@@ -245,7 +268,7 @@ const OverallAnalysisTab = ({
         totalAdjusted += adjusted;
       });
       
-      group.avgAdjustedPrice = group.count > 0 ? totalAdjusted / group.count : 0;
+      group.avgAdjustedPrice = group.salesCount > 0 ? totalAdjusted / group.salesCount : 0;
       
       if (group.avgAdjustedPrice > maxAdjustedPrice) {
         maxAdjustedPrice = group.avgAdjustedPrice;
@@ -996,8 +1019,9 @@ const OverallAnalysisTab = ({
                       <thead className="bg-gray-50">
                         <tr>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
+                          <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Properties</th>
                           <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Sales</th>
-                          <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Avg Size</th>
+                          <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Avg Year</th>
                           <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Price</th>
                           <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Adj Price</th>
                           <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Delta</th>
@@ -1015,7 +1039,8 @@ const OverallAnalysisTab = ({
                                 <div className="text-xs text-gray-500">{group.category}</div>
                               </div>
                             </td>
-                            <td className="px-4 py-3 text-sm text-right">{group.count}</td>
+                            <td className="px-4 py-3 text-sm text-right">{group.propertyCount}</td>
+                            <td className="px-4 py-3 text-sm text-right">{group.salesCount}</td>
                             <td className="px-4 py-3 text-sm text-right">{formatNumber(group.avgSize)}</td>
                             <td className="px-4 py-3 text-sm text-right">{formatCurrency(group.avgPrice)}</td>
                             <td className="px-4 py-3 text-sm text-right font-medium">{formatCurrency(group.avgAdjustedPrice)}</td>
@@ -1097,7 +1122,8 @@ const OverallAnalysisTab = ({
                                 <div className="text-xs text-gray-500">Code: {group.code}</div>
                               )}
                             </td>
-                            <td className="px-4 py-3 text-sm text-right">{group.count}</td>
+                            <td className="px-4 py-3 text-sm text-right">{group.propertyCount}</td>
+                            <td className="px-4 py-3 text-sm text-right">{group.salesCount}</td>
                             <td className="px-4 py-3 text-sm text-right">{group.avgYearBuilt}</td>
                             <td className="px-4 py-3 text-sm text-right">{formatNumber(group.avgSize)}</td>
                             <td className="px-4 py-3 text-sm text-right">{formatCurrency(group.avgPrice)}</td>
