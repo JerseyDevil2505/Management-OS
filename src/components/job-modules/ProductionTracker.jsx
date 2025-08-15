@@ -164,6 +164,11 @@ const ProductionTracker = ({
       externalInspectorsMap[code] = {
         id: `external-${code}`,
         name: `${code} (External)`,
+        fullName: `${code} (External Inspector)`,
+        inspector_type: 'external',
+        initials: code
+      };
+    });
 
   // NEW: Load vendor source from property_records
   const loadVendorSource = async () => {
