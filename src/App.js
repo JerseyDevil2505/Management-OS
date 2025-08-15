@@ -166,6 +166,7 @@ useEffect(() => {
       if (dbRef.current) {
         const dataToStore = {
           ...data,
+          jobCache: data.jobCache || {}
           timestamp: Date.now(),
           version: CACHE_VERSION
         };
@@ -228,6 +229,9 @@ useEffect(() => {
             fullData[key] = await dbRef.current.get('largeData', value._ref) || [];
           }
         }
+        
+        // Ensure jobCache is loaded
+        fullData.jobCache = fullData.jobCache || {};
         
         const loadTime = Date.now() - startTime;
         console.log(`⚡ Cache loaded from IndexedDB in ${loadTime}ms (age: ${Math.floor(cacheAge / 60000)} minutes)`);
@@ -679,6 +683,7 @@ useEffect(() => {
       const newCache = {
         ...masterCache,
         ...updates,
+        jobCache: masterCache.jobCache || {},  // ADD THIS LINE - preserve existing jobCache
         lastFetched: {
           ...masterCache.lastFetched,
           ...updates.lastFetched,
