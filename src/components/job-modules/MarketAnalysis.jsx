@@ -26,7 +26,7 @@ import LandValuationTab from './market-tabs/LandValuationTab';
 import CostValuationTab from './market-tabs/CostValuationTab';
 import AttributeCardsTab from './market-tabs/AttributeCardsTab';
 
-const MarketLandAnalysis = ({ jobData, properties }) => {
+const MarketLandAnalysis = ({ jobData, properties, marketLandData }) => {
   // ==================== STATE MANAGEMENT ====================
   const [activeTab, setActiveTab] = useState('data-quality');
   const [isSaving, setIsSaving] = useState(false);
@@ -216,9 +216,10 @@ const MarketLandAnalysis = ({ jobData, properties }) => {
                 vendorType={vendorType}
                 codeDefinitions={codeDefinitions}
                 availableFields={availableFields}
+                marketLandData={marketLandData}
                 onDataChange={() => setUnsavedChanges(true)}
               />
-            )}
+            )}    
             
             {activeTab === 'pre-valuation' && (
               <PreValuationTab 
@@ -226,6 +227,7 @@ const MarketLandAnalysis = ({ jobData, properties }) => {
                 properties={properties}
                 vendorType={vendorType}
                 codeDefinitions={codeDefinitions}
+                marketLandData={marketLandData}
                 onDataChange={() => setUnsavedChanges(true)}
               />
             )}
@@ -236,9 +238,10 @@ const MarketLandAnalysis = ({ jobData, properties }) => {
                 properties={properties}
                 vendorType={vendorType}
                 codeDefinitions={codeDefinitions}
+                marketLandData={marketLandData}
                 onDataChange={() => setUnsavedChanges(true)}
               />
-            )}
+            )}      
             
             {activeTab === 'land-valuation' && (
               <LandValuationTab 
@@ -246,6 +249,7 @@ const MarketLandAnalysis = ({ jobData, properties }) => {
                 properties={properties}
                 vendorType={vendorType}
                 codeDefinitions={codeDefinitions}
+                marketLandData={marketLandData}
                 onDataChange={() => setUnsavedChanges(true)}
               />
             )}
@@ -256,6 +260,7 @@ const MarketLandAnalysis = ({ jobData, properties }) => {
                 properties={properties}
                 vendorType={vendorType}
                 codeDefinitions={codeDefinitions}
+                marketLandData={marketLandData}
                 onDataChange={() => setUnsavedChanges(true)}
               />
             )}
@@ -266,6 +271,7 @@ const MarketLandAnalysis = ({ jobData, properties }) => {
                 properties={properties}
                 vendorType={vendorType}
                 codeDefinitions={codeDefinitions}
+                marketLandData={marketLandData}
                 onDataChange={() => setUnsavedChanges(true)}
               />
             )}
