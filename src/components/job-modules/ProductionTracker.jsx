@@ -3896,6 +3896,5 @@ const exportMissingPropertiesReport = () => {
     </div>
   );
 };
-};
 
 export default ProductionTracker;
