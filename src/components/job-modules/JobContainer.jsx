@@ -31,6 +31,20 @@ const JobContainer = ({
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [loadedCount, setLoadedCount] = useState(0);
 
+    // NEW: State for all additional data tables
+  const [inspectionData, setInspectionData] = useState([]);
+  const [marketLandData, setMarketLandData] = useState({});
+  const [hpiData, setHpiData] = useState([]);
+  const [checklistItems, setChecklistItems] = useState([]);
+  const [checklistStatus, setChecklistStatus] = useState([]);
+
+  // NEW: Data update notification for child components
+  const [dataUpdateNotification, setDataUpdateNotification] = useState({
+    hasNewData: false,
+    timestamp: null,
+    source: null // 'file_upload', 'initial_load', etc
+  });
+
   // Load latest file versions and properties
   useEffect(() => {
     if (selectedJob) {
@@ -62,6 +76,11 @@ const JobContainer = ({
         
         // Use cached data immediately
         setProperties(cached.properties || []);
+        setInspectionData(cached.inspectionData || []);
+        setMarketLandData(cached.marketLandData || {});
+        setHpiData(cached.hpiData || []);
+        setChecklistItems(cached.checklistItems || []);
+        setChecklistStatus(cached.checklistStatus || []);
         setPropertyRecordsCount(cached.properties?.length || 0);
         setLatestFileVersion(cached.fileVersion || 1);
         setLatestCodeVersion(cached.codeVersion || 1);
@@ -183,9 +202,103 @@ const JobContainer = ({
 
         setProperties(allProperties);
         console.log(`✅ Successfully loaded ${allProperties.length} properties`);
+
+        // BUILD PRESERVED FIELDS MAP for FileUploadButton
+        const preservedMap = {};
+        allProperties.forEach(prop => {
+          preservedMap[prop.property_composite_key] = {
+            project_start_date: prop.project_start_date,
+            is_assigned_property: prop.is_assigned_property,
+            validation_status: prop.validation_status,
+            location_analysis: prop.location_analysis,
+            new_vcs: prop.new_vcs,
+            values_norm_time: prop.values_norm_time,
+            values_norm_size: prop.values_norm_size
+          };
+        });
+        
+        // Store in window for FileUploadButton to access (temporary solution)
+        if (window.preservedFieldsCache) {
+          window.preservedFieldsCache[selectedJob.id] = preservedMap;
+        } else {
+          window.preservedFieldsCache = { [selectedJob.id]: preservedMap };
+        }
+        console.log(`📦 Cached preserved fields for ${allProperties.length} properties`);
       } else {
         setProperties([]);
       }
+
+      // LOAD ADDITIONAL DATA TABLES per the guide
+      console.log('📊 Loading additional data tables...');
+      
+      // 1. Load inspection_data with pagination (could be 16K+ records!)
+      console.log('📊 Loading inspection data with pagination...');
+      const allInspectionData = [];
+      let inspectionPage = 0;
+      let hasMoreInspection = true;
+      
+      while (hasMoreInspection) {
+        const start = inspectionPage * 1000;
+        const end = start + 999;
+        
+        const { data: batch, error } = await supabase
+          .from('inspection_data')
+          .select('*')
+          .eq('job_id', selectedJob.id)
+          .range(start, end);
+        
+        if (batch && batch.length > 0) {
+          allInspectionData.push(...batch);
+          inspectionPage++;
+          hasMoreInspection = batch.length === 1000;
+        } else {
+          hasMoreInspection = false;
+        }
+      }
+      const inspectionDataFull = allInspectionData;
+      
+      // 2. Load market_land_valuation (for MarketAnalysis tabs)
+      let { data: marketData } = await supabase
+        .from('market_land_valuation')
+        .select('*')
+        .eq('job_id', selectedJob.id)
+        .single();
+      
+      // Create if doesn't exist
+      if (!marketData) {
+        const { data: newMarket } = await supabase
+          .from('market_land_valuation')
+          .insert({ job_id: selectedJob.id })
+          .select()
+          .single();
+        marketData = newMarket;
+      }
+      
+      // 3. Load county_hpi_data (for PreValuation normalization)
+      const { data: hpiData } = await supabase
+        .from('county_hpi_data')
+        .select('*')
+        .eq('county_name', jobData?.county || selectedJob.county)
+        .order('observation_year', { ascending: true });
+      
+      // 4. Load checklist data (for ManagementChecklist)
+      const { data: checklistItems } = await supabase
+        .from('checklist_items')
+        .select('*')
+        .eq('job_id', selectedJob.id);
+      
+      const { data: checklistStatus } = await supabase
+        .from('checklist_item_status')
+        .select('*')
+        .eq('job_id', selectedJob.id);
+
+      // SET ALL THE LOADED DATA TO STATE
+      setInspectionData(inspectionDataFull || []);
+      setMarketLandData(marketData || {});
+      setHpiData(hpiData || []);
+      setChecklistItems(checklistItems || []);
+      setChecklistStatus(checklistStatus || []);
+      console.log('✅ All additional data tables loaded');
 
       // Prepare enriched job data with all the fetched info
       const enrichedJobData = {
@@ -211,12 +324,17 @@ const JobContainer = ({
       
       setJobData(enrichedJobData);
 
-      // UPDATE CACHE with loaded data  
+      // UPDATE CACHE with loaded data
       if (onUpdateJobCache && properties.length > 0) {
         console.log(`💾 Updating cache for job ${selectedJob.id}`);
         onUpdateJobCache(selectedJob.id, {
-          properties: properties,  // Use 'properties' state variable instead 
+          properties: properties,
           jobData: enrichedJobData,
+          inspectionData: inspectionDataFull || [],
+          marketLandData: marketData || {},
+          hpiData: hpiData || [],
+          checklistItems: checklistItems || [],
+          checklistStatus: checklistStatus || [],
           fileVersion: currentFileVersion,
           codeVersion: currentCodeVersion,
           timestamp: Date.now()
@@ -259,6 +377,14 @@ const JobContainer = ({
     
     // Refresh file version data when new files are uploaded
     await loadLatestFileVersions();
+    
+    // NOTIFY child components that new data is available (ONLY after successful file upload)
+    setDataUpdateNotification({
+      hasNewData: true,
+      timestamp: Date.now(),
+      source: 'file_upload'
+    });
+    console.log('📢 Notifying components: New data available from file upload');
     
     // 🔧 ENHANCED: Invalidate ProductionTracker analytics when files change
     if (onUpdateWorkflowStats && selectedJob?.id) {
@@ -311,14 +437,25 @@ const JobContainer = ({
   const getModuleProps = () => {
     const baseProps = {
       jobData,
-      properties,  // NEW: Pass loaded properties
+      properties,  // Pass loaded properties
+      inspectionData,  // NEW: Pass inspection data
+      marketLandData,  // NEW: Pass market land valuation
+      hpiData,  // NEW: Pass HPI data
+      checklistItems,  // NEW: Pass checklist items
+      checklistStatus,  // NEW: Pass checklist status
       onBackToJobs,
       activeSubModule: activeModule,
       onSubModuleChange: setActiveModule,
       latestFileVersion,
       latestCodeVersion,
       propertyRecordsCount,
-      onFileProcessed: handleFileProcessed
+      onFileProcessed: handleFileProcessed,
+      dataUpdateNotification,  // Pass notification to all components
+      clearDataNotification: () => setDataUpdateNotification({  // Way to clear it
+        hasNewData: false,
+        timestamp: null,
+        source: null
+      })
     };
 
     // 🔧 CRITICAL: Pass App.js state management to ProductionTracker
@@ -452,14 +589,14 @@ const JobContainer = ({
                       <span className="ml-2 text-amber-600">(assigned only)</span>
                     )}
                   </span>
-                  {loadingProgress > 90 && (
-                    <span className="text-green-600 flex items-center">
-                      <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                      Finalizing...
-                    </span>
-                  )}
+                {loadingProgress > 90 && (
+                  <span className="text-green-600 flex items-center">
+                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    Loading inspection data, market analysis, and checklists...
+                  </span>
+                )}  
                 </div>
               </>
             )}
