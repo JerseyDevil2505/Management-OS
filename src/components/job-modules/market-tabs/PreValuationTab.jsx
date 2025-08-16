@@ -1006,12 +1006,13 @@ const handleSalesDecision = async (saleId, decision) => {
 };
      
   const saveBatchDecisions = async () => {
+    const keeps = timeNormalizedSales.filter(s => s.keep_reject === 'keep');
+    const rejects = timeNormalizedSales.filter(s => s.keep_reject === 'reject');
+    
     setIsSavingDecisions(true);
     setSaveProgress({ current: 0, total: keeps.length + rejects.length, message: 'Preparing to save...' });
     
     try {
-      const keeps = timeNormalizedSales.filter(s => s.keep_reject === 'keep');
-      const rejects = timeNormalizedSales.filter(s => s.keep_reject === 'reject');
       
       console.log(`💾 Saving ${keeps.length} keeps and ${rejects.length} rejects...`);
       setSaveProgress({ current: 0, total: keeps.length + rejects.length, message: `Saving ${keeps.length} keeps...` });
