@@ -27,6 +27,11 @@ const OverallAnalysisTab = ({
     condoFloor: true
   });
 
+  const [customBaselines, setCustomBaselines] = useState({
+    design: null,
+    typeUse: null
+  });
+
   // Extract vendor type and code definitions
   const vendorType = jobData?.vendor_type || 'BRT';
   const codeDefinitions = jobData?.parsed_code_definitions || {};
@@ -276,21 +281,32 @@ const OverallAnalysisTab = ({
       }
     });
 
+    // Use custom baseline if set, otherwise use highest adjusted price
+    const actualBaseline = customBaselines.design ? 
+      Object.values(groups).find(g => g.code === customBaselines.design) || baselineGroup :
+      baselineGroup;
+
     // Calculate deltas from baseline
     Object.values(groups).forEach(group => {
-      if (baselineGroup && group !== baselineGroup) {
-        const delta = group.avgAdjustedPrice - baselineGroup.avgAdjustedPrice;
+      if (actualBaseline && group !== actualBaseline) {
+        const delta = group.avgAdjustedPrice - actualBaseline.avgAdjustedPrice;
         group.delta = delta;
-        group.deltaPercent = baselineGroup.avgAdjustedPrice > 0 ? 
-          (delta / baselineGroup.avgAdjustedPrice * 100) : 0;
+        group.deltaPercent = actualBaseline.avgAdjustedPrice > 0 ? 
+          (delta / actualBaseline.avgAdjustedPrice * 100) : 0;
+      } else if (group === actualBaseline) {
+        group.delta = 0;
+        group.deltaPercent = 0;
       } else {
         group.delta = 0;
         group.deltaPercent = 0;
       }
     });
 
+    return { groups: Object.values(groups), baseline: actualBaseline };
+
     return { groups: Object.values(groups), baseline: baselineGroup };
-  }, [filteredProperties, codeDefinitions, vendorType]);
+  }, [filteredProperties, codeDefinitions, vendorType, customBaselines.design]);
+
 
   // Year Built Analysis
   const analyzeYearBuilt = useCallback(() => {
@@ -1128,15 +1144,44 @@ const OverallAnalysisTab = ({
           {/* Design & Style Analysis */}
           {analysis?.design && (
             <div className="bg-white rounded-lg shadow-sm p-6">
-              <div 
-                onClick={() => toggleSection('design')}
-                className="flex justify-between items-center mb-4 cursor-pointer hover:bg-gray-50 -m-2 p-2 rounded"
-              >
-                <h3 className="text-lg font-semibold flex items-center gap-2">
-                  <Building className="h-5 w-5" />
-                  Design & Style Analysis
-                </h3>
-                {expandedSections.design ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+              <div className="mb-4">
+                <div 
+                  onClick={() => toggleSection('design')}
+                  className="flex justify-between items-center cursor-pointer hover:bg-gray-50 -m-2 p-2 rounded"
+                >
+                  <h3 className="text-lg font-semibold flex items-center gap-2">
+                    <Building className="h-5 w-5" />
+                    Design & Style Analysis
+                  </h3>
+                  {expandedSections.design ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+                </div>
+                
+                {expandedSections.design && (
+                  <div className="mt-4 flex items-center gap-2">
+                    <label className="text-sm text-gray-600">Baseline:</label>
+                    <select
+                      value={customBaselines.design || ''}
+                      onChange={(e) => {
+                        setCustomBaselines(prev => ({
+                          ...prev,
+                          design: e.target.value || null
+                        }));
+                        runAnalysis();
+                      }}
+                      className="px-3 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">Auto (Highest Value)</option>
+                      {analysis.design.groups
+                        .filter(g => g.salesCount > 0)
+                        .sort((a, b) => b.avgAdjustedPrice - a.avgAdjustedPrice)
+                        .map(group => (
+                          <option key={group.code} value={group.code}>
+                            {group.name} ({formatCurrency(group.avgAdjustedPrice)})
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                )}
               </div>
               
               {expandedSections.design && (
@@ -1156,8 +1201,8 @@ const OverallAnalysisTab = ({
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
-                        {analysis.design.groups
-                          .filter(g => g.code !== 'Unknown')
+                      {analysis.design.groups
+                          .filter(g => g.code !== 'Unknown' && g.name !== 'Unknown')
                           .sort((a, b) => b.avgAdjustedPrice - a.avgAdjustedPrice)
                           .map((group, idx) => (
                           <tr key={`${group.code}-${idx}`} className={group === analysis.design.baseline ? 'bg-yellow-50' : ''}>
@@ -1242,9 +1287,10 @@ const OverallAnalysisTab = ({
                             <td className="px-4 py-3 text-sm text-right">{group.avgYearBuilt || '—'}</td>
                             <td className="px-4 py-3 text-sm text-right">{formatNumber(group.avgSize)}</td>
                             <td className="px-4 py-3 text-sm text-right">{formatCurrency(group.avgPrice)}</td>
-                            <td className="px-4 py-3 text-sm text-right font-medium">{formatCurrency(group.avgAdjustedPrice)}</td>
                             <td className="px-4 py-3 text-sm text-right">
-                              {group.deltaPercent !== 0 ? (
+                              {group.salesCount === 0 ? (
+                                <span className="text-gray-500 text-xs">NO SALES DATA</span>
+                              ) : group.deltaPercent !== 0 ? (
                                 <span className={group.deltaPercent > 0 ? 'text-green-600' : 'text-red-600'}>
                                   {group.deltaPercent > 0 ? '+' : ''}{group.deltaPercent.toFixed(0)}%
                                 </span>
@@ -1293,105 +1339,199 @@ const OverallAnalysisTab = ({
               
               {expandedSections.vcsType && (
                 <div className="space-y-6 max-h-[600px] overflow-y-auto">
+                  {/* Column Headers */}
+                  <div className="bg-gray-100 px-4 py-2 rounded-lg text-xs font-medium text-gray-600 uppercase">
+                    <div className="flex justify-between items-center">
+                      <div className="flex-1">Description</div>
+                      <div className="flex gap-8 text-right">
+                        <div className="w-16">Year</div>
+                        <div className="w-20">Size</div>
+                        <div className="w-16">Beds</div>
+                        <div className="w-16">Baths</div>
+                        <div className="w-24">Price</div>
+                        <div className="w-24">Adj Price</div>
+                        <div className="w-20">Delta</div>
+                      </div>
+                    </div>
+                  </div>
+                  
                   {Object.entries(analysis.vcsType)
                     .filter(([vcs, data]) => data.salesCount > 0)
                     .sort((a, b) => b[1].avgAdjustedPrice - a[1].avgAdjustedPrice)
-                    .map(([vcs, vcsData]) => (
-                    <div key={vcs} className="border border-gray-200 rounded-lg">
+                    .map(([vcs, vcsData]) => {
+                      // Calculate VCS-level metrics
+                      let vcsYearSum = 0, vcsBedSum = 0, vcsBathSum = 0;
+                      vcsData.salesProperties.forEach(p => {
+                        vcsYearSum += p.asset_year_built || 0;
+                        // Sum beds and baths from interpretCodes functions if available
+                        const beds = interpretCodes.getBedroomRoomSum ? interpretCodes.getBedroomRoomSum(p, vendorType) : 0;
+                        const baths = interpretCodes.getBathroomPlumbingSum ? interpretCodes.getBathroomPlumbingSum(p, vendorType) : 0;
+                        vcsBedSum += beds;
+                        vcsBathSum += baths;
+                      });
+                      const vcsAvgYear = vcsData.salesCount > 0 ? Math.round(vcsYearSum / vcsData.salesCount) : 0;
+                      const vcsAvgBeds = vcsData.salesCount > 0 ? Math.round(vcsBedSum / vcsData.salesCount) : 0;
+                      const vcsAvgBaths = vcsData.salesCount > 0 ? (vcsBathSum / vcsData.salesCount).toFixed(1) : '0.0';
                       
-                      {/* VCS Header */}
-                      <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
-                        <div className="flex justify-between items-center">
-                          <h4 className="font-semibold text-gray-900">
-                            {vcsData.description} ({vcsData.code})
-                          </h4>
-                          <div className="flex items-center gap-3">
-                            <div className="text-sm text-gray-600">
-                              {vcsData.propertyCount} properties | {vcsData.salesCount} sales | 
-                              Avg: {formatCurrency(vcsData.avgAdjustedPrice)}
+                      return (
+                        <div key={vcs} className="border border-gray-200 rounded-lg">
+                          {/* VCS Header */}
+                          <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
+                            <div className="flex justify-between items-center">
+                              <div>
+                                <h4 className="font-semibold text-gray-900">
+                                  {vcsData.description} ({vcsData.code})
+                                </h4>
+                                <div className="text-sm text-gray-600 mt-1">
+                                  {vcsData.propertyCount} properties | {vcsData.salesCount} sales
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-8 text-sm">
+                                <div className="text-right">
+                                  <div className="text-gray-500">Year</div>
+                                  <div className="font-medium">{vcsAvgYear}</div>
+                                </div>
+                                <div className="text-right">
+                                  <div className="text-gray-500">Size</div>
+                                  <div className="font-medium">{formatNumber(vcsData.avgSize)}</div>
+                                </div>
+                                <div className="text-right">
+                                  <div className="text-gray-500">Beds</div>
+                                  <div className="font-medium">{vcsAvgBeds}</div>
+                                </div>
+                                <div className="text-right">
+                                  <div className="text-gray-500">Baths</div>
+                                  <div className="font-medium">{vcsAvgBaths}</div>
+                                </div>
+                                <div className="text-right">
+                                  <div className="text-gray-500">Avg Price</div>
+                                  <div className="font-medium">{formatCurrency(vcsData.avgAdjustedPrice)}</div>
+                                </div>
+                                {vcsData.salesCount > 0 && (
+                                  <span 
+                                    className="px-2 py-1 text-xs rounded font-medium"
+                                    style={{ 
+                                      backgroundColor: getCMEBracket(vcsData.avgAdjustedPrice).color,
+                                      color: getCMEBracket(vcsData.avgAdjustedPrice).textColor
+                                    }}
+                                  >
+                                    {getCMEBracket(vcsData.avgAdjustedPrice).label}
+                                  </span>
+                                )}
+                              </div>
                             </div>
-                            {vcsData.salesCount > 0 && (
-                              <span 
-                                className="px-2 py-1 text-xs rounded font-medium"
-                                style={{ 
-                                  backgroundColor: getCMEBracket(vcsData.avgAdjustedPrice).color,
-                                  color: getCMEBracket(vcsData.avgAdjustedPrice).textColor
-                                }}
-                              >
-                                {getCMEBracket(vcsData.avgAdjustedPrice).label}
-                              </span>
-                            )}
+                          </div>
+                          
+                          {/* Type Level */}
+                          <div className="p-4 space-y-3">
+                            {Object.values(vcsData.types)
+                              .filter(type => type.salesCount > 0)
+                              .sort((a, b) => b.avgAdjustedPrice - a.avgAdjustedPrice)
+                              .map((typeGroup) => {
+                                // Calculate type-level metrics
+                                let typeYearSum = 0, typeBedSum = 0, typeBathSum = 0;
+                                typeGroup.salesProperties.forEach(p => {
+                                  typeYearSum += p.asset_year_built || 0;
+                                  const beds = interpretCodes.getBedroomRoomSum ? interpretCodes.getBedroomRoomSum(p, vendorType) : 0;
+                                  const baths = interpretCodes.getBathroomPlumbingSum ? interpretCodes.getBathroomPlumbingSum(p, vendorType) : 0;
+                                  typeBedSum += beds;
+                                  typeBathSum += baths;
+                                });
+                                const typeAvgYear = typeGroup.salesCount > 0 ? Math.round(typeYearSum / typeGroup.salesCount) : 0;
+                                const typeAvgBeds = typeGroup.salesCount > 0 ? Math.round(typeBedSum / typeGroup.salesCount) : 0;
+                                const typeAvgBaths = typeGroup.salesCount > 0 ? (typeBathSum / typeGroup.salesCount).toFixed(1) : '0.0';
+                                
+                                return (
+                                  <div key={typeGroup.code} className="border border-gray-100 rounded">
+                                    {/* Type Header */}
+                                    <div className={`px-3 py-2 ${typeGroup === vcsData.baselineType ? 'bg-yellow-50' : 'bg-gray-50'}`}>
+                                      <div className="flex justify-between items-center">
+                                        <div className="flex items-center gap-4">
+                                          <span className="font-medium">{typeGroup.name}</span>
+                                          <span className="text-sm text-gray-600">
+                                            ({typeGroup.propertyCount} props, {typeGroup.salesCount} sales)
+                                          </span>
+                                        </div>
+                                        <div className="flex items-center gap-6 text-sm">
+                                          <span className="text-gray-600">{typeAvgYear}</span>
+                                          <span className="text-gray-600">{formatNumber(typeGroup.avgSize)}</span>
+                                          <span className="text-gray-600">{typeAvgBeds}</span>
+                                          <span className="text-gray-600">{typeAvgBaths}</span>
+                                          <span>{formatCurrency(typeGroup.avgPrice)}</span>
+                                          <span className="font-medium">{formatCurrency(typeGroup.avgAdjustedPrice)}</span>
+                                          <span className={`min-w-[60px] text-right ${
+                                            typeGroup.deltaPercent > 0 ? 'text-green-600' : 
+                                            typeGroup.deltaPercent < 0 ? 'text-red-600' : 
+                                            'text-gray-400'
+                                          }`}>
+                                            {typeGroup.deltaPercent !== 0 ? 
+                                              `${typeGroup.deltaPercent > 0 ? '+' : ''}${typeGroup.deltaPercent.toFixed(0)}%` : 
+                                              typeGroup === vcsData.baselineType ? 'VCS BASE' : '—'
+                                            }
+                                          </span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                    
+                                    {/* Design Level - Nested */}
+                                    {Object.keys(typeGroup.designs).length > 1 && (
+                                      <div className="px-6 py-2 space-y-1 bg-white">
+                                        {Object.values(typeGroup.designs)
+                                          .filter(design => design.salesCount > 0)
+                                          .sort((a, b) => b.avgAdjustedPrice - a.avgAdjustedPrice)
+                                          .map((designGroup) => {
+                                            // Calculate design-level metrics
+                                            let designYearSum = 0, designBedSum = 0, designBathSum = 0;
+                                            designGroup.salesProperties.forEach(p => {
+                                              designYearSum += p.asset_year_built || 0;
+                                              const beds = interpretCodes.getBedroomRoomSum ? interpretCodes.getBedroomRoomSum(p, vendorType) : 0;
+                                              const baths = interpretCodes.getBathroomPlumbingSum ? interpretCodes.getBathroomPlumbingSum(p, vendorType) : 0;
+                                              designBedSum += beds;
+                                              designBathSum += baths;
+                                            });
+                                            const designAvgYear = designGroup.salesCount > 0 ? Math.round(designYearSum / designGroup.salesCount) : 0;
+                                            const designAvgBeds = designGroup.salesCount > 0 ? Math.round(designBedSum / designGroup.salesCount) : 0;
+                                            const designAvgBaths = designGroup.salesCount > 0 ? (designBathSum / designGroup.salesCount).toFixed(1) : '0.0';
+                                            
+                                            return (
+                                              <div key={designGroup.code} className="flex justify-between items-center py-1 text-sm">
+                                                <div className="flex items-center gap-3">
+                                                  <span className="text-gray-500">└</span>
+                                                  <span>{designGroup.name}</span>
+                                                  <span className="text-xs text-gray-500">
+                                                    ({designGroup.propertyCount} props, {designGroup.salesCount} sales)
+                                                  </span>
+                                                </div>
+                                                <div className="flex items-center gap-6">
+                                                  <span className="text-gray-500 text-xs">{designAvgYear}</span>
+                                                  <span className="text-gray-500 text-xs">{formatNumber(designGroup.avgSize)}</span>
+                                                  <span className="text-gray-500 text-xs">{designAvgBeds}</span>
+                                                  <span className="text-gray-500 text-xs">{designAvgBaths}</span>
+                                                  <span className="text-gray-600">{formatCurrency(designGroup.avgPrice)}</span>
+                                                  <span className="font-medium">{formatCurrency(designGroup.avgAdjustedPrice)}</span>
+                                                  <span className={`min-w-[60px] text-right ${
+                                                    designGroup.deltaPercent > 0 ? 'text-green-600' : 
+                                                    designGroup.deltaPercent < 0 ? 'text-red-600' : 
+                                                    'text-gray-400 text-xs'
+                                                  }`}>
+                                                    {designGroup.deltaPercent !== 0 ? 
+                                                      `${designGroup.deltaPercent > 0 ? '+' : ''}${designGroup.deltaPercent.toFixed(0)}%` : 
+                                                      designGroup === typeGroup.baselineDesign ? 'TYPE BASE' : '—'
+                                                    }
+                                                  </span>
+                                                </div>
+                                              </div>
+                                            );
+                                          })}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
                           </div>
                         </div>
-                      </div>
-                      
-                      {/* Type Level */}
-                      <div className="p-4 space-y-3">
-                        {Object.values(vcsData.types)
-                          .filter(type => type.salesCount > 0)
-                          .sort((a, b) => b.avgAdjustedPrice - a.avgAdjustedPrice)
-                          .map((typeGroup) => (
-                          <div key={typeGroup.code} className="border border-gray-100 rounded">
-                            {/* Type Header */}
-                            <div className={`px-3 py-2 ${typeGroup === vcsData.baselineType ? 'bg-yellow-50' : 'bg-gray-50'}`}>
-                              <div className="flex justify-between items-center">
-                                <div className="flex items-center gap-4">
-                                  <span className="font-medium">{typeGroup.name}</span>
-                                  <span className="text-sm text-gray-600">
-                                    {typeGroup.propertyCount} props | {typeGroup.salesCount} sales
-                                  </span>
-                                </div>
-                                <div className="flex items-center gap-4 text-sm">
-                                  <span>{formatCurrency(typeGroup.avgPrice)}</span>
-                                  <span className="font-medium">{formatCurrency(typeGroup.avgAdjustedPrice)}</span>
-                                  <span className={typeGroup.deltaPercent > 0 ? 'text-green-600' : typeGroup.deltaPercent < 0 ? 'text-red-600' : 'text-gray-400'}>
-                                    {typeGroup.deltaPercent !== 0 ? 
-                                      `${typeGroup.deltaPercent > 0 ? '+' : ''}${typeGroup.deltaPercent.toFixed(0)}%` : 
-                                      'BASELINE'
-                                    }
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                            
-                            {/* Design Level - Nested */}
-                            {Object.keys(typeGroup.designs).length > 1 && (
-                              <div className="px-6 py-2 space-y-1 bg-white">
-                                {Object.values(typeGroup.designs)
-                                  .filter(design => design.salesCount > 0)
-                                  .sort((a, b) => b.avgAdjustedPrice - a.avgAdjustedPrice)
-                                  .map((designGroup) => (
-                                  <div key={designGroup.code} className="flex justify-between items-center py-1 text-sm">
-                                    <div className="flex items-center gap-3">
-                                      <span className="text-gray-500">└</span>
-                                      <span>{designGroup.name}</span>
-                                      <span className="text-xs text-gray-500">
-                                        ({designGroup.propertyCount} props, {designGroup.salesCount} sales)
-                                      </span>
-                                    </div>
-                                    <div className="flex items-center gap-3">
-                                      <span className="text-gray-600">{formatCurrency(designGroup.avgPrice)}</span>
-                                      <span className="font-medium">{formatCurrency(designGroup.avgAdjustedPrice)}</span>
-                                      <span className={`min-w-[50px] text-right ${
-                                        designGroup.deltaPercent > 0 ? 'text-green-600' : 
-                                        designGroup.deltaPercent < 0 ? 'text-red-600' : 
-                                        'text-gray-400 text-xs'
-                                      }`}>
-                                        {designGroup.deltaPercent !== 0 ? 
-                                          `${designGroup.deltaPercent > 0 ? '+' : ''}${designGroup.deltaPercent.toFixed(0)}%` : 
-                                          designGroup === typeGroup.baselineDesign ? 'BASE' : ''
-                                        }
-                                      </span>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
+                      );
+                    })}
                 </div>
               )}
             </div>
