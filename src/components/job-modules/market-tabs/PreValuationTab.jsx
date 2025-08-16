@@ -61,9 +61,6 @@ const PreValuationTab = ({
     conversions: 0,
     avgSizeAdjustment: 0
   });
-
-  const [lastTimeNormalizationRun, setLastTimeNormalizationRun] = useState(null);
-  const [lastSizeNormalizationRun, setLastSizeNormalizationRun] = useState(null);
   const [worksheetProperties, setWorksheetProperties] = useState([]);
   const [lastTimeNormalizationRun, setLastTimeNormalizationRun] = useState(null);
   const [lastSizeNormalizationRun, setLastSizeNormalizationRun] = useState(null);
