@@ -487,23 +487,24 @@ const handlePropertyResearch = async (property) => {
   setLandNotes(prev => ({...prev, [property.id]: 'Researching...'}));
 
   try {
-    const response = await fetch(`https://zxvavttfvpsagzluqqwn.supabase.co/functions/v1/analyze-property`, {
+    const response = await fetch('https://zxvavttfvpsagzluqqwn.supabase.co/functions/v1/analyze-property', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp4dmF2dHRmdnBzYWd6bHVxcXduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIzNDA4NjcsImV4cCI6MjA2NzkxNjg2N30.Rrn2pTnImCpBIoKPcdlzzZ9hMwnYtIO5s7i1ejwQReg`,
+        'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp4dmF2dHRmdnBzYWd6bHVxcXduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIzNDA4NjcsImV4cCI6MjA2NzkxNjg2N30.Rrn2pTnImCpBIoKPcdlzzZ9hMwnYtIO5s7i1ejwQReg',
+        'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp4dmF2dHRmdnBzYWd6bHVxcXduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIzNDA4NjcsImV4cCI6MjA2NzkxNjg2N30.Rrn2pTnImCpBIoKPcdlzzZ9hMwnYtIO5s7i1ejwQReg'
       },
       body: JSON.stringify({
-        municipality: jobData?.municipality,
-        county: jobData?.county,
-        block: property.property_block,
-        lot: property.property_lot,
-        address: property.property_location,
-        saleDate: property.sales_date,
-        salePrice: property.sales_price,
-        acres: property.totalAcres,
-        pricePerAcre: property.pricePerAcre,
-        propertyClass: property.property_m4_class
+        municipality: jobData?.municipality || 'Unknown',
+        county: jobData?.county || 'Unknown',
+        block: property.property_block || '',
+        lot: property.property_lot || '',
+        address: property.property_location || '',
+        saleDate: property.sales_date || '',
+        salePrice: property.sales_price || 0,
+        acres: property.totalAcres || 0,
+        pricePerAcre: property.pricePerAcre || 0,
+        propertyClass: property.property_m4_class || '1'
       })
     });
 
