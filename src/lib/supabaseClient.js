@@ -745,6 +745,16 @@ getInteriorConditionName: function(property, codeDefinitions, vendorType) {
     const hasFarmland = packageProperties.some(p => 
       p.asset_building_class === '3B'
     );
+
+    // Check if this is additional cards for same property
+    const isAdditionalCard = packageProperties.every(p => {
+      const parsed = p.property_composite_key.split('-');
+      const baseKey = `${parsed[0]}-${parsed[1]}-${parsed[2]}-${parsed[3]}`;
+      return packageProperties.every(other => {
+        const otherParsed = other.property_composite_key.split('-');
+        const otherBase = `${otherParsed[0]}-${otherParsed[1]}-${otherParsed[2]}-${otherParsed[3]}`;
+        return baseKey === otherBase;
+      });
     
     const hasResidential = packageProperties.some(p => {
       const propClass = p.asset_building_class;
@@ -771,6 +781,8 @@ getInteriorConditionName: function(property, codeDefinitions, vendorType) {
     
     return {
       is_package_sale: true,
+      is_farm_package: hasFarmland,
+      is_additional_card: isAdditionalCard,
       package_count: packageProperties.length,
       package_id: packageId,
       combined_lot_sf: combinedLotSF,
