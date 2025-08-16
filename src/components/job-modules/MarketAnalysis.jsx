@@ -26,7 +26,7 @@ import LandValuationTab from './market-tabs/LandValuationTab';
 import CostValuationTab from './market-tabs/CostValuationTab';
 import AttributeCardsTab from './market-tabs/AttributeCardsTab';
 
-const MarketLandAnalysis = ({ jobData, properties, marketLandData }) => {
+const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData }) => {
   // ==================== STATE MANAGEMENT ====================
   const [activeTab, setActiveTab] = useState('data-quality');
   const [isSaving, setIsSaving] = useState(false);
@@ -239,6 +239,7 @@ const MarketLandAnalysis = ({ jobData, properties, marketLandData }) => {
                 vendorType={vendorType}
                 codeDefinitions={codeDefinitions}
                 marketLandData={marketLandData}
+                hpiData={hpiData}
                 onDataChange={() => setUnsavedChanges(true)}
               />
             )}      
