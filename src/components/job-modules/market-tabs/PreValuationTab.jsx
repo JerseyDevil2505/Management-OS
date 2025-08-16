@@ -18,7 +18,15 @@ import {
   AlertCircle
 } from 'lucide-react';
 
-const PreValuationTab = ({ jobData, properties }) => {
+const PreValuationTab = ({ 
+  jobData, 
+  properties,
+  marketLandData,
+  hpiData,
+  codeDefinitions,
+  vendorType,
+  onDataChange 
+}) => {
   // ==================== STATE MANAGEMENT ====================
   
   // Normalization Configuration State (matching HTML UI)
@@ -32,8 +40,7 @@ const PreValuationTab = ({ jobData, properties }) => {
   
   // Normalization Data State
   const [activeSubTab, setActiveSubTab] = useState('normalization');
-  const [hpiData, setHpiData] = useState([]);
-  const [hpiLoaded, setHpiLoaded] = useState(false);
+  const [hpiLoaded, setHpiLoaded] = useState(true);
   const [timeNormalizedSales, setTimeNormalizedSales] = useState([]);
   const [isProcessingTime, setIsProcessingTime] = useState(false);
   const [isProcessingSize, setIsProcessingSize] = useState(false);
@@ -111,10 +118,6 @@ const PreValuationTab = ({ jobData, properties }) => {
   const [showBlockDetailModal, setShowBlockDetailModal] = useState(false);
   const [isProcessingBlocks, setIsProcessingBlocks] = useState(false);
 
-  // Vendor detection
-  const vendorType = jobData?.vendor_source || jobData?.vendor_type || 'BRT';
-  const codeDefinitions = jobData?.parsed_code_definitions;
-
   // Bluebeam Revu 32-color palette
   const bluebeamPalette = [
     // Row 1 - Light colors
@@ -156,6 +159,15 @@ const PreValuationTab = ({ jobData, properties }) => {
   ];
   const [isResultsCollapsed, setIsResultsCollapsed] = useState(false);
 
+  // ==================== FILTER HPI DATA ====================
+  // Filter HPI data for selected county from the prop
+  const filteredHpiData = useMemo(() => {
+    if (!hpiData || !selectedCounty) return [];
+    
+    const filtered = hpiData.filter(item => item.county_name === selectedCounty);
+    console.log(`📈 Filtered ${filtered.length} HPI records for ${selectedCounty} County`);
+    return filtered;
+  }, [hpiData, selectedCounty]);
 
   // ==================== HELPER FUNCTIONS USING interpretCodes ====================
   
@@ -247,70 +259,35 @@ useEffect(() => {
   loadAvailableCounties();
 }, []);  
 
-  // ==================== HPI DATA LOADING ====================
-  useEffect(() => {
-    const loadHPIData = async () => {
-      if (!selectedCounty) return;
-      
-      try {
-      const { data, error } = await supabase
-        .from('county_hpi_data')
-        .select('*')
-        .eq('county_name', selectedCounty)
-        .order('observation_year', { ascending: true });
-        
-        if (error) throw error;
-        
-        setHpiData(data || []);
-        setHpiLoaded(true);
-        console.log(`📈 Loaded ${data?.length || 0} years of HPI data for ${selectedCounty} County`);
-      } catch (error) {
-        console.error('Error loading HPI data:', error);
-        setHpiLoaded(false);
-      }
-    };
-
-    loadHPIData();
-  }, [selectedCounty]);
-  // ==================== LOAD SAVED NORMALIZATION DATA ====================
-  useEffect(() => {
-    const loadSavedNormalizationData = async () => {
-      if (!jobData?.id) return;
-      
-      try {
-        const savedData = await worksheetService.loadNormalizationData(jobData.id);
-        
-        if (savedData) {
-          // Restore configuration
-          if (savedData.normalization_config) {
-            const config = savedData.normalization_config;
-            if (config.equalizationRatio !== undefined) setEqualizationRatio(config.equalizationRatio);
-            if (config.outlierThreshold !== undefined) setOutlierThreshold(config.outlierThreshold);
-            if (config.normalizeToYear !== undefined) setNormalizeToYear(config.normalizeToYear);
-            if (config.salesFromYear !== undefined) setSalesFromYear(config.salesFromYear);
-            if (config.minSalePrice !== undefined) setMinSalePrice(config.minSalePrice);
-            if (config.selectedCounty !== undefined) setSelectedCounty(config.selectedCounty);
-          }
-          
-          // Restore normalized sales
-          if (savedData.time_normalized_sales && savedData.time_normalized_sales.length > 0) {
-            setTimeNormalizedSales(savedData.time_normalized_sales);
-          }
-          
-          // Restore stats
-          if (savedData.normalization_stats) {
-            setNormalizationStats(savedData.normalization_stats);
-          }
-          
-          console.log('✅ Loaded saved normalization data');
-        }
-      } catch (error) {
-        console.error('Error loading saved normalization data:', error);
-      }
-    };
-    
-    loadSavedNormalizationData();
-  }, [jobData?.id]);
+// ==================== USE SAVED NORMALIZATION DATA FROM PROPS ====================
+useEffect(() => {
+  if (!marketLandData) return;
+  
+  // Restore configuration from marketLandData prop
+  if (marketLandData.normalization_config) {
+    const config = marketLandData.normalization_config;
+    if (config.equalizationRatio !== undefined) setEqualizationRatio(config.equalizationRatio);
+    if (config.outlierThreshold !== undefined) setOutlierThreshold(config.outlierThreshold);
+    if (config.normalizeToYear !== undefined) setNormalizeToYear(config.normalizeToYear);
+    if (config.salesFromYear !== undefined) setSalesFromYear(config.salesFromYear);
+    if (config.minSalePrice !== undefined) setMinSalePrice(config.minSalePrice);
+    if (config.selectedCounty !== undefined) setSelectedCounty(config.selectedCounty);
+  }
+  
+  // Restore normalized sales from marketLandData
+  if (marketLandData.time_normalized_sales && marketLandData.time_normalized_sales.length > 0) {
+    setTimeNormalizedSales(marketLandData.time_normalized_sales);
+  }
+  
+  // Restore stats from marketLandData
+  if (marketLandData.normalization_stats) {
+    setNormalizationStats(marketLandData.normalization_stats);
+  }
+  
+  if (marketLandData.normalization_config || marketLandData.time_normalized_sales) {
+    console.log('✅ Restored saved normalization data from props');
+  }
+}, [marketLandData]);
 
   // ==================== WORKSHEET INITIALIZATION ====================
   useEffect(() => {
@@ -367,9 +344,9 @@ useEffect(() => {
 
   // ==================== NORMALIZATION FUNCTIONS ====================
   
-  const getHPIMultiplier = useCallback((saleYear, targetYear) => {
-    // Find the max year available in HPI data
-    const maxHPIYear = Math.max(...hpiData.map(h => h.observation_year));
+const getHPIMultiplier = useCallback((saleYear, targetYear) => {
+  // Find the max year available in HPI data
+  const maxHPIYear = Math.max(...filteredHpiData.map(h => h.observation_year));
     
     // If sale year is beyond our HPI data, use 1.0
     if (saleYear > maxHPIYear) return 1.0;
@@ -379,8 +356,8 @@ useEffect(() => {
     
     if (saleYear === effectiveTargetYear) return 1.0;
     
-    const saleYearData = hpiData.find(h => h.observation_year === saleYear);
-    const targetYearData = hpiData.find(h => h.observation_year === effectiveTargetYear);
+  const saleYearData = filteredHpiData.find(h => h.observation_year === saleYear);
+  const targetYearData = filteredHpiData.find(h => h.observation_year === effectiveTargetYear);
     
     if (!saleYearData || !targetYearData) {
       // Only warn once, not for every sale
@@ -394,7 +371,7 @@ useEffect(() => {
     const targetHPI = targetYearData.hpi_index || 100;
     
     return targetHPI / saleHPI;
-  }, [hpiData]);
+  }, [filteredHpiData]);
 
 const runTimeNormalization = useCallback(async () => {
     setIsProcessingTime(true);
@@ -528,6 +505,8 @@ const runTimeNormalization = useCallback(async () => {
       await worksheetService.saveNormalizationConfig(jobData.id, config);
       await worksheetService.saveTimeNormalizedSales(jobData.id, normalized, newStats);
 
+      if (onDataChange) onDataChange();
+
       console.log(`✅ Time normalization complete - preserved ${Object.keys(existingDecisions).length} keep/reject decisions`);
     } catch (error) {
       console.error('Error during time normalization:', error);
@@ -551,6 +530,9 @@ const saveSizeNormalizedValues = async (normalizedSales) => {
       }
     }
     console.log('✅ Size normalized values saved to database');
+
+    if (onDataChange) onDataChange();
+    
   } catch (error) {
     console.error('Error saving size normalized values:', error);
   }
@@ -855,6 +837,8 @@ const handleSalesDecision = async (saleId, decision) => {
           console.error('Error removing normalized values:', error);
         } else {
           console.log(`✅ Immediately removed normalized values for property ${saleId}`);
+
+          if (onDataChange) onDataChange();
         }
       } catch (error) {
         console.error('Error updating database:', error);
@@ -877,6 +861,8 @@ const handleSalesDecision = async (saleId, decision) => {
             console.error('Error saving normalized value:', error);
           } else {
             console.log(`✅ Immediately saved normalized value for property ${saleId}`);
+
+            if (onDataChange) onDataChange();
           }
         }
       } catch (error) {
@@ -932,6 +918,8 @@ const saveBatchDecisions = async () => {
       await worksheetService.saveTimeNormalizedSales(jobData.id, timeNormalizedSales, normalizationStats);
       
       alert(`✅ Successfully saved ${keeps.length} keeps and ${rejects.length} rejects`);
+
+      if (onDataChange) onDataChange();
     } catch (error) {
       console.error('❌ Error saving batch decisions:', error);
       alert('Error saving decisions. Please check the console and try again.');
