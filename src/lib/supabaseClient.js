@@ -742,20 +742,23 @@ getInteriorConditionName: function(property, codeDefinitions, vendorType) {
       p.asset_building_class === '1' || p.asset_building_class === '3B'
     );
     
-    const hasFarmland = packageProperties.some(p => 
-      p.asset_building_class === '3B'
-    );
+    const hasFarmland = packageProperties.some(p => {
+      const propClass = p.property_m4_class || p.property_class;
+      return propClass === '3B';
+    });
 
     // Check if this is additional cards for same property
-    const isAdditionalCard = packageProperties.every(p => {
-      const parsed = p.property_composite_key.split('-');
-      const baseKey = `${parsed[0]}-${parsed[1]}-${parsed[2]}-${parsed[3]}`;
-      return packageProperties.every(other => {
-        const otherParsed = other.property_composite_key.split('-');
-        const otherBase = `${otherParsed[0]}-${otherParsed[1]}-${otherParsed[2]}-${otherParsed[3]}`;
-        return baseKey === otherBase;
+    let isAdditionalCard = false;
+    if (packageProperties.length > 1) {
+      const firstParts = packageProperties[0].property_composite_key.split('-');
+      const expectedBase = `${firstParts[0]}-${firstParts[1]}-${firstParts[2]}-${firstParts[3]}`;
+      
+      isAdditionalCard = packageProperties.every(p => {
+        const parts = p.property_composite_key.split('-');
+        const base = `${parts[0]}-${parts[1]}-${parts[2]}-${parts[3]}`;
+        return base === expectedBase;
       });
-    }) && packageProperties.length > 1;
+    }
     
     const hasResidential = packageProperties.some(p => {
       const propClass = p.asset_building_class;
