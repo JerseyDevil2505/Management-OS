@@ -112,6 +112,8 @@ const PreValuationTab = ({
   });
   const [isProcessingImport, setIsProcessingImport] = useState(false);
   const [importProgress, setImportProgress] = useState({ current: 0, total: 0, message: '' });
+  const [processProgress, setProcessProgress] = useState({ current: 0, total: 0, message: '' });
+  const [isProcessingProperties, setIsProcessingProperties] = useState(false);
 
   // Market Analysis State
   const [marketAnalysisData, setMarketAnalysisData] = useState([]);
@@ -624,7 +626,21 @@ const saveSizeNormalizedValues = async (normalizedSales) => {
         singleFamily: acceptedSales.filter(s => 
           s.asset_type_use?.toString().trim().startsWith('1')
         ),
-        // ... rest of your grouping logic ...
+        semiDetached: acceptedSales.filter(s => 
+          s.asset_type_use?.toString().trim().startsWith('2')
+        ),
+        townhouses: acceptedSales.filter(s => 
+          s.asset_type_use?.toString().trim().startsWith('3')
+        ),
+        multifamily: acceptedSales.filter(s => 
+          s.asset_type_use?.toString().trim().startsWith('4')
+        ),
+        conversions: acceptedSales.filter(s => 
+          s.asset_type_use?.toString().trim().startsWith('5')
+        ),
+        condominiums: acceptedSales.filter(s => 
+          s.asset_type_use?.toString().trim().startsWith('6')
+        )
       };
 
       let totalSizeNormalized = 0;
@@ -796,7 +812,7 @@ const saveSizeNormalizedValues = async (normalizedSales) => {
           return {
             block,
             propertyCount: allProps.length,  // Total properties in block
-            salesCount: allProps.filter(p => p.sales_price && p.sales_price > 0).length,  // Total with sales
+            salesCount: allProps.filter(p => p.values_norm_size && p.values_norm_size > 0).length,  // Size normalized sales
             avgNormalizedValue: 0,
             color: { hex: "#E5E7EB", name: "No Data", row: 0, col: 0 },
             ageConsistency: 'N/A',
@@ -855,7 +871,7 @@ const saveSizeNormalizedValues = async (normalizedSales) => {
         return {
           block,
           propertyCount: allProps.length,  // Total properties in block (not just normalized)
-          salesCount: allProps.filter(p => p.sales_price && p.sales_price > 0).length,  // Total with sales
+          salesCount: props.length,  // Count of size normalized properties
           avgNormalizedValue: Math.round(avgValue),
           color: assignedColor,
           ageConsistency,
@@ -1213,7 +1229,7 @@ const handleSalesDecision = async (saleId, decision) => {
     }
   };
 
-  const processSelectedProperties = async () => {
+const processSelectedProperties = async () => {
     const toProcess = worksheetProperties.filter(p => 
       readyProperties.has(p.property_composite_key)
     );
@@ -1223,26 +1239,58 @@ const handleSalesDecision = async (saleId, decision) => {
       return;
     }
     
+    setIsProcessingProperties(true);
+    setProcessProgress({ current: 0, total: toProcess.length, message: 'Preparing to process properties...' });
+    
     try {
-      for (const prop of toProcess) {
-        await supabase
+      // Process in batches of 500
+      const batchSize = 500;
+      for (let i = 0; i < toProcess.length; i += batchSize) {
+        const batch = toProcess.slice(i, i + batchSize);
+        
+        setProcessProgress({ 
+          current: i, 
+          total: toProcess.length, 
+          message: `Processing batch ${Math.floor(i/batchSize) + 1} of ${Math.ceil(toProcess.length/batchSize)}...` 
+        });
+        
+        // Build update array for batch upsert
+        const updates = batch.map(prop => ({
+          property_composite_key: prop.property_composite_key,
+          new_vcs: prop.new_vcs,
+          location_analysis: prop.location_analysis,
+          asset_zoning: prop.asset_zoning,
+          asset_map_page: prop.asset_map_page,
+          asset_key_page: prop.asset_key_page
+        }));
+        
+        // Use upsert for batch processing
+        const { error } = await supabase
           .from('property_records')
-          .update({
-            new_vcs: prop.new_vcs,
-            location_analysis: prop.location_analysis,
-            asset_zoning: prop.asset_zoning,
-            asset_map_page: prop.asset_map_page,
-            asset_key_page: prop.asset_key_page
-          })
-          .eq('property_composite_key', prop.property_composite_key);
+          .upsert(updates, { onConflict: 'property_composite_key' });
+          
+        if (error) throw error;
       }
       
-      alert(`✅ Successfully processed ${toProcess.length} properties`);
-      setReadyProperties(new Set());
-      updateWorksheetStats(worksheetProperties);
+      setProcessProgress({ 
+        current: toProcess.length, 
+        total: toProcess.length, 
+        message: 'Processing complete!' 
+      });
+      
+      setTimeout(() => {
+        alert(`✅ Successfully processed ${toProcess.length} properties`);
+        setReadyProperties(new Set());
+        updateWorksheetStats(worksheetProperties);
+        setIsProcessingProperties(false);
+        setProcessProgress({ current: 0, total: 0, message: '' });
+      }, 500);
+      
     } catch (error) {
       console.error('Error processing properties:', error);
       alert('Error processing properties. Please try again.');
+      setIsProcessingProperties(false);
+      setProcessProgress({ current: 0, total: 0, message: '' });
     }
   };
 
@@ -1763,8 +1811,8 @@ const analyzeImportFile = async (file) => {
                     <div className="text-sm text-gray-600">Potential Sales</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-2xl font-bold">{normalizationStats.timeNormalized}</div>
-                    <div className="text-sm text-gray-600">Time Normalized</div>
+                    <div className="text-2xl font-bold">{timeNormalizedSales.filter(s => s.keep_reject === 'keep').length}</div>
+                    <div className="text-sm text-gray-600">Kept/Normalized</div>
                   </div>
                   <div className="text-center">
                     <div className="text-2xl font-bold text-orange-600">{normalizationStats.flaggedOutliers}</div>
@@ -2623,27 +2671,27 @@ const analyzeImportFile = async (file) => {
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold">Property Worksheet</h3>
-              <button
-                onClick={() => {
-                  const confirmMsg = `Copy current VCS to new VCS for ALL ${worksheetProperties.length} properties? This will OVERWRITE any existing new VCS values!`;
-                  if (window.confirm(confirmMsg)) {
-                    const updated = worksheetProperties.map(prop => ({
-                      ...prop,
-                      new_vcs: prop.property_vcs || ''
-                    }));
-                    setWorksheetProperties(updated);
-                    setFilteredWorksheetProps(updated);
-                    updateWorksheetStats(updated);
-                    setUnsavedChanges(true);
-                    alert(`✅ Copied current VCS values for ${worksheetProperties.length} properties`);
-                  }
-                }}
-                className="px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600 font-medium"
-                title="Copy all current VCS values to new VCS field"
-              >
-                Preserve All Current VCS
-              </button>
               <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    const confirmMsg = `Copy current VCS to new VCS for ALL ${worksheetProperties.length} properties? This will OVERWRITE any existing new VCS values!`;
+                    if (window.confirm(confirmMsg)) {
+                      const updated = worksheetProperties.map(prop => ({
+                        ...prop,
+                        new_vcs: prop.property_vcs || ''
+                      }));
+                      setWorksheetProperties(updated);
+                      setFilteredWorksheetProps(updated);
+                      updateWorksheetStats(updated);
+                      setUnsavedChanges(true);
+                      alert(`✅ Copied current VCS values for ${worksheetProperties.length} properties`);
+                    }
+                  }}
+                  className="px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600 font-medium"
+                  title="Copy all current VCS values to new VCS field"
+                >
+                  Preserve All Current VCS
+                </button>
                 <input
                   type="text"
                   placeholder="Search address or property ID..."
@@ -3236,7 +3284,39 @@ const analyzeImportFile = async (file) => {
            </div>
          </div>
        </div>
-     )}
+      )}
+
+      {/* Process Selected Properties Progress Modal */}
+      {isProcessingProperties && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <h3 className="text-lg font-semibold mb-4">Processing Properties</h3>
+            
+            <div className="mb-4">
+              <div className="flex justify-between text-sm text-gray-600 mb-2">
+                <span>{processProgress.message}</span>
+                <span>{processProgress.current} / {processProgress.total}</span>
+              </div>
+              
+              <div className="w-full bg-gray-200 rounded-full h-2">
+                <div
+                  className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                  style={{
+                    width: `${processProgress.total > 0 
+                      ? (processProgress.current / processProgress.total * 100) 
+                      : 0}%`
+                  }}
+                />
+              </div>
+            </div>
+            
+            <div className="flex items-center justify-center">
+              <RefreshCw className="animate-spin text-blue-600" size={20} />
+              <span className="ml-2 text-sm text-gray-600">Please wait...</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Zoning Requirements Tab Content */}
       {activeSubTab === 'zoning' && (
@@ -3268,7 +3348,7 @@ const analyzeImportFile = async (file) => {
                         .from('market_land_valuation')
                         .upsert({
                           job_id: jobData.id,
-                          zoning_requirements: zoningRequirements,
+                          zoning_config: zoningRequirements,
                           updated_at: new Date().toISOString()
                         })
                         .eq('job_id', jobData.id);
