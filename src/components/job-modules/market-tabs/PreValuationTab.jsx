@@ -1259,8 +1259,8 @@ const handleSalesDecision = async (saleId, decision) => {
       if (field === 'block' || field === 'lot') {
         const aParsed = parseCompositeKey(a.property_composite_key);
         const bParsed = parseCompositeKey(b.property_composite_key);
-        aVal = field === 'block' ? aParsed.block : aParsed.lot;
-        bVal = field === 'block' ? bParsed.block : bParsed.lot;
+        aVal = field === 'block' ? parseInt(aParsed.block) || 0 : parseFloat(aParsed.lot) || 0;
+        bVal = field === 'block' ? parseInt(bParsed.block) || 0 : parseFloat(bParsed.lot) || 0;
       } else {
         aVal = a[field];
         bVal = b[field];
@@ -2404,13 +2404,26 @@ const analyzeImportFile = async (file) => {
                           <td className="px-4 py-3 text-sm text-center">{block.propertyCount}</td>
                           <td className="px-4 py-3 text-sm text-center">{block.salesCount}</td>
                           <td className="px-4 py-3 text-sm text-right font-medium">
-                            ${block.avgNormalizedValue.toLocaleString()}
+                            {block.noData ? (
+                              <span className="text-gray-400 italic">No Sales Data</span>
+                            ) : (
+                              `$${block.avgNormalizedValue.toLocaleString()}`
+                            )}
                           </td>
-                          <td className="px-4 py-3 text-sm text-center">{block.ageDetails.avgYear}</td>
-                          <td className="px-4 py-3 text-sm text-right">{block.sizeDetails.avgSize.toLocaleString()} sf</td>
-                          <td className="px-4 py-3 text-sm">{block.designDetails.dominantDesign}</td>
+                          <td className="px-4 py-3 text-sm text-center">
+                            {block.noData ? '-' : block.ageDetails.avgYear}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-right">
+                            {block.noData ? '-' : `${block.sizeDetails.avgSize.toLocaleString()} sf`}
+                          </td>
+                          <td className="px-4 py-3 text-sm">
+                            {block.noData ? '-' : block.designDetails.dominantDesign}
+                          </td>
                           <td className="px-4 py-3 text-center">
-                            <button
+                            {block.noData ? (
+                              <span className="text-gray-400">-</span>
+                            ) : (
+                              <button
                               onClick={() => {
                                 setSelectedBlockDetails({
                                   ...block,
@@ -2424,9 +2437,13 @@ const analyzeImportFile = async (file) => {
                             >
                               {block.ageConsistency}
                             </button>
+                            )}
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <button
+                            {block.noData ? (
+                              <span className="text-gray-400">-</span>
+                            ) : (
+                              <button
                               onClick={() => {
                                 setSelectedBlockDetails({
                                   ...block,
@@ -2440,9 +2457,13 @@ const analyzeImportFile = async (file) => {
                             >
                               {block.sizeConsistency}
                             </button>
+                            )}
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <button
+                            {block.noData ? (
+                              <span className="text-gray-400">-</span>
+                            ) : (
+                              <button
                               onClick={() => {
                                 setSelectedBlockDetails({
                                   ...block,
@@ -2456,6 +2477,7 @@ const analyzeImportFile = async (file) => {
                             >
                               {block.designConsistency}
                             </button>
+                            )}
                           </td>
                           <td className="px-4 py-3 text-center">
                             <div className="flex items-center justify-center gap-1">
@@ -2490,31 +2512,7 @@ const analyzeImportFile = async (file) => {
           {/* Configuration Section */}
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex justify-between items-center mb-4">
-              <div className="flex items-center gap-4">
-                <h3 className="text-lg font-semibold">Property Worksheet Configuration</h3>
-                <button
-                  onClick={() => {
-                    const confirmMsg = `Are you sure you want to copy current VCS to new VCS for ALL ${worksheetProperties.length} properties?\n\nThis will OVERWRITE any existing new VCS values!`;
-                    if (window.confirm(confirmMsg)) {
-                      if (window.confirm('This action cannot be undone. Are you absolutely sure?')) {
-                        const updated = worksheetProperties.map(prop => ({
-                          ...prop,
-                          new_vcs: prop.property_vcs || ''
-                        }));
-                        setWorksheetProperties(updated);
-                        setFilteredWorksheetProps(updated);
-                        updateWorksheetStats(updated);
-                        setUnsavedChanges(true);
-                        alert(`✅ Copied current VCS values for ${worksheetProperties.length} properties`);
-                      }
-                    }
-                  }}
-                  className="px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600 font-medium"
-                  title="Copy all current VCS values to new VCS field"
-                >
-                  Preserve All Current VCS
-                </button>
-              </div>
+              <h3 className="text-lg font-semibold">Property Worksheet Configuration</h3>
               <div className="flex gap-2">
                 <input
                   type="file"
@@ -2595,6 +2593,26 @@ const analyzeImportFile = async (file) => {
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold">Property Worksheet</h3>
+              <button
+                onClick={() => {
+                  const confirmMsg = `Copy current VCS to new VCS for ALL ${worksheetProperties.length} properties? This will OVERWRITE any existing new VCS values!`;
+                  if (window.confirm(confirmMsg)) {
+                    const updated = worksheetProperties.map(prop => ({
+                      ...prop,
+                      new_vcs: prop.property_vcs || ''
+                    }));
+                    setWorksheetProperties(updated);
+                    setFilteredWorksheetProps(updated);
+                    updateWorksheetStats(updated);
+                    setUnsavedChanges(true);
+                    alert(`✅ Copied current VCS values for ${worksheetProperties.length} properties`);
+                  }
+                }}
+                className="px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600 font-medium"
+                title="Copy all current VCS values to new VCS field"
+              >
+                Preserve All Current VCS
+              </button>
               <div className="flex gap-2">
                 <input
                   type="text"
