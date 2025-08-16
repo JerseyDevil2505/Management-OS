@@ -499,36 +499,26 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
   try {
     await navigator.clipboard.writeText(prompt);
     
-    // Update notes field with success message
     setLandNotes(prev => ({
       ...prev, 
-      [property.id]: '📋 Prompt copied! Opening Claude.ai... Paste your prompt there, then paste the response back here.'
+      [property.id]: '📋 Prompt copied! Opening Claude... (paste response here when ready)'
     }));
     
-    // Show a temporary success notification (optional)
-    const originalNotes = landNotes[property.id] || '';
-    
-    // Open Claude in a new tab
     window.open('https://claude.ai/new', '_blank');
     
-    // After 5 seconds, update the message to remind them to paste the response
     setTimeout(() => {
       setLandNotes(prev => ({
         ...prev,
-        [property.id]: prev[property.id]?.includes('📋') ? '[Paste Claude\'s response here]' : prev[property.id]
+        [property.id]: ''
       }));
-    }, 5000);
+    }, 3000);
     
   } catch (err) {
-    console.error('Failed to copy prompt:', err);
-    
-    // Fallback: put the prompt in the notes field so they can copy it manually
+    console.error('Failed to copy:', err);
     setLandNotes(prev => ({
       ...prev, 
-      [property.id]: `[Copy this prompt to Claude.ai]:\n${prompt}`
+      [property.id]: `Copy this to Claude:\n${prompt}`
     }));
-    
-    // Still try to open Claude
     window.open('https://claude.ai/new', '_blank');
   }
 };
@@ -1735,6 +1725,10 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
                       type="text"
                       value={landNotes[sale.id] || ''}
                       onChange={(e) => setLandNotes(prev => ({ ...prev, [sale.id]: e.target.value }))}
+                      onBlur={() => {
+                        // Save when user clicks outside the field
+                        saveAnalysis();
+                      }}
                       placeholder="Add notes..."
                       style={{
                         width: '200px',
