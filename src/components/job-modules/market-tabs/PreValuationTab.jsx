@@ -2637,6 +2637,35 @@ const analyzeImportFile = async (file) => {
                 <div className="text-2xl font-bold">
                   {worksheetStats.vcsAssigned} / {worksheetStats.totalProperties}
                 </div>
+                <div className="text-sm text-gray-600 flex items-center justify-center gap-1">
+                  VCS Assigned
+                  <button
+                    onClick={() => {
+                      if (window.confirm(`Copy current VCS to new VCS for ALL ${worksheetProperties.length} properties? This will OVERWRITE any existing new VCS values!`)) {
+                        const updated = worksheetProperties.map(prop => ({
+                          ...prop,
+                          new_vcs: prop.property_vcs || ''
+                        }));
+                        setWorksheetProperties(updated);
+                        setFilteredWorksheetProps(updated);
+                        updateWorksheetStats(updated);
+                        setUnsavedChanges(true);
+                        alert(`✅ Copied current VCS values for ${worksheetProperties.length} properties`);
+                      }
+                    }}
+                    className="px-1 py-0.5 bg-orange-500 text-white rounded hover:bg-orange-600 text-xs"
+                    title="Copy all current VCS values to new VCS field"
+                  >
+                    »
+                  </button>
+                </div>
+              </div>
+                <div className="text-sm text-gray-600">Total Properties</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold">
+                  {worksheetStats.vcsAssigned} / {worksheetStats.totalProperties}
+                </div>
                 <div className="text-sm text-gray-600">VCS Assigned</div>
               </div>
               <div className="text-center">
@@ -2678,26 +2707,6 @@ const analyzeImportFile = async (file) => {
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold">Property Worksheet</h3>
               <div className="flex gap-2">
-                <button
-                  onClick={() => {
-                    const confirmMsg = `Copy current VCS to new VCS for ALL ${worksheetProperties.length} properties? This will OVERWRITE any existing new VCS values!`;
-                    if (window.confirm(confirmMsg)) {
-                      const updated = worksheetProperties.map(prop => ({
-                        ...prop,
-                        new_vcs: prop.property_vcs || ''
-                      }));
-                      setWorksheetProperties(updated);
-                      setFilteredWorksheetProps(updated);
-                      updateWorksheetStats(updated);
-                      setUnsavedChanges(true);
-                      alert(`✅ Copied current VCS values for ${worksheetProperties.length} properties`);
-                    }
-                  }}
-                  className="px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600 font-medium"
-                  title="Copy all current VCS values to new VCS field"
-                >
-                  Preserve All Current VCS
-                </button>
                 <input
                   type="text"
                   placeholder="Search address or property ID..."
@@ -3457,13 +3466,13 @@ const analyzeImportFile = async (file) => {
                   <table className="min-w-full">
                     <thead className="bg-gray-50 border-b">
                       <tr>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Zone</th>
-                        <th className="px-4 py-3 text-center text-sm font-medium text-gray-700"># Props</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Description</th>
-                        <th className="px-4 py-3 text-center text-sm font-medium text-gray-700">Min Size (SF)</th>
-                        <th className="px-4 py-3 text-center text-sm font-medium text-gray-700">Min Frontage (FT)</th>
-                        <th className="px-4 py-3 text-center text-sm font-medium text-gray-700">Min Depth (FT)</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Depth Table</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-20">Zone</th>
+                        <th className="px-4 py-3 text-center text-sm font-medium text-gray-700 w-20"># Props</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-64">Description</th>
+                        <th className="px-4 py-3 text-center text-sm font-medium text-gray-700 w-32">Min Size (SF)</th>
+                        <th className="px-4 py-3 text-center text-sm font-medium text-gray-700 w-32">Min Frontage (FT)</th>
+                        <th className="px-4 py-3 text-center text-sm font-medium text-gray-700 w-32">Min Depth (FT)</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-40">Depth Table</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -3488,16 +3497,30 @@ const analyzeImportFile = async (file) => {
                               />
                             </td>
                             <td className="px-4 py-3">
-                              <input
-                                type="number"
-                                value={zoneData.minSize || ''}
-                                onChange={(e) => setEditingZoning(prev => ({
-                                  ...prev,
-                                  [zone]: { ...prev[zone], minSize: e.target.value }
-                                }))}
-                                placeholder="e.g., 7500"
-                                className="w-24 px-2 py-1 border border-gray-300 rounded text-sm text-center"
-                              />
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="number"
+                                  value={zoneData.minSize || ''}
+                                  onChange={(e) => setEditingZoning(prev => ({
+                                    ...prev,
+                                    [zone]: { ...prev[zone], minSize: e.target.value }
+                                  }))}
+                                  placeholder={zoneData.minSizeUnit === 'AC' ? "e.g., 2.5" : "e.g., 7500"}
+                                  step={zoneData.minSizeUnit === 'AC' ? "0.01" : "1"}
+                                  className="w-20 px-2 py-1 border border-gray-300 rounded text-sm text-center"
+                                />
+                                <select
+                                  value={zoneData.minSizeUnit || 'SF'}
+                                  onChange={(e) => setEditingZoning(prev => ({
+                                    ...prev,
+                                    [zone]: { ...prev[zone], minSizeUnit: e.target.value }
+                                  }))}
+                                  className="px-1 py-1 border border-gray-300 rounded text-sm"
+                                >
+                                  <option value="SF">SF</option>
+                                  <option value="AC">AC</option>
+                                </select>
+                              </div>
                             </td>
                             <td className="px-4 py-3">
                               <input
