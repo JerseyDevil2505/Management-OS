@@ -487,31 +487,48 @@ const LandValuationTab = ({
     setLandNotes(prev => ({...prev, [property.id]: 'Researching...'}));
 
     try {
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "claude-3-5-sonnet-20241022",
-          max_tokens: 1000,
-          messages: [
-            {
-              role: "user",
-              content: `Analyze this land sale in ${jobData?.municipality}, ${jobData?.county} County, NJ:
-Block ${property.property_block} Lot ${property.property_lot}
-Address: ${property.property_location}
-Sale Date: ${property.sales_date}
-Sale Price: $${property.sales_price?.toLocaleString()}
-Acres: ${property.totalAcres?.toFixed(2)}
-Price/Acre: $${property.pricePerAcre?.toLocaleString()}
-Class: ${property.property_m4_class === '2' ? 'Residential (possible teardown)' : property.property_m4_class}
-
-Identify likely factors affecting this sale price (wetlands, access, zoning, teardown value, etc.). Be specific and actionable for valuation purposes. 2-3 sentences.`
-            }
-          ]
-        })
+      const { data, error } = await supabase.functions.invoke('analyze-property', {
+        body: {
+          municipality: jobData?.municipality,
+          county: jobData?.county,
+          block: property.property_block,
+          lot: property.property_lot,
+          address: property.property_location,
+          saleDate: property.sales_date,
+          salePrice: property.sales_price,
+          acres: property.totalAcres,
+          pricePerAcre: property.pricePerAcre,
+          propertyClass: property.property_m4_class
+        }
       });
+
+      if (error) throw error;
+      
+      const claudeResponse = data.analysis;
+      
+      setLandNotes(prev => ({...prev, [property.id]: claudeResponse}));
+      
+      // Auto-categorize based on response
+      const lowerResponse = claudeResponse.toLowerCase();
+      if (lowerResponse.includes('wetland')) {
+        setSaleCategories(prev => ({...prev, [property.id]: 'wetlands'}));
+        setSpecialRegions(prev => ({...prev, [property.id]: 'Wetlands'}));
+      } else if (lowerResponse.includes('landlocked') || lowerResponse.includes('no access')) {
+        setSaleCategories(prev => ({...prev, [property.id]: 'landlocked'}));
+      } else if (lowerResponse.includes('teardown') || lowerResponse.includes('demolition')) {
+        setSaleCategories(prev => ({...prev, [property.id]: 'teardown'}));
+      } else if (lowerResponse.includes('conservation') || lowerResponse.includes('preserved')) {
+        setSaleCategories(prev => ({...prev, [property.id]: 'conservation'}));
+        setSpecialRegions(prev => ({...prev, [property.id]: 'Conservation'}));
+      } else if (lowerResponse.includes('pineland')) {
+        setSpecialRegions(prev => ({...prev, [property.id]: 'Pinelands'}));
+      }
+      
+    } catch (error) {
+      console.error('Research failed:', error);
+      setLandNotes(prev => ({...prev, [property.id]: '[Research failed - try again]'}));
+    }
+  };
 
       const data = await response.json();
       const claudeResponse = data.content[0].text;
