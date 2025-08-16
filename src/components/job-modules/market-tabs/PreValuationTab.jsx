@@ -62,6 +62,10 @@ const PreValuationTab = ({
     avgSizeAdjustment: 0
   });
 
+  // Track last run dates for normalizations
+  const [lastTimeNormalizationRun, setLastTimeNormalizationRun] = useState(null);
+  const [lastSizeNormalizationRun, setLastSizeNormalizationRun] = useState(null);
+
   // Page by Page Worksheet State
   const [worksheetProperties, setWorksheetProperties] = useState([]);
   const [filteredWorksheetProps, setFilteredWorksheetProps] = useState([]);
@@ -272,6 +276,8 @@ useEffect(() => {
     if (config.salesFromYear !== undefined) setSalesFromYear(config.salesFromYear);
     if (config.minSalePrice !== undefined) setMinSalePrice(config.minSalePrice);
     if (config.selectedCounty !== undefined) setSelectedCounty(config.selectedCounty);
+    if (config.lastTimeNormalizationRun) setLastTimeNormalizationRun(config.lastTimeNormalizationRun);
+    if (config.lastSizeNormalizationRun) setLastSizeNormalizationRun(config.lastSizeNormalizationRun);
   }
   
   // Restore normalized sales from marketLandData
@@ -500,12 +506,13 @@ const runTimeNormalization = useCallback(async () => {
         salesFromYear,
         minSalePrice,
         selectedCounty
+        lastTimeNormalizationRun: new Date().toISOString()
       };
       
       await worksheetService.saveNormalizationConfig(jobData.id, config);
       await worksheetService.saveTimeNormalizedSales(jobData.id, normalized, newStats);
 
-      if (onDataChange) onDataChange();
+      setLastTimeNormalizationRun(new Date().toISOString());
 
       console.log(`✅ Time normalization complete - preserved ${Object.keys(existingDecisions).length} keep/reject decisions`);
     } catch (error) {
@@ -530,8 +537,6 @@ const saveSizeNormalizedValues = async (normalizedSales) => {
       }
     }
     console.log('✅ Size normalized values saved to database');
-
-    if (onDataChange) onDataChange();
     
   } catch (error) {
     console.error('Error saving size normalized values:', error);
@@ -627,6 +632,15 @@ const runSizeNormalization = useCallback(async () => {
 
       // Save to database
       await saveSizeNormalizedValues(acceptedSales);
+      
+      // Track the run date
+      const runDate = new Date().toISOString();
+      setLastSizeNormalizationRun(runDate);
+      
+      // Save the date to config
+      await worksheetService.saveNormalizationConfig(jobData.id, {
+        lastSizeNormalizationRun: runDate
+      });
       
       console.log(`✅ Size normalization complete - preserved ${preservedCount} existing calculations`);
       
@@ -808,68 +822,47 @@ const runSizeNormalization = useCallback(async () => {
   }, [blockTypeFilter, colorScaleStart, colorScaleIncrement, normalizationStats.sizeNormalized, processBlockAnalysis]);
 
 const handleSalesDecision = async (saleId, decision) => {
-    const updatedSales = timeNormalizedSales.map(sale =>
-      sale.id === saleId ? { ...sale, keep_reject: decision } : sale
-    );
-    setTimeNormalizedSales(updatedSales);
+  const updatedSales = timeNormalizedSales.map(sale =>
+    sale.id === saleId ? { ...sale, keep_reject: decision } : sale
+  );
+  setTimeNormalizedSales(updatedSales);
 
-    // Update stats
-    const newStats = {
-      ...normalizationStats,
-      pendingReview: updatedSales.filter(s => s.keep_reject === 'pending').length,
-      keptCount: updatedSales.filter(s => s.keep_reject === 'keep').length,
-      rejectedCount: updatedSales.filter(s => s.keep_reject === 'reject').length
-    };
-    setNormalizationStats(newStats);
-
-    // If changing to reject, immediately remove from database
-    if (decision === 'reject') {
-      try {
-        const { error } = await supabase
-          .from('property_records')
-          .update({ 
-            values_norm_time: null,
-            values_norm_size: null 
-          })
-          .eq('id', saleId);
-        
-        if (error) {
-          console.error('Error removing normalized values:', error);
-        } else {
-          console.log(`✅ Immediately removed normalized values for property ${saleId}`);
-
-          if (onDataChange) onDataChange();
-        }
-      } catch (error) {
-        console.error('Error updating database:', error);
-      }
-    }
-    
-    // If changing to keep, immediately save to database
-    if (decision === 'keep') {
-      try {
-        const sale = updatedSales.find(s => s.id === saleId);
-        if (sale && sale.time_normalized_price) {
-          const { error } = await supabase
-            .from('property_records')
-            .update({ 
-              values_norm_time: sale.time_normalized_price 
-            })
-            .eq('id', saleId);
-          
-          if (error) {
-            console.error('Error saving normalized value:', error);
-          } else {
-            console.log(`✅ Immediately saved normalized value for property ${saleId}`);
-
-            if (onDataChange) onDataChange();
-          }
-        }
-      } catch (error) {
-        console.error('Error updating database:', error);
-      }
-    }
+  // Update stats
+  const newStats = {
+    ...normalizationStats,
+    pendingReview: updatedSales.filter(s => s.keep_reject === 'pending').length,
+    keptCount: updatedSales.filter(s => s.keep_reject === 'keep').length,
+    rejectedCount: updatedSales.filter(s => s.keep_reject === 'reject').length
   };
+  setNormalizationStats(newStats);
+
+  // Only do immediate database operations for REJECTIONS
+  if (decision === 'reject') {
+    try {
+      const { error } = await supabase
+        .from('property_records')
+        .update({ 
+          values_norm_time: null,
+          values_norm_size: null 
+        })
+        .eq('id', saleId);
+      
+      if (error) {
+        console.error('Error removing normalized values:', error);
+      } else {
+        console.log(`🗑️ Immediately removed normalized values for rejected property ${saleId}`);
+      }
+    } catch (error) {
+      console.error('Error updating database:', error);
+    }
+  }
+  // KEEPS wait for batch save - no immediate database update
+  
+  // Track unsaved changes only for keeps that need saving
+  if (decision === 'keep' && onDataChange) {
+    onDataChange();
+  }
+};
      
 const saveBatchDecisions = async () => {
     try {
@@ -918,8 +911,6 @@ const saveBatchDecisions = async () => {
       await worksheetService.saveTimeNormalizedSales(jobData.id, timeNormalizedSales, normalizationStats);
       
       alert(`✅ Successfully saved ${keeps.length} keeps and ${rejects.length} rejects`);
-
-      if (onDataChange) onDataChange();
     } catch (error) {
       console.error('❌ Error saving batch decisions:', error);
       alert('Error saving decisions. Please check the console and try again.');
@@ -1391,7 +1382,7 @@ const analyzeImportFile = async (file) => {
   // ==================== RENDER ====================
   
   return (
-    <div className="space-y-4">
+    <div className="w-full">
       {/* Sub-tab Navigation */}
       <div className="flex gap-2 border-b border-gray-200">
         <button
@@ -1448,6 +1439,11 @@ const analyzeImportFile = async (file) => {
               <div className="flex items-center gap-4">
                 {hpiLoaded && (
                   <span className="text-green-600 text-sm">✓ HPI Data Loaded</span>
+                )}
+                {lastTimeNormalizationRun && (
+                  <span className="text-gray-500 text-sm">
+                    Last run: {new Date(lastTimeNormalizationRun).toLocaleDateString()}
+                  </span>
                 )}
                 <button
                   onClick={() => {
@@ -1997,8 +1993,14 @@ const analyzeImportFile = async (file) => {
               <div className="bg-white rounded-lg shadow p-6">
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-lg font-semibold">Size Normalization</h3>
-                  <button
-                    onClick={runSizeNormalization}
+                  <div className="flex items-center gap-4">
+                    {lastSizeNormalizationRun && (
+                      <span className="text-gray-500 text-sm">
+                        Last run: {new Date(lastSizeNormalizationRun).toLocaleDateString()}
+                      </span>
+                    )}
+                    <button
+                      onClick={runSizeNormalization}
                     disabled={isProcessingSize || timeNormalizedSales.filter(s => s.keep_reject === 'keep').length === 0}
                     className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
                   >
@@ -2011,6 +2013,7 @@ const analyzeImportFile = async (file) => {
                       'Run Size Normalization'
                     )}
                   </button>
+                  </div>
                 </div>
 
                 <div className="p-4 bg-blue-50 rounded mb-4">
