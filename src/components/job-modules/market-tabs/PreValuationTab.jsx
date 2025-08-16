@@ -1843,10 +1843,6 @@ const analyzeImportFile = async (file) => {
                             <option value="type-6">Condominiums</option>
                           )}
                         </select>
-                        {timeNormalizedSales.some(s => s.asset_type_use?.toString().trim().startsWith('6')) && (
-                            <option value="type-6">Condominiums</option>
-                          )}
-                        </select>
                         <select
                           value={normItemsPerPage}
                           onChange={(e) => setNormItemsPerPage(parseInt(e.target.value))}
