@@ -755,6 +755,7 @@ getInteriorConditionName: function(property, codeDefinitions, vendorType) {
         const otherBase = `${otherParsed[0]}-${otherParsed[1]}-${otherParsed[2]}-${otherParsed[3]}`;
         return baseKey === otherBase;
       });
+    }) && packageProperties.length > 1;
     
     const hasResidential = packageProperties.some(p => {
       const propClass = p.asset_building_class;
