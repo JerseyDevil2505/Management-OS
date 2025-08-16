@@ -1057,15 +1057,16 @@ const OverallAnalysisTab = ({
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
                           <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Properties</th>
                           <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Sales</th>
-                          <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Avg Year</th>
+                          <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Avg Size</th>
                           <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Price</th>
                           <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Adj Price</th>
                           <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Delta</th>
                           <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">CME Bracket</th>
                         </tr>
                       </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
+                        <tbody className="bg-white divide-y divide-gray-200">
                         {analysis.typeUse.groups
+                          .filter(g => g.code !== 'Unknown' && g.name !== 'Other')
                           .sort((a, b) => b.avgAdjustedPrice - a.avgAdjustedPrice)
                           .map((group, idx) => (
                           <tr key={`${group.code}-${idx}`} className={group === analysis.typeUse.baseline ? 'bg-yellow-50' : ''}>
@@ -1081,7 +1082,9 @@ const OverallAnalysisTab = ({
                             <td className="px-4 py-3 text-sm text-right">{formatCurrency(group.avgPrice)}</td>
                             <td className="px-4 py-3 text-sm text-right font-medium">{formatCurrency(group.avgAdjustedPrice)}</td>
                             <td className="px-4 py-3 text-sm text-right">
-                              {group.deltaPercent !== 0 ? (
+                              {group.salesCount === 0 ? (
+                                <span className="text-gray-500 text-xs">NO SALES DATA</span>
+                              ) : group.deltaPercent !== 0 ? (
                                 <span className={group.deltaPercent > 0 ? 'text-green-600' : 'text-red-600'}>
                                   {group.deltaPercent > 0 ? '+' : ''}{group.deltaPercent.toFixed(0)}%
                                 </span>
@@ -1090,15 +1093,19 @@ const OverallAnalysisTab = ({
                               )}
                             </td>
                             <td className="px-4 py-3 text-sm text-center">
-                              <span 
-                                className="px-2 py-1 text-xs rounded font-medium"
-                                style={{ 
-                                  backgroundColor: group.cmeBracket.color,
-                                  color: group.cmeBracket.textColor
-                                }}
-                              >
-                                {group.cmeBracket.label}
-                              </span>
+                              {group.salesCount > 0 ? (
+                                <span 
+                                  className="px-2 py-1 text-xs rounded font-medium"
+                                  style={{ 
+                                    backgroundColor: group.cmeBracket.color,
+                                    color: group.cmeBracket.textColor
+                                  }}
+                                >
+                                  {group.cmeBracket.label}
+                                </span>
+                              ) : (
+                                <span className="text-gray-400">—</span>
+                              )}
                             </td>
                           </tr>
                         ))}
@@ -1139,6 +1146,7 @@ const OverallAnalysisTab = ({
                       <thead className="bg-gray-50">
                         <tr>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
+                          <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Properties</th>
                           <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Sales</th>
                           <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Avg Year</th>
                           <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Avg Size</th>
@@ -1149,6 +1157,7 @@ const OverallAnalysisTab = ({
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
                         {analysis.design.groups
+                          .filter(g => g.code !== 'Unknown')
                           .sort((a, b) => b.avgAdjustedPrice - a.avgAdjustedPrice)
                           .map((group, idx) => (
                           <tr key={`${group.code}-${idx}`} className={group === analysis.design.baseline ? 'bg-yellow-50' : ''}>
@@ -1160,12 +1169,14 @@ const OverallAnalysisTab = ({
                             </td>
                             <td className="px-4 py-3 text-sm text-right">{group.propertyCount}</td>
                             <td className="px-4 py-3 text-sm text-right">{group.salesCount}</td>
-                            <td className="px-4 py-3 text-sm text-right">{group.avgYearBuilt}</td>
+                            <td className="px-4 py-3 text-sm text-right">{group.avgYearBuilt || '—'}</td>
                             <td className="px-4 py-3 text-sm text-right">{formatNumber(group.avgSize)}</td>
                             <td className="px-4 py-3 text-sm text-right">{formatCurrency(group.avgPrice)}</td>
                             <td className="px-4 py-3 text-sm text-right font-medium">{formatCurrency(group.avgAdjustedPrice)}</td>
                             <td className="px-4 py-3 text-sm text-right">
-                              {group.deltaPercent !== 0 ? (
+                              {group.salesCount === 0 ? (
+                                <span className="text-gray-500 text-xs">NO SALES DATA</span>
+                              ) : group.deltaPercent !== 0 ? (
                                 <span className={group.deltaPercent > 0 ? 'text-green-600' : 'text-red-600'}>
                                   {group.deltaPercent > 0 ? '+' : ''}{group.deltaPercent.toFixed(0)}%
                                 </span>
@@ -1287,15 +1298,29 @@ const OverallAnalysisTab = ({
                     .sort((a, b) => b[1].avgAdjustedPrice - a[1].avgAdjustedPrice)
                     .map(([vcs, vcsData]) => (
                     <div key={vcs} className="border border-gray-200 rounded-lg">
+                      
                       {/* VCS Header */}
                       <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
                         <div className="flex justify-between items-center">
                           <h4 className="font-semibold text-gray-900">
                             {vcsData.description} ({vcsData.code})
                           </h4>
-                          <div className="text-sm text-gray-600">
-                            {vcsData.propertyCount} properties | {vcsData.salesCount} sales | 
-                            Avg: {formatCurrency(vcsData.avgAdjustedPrice)}
+                          <div className="flex items-center gap-3">
+                            <div className="text-sm text-gray-600">
+                              {vcsData.propertyCount} properties | {vcsData.salesCount} sales | 
+                              Avg: {formatCurrency(vcsData.avgAdjustedPrice)}
+                            </div>
+                            {vcsData.salesCount > 0 && (
+                              <span 
+                                className="px-2 py-1 text-xs rounded font-medium"
+                                style={{ 
+                                  backgroundColor: getCMEBracket(vcsData.avgAdjustedPrice).color,
+                                  color: getCMEBracket(vcsData.avgAdjustedPrice).textColor
+                                }}
+                              >
+                                {getCMEBracket(vcsData.avgAdjustedPrice).label}
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>
