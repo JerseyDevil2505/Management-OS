@@ -301,10 +301,10 @@ useEffect(() => {
   }
 
   // Restore zoning requirements from marketLandData
-  if (marketLandData.zoning_requirements) {
-    setEditingZoning(marketLandData.zoning_requirements);
+  if (marketLandData?.zoning_config) {
+    setEditingZoning(marketLandData.zoning_config);
+    console.log('✅ Restored zoning configuration from marketLandData');
   }
-  
   if (marketLandData.normalization_config || marketLandData.time_normalized_sales) {
     console.log('✅ Restored saved normalization data from props');
   }
@@ -2598,6 +2598,25 @@ const analyzeImportFile = async (file) => {
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold">Property Worksheet Configuration</h3>
               <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    if (window.confirm(`Copy current VCS to new VCS for ALL ${worksheetProperties.length} properties? This will OVERWRITE any existing new VCS values!`)) {
+                      const updated = worksheetProperties.map(prop => ({
+                        ...prop,
+                        new_vcs: prop.property_vcs || ''
+                      }));
+                      setWorksheetProperties(updated);
+                      setFilteredWorksheetProps(updated);
+                      updateWorksheetStats(updated);
+                      setUnsavedChanges(true);
+                      alert(`✅ Copied current VCS values for ${worksheetProperties.length} properties`);
+                    }
+                  }}
+                  className="px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600"
+                  title="Copy all current VCS values to new VCS field"
+                >
+                  Copy All Current VCS
+                </button>
                 <input
                   type="file"
                   id="import-file"
@@ -2627,7 +2646,7 @@ const analyzeImportFile = async (file) => {
                 </button>
               </div>
             </div>
-
+            
             <div className="grid grid-cols-6 gap-4">
               <div className="text-center">
                 <div className="text-2xl font-bold">{worksheetStats.totalProperties}</div>
@@ -2758,21 +2777,21 @@ const analyzeImportFile = async (file) => {
                         </th>
                         <th 
                           className="px-3 py-2 text-left text-xs font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
+                          onClick={() => handleSort('property_location')}
+                        >
+                          Address {sortConfig.field === 'property_location' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                        </th>
+                        <th 
+                          className="px-3 py-2 text-left text-xs font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
                           onClick={() => handleSort('property_class')}
                         >
                           Class {sortConfig.field === 'property_class' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
                         </th>
                         <th 
                           className="px-3 py-2 text-left text-xs font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
-                          onClick={() => handleSort('property_vcs')}
-                        >
-                          Current VCS {sortConfig.field === 'property_vcs' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                        </th>
-                        <th 
-                          className="px-3 py-2 text-left text-xs font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
                           onClick={() => handleSort('building_class_display')}
                         >
-                          Building {sortConfig.field === 'building_class_display' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                          Building Class {sortConfig.field === 'building_class_display' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
                         </th>
                         <th 
                           className="px-3 py-2 text-left text-xs font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
@@ -2785,6 +2804,12 @@ const analyzeImportFile = async (file) => {
                           onClick={() => handleSort('design_display')}
                         >
                           Design {sortConfig.field === 'design_display' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                        </th>
+                        <th 
+                          className="px-3 py-2 text-left text-xs font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
+                          onClick={() => handleSort('property_vcs')}
+                        >
+                          Current VCS {sortConfig.field === 'property_vcs' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
                         </th>
                         <th></th>
                         <th 
@@ -2831,7 +2856,7 @@ const analyzeImportFile = async (file) => {
                         </th>
                       </tr>
                     </thead>
-                <tbody>
+                  <tbody>
                   {paginatedProperties.map((prop) => (
                     <tr key={prop.property_composite_key} className="border-b hover:bg-gray-50">
                       <td className="px-3 py-2 text-sm">{prop.block}</td>
@@ -2874,6 +2899,7 @@ const analyzeImportFile = async (file) => {
                         </div>
                       </td>
                       <td className="px-3 py-2 text-sm">{prop.location || '-'}</td>
+                      <td className="px-3 py-2 text-sm">{prop.property_location}</td>
                       <td className="px-3 py-2 text-sm">{prop.property_class}</td>
                       <td className="px-3 py-2 text-sm">{prop.building_class_display}</td>
                       <td className="px-3 py-2 text-sm">{prop.type_use_display}</td>
