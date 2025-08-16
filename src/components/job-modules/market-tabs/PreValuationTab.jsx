@@ -414,9 +414,17 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
         
         // Check for valid sales date
         if (!p.sales_date) return false;
+
+        // Check for minimum improvement value (exclude tear-downs)
+        if (!p.values_mod_improvement || p.values_mod_improvement < 10000) return false;
+        
+        const saleYear = new Date(p.sales_date).getFullYear();
         
         const saleYear = new Date(p.sales_date).getFullYear();
         if (saleYear < salesFromYear) return false;
+
+        // Check that house existed at time of sale (year built <= sale year)
+        if (p.asset_year_built && p.asset_year_built > saleYear) return false;
         
         // Parse composite key for card filtering
         const parsed = parseCompositeKey(p.property_composite_key);
