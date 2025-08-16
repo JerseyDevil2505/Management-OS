@@ -3357,8 +3357,9 @@ const analyzeImportFile = async (file) => {
                           job_id: jobData.id,
                           zoning_config: zoningRequirements,
                           updated_at: new Date().toISOString()
-                        })
-                        .eq('job_id', jobData.id);
+                        }, {
+                          onConflict: 'job_id'
+                        });
                         
                       if (error) throw error;
                       alert('✅ Zoning requirements saved successfully');
