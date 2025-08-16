@@ -228,6 +228,7 @@ const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData }) =>
                 vendorType={vendorType}
                 codeDefinitions={codeDefinitions}
                 marketLandData={marketLandData}
+                hpiData={hpiData}
                 onDataChange={() => setUnsavedChanges(true)}
               />
             )}
