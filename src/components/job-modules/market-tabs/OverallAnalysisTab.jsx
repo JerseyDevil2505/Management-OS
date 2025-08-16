@@ -295,56 +295,70 @@ const OverallAnalysisTab = ({
   // Year Built Analysis
   const analyzeYearBuilt = useCallback(() => {
     const currentYear = new Date().getFullYear();
+    
+    // Separate valid sales from all properties
+    const validSales = filteredProperties.filter(p => p.values_norm_time && p.values_norm_time > 0);
+    
     const groups = {
       'New': { 
         label: 'New (0-10 years)', 
         minYear: currentYear - 10,
         isCCF: true,
-        properties: [], 
+        allProperties: [],
+        salesProperties: [], 
         totalPrice: 0, 
         totalSize: 0,
         totalYearBuilt: 0,
-        count: 0 
+        propertyCount: 0,
+        salesCount: 0 
       },
       'Newer': { 
         label: 'Newer (11-20 years)', 
         minYear: currentYear - 20,
         maxYear: currentYear - 11,
         isCCF: true,
-        properties: [], 
+        allProperties: [],
+        salesProperties: [], 
         totalPrice: 0, 
         totalSize: 0,
         totalYearBuilt: 0,
-        count: 0 
+        propertyCount: 0,
+        salesCount: 0 
       },
       'Moderate': { 
         label: 'Moderate (21-35 years)', 
         minYear: currentYear - 35,
         maxYear: currentYear - 21,
-        properties: [], 
+        allProperties: [],
+        salesProperties: [], 
         totalPrice: 0, 
         totalSize: 0,
         totalYearBuilt: 0,
-        count: 0 
+        propertyCount: 0,
+        salesCount: 0 
       },
       'Older': { 
         label: 'Older (36-50 years)', 
         minYear: currentYear - 50,
         maxYear: currentYear - 36,
-        properties: [], 
+        allProperties: [],
+        salesProperties: [], 
         totalPrice: 0, 
         totalSize: 0,
         totalYearBuilt: 0,
-        count: 0 
+        propertyCount: 0,
+        salesCount: 0 
       },
       'Historic': { 
         label: 'Historic (50+ years)', 
         maxYear: currentYear - 51,
-        properties: [], 
+        allProperties: [],
+        salesProperties: [], 
         totalPrice: 0, 
         totalSize: 0,
         totalYearBuilt: 0,
-        count: 0 
+        propertyCount: 0,
+        salesCount: 0 
       }
     };
 
@@ -356,11 +370,17 @@ const OverallAnalysisTab = ({
       const group = groups[category];
       
       if (group) {
-        group.properties.push(p);
-        group.count++;
-        group.totalPrice += p.values_norm_time || 0;
-        group.totalSize += p.asset_sfla || 0;
-        group.totalYearBuilt += yearBuilt;
+        group.allProperties.push(p);
+        group.propertyCount++;
+        
+        // Only add to sales if it has valid price
+        if (p.values_norm_time && p.values_norm_time > 0) {
+          group.salesProperties.push(p);
+          group.salesCount++;
+          group.totalPrice += p.values_norm_time;
+          group.totalSize += p.asset_sfla || 0;
+          group.totalYearBuilt += yearBuilt;
+        }
       }
     });
 
@@ -369,13 +389,13 @@ const OverallAnalysisTab = ({
     let baselineGroup = null;
 
     Object.values(groups).forEach(group => {
-      group.avgPrice = group.count > 0 ? group.totalPrice / group.count : 0;
-      group.avgSize = group.count > 0 ? group.totalSize / group.count : 0;
-      group.avgYearBuilt = group.count > 0 ? Math.round(group.totalYearBuilt / group.count) : 0;
+      group.avgPrice = group.salesCount > 0 ? group.totalPrice / group.salesCount : 0;
+      group.avgSize = group.salesCount > 0 ? group.totalSize / group.salesCount : 0;
+      group.avgYearBuilt = group.salesCount > 0 ? Math.round(group.totalYearBuilt / group.salesCount) : 0;
       
       // Calculate adjusted prices using group's average size
       let totalAdjusted = 0;
-      group.properties.forEach(p => {
+      group.salesProperties.forEach(p => {
         const adjusted = calculateAdjustedPrice(
           p.values_norm_time || 0,
           p.asset_sfla || 0,
@@ -384,7 +404,7 @@ const OverallAnalysisTab = ({
         totalAdjusted += adjusted;
       });
       
-      group.avgAdjustedPrice = group.count > 0 ? totalAdjusted / group.count : 0;
+      group.avgAdjustedPrice = group.salesCount > 0 ? totalAdjusted / group.salesCount : 0;
       
       if (group.avgAdjustedPrice > maxAdjustedPrice) {
         maxAdjustedPrice = group.avgAdjustedPrice;
@@ -408,97 +428,14 @@ const OverallAnalysisTab = ({
     return { groups: Object.values(groups), baseline: baselineGroup };
   }, [filteredProperties]);
 
-  // VCS by Type Analysis
+  // VCS by Type Analysis - Cascading Structure
   const analyzeVCSByType = useCallback(() => {
     const vcsGroups = {};
     
-    filteredProperties.forEach(p => {
-      const vcs = p.new_vcs || p.property_vcs || 'Unknown';
-      const vcsDesc = interpretCodes.getVCSDescription(p, codeDefinitions, vendorType) || vcs;
-      const typeCode = p.asset_type_use || 'Unknown';
-      const typeName = interpretCodes.getTypeName(p, codeDefinitions, vendorType) || getTypeCategory(typeCode);
-      
-      if (!vcsGroups[vcs]) {
-        vcsGroups[vcs] = {
-          code: vcs,
-          description: vcsDesc,
-          types: {}
-        };
-      }
-      
-      const typeKey = `${typeCode}-${typeName}`;
-      if (!vcsGroups[vcs].types[typeKey]) {
-        vcsGroups[vcs].types[typeKey] = {
-          code: typeCode,
-          name: typeName,
-          properties: [],
-          totalPrice: 0,
-          totalSize: 0,
-          totalYearBuilt: 0,
-          count: 0
-        };
-      }
-      
-      const typeGroup = vcsGroups[vcs].types[typeKey];
-      typeGroup.properties.push(p);
-      typeGroup.count++;
-      typeGroup.totalPrice += p.values_norm_time || 0;
-      typeGroup.totalSize += p.asset_sfla || 0;
-      typeGroup.totalYearBuilt += p.asset_year_built || 0;
-    });
-
-    // Calculate averages and adjusted prices for each VCS
-    Object.values(vcsGroups).forEach(vcsGroup => {
-      let maxAdjustedPrice = 0;
-      let baselineType = null;
-
-      Object.values(vcsGroup.types).forEach(typeGroup => {
-        typeGroup.avgPrice = typeGroup.count > 0 ? typeGroup.totalPrice / typeGroup.count : 0;
-        typeGroup.avgSize = typeGroup.count > 0 ? typeGroup.totalSize / typeGroup.count : 0;
-        typeGroup.avgYearBuilt = typeGroup.count > 0 ? Math.round(typeGroup.totalYearBuilt / typeGroup.count) : 0;
-        
-        // Calculate adjusted prices using group's average size
-        let totalAdjusted = 0;
-        typeGroup.properties.forEach(p => {
-          const adjusted = calculateAdjustedPrice(
-            p.values_norm_time || 0,
-            p.asset_sfla || 0,
-            typeGroup.avgSize
-          );
-          totalAdjusted += adjusted;
-        });
-        
-        typeGroup.avgAdjustedPrice = typeGroup.count > 0 ? totalAdjusted / typeGroup.count : 0;
-        
-        if (typeGroup.avgAdjustedPrice > maxAdjustedPrice) {
-          maxAdjustedPrice = typeGroup.avgAdjustedPrice;
-          baselineType = typeGroup;
-        }
-      });
-
-      // Calculate deltas from baseline within VCS
-      Object.values(vcsGroup.types).forEach(typeGroup => {
-        if (baselineType && typeGroup !== baselineType) {
-          const delta = typeGroup.avgAdjustedPrice - baselineType.avgAdjustedPrice;
-          typeGroup.delta = delta;
-          typeGroup.deltaPercent = baselineType.avgAdjustedPrice > 0 ? 
-            (delta / baselineType.avgAdjustedPrice * 100) : 0;
-        } else {
-          typeGroup.delta = 0;
-          typeGroup.deltaPercent = 0;
-        }
-      });
-
-      vcsGroup.baseline = baselineType;
-    });
-
-    return vcsGroups;
-  }, [filteredProperties, codeDefinitions, vendorType]);
-
-  // VCS by Type & Design Analysis
-  const analyzeVCSByTypeAndDesign = useCallback(() => {
-    const vcsGroups = {};
+    // Only count properties with valid sales prices
+    const validSales = filteredProperties.filter(p => p.values_norm_time && p.values_norm_time > 0);
     
+    // Build the cascading structure
     filteredProperties.forEach(p => {
       const vcs = p.new_vcs || p.property_vcs || 'Unknown';
       const vcsDesc = interpretCodes.getVCSDescription(p, codeDefinitions, vendorType) || vcs;
@@ -507,79 +444,180 @@ const OverallAnalysisTab = ({
       const designCode = p.asset_design_style || 'Unknown';
       const designName = interpretCodes.getDesignName(p, codeDefinitions, vendorType) || designCode;
       
+      // Initialize VCS level
       if (!vcsGroups[vcs]) {
         vcsGroups[vcs] = {
           code: vcs,
           description: vcsDesc,
-          combinations: {}
-        };
-      }
-      
-      const comboKey = `${typeCode}-${typeName}|${designCode}-${designName}`;
-      if (!vcsGroups[vcs].combinations[comboKey]) {
-        vcsGroups[vcs].combinations[comboKey] = {
-          typeCode,
-          typeName,
-          designCode,
-          designName,
-          properties: [],
+          allProperties: [],
+          salesProperties: [],
+          propertyCount: 0,
+          salesCount: 0,
           totalPrice: 0,
           totalSize: 0,
-          count: 0
+          types: {}
         };
       }
       
-      const combo = vcsGroups[vcs].combinations[comboKey];
-      combo.properties.push(p);
-      combo.count++;
-      combo.totalPrice += p.values_norm_time || 0;
-      combo.totalSize += p.asset_sfla || 0;
-    });
-
-    // Calculate averages and adjusted prices
-    Object.values(vcsGroups).forEach(vcsGroup => {
-      let maxAdjustedPrice = 0;
-      let baselineCombo = null;
-
-      Object.values(vcsGroup.combinations).forEach(combo => {
-        combo.avgPrice = combo.count > 0 ? combo.totalPrice / combo.count : 0;
-        combo.avgSize = combo.count > 0 ? combo.totalSize / combo.count : 0;
+      // Add to VCS level
+      vcsGroups[vcs].allProperties.push(p);
+      vcsGroups[vcs].propertyCount++;
+      
+      // Initialize Type level within VCS
+      if (!vcsGroups[vcs].types[typeCode]) {
+        vcsGroups[vcs].types[typeCode] = {
+          code: typeCode,
+          name: typeName,
+          allProperties: [],
+          salesProperties: [],
+          propertyCount: 0,
+          salesCount: 0,
+          totalPrice: 0,
+          totalSize: 0,
+          designs: {}
+        };
+      }
+      
+      // Add to Type level
+      vcsGroups[vcs].types[typeCode].allProperties.push(p);
+      vcsGroups[vcs].types[typeCode].propertyCount++;
+      
+      // Initialize Design level within Type
+      if (!vcsGroups[vcs].types[typeCode].designs[designCode]) {
+        vcsGroups[vcs].types[typeCode].designs[designCode] = {
+          code: designCode,
+          name: designName,
+          allProperties: [],
+          salesProperties: [],
+          propertyCount: 0,
+          salesCount: 0,
+          totalPrice: 0,
+          totalSize: 0
+        };
+      }
+      
+      // Add to Design level
+      vcsGroups[vcs].types[typeCode].designs[designCode].allProperties.push(p);
+      vcsGroups[vcs].types[typeCode].designs[designCode].propertyCount++;
+      
+      // If it's a valid sale, add to sales at all levels
+      if (p.values_norm_time && p.values_norm_time > 0) {
+        // VCS level sales
+        vcsGroups[vcs].salesProperties.push(p);
+        vcsGroups[vcs].salesCount++;
+        vcsGroups[vcs].totalPrice += p.values_norm_time;
+        vcsGroups[vcs].totalSize += p.asset_sfla || 0;
         
-        // Calculate adjusted prices
-        let totalAdjusted = 0;
-        combo.properties.forEach(p => {
+        // Type level sales
+        vcsGroups[vcs].types[typeCode].salesProperties.push(p);
+        vcsGroups[vcs].types[typeCode].salesCount++;
+        vcsGroups[vcs].types[typeCode].totalPrice += p.values_norm_time;
+        vcsGroups[vcs].types[typeCode].totalSize += p.asset_sfla || 0;
+        
+        // Design level sales
+        vcsGroups[vcs].types[typeCode].designs[designCode].salesProperties.push(p);
+        vcsGroups[vcs].types[typeCode].designs[designCode].salesCount++;
+        vcsGroups[vcs].types[typeCode].designs[designCode].totalPrice += p.values_norm_time;
+        vcsGroups[vcs].types[typeCode].designs[designCode].totalSize += p.asset_sfla || 0;
+      }
+    });
+    
+    // Calculate averages and adjusted prices at all levels
+    Object.values(vcsGroups).forEach(vcsGroup => {
+      // VCS level calculations
+      vcsGroup.avgPrice = vcsGroup.salesCount > 0 ? vcsGroup.totalPrice / vcsGroup.salesCount : 0;
+      vcsGroup.avgSize = vcsGroup.salesCount > 0 ? vcsGroup.totalSize / vcsGroup.salesCount : 0;
+      
+      // Calculate VCS adjusted price
+      let vcsTotalAdjusted = 0;
+      vcsGroup.salesProperties.forEach(p => {
+        const adjusted = calculateAdjustedPrice(
+          p.values_norm_time || 0,
+          p.asset_sfla || 0,
+          vcsGroup.avgSize
+        );
+        vcsTotalAdjusted += adjusted;
+      });
+      vcsGroup.avgAdjustedPrice = vcsGroup.salesCount > 0 ? vcsTotalAdjusted / vcsGroup.salesCount : 0;
+      
+      // Find baseline for this VCS (highest adjusted price)
+      let maxTypePrice = 0;
+      let baselineType = null;
+      
+      // Type level calculations
+      Object.values(vcsGroup.types).forEach(typeGroup => {
+        typeGroup.avgPrice = typeGroup.salesCount > 0 ? typeGroup.totalPrice / typeGroup.salesCount : 0;
+        typeGroup.avgSize = typeGroup.salesCount > 0 ? typeGroup.totalSize / typeGroup.salesCount : 0;
+        
+        // Calculate type adjusted price
+        let typeTotalAdjusted = 0;
+        typeGroup.salesProperties.forEach(p => {
           const adjusted = calculateAdjustedPrice(
             p.values_norm_time || 0,
             p.asset_sfla || 0,
-            combo.avgSize
+            typeGroup.avgSize
           );
-          totalAdjusted += adjusted;
+          typeTotalAdjusted += adjusted;
+        });
+        typeGroup.avgAdjustedPrice = typeGroup.salesCount > 0 ? typeTotalAdjusted / typeGroup.salesCount : 0;
+        
+        if (typeGroup.avgAdjustedPrice > maxTypePrice) {
+          maxTypePrice = typeGroup.avgAdjustedPrice;
+          baselineType = typeGroup;
+        }
+        
+        // Design level calculations
+        let maxDesignPrice = 0;
+        let baselineDesign = null;
+        
+        Object.values(typeGroup.designs).forEach(designGroup => {
+          designGroup.avgPrice = designGroup.salesCount > 0 ? designGroup.totalPrice / designGroup.salesCount : 0;
+          designGroup.avgSize = designGroup.salesCount > 0 ? designGroup.totalSize / designGroup.salesCount : 0;
+          
+          // Calculate design adjusted price
+          let designTotalAdjusted = 0;
+          designGroup.salesProperties.forEach(p => {
+            const adjusted = calculateAdjustedPrice(
+              p.values_norm_time || 0,
+              p.asset_sfla || 0,
+              designGroup.avgSize
+            );
+            designTotalAdjusted += adjusted;
+          });
+          designGroup.avgAdjustedPrice = designGroup.salesCount > 0 ? designTotalAdjusted / designGroup.salesCount : 0;
+          
+          if (designGroup.avgAdjustedPrice > maxDesignPrice) {
+            maxDesignPrice = designGroup.avgAdjustedPrice;
+            baselineDesign = designGroup;
+          }
         });
         
-        combo.avgAdjustedPrice = combo.count > 0 ? totalAdjusted / combo.count : 0;
+        // Calculate design deltas within type
+        Object.values(typeGroup.designs).forEach(designGroup => {
+          if (baselineDesign && designGroup !== baselineDesign) {
+            designGroup.deltaPercent = baselineDesign.avgAdjustedPrice > 0 ? 
+              ((designGroup.avgAdjustedPrice - baselineDesign.avgAdjustedPrice) / baselineDesign.avgAdjustedPrice * 100) : 0;
+          } else {
+            designGroup.deltaPercent = 0;
+          }
+        });
         
-        if (combo.avgAdjustedPrice > maxAdjustedPrice) {
-          maxAdjustedPrice = combo.avgAdjustedPrice;
-          baselineCombo = combo;
-        }
+        typeGroup.baselineDesign = baselineDesign;
       });
-
-      // Calculate deltas
-      Object.values(vcsGroup.combinations).forEach(combo => {
-        if (baselineCombo && combo !== baselineCombo) {
-          const delta = combo.avgAdjustedPrice - baselineCombo.avgAdjustedPrice;
-          combo.delta = delta;
-          combo.deltaPercent = baselineCombo.avgAdjustedPrice > 0 ? 
-            (delta / baselineCombo.avgAdjustedPrice * 100) : 0;
+      
+      // Calculate type deltas within VCS
+      Object.values(vcsGroup.types).forEach(typeGroup => {
+        if (baselineType && typeGroup !== baselineType) {
+          typeGroup.deltaPercent = baselineType.avgAdjustedPrice > 0 ? 
+            ((typeGroup.avgAdjustedPrice - baselineType.avgAdjustedPrice) / baselineType.avgAdjustedPrice * 100) : 0;
         } else {
-          combo.delta = 0;
-          combo.deltaPercent = 0;
+          typeGroup.deltaPercent = 0;
         }
       });
-
-      vcsGroup.baseline = baselineCombo;
+      
+      vcsGroup.baselineType = baselineType;
     });
-
+    
     return vcsGroups;
   }, [filteredProperties, codeDefinitions, vendorType]);
 
@@ -818,7 +856,6 @@ const OverallAnalysisTab = ({
       const designAnalysis = analyzeDesign();
       const yearBuiltAnalysis = analyzeYearBuilt();
       const vcsTypeAnalysis = analyzeVCSByType();
-      const vcsTypeDesignAnalysis = analyzeVCSByTypeAndDesign();
       const condoAnalysis = analyzeCondos();
 
       const results = {
@@ -826,7 +863,6 @@ const OverallAnalysisTab = ({
         design: designAnalysis,
         yearBuilt: yearBuiltAnalysis,
         vcsType: vcsTypeAnalysis,
-        vcsTypeDesign: vcsTypeDesignAnalysis,
         condo: condoAnalysis,
         timestamp: new Date().toISOString()
       };
@@ -1176,6 +1212,7 @@ const OverallAnalysisTab = ({
                       <thead className="bg-gray-50">
                         <tr>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
+                          <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Properties</th>
                           <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Sales</th>
                           <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Avg Year</th>
                           <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Avg Size</th>
@@ -1189,7 +1226,8 @@ const OverallAnalysisTab = ({
                         {analysis.yearBuilt.groups.map((group, idx) => (
                           <tr key={idx} className={group === analysis.yearBuilt.baseline ? 'bg-yellow-50' : ''}>
                             <td className="px-4 py-3 text-sm font-medium">{group.label}</td>
-                            <td className="px-4 py-3 text-sm text-right">{group.count}</td>
+                            <td className="px-4 py-3 text-sm text-right">{group.propertyCount}</td>
+                            <td className="px-4 py-3 text-sm text-right">{group.salesCount}</td>
                             <td className="px-4 py-3 text-sm text-right">{group.avgYearBuilt || '—'}</td>
                             <td className="px-4 py-3 text-sm text-right">{formatNumber(group.avgSize)}</td>
                             <td className="px-4 py-3 text-sm text-right">{formatCurrency(group.avgPrice)}</td>
@@ -1228,7 +1266,7 @@ const OverallAnalysisTab = ({
             </div>
           )}
 
-          {/* VCS by Type Analysis */}
+          {/* VCS by Type Analysis - Cascading */}
           {analysis?.vcsType && Object.keys(analysis.vcsType).length > 0 && (
             <div className="bg-white rounded-lg shadow-sm p-6">
               <div 
@@ -1237,125 +1275,95 @@ const OverallAnalysisTab = ({
               >
                 <h3 className="text-lg font-semibold flex items-center gap-2">
                   <MapPin className="h-5 w-5" />
-                  VCS by Type Analysis
+                  VCS by Type Analysis (Cascading)
                 </h3>
                 {expandedSections.vcsType ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
               </div>
               
               {expandedSections.vcsType && (
-                <div className="space-y-6">
+                <div className="space-y-6 max-h-[600px] overflow-y-auto">
                   {Object.entries(analysis.vcsType)
-                    .filter(([vcs, data]) => Object.keys(data.types).length > 0)
+                    .filter(([vcs, data]) => data.salesCount > 0)
+                    .sort((a, b) => b[1].avgAdjustedPrice - a[1].avgAdjustedPrice)
                     .map(([vcs, vcsData]) => (
-                    <div key={vcs} className="border border-gray-200 rounded-lg p-4">
-                      <h4 className="font-medium text-gray-900 mb-3">
-                        {vcsData.description} ({vcsData.code})
-                      </h4>
-                      <div className="overflow-x-auto">
-                        <table className="min-w-full divide-y divide-gray-200">
-                          <thead className="bg-gray-50">
-                            <tr>
-                              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                              <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Sales</th>
-                              <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Avg Year</th>
-                              <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Size</th>
-                              <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Price</th>
-                              <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Adj Price</th>
-                              <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Delta</th>
-                            </tr>
-                          </thead>
-                          <tbody className="bg-white divide-y divide-gray-200">
-                            {Object.values(vcsData.types)
-                              .sort((a, b) => b.avgAdjustedPrice - a.avgAdjustedPrice)
-                              .map((type) => (
-                              <tr key={type.code} className={type === vcsData.baseline ? 'bg-yellow-50' : ''}>
-                                <td className="px-3 py-2 text-sm">{type.name}</td>
-                                <td className="px-3 py-2 text-sm text-right">{type.count}</td>
-                                <td className="px-3 py-2 text-sm text-right">{type.avgYearBuilt}</td>
-                                <td className="px-3 py-2 text-sm text-right">{formatNumber(type.avgSize)}</td>
-                                <td className="px-3 py-2 text-sm text-right">{formatCurrency(type.avgPrice)}</td>
-                                <td className="px-3 py-2 text-sm text-right font-medium">{formatCurrency(type.avgAdjustedPrice)}</td>
-                                <td className="px-3 py-2 text-sm text-right">
-                                  {type.deltaPercent !== 0 ? (
-                                    <span className={type.deltaPercent > 0 ? 'text-green-600' : 'text-red-600'}>
-                                      {type.deltaPercent > 0 ? '+' : ''}{type.deltaPercent.toFixed(0)}%
-                                    </span>
-                                  ) : (
-                                    <span className="text-gray-400 text-xs">BASE</span>
-                                  )}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                    <div key={vcs} className="border border-gray-200 rounded-lg">
+                      {/* VCS Header */}
+                      <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
+                        <div className="flex justify-between items-center">
+                          <h4 className="font-semibold text-gray-900">
+                            {vcsData.description} ({vcsData.code})
+                          </h4>
+                          <div className="text-sm text-gray-600">
+                            {vcsData.propertyCount} properties | {vcsData.salesCount} sales | 
+                            Avg: {formatCurrency(vcsData.avgAdjustedPrice)}
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-       {/* VCS by Type & Design Analysis */}
-          {analysis?.vcsTypeDesign && Object.keys(analysis.vcsTypeDesign).length > 0 && (
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              <div 
-                onClick={() => toggleSection('vcsTypeDesign')}
-                className="flex justify-between items-center mb-4 cursor-pointer hover:bg-gray-50 -m-2 p-2 rounded"
-              >
-                <h3 className="text-lg font-semibold flex items-center gap-2">
-                  <Layers className="h-5 w-5" />
-                  VCS by Type & Design Analysis
-                </h3>
-                {expandedSections.vcsTypeDesign ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
-              </div>
-              
-              {expandedSections.vcsTypeDesign && (
-                <div className="space-y-6 max-h-96 overflow-y-auto">
-                  {Object.entries(analysis.vcsTypeDesign)
-                    .filter(([vcs, data]) => Object.keys(data.combinations).length > 0)
-                    .map(([vcs, vcsData]) => (
-                    <div key={vcs} className="border border-gray-200 rounded-lg p-4">
-                      <h4 className="font-medium text-gray-900 mb-3">
-                        {vcsData.description} ({vcsData.code})
-                      </h4>
-                      <div className="overflow-x-auto">
-                        <table className="min-w-full divide-y divide-gray-200">
-                          <thead className="bg-gray-50">
-                            <tr>
-                              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Design</th>
-                              <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Sales</th>
-                              <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Size</th>
-                              <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Price</th>
-                              <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Adj Price</th>
-                              <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Delta</th>
-                            </tr>
-                          </thead>
-                          <tbody className="bg-white divide-y divide-gray-200">
-                            {Object.values(vcsData.combinations)
-                              .sort((a, b) => b.avgAdjustedPrice - a.avgAdjustedPrice)
-                              .map((combo) => (
-                              <tr key={`${combo.typeCode}-${combo.designCode}`} className={combo === vcsData.baseline ? 'bg-yellow-50' : ''}>
-                                <td className="px-3 py-2 text-sm">{combo.typeName}</td>
-                                <td className="px-3 py-2 text-sm">{combo.designName}</td>
-                                <td className="px-3 py-2 text-sm text-right">{combo.count}</td>
-                                <td className="px-3 py-2 text-sm text-right">{formatNumber(combo.avgSize)}</td>
-                                <td className="px-3 py-2 text-sm text-right">{formatCurrency(combo.avgPrice)}</td>
-                                <td className="px-3 py-2 text-sm text-right font-medium">{formatCurrency(combo.avgAdjustedPrice)}</td>
-                                <td className="px-3 py-2 text-sm text-right">
-                                  {combo.deltaPercent !== 0 ? (
-                                    <span className={combo.deltaPercent > 0 ? 'text-green-600' : 'text-red-600'}>
-                                      {combo.deltaPercent > 0 ? '+' : ''}{combo.deltaPercent.toFixed(0)}%
-                                    </span>
-                                  ) : (
-                                    <span className="text-gray-400 text-xs">BASE</span>
-                                  )}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                      
+                      {/* Type Level */}
+                      <div className="p-4 space-y-3">
+                        {Object.values(vcsData.types)
+                          .filter(type => type.salesCount > 0)
+                          .sort((a, b) => b.avgAdjustedPrice - a.avgAdjustedPrice)
+                          .map((typeGroup) => (
+                          <div key={typeGroup.code} className="border border-gray-100 rounded">
+                            {/* Type Header */}
+                            <div className={`px-3 py-2 ${typeGroup === vcsData.baselineType ? 'bg-yellow-50' : 'bg-gray-50'}`}>
+                              <div className="flex justify-between items-center">
+                                <div className="flex items-center gap-4">
+                                  <span className="font-medium">{typeGroup.name}</span>
+                                  <span className="text-sm text-gray-600">
+                                    {typeGroup.propertyCount} props | {typeGroup.salesCount} sales
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-4 text-sm">
+                                  <span>{formatCurrency(typeGroup.avgPrice)}</span>
+                                  <span className="font-medium">{formatCurrency(typeGroup.avgAdjustedPrice)}</span>
+                                  <span className={typeGroup.deltaPercent > 0 ? 'text-green-600' : typeGroup.deltaPercent < 0 ? 'text-red-600' : 'text-gray-400'}>
+                                    {typeGroup.deltaPercent !== 0 ? 
+                                      `${typeGroup.deltaPercent > 0 ? '+' : ''}${typeGroup.deltaPercent.toFixed(0)}%` : 
+                                      'BASELINE'
+                                    }
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                            
+                            {/* Design Level - Nested */}
+                            {Object.keys(typeGroup.designs).length > 1 && (
+                              <div className="px-6 py-2 space-y-1 bg-white">
+                                {Object.values(typeGroup.designs)
+                                  .filter(design => design.salesCount > 0)
+                                  .sort((a, b) => b.avgAdjustedPrice - a.avgAdjustedPrice)
+                                  .map((designGroup) => (
+                                  <div key={designGroup.code} className="flex justify-between items-center py-1 text-sm">
+                                    <div className="flex items-center gap-3">
+                                      <span className="text-gray-500">└</span>
+                                      <span>{designGroup.name}</span>
+                                      <span className="text-xs text-gray-500">
+                                        ({designGroup.propertyCount} props, {designGroup.salesCount} sales)
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                      <span className="text-gray-600">{formatCurrency(designGroup.avgPrice)}</span>
+                                      <span className="font-medium">{formatCurrency(designGroup.avgAdjustedPrice)}</span>
+                                      <span className={`min-w-[50px] text-right ${
+                                        designGroup.deltaPercent > 0 ? 'text-green-600' : 
+                                        designGroup.deltaPercent < 0 ? 'text-red-600' : 
+                                        'text-gray-400 text-xs'
+                                      }`}>
+                                        {designGroup.deltaPercent !== 0 ? 
+                                          `${designGroup.deltaPercent > 0 ? '+' : ''}${designGroup.deltaPercent.toFixed(0)}%` : 
+                                          designGroup === typeGroup.baselineDesign ? 'BASE' : ''
+                                        }
+                                      </span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ))}
                       </div>
                     </div>
                   ))}
