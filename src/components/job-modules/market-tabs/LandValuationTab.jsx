@@ -484,60 +484,52 @@ const LandValuationTab = ({
   };
 
 const handlePropertyResearch = async (property) => {
-  setLandNotes(prev => ({...prev, [property.id]: 'Researching...'}));
+  const prompt = `Analyze this land sale in ${jobData?.municipality || 'Unknown'}, ${jobData?.county || 'Unknown'} County, NJ:
+
+Block ${property.property_block} Lot ${property.property_lot}
+Address: ${property.property_location}
+Sale Date: ${property.sales_date}
+Sale Price: $${property.sales_price?.toLocaleString()}
+Acres: ${property.totalAcres?.toFixed(2)}
+Price/Acre: $${property.pricePerAcre?.toLocaleString()}
+Class: ${property.property_m4_class === '2' ? 'Residential (possible teardown)' : property.property_m4_class}
+
+Identify likely factors affecting this sale price (wetlands, access, zoning, teardown value, etc.). Be specific and actionable for valuation purposes. 2-3 sentences.`;
 
   try {
-    const response = await fetch('https://zxvavttfvpsagzluqqwn.supabase.co/functions/v1/analyze-property', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp4dmF2dHRmdnBzYWd6bHVxcXduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIzNDA4NjcsImV4cCI6MjA2NzkxNjg2N30.Rrn2pTnImCpBIoKPcdlzzZ9hMwnYtIO5s7i1ejwQReg',
-        'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp4dmF2dHRmdnBzYWd6bHVxcXduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIzNDA4NjcsImV4cCI6MjA2NzkxNjg2N30.Rrn2pTnImCpBIoKPcdlzzZ9hMwnYtIO5s7i1ejwQReg'
-      },
-      body: JSON.stringify({
-        municipality: jobData?.municipality || 'Unknown',
-        county: jobData?.county || 'Unknown',
-        block: property.property_block || '',
-        lot: property.property_lot || '',
-        address: property.property_location || '',
-        saleDate: property.sales_date || '',
-        salePrice: property.sales_price || 0,
-        acres: property.totalAcres || 0,
-        pricePerAcre: property.pricePerAcre || 0,
-        propertyClass: property.property_m4_class || '1'
-      })
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Function response:', errorText);
-      throw new Error('Function call failed');
-    }
+    await navigator.clipboard.writeText(prompt);
     
-    const data = await response.json();
-    const claudeResponse = data.analysis;
+    // Update notes field with success message
+    setLandNotes(prev => ({
+      ...prev, 
+      [property.id]: '📋 Prompt copied! Opening Claude.ai... Paste your prompt there, then paste the response back here.'
+    }));
     
-    setLandNotes(prev => ({...prev, [property.id]: claudeResponse}));
+    // Show a temporary success notification (optional)
+    const originalNotes = landNotes[property.id] || '';
     
-    // Auto-categorize based on response
-    const lowerResponse = claudeResponse.toLowerCase();
-    if (lowerResponse.includes('wetland')) {
-      setSaleCategories(prev => ({...prev, [property.id]: 'wetlands'}));
-      setSpecialRegions(prev => ({...prev, [property.id]: 'Wetlands'}));
-    } else if (lowerResponse.includes('landlocked') || lowerResponse.includes('no access')) {
-      setSaleCategories(prev => ({...prev, [property.id]: 'landlocked'}));
-    } else if (lowerResponse.includes('teardown') || lowerResponse.includes('demolition')) {
-      setSaleCategories(prev => ({...prev, [property.id]: 'teardown'}));
-    } else if (lowerResponse.includes('conservation') || lowerResponse.includes('preserved')) {
-      setSaleCategories(prev => ({...prev, [property.id]: 'conservation'}));
-      setSpecialRegions(prev => ({...prev, [property.id]: 'Conservation'}));
-    } else if (lowerResponse.includes('pineland')) {
-      setSpecialRegions(prev => ({...prev, [property.id]: 'Pinelands'}));
-    }
+    // Open Claude in a new tab
+    window.open('https://claude.ai/new', '_blank');
     
-  } catch (error) {
-    console.error('Research failed:', error);
-    setLandNotes(prev => ({...prev, [property.id]: '[Research failed - try again]'}));
+    // After 5 seconds, update the message to remind them to paste the response
+    setTimeout(() => {
+      setLandNotes(prev => ({
+        ...prev,
+        [property.id]: prev[property.id]?.includes('📋') ? '[Paste Claude\'s response here]' : prev[property.id]
+      }));
+    }, 5000);
+    
+  } catch (err) {
+    console.error('Failed to copy prompt:', err);
+    
+    // Fallback: put the prompt in the notes field so they can copy it manually
+    setLandNotes(prev => ({
+      ...prev, 
+      [property.id]: `[Copy this prompt to Claude.ai]:\n${prompt}`
+    }));
+    
+    // Still try to open Claude
+    window.open('https://claude.ai/new', '_blank');
   }
 };
 
