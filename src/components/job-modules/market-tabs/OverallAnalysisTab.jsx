@@ -878,7 +878,7 @@ const OverallAnalysisTab = ({
     } finally {
       setIsProcessing(false);
     }
-  }, [analyzeTypeUse, analyzeDesign, analyzeYearBuilt, analyzeVCSByType, analyzeVCSByTypeAndDesign, analyzeCondos, onDataChange]);
+  }, [analyzeTypeUse, analyzeDesign, analyzeYearBuilt, analyzeVCSByType, analyzeCondos, onDataChange]);
 
   // Run analysis on mount and when properties change
   useEffect(() => {
