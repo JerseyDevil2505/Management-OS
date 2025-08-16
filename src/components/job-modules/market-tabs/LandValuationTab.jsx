@@ -484,49 +484,61 @@ const LandValuationTab = ({
   };
 
 const handlePropertyResearch = async (property) => {
-    setLandNotes(prev => ({...prev, [property.id]: 'Researching...'}));
-    try {
-      const { data, error } = await supabase.functions.invoke('analyze-property', {
-        body: {
-          municipality: jobData?.municipality,
-          county: jobData?.county,
-          block: property.property_block,
-          lot: property.property_lot,
-          address: property.property_location,
-          saleDate: property.sales_date,
-          salePrice: property.sales_price,
-          acres: property.totalAcres,
-          pricePerAcre: property.pricePerAcre,
-          propertyClass: property.property_m4_class
-        }
-      });
-      if (error) throw error;
-      
-      const claudeResponse = data.analysis;
-      
-      setLandNotes(prev => ({...prev, [property.id]: claudeResponse}));
-      
-      // Auto-categorize based on response
-      const lowerResponse = claudeResponse.toLowerCase();
-      if (lowerResponse.includes('wetland')) {
-        setSaleCategories(prev => ({...prev, [property.id]: 'wetlands'}));
-        setSpecialRegions(prev => ({...prev, [property.id]: 'Wetlands'}));
-      } else if (lowerResponse.includes('landlocked') || lowerResponse.includes('no access')) {
-        setSaleCategories(prev => ({...prev, [property.id]: 'landlocked'}));
-      } else if (lowerResponse.includes('teardown') || lowerResponse.includes('demolition')) {
-        setSaleCategories(prev => ({...prev, [property.id]: 'teardown'}));
-      } else if (lowerResponse.includes('conservation') || lowerResponse.includes('preserved')) {
-        setSaleCategories(prev => ({...prev, [property.id]: 'conservation'}));
-        setSpecialRegions(prev => ({...prev, [property.id]: 'Conservation'}));
-      } else if (lowerResponse.includes('pineland')) {
-        setSpecialRegions(prev => ({...prev, [property.id]: 'Pinelands'}));
-      }
-      
-    } catch (error) {
-      console.error('Research failed:', error);
-      setLandNotes(prev => ({...prev, [property.id]: '[Research failed - try again]'}));
+  setLandNotes(prev => ({...prev, [property.id]: 'Researching...'}));
+
+  try {
+    const response = await fetch(`https://zxvavttfvpsagzluqqwn.supabase.co/functions/v1/analyze-property`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp4dmF2dHRmdnBzYWd6bHVxcXduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIzNDA4NjcsImV4cCI6MjA2NzkxNjg2N30.Rrn2pTnImCpBIoKPcdlzzZ9hMwnYtIO5s7i1ejwQReg`,
+      },
+      body: JSON.stringify({
+        municipality: jobData?.municipality,
+        county: jobData?.county,
+        block: property.property_block,
+        lot: property.property_lot,
+        address: property.property_location,
+        saleDate: property.sales_date,
+        salePrice: property.sales_price,
+        acres: property.totalAcres,
+        pricePerAcre: property.pricePerAcre,
+        propertyClass: property.property_m4_class
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Function response:', errorText);
+      throw new Error('Function call failed');
     }
-  };
+    
+    const data = await response.json();
+    const claudeResponse = data.analysis;
+    
+    setLandNotes(prev => ({...prev, [property.id]: claudeResponse}));
+    
+    // Auto-categorize based on response
+    const lowerResponse = claudeResponse.toLowerCase();
+    if (lowerResponse.includes('wetland')) {
+      setSaleCategories(prev => ({...prev, [property.id]: 'wetlands'}));
+      setSpecialRegions(prev => ({...prev, [property.id]: 'Wetlands'}));
+    } else if (lowerResponse.includes('landlocked') || lowerResponse.includes('no access')) {
+      setSaleCategories(prev => ({...prev, [property.id]: 'landlocked'}));
+    } else if (lowerResponse.includes('teardown') || lowerResponse.includes('demolition')) {
+      setSaleCategories(prev => ({...prev, [property.id]: 'teardown'}));
+    } else if (lowerResponse.includes('conservation') || lowerResponse.includes('preserved')) {
+      setSaleCategories(prev => ({...prev, [property.id]: 'conservation'}));
+      setSpecialRegions(prev => ({...prev, [property.id]: 'Conservation'}));
+    } else if (lowerResponse.includes('pineland')) {
+      setSpecialRegions(prev => ({...prev, [property.id]: 'Pinelands'}));
+    }
+    
+  } catch (error) {
+    console.error('Research failed:', error);
+    setLandNotes(prev => ({...prev, [property.id]: '[Research failed - try again]'}));
+  }
+};
 
   const removeSale = (saleId) => {
     setVacantSales(prev => prev.filter(s => s.id !== saleId));
