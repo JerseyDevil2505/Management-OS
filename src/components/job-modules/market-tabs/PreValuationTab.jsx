@@ -163,7 +163,15 @@ const PreValuationTab = ({
   ];
   const [isResultsCollapsed, setIsResultsCollapsed] = useState(false);
 
-  // ==================== FILTER HPI DATA ====================
+// ==================== FILTER HPI DATA ====================
+  // Check what HPI data we received
+  console.log('🔍 HPI Data Check:', {
+    hpiDataReceived: !!hpiData,
+    hpiDataLength: hpiData?.length || 0,
+    selectedCounty: selectedCounty,
+    firstFewRecords: hpiData?.slice(0, 3)
+  });
+  
   // Filter HPI data for selected county from the prop
   const filteredHpiData = useMemo(() => {
     if (!hpiData || !selectedCounty) return [];
@@ -1008,6 +1016,11 @@ const handleSalesDecision = async (saleId, decision) => {
   const saveBatchDecisions = async () => {
     const keeps = timeNormalizedSales.filter(s => s.keep_reject === 'keep');
     const rejects = timeNormalizedSales.filter(s => s.keep_reject === 'reject');
+    console.log('🔍 Sample keep values:', keeps.slice(0, 3).map(k => ({
+      id: k.id,
+      time_normalized_price: k.time_normalized_price,
+      has_value: !!k.time_normalized_price
+    })));
     
     setIsSavingDecisions(true);
     setSaveProgress({ current: 0, total: keeps.length + rejects.length, message: 'Preparing to save...' });
@@ -1019,12 +1032,15 @@ const handleSalesDecision = async (saleId, decision) => {
       
       // Batch update keeps in chunks of 500
       if (keeps.length > 0) {
+        console.log(`📝 Preparing to save ${keeps.length} kept sales`);
         for (let i = 0; i < keeps.length; i += 500) {
           const batch = keeps.slice(i, i + 500);
           const updates = batch.map(sale => ({
             id: sale.id,
             values_norm_time: sale.time_normalized_price
           }));
+          
+          console.log(`💾 Batch ${Math.floor(i/500) + 1}: Saving IDs`, updates.slice(0, 3).map(u => u.id), '...');
           
           // Use Promise.all for parallel updates within batch
           await Promise.all(updates.map(u => 
@@ -1586,6 +1602,7 @@ const analyzeImportFile = async (file) => {
       {activeSubTab === 'normalization' && (
         <div className="w-full">
           <div className="space-y-6 px-2">
+            
           {/* Configuration Section */}
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex justify-between items-center mb-4">
@@ -1607,7 +1624,7 @@ const analyzeImportFile = async (file) => {
                     }
                     runTimeNormalization();
                   }}
-                  disabled={isProcessingTime || !hpiLoaded}
+                  disabled={isProcessingTime || !hpiLoaded || !hpiData || hpiData.length === 0}
                   className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
                 >      
                   {isProcessingTime ? (
@@ -1621,6 +1638,19 @@ const analyzeImportFile = async (file) => {
                 </button>
               </div>
             </div>
+
+            {(!hpiData || hpiData.length === 0) && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
+                <AlertCircle className="text-red-600 mt-0.5" size={20} />
+                <div>
+                  <p className="text-sm font-medium text-red-800">HPI Data Not Available</p>
+                  <p className="text-xs text-red-600 mt-1">
+                    Time normalization cannot run without House Price Index data for {selectedCounty} County.
+                    Please ensure HPI data is loaded in the database.
+                  </p>
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-3 gap-4">
               <div>
