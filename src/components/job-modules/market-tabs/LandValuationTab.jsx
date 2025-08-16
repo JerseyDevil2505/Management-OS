@@ -483,9 +483,8 @@ const LandValuationTab = ({
     setSearchResults([]);
   };
 
-  const handlePropertyResearch = async (property) => {
+const handlePropertyResearch = async (property) => {
     setLandNotes(prev => ({...prev, [property.id]: 'Researching...'}));
-
     try {
       const { data, error } = await supabase.functions.invoke('analyze-property', {
         body: {
@@ -501,37 +500,9 @@ const LandValuationTab = ({
           propertyClass: property.property_m4_class
         }
       });
-
       if (error) throw error;
       
       const claudeResponse = data.analysis;
-      
-      setLandNotes(prev => ({...prev, [property.id]: claudeResponse}));
-      
-      // Auto-categorize based on response
-      const lowerResponse = claudeResponse.toLowerCase();
-      if (lowerResponse.includes('wetland')) {
-        setSaleCategories(prev => ({...prev, [property.id]: 'wetlands'}));
-        setSpecialRegions(prev => ({...prev, [property.id]: 'Wetlands'}));
-      } else if (lowerResponse.includes('landlocked') || lowerResponse.includes('no access')) {
-        setSaleCategories(prev => ({...prev, [property.id]: 'landlocked'}));
-      } else if (lowerResponse.includes('teardown') || lowerResponse.includes('demolition')) {
-        setSaleCategories(prev => ({...prev, [property.id]: 'teardown'}));
-      } else if (lowerResponse.includes('conservation') || lowerResponse.includes('preserved')) {
-        setSaleCategories(prev => ({...prev, [property.id]: 'conservation'}));
-        setSpecialRegions(prev => ({...prev, [property.id]: 'Conservation'}));
-      } else if (lowerResponse.includes('pineland')) {
-        setSpecialRegions(prev => ({...prev, [property.id]: 'Pinelands'}));
-      }
-      
-    } catch (error) {
-      console.error('Research failed:', error);
-      setLandNotes(prev => ({...prev, [property.id]: '[Research failed - try again]'}));
-    }
-  };
-
-      const data = await response.json();
-      const claudeResponse = data.content[0].text;
       
       setLandNotes(prev => ({...prev, [property.id]: claudeResponse}));
       
