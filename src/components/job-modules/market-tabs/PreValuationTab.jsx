@@ -505,7 +505,7 @@ const runTimeNormalization = useCallback(async () => {
         normalizeToYear,
         salesFromYear,
         minSalePrice,
-        selectedCounty
+        selectedCounty,
         lastTimeNormalizationRun: new Date().toISOString()
       };
       
@@ -623,11 +623,17 @@ const runSizeNormalization = useCallback(async () => {
       });
 
       // Update stats
+      const avgAdjustment = totalSizeNormalized > 0 ? Math.round(totalAdjustment / totalSizeNormalized) : 0;
+      
       setNormalizationStats(prev => ({
         ...prev,
         acceptedSales: acceptedSales.length,
         sizeNormalized: totalSizeNormalized,
-        // ... rest of your stats ...
+        singleFamily: groups.singleFamily?.length || 0,
+        multifamily: groups.multifamily?.length || 0,
+        townhouses: groups.townhouses?.length || 0,
+        conversions: groups.conversions?.length || 0,
+        avgSizeAdjustment: avgAdjustment
       }));
 
       // Save to database
@@ -1431,7 +1437,7 @@ const analyzeImportFile = async (file) => {
       {/* Normalization Tab Content */}
       {activeSubTab === 'normalization' && (
         <div className="w-full">
-          <div className="space-y-6 px-4">
+          <div className="space-y-6 px-2">
           {/* Configuration Section */}
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex justify-between items-center mb-4">
@@ -1697,7 +1703,7 @@ const analyzeImportFile = async (file) => {
                       </div>
                     </div>
 
-                    <div className="overflow-x-auto max-w-full">
+                    <div className="overflow-x-auto">
                       <table className="min-w-full table-fixed">
                         <thead className="bg-gray-50 border-b">
                           <tr>
@@ -2447,7 +2453,7 @@ const analyzeImportFile = async (file) => {
               </div>
             </div>
 
-            <div className="overflow-x-auto max-h-[600px] max-w-full">
+            <div className="overflow-x-auto max-h-[600px]">
               <table className="min-w-full table-fixed">
                     <thead className="bg-gray-50 border-b sticky top-0">
                       <tr>
