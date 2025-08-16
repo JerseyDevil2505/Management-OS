@@ -2008,7 +2008,8 @@ const analyzeImportFile = async (file) => {
                                         return (
                                           <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs font-medium" 
                                                 title={`Package sale: ${packageData.package_count} properties - Deed ${deedRef}`}>
-                                            Pkg {deedRef}
+                                            Pkg {deedRef} ({packageData.package_count})
+
                                           </span>
                                         );
                                       }
