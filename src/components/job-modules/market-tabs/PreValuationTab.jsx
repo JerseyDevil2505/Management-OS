@@ -2660,14 +2660,6 @@ const analyzeImportFile = async (file) => {
                   </button>
                 </div>
               </div>
-                <div className="text-sm text-gray-600">Total Properties</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold">
-                  {worksheetStats.vcsAssigned} / {worksheetStats.totalProperties}
-                </div>
-                <div className="text-sm text-gray-600">VCS Assigned</div>
-              </div>
               <div className="text-center">
                 <div className="text-2xl font-bold">
                   {worksheetStats.zoningEntered} / {worksheetStats.totalProperties}
