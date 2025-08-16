@@ -1986,53 +1986,32 @@ const analyzeImportFile = async (file) => {
                                       const packageData = interpretCodes.getPackageSaleData(properties, sale);
                                       if (!packageData) return '-';
                                       
-                                      // Check if it's a farm package (has 3B)
-                                      const isFarmPackage = packageData.has_farmland;
-                                      
-                                      if (isFarmPackage) {
+                                      // Use the flags from packageData directly
+                                      if (packageData.is_farm_package) {
                                         return (
                                           <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-medium" 
                                                 title={`Farm package: ${packageData.package_count} properties (includes farmland)`}>
                                             Farm ({packageData.package_count})
                                           </span>
                                         );
-                                      }
-                                      
-                                      // Check if it's additional cards (same property, different cards)
-                                      const parsed = parseCompositeKey(sale.property_composite_key);
-                                      const samePropertyDifferentCards = packageData.properties?.filter(p => {
-                                        const pParsed = parseCompositeKey(p.property_composite_key);
-                                        return pParsed.block === parsed.block && 
-                                               pParsed.lot === parsed.lot && 
-                                               pParsed.card !== parsed.card;
-                                      });
-                                      
-                                      // Check if main card (M for Microsystems, 1 for BRT)
-                                      const isMainCard = (vendorType === 'Microsystems' && parsed.card === 'M') || 
-                                                        (vendorType === 'BRT' && parsed.card === '1');
-                                      
-                                      if (samePropertyDifferentCards && samePropertyDifferentCards.length > 0 && isMainCard) {
-                                        // It's the main card with additional cards on same property
+                                      } else if (packageData.is_additional_card) {
                                         return (
                                           <span className="px-2 py-1 bg-yellow-100 text-yellow-700 rounded text-xs font-medium" 
                                                 title={`Additional cards on same property`}>
-                                            Addl Card ({samePropertyDifferentCards.length})
+                                            Addl Card ({packageData.package_count})
                                           </span>
                                         );
-                                      } else if (samePropertyDifferentCards && samePropertyDifferentCards.length > 0 && !isMainCard) {
-                                        // It's an additional card, don't show package indicator
-                                        return '-';
+                                      } else {
+                                        // Regular package
+                                        const deedRef = sale.sales_book && sale.sales_page ? 
+                                          `${sale.sales_book}/${sale.sales_page}` : 'Package';
+                                        return (
+                                          <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs font-medium" 
+                                                title={`Package sale: ${packageData.package_count} properties - Deed ${deedRef}`}>
+                                            Pkg {deedRef}
+                                          </span>
+                                        );
                                       }
-                                      
-                                      // Regular package (multiple properties)
-                                      const deedRef = sale.sales_book && sale.sales_page ? 
-                                        `${sale.sales_book}/${sale.sales_page}` : 'Package';
-                                      return (
-                                        <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs font-medium" 
-                                              title={`Package sale: ${packageData.package_count} properties - Deed ${deedRef}`}>
-                                          Pkg {deedRef}
-                                        </span>
-                                      );
                                     })()}
                                   </td>
                                   <td className="px-4 py-3 text-sm">
