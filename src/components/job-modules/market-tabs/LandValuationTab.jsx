@@ -121,88 +121,107 @@ const LandValuationTab = ({
     positive: ['GV', 'GC', 'WV', 'WF'],
     custom: customLocationCodes
   };
-  // ========== INITIALIZE FROM PROPS ==========
-  useEffect(() => {
-    if (!marketLandData) {
-      setIsLoading(false);
-      return;
-    }
-
-    // Restore all saved states from marketLandData
-    if (marketLandData.raw_land_config) {
-      if (marketLandData.raw_land_config.date_range) {
-        setDateRange({
-          start: new Date(marketLandData.raw_land_config.date_range.start),
-          end: new Date(marketLandData.raw_land_config.date_range.end)
-        });
-      }
-      if (marketLandData.raw_land_config.cascade_config) {
-        setCascadeConfig(marketLandData.raw_land_config.cascade_config);
-        if (marketLandData.raw_land_config.cascade_config.mode) {
-          setValuationMode(marketLandData.raw_land_config.cascade_config.mode);
-        }
-      }
-    }
-
-    if (marketLandData.vacant_sales_analysis?.sales) {
-      const savedCategories = {};
-      const savedNotes = {};
-      const savedRegions = {};
-      const savedIncluded = new Set();
-      
-      marketLandData.vacant_sales_analysis.sales.forEach(s => {
-        if (s.category) savedCategories[s.id] = s.category;
-        if (s.notes) savedNotes[s.id] = s.notes;
-        if (s.special_region) savedRegions[s.id] = s.special_region;
-        if (s.included) savedIncluded.add(s.id);
-      });
-      
-      setSaleCategories(savedCategories);
-      setLandNotes(savedNotes);
-      setSpecialRegions(savedRegions);
-      setIncludedSales(savedIncluded);
-    }
-
-    if (marketLandData.cascade_rates) {
-      setCascadeConfig(marketLandData.cascade_rates);
-    }
-
-    if (marketLandData.allocation_study) {
-      if (marketLandData.allocation_study.actual_allocations) {
-        setActualAllocations(marketLandData.allocation_study.actual_allocations);
-      }
-      if (marketLandData.allocation_study.vcs_site_values) {
-        setVcsSiteValues(marketLandData.allocation_study.vcs_site_values);
-      }
-      if (marketLandData.allocation_study.target_allocation) {
-        setTargetAllocation(marketLandData.allocation_study.target_allocation);
-      }
-    }
-
-    if (marketLandData.vcs_sheet_data) {
-      setVcsSheetData(marketLandData.vcs_sheet_data);
-      if (marketLandData.vcs_sheet_data.manual_site_values) {
-        setVcsManualSiteValues(marketLandData.vcs_sheet_data.manual_site_values);
-      }
-      if (marketLandData.vcs_sheet_data.descriptions) {
-        setVcsDescriptions(marketLandData.vcs_sheet_data.descriptions);
-      }
-      if (marketLandData.vcs_sheet_data.types) {
-        setVcsTypes(marketLandData.vcs_sheet_data.types);
-      }
-    }
-
-    if (marketLandData.economic_obsolescence) {
-      setEcoObsFactors(marketLandData.economic_obsolescence.factors || {});
-      setLocationCodes(marketLandData.economic_obsolescence.location_codes || {});
-      setTrafficLevels(marketLandData.economic_obsolescence.traffic_levels || {});
-      setActualAdjustments(marketLandData.economic_obsolescence.actual_adjustments || {});
-      setCustomLocationCodes(marketLandData.economic_obsolescence.custom_codes || []);
-    }
-
-    setLastSaved(marketLandData.updated_at ? new Date(marketLandData.updated_at) : null);
+// ========== INITIALIZE FROM PROPS ==========
+useEffect(() => {
+  if (!marketLandData) {
     setIsLoading(false);
-  }, [marketLandData]);
+    return;
+  }
+
+  // Restore all saved states from marketLandData
+  if (marketLandData.raw_land_config) {
+    if (marketLandData.raw_land_config.date_range) {
+      setDateRange({
+        start: new Date(marketLandData.raw_land_config.date_range.start),
+        end: new Date(marketLandData.raw_land_config.date_range.end)
+      });
+    }
+    if (marketLandData.raw_land_config.cascade_config) {
+      // Ensure the structure is complete
+      const savedConfig = marketLandData.raw_land_config.cascade_config;
+      setCascadeConfig({
+        mode: savedConfig.mode || 'acre',
+        normal: {
+          prime: savedConfig.normal?.prime || { max: 1, rate: null },
+          secondary: savedConfig.normal?.secondary || { max: 5, rate: null },
+          excess: savedConfig.normal?.excess || { max: 10, rate: null },
+          residual: savedConfig.normal?.residual || { max: null, rate: null },
+          standard: savedConfig.normal?.standard || { max: 100, rate: null }
+        },
+        special: savedConfig.special || {},
+        specialCategories: savedConfig.specialCategories || {
+          wetlands: null,
+          landlocked: null,
+          conservation: null
+        },
+        customCategories: savedConfig.customCategories || []
+      });
+      if (savedConfig.mode) {
+        setValuationMode(savedConfig.mode);
+      }
+    }
+  }
+
+  // Skip the duplicate cascade_rates assignment - it's redundant
+  // if (marketLandData.cascade_rates) {
+  //   setCascadeConfig(marketLandData.cascade_rates);
+  // }
+
+  if (marketLandData.vacant_sales_analysis?.sales) {
+    const savedCategories = {};
+    const savedNotes = {};
+    const savedRegions = {};
+    const savedIncluded = new Set();
+    
+    marketLandData.vacant_sales_analysis.sales.forEach(s => {
+      if (s.category) savedCategories[s.id] = s.category;
+      if (s.notes) savedNotes[s.id] = s.notes;
+      if (s.special_region) savedRegions[s.id] = s.special_region;
+      if (s.included) savedIncluded.add(s.id);
+    });
+    
+    setSaleCategories(savedCategories);
+    setLandNotes(savedNotes);
+    setSpecialRegions(savedRegions);
+    setIncludedSales(savedIncluded);
+  }
+
+  if (marketLandData.allocation_study) {
+    if (marketLandData.allocation_study.actual_allocations) {
+      setActualAllocations(marketLandData.allocation_study.actual_allocations);
+    }
+    if (marketLandData.allocation_study.vcs_site_values) {
+      setVcsSiteValues(marketLandData.allocation_study.vcs_site_values);
+    }
+    if (marketLandData.allocation_study.target_allocation) {
+      setTargetAllocation(marketLandData.allocation_study.target_allocation);
+    }
+  }
+
+  if (marketLandData.vcs_sheet_data) {
+    setVcsSheetData(marketLandData.vcs_sheet_data);
+    if (marketLandData.vcs_sheet_data.manual_site_values) {
+      setVcsManualSiteValues(marketLandData.vcs_sheet_data.manual_site_values);
+    }
+    if (marketLandData.vcs_sheet_data.descriptions) {
+      setVcsDescriptions(marketLandData.vcs_sheet_data.descriptions);
+    }
+    if (marketLandData.vcs_sheet_data.types) {
+      setVcsTypes(marketLandData.vcs_sheet_data.types);
+    }
+  }
+
+  if (marketLandData.economic_obsolescence) {
+    setEcoObsFactors(marketLandData.economic_obsolescence.factors || {});
+    setLocationCodes(marketLandData.economic_obsolescence.location_codes || {});
+    setTrafficLevels(marketLandData.economic_obsolescence.traffic_levels || {});
+    setActualAdjustments(marketLandData.economic_obsolescence.actual_adjustments || {});
+    setCustomLocationCodes(marketLandData.economic_obsolescence.custom_codes || []);
+  }
+
+  setLastSaved(marketLandData.updated_at ? new Date(marketLandData.updated_at) : null);
+  setIsLoading(false);
+}, [marketLandData]);
 
   // ========== CHECK FRONT FOOT AVAILABILITY ==========
   useEffect(() => {
