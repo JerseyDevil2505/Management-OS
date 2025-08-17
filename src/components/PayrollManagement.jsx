@@ -1,15 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { supabase, employeeService, jobService } from '../lib/supabaseClient';
+import { supabase } from '../lib/supabaseClient';
 import * as XLSX from 'xlsx';
 
-const PayrollManagement = () => {
+const PayrollManagement = ({ 
+  employees = [], 
+  jobs = [], 
+  archivedPeriods = [], 
+  dataRecency: propDataRecency = [],
+  onDataUpdate,
+  onRefresh 
+}) => {
   const [activeTab, setActiveTab] = useState('current');
   const [payrollData, setPayrollData] = useState([]);
   const [uploadedFile, setUploadedFile] = useState(null);
   const [inspectionBonuses, setInspectionBonuses] = useState({});
   const [isProcessing, setIsProcessing] = useState(false);
-  const [employees, setEmployees] = useState([]);
-  const [jobs, setJobs] = useState([]);
   const [selectedJob, setSelectedJob] = useState('all');
   const [bonusRate] = useState(2.00);
   const [error, setError] = useState(null);
@@ -22,7 +27,6 @@ const PayrollManagement = () => {
     expectedHours: 0
   });
   const [lastProcessedInfo, setLastProcessedInfo] = useState(null);
-  const [archivedPeriods, setArchivedPeriods] = useState([]);
   const [dataRecency, setDataRecency] = useState([]);
   const [isLoadingRecency, setIsLoadingRecency] = useState(false);
 
@@ -155,23 +159,17 @@ const PayrollManagement = () => {
     setError(null);
     
     try {
-      // Get all active jobs - SIMPLE QUERY, NO ARCHIVED CHECK
-      const { data: activeJobs, error: jobsError } = await supabase
-        .from('jobs')
-        .select('id, job_name, ccdd')
-        .eq('status', 'active')
-        .order('job_name');
+      // Use jobs from props instead of fetching
+      const activeJobs = jobs; // jobs prop is already filtered for active
       
-      if (jobsError) throw jobsError;
-      
-      if (!activeJobs || activeJobs.length === 0) {
+      if (!jobs || jobs.length === 0) {
         setDataRecency([]);
         return;
       }
       
       // Get latest upload date for each job
       const recencyData = await Promise.all(
-        activeJobs.map(async (job) => {
+        jobs.map(async (job) => {
           const { data: latestUpload, error: uploadError } = await supabase
             .from('inspection_data')
             .select('upload_date')
@@ -258,18 +256,9 @@ const PayrollManagement = () => {
     }
   }, [payrollPeriod.endDate]);
 
-  const loadInitialData = async () => {
+const loadInitialData = async () => {
     try {
-      const employeeData = await employeeService.getAll();
-      const eligibleEmployees = employeeData.filter(emp => 
-        emp.employment_status === 'active' && 
-        ['residential', 'management'].includes(emp.inspector_type?.toLowerCase())
-      );
-      setEmployees(eligibleEmployees);
-
-      const jobData = await jobService.getAll();
-      setJobs(jobData.filter(job => job.status === 'active'));
-
+      // Just check localStorage for last processed info
       const { data: lastInspection, error } = await supabase
         .from('inspection_data')
         .select('payroll_period_end, payroll_processed_date')
@@ -287,22 +276,11 @@ const PayrollManagement = () => {
           }
         }
       }
-      
-      const { data: archived, error: archiveError } = await supabase
-        .from('payroll_periods')
-        .select('*')
-        .order('end_date', { ascending: false })
-        .limit(12);
-      
-      if (!archiveError && archived) {
-        setArchivedPeriods(archived);
-      }
     } catch (error) {
-      console.error('Error loading initial data:', error);
-      setError('Failed to load initial data');
+      console.error('Error loading last processed info:', error);
+      // Don't set error for this, it's not critical
     }
   };
-
   const calculateInspectionBonuses = async () => {
     setIsProcessing(true);
     setError(null);
@@ -478,28 +456,37 @@ const PayrollManagement = () => {
               empData.issues.push(`TOTAL formula error: Shows $${total} but should be $${calculatedTotal} (${apptOT} + ${fieldOT})`);
             }
             
-            if (typeof hours === 'number' && !isNaN(hours)) {
+            // Check for missing, undefined, or invalid hours first
+            if (hours === undefined || hours === null || hours === '') {
+              empData.issues.push(`Missing hours data`);
+            } else if (typeof hours === 'number' && hours < 0) {
+              empData.issues.push(`Negative hours (${hours}) - please check`);
+            } else if (typeof hours === 'number' && !isNaN(hours)) {
               totalHoursSum += hours;
               console.log(`  Added ${hours} to total, new sum: ${totalHoursSum}`);
               
-              const isPartTime = comments.toLowerCase().includes('part');
-              const hasPTO = timeOff.toLowerCase().includes('pto') && !timeOff.toLowerCase().includes('without pto');
-              const hasUnpaidTimeOff = timeOff.toLowerCase().includes('without pto') || 
-                                       timeOff.toLowerCase().includes('unpaid');
+              // Look up the employee in our employees data to check their actual status
+              const employee = employees.find(emp => {
+                const empFullName = `${emp.last_name}, ${emp.first_name}`.toLowerCase();
+                const worksheetName = employeeName.toLowerCase();
+                return worksheetName.includes(emp.last_name.toLowerCase()) && 
+                       worksheetName.includes(emp.first_name.toLowerCase());
+              });
               
-              if (hours !== payrollPeriod.expectedHours && !isPartTime) {
-                if (hasUnpaidTimeOff) {
-                  empData.issues.push(`Has unpaid time off - ${hours} hours instead of ${payrollPeriod.expectedHours}`);
-                } else if (!hasPTO && Math.abs(hours - payrollPeriod.expectedHours) > 8) {
-                  empData.issues.push(`Expected ${payrollPeriod.expectedHours} hours, showing ${hours}`);
-                } else if (hasPTO && hours > payrollPeriod.expectedHours) {
-                  empData.issues.push(`Has PTO but worked ${hours} hours (overtime?)`);
-                }
+              // Use employment_status from database
+              const isPartTime = employee && employee.employment_status === 'part_time';
+              
+              // Simple check: if not part-time and hours don't match expected, flag it
+              if (!isPartTime && hours !== payrollPeriod.expectedHours) {
+                empData.issues.push(`Shows ${hours} hours instead of expected ${payrollPeriod.expectedHours}`);
               }
               
-              if (hours === 0 && !timeOff.toLowerCase().includes('start date')) {
+              if (hours === 0) {
                 empData.issues.push(`Zero hours recorded`);
               }
+            } else if (hours !== 'same' && hours !== 'Salary') {
+              // It's not a number and not "same"/"Salary"
+              empData.issues.push(`Invalid hours value: "${hours}"`);
             }
             
             if (typeof apptOT === 'number' && !isNaN(apptOT)) {
@@ -753,6 +740,10 @@ const PayrollManagement = () => {
       setWorksheetIssues([]);
       setUploadedFile(null);
       
+      // Refresh data in App.js
+      if (onRefresh) onRefresh();
+      
+      // Still need to check for last processed info
       loadInitialData();
     } catch (error) {
       console.error('Error marking inspections as processed:', error);

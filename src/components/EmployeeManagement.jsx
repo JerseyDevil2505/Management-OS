@@ -1,9 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Users, Upload, Search, Mail, Phone, MapPin, Clock, AlertTriangle, Settings, Database, CheckCircle, Loader, Edit, X, Copy, FileText, Download, Filter } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { employeeService, signInAsDev, supabase } from '../lib/supabaseClient';
+import { employeeService, supabase } from '../lib/supabaseClient';
 
-const EmployeeManagement = () => {
+const EmployeeManagement = ({ 
+  employees: propEmployees = [], 
+  globalAnalytics: propGlobalAnalytics = null,
+  onDataUpdate,
+  onRefresh 
+}) => {
   const [employees, setEmployees] = useState([]);
   const [filteredEmployees, setFilteredEmployees] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -32,52 +37,44 @@ const EmployeeManagement = () => {
     employmentStatus: 'all'
   });
 
-  // Load employees from database on component mount
+// Load employees from props on component mount or when props change
   useEffect(() => {
-    const initializeAuth = async () => {
-      await signInAsDev();
+    if (propEmployees.length > 0) {
       loadEmployees();
-    };
-    initializeAuth();
-  }, []);
-
-  const loadEmployees = async () => {
-    try {
-      setIsLoading(true);
-      const data = await employeeService.getAll();
-      
-      // Transform database format to component format
-      const transformedEmployees = data.map(emp => ({
-        id: emp.id,
-        inspectorNumber: emp.employee_number || `TEMP${emp.id}`,
-        name: `${emp.last_name || ''}, ${emp.first_name || ''}`.replace(/, $/, ''),
-        email: emp.email || '',
-        phone: emp.phone || '',
-        isFullTime: emp.employment_status === 'full_time',
-        isContractor: emp.employment_status === 'contractor',
-        role: emp.role || 'Unassigned',
-        location: emp.region || 'HEADQUARTERS',
-        zipCode: emp.zip_code || '',
-        weeklyHours: emp.weekly_hours || null,
-        hasIssues: !emp.employee_number || !emp.email || !emp.phone,
-        initials: emp.initials,
-        status: emp.employment_status === 'inactive' ? 'inactive' : 'active'
-      }));
-      
-      setEmployees(transformedEmployees);
-      setFilteredEmployees(transformedEmployees);
-      
-      if (transformedEmployees.length > 0) {
-        setImportComplete(true);
-      }
-    } catch (error) {
-      console.error('Error loading employees:', error);
-      alert('Error loading employee data from database');
-    } finally {
-      setIsLoading(false);
     }
-  };
+  }, [propEmployees]);
 
+const loadEmployees = () => {
+    setIsLoading(true);
+    
+    // Transform prop employees to component format
+    const transformedEmployees = propEmployees.map(emp => ({
+      id: emp.id,
+      inspectorNumber: emp.employee_number || `TEMP${emp.id}`,
+      name: `${emp.last_name || ''}, ${emp.first_name || ''}`.replace(/, $/, ''),
+      email: emp.email || '',
+      phone: emp.phone || '',
+      isFullTime: emp.employment_status === 'full_time',
+      isContractor: emp.employment_status === 'contractor',
+      role: emp.role || 'Unassigned',
+      location: emp.region || 'HEADQUARTERS',
+      zipCode: emp.zip_code || '',
+      weeklyHours: emp.weekly_hours || null,
+      hasIssues: !emp.employee_number || !emp.email || !emp.phone,
+      initials: emp.initials,
+      status: emp.employment_status === 'inactive' ? 'inactive' : 'active'
+    }));
+    
+    setEmployees(transformedEmployees);
+    setFilteredEmployees(transformedEmployees);
+    
+    if (transformedEmployees.length > 0) {
+      setImportComplete(true);
+    }
+    
+    setIsLoading(false);
+};
+  
   // Fixed Global Analytics Functions
   const loadGlobalAnalytics = async () => {
     // Check if we have cached data less than 5 minutes old
@@ -85,8 +82,14 @@ const EmployeeManagement = () => {
     const now = Date.now();
     
     if (analyticsCache && cacheTimestamp && (now - cacheTimestamp) < CACHE_DURATION) {
-      console.log('📦 Using cached analytics data');
-      setGlobalAnalytics(analyticsCache);
+      console.log('📦 Using cached data, reprocessing with current filters...');
+      // Reprocess the cached raw data with current filters
+      const reprocessed = processGlobalInspectionData(
+        analyticsCache.rawData || [], 
+        analyticsFilter, 
+        analyticsCache.totalCount || 0
+      );
+      setGlobalAnalytics(reprocessed);
       return; // Use cached data instead of reloading
     }
     
@@ -291,10 +294,14 @@ const EmployeeManagement = () => {
       processedAnalytics.summary.totalInspections = allInspectionData.length;
       setGlobalAnalytics(processedAnalytics);
 
-      // Cache the results
-      setAnalyticsCache(processedAnalytics);
+      // Cache BOTH the raw data and processed results
+      setAnalyticsCache({
+        rawData: enrichedData,  // Store the raw 45k records
+        processedResults: processedAnalytics,
+        totalCount: allInspectionData.length
+      });
       setCacheTimestamp(Date.now());
-      console.log('💾 Analytics data cached');
+      console.log(`💾 Cached ${enrichedData.length} records for instant filtering`);
 
     } catch (error) {
       console.error('Error loading global analytics:', error);
@@ -679,12 +686,25 @@ const EmployeeManagement = () => {
     };
   };
 
-  // Load analytics when component mounts or filters change
+  // Load analytics when component mounts only
   useEffect(() => {
     if (employees.length > 0) {
       loadGlobalAnalytics();
     }
-  }, [employees.length, analyticsFilter]);
+  }, [employees.length]);  // Removed analyticsFilter - we'll handle it separately
+
+  // When filters change, reprocess cached data without reloading
+  useEffect(() => {
+    if (analyticsCache && analyticsCache.rawData && !isLoadingAnalytics) {
+      console.log('🔄 Filter changed, reprocessing cached data...');
+      const reprocessed = processGlobalInspectionData(
+        analyticsCache.rawData,
+        analyticsFilter,
+        analyticsCache.totalCount || 0
+      );
+      setGlobalAnalytics(reprocessed);
+    }
+  }, [analyticsFilter]);
 
   const handleFilterChange = (filterType, value) => {
     setAnalyticsFilter(prev => ({
@@ -835,8 +855,8 @@ const EmployeeManagement = () => {
       // Save to database using bulk upsert (insert or update)
       const result = await employeeService.bulkUpsert(processedEmployees);
       
-      // Reload from database to get the saved data with IDs
-      await loadEmployees();
+      // Refresh data in App.js
+      if (onRefresh) onRefresh();
       
       // Show detailed import summary
       const fileType = Object.keys(mainSheetData[0] || {}).length <= 4 ? 'Early Format' : 'Current Format';
@@ -889,7 +909,8 @@ const EmployeeManagement = () => {
         initials: updatedData.initials || ''
       };
 
-      await loadEmployees();
+      // Refresh data in App.js
+      if (onRefresh) onRefresh();
       setEditingEmployee(null);
       alert('✅ Employee updated successfully!');
     } catch (error) {
@@ -2442,7 +2463,9 @@ const EmployeeManagement = () => {
                 </button>
                 
                 <button
-                  onClick={() => loadEmployees()}
+                  onClick={() => {
+                    if (onRefresh) onRefresh();
+                  }}
                   className="p-4 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 transition-colors text-left"
                 >
                   <div className="text-purple-700 font-semibold mb-2">🔄 Refresh Data</div>

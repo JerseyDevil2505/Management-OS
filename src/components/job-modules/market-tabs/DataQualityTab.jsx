@@ -17,7 +17,8 @@ const DataQualityTab = ({
   jobData,
   vendorType,
   codeDefinitions,
-  availableFields
+  availableFields,
+  marketLandData    
 }) => {
   // ==================== INTERNAL STATE MANAGEMENT ====================
   const [checkResults, setCheckResults] = useState({});
@@ -43,41 +44,47 @@ const DataQualityTab = ({
   const customCheckNameInputRef = useRef(null);
   const customCheckSeveritySelectRef = useRef(null);
 
-  // Load saved data on mount
+// Load saved data from props instead of database
   useEffect(() => {
-    const loadSavedData = async () => {
-      if (!jobData?.id) return;
-      
-      try {
-        const { data, error } = await supabase
-          .from('market_land_valuation')
-          .select('*')
-          .eq('job_id', jobData.id)
-          .single();
-        
-        if (data) {
-          // Load run history
-          if (data.quality_check_results?.history) {
-            setRunHistory(data.quality_check_results.history);
-          }
-          
-          // Load custom checks
-          if (data.custom_checks) {
-            setCustomChecks(data.custom_checks);
-          }
-          
-          // Load quality score
-          if (data.quality_score) {
-            setQualityScore(data.quality_score);
-          }
-        }
-      } catch (error) {
-        console.error('Error loading saved data:', error);
+    if (marketLandData) {
+      // Load run history
+      if (marketLandData.quality_check_results?.history) {
+        setRunHistory(marketLandData.quality_check_results.history);
       }
-    };
-    
-    loadSavedData();
-  }, [jobData?.id]);
+      
+      // Load custom checks
+      if (marketLandData.custom_checks) {
+        setCustomChecks(marketLandData.custom_checks);
+      }
+      
+      // Load quality score
+      if (marketLandData.quality_score) {
+        setQualityScore(marketLandData.quality_score);
+      }
+    }
+  }, [marketLandData]);
+
+  // Initialize overview stats from last run if available
+  useEffect(() => {
+    if (marketLandData && marketLandData.quality_check_results?.history?.length > 0) {
+      const lastRun = marketLandData.quality_check_results.history[0];
+      
+      // Restore stats from last run
+      setIssueStats({
+        critical: lastRun.criticalCount || 0,
+        warning: lastRun.warningCount || 0,
+        info: lastRun.infoCount || 0,
+        total: lastRun.totalIssues || 0
+      });
+      
+      // Set the quality score from last run
+      if (lastRun.qualityScore) {
+        setQualityScore(lastRun.qualityScore);
+      }
+      
+      console.log(`📊 Restored stats from last run: ${new Date(lastRun.date).toLocaleDateString()}`);
+    }
+  }, [marketLandData]);
 
   // ESC key handler for modal
   useEffect(() => {
@@ -1845,6 +1852,11 @@ const editCustomCheck = (check) => {
             <p className="text-gray-600">
               Analyzing {properties.length.toLocaleString()} properties for data integrity issues
             </p>
+            {runHistory.length > 0 && (
+              <p className="text-sm text-gray-500 mt-1">
+                Last analysis run: {new Date(runHistory[0].date).toLocaleString()}
+              </p>
+            )}
           </div>
 
           <div className="flex gap-3 mb-6">

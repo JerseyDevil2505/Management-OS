@@ -1,8 +1,8 @@
   import React, { useState, useEffect } from 'react';
 import { Upload, FileText, CheckCircle, AlertTriangle, X, Database, Settings, Download, Eye, Calendar, RefreshCw } from 'lucide-react';
-import { jobService, propertyService, supabase } from '../lib/supabaseClient';
+import { jobService, propertyService, supabase, preservedFieldsHandler } from '../../lib/supabaseClient';
 
-const FileUploadButton = ({ job, onFileProcessed }) => {
+const FileUploadButton = ({ job, onFileProcessed, isJobLoading = false, onDataRefresh }) => {
   const [sourceFile, setSourceFile] = useState(null);
   const [codeFile, setCodeFile] = useState(null);
   const [detectedVendor, setDetectedVendor] = useState(null);
@@ -11,6 +11,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
   const [comparing, setComparing] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [processingStatus, setProcessingStatus] = useState('');
+  const [isProcessingLocked, setIsProcessingLocked] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [showResultsModal, setShowResultsModal] = useState(false);
   const [comparisonResults, setComparisonResults] = useState(null);
@@ -762,9 +763,9 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         // ADD: Get sales_nu values
         const sourceSalesNu = sourceRecord[detectedVendor === 'BRT' ? 'CURRENTSALE_NU' : 'Sale Nu'] || '';
         const dbSalesNu = dbRecord.sales_nu || '';
-        const sourceSalesBook = sourceRecord[detectedVendor === 'BRT' ? 'CURRENTSALE_BOOK' : 'Sale Book'] || '';
+        const sourceSalesBook = sourceRecord[detectedVendor === 'BRT' ? 'CURRENTSALE_DEEDBOOK' : 'Sale Book'] || '';
         const dbSalesBook = dbRecord.sales_book || '';
-        const sourceSalesPage = sourceRecord[detectedVendor === 'BRT' ? 'CURRENTSALE_PAGE' : 'Sale Page'] || '';
+        const sourceSalesPage = sourceRecord[detectedVendor === 'BRT' ? 'CURRENTSALE_DEEDPAGE' : 'Sale Page'] || '';
         const dbSalesPage = dbRecord.sales_page || '';
           
         // FIXED: Normalize both dates for accurate comparison using processor method
@@ -890,18 +891,32 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
   };
 
   const handleSalesDecision = (propertyKey, decision) => {
-    // Save current scroll position
-    const container = document.getElementById('sales-changes-container');
-    const scrollPos = container ? container.scrollTop : 0;
+    // Save current scroll position of BOTH containers
+    const salesContainer = document.getElementById('sales-changes-container');
+    const modalBody = document.querySelector('.fixed .overflow-y-auto');
     
+    const salesScrollPos = salesContainer ? salesContainer.scrollTop : 0;
+    const modalScrollPos = modalBody ? modalBody.scrollTop : 0;
+    
+    // Update the decision
     setSalesDecisions(prev => new Map(prev.set(propertyKey, decision)));
     
-    // Restore scroll position after React re-renders
-    setTimeout(() => {
-      if (container) {
-        container.scrollTop = scrollPos;
-      }
-    }, 0);
+    // Force restore scroll position with multiple attempts
+    const restoreScroll = () => {
+      if (salesContainer) salesContainer.scrollTop = salesScrollPos;
+      if (modalBody) modalBody.scrollTop = modalScrollPos;
+    };
+    
+    // Try immediately
+    restoreScroll();
+    
+    // Try after React renders
+    requestAnimationFrame(restoreScroll);
+    
+    // Try after a short delay
+    setTimeout(restoreScroll, 10);
+    setTimeout(restoreScroll, 50);
+    setTimeout(restoreScroll, 100);
   };
 
   // FIXED: Compare only (don't process yet) - show modal for review
@@ -1120,14 +1135,30 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
 
   // ENHANCED: Process changes with batch logging modal
   const handleProcessChanges = async () => {
+    // Prevent processing while job is loading
+    if (isJobLoading) {
+      console.log('⚠️ Job data is still loading, please wait');
+      addNotification('Job data is still loading, please wait', 'warning');
+      return;
+    }
+    
+    // Prevent double processing
+    if (isProcessingLocked) {
+      console.log('⚠️ Processing already in progress, ignoring duplicate request');
+      return;
+    }
+    setIsProcessingLocked(true);
+    
     // Wait for initialization
     if (!isInitialized || sourceFileVersion === null) {
       addNotification('System initializing, please try again in a moment', 'warning');
+      setIsProcessingLocked(false); // Reset lock on early return
       return;
     }
     
     if (!sourceFile || !sourceFileContent) {
       addNotification('No source file to process', 'error');
+      setIsProcessingLocked(false); // Reset lock on early return
       return;
     }
     
@@ -1154,20 +1185,54 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       
       // Track batch operations
       const result = await trackBatchInserts(async () => {
-        return await propertyService.updateCSVData(
-          sourceFileContent,
-          codeFileContent,
-          job.id,
-          job.year_created || new Date().getFullYear(),
-          job.ccdd_code || job.ccddCode,
-          detectedVendor,
-          {
-            source_file_name: sourceFile?.name,
-            source_file_version_id: crypto.randomUUID(),
-            source_file_uploaded_at: new Date().toISOString(),
-            file_version: newFileVersion  // FIX 1: Pass file_version, not source_file_version
-          }
-        );
+        // Log what we're sending to help debug
+        console.log('📤 Calling updateCSVData with:', {
+          jobId: job.id,
+          vendor: detectedVendor,
+          fileVersion: newFileVersion,
+          recordCount: sourceFileContent.split('\n').length - 1
+        });
+        
+try {
+          return await propertyService.updateCSVData(
+            sourceFileContent,
+            codeFileContent,
+            job.id,
+            job.year_created || new Date().getFullYear(),
+            job.ccdd_code || job.ccddCode,
+            detectedVendor,
+            {
+              source_file_name: sourceFile?.name,
+              source_file_version_id: crypto.randomUUID(),
+              source_file_uploaded_at: new Date().toISOString(),
+              file_version: newFileVersion,
+              preservedFieldsHandler: preservedFieldsHandler,  // ADD THIS!
+              preservedFields: [
+                'project_start_date',      // ProductionTracker - user set
+                'is_assigned_property',    // AdminJobManagement - from assignments
+                'validation_status',       // ProductionTracker - validation state
+                'location_analysis',       // MarketAnalysis - manually entered
+                'new_vcs',                 // AppealCoverage - manually set
+                'asset_map_page',          // MarketAnalysis worksheet - manually entered
+                'asset_key_page',          // MarketAnalysis worksheet - manually entered
+                'asset_zoning',            // MarketAnalysis worksheet - manually entered
+                'values_norm_size',        // MarketAnalysis - calculated value
+                'values_norm_time',        // MarketAnalysis - calculated value
+                'sales_history',           // FileUploadButton - sales decisions
+                'processing_notes'         // User notes - if added should be kept
+              ]
+            }
+          );
+        } catch (updateError) {
+          console.error('❌ updateCSVData failed:', updateError);
+          // Add more specific error info to batch log
+          addBatchLog(`❌ Update failed: ${updateError.message}`, 'error', {
+            error: updateError.message,
+            stack: updateError.stack,
+            vendor: detectedVendor
+          });
+          throw updateError;
+        }
       });
       
       addBatchLog('✅ Property data processing completed', 'success', {
@@ -1377,12 +1442,18 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
           setSalesDecisions(new Map());
         }, 3000);
       }
-      
+        
       // Notify parent component
       if (onFileProcessed) {
         onFileProcessed(result);
       }
       
+      // Trigger data refresh in JobContainer
+      if (onDataRefresh) {
+        addBatchLog('🔄 Triggering data refresh in JobContainer...', 'info');
+        await onDataRefresh();
+        addBatchLog('✅ JobContainer data refreshed', 'success');
+      }
     } catch (error) {
       console.error('❌ Processing failed:', error);
       
@@ -1402,6 +1473,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     } finally {
       setProcessing(false);
       setProcessingStatus('');
+      setIsProcessingLocked(false);  // Add this line
     }
   };
   const handleSourceFileUpload = async (event) => {
@@ -1644,7 +1716,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     );
   };
 
-  // SINGLE RESULTS MODAL - Clean and properly sized with comparison first workflow
+// SINGLE RESULTS MODAL - Clean and properly sized with comparison first workflow
   const ResultsModal = () => {
     if (!comparisonResults || !showResultsModal) return null;
     
@@ -1658,9 +1730,9 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-40">
-        <div className="bg-white rounded-lg max-w-5xl w-full max-h-[70vh] overflow-hidden shadow-2xl flex flex-col">
-          {/* Header */}
-          <div className="p-4 border-b border-gray-200 bg-gray-50 shrink-0">
+        <div className="bg-white rounded-lg w-full max-w-5xl" style={{ maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+          {/* Header - FIXED: Always visible */}
+          <div className="p-4 border-b border-gray-200 bg-gray-50 flex-shrink-0">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
                 <FileText className="w-5 h-5 text-blue-600" />
@@ -1668,15 +1740,15 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
               </div>
               <button
                 onClick={() => setShowResultsModal(false)}
-                className="text-gray-400 hover:text-gray-600 p-1"
+                className="text-gray-400 hover:text-gray-600 p-2 -m-2 hover:bg-gray-100 rounded-lg transition-colors"
               >
                 <X className="w-6 h-6" />
               </button>
             </div>
           </div>
 
-          {/* Content */}
-          <div className="flex-1 overflow-y-auto p-6">
+          {/* Content - FIXED: Scrollable area */}
+          <div className="flex-1 overflow-y-auto p-6" style={{ maxHeight: 'calc(90vh - 140px)' }}>
             {/* Summary Tiles */}
             <div className="grid grid-cols-5 gap-4 mb-6">
               {/* New Records */}
@@ -1738,7 +1810,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                     ({details.salesChanges.filter(change => !salesDecisions.has(change.property_composite_key)).length} remaining)
                   </span>
                 </h3>
-                <div id="sales-changes-container" className="space-y-4 max-h-60 overflow-y-auto">
+                <div id="sales-changes-container" className="space-y-4" style={{ maxHeight: '400px', overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '1rem' }}>
                   {details.salesChanges.map((change, idx) => {
                     const currentDecision = salesDecisions.get(change.property_composite_key);
                     
@@ -1854,7 +1926,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
             {hasClassChanges && (
               <div className="mb-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Property Class Changes:</h3>
-                <div className="space-y-3 max-h-60 overflow-y-auto">
+                <div className="space-y-3" style={{ maxHeight: '300px', overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '1rem' }}>
                   {details.classChanges.map((change, idx) => (
                     <div key={idx} className="border border-purple-200 rounded-lg p-3 bg-purple-50">
                       <div className="flex justify-between items-start">
@@ -1892,7 +1964,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                 <div className="text-sm text-gray-600 mb-2">
                   Showing first 10 of {summary.missing} new properties
                 </div>
-                <div className="space-y-2 max-h-60 overflow-y-auto">
+                <div className="space-y-2" style={{ maxHeight: '300px', overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '1rem' }}>
                   {details.missing.slice(0, 10).map((record, idx) => {
                     const blockField = detectedVendor === 'BRT' ? 'BLOCK' : 'Block';
                     const lotField = detectedVendor === 'BRT' ? 'LOT' : 'Lot';
@@ -1934,7 +2006,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                 <div className="text-sm text-gray-600 mb-2">
                   Showing first 10 of {summary.deletions} properties not in source file
                 </div>
-                <div className="space-y-2 max-h-60 overflow-y-auto">
+                <div className="space-y-2" style={{ maxHeight: '300px', overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '1rem' }}>
                   {details.deletions.slice(0, 10).map((record, idx) => (
                     <div key={idx} className="border border-red-200 rounded p-2 bg-red-50 text-sm">
                       <div className="flex justify-between">
@@ -1999,12 +2071,13 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
             </div>
           </div>
 
-          {/* Footer */}
-          <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-between shrink-0">
+          {/* Footer - FIXED: Always visible at bottom */}
+          <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-between items-center flex-shrink-0">
             <div className="flex space-x-3">
               <button
                 onClick={viewAllReports}
-                className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 flex items-center space-x-2"
+                className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 flex items-center space-x-2 transition-colors"
+                style={{color: 'white' }}
               >
                 <Eye className="w-4 h-4" />
                 <span>View All Reports</span>
@@ -2012,18 +2085,19 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
               
               <button
                 onClick={exportComparisonReport}
-                className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 flex items-center space-x-2"
+                className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 flex items-center space-x-2 transition-colors"
+                style={{ color: 'white'}}
               >
                 <Download className="w-4 h-4" />
                 <span>Export This Report</span>
               </button>
             </div>
             
-            {hasAnyChanges ? (
+              {hasAnyChanges ? (
               <button
                 onClick={handleProcessChanges}
                 disabled={processing}
-                className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 font-medium"
+                className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-colors"
               >
                 {processing ? 'Processing...' : 'Mark Reviewed & Process'}
               </button>
@@ -2069,7 +2143,22 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                           source_file_name: sourceFile?.name,
                           source_file_version_id: crypto.randomUUID(),
                           source_file_uploaded_at: new Date().toISOString(),
-                          file_version: newFileVersion  // FIX 1: Pass file_version, not source_file_version
+                          file_version: newFileVersion,
+                          preservedFieldsHandler: preservedFieldsHandler,
+                          preservedFields: [
+                            'project_start_date',      // ProductionTracker - user set
+                            'is_assigned_property',    // AdminJobManagement - from assignments
+                            'validation_status',       // ProductionTracker - validation state
+                            'location_analysis',       // MarketAnalysis - manually entered
+                            'new_vcs',                 // AppealCoverage - manually set
+                            'asset_map_page',          // MarketAnalysis worksheet - manually entered
+                            'asset_key_page',          // MarketAnalysis worksheet - manually entered
+                            'asset_zoning',            // MarketAnalysis worksheet - manually entered
+                            'values_norm_size',        // MarketAnalysis - calculated value
+                            'values_norm_time',        // MarketAnalysis - calculated value
+                            'sales_history',           // FileUploadButton - sales decisions
+                            'processing_notes'         // User notes - if added should be kept
+                          ]
                         }
                       );
                     });
@@ -2134,6 +2223,13 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                       onFileProcessed(result);
                     }
                     
+                    // Trigger data refresh in JobContainer
+                    if (onDataRefresh) {
+                      addBatchLog('🔄 Triggering data refresh in JobContainer...', 'info');
+                      await onDataRefresh();
+                      addBatchLog('✅ JobContainer data refreshed', 'success');
+                    }
+                    
                   } catch (error) {
                     console.error('❌ Processing failed:', error);
                     
@@ -2155,7 +2251,8 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
                   }
                 }}
                 disabled={processing}
-                className="px-6 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 disabled:opacity-50 font-medium"
+                className="px-6 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 disabled:opacity-50 font-medium transition-colors"
+                style={{ color: 'white'}}
               >
                 {processing ? 'Processing...' : 'Acknowledge & Close'}
               </button>
@@ -2165,7 +2262,7 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
       </div>
     );
   };
-
+  
   // Format date for display
   const formatDate = (dateStr) => {
     if (!dateStr) return 'Never';
@@ -2178,35 +2275,21 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
     });
   };
 
-  // NEW: Fetch source file version from property_records
+  // Use file version from job prop instead of fetching
   useEffect(() => {
-    const fetchSourceFileVersion = async () => {
-      if (!job?.id) return;
-      
-      try {
-        const { data, error } = await supabase
-          .from('property_records')
-          .select('file_version')
-          .eq('job_id', job.id)
-          .limit(1)
-          .single();
-          
-        if (data && !error) {
-          setSourceFileVersion(data.file_version || 1);
-        } else {
-          setSourceFileVersion(1);
-        }
-      } catch (error) {
-        console.error('🔍 DEBUG - Error fetching source file version:', error);
-        setSourceFileVersion(1);
-      } finally {
-        // Mark as initialized after fetching version
-        setIsInitialized(true);
-      }
-    };
-
-    fetchSourceFileVersion();
-  }, [job?.id]);
+    if (!job?.id) return;
+    
+    // Get version from job's property_records or default to 1
+    // This should be passed from JobContainer which already has the data
+    const currentVersion = job.current_file_version || job.source_file_version || 1;
+    
+    // Only set if different to avoid unnecessary renders
+    if (sourceFileVersion !== currentVersion) {
+      setSourceFileVersion(currentVersion);
+    }
+    
+    setIsInitialized(true);
+  }, [job?.id, job?.current_file_version, job?.source_file_version]);
 
   const getFileStatusWithRealVersion = (timestamp, type) => {
     if (!timestamp) return 'Never';
@@ -2284,8 +2367,9 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
         
         <button
           onClick={() => document.getElementById('source-file-upload').click()}
-          disabled={comparing || processing}
+          disabled={comparing || processing || isJobLoading}
           className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:bg-gray-500 flex items-center gap-1"
+          title={isJobLoading ? 'Job data is loading...' : ''}
         >
           <Upload className="w-3 h-3" />
           {sourceFile ? sourceFile.name.substring(0, 10) + '...' : 'Select File'}
@@ -2308,8 +2392,9 @@ const FileUploadButton = ({ job, onFileProcessed }) => {
             </button>
             <button
               onClick={() => handleCompareFile('source')}
-              disabled={comparing || processing}
+              disabled={comparing || processing || isJobLoading}
               className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 disabled:bg-gray-500 flex items-center gap-1"
+              title={isJobLoading ? 'Job data is loading...' : ''}
             >
               {comparing ? (
                 <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>

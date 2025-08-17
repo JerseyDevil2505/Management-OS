@@ -3,7 +3,19 @@ import { Factory, Settings, Download, RefreshCw, AlertTriangle, CheckCircle, Tre
 import { supabase, jobService } from '../../lib/supabaseClient';
 import * as XLSX from 'xlsx';
 
-const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyRecordsCount, onUpdateWorkflowStats, currentWorkflowStats }) => {
+const ProductionTracker = ({ 
+  jobData, 
+  properties,           // NEW: Receive properties from JobContainer
+  inspectionData,       // NEW: Receive inspection data from JobContainer
+  onBackToJobs, 
+  latestFileVersion, 
+  propertyRecordsCount, 
+  onUpdateWorkflowStats, 
+  currentWorkflowStats,
+  dataUpdateNotification,  // NEW: Receive notification from JobContainer
+  clearDataNotification,     // NEW: Receive clear function from JobContainer
+  employees    
+}) => {
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [processed, setProcessed] = useState(false);
@@ -27,26 +39,17 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
     inspected: 0,
     priced: 0
   });
-  
-   // Load unassigned property count (properties going to external contractors)
-  const loadUnassignedPropertyCount = async () => {
-    if (!jobData?.id || !latestFileVersion) return;
 
-    try {
-      const { count, error } = await supabase
-        .from('property_records')
-        .select('*', { count: 'exact', head: true })
-        .eq('job_id', jobData.id)
-        .eq('file_version', latestFileVersion)
-        .eq('is_assigned_property', false);
-
-      if (!error && count !== null) {
-        setUnassignedPropertyCount(count);
-      }
-    } catch (error) {
-      console.error('Error loading unassigned property count:', error);
-    }
-  };
+  // Calculate unassigned property count from passed properties
+  const calculateUnassignedPropertyCount = () => {
+    if (!properties || properties.length === 0) return;
+    
+    const unassignedCount = properties.filter(p => 
+      p.is_assigned_property === false
+    ).length;
+    
+    setUnassignedPropertyCount(unassignedCount);
+   };
 
   // Settings state - Enhanced InfoBy category configuration
   const [availableInfoByCodes, setAvailableInfoByCodes] = useState([]);
@@ -112,91 +115,63 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
     console.log(`🔍 [${section}] ${message}`, data || '');
   };
 
-  // NEW: Load commercial inspection counts from inspection_data
-  const loadCommercialCounts = async () => {
-    if (!jobData?.id || !latestFileVersion) return;
+  // Calculate commercial inspection counts from passed inspection data
+  const calculateCommercialCounts = () => {
+    if (!inspectionData || inspectionData.length === 0) return;
 
-    try {
-      // Count inspected commercial properties (4A, 4B, 4C)
-      const { data: inspectedData, error: inspectedError } = await supabase
-        .from('inspection_data')
-        .select('property_composite_key')
-        .eq('job_id', jobData.id)
-        .eq('file_version', latestFileVersion)
-        .in('property_class', ['4A', '4B', '4C'])
-        .not('measure_by', 'is', null)
-        .not('measure_date', 'is', null);
-
-      if (inspectedError) throw inspectedError;
-
-      // Count priced commercial properties
-      const { data: pricedData, error: pricedError } = await supabase
-        .from('inspection_data')
-        .select('property_composite_key')
-        .eq('job_id', jobData.id)
-        .eq('file_version', latestFileVersion)
-        .in('property_class', ['4A', '4B', '4C'])
-        .not('price_by', 'is', null)
-        .not('price_date', 'is', null);
-
-      if (pricedError) throw pricedError;
-
-      setCommercialCounts({
-        inspected: inspectedData?.length || 0,
-        priced: pricedData?.length || 0
-      });
-
-    } catch (error) {
-      console.error('Error loading commercial counts:', error);
-      debugLog('COMMERCIAL_COUNTS', 'Error loading commercial counts');
-    }
+    const commercialProps = inspectionData.filter(d => 
+      ['4A', '4B', '4C'].includes(d.property_class)
+    );
+    
+    const inspected = commercialProps.filter(d => 
+      d.measure_by && d.measure_date
+    ).length;
+    
+    const priced = commercialProps.filter(d => 
+      d.price_by && d.price_date
+    ).length;
+    
+    setCommercialCounts({
+      inspected: inspected,
+      priced: priced
+    });
+    
   };
 
-  // Load employee data for inspector details
-  const loadEmployeeData = async () => {
-    try {
-      const { data: employees, error } = await supabase
-        .from('employees')
-        .select('id, first_name, last_name, inspector_type, employment_status, initials')
-        .not('initials', 'is', null)
-        .neq('initials', '');
-
-      if (error) throw error;
-
-      const employeeMap = {};
-      employees.forEach(emp => {
-        // Only use actual initials from database, no generation
-        if (emp.initials) {
-          employeeMap[emp.initials] = {
-            id: emp.id,
-            name: `${emp.first_name} ${emp.last_name}`,
-            fullName: `${emp.last_name}, ${emp.first_name}`,
-            inspector_type: emp.inspector_type,
-            initials: emp.initials
-          };
-        }
-      });
-
-      // Parse external inspectors and add them to employee data
-      const externalCodes = externalInspectorsList.split(',').map(code => code.trim()).filter(code => code);
-      const externalInspectorsMap = {};
-
-      externalCodes.forEach(code => {
-        externalInspectorsMap[code] = {
-          id: `external-${code}`,
-          name: `${code} (External)`,
-          fullName: `${code} (External Inspector)`,
-          inspector_type: 'external',
-          initials: code
+  // Process employee data from props instead of loading from database
+  const processEmployeeData = () => {
+    if (!employees || employees.length === 0) return;
+    
+    const employeeMap = {};
+    employees.forEach(emp => {
+      // Only use actual initials from database, no generation
+      if (emp.initials) {
+        employeeMap[emp.initials] = {
+          id: emp.id,
+          name: `${emp.first_name} ${emp.last_name}`,
+          fullName: `${emp.last_name}, ${emp.first_name}`,
+          inspector_type: emp.inspector_type,
+          initials: emp.initials
         };
-      });
+      }
+    });
 
-      // Merge regular employees with external inspectors
-      setEmployeeData({ ...employeeMap, ...externalInspectorsMap });
-    } catch (error) {
-      console.error('Error loading employee data:', error);
-      addNotification('Error loading employee data', 'error');
-    }
+    // Parse external inspectors and add them to employee data
+    const externalCodes = externalInspectorsList.split(',').map(code => code.trim()).filter(code => code);
+    const externalInspectorsMap = {};
+
+    externalCodes.forEach(code => {
+      externalInspectorsMap[code] = {
+        id: `external-${code}`,
+        name: `${code} (External)`,
+        fullName: `${code} (External Inspector)`,
+        inspector_type: 'external',
+        initials: code
+      };
+    });
+
+    // Merge regular employees with external inspectors
+    setEmployeeData({ ...employeeMap, ...externalInspectorsMap });
   };
 
   // NEW: Load vendor source from property_records
@@ -226,66 +201,49 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
     }
   };
 
-  // Load validation overrides
-  const loadValidationOverrides = async () => {
-    if (!jobData?.id || !latestFileVersion) return;
-
-    try {
-      const { data: overrides, error } = await supabase
-        .from('inspection_data')
-        .select(`
-          property_composite_key,
-          block,
-          lot,
-          qualifier,
-          card,
-          property_location,
-          override_applied,
-          override_reason,
-          override_by,
-          override_date
-        `)
-        .eq('job_id', jobData.id)
-        .eq('file_version', latestFileVersion)
-        .eq('override_applied', true)
-        .order('override_date', { ascending: false });
-
-      if (!error && overrides) {
-        // Some overrides might be missing block/lot if created before fix
-        // For those, parse from composite key
-        const processedOverrides = overrides.map(override => {
-          if (!override.block || !override.lot) {
-            // Parse from composite key format: "BLOCK-LOT-QUALIFIER"
-            const parts = override.property_composite_key.split('-');
-            return {
-              ...override,
-              block: override.block || parts[0] || '',
-              lot: override.lot || parts[1] || '',
-              qualifier: override.qualifier || parts[2] || ''
-            };
-          }
-          return override;
-        });
-        
-        setValidationOverrides(processedOverrides);
-        
-        // Build override map for quick lookup
-        const overrideMapData = {};
-        processedOverrides.forEach(override => {
-          overrideMapData[override.property_composite_key] = {
-            override_applied: override.override_applied,
-            override_reason: override.override_reason,
-            override_by: override.override_by,
-            override_date: override.override_date
+  // Calculate validation overrides from passed inspection data
+  const calculateValidationOverrides = () => {
+    if (!inspectionData || inspectionData.length === 0) return;
+    
+    const overrides = inspectionData.filter(d => 
+      d.override_applied === true
+    );
+    
+    // Process overrides to ensure block/lot/qualifier are populated
+    const processedOverrides = overrides.map(override => {
+      if (!override.block || !override.lot) {
+        // Parse from composite key format: "YEAR+CCDD-BLOCK-LOT_QUALIFIER-CARD-LOCATION"
+        const keyParts = override.property_composite_key.split('-');
+        if (keyParts.length >= 2) {
+          const blockPart = keyParts[1]; // After first dash is block
+          const lotQualPart = keyParts[2]; // After second dash is lot_qualifier
+          const [lot, qualifier] = lotQualPart ? lotQualPart.split('_') : ['', ''];
+          
+          return {
+            ...override,
+            block: override.block || blockPart || '',
+            lot: override.lot || lot || '',
+            qualifier: override.qualifier || qualifier || ''
           };
-        });
-        setOverrideMap(overrideMapData);
-        
-        debugLog('VALIDATION_OVERRIDES', `Loaded ${processedOverrides.length} validation overrides with property details`);
+        }
       }
-    } catch (error) {
-      console.error('Error loading validation overrides:', error);
-    }
+      return override;
+    });
+    
+    setValidationOverrides(processedOverrides);
+    
+    // Build override map for quick lookup
+    const overrideMapData = {};
+    processedOverrides.forEach(override => {
+      overrideMapData[override.property_composite_key] = {
+        override_applied: override.override_applied,
+        override_reason: override.override_reason,
+        override_by: override.override_by,
+        override_date: override.override_date
+      };
+    });
+    setOverrideMap(overrideMapData);
+    
   };
 
   // Enhanced InfoBy code loading with proper Microsystems cleaning
@@ -593,8 +551,6 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         setProcessed(true);
         setSettingsLocked(true);
         setLoadedFromDatabase(true); // CRITICAL: Mark that we loaded from database
-        debugLog('PERSISTENCE', '✅ Loaded persisted analytics with override adjustments');
-        addNotification('Previously processed analytics loaded', 'info');
       }
     } catch (error) {
       console.error('Error loading persisted analytics:', error);
@@ -789,7 +745,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
       setCustomOverrideReason('');
       
       // Immediately reload validation overrides to get fresh data with all fields
-      await loadValidationOverrides();
+      calculateValidationOverrides();
       
       // Update App.js state immediately with the new override
       if (onUpdateWorkflowStats && analytics) {
@@ -942,37 +898,37 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
     addNotification('🔄 Session reset - settings unlocked', 'info');
   };
 
-  // Initialize data loading
+// Initialize data loading
   useEffect(() => {
-    if (jobData?.id && latestFileVersion) {
-      const loadAllData = async () => {
-        // Load all base data first
-        // Load all base data first
-        // await loadEmployeeData();  // COMMENT OUT OR DELETE THIS LINE
+    if (jobData?.id && properties && properties.length > 0 && inspectionData && employees) {
+      const initializeData = async () => {
+        // Load only the things that still need database calls
         await loadAvailableInfoByCodes();
         await loadProjectStartDate();
         await loadVendorSource();
         
-        // Load validation overrides BEFORE loading persisted analytics
-        await loadValidationOverrides();
+        // Process from props instead of loading
+        processEmployeeData();  // Uses employees prop
+        calculateValidationOverrides();  // Uses inspectionData prop
+        calculateCommercialCounts();     // Uses inspectionData prop
+        calculateUnassignedPropertyCount(); // Uses properties prop
         
         // Then load persisted analytics (which may need override data)
         await loadPersistedAnalytics();
         
-        // Finally load commercial counts
-        await loadCommercialCounts();
-        // Load unassigned property count
-        await loadUnassignedPropertyCount();
-        
-        // NOW LOAD EMPLOYEES LAST
-        await loadEmployeeData();  // ADD THIS LINE HERE
-        
         setLoading(false);
       };
       
-      loadAllData();
+      initializeData();
     }
-  }, [jobData?.id, latestFileVersion]);
+  }, [jobData?.id, properties, inspectionData, employees]); // Added employees to deps
+
+  // Update employee data when external inspectors list changes
+  useEffect(() => {
+    if (employees && employees.length > 0) {
+      processEmployeeData();
+    }
+  }, [externalInspectorsList, employees]);
 
   // Track unsaved changes
   useEffect(() => {
@@ -1038,81 +994,14 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
       
       debugLog('ANALYTICS', `Loaded ${existingOverrides?.length || 0} existing validation overrides`);
 
-      // Load ALL records using pagination to bypass Supabase 1000 limit - WITH ASSIGNMENT FILTERING
-      let allRecords = [];
-      let start = 0;
-      const batchSize = 1000;
+      // Use properties from props instead of loading from database
+      const rawData = properties;
+      debugLog('ANALYTICS', `✅ Using ${rawData?.length || 0} property records from props for analysis`);
       
-      // For jobs with assignments, we need to be more careful about performance
-      const hasLargeAssignments = jobData.has_property_assignments && jobData.assignedPropertyCount > 5000;
-      
-      debugLog('ANALYTICS', `Loading ${jobData.has_property_assignments ? 'ASSIGNED' : 'ALL'} property records using pagination...`);
-      if (hasLargeAssignments) {
-        debugLog('ANALYTICS', `⚠️ Large assignment detected (${jobData.assignedPropertyCount} properties) - using optimized loading`);
+      // Show notification if large dataset
+      if (rawData.length > 5000) {
+        addNotification(`Processing ${rawData.length.toLocaleString()} properties...`, 'info');
       }
-      
-      while (true) {
-        // Build base query with minimal fields for large assignments
-        let query = supabase
-          .from('property_records')
-          .select(`
-            property_composite_key,
-            property_block,
-            property_lot,
-            property_qualifier,
-            property_addl_card,
-            property_location,
-            property_m4_class,
-            inspection_info_by,
-            inspection_list_by,
-            inspection_list_date,
-            inspection_measure_by,
-            inspection_measure_date,
-            inspection_price_by,
-            inspection_price_date,
-            values_mod_improvement
-          `)
-          .eq('job_id', jobData.id)
-          .eq('file_version', latestFileVersion);
-
-        // ADD ASSIGNMENT FILTER IF NEEDED
-        if (jobData.has_property_assignments) {
-          query = query.eq('is_assigned_property', true);
-          debugLog('ANALYTICS', '🎯 Filtering for assigned properties only');
-        }
-
-        // For large assignments, add index hints
-        if (hasLargeAssignments) {
-          // Order by composite key for better index usage
-          query = query.order('property_composite_key', { ascending: true });
-        } else {
-          // Regular ordering for smaller datasets
-          query = query
-            .order('property_block', { ascending: true })
-            .order('property_lot', { ascending: true });
-        }
-
-        const { data: batchData, error: batchError } = await query
-          .range(start, start + batchSize - 1);
-        
-        if (batchError) throw batchError;
-        if (!batchData || batchData.length === 0) break;
-        
-        allRecords = [...allRecords, ...batchData];
-        debugLog('ANALYTICS', `Loaded batch ${Math.floor(start/batchSize) + 1}: ${batchData.length} records (total: ${allRecords.length})`);
-        
-        // For very large datasets, show progress notification
-        if (hasLargeAssignments && allRecords.length % 5000 === 0) {
-          addNotification(`Loading assigned properties: ${allRecords.length.toLocaleString()} / ${jobData.assignedPropertyCount.toLocaleString()}`, 'info');
-        }
-        
-        start += batchSize;
-        
-        if (batchData.length < batchSize) break;
-      }
-      
-      const rawData = allRecords;
-      debugLog('ANALYTICS', `✅ Loaded ${rawData?.length || 0} property records for analysis`);
 
       const startDate = new Date(projectStartDate);
       const inspectorStats = {};
@@ -1228,7 +1117,6 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
             price_by: record.inspection_price_by,
             price_date: record.inspection_price_date,
             project_start_date: projectStartDate,
-            source_file_name: record.source_file_name,
             upload_date: new Date().toISOString(),
             override_applied: true,
             override_reason: overrideMapData[propertyKey].override_reason
@@ -1316,12 +1204,8 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         const externalInspectors = externalInspectorsList.split(',').map(code => code.trim()).filter(code => code);
         const isExternalInspector = externalInspectors.includes(inspector);
         
-        // Special case: "PO" (Per Office) is valid for refusals
-        const isPORefusal = inspector === 'PO' && 
-                           (infoByCategoryConfig.refusal || []).includes(actualVendor === 'BRT' ? normalizedInfoBy || infoByCode : infoByCode);
-        
         // Skip inspectors with invalid initials (not in employee database)
-        if (!employeeData[inspector] && !isExternalInspector && !isPORefusal) {
+        if (!employeeData[inspector] && !isExternalInspector) {
           reasonNotAdded = `Inspector ${inspector} not found in employee database`;
           missingProperties.push({
             composite_key: propertyKey,
@@ -1351,14 +1235,6 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
               inspector_type: 'external'
             };
           }
-          // Handle "PO" (Per Office) refusals
-          else if (inspector === 'PO' && isPORefusal) {
-            employeeInfo = {
-              name: 'Per Office',
-              fullName: 'Per Office Refusal',
-              inspector_type: 'special'
-            };
-          }
           inspectorStats[inspector] = {
             name: employeeInfo.name || inspector,
             fullName: employeeInfo.fullName || inspector,
@@ -1381,10 +1257,10 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         let isValidInspection = true;
         let hasValidMeasuredBy = inspector && inspector !== 'UNASSIGNED' && inspector.trim() !== '';
         let hasValidMeasuredDate = measuredDate && measuredDate >= startDate;
-        
+        let normalizedInfoBy = actualVendor === 'BRT' ? infoByCode?.toString().padStart(2, '0') : infoByCode;
+
         // Vendor-specific validation logic - no padding for Microsystems!
         let hasValidInfoBy;
-        let normalizedInfoBy;
         
         if (actualVendor === 'BRT') {
           // BRT: Use padding for numeric codes (01, 02, 06, etc.)
@@ -1432,11 +1308,11 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
         }
 
         // Business logic validation - ENHANCED for special codes
-        const isEntryCode = (infoByCategoryConfig.entry || []).includes(actualVendor === 'BRT' ? normalizedInfoBy || infoByCode : infoByCode);
-        const isRefusalCode = (infoByCategoryConfig.refusal || []).includes(actualVendor === 'BRT' ? normalizedInfoBy || infoByCode : infoByCode);
-        const isEstimationCode = (infoByCategoryConfig.estimation || []).includes(actualVendor === 'BRT' ? normalizedInfoBy || infoByCode : infoByCode);
-        const isPricedCode = (infoByCategoryConfig.priced || []).includes(actualVendor === 'BRT' ? normalizedInfoBy || infoByCode : infoByCode);
-        const isSpecialCode = (infoByCategoryConfig.special || []).includes(actualVendor === 'BRT' ? normalizedInfoBy || infoByCode : infoByCode);
+        const isEntryCode = (infoByCategoryConfig.entry || []).includes(normalizedInfoBy) || (infoByCategoryConfig.entry || []).includes(infoByCode);
+        const isRefusalCode = (infoByCategoryConfig.refusal || []).includes(normalizedInfoBy) || (infoByCategoryConfig.refusal || []).includes(infoByCode);
+        const isEstimationCode = (infoByCategoryConfig.estimation || []).includes(normalizedInfoBy) || (infoByCategoryConfig.estimation || []).includes(infoByCode);
+        const isPricedCode = (infoByCategoryConfig.priced || []).includes(normalizedInfoBy) || (infoByCategoryConfig.priced || []).includes(infoByCode);
+        const isSpecialCode = (infoByCategoryConfig.special || []).includes(normalizedInfoBy) || (infoByCategoryConfig.special || []).includes(infoByCode);
         const hasListingData = record.inspection_list_by && record.inspection_list_date;
         // NEW: List_by/List_date integrity validation
         const listByValue = record.inspection_list_by;
@@ -1623,12 +1499,7 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
             price_by: record.inspection_price_by,
             price_date: record.inspection_price_date,
             project_start_date: projectStartDate,
-            source_file_name: record.source_file_name,
             upload_date: new Date().toISOString(),
-            validation_report: propertyIssues[propertyKey] ? {
-              issues: propertyIssues[propertyKey].issues,
-              severity: propertyIssues[propertyKey].issues.length > 2 ? 'high' : 'medium'
-            } : null
           };
 
           // Add to batch - UPSERT will handle whether to insert or update
@@ -1777,9 +1648,9 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
             debugLog('PERSISTENCE', '✅ Successfully upserted ALL records to inspection_data');
             addNotification(`✅ Successfully saved ${inspectionDataBatch.length} records to inspection_data`, 'success');
             
-            // Reload override and commercial data after successful save
-            await loadValidationOverrides();
-            await loadCommercialCounts();
+             // Recalculate override and commercial data after successful save
+            calculateValidationOverrides();
+            calculateCommercialCounts();
             
             // Log override success if any were applied
             if (decisionsToApply.length > 0) {  // CHANGED: Use decisionsToApply.length instead
@@ -1984,8 +1855,8 @@ const ProductionTracker = ({ jobData, onBackToJobs, latestFileVersion, propertyR
       setValidationReport(validationReportData);
       setMissingPropertiesReport(missingPropertiesReportData);
       
-      // Reload validation overrides to show the new ones from processing modal
-      await loadValidationOverrides();
+      // Recalculate validation overrides to show the new ones from processing modal
+      calculateValidationOverrides();
 
       // DON'T clear modal state here - wait for user to close it
       // setPendingValidations([]);
@@ -3607,7 +3478,7 @@ const exportMissingPropertiesReport = () => {
                       <Download className="w-4 h-4" />
                       <span>Export Missing Report</span>
                     </button>
-                  )}
+                  )}  
                   )}
                 </div>
 

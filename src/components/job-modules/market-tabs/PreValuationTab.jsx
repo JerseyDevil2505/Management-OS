@@ -18,7 +18,15 @@ import {
   AlertCircle
 } from 'lucide-react';
 
-const PreValuationTab = ({ jobData, properties }) => {
+const PreValuationTab = ({ 
+  jobData, 
+  properties,
+  marketLandData,
+  hpiData,
+  codeDefinitions,
+  vendorType,
+  onDataChange 
+}) => {
   // ==================== STATE MANAGEMENT ====================
   
   // Normalization Configuration State (matching HTML UI)
@@ -32,8 +40,7 @@ const PreValuationTab = ({ jobData, properties }) => {
   
   // Normalization Data State
   const [activeSubTab, setActiveSubTab] = useState('normalization');
-  const [hpiData, setHpiData] = useState([]);
-  const [hpiLoaded, setHpiLoaded] = useState(false);
+  const [hpiLoaded, setHpiLoaded] = useState(true);
   const [timeNormalizedSales, setTimeNormalizedSales] = useState([]);
   const [isProcessingTime, setIsProcessingTime] = useState(false);
   const [isProcessingSize, setIsProcessingSize] = useState(false);
@@ -54,16 +61,20 @@ const PreValuationTab = ({ jobData, properties }) => {
     conversions: 0,
     avgSizeAdjustment: 0
   });
-
-  // Page by Page Worksheet State
   const [worksheetProperties, setWorksheetProperties] = useState([]);
+  const [lastTimeNormalizationRun, setLastTimeNormalizationRun] = useState(null);
+  const [lastSizeNormalizationRun, setLastSizeNormalizationRun] = useState(null);
+  const [isSavingDecisions, setIsSavingDecisions] = useState(false);
+  const [saveProgress, setSaveProgress] = useState({ current: 0, total: 0, message: '' });
+  const [sizeNormProgress, setSizeNormProgress] = useState({ current: 0, total: 0, message: '' });
+  const [timeNormProgress, setTimeNormProgress] = useState({ current: 0, total: 0, message: '' });
   const [filteredWorksheetProps, setFilteredWorksheetProps] = useState([]);
   const [worksheetSearchTerm, setWorksheetSearchTerm] = useState('');
   const [worksheetFilter, setWorksheetFilter] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(50);
   const [normCurrentPage, setNormCurrentPage] = useState(1);
-  const [normItemsPerPage] = useState(100);
+  const [normItemsPerPage, setNormItemsPerPage] = useState(100);
   const [unsavedChanges, setUnsavedChanges] = useState(false);
   const [lastAutoSave, setLastAutoSave] = useState(null);
   const [readyProperties, setReadyProperties] = useState(new Set());
@@ -101,6 +112,8 @@ const PreValuationTab = ({ jobData, properties }) => {
   });
   const [isProcessingImport, setIsProcessingImport] = useState(false);
   const [importProgress, setImportProgress] = useState({ current: 0, total: 0, message: '' });
+  const [processProgress, setProcessProgress] = useState({ current: 0, total: 0, message: '' });
+  const [isProcessingProperties, setIsProcessingProperties] = useState(false);
 
   // Market Analysis State
   const [marketAnalysisData, setMarketAnalysisData] = useState([]);
@@ -110,10 +123,6 @@ const PreValuationTab = ({ jobData, properties }) => {
   const [selectedBlockDetails, setSelectedBlockDetails] = useState(null);
   const [showBlockDetailModal, setShowBlockDetailModal] = useState(false);
   const [isProcessingBlocks, setIsProcessingBlocks] = useState(false);
-
-  // Vendor detection
-  const vendorType = jobData?.vendor_source || jobData?.vendor_type || 'BRT';
-  const codeDefinitions = jobData?.parsed_code_definitions;
 
   // Bluebeam Revu 32-color palette
   const bluebeamPalette = [
@@ -156,6 +165,23 @@ const PreValuationTab = ({ jobData, properties }) => {
   ];
   const [isResultsCollapsed, setIsResultsCollapsed] = useState(false);
 
+// ==================== FILTER HPI DATA ====================
+  // Check what HPI data we received
+  console.log('🔍 HPI Data Check:', {
+    hpiDataReceived: !!hpiData,
+    hpiDataLength: hpiData?.length || 0,
+    selectedCounty: selectedCounty,
+    firstFewRecords: hpiData?.slice(0, 3)
+  });
+  
+  // Filter HPI data for selected county from the prop
+  const filteredHpiData = useMemo(() => {
+    if (!hpiData || !selectedCounty) return [];
+    
+    const filtered = hpiData.filter(item => item.county_name === selectedCounty);
+    console.log(`📈 Filtered ${filtered.length} HPI records for ${selectedCounty} County`);
+    return filtered;
+  }, [hpiData, selectedCounty]);
 
   // ==================== HELPER FUNCTIONS USING interpretCodes ====================
   
@@ -247,70 +273,42 @@ useEffect(() => {
   loadAvailableCounties();
 }, []);  
 
-  // ==================== HPI DATA LOADING ====================
-  useEffect(() => {
-    const loadHPIData = async () => {
-      if (!selectedCounty) return;
-      
-      try {
-      const { data, error } = await supabase
-        .from('county_hpi_data')
-        .select('*')
-        .eq('county_name', selectedCounty)
-        .order('observation_year', { ascending: true });
-        
-        if (error) throw error;
-        
-        setHpiData(data || []);
-        setHpiLoaded(true);
-        console.log(`📈 Loaded ${data?.length || 0} years of HPI data for ${selectedCounty} County`);
-      } catch (error) {
-        console.error('Error loading HPI data:', error);
-        setHpiLoaded(false);
-      }
-    };
+// ==================== USE SAVED NORMALIZATION DATA FROM PROPS ====================
+useEffect(() => {
+  if (!marketLandData) return;
+  
+  // Restore configuration from marketLandData prop
+  if (marketLandData.normalization_config) {
+    const config = marketLandData.normalization_config;
+    if (config.equalizationRatio !== undefined) setEqualizationRatio(config.equalizationRatio);
+    if (config.outlierThreshold !== undefined) setOutlierThreshold(config.outlierThreshold);
+    if (config.normalizeToYear !== undefined) setNormalizeToYear(config.normalizeToYear);
+    if (config.salesFromYear !== undefined) setSalesFromYear(config.salesFromYear);
+    if (config.minSalePrice !== undefined) setMinSalePrice(config.minSalePrice);
+    if (config.selectedCounty !== undefined) setSelectedCounty(config.selectedCounty);
+    if (config.lastTimeNormalizationRun) setLastTimeNormalizationRun(config.lastTimeNormalizationRun);
+    if (config.lastSizeNormalizationRun) setLastSizeNormalizationRun(config.lastSizeNormalizationRun);
+  }
+  
+  // Restore normalized sales from marketLandData
+  if (marketLandData.time_normalized_sales && marketLandData.time_normalized_sales.length > 0) {
+    setTimeNormalizedSales(marketLandData.time_normalized_sales);
+  }
+  
+  // Restore stats from marketLandData
+  if (marketLandData.normalization_stats) {
+    setNormalizationStats(marketLandData.normalization_stats);
+  }
 
-    loadHPIData();
-  }, [selectedCounty]);
-  // ==================== LOAD SAVED NORMALIZATION DATA ====================
-  useEffect(() => {
-    const loadSavedNormalizationData = async () => {
-      if (!jobData?.id) return;
-      
-      try {
-        const savedData = await worksheetService.loadNormalizationData(jobData.id);
-        
-        if (savedData) {
-          // Restore configuration
-          if (savedData.normalization_config) {
-            const config = savedData.normalization_config;
-            if (config.equalizationRatio !== undefined) setEqualizationRatio(config.equalizationRatio);
-            if (config.outlierThreshold !== undefined) setOutlierThreshold(config.outlierThreshold);
-            if (config.normalizeToYear !== undefined) setNormalizeToYear(config.normalizeToYear);
-            if (config.salesFromYear !== undefined) setSalesFromYear(config.salesFromYear);
-            if (config.minSalePrice !== undefined) setMinSalePrice(config.minSalePrice);
-            if (config.selectedCounty !== undefined) setSelectedCounty(config.selectedCounty);
-          }
-          
-          // Restore normalized sales
-          if (savedData.time_normalized_sales && savedData.time_normalized_sales.length > 0) {
-            setTimeNormalizedSales(savedData.time_normalized_sales);
-          }
-          
-          // Restore stats
-          if (savedData.normalization_stats) {
-            setNormalizationStats(savedData.normalization_stats);
-          }
-          
-          console.log('✅ Loaded saved normalization data');
-        }
-      } catch (error) {
-        console.error('Error loading saved normalization data:', error);
-      }
-    };
-    
-    loadSavedNormalizationData();
-  }, [jobData?.id]);
+  // Restore zoning requirements from marketLandData
+  if (marketLandData?.zoning_config) {
+    setEditingZoning(marketLandData.zoning_config);
+    console.log('✅ Restored zoning configuration from marketLandData');
+  }
+  if (marketLandData.normalization_config || marketLandData.time_normalized_sales) {
+    console.log('✅ Restored saved normalization data from props');
+  }
+}, [marketLandData]);
 
   // ==================== WORKSHEET INITIALIZATION ====================
   useEffect(() => {
@@ -367,9 +365,9 @@ useEffect(() => {
 
   // ==================== NORMALIZATION FUNCTIONS ====================
   
-  const getHPIMultiplier = useCallback((saleYear, targetYear) => {
-    // Find the max year available in HPI data
-    const maxHPIYear = Math.max(...hpiData.map(h => h.observation_year));
+const getHPIMultiplier = useCallback((saleYear, targetYear) => {
+  // Find the max year available in HPI data
+  const maxHPIYear = Math.max(...filteredHpiData.map(h => h.observation_year));
     
     // If sale year is beyond our HPI data, use 1.0
     if (saleYear > maxHPIYear) return 1.0;
@@ -379,8 +377,8 @@ useEffect(() => {
     
     if (saleYear === effectiveTargetYear) return 1.0;
     
-    const saleYearData = hpiData.find(h => h.observation_year === saleYear);
-    const targetYearData = hpiData.find(h => h.observation_year === effectiveTargetYear);
+  const saleYearData = filteredHpiData.find(h => h.observation_year === saleYear);
+  const targetYearData = filteredHpiData.find(h => h.observation_year === effectiveTargetYear);
     
     if (!saleYearData || !targetYearData) {
       // Only warn once, not for every sale
@@ -394,10 +392,11 @@ useEffect(() => {
     const targetHPI = targetYearData.hpi_index || 100;
     
     return targetHPI / saleHPI;
-  }, [hpiData]);
+  }, [filteredHpiData]);
 
-const runTimeNormalization = useCallback(async () => {
+  const runTimeNormalization = useCallback(async () => {
     setIsProcessingTime(true);
+    setTimeNormProgress({ current: 0, total: properties.length, message: 'Analyzing properties...' });
     
     try {
       // Create a map of existing keep/reject decisions
@@ -415,14 +414,15 @@ const runTimeNormalization = useCallback(async () => {
         
         // Check for valid sales date
         if (!p.sales_date) return false;
+
+        // Check for minimum improvement value (exclude tear-downs)
+        if (!p.values_mod_improvement || p.values_mod_improvement < 10000) return false;
         
         const saleYear = new Date(p.sales_date).getFullYear();
         if (saleYear < salesFromYear) return false;
-        
-        // Check sales_nu conditions (empty, null, 00, 7, or 07 are valid)
-        const nu = p.sales_nu?.toString().trim();
-        const validNU = !nu || nu === '' || nu === '00' || nu === '7' || nu === '07';
-        if (!validNU) return false;
+
+        // Check that house existed at time of sale (year built <= sale year)
+        if (p.asset_year_built && p.asset_year_built > saleYear) return false;
         
         // Parse composite key for card filtering
         const parsed = parseCompositeKey(p.property_composite_key);
@@ -444,11 +444,53 @@ const runTimeNormalization = useCallback(async () => {
         if (!typeUse) return false;
         if (!designStyle) return false;
         
+        // Check for valid living area
+        if (!p.asset_sfla || p.asset_sfla <= 0) return false;
+        
         return true;
       });
+
+      setTimeNormProgress({ 
+        current: properties.length, 
+        total: properties.length, 
+        message: `Found ${validSales.length} valid sales to normalize...` 
+      });
+
+      // Enhance valid sales with combined SFLA from additional cards
+      const enhancedSales = validSales.map(prop => {
+        const parsed = parseCompositeKey(prop.property_composite_key);
+        
+        // If this is a main card, check for additional cards
+        if ((vendorType === 'Microsystems' && parsed.card === 'M') || 
+            (vendorType === 'BRT' && parsed.card === '1')) {
+          
+          // Find additional cards for this property
+          const additionalCards = properties.filter(p => {
+            const pParsed = parseCompositeKey(p.property_composite_key);
+            return pParsed.block === parsed.block && 
+                   pParsed.lot === parsed.lot &&
+                   pParsed.qualifier === parsed.qualifier &&
+                   pParsed.card !== parsed.card &&
+                   p.asset_sfla && p.asset_sfla > 0; // Only cards with living area
+          });
+          
+          // Sum additional SFLA
+          const additionalSFLA = additionalCards.reduce((sum, card) => sum + (card.asset_sfla || 0), 0);
+          
+          // Return property with combined SFLA
+          return {
+            ...prop,
+            original_sfla: prop.asset_sfla,
+            asset_sfla: prop.asset_sfla + additionalSFLA,
+            has_additional_cards: additionalCards.length > 0
+          };
+        }
+        
+        return prop;
+      });      
       
       // Process each valid sale
-      const normalized = validSales.map(prop => {
+      const normalized = enhancedSales.map(prop => {
         const saleYear = new Date(prop.sales_date).getFullYear();
         const hpiMultiplier = getHPIMultiplier(saleYear, normalizeToYear);
         const timeNormalizedPrice = Math.round(prop.sales_price * hpiMultiplier);
@@ -522,11 +564,14 @@ const runTimeNormalization = useCallback(async () => {
         normalizeToYear,
         salesFromYear,
         minSalePrice,
-        selectedCounty
+        selectedCounty,
+        lastTimeNormalizationRun: new Date().toISOString()
       };
       
       await worksheetService.saveNormalizationConfig(jobData.id, config);
       await worksheetService.saveTimeNormalizedSales(jobData.id, normalized, newStats);
+
+      setLastTimeNormalizationRun(new Date().toISOString());
 
       console.log(`✅ Time normalization complete - preserved ${Object.keys(existingDecisions).length} keep/reject decisions`);
     } catch (error) {
@@ -534,6 +579,7 @@ const runTimeNormalization = useCallback(async () => {
       alert('Error during time normalization. Please check the console.');
     } finally {
       setIsProcessingTime(false);
+      setTimeNormProgress({ current: 0, total: 0, message: '' });
     }
   }, [properties, salesFromYear, minSalePrice, normalizeToYear, equalizationRatio, outlierThreshold, getHPIMultiplier, timeNormalizedSales, normalizationStats, vendorType, parseCompositeKey, jobData.id, selectedCounty, worksheetService]);
 
@@ -551,13 +597,15 @@ const saveSizeNormalizedValues = async (normalizedSales) => {
       }
     }
     console.log('✅ Size normalized values saved to database');
+    
   } catch (error) {
     console.error('Error saving size normalized values:', error);
   }
 };
 
-const runSizeNormalization = useCallback(async () => {
+  const runSizeNormalization = useCallback(async () => {
     setIsProcessingSize(true);
+    setSizeNormProgress({ current: 0, total: 0, message: 'Preparing size normalization...' });
     
     try {
       // Create a map of existing size-normalized values
@@ -584,7 +632,21 @@ const runSizeNormalization = useCallback(async () => {
         singleFamily: acceptedSales.filter(s => 
           s.asset_type_use?.toString().trim().startsWith('1')
         ),
-        // ... rest of your grouping logic ...
+        semiDetached: acceptedSales.filter(s => 
+          s.asset_type_use?.toString().trim().startsWith('2')
+        ),
+        townhouses: acceptedSales.filter(s => 
+          s.asset_type_use?.toString().trim().startsWith('3')
+        ),
+        multifamily: acceptedSales.filter(s => 
+          s.asset_type_use?.toString().trim().startsWith('4')
+        ),
+        conversions: acceptedSales.filter(s => 
+          s.asset_type_use?.toString().trim().startsWith('5')
+        ),
+        condominiums: acceptedSales.filter(s => 
+          s.asset_type_use?.toString().trim().startsWith('6')
+        )
       };
 
       let totalSizeNormalized = 0;
@@ -594,6 +656,12 @@ const runSizeNormalization = useCallback(async () => {
       // Process each group
       Object.entries(groups).forEach(([groupName, groupSales]) => {
         if (groupSales.length === 0) return;
+        
+        setSizeNormProgress({ 
+          current: totalSizeNormalized, 
+          total: acceptedSales.length, 
+          message: `Processing ${groupName} properties...` 
+        });
         
         // Calculate average LIVING size for the group
         const totalSize = groupSales.reduce((sum, s) => sum + (s.asset_sfla || 0), 0);
@@ -636,15 +704,35 @@ const runSizeNormalization = useCallback(async () => {
       });
 
       // Update stats
+      const avgAdjustment = totalSizeNormalized > 0 ? Math.round(totalAdjustment / totalSizeNormalized) : 0;
+
+      // Verify accepted equals normalized (should always match with SFLA > 0 filter)
+      if (acceptedSales.length !== totalSizeNormalized) {
+        console.warn(`⚠️ Size normalization mismatch: ${acceptedSales.length} accepted but only ${totalSizeNormalized} normalized. Check for properties with 0 SFLA.`);
+      }
+      
       setNormalizationStats(prev => ({
         ...prev,
         acceptedSales: acceptedSales.length,
         sizeNormalized: totalSizeNormalized,
-        // ... rest of your stats ...
+        singleFamily: groups.singleFamily?.length || 0,
+        multifamily: groups.multifamily?.length || 0,
+        townhouses: groups.townhouses?.length || 0,
+        conversions: groups.conversions?.length || 0,
+        avgSizeAdjustment: avgAdjustment
       }));
 
       // Save to database
       await saveSizeNormalizedValues(acceptedSales);
+      
+      // Track the run date
+      const runDate = new Date().toISOString();
+      setLastSizeNormalizationRun(runDate);
+      
+      // Save the date to config
+      await worksheetService.saveNormalizationConfig(jobData.id, {
+        lastSizeNormalizationRun: runDate
+      });
       
       console.log(`✅ Size normalization complete - preserved ${preservedCount} existing calculations`);
       
@@ -658,6 +746,7 @@ const runSizeNormalization = useCallback(async () => {
       alert('Error during size normalization. Please check the console.');
     } finally {
       setIsProcessingSize(false);
+      setSizeNormProgress({ current: 0, total: 0, message: '' });
     }
   }, [timeNormalizedSales]);
 
@@ -665,7 +754,18 @@ const runSizeNormalization = useCallback(async () => {
     setIsProcessingBlocks(true);
     
     try {
-      // Get all properties with size-normalized values
+      // Get ALL properties first (for complete counts)
+      const allPropertiesByBlock = {};
+      properties.forEach(prop => {
+        const parsed = parseCompositeKey(prop.property_composite_key);
+        const block = parsed.block;
+        if (!allPropertiesByBlock[block]) {
+          allPropertiesByBlock[block] = [];
+        }
+        allPropertiesByBlock[block].push(prop);
+      });
+      
+      // Get properties with size-normalized values for analysis
       const normalizedProps = properties.filter(p => p.values_norm_size && p.values_norm_size > 0);
       
       // Filter by property type
@@ -676,12 +776,22 @@ const runSizeNormalization = useCallback(async () => {
         switch (blockTypeFilter) {
           case 'single_family':
             return typeUse.startsWith('1');
+          case 'semi_detached':
+            return typeUse.startsWith('2');
+          case 'townhouses':
+            return typeUse.startsWith('3');
           case 'multifamily':
-            return ['42', '43', '44'].some(code => typeUse === code || typeUse.startsWith(code));
+            return typeUse.startsWith('4');
+          case 'conversions':
+            return typeUse.startsWith('5');
+          case 'condominiums':
+            return typeUse.startsWith('6');
+          case 'all_residential':
+            return typeUse.match(/^[1-6]/);
           case 'commercial':
             return ['50', '51', '52'].some(code => typeUse === code || typeUse.startsWith(code));
-          case 'all_residential':
-            return typeUse.startsWith('1') || ['42', '43', '44'].some(code => typeUse === code || typeUse.startsWith(code));
+          case 'all':
+            return true;
           default:
             return true;
         }
@@ -699,8 +809,27 @@ const runSizeNormalization = useCallback(async () => {
         blockGroups[block].push(prop);
       });
       
-      // Calculate metrics for each block
-      const blockData = Object.entries(blockGroups).map(([block, props]) => {
+      // Calculate metrics for ALL blocks (including those without sales)
+      const blockData = Object.entries(allPropertiesByBlock).map(([block, allProps]) => {
+        const normalizedPropsInBlock = blockGroups[block] || [];
+        
+        // If no normalized properties in this block, return gray/no data entry
+        if (normalizedPropsInBlock.length === 0) {
+          return {
+            block,
+            propertyCount: allProps.length,  // Total properties in block
+            salesCount: allProps.filter(p => p.values_norm_size && p.values_norm_size > 0).length,  // Size normalized sales
+            avgNormalizedValue: 0,
+            color: { hex: "#E5E7EB", name: "No Data", row: 0, col: 0 },
+            ageConsistency: 'N/A',
+            sizeConsistency: 'N/A',
+            designConsistency: 'N/A',
+            noData: true
+          };
+        }
+        
+        // Rest of the existing calculation but using normalizedPropsInBlock instead of props
+        const props = normalizedPropsInBlock;
         // Average normalized value
         const avgValue = props.reduce((sum, p) => sum + p.values_norm_size, 0) / props.length;
         
@@ -747,8 +876,8 @@ const runSizeNormalization = useCallback(async () => {
         
         return {
           block,
-          propertyCount: props.length,
-          salesCount: props.filter(p => p.sales_price && p.sales_date).length,
+          propertyCount: allProps.length,  // Total properties in block (not just normalized)
+          salesCount: props.length,  // Count of size normalized properties
           avgNormalizedValue: Math.round(avgValue),
           color: assignedColor,
           ageConsistency,
@@ -800,6 +929,44 @@ const runSizeNormalization = useCallback(async () => {
     const avgSquareDiff = squareDiffs.reduce((sum, v) => sum + v, 0) / values.length;
     return Math.sqrt(avgSquareDiff);
   };
+
+  // Extract available depth tables from code definitions
+  const getAvailableDepthTables = useCallback(() => {
+    if (!codeDefinitions) return [];
+    
+    try {
+      if (vendorType === 'BRT') {
+        // For BRT, look in Depth section for DATA.VALUE entries
+        const depthSection = codeDefinitions.sections?.Depth || {};
+        const tables = new Set();
+        
+        Object.values(depthSection).forEach(item => {
+          if (item?.DATA?.VALUE) {
+            tables.add(item.DATA.VALUE);
+          }
+        });
+        
+        return Array.from(tables).sort();
+      } else {
+        // For Microsystems, look for codes starting with "200"
+        const tables = new Set();
+        
+        Object.keys(codeDefinitions).forEach(code => {
+          if (code.startsWith('200') && code.length >= 7) {
+            const tableCode = code.substring(3, 7);
+            tables.add(tableCode);
+          }
+        });
+        
+        return Array.from(tables).sort();
+      }
+    } catch (error) {
+      console.error('Error extracting depth tables:', error);
+      return [];
+    }
+  }, [codeDefinitions, vendorType]);
+  
+  const availableDepthTables = getAvailableDepthTables();
   
   const mode = (arr) => {
     if (arr.length === 0) return null;
@@ -826,80 +993,76 @@ const runSizeNormalization = useCallback(async () => {
   }, [blockTypeFilter, colorScaleStart, colorScaleIncrement, normalizationStats.sizeNormalized, processBlockAnalysis]);
 
 const handleSalesDecision = async (saleId, decision) => {
-    const updatedSales = timeNormalizedSales.map(sale =>
-      sale.id === saleId ? { ...sale, keep_reject: decision } : sale
-    );
-    setTimeNormalizedSales(updatedSales);
+  const updatedSales = timeNormalizedSales.map(sale =>
+    sale.id === saleId ? { ...sale, keep_reject: decision } : sale
+  );
+  setTimeNormalizedSales(updatedSales);
 
-    // Update stats
-    const newStats = {
-      ...normalizationStats,
-      pendingReview: updatedSales.filter(s => s.keep_reject === 'pending').length,
-      keptCount: updatedSales.filter(s => s.keep_reject === 'keep').length,
-      rejectedCount: updatedSales.filter(s => s.keep_reject === 'reject').length
-    };
-    setNormalizationStats(newStats);
-
-    // If changing to reject, immediately remove from database
-    if (decision === 'reject') {
-      try {
-        const { error } = await supabase
-          .from('property_records')
-          .update({ 
-            values_norm_time: null,
-            values_norm_size: null 
-          })
-          .eq('id', saleId);
-        
-        if (error) {
-          console.error('Error removing normalized values:', error);
-        } else {
-          console.log(`✅ Immediately removed normalized values for property ${saleId}`);
-        }
-      } catch (error) {
-        console.error('Error updating database:', error);
-      }
-    }
-    
-    // If changing to keep, immediately save to database
-    if (decision === 'keep') {
-      try {
-        const sale = updatedSales.find(s => s.id === saleId);
-        if (sale && sale.time_normalized_price) {
-          const { error } = await supabase
-            .from('property_records')
-            .update({ 
-              values_norm_time: sale.time_normalized_price 
-            })
-            .eq('id', saleId);
-          
-          if (error) {
-            console.error('Error saving normalized value:', error);
-          } else {
-            console.log(`✅ Immediately saved normalized value for property ${saleId}`);
-          }
-        }
-      } catch (error) {
-        console.error('Error updating database:', error);
-      }
-    }
+  // Update stats
+  const newStats = {
+    ...normalizationStats,
+    pendingReview: updatedSales.filter(s => s.keep_reject === 'pending').length,
+    keptCount: updatedSales.filter(s => s.keep_reject === 'keep').length,
+    rejectedCount: updatedSales.filter(s => s.keep_reject === 'reject').length
   };
-     
-const saveBatchDecisions = async () => {
+  setNormalizationStats(newStats);
+
+  // Only do immediate database operations for REJECTIONS
+  if (decision === 'reject') {
     try {
-      const keeps = timeNormalizedSales.filter(s => s.keep_reject === 'keep');
-      const rejects = timeNormalizedSales.filter(s => s.keep_reject === 'reject');
+      const { error } = await supabase
+        .from('property_records')
+        .update({ 
+          values_norm_time: null,
+          values_norm_size: null 
+        })
+        .eq('id', saleId);
+      
+      if (error) {
+        console.error('Error removing normalized values:', error);
+      } else {
+        console.log(`🗑️ Immediately removed normalized values for rejected property ${saleId}`);
+      }
+    } catch (error) {
+      console.error('Error updating database:', error);
+    }
+  }
+  // KEEPS wait for batch save - no immediate database update
+  
+  // Track unsaved changes only for keeps that need saving
+  if (decision === 'keep' && onDataChange) {
+    onDataChange();
+  }
+};
+     
+  const saveBatchDecisions = async () => {
+    const keeps = timeNormalizedSales.filter(s => s.keep_reject === 'keep');
+    const rejects = timeNormalizedSales.filter(s => s.keep_reject === 'reject');
+    console.log('🔍 Sample keep values:', keeps.slice(0, 3).map(k => ({
+      id: k.id,
+      time_normalized_price: k.time_normalized_price,
+      has_value: !!k.time_normalized_price
+    })));
+    
+    setIsSavingDecisions(true);
+    setSaveProgress({ current: 0, total: keeps.length + rejects.length, message: 'Preparing to save...' });
+    
+    try {
       
       console.log(`💾 Saving ${keeps.length} keeps and ${rejects.length} rejects...`);
+      setSaveProgress({ current: 0, total: keeps.length + rejects.length, message: `Saving ${keeps.length} keeps...` });
       
       // Batch update keeps in chunks of 500
       if (keeps.length > 0) {
+        console.log(`📝 Preparing to save ${keeps.length} kept sales`);
         for (let i = 0; i < keeps.length; i += 500) {
           const batch = keeps.slice(i, i + 500);
           const updates = batch.map(sale => ({
             id: sale.id,
             values_norm_time: sale.time_normalized_price
           }));
+          
+          console.log(`💾 Batch ${Math.floor(i/500) + 1}: Saving IDs`, updates.slice(0, 3).map(u => u.id), '...');
           
           // Use Promise.all for parallel updates within batch
           await Promise.all(updates.map(u => 
@@ -910,6 +1073,11 @@ const saveBatchDecisions = async () => {
           ));
           
           console.log(`✅ Saved batch ${Math.floor(i/500) + 1} of ${Math.ceil(keeps.length/500)}`);
+          setSaveProgress({ 
+            current: Math.min(i + 500, keeps.length), 
+            total: keeps.length + rejects.length, 
+            message: `Saved ${Math.min(i + 500, keeps.length)} keeps...` 
+          });
         }
       }
       
@@ -935,6 +1103,9 @@ const saveBatchDecisions = async () => {
     } catch (error) {
       console.error('❌ Error saving batch decisions:', error);
       alert('Error saving decisions. Please check the console and try again.');
+    } finally {
+      setIsSavingDecisions(false);
+      setSaveProgress({ current: 0, total: 0, message: '' });
     }
   };
 
@@ -1064,7 +1235,7 @@ const saveBatchDecisions = async () => {
     }
   };
 
-  const processSelectedProperties = async () => {
+const processSelectedProperties = async () => {
     const toProcess = worksheetProperties.filter(p => 
       readyProperties.has(p.property_composite_key)
     );
@@ -1074,26 +1245,58 @@ const saveBatchDecisions = async () => {
       return;
     }
     
+    setIsProcessingProperties(true);
+    setProcessProgress({ current: 0, total: toProcess.length, message: 'Preparing to process properties...' });
+    
     try {
-      for (const prop of toProcess) {
-        await supabase
+      // Process in batches of 500
+      const batchSize = 500;
+      for (let i = 0; i < toProcess.length; i += batchSize) {
+        const batch = toProcess.slice(i, i + batchSize);
+        
+        setProcessProgress({ 
+          current: i, 
+          total: toProcess.length, 
+          message: `Processing batch ${Math.floor(i/batchSize) + 1} of ${Math.ceil(toProcess.length/batchSize)}...` 
+        });
+        
+        // Build update array for batch upsert
+        const updates = batch.map(prop => ({
+          property_composite_key: prop.property_composite_key,
+          new_vcs: prop.new_vcs,
+          location_analysis: prop.location_analysis,
+          asset_zoning: prop.asset_zoning,
+          asset_map_page: prop.asset_map_page,
+          asset_key_page: prop.asset_key_page
+        }));
+        
+        // Use upsert for batch processing
+        const { error } = await supabase
           .from('property_records')
-          .update({
-            new_vcs: prop.new_vcs,
-            location_analysis: prop.location_analysis,
-            asset_zoning: prop.asset_zoning,
-            asset_map_page: prop.asset_map_page,
-            asset_key_page: prop.asset_key_page
-          })
-          .eq('property_composite_key', prop.property_composite_key);
+          .upsert(updates, { onConflict: 'property_composite_key' });
+          
+        if (error) throw error;
       }
       
-      alert(`✅ Successfully processed ${toProcess.length} properties`);
-      setReadyProperties(new Set());
-      updateWorksheetStats(worksheetProperties);
+      setProcessProgress({ 
+        current: toProcess.length, 
+        total: toProcess.length, 
+        message: 'Processing complete!' 
+      });
+      
+      setTimeout(() => {
+        alert(`✅ Successfully processed ${toProcess.length} properties`);
+        setReadyProperties(new Set());
+        updateWorksheetStats(worksheetProperties);
+        setIsProcessingProperties(false);
+        setProcessProgress({ current: 0, total: 0, message: '' });
+      }, 500);
+      
     } catch (error) {
       console.error('Error processing properties:', error);
       alert('Error processing properties. Please try again.');
+      setIsProcessingProperties(false);
+      setProcessProgress({ current: 0, total: 0, message: '' });
     }
   };
 
@@ -1126,8 +1329,8 @@ const saveBatchDecisions = async () => {
       if (field === 'block' || field === 'lot') {
         const aParsed = parseCompositeKey(a.property_composite_key);
         const bParsed = parseCompositeKey(b.property_composite_key);
-        aVal = field === 'block' ? aParsed.block : aParsed.lot;
-        bVal = field === 'block' ? bParsed.block : bParsed.lot;
+        aVal = field === 'block' ? parseInt(aParsed.block) || 0 : parseFloat(aParsed.lot) || 0;
+        bVal = field === 'block' ? parseInt(bParsed.block) || 0 : parseFloat(bParsed.lot) || 0;
       } else {
         aVal = a[field];
         bVal = b[field];
@@ -1403,7 +1606,7 @@ const analyzeImportFile = async (file) => {
   // ==================== RENDER ====================
   
   return (
-    <div className="space-y-4">
+    <div className="w-full">
       {/* Sub-tab Navigation */}
       <div className="flex gap-2 border-b border-gray-200">
         <button
@@ -1452,7 +1655,8 @@ const analyzeImportFile = async (file) => {
       {/* Normalization Tab Content */}
       {activeSubTab === 'normalization' && (
         <div className="w-full">
-          <div className="space-y-6 px-4">
+          <div className="space-y-6 px-2">
+            
           {/* Configuration Section */}
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex justify-between items-center mb-4">
@@ -1460,6 +1664,11 @@ const analyzeImportFile = async (file) => {
               <div className="flex items-center gap-4">
                 {hpiLoaded && (
                   <span className="text-green-600 text-sm">✓ HPI Data Loaded</span>
+                )}
+                {lastTimeNormalizationRun && (
+                  <span className="text-gray-500 text-sm">
+                    Last run: {new Date(lastTimeNormalizationRun).toLocaleDateString()}
+                  </span>
                 )}
                 <button
                   onClick={() => {
@@ -1469,7 +1678,7 @@ const analyzeImportFile = async (file) => {
                     }
                     runTimeNormalization();
                   }}
-                  disabled={isProcessingTime || !hpiLoaded}
+                  disabled={isProcessingTime || !hpiLoaded || !hpiData || hpiData.length === 0}
                   className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
                 >      
                   {isProcessingTime ? (
@@ -1483,6 +1692,19 @@ const analyzeImportFile = async (file) => {
                 </button>
               </div>
             </div>
+
+            {(!hpiData || hpiData.length === 0) && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
+                <AlertCircle className="text-red-600 mt-0.5" size={20} />
+                <div>
+                  <p className="text-sm font-medium text-red-800">HPI Data Not Available</p>
+                  <p className="text-xs text-red-600 mt-1">
+                    Time normalization cannot run without House Price Index data for {selectedCounty} County.
+                    Please ensure HPI data is loaded in the database.
+                  </p>
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-3 gap-4">
               <div>
@@ -1592,15 +1814,11 @@ const analyzeImportFile = async (file) => {
                 <div className="grid grid-cols-6 gap-4">
                   <div className="text-center">
                     <div className="text-2xl font-bold">{normalizationStats.totalSales}</div>
-                    <div className="text-sm text-gray-600">Total Sales ({salesFromYear}+)</div>
+                    <div className="text-sm text-gray-600">Potential Sales</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-2xl font-bold">{normalizationStats.timeNormalized}</div>
-                    <div className="text-sm text-gray-600">Time Normalized</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold">{normalizationStats.excluded}</div>
-                    <div className="text-sm text-gray-600">Excluded (&lt; ${minSalePrice})</div>
+                    <div className="text-2xl font-bold">{timeNormalizedSales.filter(s => s.keep_reject === 'keep').length}</div>
+                    <div className="text-sm text-gray-600">Kept/Normalized</div>
                   </div>
                   <div className="text-center">
                     <div className="text-2xl font-bold text-orange-600">{normalizationStats.flaggedOutliers}</div>
@@ -1710,10 +1928,20 @@ const analyzeImportFile = async (file) => {
                             <option value="type-6">Condominiums</option>
                           )}
                         </select>
+                        <select
+                          value={normItemsPerPage}
+                          onChange={(e) => setNormItemsPerPage(parseInt(e.target.value))}
+                          className="px-3 py-2 border border-gray-300 rounded"
+                        >
+                          <option value="25">25 per page</option>
+                          <option value="50">50 per page</option>
+                          <option value="100">100 per page</option>
+                          <option value="200">200 per page</option>
+                        </select>
                       </div>
                     </div>
 
-                    <div className="overflow-x-auto max-w-full">
+                    <div className="overflow-x-auto">
                       <table className="min-w-full table-fixed">
                         <thead className="bg-gray-50 border-b">
                           <tr>
@@ -1842,51 +2070,33 @@ const analyzeImportFile = async (file) => {
                                       const packageData = interpretCodes.getPackageSaleData(properties, sale);
                                       if (!packageData) return '-';
                                       
-                                      // Check if it's a farm package (has 3B)
-                                      const isFarmPackage = packageData.has_farmland;
-                                      
-                                      if (isFarmPackage) {
+                                      // Use the flags from packageData directly
+                                      if (packageData.is_farm_package) {
                                         return (
                                           <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-medium" 
                                                 title={`Farm package: ${packageData.package_count} properties (includes farmland)`}>
                                             Farm ({packageData.package_count})
                                           </span>
                                         );
-                                      }
-                                      
-                                      // Check if it's additional cards (same property, different cards)
-                                      const parsed = parseCompositeKey(sale.property_composite_key);
-                                      const samePropertyDifferentCards = packageData.properties?.filter(p => {
-                                        const pParsed = parseCompositeKey(p.property_composite_key);
-                                        return pParsed.block === parsed.block && 
-                                               pParsed.lot === parsed.lot && 
-                                               pParsed.card !== parsed.card;
-                                      });
-                                      
-                                      // Check if main card (M for Microsystems, 1 for BRT)
-                                      const isMainCard = (vendorType === 'Microsystems' && parsed.card === 'M') || 
-                                                        (vendorType === 'BRT' && parsed.card === '1');
-                                      
-                                      if (samePropertyDifferentCards && samePropertyDifferentCards.length > 0 && isMainCard) {
-                                        // It's the main card with additional cards on same property
+                                      } else if (packageData.is_additional_card) {
                                         return (
                                           <span className="px-2 py-1 bg-yellow-100 text-yellow-700 rounded text-xs font-medium" 
                                                 title={`Additional cards on same property`}>
-                                            Addl Card ({samePropertyDifferentCards.length})
+                                            Addl Card ({packageData.package_count})
                                           </span>
                                         );
-                                      } else if (samePropertyDifferentCards && samePropertyDifferentCards.length > 0 && !isMainCard) {
-                                        // It's an additional card, don't show package indicator
-                                        return '-';
+                                      } else {
+                                        // Regular package
+                                        const deedRef = sale.sales_book && sale.sales_page ? 
+                                          `${sale.sales_book}/${sale.sales_page}` : 'Package';
+                                        return (
+                                          <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs font-medium" 
+                                                title={`Package sale: ${packageData.package_count} properties - Deed ${deedRef}`}>
+                                            Pkg {deedRef} ({packageData.package_count})
+
+                                          </span>
+                                        );
                                       }
-                                      
-                                      // Regular package (multiple properties)
-                                      return (
-                                        <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs font-medium" 
-                                              title={`Package sale: ${packageData.package_count} properties`}>
-                                          Pkg ({packageData.package_count})
-                                        </span>
-                                      );
                                     })()}
                                   </td>
                                   <td className="px-4 py-3 text-sm">
@@ -2009,8 +2219,14 @@ const analyzeImportFile = async (file) => {
               <div className="bg-white rounded-lg shadow p-6">
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-lg font-semibold">Size Normalization</h3>
-                  <button
-                    onClick={runSizeNormalization}
+                  <div className="flex items-center gap-4">
+                    {lastSizeNormalizationRun && (
+                      <span className="text-gray-500 text-sm">
+                        Last run: {new Date(lastSizeNormalizationRun).toLocaleDateString()}
+                      </span>
+                    )}
+                    <button
+                      onClick={runSizeNormalization}
                     disabled={isProcessingSize || timeNormalizedSales.filter(s => s.keep_reject === 'keep').length === 0}
                     className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
                   >
@@ -2023,6 +2239,7 @@ const analyzeImportFile = async (file) => {
                       'Run Size Normalization'
                     )}
                   </button>
+                  </div>
                 </div>
 
                 <div className="p-4 bg-blue-50 rounded mb-4">
@@ -2171,9 +2388,15 @@ const analyzeImportFile = async (file) => {
                   onChange={(e) => setBlockTypeFilter(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded"
                 >
-                  <option value="single_family">Single Family</option>
-                  <option value="multifamily">Multifamily</option>
+                  <option value="single_family">Single Family (1x)</option>
+                  <option value="semi_detached">Semi-Detached (2x)</option>
+                  <option value="townhouses">Row/Townhouses (3x)</option>
+                  <option value="multifamily">Multifamily (4x)</option>
+                  <option value="conversions">Conversions (5x)</option>
+                  <option value="condominiums">Condominiums (6x)</option>
                   <option value="all_residential">All Residential</option>
+                  <option value="commercial">Commercial</option>
+                  <option value="all">All Properties</option>
                 </select>
               </div>
               
@@ -2260,18 +2483,31 @@ const analyzeImportFile = async (file) => {
                       }).length;
                       
                       return (
-                        <tr key={block.block} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                        <tr key={block.block} className={`${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'} ${block.noData ? 'opacity-50' : ''}`}>
                           <td className="px-4 py-3 text-sm font-medium">{block.block}</td>
                           <td className="px-4 py-3 text-sm text-center">{block.propertyCount}</td>
-                          <td className="px-4 py-3 text-sm text-center">{salesCount}</td>
+                          <td className="px-4 py-3 text-sm text-center">{block.salesCount}</td>
                           <td className="px-4 py-3 text-sm text-right font-medium">
-                            ${block.avgNormalizedValue.toLocaleString()}
+                            {block.noData ? (
+                              <span className="text-gray-400 italic">No Sales Data</span>
+                            ) : (
+                              `$${block.avgNormalizedValue.toLocaleString()}`
+                            )}
                           </td>
-                          <td className="px-4 py-3 text-sm text-center">{block.ageDetails.avgYear}</td>
-                          <td className="px-4 py-3 text-sm text-right">{block.sizeDetails.avgSize.toLocaleString()} sf</td>
-                          <td className="px-4 py-3 text-sm">{block.designDetails.dominantDesign}</td>
+                          <td className="px-4 py-3 text-sm text-center">
+                            {block.noData ? '-' : block.ageDetails.avgYear}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-right">
+                            {block.noData ? '-' : `${block.sizeDetails.avgSize.toLocaleString()} sf`}
+                          </td>
+                          <td className="px-4 py-3 text-sm">
+                            {block.noData ? '-' : block.designDetails.dominantDesign}
+                          </td>
                           <td className="px-4 py-3 text-center">
-                            <button
+                            {block.noData ? (
+                              <span className="text-gray-400">-</span>
+                            ) : (
+                              <button
                               onClick={() => {
                                 setSelectedBlockDetails({
                                   ...block,
@@ -2285,9 +2521,13 @@ const analyzeImportFile = async (file) => {
                             >
                               {block.ageConsistency}
                             </button>
+                            )}
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <button
+                            {block.noData ? (
+                              <span className="text-gray-400">-</span>
+                            ) : (
+                              <button
                               onClick={() => {
                                 setSelectedBlockDetails({
                                   ...block,
@@ -2301,9 +2541,13 @@ const analyzeImportFile = async (file) => {
                             >
                               {block.sizeConsistency}
                             </button>
+                            )}
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <button
+                            {block.noData ? (
+                              <span className="text-gray-400">-</span>
+                            ) : (
+                              <button
                               onClick={() => {
                                 setSelectedBlockDetails({
                                   ...block,
@@ -2317,6 +2561,7 @@ const analyzeImportFile = async (file) => {
                             >
                               {block.designConsistency}
                             </button>
+                            )}
                           </td>
                           <td className="px-4 py-3 text-center">
                             <div className="flex items-center justify-center gap-1">
@@ -2353,6 +2598,25 @@ const analyzeImportFile = async (file) => {
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold">Property Worksheet Configuration</h3>
               <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    if (window.confirm(`Copy current VCS to new VCS for ALL ${worksheetProperties.length} properties? This will OVERWRITE any existing new VCS values!`)) {
+                      const updated = worksheetProperties.map(prop => ({
+                        ...prop,
+                        new_vcs: prop.property_vcs || ''
+                      }));
+                      setWorksheetProperties(updated);
+                      setFilteredWorksheetProps(updated);
+                      updateWorksheetStats(updated);
+                      setUnsavedChanges(true);
+                      alert(`✅ Copied current VCS values for ${worksheetProperties.length} properties`);
+                    }
+                  }}
+                  className="px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600"
+                  title="Copy all current VCS values to new VCS field"
+                >
+                  Copy All Current VCS
+                </button>
                 <input
                   type="file"
                   id="import-file"
@@ -2382,7 +2646,7 @@ const analyzeImportFile = async (file) => {
                 </button>
               </div>
             </div>
-
+            
             <div className="grid grid-cols-6 gap-4">
               <div className="text-center">
                 <div className="text-2xl font-bold">{worksheetStats.totalProperties}</div>
@@ -2392,7 +2656,28 @@ const analyzeImportFile = async (file) => {
                 <div className="text-2xl font-bold">
                   {worksheetStats.vcsAssigned} / {worksheetStats.totalProperties}
                 </div>
-                <div className="text-sm text-gray-600">VCS Assigned</div>
+                <div className="text-sm text-gray-600 flex items-center justify-center gap-1">
+                  VCS Assigned
+                  <button
+                    onClick={() => {
+                      if (window.confirm(`Copy current VCS to new VCS for ALL ${worksheetProperties.length} properties? This will OVERWRITE any existing new VCS values!`)) {
+                        const updated = worksheetProperties.map(prop => ({
+                          ...prop,
+                          new_vcs: prop.property_vcs || ''
+                        }));
+                        setWorksheetProperties(updated);
+                        setFilteredWorksheetProps(updated);
+                        updateWorksheetStats(updated);
+                        setUnsavedChanges(true);
+                        alert(`✅ Copied current VCS values for ${worksheetProperties.length} properties`);
+                      }
+                    }}
+                    className="px-1 py-0.5 bg-orange-500 text-white rounded hover:bg-orange-600 text-xs"
+                    title="Copy all current VCS values to new VCS field"
+                  >
+                    »
+                  </button>
+                </div>
               </div>
               <div className="text-center">
                 <div className="text-2xl font-bold">
@@ -2456,7 +2741,7 @@ const analyzeImportFile = async (file) => {
               </div>
             </div>
 
-            <div className="overflow-x-auto max-h-[600px] max-w-full">
+            <div className="overflow-x-auto max-h-[600px]">
               <table className="min-w-full table-fixed">
                     <thead className="bg-gray-50 border-b sticky top-0">
                       <tr>
@@ -2492,21 +2777,21 @@ const analyzeImportFile = async (file) => {
                         </th>
                         <th 
                           className="px-3 py-2 text-left text-xs font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
+                          onClick={() => handleSort('property_location')}
+                        >
+                          Address {sortConfig.field === 'property_location' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                        </th>
+                        <th 
+                          className="px-3 py-2 text-left text-xs font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
                           onClick={() => handleSort('property_class')}
                         >
                           Class {sortConfig.field === 'property_class' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
                         </th>
                         <th 
                           className="px-3 py-2 text-left text-xs font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
-                          onClick={() => handleSort('property_vcs')}
-                        >
-                          Current VCS {sortConfig.field === 'property_vcs' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                        </th>
-                        <th 
-                          className="px-3 py-2 text-left text-xs font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
                           onClick={() => handleSort('building_class_display')}
                         >
-                          Building {sortConfig.field === 'building_class_display' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                          Building Class {sortConfig.field === 'building_class_display' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
                         </th>
                         <th 
                           className="px-3 py-2 text-left text-xs font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
@@ -2519,6 +2804,12 @@ const analyzeImportFile = async (file) => {
                           onClick={() => handleSort('design_display')}
                         >
                           Design {sortConfig.field === 'design_display' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                        </th>
+                        <th 
+                          className="px-3 py-2 text-left text-xs font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
+                          onClick={() => handleSort('property_vcs')}
+                        >
+                          Current VCS {sortConfig.field === 'property_vcs' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
                         </th>
                         <th></th>
                         <th 
@@ -2565,7 +2856,7 @@ const analyzeImportFile = async (file) => {
                         </th>
                       </tr>
                     </thead>
-                <tbody>
+                  <tbody>
                   {paginatedProperties.map((prop) => (
                     <tr key={prop.property_composite_key} className="border-b hover:bg-gray-50">
                       <td className="px-3 py-2 text-sm">{prop.block}</td>
@@ -2608,6 +2899,7 @@ const analyzeImportFile = async (file) => {
                         </div>
                       </td>
                       <td className="px-3 py-2 text-sm">{prop.location || '-'}</td>
+                      <td className="px-3 py-2 text-sm">{prop.property_location}</td>
                       <td className="px-3 py-2 text-sm">{prop.property_class}</td>
                       <td className="px-3 py-2 text-sm">{prop.building_class_display}</td>
                       <td className="px-3 py-2 text-sm">{prop.type_use_display}</td>
@@ -3025,7 +3317,39 @@ const analyzeImportFile = async (file) => {
            </div>
          </div>
        </div>
-     )}
+      )}
+
+      {/* Process Selected Properties Progress Modal */}
+      {isProcessingProperties && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <h3 className="text-lg font-semibold mb-4">Processing Properties</h3>
+            
+            <div className="mb-4">
+              <div className="flex justify-between text-sm text-gray-600 mb-2">
+                <span>{processProgress.message}</span>
+                <span>{processProgress.current} / {processProgress.total}</span>
+              </div>
+              
+              <div className="w-full bg-gray-200 rounded-full h-2">
+                <div
+                  className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                  style={{
+                    width: `${processProgress.total > 0 
+                      ? (processProgress.current / processProgress.total * 100) 
+                      : 0}%`
+                  }}
+                />
+              </div>
+            </div>
+            
+            <div className="flex items-center justify-center">
+              <RefreshCw className="animate-spin text-blue-600" size={20} />
+              <span className="ml-2 text-sm text-gray-600">Please wait...</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Zoning Requirements Tab Content */}
       {activeSubTab === 'zoning' && (
@@ -3036,23 +3360,34 @@ const analyzeImportFile = async (file) => {
               <div className="flex gap-2">
                 <button
                   onClick={async () => {
-                    // Save all zoning data
+                    // Save all zoning data as JSONB
                     try {
-                      for (const zone of Object.keys(editingZoning)) {
+                      // Build the zoning requirements object
+                      const zoningRequirements = {};
+                      Object.keys(editingZoning).forEach(zone => {
                         if (editingZoning[zone]) {
-                          await supabase
-                            .from('market_land_valuation')
-                            .upsert({
-                              job_id: jobData.id,
-                              zone: zone,
-                              zone_description: editingZoning[zone].description || '',
-                              zone_min_size: editingZoning[zone].minSize || null,
-                              zone_min_frontage: editingZoning[zone].minFrontage || null,
-                              zone_min_depth: editingZoning[zone].minDepth || null,
-                              zone_depth_table: editingZoning[zone].depthTable || ''
-                            });
+                          zoningRequirements[zone] = {
+                            description: editingZoning[zone].description || '',
+                            min_size: parseInt(editingZoning[zone].min_size) || null,
+                            min_frontage: parseInt(editingZoning[zone].min_frontage) || null,
+                            min_depth: parseInt(editingZoning[zone].min_depth) || null,
+                            depth_table: editingZoning[zone].depth_table || ''
+                          };
                         }
-                      }
+                      });
+                      
+                      // Save to database
+                      const { error } = await supabase
+                        .from('market_land_valuation')
+                        .upsert({
+                          job_id: jobData.id,
+                          zoning_config: zoningRequirements,
+                          updated_at: new Date().toISOString()
+                        }, {
+                          onConflict: 'job_id'
+                        });
+                        
+                      if (error) throw error;
                       alert('✅ Zoning requirements saved successfully');
                     } catch (error) {
                       console.error('Error saving zoning data:', error);
@@ -3150,13 +3485,13 @@ const analyzeImportFile = async (file) => {
                   <table className="min-w-full">
                     <thead className="bg-gray-50 border-b">
                       <tr>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Zone</th>
-                        <th className="px-4 py-3 text-center text-sm font-medium text-gray-700"># Props</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Description</th>
-                        <th className="px-4 py-3 text-center text-sm font-medium text-gray-700">Min Size (SF)</th>
-                        <th className="px-4 py-3 text-center text-sm font-medium text-gray-700">Min Frontage (FT)</th>
-                        <th className="px-4 py-3 text-center text-sm font-medium text-gray-700">Min Depth (FT)</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Depth Table</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-20">Zone</th>
+                        <th className="px-4 py-3 text-center text-sm font-medium text-gray-700 w-20"># Props</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-64">Description</th>
+                        <th className="px-4 py-3 text-center text-sm font-medium text-gray-700 w-32">Min Size (SF)</th>
+                        <th className="px-4 py-3 text-center text-sm font-medium text-gray-700 w-32">Min Frontage (FT)</th>
+                        <th className="px-4 py-3 text-center text-sm font-medium text-gray-700 w-32">Min Depth (FT)</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-40">Depth Table</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -3181,24 +3516,38 @@ const analyzeImportFile = async (file) => {
                               />
                             </td>
                             <td className="px-4 py-3">
-                              <input
-                                type="number"
-                                value={zoneData.minSize || ''}
-                                onChange={(e) => setEditingZoning(prev => ({
-                                  ...prev,
-                                  [zone]: { ...prev[zone], minSize: e.target.value }
-                                }))}
-                                placeholder="e.g., 7500"
-                                className="w-24 px-2 py-1 border border-gray-300 rounded text-sm text-center"
-                              />
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="number"
+                                  value={zoneData.min_size || ''}
+                                  onChange={(e) => setEditingZoning(prev => ({
+                                    ...prev,
+                                    [zone]: { ...prev[zone], min_size: e.target.value }
+                                  }))}
+                                  placeholder={zoneData.minSizeUnit === 'AC' ? "e.g., 2.5" : "e.g., 7500"}
+                                  step={zoneData.minSizeUnit === 'AC' ? "0.01" : "1"}
+                                  className="w-20 px-2 py-1 border border-gray-300 rounded text-sm text-center"
+                                />
+                                <select
+                                  value={zoneData.minSizeUnit || 'SF'}
+                                  onChange={(e) => setEditingZoning(prev => ({
+                                    ...prev,
+                                    [zone]: { ...prev[zone], minSizeUnit: e.target.value }
+                                  }))}
+                                  className="px-1 py-1 border border-gray-300 rounded text-sm"
+                                >
+                                  <option value="SF">SF</option>
+                                  <option value="AC">AC</option>
+                                </select>
+                              </div>
                             </td>
                             <td className="px-4 py-3">
                               <input
                                 type="number"
-                                value={zoneData.minFrontage || ''}
+                                value={zoneData.min_frontage || ''}
                                 onChange={(e) => setEditingZoning(prev => ({
                                   ...prev,
-                                  [zone]: { ...prev[zone], minFrontage: e.target.value }
+                                  [zone]: { ...prev[zone], min_frontage: e.target.value }
                                 }))}
                                 placeholder="e.g., 75"
                                 className="w-20 px-2 py-1 border border-gray-300 rounded text-sm text-center"
@@ -3207,26 +3556,31 @@ const analyzeImportFile = async (file) => {
                             <td className="px-4 py-3">
                               <input
                                 type="number"
-                                value={zoneData.minDepth || ''}
+                                value={zoneData.min_depth || ''}
                                 onChange={(e) => setEditingZoning(prev => ({
                                   ...prev,
-                                  [zone]: { ...prev[zone], minDepth: e.target.value }
+                                  [zone]: { ...prev[zone], min_depth: e.target.value }
                                 }))}
                                 placeholder="e.g., 100"
                                 className="w-20 px-2 py-1 border border-gray-300 rounded text-sm text-center"
                               />
                             </td>
                             <td className="px-4 py-3">
-                              <input
-                                type="text"
-                                value={zoneData.depthTable || ''}
+                              <select
+                                value={zoneData.depth_table || ''}
                                 onChange={(e) => setEditingZoning(prev => ({
                                   ...prev,
-                                  [zone]: { ...prev[zone], depthTable: e.target.value }
+                                  [zone]: { ...prev[zone], depth_table: e.target.value }
                                 }))}
-                                placeholder="e.g., Table A-1"
                                 className="w-32 px-2 py-1 border border-gray-300 rounded text-sm"
-                              />
+                              >
+                                <option value="">Select...</option>
+                                {availableDepthTables.map(table => (
+                                  <option key={table} value={table}>
+                                    {table}
+                                  </option>
+                                ))}
+                              </select>
                             </td>
                           </tr>
                         );
@@ -3384,6 +3738,98 @@ const analyzeImportFile = async (file) => {
          </div>
        </div>
      )}  
+{/* Save Progress Modal */}
+      {isSavingDecisions && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <h3 className="text-lg font-semibold mb-4">Saving Decisions</h3>
+            
+            <div className="mb-4">
+              <div className="flex justify-between text-sm text-gray-600 mb-2">
+                <span>{saveProgress.message}</span>
+                <span>{saveProgress.current} / {saveProgress.total}</span>
+              </div>
+              
+              <div className="w-full bg-gray-200 rounded-full h-2">
+                <div
+                  className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                  style={{
+                    width: `${saveProgress.total > 0 
+                      ? (saveProgress.current / saveProgress.total * 100) 
+                      : 0}%`
+                  }}
+                />
+              </div>
+            </div>
+            
+            <div className="flex items-center justify-center">
+              <RefreshCw className="animate-spin text-blue-600" size={20} />
+              <span className="ml-2 text-sm text-gray-600">Please wait...</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Size Normalization Progress Modal */}
+      {isProcessingSize && sizeNormProgress.total > 0 && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <h3 className="text-lg font-semibold mb-4">Size Normalization Progress</h3>
+            
+            <div className="mb-4">
+              <div className="flex justify-between text-sm text-gray-600 mb-2">
+                <span>{sizeNormProgress.message}</span>
+                <span>{sizeNormProgress.current} / {sizeNormProgress.total}</span>
+              </div>
+              
+              <div className="w-full bg-gray-200 rounded-full h-2">
+                <div
+                  className="bg-green-600 h-2 rounded-full transition-all duration-300"
+                  style={{
+                    width: `${(sizeNormProgress.current / sizeNormProgress.total * 100)}%`
+                  }}
+                />
+              </div>
+            </div>
+            
+            <div className="flex items-center justify-center">
+              <RefreshCw className="animate-spin text-green-600" size={20} />
+              <span className="ml-2 text-sm text-gray-600">Normalizing sizes...</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Time Normalization Progress Modal */}
+      {isProcessingTime && timeNormProgress.total > 0 && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <h3 className="text-lg font-semibold mb-4">Time Normalization Progress</h3>
+            
+            <div className="mb-4">
+              <div className="flex justify-between text-sm text-gray-600 mb-2">
+                <span>{timeNormProgress.message}</span>
+                <span>{timeNormProgress.current} / {timeNormProgress.total}</span>
+              </div>
+              
+              <div className="w-full bg-gray-200 rounded-full h-2">
+                <div
+                  className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                  style={{
+                    width: `${(timeNormProgress.current / timeNormProgress.total * 100)}%`
+                  }}
+                />
+              </div>
+            </div>
+            
+            <div className="flex items-center justify-center">
+              <RefreshCw className="animate-spin text-blue-600" size={20} />
+              <span className="ml-2 text-sm text-gray-600">Analyzing sales...</span>
+            </div>
+          </div>
+        </div>
+      )}
+
    </div>
  );
 };

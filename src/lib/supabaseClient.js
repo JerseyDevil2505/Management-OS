@@ -74,21 +74,19 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
 
 // Define fields that must be preserved during file updates
 const PRESERVED_FIELDS = [
-  'project_start_date',      // ProductionTracker
-  'is_assigned_property',    // AdminJobManagement  
-  'validation_status',       // ProductionTracker
-  'asset_building_class',    // FinalValuation
-  'asset_design_style',      // FinalValuation
-  'asset_ext_cond',         // FinalValuation
-  'asset_int_cond',         // FinalValuation
-  'asset_type_use',         // FinalValuation
-  'asset_year_built',       // FinalValuation
-  'asset_zoning',           // FinalValuation
-  'location_analysis',      // MarketAnalysis
-  'new_vcs',                // AppealCoverage
-  'values_norm_size',       // Valuation adjustments
-  'values_norm_time'        // Valuation adjustments
-];
+  'project_start_date',      // ProductionTracker - user set
+  'is_assigned_property',    // AdminJobManagement - from assignments
+  'validation_status',       // ProductionTracker - validation state
+  'location_analysis',       // MarketAnalysis - manually entered
+  'new_vcs',                 // AppealCoverage - manually set
+  'asset_map_page',          // MarketAnalysis worksheet - manually entered
+  'asset_key_page',          // MarketAnalysis worksheet - manually entered
+  'asset_zoning',            // MarketAnalysis worksheet - manually entered
+  'values_norm_size',        // MarketAnalysis - calculated value
+  'values_norm_time',        // MarketAnalysis - calculated value
+  'sales_history',           // FileUploadButton - sales decisions
+  'processing_notes'         // User notes - if added should be kept
+]
 
 // ===== CODE INTERPRETATION UTILITIES =====
 // Utilities for interpreting vendor-specific codes in MarketLandAnalysis
@@ -744,9 +742,23 @@ getInteriorConditionName: function(property, codeDefinitions, vendorType) {
       p.asset_building_class === '1' || p.asset_building_class === '3B'
     );
     
-    const hasFarmland = packageProperties.some(p => 
-      p.asset_building_class === '3B'
-    );
+    const hasFarmland = packageProperties.some(p => {
+      const propClass = p.property_m4_class || p.property_class;
+      return propClass === '3B';
+    });
+
+    // Check if this is additional cards for same property
+    let isAdditionalCard = false;
+    if (packageProperties.length > 1) {
+      const firstParts = packageProperties[0].property_composite_key.split('-');
+      const expectedBase = `${firstParts[0]}-${firstParts[1]}-${firstParts[2]}-${firstParts[3]}`;
+      
+      isAdditionalCard = packageProperties.every(p => {
+        const parts = p.property_composite_key.split('-');
+        const base = `${parts[0]}-${parts[1]}-${parts[2]}-${parts[3]}`;
+        return base === expectedBase;
+      });
+    }
     
     const hasResidential = packageProperties.some(p => {
       const propClass = p.asset_building_class;
@@ -773,6 +785,8 @@ getInteriorConditionName: function(property, codeDefinitions, vendorType) {
     
     return {
       is_package_sale: true,
+      is_farm_package: hasFarmland,
+      is_additional_card: isAdditionalCard,
       package_count: packageProperties.length,
       package_id: packageId,
       combined_lot_sf: combinedLotSF,
@@ -911,6 +925,83 @@ getInteriorConditionName: function(property, codeDefinitions, vendorType) {
       depthFactors: defaultTable?.factors || {},
       minimumFrontage: null // Manager must set this
     };
+  },
+  // ===== SMART ACREAGE CALCULATOR =====
+  getCalculatedAcreage: function(property, vendorType) {
+    // 1. Check direct acre field first
+    if (property.asset_lot_acre && property.asset_lot_acre > 0) {
+      return parseFloat(property.asset_lot_acre).toFixed(2);
+    }
+
+    // 2. Check square feet field and convert
+    if (property.asset_lot_sf && property.asset_lot_sf > 0) {
+      return (property.asset_lot_sf / 43560).toFixed(2);
+    }
+
+    // 3. Calculate from frontage × depth (NEW!)
+    if (property.asset_lot_frontage && property.asset_lot_depth) {
+      const sf = property.asset_lot_frontage * property.asset_lot_depth;
+      return (sf / 43560).toFixed(2);
+    }
+
+    // 4. Check raw data for vendor-specific fields
+    if (vendorType === 'BRT' && property.raw_data) {
+      let totalSf = 0;
+      let totalAcres = 0;
+      
+      // Check LANDUR fields for SF or ACRE
+      for (let i = 1; i <= 6; i++) {
+        const landur = property.raw_data[`LANDUR_${i}`];
+        if (landur) {
+          // Check for SF indicators
+          if (landur.includes('SF') || landur.includes('SITE')) {
+            const match = landur.match(/(\d+)\s*(SF|SITE)/);
+            if (match) totalSf += parseInt(match[1]);
+          }
+          // Check for ACRE indicators
+          if (landur.includes('ACRE') || landur.includes('AC')) {
+            const match = landur.match(/(\d+\.?\d*)\s*(ACRE|AC)/);
+            if (match) totalAcres += parseFloat(match[1]);
+          }
+        }
+      }
+      
+      // Return acres (converted from SF if needed)
+      if (totalAcres > 0) return totalAcres.toFixed(2);
+      if (totalSf > 0) return (totalSf / 43560).toFixed(2);
+    }
+
+    // 5. Microsystems vendor check
+    if (vendorType === 'Microsystems' && property.raw_data) {
+      // Check for Microsystems-specific fields
+      // Common field names: 'Lot Area', 'Site Area', 'Acreage'
+      const lotArea = property.raw_data['Lot Area'] || property.raw_data['Site Area'];
+      if (lotArea) {
+        const numValue = parseFloat(lotArea);
+        if (!isNaN(numValue)) {
+          // Microsystems often stores in SF
+          if (numValue > 1000) {
+            // Likely square feet
+            return (numValue / 43560).toFixed(2);
+          } else {
+            // Likely already in acres
+            return numValue.toFixed(2);
+          }
+        }
+      }
+      
+      // Check for direct acreage field
+      const acreage = property.raw_data['Acreage'] || property.raw_data['Acres'];
+      if (acreage) {
+        const numValue = parseFloat(acreage);
+        if (!isNaN(numValue)) {
+          return numValue.toFixed(2);
+        }
+      }
+    }
+
+    // Default return if no acreage can be calculated
+    return '0.00';
   }
 };  
 
@@ -1112,7 +1203,7 @@ export const jobService = {
         ccdd: job.ccdd_code, // ADDED: Alternative accessor for backward compatibility
         municipality: job.municipality || job.client_name,
         job_number: job.job_number,
-        year_created: job.year_created,
+        year_created: job.start_date ? new Date(job.start_date).getFullYear() : new Date().getFullYear(),
         county: job.county,
         state: job.state,
         vendor: job.vendor_type,
@@ -1265,11 +1356,14 @@ export const jobService = {
 
 
       const { data, error } = await supabase
-        .from('jobs')
-        .update(dbFields)
-        .eq('id', id)
-        .select()
-        .single();
+       .from('jobs')
+       .update({
+         ...dbFields,
+         updated_at: new Date().toISOString()
+       })
+       .eq('id', id)
+       .select()
+       .single();
       
       if (error) {
         console.error('❌ DEBUG - Supabase update error:', error);
@@ -2000,7 +2094,10 @@ export const propertyService = {
   // Helper method to create a preserved fields handler for the updaters
   async createPreservedFieldsHandler(jobId, compositeKeys) {
     const preservedDataMap = new Map();
-    
+
+    //Add a small delay to ensure component is fully mounted
+    await new Promise(resolve => setTimeout(resolve, 500));
+        
     try {
       // Batch fetch in chunks to avoid query limits
       const chunkSize = 500;
@@ -2397,6 +2494,10 @@ export const authService = {
 
 // ===== LEGACY COMPATIBILITY =====
 export const signInAsDev = authService.signInAsDev;
+
+// ===== PRESERVED FIELDS HANDLER EXPORT =====
+// Export the handler for FileUploadButton to pass to updaters
+export const preservedFieldsHandler = propertyService.createPreservedFieldsHandler;
 
 // ===== AUTH HELPER FUNCTIONS =====
 export const authHelpers = {

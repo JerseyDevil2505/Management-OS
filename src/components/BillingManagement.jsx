@@ -2,18 +2,28 @@
 import { supabase } from '../lib/supabaseClient';
 import * as XLSX from 'xlsx';
 
-const BillingManagement = () => {
+const BillingManagement = ({ 
+  activeJobs = [], 
+  legacyJobs = [], 
+  planningJobs = [], 
+  expenses = [], 
+  receivables = [], 
+  distributions = [], 
+  billingMetrics = null,
+  onDataUpdate,
+  onRefresh 
+}) => {
   const [activeTab, setActiveTab] = useState('active');
   const [jobs, setJobs] = useState([]);
-  const [legacyJobs, setLegacyJobs] = useState([]);
-  const [planningJobs, setPlanningJobs] = useState([]);
+  const [legacyJobsState, setLegacyJobs] = useState([]);
+  const [planningJobsState, setPlanningJobs] = useState([]);
   // Add state to track counts for all job types
   const [jobCounts, setJobCounts] = useState({
     active: 0,
     planned: 0,
     legacy: 0
   });
-  const [expenses, setExpenses] = useState([]);
+  const [expensesState, setExpenses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showContractSetup, setShowContractSetup] = useState(false);
   const [selectedJob, setSelectedJob] = useState(null);
@@ -34,7 +44,7 @@ const BillingManagement = () => {
     amount: ''
   });
   const [editingReceivable, setEditingReceivable] = useState(null);
-  const [distributions, setDistributions] = useState([]);
+  const [distributionsState, setDistributions] = useState([]);
   const [showDistributionForm, setShowDistributionForm] = useState(false);
   const [distributionForm, setDistributionForm] = useState({
     shareholder: '',
@@ -210,11 +220,13 @@ Thank you for your immediate attention to this matter.`;
   });
 
   useEffect(() => {
-    // Load job counts on initial mount
+    // Set initial data from props
     loadJobCounts();
-    calculateGlobalMetrics();
-  }, []);
-
+    if (billingMetrics) {
+      setGlobalMetrics(billingMetrics);
+    }
+  }, [activeJobs, legacyJobs, planningJobs, billingMetrics]);
+  
   useEffect(() => {
     // Load specific data when tab changes
     loadJobs();
@@ -236,271 +248,28 @@ Thank you for your immediate attention to this matter.`;
   }, [globalMetrics, activeTab, reserveSettings]);
 
   const calculateGlobalMetrics = async () => {
-    try {
-      // Get all active jobs with contracts
-      const { data: activeJobs } = await supabase
-        .from('jobs')
-        .select(`
-          job_contracts(contract_amount, retainer_amount),
-          billing_events(amount_billed, retainer_amount, status, percentage_billed)
-        `)
-        .eq('job_type', 'standard');
-
-      // Get planning jobs with contract amounts
-      const { data: planningJobsData } = await supabase
-        .from('planning_jobs')
-        .select('contract_amount')
-        .not('contract_amount', 'is', null)
-        .eq('is_archived', false);
-
-      // Calculate planned contracts total for projection formula
-      const plannedContractsTotal = planningJobsData?.reduce((sum, job) => sum + (job.contract_amount || 0), 0) || 0;
-
-      // Get current year expenses
-      const currentYear = new Date().getFullYear();
-      const currentMonth = new Date().getMonth() + 1;
-      const { data: expenseData } = await supabase
-        .from('expenses')
-        .select('*')
-        .eq('year', currentYear);
-
-      let totalSigned = 0;
-      let totalPaid = 0;
-      let totalOpen = 0;
-      let totalRemaining = 0;
-      let totalRemainingExcludingRetainer = 0;
-
-      // Calculate from active jobs
-      if (activeJobs) {
-        activeJobs.forEach(job => {
-          if (job.job_contracts?.[0]) {
-            const contract = job.job_contracts[0];
-            const contractAmount = contract.contract_amount;
-            const totalRetainerAmount = contract.retainer_amount;
-            
-            totalSigned += contractAmount;
-
-            let jobPaid = 0;
-            let jobOpen = 0;  // ADD THIS LINE
-            let totalPercentageBilled = 0;
-
-            if (job.billing_events) {
-              job.billing_events.forEach(event => {
-                if (event.status === 'P') {
-                  jobPaid += event.amount_billed;                                 
-                } else if (event.status === 'O') {   // Check for multiple possible open statuses
-                  jobOpen += event.amount_billed;
-                }
-                totalPercentageBilled += event.percentage_billed;
-              });
-            }
-
-            totalPaid += jobPaid;
-            totalOpen += jobOpen;  // ADD THIS LINE
-            const jobRemaining = contractAmount - jobPaid;
-            totalRemaining += jobRemaining;
-            
-            // Calculate remaining retainer to be collected
-            const remainingPercentage = 1 - totalPercentageBilled;
-            const remainingRetainer = totalRetainerAmount * remainingPercentage;
-            
-            // Remaining excluding future retainer collections
-            totalRemainingExcludingRetainer += (jobRemaining - remainingRetainer);
-          }
-        });
-      }
-       // Get legacy jobs with open invoices
-      const { data: legacyJobs } = await supabase
-        .from('jobs')
-        .select(`
-          job_contracts(contract_amount),
-          billing_events(amount_billed, status, billing_date)
-        `)
-        .eq('job_type', 'legacy_billing');
-  
-      if (legacyJobs) {
-        const currentYear = new Date().getFullYear();
-        legacyJobs.forEach(job => {
-          if (job.billing_events) {
-            job.billing_events.forEach(event => {
-              const billingYear = new Date(event.billing_date).getFullYear();
-              
-              if (event.status === 'O') {
-                totalOpen += event.amount_billed;
-              } else if (event.status === 'P' && billingYear === currentYear) {
-                // Only count paid invoices that were billed in the current year
-                totalPaid += event.amount_billed;
-              }
-            });
-          }
-          
-          // Add remaining contract balance to totalRemaining
-          if (job.job_contracts?.[0]) {
-            const contract = job.job_contracts[0];
-            const totalBilled = job.billing_events?.reduce((sum, event) => 
-              sum + parseFloat(event.amount_billed || 0), 0) || 0;
-            const jobRemaining = contract.contract_amount - totalBilled;
-            
-            if (jobRemaining > 0) {
-              totalRemaining += jobRemaining;
-              // For legacy jobs, assume standard 10% retainer on the remaining amount
-              totalRemainingExcludingRetainer += jobRemaining * 0.9;
-            }
-          }
-        });
-      }
-      // Get office receivables
-      const { data: receivablesData } = await supabase
-        .from('office_receivables')
-        .select('amount, status');
-
-      if (receivablesData) {
-        receivablesData.forEach(receivable => {
-          if (receivable.status === 'P') {
-            totalPaid += parseFloat(receivable.amount);
-          } else if (receivable.status === 'O') {
-            totalOpen += parseFloat(receivable.amount);
-          }
-        });
-      }
-      // Add planning jobs to total signed
-      if (planningJobsData) {
-        planningJobsData.forEach(job => {
-          if (job.contract_amount) {
-            totalSigned += job.contract_amount;
-            // Planning jobs have no payments yet, so full amount is remaining
-            totalRemaining += job.contract_amount;
-            // Assuming standard 10% retainer for planning jobs
-            totalRemainingExcludingRetainer += (job.contract_amount * 0.9);
-          }
-        });
-      }
-
-      // Calculate expense metrics
-      let currentExpenses = 0;
-      let monthlyExpenses = new Array(12).fill(0);
-      
-      if (expenseData) {
-        expenseData.forEach(expense => {
-          monthlyExpenses[expense.month - 1] += parseFloat(expense.amount);
-          if (expense.month <= currentMonth) {
-            currentExpenses += parseFloat(expense.amount);
-          }
-        });
-      }
-
-      // Calculate working days so far this year
-      let workingDaysSoFar = 0;
-      for (let month = 1; month <= currentMonth; month++) {
-        workingDaysSoFar += workingDays[month] || 21;
-      }
-
-      // Calculate total working days in year
-      const totalWorkingDays = Object.values(workingDays).reduce((sum, days) => sum + days, 0);
-
-      // Calculate daily fringe (expense rate) and projections
-      const revenue = totalPaid; // Use total paid invoices as revenue
-      const dailyFringe = workingDaysSoFar > 0 ? currentExpenses / workingDaysSoFar : 0;
-      
-      // Calculate average of monthly daily rates for better projection
-      let monthlyDailyRates = [];
-      let totalDailyRates = 0;
-      let monthsWithData = 0;
-      
-      for (let month = 1; month <= currentMonth; month++) {
-        const monthExpense = monthlyExpenses[month - 1];
-        if (monthExpense > 0) {
-          const dailyRate = monthExpense / workingDays[month];
-          monthlyDailyRates.push(dailyRate);
-          totalDailyRates += dailyRate;
-          monthsWithData++;
-        }
-      }
-      
-      // Use average of monthly daily rates for projection
-      const avgMonthlyDailyRate = monthsWithData > 0 ? totalDailyRates / monthsWithData : 0;
-      const projectedExpenses = avgMonthlyDailyRate * totalWorkingDays;  // This line stays the same
-      
-      // Keep YTD rate for display
-      const dailyExpenseRate = workingDaysSoFar > 0 ? currentExpenses / workingDaysSoFar : 0;
-      
-      // Calculate profit/loss
-      const projectedRevenue = dailyFringe * totalWorkingDays;
-      const profitLoss = projectedRevenue - projectedExpenses;
-      const profitLossPercent = projectedRevenue > 0 ? (profitLoss / projectedRevenue) * 100 : 0;
-
-      // Calculate projected cash using the new formula
-      const projectedCash = (totalPaid + totalOpen + totalRemaining) - (plannedContractsTotal * 0.6);
-      const projectedProfitLoss = projectedCash - projectedExpenses;
-      const projectedProfitLossPercent = projectedCash > 0 ? (projectedProfitLoss / projectedCash) * 100 : 0;
-
-      setGlobalMetrics({
-        totalSigned,
-        totalPaid,
-        totalOpen,
-        totalRemaining,
-        totalRemainingExcludingRetainer,
-        dailyFringe: avgMonthlyDailyRate || dailyExpenseRate,
-        currentExpenses,
-        projectedExpenses,
-        profitLoss,
-        profitLossPercent,
-        projectedCash,           
-        projectedProfitLoss,     
-        projectedProfitLossPercent 
-      });
-    } catch (error) {
-      console.error('Error calculating global metrics:', error);
+    // Use the pre-calculated metrics from App.js
+    if (billingMetrics) {
+      setGlobalMetrics(billingMetrics);
     }
   };
 
   const loadExpenses = async () => {
-    try {
-      const currentYear = new Date().getFullYear();
-      const { data: expenseData, error } = await supabase
-        .from('expenses')
-        .select('*')
-        .eq('year', currentYear)
-        .order('category')
-        .order('month');
-
-      if (error) throw error;
-      setExpenses(expenseData || []);
-    } catch (error) {
-      console.error('Error loading expenses:', error);
-    }
+    // Just use the expenses from props
+    setExpenses(expenses);
   };
 
   const loadOfficeReceivables = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('office_receivables')
-        .select('*')
-        .order('created_at', { ascending: false });
+    // Just use the receivables from props
+    setOfficeReceivables(receivables);
+  }; 
 
-      if (error) throw error;
-      setOfficeReceivables(data || []);
-    } catch (error) {
-      console.error('Error loading office receivables:', error);
-    }
-  };  
-
-    const loadDistributions = async () => {
-    try {
-      const currentYear = new Date().getFullYear();
-      const { data, error } = await supabase
-        .from('shareholder_distributions')
-        .select('*')
-        .eq('year', currentYear)
-        .order('distribution_date', { ascending: false });
-
-      if (error) throw error;
-      setDistributions(data || [])
-    } catch (error) {
-      console.error('Error loading distributions:', error);
-    }
+  const loadDistributions = async () => {
+    // Just use the distributions from props
+    setDistributions(distributions);
   };
-  const calculateDistributionMetrics = async () => {
+  
+const calculateDistributionMetrics = async () => {
     try {
       const currentDate = new Date();
       const currentYear = currentDate.getFullYear();
@@ -508,23 +277,15 @@ Thank you for your immediate attention to this matter.`;
       const monthsElapsed = currentMonth;
       const monthsRemaining = 12 - currentMonth;
       
-      // Get YTD distributions
-      const { data: ytdDists } = await supabase
-        .from('shareholder_distributions')
-        .select('amount')
-        .eq('year', currentYear)
-        .eq('status', 'paid');
+      // Use distributions from props instead of fetching
+      const ytdDistributions = distributions
+        ?.filter(d => d.status === 'paid')
+        ?.reduce((sum, dist) => sum + parseFloat(dist.amount), 0) || 0;
       
-      const ytdDistributions = ytdDists?.reduce((sum, dist) => sum + parseFloat(dist.amount), 0) || 0;
-      
-      // Get planning jobs total for the new projection formula
-      const { data: planningJobs } = await supabase
-        .from('planning_jobs')
-        .select('contract_amount')
-        .not('contract_amount', 'is', null)
-        .eq('is_archived', false);
-      
-      const plannedContractsTotal = planningJobs?.reduce((sum, job) => sum + (job.contract_amount || 0), 0) || 0;
+      // Use planning jobs from props for the projection formula
+      const plannedContractsTotal = planningJobs
+        ?.filter(job => job.contract_amount && !job.is_archived)
+        ?.reduce((sum, job) => sum + (job.contract_amount || 0), 0) || 0;
       
       // Calculate monthly collection rate (keep for display purposes)
       const monthlyCollectionRate = monthsElapsed > 0 ? globalMetrics.totalPaid / monthsElapsed : 0;
@@ -835,82 +596,30 @@ Thank you for your immediate attention to this matter.`;
   };
   
   const loadJobCounts = async () => {
-    try {
-      // Load active jobs count
-      const { data: activeJobsData, error: activeError } = await supabase
-        .from('jobs')
-        .select('id', { count: 'exact' })
-        .eq('job_type', 'standard');
-
-      // Load planned jobs count
-      const { data: planningData, error: planningError } = await supabase
-        .from('planning_jobs')
-        .select('id', { count: 'exact' })
-        .or('is_archived.eq.false,is_archived.is.null');
-
-      // Load legacy jobs count
-      const { data: legacyData, error: legacyError } = await supabase
-        .from('jobs')
-        .select('id', { count: 'exact' })
-        .eq('job_type', 'legacy_billing');
-
-      setJobCounts({
-        active: activeJobsData?.length || 0,
-        planned: planningData?.length || 0,
-        legacy: legacyData?.length || 0
-      });
-    } catch (error) {
-      console.error('Error loading job counts:', error);
-    }
+    // Use counts from props
+    setJobCounts({
+      active: activeJobs.length,
+      planned: planningJobs.length,
+      legacy: legacyJobs.length
+    });
   };
 
-  const loadJobs = async () => {
+const loadJobs = async () => {
     try {
       setLoading(true);
       
       if (activeTab === 'active') {
-        // Load ALL active jobs (no filter on job names)
-        const { data: jobsData, error: jobsError } = await supabase
-          .from('jobs')
-          .select(`
-            *,
-            job_contracts(*),
-            billing_events(*),
-            workflow_stats
-          `)
-          .eq('job_type', 'standard')
-          .order('created_at', { ascending: false });
-
-        if (jobsError) throw jobsError;
-        setJobs(jobsData || []);
-        // Update count after loading
-        setJobCounts(prev => ({ ...prev, active: jobsData?.length || 0 }));
+        // Use cached activeJobs from props
+        setJobs(activeJobs);
+        setJobCounts(prev => ({ ...prev, active: activeJobs.length }));
       } else if (activeTab === 'planned') {
-        // Load planning jobs
-        const { data: planningData, error: planningError } = await supabase
-          .from('planning_jobs')
-          .select('*')
-          .or('is_archived.eq.false,is_archived.is.null');
-
-        if (planningError) throw planningError;
-        setPlanningJobs(planningData || []);
-        // Update count after loading
-        setJobCounts(prev => ({ ...prev, planned: planningData?.length || 0 }));
+        // Use cached planningJobs from props
+        setPlanningJobs(planningJobs);
+        setJobCounts(prev => ({ ...prev, planned: planningJobs.length }));
       } else if (activeTab === 'legacy') {
-        // Load legacy billing-only jobs
-        const { data: legacyData, error: legacyError } = await supabase
-          .from('jobs')
-          .select(`
-            *,
-            job_contracts(*),
-            billing_events(*)
-          `)
-          .eq('job_type', 'legacy_billing');
-
-        if (legacyError) throw legacyError;
-        setLegacyJobs(legacyData || []);
-        // Update count after loading
-        setJobCounts(prev => ({ ...prev, legacy: legacyData?.length || 0 }));
+        // Use cached legacyJobs from props
+        setLegacyJobs(legacyJobs);
+        setJobCounts(prev => ({ ...prev, legacy: legacyJobs.length }));
       }
     } catch (error) {
       console.error('Error loading jobs:', error);
@@ -1088,8 +797,7 @@ Thank you for your immediate attention to this matter.`;
         secondYearAppealsPercentage: 0.02,
         thirdYearAppealsPercentage: 0.00
       });
-      loadJobs();
-      calculateGlobalMetrics();
+      if (onRefresh) onRefresh();
     } catch (error) {
       console.error('Error setting up contract:', error);
     }
@@ -1271,13 +979,11 @@ Thank you for your immediate attention to this matter.`;
         overrideAmount: '',
         billingType: ''
       });
-      await loadJobs()
-      calculateGlobalMetrics();
+      if (onRefresh) onRefresh();
     } catch (error) {
       console.error('Error adding billing event:', error);
     }
   };
-
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -1306,6 +1012,11 @@ Thank you for your immediate attention to this matter.`;
         .eq('id', editingEvent.id);
 
       if (updateError) throw updateError;
+
+      // Call the cache update for status changes
+      if (onDataUpdate) {
+        onDataUpdate('billing_event_status', editingEvent.id, { status: editingEvent.status });
+      }
 
       // Get all billing events for this job ordered by date
       const { data: jobData } = await supabase
@@ -1350,8 +1061,7 @@ Thank you for your immediate attention to this matter.`;
 
       setShowEditBilling(false);
       setEditingEvent(null);
-      loadJobs();
-      calculateGlobalMetrics();
+      if (onRefresh) onRefresh();
     } catch (error) {
       console.error('Error updating billing event:', error);
       alert('Error updating billing event: ' + error.message);
@@ -1366,8 +1076,7 @@ Thank you for your immediate attention to this matter.`;
         .eq('id', planningJobId);
 
       if (error) throw error;
-      loadJobs();
-      calculateGlobalMetrics();  // ADD THIS LINE
+      if (onRefresh) onRefresh();
     } catch (error) {
       console.error('Error updating planned contract:', error);
     }
@@ -1503,8 +1212,7 @@ Thank you for your immediate attention to this matter.`;
 
       alert(`Successfully rolled over "${planningJob.job_name || planningJob.municipality}" to active jobs!`);
       setActiveTab('active');
-      loadJobs();
-      loadJobCounts(); // Refresh counts after rollover
+      if (onRefresh) onRefresh();
     } catch (error) {
       console.error('Error rolling over planning job:', error);
       alert('Error rolling over job: ' + error.message);
@@ -1554,8 +1262,7 @@ Thank you for your immediate attention to this matter.`;
       setShowEditBilling(false);      
       setShowEditBilling(false);
       setEditingEvent(null);
-      loadJobs();
-      calculateGlobalMetrics();
+      if (onRefresh) onRefresh();
     } catch (error) {
       console.error('Error deleting billing event:', error);
     }
@@ -1652,8 +1359,7 @@ Thank you for your immediate attention to this matter.`;
         thirdYearAppealsPercentage: 0.00
       });
       setActiveTab('legacy');
-      loadJobs();
-      loadJobCounts(); // Refresh counts after creating legacy job
+      if (onRefresh) onRefresh();
     } catch (error) {
       console.error('Error creating legacy job:', error);
     }
@@ -1754,8 +1460,7 @@ Thank you for your immediate attention to this matter.`;
         alert(`Successfully imported ${expenseData.length} expense entries`);
         setShowExpenseImport(false);
         setExpenseFile(null);
-        loadExpenses(); // Reload the expenses
-        calculateGlobalMetrics(); // Update metrics
+        if (onRefresh) onRefresh();
       } else {
         alert('No expense data found in the file');
       }
@@ -1787,26 +1492,12 @@ Thank you for your immediate attention to this matter.`;
       <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-6 mb-6">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold text-gray-800">Business Overview</h2>
-          <div className="flex space-x-3">
-            <button
-              onClick={() => {
-                calculateGlobalMetrics();
-                if (activeTab === 'distributions') {
-                  calculateDistributionMetrics();
-                }
-              }}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium"
-              title="Refresh metrics"
-            >
-              🔄 Refresh
-            </button>
-            <button
-              onClick={loadAllOpenInvoices}
-              className="px-4 py-2 bg-gray-800 text-white rounded-md hover:bg-gray-900 text-sm font-bold shadow-md ring-2 ring-gray-600 ring-offset-2"
-            >
-              View All Open Invoices ({formatCurrency(globalMetrics.totalOpen)})
-            </button>
-          </div>
+          <button
+            onClick={loadAllOpenInvoices}
+            className="px-4 py-2 bg-gray-800 text-white rounded-md hover:bg-gray-900 text-sm font-bold shadow-md ring-2 ring-gray-600 ring-offset-2"
+          >
+            View All Open Invoices ({formatCurrency(globalMetrics.totalOpen)})
+          </button>
         </div>
         
         {/* Row 1: Contract & Revenue Status */}
@@ -2216,7 +1907,7 @@ Thank you for your immediate attention to this matter.`;
       {/* Planned Jobs Tab */}
       {activeTab === 'planned' && (
         <div className="space-y-6">
-          {planningJobs.filter(job => !job.is_archived).length === 0 ? (
+          {planningJobsState.filter(job => !job.is_archived).length === 0 ? (
             <div className="text-center py-12 bg-gray-50 rounded-lg">
               <p className="text-gray-600">No planned jobs found. Create them in the Admin Jobs section.</p>
             </div>
@@ -2243,7 +1934,7 @@ Thank you for your immediate attention to this matter.`;
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {planningJobs
+                  {planningJobsState
                     .filter(job => !job.is_archived)
                     .sort((a, b) => {
                       // First priority: Jobs without contract amounts go to top
@@ -2329,12 +2020,12 @@ Thank you for your immediate attention to this matter.`;
                 </button>
               </div>
 
-              {legacyJobs.length === 0 ? (
+              {legacyJobsState.length === 0 ? (
                 <div className="text-center py-12 bg-gray-50 rounded-lg">
                   <p className="text-gray-600">No legacy billing jobs found. Click "Add Legacy Job" to create one.</p>
                 </div>
               ) : (
-                legacyJobs.map(job => {
+                legacyJobsState.map(job => {
                   const totals = calculateBillingTotals(job);
                   const needsContractSetup = !job.job_contracts || job.job_contracts.length === 0;
                   
@@ -2392,10 +2083,8 @@ Thank you for your immediate attention to this matter.`;
                                   
                                   if (error) throw error;
                                   
-                  alert('Legacy job deleted successfully');
-                  loadJobs();
-                  loadJobCounts(); // Refresh counts after deletion
-                  calculateGlobalMetrics();    
+                                  alert('Legacy job deleted successfully');
+                                  if (onRefresh) onRefresh();   
                                 } catch (error) {
                                   console.error('Error deleting legacy job:', error);
                                   alert('Error deleting job: ' + error.message);
@@ -2564,7 +2253,7 @@ Thank you for your immediate attention to this matter.`;
                 </button>
               </div>
 
-              {expenses.length === 0 ? (
+              {expensesState.length === 0 ? (
                 <div className="text-center py-12 bg-gray-50 rounded-lg">
                   <p className="text-gray-600 mb-4">No expense data found.</p>
                   <p className="text-sm text-gray-500">Click "Import Excel" to upload your expense file.</p>
@@ -2611,7 +2300,7 @@ Thank you for your immediate attention to this matter.`;
                           const expensesByCategory = {};
                           const categoryTotals = {};
                           
-                          expenses.forEach(expense => {
+                          expensesState.forEach(expense => {
                             if (!expensesByCategory[expense.category]) {
                               expensesByCategory[expense.category] = new Array(12).fill(0);
                               categoryTotals[expense.category] = 0;
@@ -2644,7 +2333,7 @@ Thank you for your immediate attention to this matter.`;
                           </td>
                           {(() => {
                             const monthlyTotals = new Array(12).fill(0);
-                            expenses.forEach(expense => {
+                            expensesState.forEach(expense => {
                               monthlyTotals[expense.month - 1] += parseFloat(expense.amount);
                             });
                             
@@ -2655,7 +2344,7 @@ Thank you for your immediate attention to this matter.`;
                             ));
                           })()}
                           <td className="px-6 py-4 text-sm text-right text-gray-900 bg-gray-200">
-                            {formatCurrency(expenses.reduce((sum, exp) => sum + parseFloat(exp.amount), 0))}
+                            {formatCurrency(expensesState.reduce((sum, exp) => sum + parseFloat(exp.amount), 0))}
                           </td>
                         </tr>
                         
@@ -2797,8 +2486,7 @@ Thank you for your immediate attention to this matter.`;
                                     
                                     if (error) throw error;
                                     
-                                    loadOfficeReceivables();
-                                    calculateGlobalMetrics();
+                                    if (onRefresh) onRefresh();
                                   } catch (error) {
                                     console.error('Error deleting receivable:', error);
                                     alert('Error deleting receivable');
@@ -2972,7 +2660,7 @@ Thank you for your immediate attention to this matter.`;
                 </p>
               </div>
               <div className="bg-white rounded-lg p-4 shadow-sm">
-                <p className="text-sm text-gray-600">James&Kristine Duda (45%)</p>
+                <p className="text-sm text-gray-600">Kristine Duda (45%)</p>
                 <p className="text-xs text-gray-500 mb-1">Actual Balance / Projected</p>
                 <p className="text-lg font-semibold text-gray-900">
                   ${Math.floor(((globalMetrics.totalPaid + globalMetrics.totalOpen) - globalMetrics.currentExpenses - distributionMetrics.ytdDistributions) * 0.45).toLocaleString()} / 
@@ -2987,20 +2675,20 @@ Thank you for your immediate attention to this matter.`;
                 <h3 className="text-lg font-semibold text-gray-900 p-6 pb-4">{new Date().getFullYear()} Distribution Summary</h3>
                 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 p-6">
-                  {['Thomas Davis', 'Brian Schneider', 'James&Kristine Duda'].map(partner => {
+                  {['Thomas Davis', 'Brian Schneider', 'Kristine Duda'].map(partner => {
                     const ownership = partner === 'Thomas Davis' ? 0.10 : 0.45;
-                    const partnerDistributions = distributions.filter(d => 
+                    const partnerDistributions = distributionsState.filter(d => 
                       d.shareholder_name === partner && d.status === 'paid'
                     );
                     const totalTaken = partnerDistributions.reduce((sum, d) => sum + d.amount, 0);
                     
                     // Calculate the highest distribution level to ensure tax matching
-                    const allPartners = ['Thomas Davis', 'Brian Schneider', 'James&Kristine Duda'];
+                    const allPartners = ['Thomas Davis', 'Brian Schneider', 'Kristine Duda'];
                     let maxImpliedTotal = 0;
                     
                     allPartners.forEach(p => {
                       const pOwnership = p === 'Thomas Davis' ? 0.10 : 0.45;
-                      const pDistributions = distributions.filter(d => d.shareholder_name === p && d.status === 'paid');
+                      const pDistributions = distributionsState.filter(d => d.shareholder_name === p && d.status === 'paid');
                       const pTotal = pDistributions.reduce((sum, d) => sum + d.amount, 0);
                       const impliedTotal = pTotal / pOwnership;
                       if (impliedTotal > maxImpliedTotal) {
@@ -3077,12 +2765,12 @@ Thank you for your immediate attention to this matter.`;
                       <p className="text-2xl font-bold text-gray-900">
                         {formatCurrency((() => {
                           // Calculate the highest distribution level
-                          const allPartners = ['Thomas Davis', 'Brian Schneider', 'James&Kristine Duda'];
+                          const allPartners = ['Thomas Davis', 'Brian Schneider', 'Kristine Duda'];
                           let maxImpliedTotal = 0;
                           
                           allPartners.forEach(p => {
                             const pOwnership = p === 'Thomas Davis' ? 0.10 : 0.45;
-                            const pDistributions = distributions.filter(d => d.shareholder_name === p && d.status === 'paid');
+                            const pDistributions = distributionsState.filter(d => d.shareholder_name === p && d.status === 'paid');
                             const pTotal = pDistributions.reduce((sum, d) => sum + d.amount, 0);
                             const impliedTotal = pTotal / pOwnership;
                             if (impliedTotal > maxImpliedTotal) {
@@ -3838,9 +3526,9 @@ Thank you for your immediate attention to this matter.`;
 
       {/* Open Invoices Modal */}
       {showOpenInvoices && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="flex justify-between items-center mb-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-8">
+          <div className="bg-white rounded-lg p-6 w-full max-w-4xl" style={{ height: '550px' }}>
+            <div className="flex justify-between items-center mb-4 flex-shrink-0">
               <h3 className="text-xl font-semibold">All Open Invoices</h3>
               <div className="flex items-center space-x-4">
                 <span className="text-lg font-medium text-orange-600">
@@ -3857,7 +3545,7 @@ Thank you for your immediate attention to this matter.`;
               </div>
             </div>
             
-            <div className="flex-1 overflow-auto">
+            <div style={{ height: 'calc(100% - 80px)', overflowY: 'auto', overflowX: 'hidden' }}>
               {allOpenInvoices.length === 0 ? (
                 <div className="text-center py-12">
                   <p className="text-gray-600">No open invoices found.</p>
@@ -3911,7 +3599,7 @@ Thank you for your immediate attention to this matter.`;
                                   setReminderMessage(generateReminderMessage(invoice, daysOld));
                                   setShowReminderModal(true);
                                 }}
-                                className="px-2 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600"
+                                className="px-2 py-1 text-xs border border-blue-500 text-blue-600 rounded hover:bg-blue-50 bg-transparent"
                               >
                                 Send Reminder
                               </button>
@@ -4056,8 +3744,7 @@ Thank you for your immediate attention to this matter.`;
                       invoiceNumber: '',
                       amount: ''
                     });
-                    loadOfficeReceivables();
-                    calculateGlobalMetrics();
+                    if (onRefresh) onRefresh();
                   } catch (error) {
                     console.error('Error saving receivable:', error);
                     alert('Error saving receivable');
@@ -4090,7 +3777,7 @@ Thank you for your immediate attention to this matter.`;
                   <option value="">Select shareholder...</option>
                   <option value="Thomas Davis">Thomas Davis (10%)</option>
                   <option value="Brian Schneider">Brian Schneider (45%)</option>
-                  <option value="James&Kristine Duda">James&Kristine Duda (45%)</option>
+                  <option value="Kristine Duda">Kristine Duda (45%)</option>
                 </select>
               </div>
 
@@ -4190,8 +3877,7 @@ Thank you for your immediate attention to this matter.`;
                       date: new Date().toISOString().split('T')[0],
                       notes: ''
                     });
-                    loadDistributions();
-                    calculateGlobalMetrics();
+                    if (onRefresh) onRefresh();
                   } catch (error) {
                     console.error('Error recording distribution:', error);
                     alert('Error recording distribution');
