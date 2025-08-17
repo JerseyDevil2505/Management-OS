@@ -3368,10 +3368,10 @@ const analyzeImportFile = async (file) => {
                         if (editingZoning[zone]) {
                           zoningRequirements[zone] = {
                             description: editingZoning[zone].description || '',
-                            min_size: parseInt(editingZoning[zone].minSize) || null,
-                            min_frontage: parseInt(editingZoning[zone].minFrontage) || null,
-                            min_depth: parseInt(editingZoning[zone].minDepth) || null,
-                            depth_table: editingZoning[zone].depthTable || ''
+                            min_size: parseInt(editingZoning[zone].min_size) || null,
+                            min_frontage: parseInt(editingZoning[zone].min_frontage) || null,
+                            min_depth: parseInt(editingZoning[zone].min_depth) || null,
+                            depth_table: editingZoning[zone].depth_table || ''
                           };
                         }
                       });
@@ -3519,10 +3519,10 @@ const analyzeImportFile = async (file) => {
                               <div className="flex items-center gap-1">
                                 <input
                                   type="number"
-                                  value={zoneData.minSize || ''}
+                                  value={zoneData.min_size || ''}
                                   onChange={(e) => setEditingZoning(prev => ({
                                     ...prev,
-                                    [zone]: { ...prev[zone], minSize: e.target.value }
+                                    [zone]: { ...prev[zone], min_size: e.target.value }
                                   }))}
                                   placeholder={zoneData.minSizeUnit === 'AC' ? "e.g., 2.5" : "e.g., 7500"}
                                   step={zoneData.minSizeUnit === 'AC' ? "0.01" : "1"}
@@ -3544,10 +3544,10 @@ const analyzeImportFile = async (file) => {
                             <td className="px-4 py-3">
                               <input
                                 type="number"
-                                value={zoneData.minFrontage || ''}
+                                value={zoneData.min_frontage || ''}
                                 onChange={(e) => setEditingZoning(prev => ({
                                   ...prev,
-                                  [zone]: { ...prev[zone], minFrontage: e.target.value }
+                                  [zone]: { ...prev[zone], min_frontage: e.target.value }
                                 }))}
                                 placeholder="e.g., 75"
                                 className="w-20 px-2 py-1 border border-gray-300 rounded text-sm text-center"
@@ -3556,10 +3556,10 @@ const analyzeImportFile = async (file) => {
                             <td className="px-4 py-3">
                               <input
                                 type="number"
-                                value={zoneData.minDepth || ''}
+                                value={zoneData.min_depth || ''}
                                 onChange={(e) => setEditingZoning(prev => ({
                                   ...prev,
-                                  [zone]: { ...prev[zone], minDepth: e.target.value }
+                                  [zone]: { ...prev[zone], min_depth: e.target.value }
                                 }))}
                                 placeholder="e.g., 100"
                                 className="w-20 px-2 py-1 border border-gray-300 rounded text-sm text-center"
@@ -3567,10 +3567,10 @@ const analyzeImportFile = async (file) => {
                             </td>
                             <td className="px-4 py-3">
                               <select
-                                value={zoneData.depthTable || ''}
+                                value={zoneData.depth_table || ''}
                                 onChange={(e) => setEditingZoning(prev => ({
                                   ...prev,
-                                  [zone]: { ...prev[zone], depthTable: e.target.value }
+                                  [zone]: { ...prev[zone], depth_table: e.target.value }
                                 }))}
                                 className="w-32 px-2 py-1 border border-gray-300 rounded text-sm"
                               >
