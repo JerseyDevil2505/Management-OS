@@ -27,6 +27,12 @@ const PreValuationTab = ({
   vendorType,
   onDataChange 
 }) => {
+    console.log('PreValuationTab MOUNTED/UPDATED:', {
+    jobId: jobData?.id,
+    vendorType,
+    hasMarketLandData: !!marketLandData,
+    marketLandDataKeys: marketLandData ? Object.keys(marketLandData).length : 0
+  });
   // ==================== STATE MANAGEMENT ====================
   
   // Normalization Configuration State (matching HTML UI)
