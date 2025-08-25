@@ -557,7 +557,7 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       
       setNormalizationStats(newStats);
       
-      // Save configuration and results to database
+      // Save configuration to database
       const config = {
         equalizationRatio,
         outlierThreshold,
@@ -569,11 +569,14 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       };
       
       await worksheetService.saveNormalizationConfig(jobData.id, config);
+      
+      // IMPORTANT: Save the normalized sales immediately to persist them
       await worksheetService.saveTimeNormalizedSales(jobData.id, normalized, newStats);
 
       setLastTimeNormalizationRun(new Date().toISOString());
 
       console.log(`✅ Time normalization complete - preserved ${Object.keys(existingDecisions).length} keep/reject decisions`);
+      console.log('✅ Normalized sales saved to database for persistence');
     } catch (error) {
       console.error('Error during time normalization:', error);
       alert('Error during time normalization. Please check the console.');
@@ -1007,7 +1010,15 @@ const handleSalesDecision = async (saleId, decision) => {
   };
   setNormalizationStats(newStats);
 
-  // Only do immediate database operations for REJECTIONS
+  // Save the updated sales list to market_land_valuation to persist decisions
+  try {
+    await worksheetService.saveTimeNormalizedSales(jobData.id, updatedSales, newStats);
+    console.log(`💾 Saved decision (${decision}) for property ${saleId} to database`);
+  } catch (error) {
+    console.error('Error persisting decision to market_land_valuation:', error);
+  }
+
+  // Handle immediate database operations for REJECTIONS
   if (decision === 'reject') {
     try {
       const { error } = await supabase
@@ -1021,16 +1032,15 @@ const handleSalesDecision = async (saleId, decision) => {
       if (error) {
         console.error('Error removing normalized values:', error);
       } else {
-        console.log(`🗑️ Immediately removed normalized values for rejected property ${saleId}`);
+        console.log(`🗑️ Removed normalized values for rejected property ${saleId}`);
       }
     } catch (error) {
-      console.error('Error updating database:', error);
+      console.error('Error updating property_records:', error);
     }
   }
-  // KEEPS wait for batch save - no immediate database update
   
-  // Track unsaved changes only for keeps that need saving
-  if (decision === 'keep' && onDataChange) {
+  // Track unsaved changes
+  if (onDataChange) {
     onDataChange();
   }
 };
