@@ -486,8 +486,8 @@ const JobContainer = ({
         source: null
       }),
       onUpdateWorkflowStats: handleAnalyticsUpdate,  // Pass the analytics update handler
-      currentWorkflowStats: workflowStats  // Pass current workflow stats
-      onUpdateJobCache: onUpdateJobCache,
+      currentWorkflowStats: workflowStats,  // Pass current workflow stats
+      onUpdateJobCache: onUpdateJobCache
     };
 
     // 🔧 CRITICAL: Pass App.js state management to ProductionTracker
