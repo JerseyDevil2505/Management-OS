@@ -26,7 +26,7 @@ import LandValuationTab from './market-tabs/LandValuationTab';
 import CostValuationTab from './market-tabs/CostValuationTab';
 import AttributeCardsTab from './market-tabs/AttributeCardsTab';
 
-const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData }) => {
+const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData, onUpdateJobCache }) => {
   // ==================== STATE MANAGEMENT ====================
   const [activeTab, setActiveTab] = useState('data-quality');
   const [isSaving, setIsSaving] = useState(false);
@@ -86,29 +86,35 @@ const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData }) =>
   ];
 
   // ==================== SAVE FUNCTIONALITY ====================
-  const handleSave = async () => {
-    setIsSaving(true);
-    try {
-      // TODO: Implement save logic for current tab
-      // This will vary based on which tab is active
-      
-      // Example structure:
-      // if (activeTab === 'pre-valuation') {
-      //   await worksheetService.saveWorksheetData(jobData.id, worksheetData);
-      // } else if (activeTab === 'land-valuation') {
-      //   await landService.saveLandData(jobData.id, landData);
-      // }
-      
-      setLastSaved(new Date());
-      setUnsavedChanges(false);
-      console.log('Analysis data saved successfully');
-    } catch (error) {
-      console.error('Error saving analysis:', error);
-      alert('Failed to save data. Please try again.');
-    } finally {
-      setIsSaving(false);
+const handleSave = async () => {
+  setIsSaving(true);
+  try {
+    // TODO: Implement save logic for current tab
+    // This will vary based on which tab is active
+    
+    // Example structure:
+    // if (activeTab === 'pre-valuation') {
+    //   await worksheetService.saveWorksheetData(jobData.id, worksheetData);
+    // } else if (activeTab === 'land-valuation') {
+    //   await landService.saveLandData(jobData.id, landData);
+    // }
+    
+    // CRITICAL: Clear the job cache after ANY save to force fresh data on next load
+    if (props.onUpdateJobCache && jobData?.id) {
+      console.log('🗑️ Clearing job cache after market data save');
+      props.onUpdateJobCache(jobData.id, null);
     }
-  };
+    
+    setLastSaved(new Date());
+    setUnsavedChanges(false);
+    console.log('Analysis data saved successfully');
+  } catch (error) {
+    console.error('Error saving analysis:', error);
+    alert('Failed to save data. Please try again.');
+  } finally {
+    setIsSaving(false);
+  }
+};
 
   // Auto-save reminder
   useEffect(() => {
