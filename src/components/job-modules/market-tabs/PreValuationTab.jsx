@@ -281,48 +281,37 @@ useEffect(() => {
 
 // ==================== USE SAVED NORMALIZATION DATA FROM PROPS ====================
 useEffect(() => {
-    console.log('🔍 DEBUG: marketLandData received:', {
-    hasMarketLandData: !!marketLandData,
-    keys: marketLandData ? Object.keys(marketLandData) : [],
-    hasTimeNormalizedSales: !!(marketLandData?.time_normalized_sales),
-    timeNormalizedLength: marketLandData?.time_normalized_sales?.length || 0,
-    normalizationConfig: marketLandData?.normalization_config,
-    normalizationStats: marketLandData?.normalization_stats
-  });
   if (!marketLandData) return;
   
-  // Restore configuration from marketLandData prop
+  console.log('🔄 Restoring data from marketLandData...');
+  
+  // Always restore everything when we have marketLandData
   if (marketLandData.normalization_config) {
     const config = marketLandData.normalization_config;
-    if (config.equalizationRatio !== undefined) setEqualizationRatio(config.equalizationRatio);
-    if (config.outlierThreshold !== undefined) setOutlierThreshold(config.outlierThreshold);
-    if (config.normalizeToYear !== undefined) setNormalizeToYear(config.normalizeToYear);
-    if (config.salesFromYear !== undefined) setSalesFromYear(config.salesFromYear);
-    if (config.minSalePrice !== undefined) setMinSalePrice(config.minSalePrice);
-    if (config.selectedCounty !== undefined) setSelectedCounty(config.selectedCounty);
-    if (config.lastTimeNormalizationRun) setLastTimeNormalizationRun(config.lastTimeNormalizationRun);
-    if (config.lastSizeNormalizationRun) setLastSizeNormalizationRun(config.lastSizeNormalizationRun);
+    setEqualizationRatio(config.equalizationRatio || '');
+    setOutlierThreshold(config.outlierThreshold || '');
+    setNormalizeToYear(config.normalizeToYear || 2025);
+    setSalesFromYear(config.salesFromYear || 2012);
+    setMinSalePrice(config.minSalePrice || 100);
+    setSelectedCounty(config.selectedCounty || 'Bergen');
+    setLastTimeNormalizationRun(config.lastTimeNormalizationRun || null);
+    setLastSizeNormalizationRun(config.lastSizeNormalizationRun || null);
   }
   
-  // Restore normalized sales from marketLandData
   if (marketLandData.time_normalized_sales && marketLandData.time_normalized_sales.length > 0) {
+    console.log(`✅ Restoring ${marketLandData.time_normalized_sales.length} normalized sales`);
     setTimeNormalizedSales(marketLandData.time_normalized_sales);
   }
   
-  // Restore stats from marketLandData
   if (marketLandData.normalization_stats) {
+    console.log('📊 Restoring normalization stats:', marketLandData.normalization_stats);
     setNormalizationStats(marketLandData.normalization_stats);
   }
-
-  // Restore zoning requirements from marketLandData
-  if (marketLandData?.zoning_config) {
+  
+  if (marketLandData.zoning_config) {
     setEditingZoning(marketLandData.zoning_config);
-    console.log('✅ Restored zoning configuration from marketLandData');
   }
-  if (marketLandData.normalization_config || marketLandData.time_normalized_sales) {
-    console.log('✅ Restored saved normalization data from props');
-  }
-}, [marketLandData]);
+}); // NO dependency array - runs on every render
 
   // ==================== WORKSHEET INITIALIZATION ====================
   useEffect(() => {
