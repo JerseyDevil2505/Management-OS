@@ -100,9 +100,9 @@ const handleSave = async () => {
     // }
     
     // CRITICAL: Clear the job cache after ANY save to force fresh data on next load
-    if (props.onUpdateJobCache && jobData?.id) {
+    if (onUpdateJobCache && jobData?.id) {
       console.log('🗑️ Clearing job cache after market data save');
-      props.onUpdateJobCache(jobData.id, null);
+      onUpdateJobCache(jobData.id, null);
     }
     
     setLastSaved(new Date());
