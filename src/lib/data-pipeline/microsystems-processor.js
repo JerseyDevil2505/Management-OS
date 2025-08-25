@@ -331,7 +331,6 @@ export class MicrosystemsProcessor {
       property_lot: rawRecord['Lot'],
       property_qualifier: rawRecord['Qual'],
       property_addl_card: rawRecord['Bldg'],
-      property_addl_lot: null, // Not available in Microsystems
       property_location: rawRecord['Location'], // Direct mapping to first Location
       property_composite_key: `${yearCreated}${ccddCode}-${rawRecord['Block']}-${rawRecord['Lot']}_${(rawRecord['Qual'] || '').trim() || 'NONE'}-${(rawRecord['Bldg'] || '').trim() || 'NONE'}-${(rawRecord['Location'] || '').trim() || 'NONE'}`,
       property_cama_class: null, //Not available in Microsystems
@@ -393,36 +392,28 @@ export class MicrosystemsProcessor {
       asset_zoning: null, // User defined, created in module
       
       // Analysis and calculation fields
-      analysis_code: null, // User defined, created in module
-      analysis_version: 1,
-      condition_rating: null, // User defined, created in module
       location_analysis: null, // User defined, created in module
       new_vcs: null, // User defined, created in module
       total_baths_calculated: this.calculateTotalBaths(rawRecord),
       
       // Processing metadata
       processed_at: new Date().toISOString(),
-      processing_notes: null,
       validation_status: 'imported',
       is_new_since_last_upload: true,
-      is_retroactive_credit: false,
       
       // File tracking with version info
       source_file_name: versionInfo.source_file_name || null,
       source_file_version_id: versionInfo.source_file_version_id || null,
       source_file_uploaded_at: versionInfo.source_file_uploaded_at || new Date().toISOString(),
-      code_file_name: versionInfo.code_file_name || null,
       code_file_updated_at: versionInfo.code_file_updated_at || new Date().toISOString(),
       file_version: versionInfo.file_version || 1,
       upload_date: new Date().toISOString(),
       
       // Payroll and project tracking
-      payroll_period_start: null,
       project_start_date: null,
       
       // System metadata
       vendor_source: 'Microsystems',
-      import_session_id: versionInfo.import_session_id || null,
       created_by: '5df85ca3-7a54-4798-a665-c31da8d9caad',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
