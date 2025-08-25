@@ -275,6 +275,14 @@ useEffect(() => {
 
 // ==================== USE SAVED NORMALIZATION DATA FROM PROPS ====================
 useEffect(() => {
+    console.log('🔍 DEBUG: marketLandData received:', {
+    hasMarketLandData: !!marketLandData,
+    keys: marketLandData ? Object.keys(marketLandData) : [],
+    hasTimeNormalizedSales: !!(marketLandData?.time_normalized_sales),
+    timeNormalizedLength: marketLandData?.time_normalized_sales?.length || 0,
+    normalizationConfig: marketLandData?.normalization_config,
+    normalizationStats: marketLandData?.normalization_stats
+  });
   if (!marketLandData) return;
   
   // Restore configuration from marketLandData prop
