@@ -1294,6 +1294,29 @@ useEffect(() => {
     };
   }, []); // Only run once on mount
 
+   // ==========================================
+  // URL-BASED JOB RESTORATION (FIX FOR F5)
+  // ==========================================
+  useEffect(() => {
+    // Only run if we have jobs loaded and no job currently selected
+    if (masterCache.jobs && masterCache.jobs.length > 0 && !selectedJob) {
+      const path = window.location.pathname;
+      const parts = path.split('/');
+      
+      // Check if URL indicates a specific job
+      if (parts[1] === 'job' && parts[2]) {
+        const jobId = parts[2];
+        const job = masterCache.jobs.find(j => j.id === jobId);
+        
+        if (job) {
+          console.log('📍 Restoring job from URL after cache/data load:', jobId);
+          setSelectedJob(job);
+          setActiveView('job-modules');
+        }
+      }
+    }
+  }, [masterCache.jobs]); // Re-run when jobs are loaded/updated
+
   // ==========================================
   // VISIBILITY CHANGE HANDLER
   // ==========================================
