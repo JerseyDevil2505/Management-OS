@@ -555,6 +555,9 @@ const AdminJobManagement = ({
         }
       }
       
+      // Clear cache after all database operations
+      await supabase.rpc('clear_cache');
+      
       // Get the real count after all updates
       const { count: finalMatchedCount } = await supabase
         .from('property_records')
@@ -746,7 +749,7 @@ const AdminJobManagement = ({
         }
       }
 
-      // Database integration
+// Database integration
       const { data, error } = await supabase
         .from('county_hpi_data')
         .delete()
@@ -761,6 +764,9 @@ const AdminJobManagement = ({
       if (insertError) {
         throw new Error('Database insert failed: ' + insertError.message);
       }
+      
+      // Clear cache after database operations
+      await supabase.rpc('clear_cache');
       
       // Update local state
       setCountyHpiData(prev => ({
@@ -1079,6 +1085,9 @@ const AdminJobManagement = ({
           
           await jobService.update(createdJob.id, updateData);
           
+          // Clear cache after all database operations
+          await supabase.rpc('clear_cache');
+          
           updateProcessingStatus('Refreshing job list...', 95);
           
           // Only refresh jobs list if processing was successful
@@ -1141,6 +1150,9 @@ const AdminJobManagement = ({
 
       await planningJobService.create(planningData);
       
+      // Clear cache after database operation
+      await supabase.rpc('clear_cache');
+      
       const updatedPlanningJobs = await planningJobService.getAll();
       setPlanningJobs(updatedPlanningJobs);
       
@@ -1191,6 +1203,9 @@ const AdminJobManagement = ({
           .insert(assignments);
       }
       
+      // Clear cache after all database operations
+      await supabase.rpc('clear_cache');
+      
       // Refresh with assigned property counts
       await refreshJobsWithAssignedCounts();
       
@@ -1216,6 +1231,9 @@ const AdminJobManagement = ({
 
       await planningJobService.update(editingPlanning.id, updateData);
       
+      // Clear cache after database operation
+      await supabase.rpc('clear_cache');
+      
       const updatedPlanningJobs = await planningJobService.getAll();
       setPlanningJobs(updatedPlanningJobs);
       
@@ -1230,6 +1248,10 @@ const AdminJobManagement = ({
   const deleteJob = async (job) => {
     try {
       await jobService.delete(job.id);
+      
+      // Clear cache after database operation
+      await supabase.rpc('clear_cache');
+      
       await refreshJobsWithAssignedCounts();
       setShowDeleteConfirm(null);
       addNotification('Job deleted successfully', 'success');
