@@ -527,8 +527,8 @@ getTotalLotSize: function(property, vendorType, codeDefinitions) {
         }
       }
       
-      if (vcsData?.MAP?.[8]?.MAP) {
-        const urcMap = vcsData.MAP[8].MAP;
+      if (vcsData?.MAP?.["8"]?.MAP) {
+        const urcMap = vcsData.MAP["8"].MAP;
         
         for (let i = 1; i <= 6; i++) {
           const landCode = property.raw_data[`LANDUR_${i}`];
@@ -536,33 +536,28 @@ getTotalLotSize: function(property, vendorType, codeDefinitions) {
           
           // BRT stores single digit codes without leading zero, pad them
           const paddedCode = landCode ? String(landCode).padStart(2, '0') : null;
-
-         // DEBUG - Remove after testing
-        if (landCode) {
-          console.log(`LANDUR_${i}: raw="${landCode}", padded="${paddedCode}", units=${landUnits}`);
-          if (paddedCode && urcMap[paddedCode]) {
-            console.log(`  Found in map:`, urcMap[paddedCode]?.MAP?.[1]?.DATA?.VALUE);
-          } else {
-            console.log(`  NOT found in urcMap`);
-          }    
-        }      
           
-          if (paddedCode && landUnits > 0 && urcMap[paddedCode]?.MAP?.[1]?.DATA?.VALUE) {
-            const description = urcMap[paddedCode].MAP[1].DATA.VALUE.toUpperCase();
-            
-            if ((description.includes('ACRE') || description.includes('AC')) && 
-                !description.includes('SITE VALUE')) {
-              totalAcres += landUnits;
-            } else if ((description.includes('SF') || description.includes('SQUARE')) && 
-                       !description.includes('SITE VALUE')) {
-              totalSf += landUnits;
+          if (paddedCode && landUnits > 0) {
+            // Find the matching code entry (they're numbered "1", "2", "3" etc)
+            for (const key in urcMap) {
+              if (urcMap[key].KEY === paddedCode && urcMap[key].MAP?.["1"]?.DATA?.VALUE) {
+                const description = urcMap[key].MAP["1"].DATA.VALUE.toUpperCase();
+                
+                if ((description.includes('ACRE') || description.includes('AC')) && 
+                    !description.includes('SITE VALUE')) {
+                  totalAcres += landUnits;
+                } else if ((description.includes('SF') || description.includes('SQUARE')) && 
+                           !description.includes('SITE VALUE')) {
+                  totalSf += landUnits;
+                }
+                break;
+              }
             }
           }
         }
       }
     }
   }
-  
   // Convert all to acres and return
   const finalAcres = totalAcres + (totalSf / 43560);
   return finalAcres > 0 ? finalAcres : null;
