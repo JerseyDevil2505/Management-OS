@@ -341,6 +341,9 @@ useEffect(() => {
       
       if (error) throw error;
       
+      // Clear cache after database operation
+      await supabase.rpc('clear_cache');
+      
       // Update local state
       setChecklistItems(items => items.map(item => 
         item.id === itemId ? { 
@@ -379,6 +382,9 @@ useEffect(() => {
         });
       
       if (error) throw error;
+      
+      // Clear cache after database operation
+      await supabase.rpc('clear_cache');
       
       // Update local state
       setChecklistItems(items => items.map(item => 
@@ -456,6 +462,9 @@ useEffect(() => {
               });
           }
           
+          // Clear cache after all database operations
+          await supabase.rpc('clear_cache');
+          
           console.log(`✅ All uploads complete for ${itemText}`);
           
           // Reload to show all files
@@ -508,6 +517,9 @@ useEffect(() => {
               onConflict: 'job_id,item_id'
             });
           
+          // Clear cache after database operation
+          await supabase.rpc('clear_cache');
+          
           // Update local state
           setChecklistItems(items => items.map(item => 
             item.id === itemId ? { ...item, file_attachment_path: filePath } : item
@@ -544,6 +556,9 @@ useEffect(() => {
           .eq('id', jobData.id);
       }
       
+      // Clear cache after database operation
+      await supabase.rpc('clear_cache');
+      
       // Update local state
       setHasAssessorNameChanges(false);
       
@@ -567,6 +582,9 @@ useEffect(() => {
           .update({ assessor_email: editableAssessorEmail })
           .eq('id', jobData.id);
       }
+      
+      // Clear cache after database operation
+      await supabase.rpc('clear_cache');
       
       // Update local state
       setHasAssessorEmailChanges(false);
@@ -1086,6 +1104,8 @@ useEffect(() => {
                       .from('jobs')
                       .update({ project_type: 'revaluation' })
                       .eq('id', jobData.id);
+                    // Clear cache after database operation
+                    await supabase.rpc('clear_cache');
                   }}
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                     checklistType === 'revaluation' 
@@ -1103,6 +1123,8 @@ useEffect(() => {
                       .from('jobs')
                       .update({ project_type: 'reassessment' })
                       .eq('id', jobData.id);
+                    // Clear cache after database operation
+                    await supabase.rpc('clear_cache');
                   }}
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                     checklistType === 'reassessment' 
