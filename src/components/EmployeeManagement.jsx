@@ -849,11 +849,16 @@ const loadEmployees = () => {
       let inactiveCount = 0;
       if (inactiveUpdates.length > 0) {
         await employeeService.bulkUpdate(inactiveUpdates);
+        // Clear cache after marking employees inactive
+        await supabase.rpc('clear_cache');
         inactiveCount = inactiveUpdates.length;
       }
       
       // Save to database using bulk upsert (insert or update)
       const result = await employeeService.bulkUpsert(processedEmployees);
+      
+      // Clear cache after bulk upsert
+      await supabase.rpc('clear_cache');
       
       // Refresh data in App.js
       if (onRefresh) onRefresh();
@@ -908,6 +913,12 @@ const loadEmployees = () => {
         region: updatedData.location,
         initials: updatedData.initials || ''
       };
+
+      // Actually update the employee in database
+      await employeeService.update(employeeId, updateData);
+      
+      // Clear cache after database write
+      await supabase.rpc('clear_cache');
 
       // Refresh data in App.js
       if (onRefresh) onRefresh();
