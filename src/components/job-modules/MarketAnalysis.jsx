@@ -161,7 +161,6 @@ const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData, onUp
                 codeDefinitions={codeDefinitions}
                 availableFields={availableFields}
                 marketLandData={marketLandData}
-                onDataChange={() => setUnsavedChanges(true)}
                 onUpdateJobCache={onUpdateJobCache}
               />
             )}    
@@ -174,7 +173,6 @@ const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData, onUp
                 codeDefinitions={codeDefinitions}
                 marketLandData={marketLandData}
                 hpiData={hpiData}
-                onDataChange={() => setUnsavedChanges(true)}
                 onUpdateJobCache={onUpdateJobCache}
               />
             )}
@@ -187,7 +185,6 @@ const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData, onUp
                 codeDefinitions={codeDefinitions}
                 marketLandData={marketLandData}
                 hpiData={hpiData}
-                onDataChange={() => setUnsavedChanges(true)}
                 onUpdateJobCache={onUpdateJobCache}
               />
             )}      
@@ -199,7 +196,6 @@ const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData, onUp
                 vendorType={vendorType}
                 codeDefinitions={codeDefinitions}
                 marketLandData={marketLandData}
-                onDataChange={() => setUnsavedChanges(true)}
                 onUpdateJobCache={onUpdateJobCache}
               />
             )}
@@ -211,7 +207,6 @@ const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData, onUp
                 vendorType={vendorType}
                 codeDefinitions={codeDefinitions}
                 marketLandData={marketLandData}
-                onDataChange={() => setUnsavedChanges(true)}
                 onUpdateJobCache={onUpdateJobCache}
               />
             )}
@@ -223,7 +218,6 @@ const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData, onUp
                 vendorType={vendorType}
                 codeDefinitions={codeDefinitions}
                 marketLandData={marketLandData}
-                onDataChange={() => setUnsavedChanges(true)}
                 onUpdateJobCache={onUpdateJobCache}
               />
             )}
