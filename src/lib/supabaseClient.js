@@ -536,6 +536,16 @@ getTotalLotSize: function(property, vendorType, codeDefinitions) {
           
           // BRT stores single digit codes without leading zero, pad them
           const paddedCode = landCode ? String(landCode).padStart(2, '0') : null;
+
+         // DEBUG - Remove after testing
+        if (landCode) {
+          console.log(`LANDUR_${i}: raw="${landCode}", padded="${paddedCode}", units=${landUnits}`);
+          if (paddedCode && urcMap[paddedCode]) {
+            console.log(`  Found in map:`, urcMap[paddedCode]?.MAP?.[1]?.DATA?.VALUE);
+          } else {
+            console.log(`  NOT found in urcMap`);
+          }    
+        }      
           
           if (paddedCode && landUnits > 0 && urcMap[paddedCode]?.MAP?.[1]?.DATA?.VALUE) {
             const description = urcMap[paddedCode].MAP[1].DATA.VALUE.toUpperCase();
