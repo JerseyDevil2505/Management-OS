@@ -1335,6 +1335,7 @@ const processSelectedProperties = async () => {
           console.log('🗑️ Clearing cache after processing worksheet properties');
           onUpdateJobCache(jobData.id, null);
         }
+      }
       
       setProcessProgress({ 
         current: toProcess.length, 
