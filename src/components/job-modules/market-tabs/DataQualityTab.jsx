@@ -788,19 +788,42 @@ const generateQCFormPDF = () => {
       }
     }
     
-    // LOT SIZE CHECKS - Use the enhanced getTotalLotSize function
+  // LOT SIZE CHECKS - Use the enhanced getTotalLotSize function
     const totalLotSize = interpretCodes.getTotalLotSize(property, vendor, codeDefinitions);
     const lotFrontage = property.asset_lot_frontage || 0;
+    const typeUse = property.asset_type_use || '';
+    
+    // Check if this is a condo (Type/Use starts with 6 in Microsystems or 60 in BRT)
+    const isCondo = (vendor === 'Microsystems' && typeUse.toString().startsWith('6')) ||
+                    (vendor === 'BRT' && typeUse.toString().startsWith('60'));
+    
+    // Check for SITE VALUE only (common for condos)
+    let hasSiteValueOnly = false;
+    if (vendor === 'BRT' && property.raw_data) {
+      let hasAcreageCode = false;
+      let hasSiteCode = false;
+      
+      for (let i = 1; i <= 6; i++) {
+        const code = property.raw_data[`LANDUR_${i}`];
+        if (code === '01' || code === '1') hasSiteCode = true;
+        if (code === '02' || code === '2') hasAcreageCode = true;
+      }
+      
+      hasSiteValueOnly = hasSiteCode && !hasAcreageCode;
+    }
     
     // Check if we truly have zero lot size (getTotalLotSize returns acres or null)
     if ((!totalLotSize || parseFloat(totalLotSize) === 0) && lotFrontage === 0) {
-      results.characteristics.push({
-        check: 'zero_lot_size',
-        severity: 'critical',
-        property_key: property.property_composite_key,
-        message: 'Property has zero lot size (no acre, sf, frontage, or LANDUR data)',
-        details: property
-      });
+      // Skip the error if it's a condo with site value only
+      if (!(isCondo && hasSiteValueOnly)) {
+        results.characteristics.push({
+          check: 'zero_lot_size',
+          severity: 'critical',
+          property_key: property.property_composite_key,
+          message: 'Property has zero lot size (no acre, sf, frontage, or LANDUR data)',
+          details: property
+        });
+      }
     }
     
     // LIVING AREA & YEAR BUILT
