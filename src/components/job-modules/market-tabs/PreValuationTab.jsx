@@ -311,7 +311,7 @@ useEffect(() => {
   if (marketLandData.zoning_config) {
     setEditingZoning(marketLandData.zoning_config);
   }
-}); // NO dependency array - runs on every render
+}, [marketLandData]);// Only run when marketLandData actually changes
 
   // ==================== WORKSHEET INITIALIZATION ====================
   useEffect(() => {
