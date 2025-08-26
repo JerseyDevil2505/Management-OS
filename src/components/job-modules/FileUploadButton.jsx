@@ -246,96 +246,57 @@ const FileUploadButton = ({ job, onFileProcessed, isJobLoading = false, onDataRe
     }
   };
 
-  // FIXED: Handle code file update with proper Unicode sanitization and BRT support
-  const handleCodeFileUpdate = async () => {
-    if (!codeFile || !codeFileContent) {
-      addNotification('Please select a code file first', 'error');
-      return;
+// FIXED: Handle code file update with proper Unicode sanitization and BRT support
+const handleCodeFileUpdate = async () => {
+  if (!codeFile || !codeFileContent) {
+    addNotification('Please select a code file first', 'error');
+    return;
+  }
+
+  if (!detectedVendor) {
+    addNotification('Could not detect vendor type for code file', 'error');
+    return;
+  }
+
+  try {
+    setProcessing(true);
+    setProcessingStatus('Processing code file...');
+
+    // Call the actual processor to handle the code file properly
+    if (detectedVendor === 'BRT') {
+      const { brtProcessor } = await import('../../lib/data-pipeline/brt-processor.js');
+      await brtProcessor.processCodeFile(codeFileContent, job.id);
+    } else if (detectedVendor === 'Microsystems') {
+      const { microsystemsProcessor } = await import('../../lib/data-pipeline/microsystems-processor.js');
+      await microsystemsProcessor.processCodeFile(codeFileContent, job.id);
+    } else {
+      throw new Error('Unsupported vendor type');
     }
 
-    if (!detectedVendor) {
-      addNotification('Could not detect vendor type for code file', 'error');
-      return;
+    addNotification(`✅ Successfully updated code definitions for ${detectedVendor}`, 'success');
+    setLastCodeProcessedDate(new Date().toISOString());
+    
+    // Clear code file selection
+    setCodeFile(null);
+    setCodeFileContent(null);
+    document.getElementById('code-file-upload').value = '';
+
+    // Notify parent component of the update
+    if (onFileProcessed) {
+      onFileProcessed({ 
+        type: 'code_update',
+        vendor: detectedVendor 
+      });
     }
 
-    try {
-      setProcessing(true);
-      setProcessingStatus('Processing code file...');
-
-      // Parse the code file
-      const parsedCodes = parseCodeFile(codeFileContent, detectedVendor);
-      
-      if (!parsedCodes) {
-        throw new Error('Failed to parse code file');
-      }
-
-      // Count codes for feedback
-      let codeCount = 0;
-      if (detectedVendor === 'BRT') {
-        // BRT has nested sections - count all entries
-        codeCount = Object.values(parsedCodes).reduce((total, section) => {
-          return total + (typeof section === 'object' ? Object.keys(section).length : 1);
-        }, 0);
-      } else {
-        // Microsystems has flat structure
-        codeCount = Object.keys(parsedCodes).length;
-      }
-
-      // FIXED: Properly escape special characters to prevent Unicode errors
-      const sanitizedContent = codeFileContent
-        .replace(/\\/g, '\\\\')  // Escape backslashes first
-        .replace(/'/g, "''")     // Escape single quotes for SQL
-        .replace(/\x00/g, '\\0') // Escape null bytes
-        .replace(/\n/g, '\\n')   // Escape newlines
-        .replace(/\r/g, '\\r')   // Escape carriage returns
-        .replace(/\x1a/g, '\\Z') // Escape Ctrl+Z
-        .replace(/\t/g, '\\t');  // Escape tabs
-
-      const newVersion = (job.code_file_version || 1) + 1;
-
-      // Update jobs table directly
-      const { error } = await supabase
-        .from('jobs')
-        .update({
-          code_file_content: sanitizedContent,
-          code_file_name: codeFile.name,
-          code_file_status: 'current',
-          code_file_uploaded_at: new Date().toISOString(),
-          code_file_version: newVersion,
-          parsed_code_definitions: parsedCodes,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', job.id);
-
-      if (error) {
-        throw new Error(`Failed to update job: ${error.message}`);
-      }
-
-      addNotification(`✅ Successfully updated ${codeCount} code definitions for ${detectedVendor}`, 'success');
-      setLastCodeProcessedDate(new Date().toISOString());  // Track code file update date
-      
-      // Clear code file selection
-      setCodeFile(null);
-      setCodeFileContent(null);
-      document.getElementById('code-file-upload').value = '';
-
-      // Notify parent component of the update
-      if (onFileProcessed) {
-        onFileProcessed({ 
-          type: 'code_update', 
-          codes_updated: codeCount,
-          vendor: detectedVendor 
-        });
-      }
-
-    } catch (error) {
-      console.error('❌ Code file update failed:', error);
-      addNotification(`Code file update failed: ${error.message}`, 'error');
-    } finally {
-      setProcessing(false);
-      setProcessingStatus('');
-    }
-  };
+  } catch (error) {
+    console.error('❌ Code file update failed:', error);
+    addNotification(`Code file update failed: ${error.message}`, 'error');
+  } finally {
+    setProcessing(false);
+    setProcessingStatus('');
+  }
+};
 
   // FIXED: Parse files with exact processor logic
   const parseSourceFile = (fileContent, vendor) => {
