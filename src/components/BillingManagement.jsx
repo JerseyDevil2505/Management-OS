@@ -784,6 +784,9 @@ const loadJobs = async () => {
           .eq('id', selectedJob.id);
       }
 
+      // Clear cache after all database operations
+      await supabase.rpc('clear_cache');
+      
       setShowContractSetup(false);
       setSelectedJob(null);
       setBillingHistoryText('');
@@ -968,6 +971,9 @@ const loadJobs = async () => {
         calculateGlobalMetrics();
       }
       
+      // Clear cache after all database operations
+      await supabase.rpc('clear_cache');
+      
       setShowBillingForm(false);
       setBillingForm({
         billingDate: new Date().toISOString().split('T')[0],
@@ -1058,6 +1064,9 @@ const loadJobs = async () => {
           }
         }
       }
+      
+      // Clear cache after all database operations
+      await supabase.rpc('clear_cache');
 
       setShowEditBilling(false);
       setEditingEvent(null);
@@ -1076,6 +1085,10 @@ const loadJobs = async () => {
         .eq('id', planningJobId);
 
       if (error) throw error;
+
+      //Clear cachea after database operation
+      await supabase.rpc('clear_cache');
+      
       if (onRefresh) onRefresh();
     } catch (error) {
       console.error('Error updating planned contract:', error);
@@ -1210,6 +1223,9 @@ const loadJobs = async () => {
         .update({ is_archived: true })
         .eq('id', planningJob.id);
 
+      //Clear cache after all database operations
+      await supabase.rpc('clear_cache');
+
       alert(`Successfully rolled over "${planningJob.job_name || planningJob.municipality}" to active jobs!`);
       setActiveTab('active');
       if (onRefresh) onRefresh();
@@ -1255,11 +1271,10 @@ const loadJobs = async () => {
         .update({ percent_billed: newTotalPercentage })
         .eq('id', billingEvent.job_id);
 
-      // Give database time to commit
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Clear cache after database operations
+      await supabase.rpc('clear_cache');
 
       // Update the job in state without reloading
-      setShowEditBilling(false);      
       setShowEditBilling(false);
       setEditingEvent(null);
       if (onRefresh) onRefresh();
@@ -1346,6 +1361,9 @@ const loadJobs = async () => {
           .eq('id', newJob.id);
       }
 
+      // Clear cache after all database operations
+      await supabase.rpc('clear_cache');
+      
       setShowLegacyJobForm(false);
       setLegacyJobForm({
         jobName: '',
@@ -1457,6 +1475,9 @@ const loadJobs = async () => {
         
         if (error) throw error;
         
+        // Clear cache after database operations
+        await supabase.rpc('clear_cache');
+        
         alert(`Successfully imported ${expenseData.length} expense entries`);
         setShowExpenseImport(false);
         setExpenseFile(null);
@@ -1469,7 +1490,7 @@ const loadJobs = async () => {
       console.error('Error importing expenses:', error);
       alert('Error importing file: ' + error.message);
     }
-  };  
+  };
   
   const getJobStatusColor = (job) => {
     const totals = calculateBillingTotals(job);
@@ -3735,6 +3756,9 @@ const loadJobs = async () => {
                       if (error) throw error;
                     }
 
+                    // Clear cache after database operation
+                    await supabase.rpc('clear_cache');
+                    
                     setShowReceivableForm(false);
                     setEditingReceivable(null);
                     setReceivableForm({
@@ -3870,6 +3894,9 @@ const loadJobs = async () => {
                     
                     if (error) throw error;
                     
+                    // Clear cache after database operation
+                    await supabase.rpc('clear_cache');
+                    
                     setShowDistributionForm(false);
                     setDistributionForm({
                       shareholder: '',
@@ -3881,6 +3908,7 @@ const loadJobs = async () => {
                   } catch (error) {
                     console.error('Error recording distribution:', error);
                     alert('Error recording distribution');
+                  }
                   }
                 }}
                 className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
