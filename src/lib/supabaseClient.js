@@ -485,78 +485,68 @@ getInteriorConditionName: function(property, codeDefinitions, vendorType) {
     return rawData[fieldName];
   },
 
-  // Get total lot size (aggregates multiple fields)
-  getTotalLotSize: function(property, vendorType, codeDefinitions) {
-    if (!property) return 0;
+// Get total lot size (aggregates multiple fields)
+getTotalLotSize: function(property, vendorType, codeDefinitions) {
+  if (!property) return null;
+  
+  // First check direct acre/sf fields
+  let totalAcres = parseFloat(property.asset_lot_acre) || 0;
+  let totalSf = parseFloat(property.asset_lot_sf) || 0;
+  
+  // If no direct values, calculate from frontage × depth (works for both vendors)
+  if (totalAcres === 0 && totalSf === 0) {
+    const frontage = parseFloat(property.asset_lot_frontage) || 0;
+    const depth = parseFloat(property.asset_lot_depth) || 0;
     
-    // First check standard fields
-    let totalAcres = property.asset_lot_acre || 0;
-    let totalSf = property.asset_lot_sf || 0;
-    
-    // Convert SF to acres if we have SF but no acres
-    if (totalSf > 0 && totalAcres === 0) {
-      totalAcres = totalSf / 43560;
+    if (frontage > 0 && depth > 0) {
+      totalSf = frontage * depth;
     }
+  }
+  
+  // BRT: Check LANDUR codes only if still no data
+  if (totalAcres === 0 && totalSf === 0 && vendorType === 'BRT' && property.raw_data && codeDefinitions) {
+    const propertyVCS = property.raw_data?.VCS || property.property_vcs;
     
-    // For BRT, check front foot × depth first, then LANDUR codes
-    if (vendorType === 'BRT' && property.raw_data) {
-      let foundFrontDepth = false;
+    if (propertyVCS && codeDefinitions.sections?.VCS) {
+      let vcsData = codeDefinitions.sections.VCS[propertyVCS];
       
-      // Check for front foot × depth calculation
-      for (let i = 1; i <= 6; i++) {
-        const frontFoot = parseFloat(property.raw_data[`LANDFF_${i}`]) || 0;
-        const avgDepth = parseFloat(property.raw_data[`LANDAVGDEP_${i}`]) || 0;
-        
-        if (frontFoot > 0 && avgDepth > 0) {
-          const sf = frontFoot * avgDepth;
-          totalSf += sf;
-          foundFrontDepth = true;
+      if (!vcsData) {
+        // Search for matching VCS
+        for (const [key, value] of Object.entries(codeDefinitions.sections.VCS)) {
+          if (value.KEY === propertyVCS || value.DATA?.KEY === propertyVCS) {
+            vcsData = value;
+            break;
+          }
         }
       }
       
-      // If no front/depth data, check LANDUR codes with VCS interpretation
-      if (!foundFrontDepth && codeDefinitions) {
-        const propertyVCS = property.raw_data?.VCS || property.property_vcs;
+      if (vcsData?.MAP?.[8]?.MAP) {
+        const urcMap = vcsData.MAP[8].MAP;
         
-        if (!propertyVCS) {
-          // No VCS - this is an error condition
-          console.warn(`Property ${property.property_composite_key} has no VCS for lot size calculation`);
-          return 0; // or return null to indicate error
-        }
-        
-        if (codeDefinitions.sections?.VCS?.[propertyVCS]) {
-          const vcsSection = codeDefinitions.sections.VCS[propertyVCS];
-          const urcSection = vcsSection['8']; // URC codes are in subsection 8
+        for (let i = 1; i <= 6; i++) {
+          const landCode = property.raw_data[`LANDUR_${i}`];
+          const landUnits = parseFloat(property.raw_data[`LANDURUNITS_${i}`]) || 0;
           
-          if (urcSection?.MAP) {
-            for (let i = 1; i <= 6; i++) {
-              const landCode = property.raw_data[`LANDUR_${i}`];
-              const landUnits = parseFloat(property.raw_data[`LANDURUNITS_${i}`]) || 0;
-              
-              if (landCode && landUnits > 0) {
-                // Look up what this code means for this VCS
-                const codeEntry = urcSection.MAP[landCode];
-                if (codeEntry?.DATA?.VALUE) {
-                  const description = codeEntry.DATA.VALUE.toUpperCase();
-                  
-                  // Include if it contains AC or SF, but NOT if it's just SITE VALUE
-                  if ((description.includes('AC') || description.includes('ACRE')) && 
-                      !description.includes('SITE')) {
-                    totalAcres += landUnits;
-                  } else if (description.includes('SF') && !description.includes('SITE')) {
-                    totalSf += landUnits;
-                  }
-                }
-              }
+          if (landCode && landUnits > 0 && urcMap[landCode]?.MAP?.[1]?.DATA?.VALUE) {
+            const description = urcMap[landCode].MAP[1].DATA.VALUE.toUpperCase();
+            
+            if ((description.includes('ACRE') || description.includes('AC')) && 
+                !description.includes('SITE VALUE')) {
+              totalAcres += landUnits;
+            } else if ((description.includes('SF') || description.includes('SQUARE')) && 
+                       !description.includes('SITE VALUE')) {
+              totalSf += landUnits;
             }
           }
         }
       }
     }
-    
-    // Return total in acres
-    return totalAcres + (totalSf / 43560);
-  },
+  }
+  
+  // Convert all to acres and return
+  const finalAcres = totalAcres + (totalSf / 43560);
+  return finalAcres > 0 ? finalAcres : null;
+},
 // Get bathroom plumbing sum (BRT only)
   getBathroomPlumbingSum: function(property, vendorType) {
     if (!property || !property.raw_data || vendorType !== 'BRT') return 0;
