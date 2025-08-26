@@ -273,6 +273,9 @@ const handleCodeFileUpdate = async () => {
       throw new Error('Unsupported vendor type');
     }
 
+    // Clear cache after code file update
+    await supabase.rpc('clear_cache');
+    
     addNotification(`✅ Successfully updated code definitions for ${detectedVendor}`, 'success');
     setLastCodeProcessedDate(new Date().toISOString());
     
@@ -1202,6 +1205,10 @@ try {
         newVersion: newFileVersion  // FIX 1: Show correct version
       });
       
+      // Clear cache after property updates
+      await supabase.rpc('clear_cache');
+      addBatchLog('🔄 Cache cleared after property updates', 'success');
+      
       // Save comparison report with sales decisions
       addBatchLog('💾 Saving comparison report to database...', 'info');
       await saveComparisonReport(comparisonResults, salesDecisions);
@@ -1329,6 +1336,9 @@ try {
           }
         }
         
+        // Clear cache after all sales decisions
+        await supabase.rpc('clear_cache');
+        
         addBatchLog(`✅ Processed ${salesProcessed}/${salesDecisions.size} sales decisions`, 'success', {
           reverted: salesReverted,
           keptNew: salesProcessed - salesReverted - salesBothStored,
@@ -1355,6 +1365,36 @@ try {
         addBatchLog('⚠️ Job metadata update failed', 'warning', { error: updateError.message });
         addNotification('Data processed but job update failed', 'warning');
       }
+
+      // Set flag for ProductionTracker to know data is stale
+      try {
+        const { data: currentJob } = await supabase
+          .from('jobs')
+          .select('workflow_stats')
+          .eq('id', job.id)
+          .single();
+
+        if (currentJob?.workflow_stats) {
+          const updatedWorkflowStats = {
+            ...currentJob.workflow_stats,
+            needsRefresh: true,
+            lastFileUpdate: new Date().toISOString()
+          };
+          
+          await supabase
+            .from('jobs')
+            .update({ 
+              workflow_stats: updatedWorkflowStats 
+            })
+            .eq('id', job.id);
+            
+          await supabase.rpc('clear_cache');
+          
+          addBatchLog('🔄 Marked production analytics as needing refresh', 'info');
+        }
+      } catch (statsError) {
+        console.error('Error updating workflow stats flag:', statsError);
+      }      
       
       const totalProcessed = result.processed || 0;
       const errorCount = result.errors || 0;
