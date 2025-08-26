@@ -224,6 +224,7 @@ const handleSave = async () => {
                 availableFields={availableFields}
                 marketLandData={marketLandData}
                 onDataChange={() => setUnsavedChanges(true)}
+                onUpdateJobCache={onUpdateJobCache}
               />
             )}    
             
@@ -236,6 +237,7 @@ const handleSave = async () => {
                 marketLandData={marketLandData}
                 hpiData={hpiData}
                 onDataChange={() => setUnsavedChanges(true)}
+                onUpdateJobCache={onUpdateJobCache}
               />
             )}
             
@@ -248,6 +250,7 @@ const handleSave = async () => {
                 marketLandData={marketLandData}
                 hpiData={hpiData}
                 onDataChange={() => setUnsavedChanges(true)}
+                onUpdateJobCache={onUpdateJobCache}
               />
             )}      
             
@@ -259,6 +262,7 @@ const handleSave = async () => {
                 codeDefinitions={codeDefinitions}
                 marketLandData={marketLandData}
                 onDataChange={() => setUnsavedChanges(true)}
+                onUpdateJobCache={onUpdateJobCache}
               />
             )}
             
@@ -270,6 +274,7 @@ const handleSave = async () => {
                 codeDefinitions={codeDefinitions}
                 marketLandData={marketLandData}
                 onDataChange={() => setUnsavedChanges(true)}
+                onUpdateJobCache={onUpdateJobCache}
               />
             )}
             
@@ -281,6 +286,7 @@ const handleSave = async () => {
                 codeDefinitions={codeDefinitions}
                 marketLandData={marketLandData}
                 onDataChange={() => setUnsavedChanges(true)}
+                onUpdateJobCache={onUpdateJobCache}
               />
             )}
           </>
