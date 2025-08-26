@@ -1493,13 +1493,6 @@ try {
   const ReportsListModal = () => {
     if (!showReportsModal) return null;
     
-    // Load reports when modal opens
-    useEffect(() => {
-      if (showReportsModal) {
-        loadReportsList();
-      }
-    }, [showReportsModal]);
-    
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
         <div className="bg-white rounded-lg max-w-4xl w-full max-h-[80vh] overflow-hidden shadow-2xl flex flex-col">
@@ -2494,6 +2487,13 @@ try {
       loadReportCount();
     }
   }, [job?.id]);  
+
+  // Load reports when modal opens
+  useEffect(() => {
+    if (showReportsModal) {
+      loadReportsList();
+    }
+  }, [showReportsModal]);
 
   const getFileStatusWithRealVersion = (timestamp, type) => {
     if (!timestamp) return 'Never';
