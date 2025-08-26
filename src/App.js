@@ -878,9 +878,7 @@ useEffect(() => {
           [jobId]: undefined
         }
       }));
-      
-      // CRITICAL: Force JobContainer to reload by incrementing fileRefreshTrigger
-      setFileRefreshTrigger(prev => prev + 1);
+      // Don't trigger reload here - let FileUploadButton handle that
     } else {
       // Update cache for this job
       console.log(`📦 Updating cache for job ${jobId}`);
