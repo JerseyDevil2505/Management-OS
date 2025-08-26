@@ -793,8 +793,7 @@ const generateQCFormPDF = () => {
     const lotFrontage = property.asset_lot_frontage || 0;
     
     // Check if this is a condo (Type/Use starts with 6 in Microsystems or 60 in BRT)
-    // typeUse is already declared earlier in the function
-    const typeUseStr = typeUse ? typeUse.toString() : '';
+    // Both typeUse and typeUseStr are already declared earlier
     const isCondo = (vendor === 'Microsystems' && typeUseStr.startsWith('6')) ||
                     (vendor === 'BRT' && typeUseStr.startsWith('60'));
     
