@@ -127,48 +127,48 @@ export const interpretCodes = {
     'built_ins_591': '591',
     'detached_items': '680'
   },
-  // BRT section to field mapping
-  brtSectionMap: {
-    'asset_design_style': '9',
-    'asset_building_class': '6',
-    'asset_type_use': '7',
-    'asset_stories': '8',
-    'asset_ext_cond': '34',
-    'asset_int_cond': '34',
-    'inspection_info_by': '30',
-    // Raw data fields
-    'attached_items': '4',
-    'detached_items': '5',
-    'roof_type': '10',
-    'roof_material': '11',
-    'exterior_finish': '12',
-    'foundation': '13',
-    'interior_finish': '14',
-    'floor_finish': '15',
-    'basement': '16',
-    'heat_source': '17',
-    'heat_system': '18',
-    'electric': '19',
-    'air_cond': '20',
-    'plumbing': '21',
-    'fireplace': '22',
-    'attic_dormer': '23',
-    'unfinished_area': '24',
-    'miscellaneous': '25',
-    'roof_pitch': '26',
-    'neighborhood': '27',
-    'view': '28',
-    'utilities': '29',
-    'road': '31',
-    'class_adj': '32',
-    'sidewalk': '33',
-    'mkt_infl': '35',
-    'land_adj': '36',
-    'land_infl': '37',
-    'land_udessc': '38',
-    'field_call_result': '39',
-    'vcs': 'special'  // Handle VCS differently
-  },
+ // Add this to interpretCodes object
+brtParsedStructureMap: {
+  // Format: fieldName: { parent: 'X', section: 'Y' }
+  'asset_design_style': { parent: '9', section: '23' },
+  'asset_building_class': { parent: '6', section: '20' },
+  'asset_type_use': { parent: '7', section: '21' },
+  'asset_stories': { parent: '8', section: '22' },
+  'asset_ext_cond': { parent: '34', section: '60' },
+  'asset_int_cond': { parent: '34', section: '60' },
+  'inspection_info_by': { parent: '30', section: '53' },
+  // Raw data fields
+  'attached_items': { parent: '4', section: '11' },
+  'detached_items': { parent: '5', section: '15' },
+  'roof_type': { parent: '10', section: '24' },
+  'roof_material': { parent: '11', section: '25' },
+  'exterior_finish': { parent: '12', section: '26' },
+  'foundation': { parent: '13', section: '27' },
+  'interior_finish': { parent: '14', section: '28' },
+  'floor_finish': { parent: '15', section: '29' },
+  'basement': { parent: '16', section: '30' },
+  'heat_source': { parent: '17', section: '31' },
+  'heat_system': { parent: '18', section: '32' },
+  'electric': { parent: '19', section: '33' },
+  'air_cond': { parent: '20', section: '34' },
+  'plumbing': { parent: '21', section: '35' },
+  'fireplace': { parent: '22', section: '36' },
+  'attic_dormer': { parent: '23', section: '37' },
+  'unfinished_area': { parent: '24', section: '38' },
+  'miscellaneous': { parent: '25', section: '39' },
+  'roof_pitch': { parent: '26', section: '41' },
+  'neighborhood': { parent: '27', section: '50' },
+  'view': { parent: '28', section: '51' },
+  'utilities': { parent: '29', section: '52' },
+  'road': { parent: '31', section: '53' },
+  'class_adj': { parent: '32', section: '55' },
+  'sidewalk': { parent: '33', section: '56' },
+  'mkt_infl': { parent: '35', section: '61' },
+  'land_adj': { parent: '36', section: '62' },
+  'land_infl': { parent: '37', section: '63' },
+  'land_udessc': { parent: '38', section: '64' },
+  'field_call_result': { parent: '39', section: '70' },
+},
 
   // Get decoded value for Microsystems property field
   getMicrosystemsValue: function(property, codeDefinitions, fieldName) {
@@ -192,39 +192,46 @@ export const interpretCodes = {
     // Return decoded value or original code if not found
     return codeDefinitions[lookupKey] || code;
   },
-  // ADD THIS: Core BRT lookup function
-  getBRTValue: function(property, codeDefinitions, fieldName, sectionNumber) {
-    if (!property || !codeDefinitions) return null;
-    
-    // Check both the property field and raw_data
-    let code = property[fieldName];
-    if (!code && property.raw_data) {
-      code = property.raw_data[fieldName];
+// Core BRT lookup function - updated to use mapping
+getBRTValue: function(property, codeDefinitions, fieldName) {
+  if (!property || !codeDefinitions) return null;
+  
+  // Check both the property field and raw_data
+  let code = property[fieldName];
+  if (!code && property.raw_data) {
+    code = property.raw_data[fieldName];
+  }
+  
+  if (!code || code.trim() === '') return null;
+  
+  // Check if we have sections (BRT structure)
+  if (!codeDefinitions.sections?.Residential) {
+    return code;
+  }
+  
+  // Get the mapping for this field
+  const mapping = this.brtParsedStructureMap[fieldName];
+  if (!mapping) {
+    console.warn(`No BRT mapping for field: ${fieldName}`);
+    return code;
+  }
+  
+  // Use parent key from mapping to find the section
+  const section = codeDefinitions.sections.Residential[mapping.parent];
+  
+  if (!section || !section.MAP) {
+    return code;
+  }
+  
+  // Look through the MAP for matching code
+  for (const [key, value] of Object.entries(section.MAP)) {
+    if (value.KEY === code || value.DATA?.KEY === code) {
+      return value.DATA?.VALUE || value.VALUE || code;
     }
-    
-    if (!code || code.trim() === '') return null;
-    
-    // Check if we have sections (BRT structure)
-    if (!codeDefinitions.sections) {
-      return code;
-    }
-    
-    // BRT stores numbered sections inside Residential
-    const section = codeDefinitions.sections.Residential?.[sectionNumber];
-    
-    if (!section || !section.MAP) {
-      return code;
-    }
-    
-    // Look through the MAP for matching code
-    for (const [key, value] of Object.entries(section.MAP)) {
-      if (value.KEY === code || value.DATA?.KEY === code) {
-        return value.DATA?.VALUE || value.VALUE || code;
-      }
-    }
-       
-    return code; // Return original if no match found
-  },
+  }
+  
+  return code; // Return original if no match found
+},
 
   // REPLACE the existing getDesignName with this:
   getDesignName: function(property, codeDefinitions, vendorType) {
@@ -236,7 +243,7 @@ export const interpretCodes = {
     if (vendorType === 'Microsystems') {
       return this.getMicrosystemsValue(property, codeDefinitions, 'asset_design_style');
     } else if (vendorType === 'BRT') {
-      return this.getBRTValue(property, codeDefinitions, 'asset_design_style', '23');
+      return this.getBRTValue(property, codeDefinitions, 'asset_design_style');
     }
     
     return designCode;
@@ -252,7 +259,7 @@ export const interpretCodes = {
     if (vendorType === 'Microsystems') {
       return this.getMicrosystemsValue(property, codeDefinitions, 'asset_type_use');
     } else if (vendorType === 'BRT') {
-      return this.getBRTValue(property, codeDefinitions, 'asset_type_use', '21');
+      return this.getBRTValue(property, codeDefinitions, 'asset_type_use');
     }
     
     return typeCode;
@@ -274,7 +281,7 @@ getExteriorConditionName: function(property, codeDefinitions, vendorType) {
     return this.getMicrosystemsValue(property, codeDefinitions, 'asset_ext_cond');
   } else if (vendorType === 'BRT') {
     // ADD THE SECTION NUMBER HERE - need to find what section exterior condition is in
-    return this.getBRTValue(property, codeDefinitions, 'asset_ext_cond', '60'); 
+    return this.getBRTValue(property, codeDefinitions, 'asset_ext_cond'); 
   }
   
   return condCode;
@@ -291,7 +298,7 @@ getInteriorConditionName: function(property, codeDefinitions, vendorType) {
     return this.getMicrosystemsValue(property, codeDefinitions, 'asset_int_cond');
   } else if (vendorType === 'BRT') {
     // ADD THE SECTION NUMBER HERE - need to find what section interior condition is in
-    return this.getBRTValue(property, codeDefinitions, 'asset_int_cond', '60'); 
+    return this.getBRTValue(property, codeDefinitions, 'asset_int_cond');
   }
   
   return condCode;
