@@ -25,7 +25,8 @@ const PreValuationTab = ({
   hpiData,
   codeDefinitions,
   vendorType,
-  onDataChange 
+  onDataChange,
+  onUpdateJobCache 
 }) => {
     console.log('PreValuationTab MOUNTED/UPDATED:', {
     jobId: jobData?.id,
@@ -309,6 +310,14 @@ useEffect(() => {
   }
   
   if (marketLandData.zoning_config) {
+    // Convert min_size_unit from database (snake_case) to minSizeUnit for UI (camelCase)
+    const convertedConfig = {};
+    Object.keys(marketLandData.zoning_config).forEach(zone => {
+      convertedConfig[zone] = {
+        ...marketLandData.zoning_config[zone],
+        minSizeUnit: marketLandData.zoning_config[zone].min_size_unit || 'SF'
+      };
+    });
     setEditingZoning(marketLandData.zoning_config);
   }
 }, [marketLandData]);// Only run when marketLandData actually changes
@@ -576,6 +585,12 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       // IMPORTANT: Save the normalized sales immediately to persist them
       await worksheetService.saveTimeNormalizedSales(jobData.id, normalized, newStats);
 
+      //Clear cache after saving normalization data
+      if (onUpdateJobCache && jobData?.id) {
+        console.log('🗑️ Clearing cache after time normalization');
+        onUpdateJobCache(jobData.id, null);
+      }
+      
       setLastTimeNormalizationRun(new Date().toISOString());
 
       console.log(`✅ Time normalization complete - preserved ${Object.keys(existingDecisions).length} keep/reject decisions`);
@@ -730,7 +745,13 @@ const saveSizeNormalizedValues = async (normalizedSales) => {
 
       // Save to database
       await saveSizeNormalizedValues(acceptedSales);
-      
+
+      //Clear cache after size normalization
+      if (onUpdateJobCache && jobData?.id) {
+        console.log('🗑️ Clearing cache after size normalization');
+        onUpdateJobCache(jobData.id, null);
+      }
+        
       // Track the run date
       const runDate = new Date().toISOString();
       setLastSizeNormalizationRun(runDate);
@@ -1016,6 +1037,13 @@ const handleSalesDecision = async (saleId, decision) => {
   // Save the updated sales list to market_land_valuation to persist decisions
   try {
     await worksheetService.saveTimeNormalizedSales(jobData.id, updatedSales, newStats);
+
+    //Clear cache after saving individual decision
+    if (onUpdateJobCache && jobData?.id) {
+      console.log('🗑️ Clearing cache after sales decision');
+      onUpdateJobCache(jobData.id, null);
+    }
+    
     console.log(`💾 Saved decision (${decision}) for property ${saleId} to database`);
   } catch (error) {
     console.error('Error persisting decision to market_land_valuation:', error);
@@ -1111,6 +1139,12 @@ const handleSalesDecision = async (saleId, decision) => {
       
       // Save the entire state to market_land_valuation for persistence
       await worksheetService.saveTimeNormalizedSales(jobData.id, timeNormalizedSales, normalizationStats);
+
+      //Clear cache after saving decisions
+      if (onUpdateJobCache && jobData?.id) {
+        console.log('🗑️ Clearing cache after saving keep/reject decisions');
+        onUpdateJobCache(jobData.id, null);
+      }
       
       alert(`✅ Successfully saved ${keeps.length} keeps and ${rejects.length} rejects`);
     } catch (error) {
@@ -1239,6 +1273,12 @@ const handleSalesDecision = async (saleId, decision) => {
         ready_to_process: worksheetStats.readyToProcess,
         location_variations: locationVariations
       });
+
+      //Clear cache after auto-save
+      if (onUpdateJobCache && jobData?.id) {
+        console.log('🗑️ Clearing cache after auto-save worksheet');
+        onUpdateJobCache(jobData.id, null);
+      }
       
       setLastAutoSave(new Date());
       setUnsavedChanges(false);
@@ -1289,6 +1329,11 @@ const processSelectedProperties = async () => {
           .upsert(updates, { onConflict: 'property_composite_key' });
           
         if (error) throw error;
+
+        // Clear cache after updating property records
+        if (onUpdateJobCache && jobData?.id) {
+          console.log('🗑️ Clearing cache after processing worksheet properties');
+          onUpdateJobCache(jobData.id, null);
       }
       
       setProcessProgress({ 
@@ -3382,6 +3427,7 @@ const analyzeImportFile = async (file) => {
                           zoningRequirements[zone] = {
                             description: editingZoning[zone].description || '',
                             min_size: parseInt(editingZoning[zone].min_size) || null,
+                            min_size_unit: editingZoning[zone].minSizeUnit || 'SF',
                             min_frontage: parseInt(editingZoning[zone].min_frontage) || null,
                             min_depth: parseInt(editingZoning[zone].min_depth) || null,
                             depth_table: editingZoning[zone].depth_table || ''
@@ -3401,6 +3447,13 @@ const analyzeImportFile = async (file) => {
                         });
                         
                       if (error) throw error;
+
+                      //Clear cache after saving zoning
+                      if (onUpdateJobCache && jobData?.id) { 
+                        console.log('🗑️ Clearing cache after saving zoning');
+                        onUpdateJobCache(jobData.id, null);
+                      }
+                        
                       alert('✅ Zoning requirements saved successfully');
                     } catch (error) {
                       console.error('Error saving zoning data:', error);
