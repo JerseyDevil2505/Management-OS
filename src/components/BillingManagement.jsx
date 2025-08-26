@@ -1086,7 +1086,7 @@ const loadJobs = async () => {
 
       if (error) throw error;
 
-      //Clear cachea after database operation
+      //Clear cache after database operation
       await supabase.rpc('clear_cache');
       
       if (onRefresh) onRefresh();
@@ -3908,7 +3908,6 @@ const loadJobs = async () => {
                   } catch (error) {
                     console.error('Error recording distribution:', error);
                     alert('Error recording distribution');
-                  }
                   }
                 }}
                 className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
