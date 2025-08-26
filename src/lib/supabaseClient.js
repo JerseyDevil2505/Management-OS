@@ -225,9 +225,6 @@ export const interpretCodes = {
        
     return code; // Return original if no match found
   },
-       
-    return code; // Return original if no match found
-  },
 
   // REPLACE the existing getDesignName with this:
   getDesignName: function(property, codeDefinitions, vendorType) {
