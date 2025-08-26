@@ -462,15 +462,16 @@ const ProductionTracker = ({
           },
           external_inspectors: externalInspectorsList,
           // Persist fresh analytics data for navigation survival
-          workflow_stats: analyticsToSave.analytics ? {
-            ...analyticsToSave.analytics,
-            billingAnalytics: analyticsToSave.billingAnalytics,
-            validationReport: analyticsToSave.validationReport,
-            missingPropertiesReport: analyticsToSave.missingPropertiesReport,
-            validationOverrides: analyticsToSave.validationOverrides,
-            overrideMap: analyticsToSave.overrideMap,
-            lastProcessed: new Date().toISOString()
-          } : undefined
+      workflow_stats: analyticsToSave.analytics ? {
+        ...analyticsToSave.analytics,
+        billingAnalytics: analyticsToSave.billingAnalytics,
+        validationReport: analyticsToSave.validationReport,
+        missingPropertiesReport: analyticsToSave.missingPropertiesReport,
+        validationOverrides: analyticsToSave.validationOverrides,
+        overrideMap: analyticsToSave.overrideMap,
+        lastProcessed: new Date().toISOString(),
+        needsRefresh: false  // Clear the stale flag after processing
+      } : undefined
         })
         .eq('id', jobData.id);
 
