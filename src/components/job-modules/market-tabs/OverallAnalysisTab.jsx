@@ -40,9 +40,9 @@ const OverallAnalysisTab = ({
   const CME_BRACKETS = [
     { min: 0, max: 99999, label: 'up to $99,999', color: '#ef4444', textColor: 'white' },
     { min: 100000, max: 199999, label: '$100,000-$199,999', color: '#f97316', textColor: 'white' },
-    { min: 200000, max: 299999, label: '$200,000-$299,999', color: '#fb923c', textColor: 'white' },
-    { min: 300000, max: 399999, label: '$300,000-$399,999', color: '#fbbf24', textColor: 'black' },
-    { min: 400000, max: 499999, label: '$400,000-$499,999', color: '#facc15', textColor: 'black' },
+    { min: 200000, max: 299999, label: '$200,000-$299,999', color: '#fbbf24', textColor: 'black' },
+    { min: 300000, max: 399999, label: '$300,000-$399,999', color: '#fde047', textColor: 'black' },  
+    { min: 400000, max: 499999, label: '$400,000-$499,999', color: '#bef264', textColor: 'black' },  
     { min: 500000, max: 749999, label: '$500,000-$749,999', color: '#84cc16', textColor: 'black' },
     { min: 750000, max: 999999, label: '$750,000-$999,999', color: '#22c55e', textColor: 'white' },
     { min: 1000000, max: 1499999, label: '$1,000,000-$1,499,999', color: '#3b82f6', textColor: 'white' },
@@ -268,6 +268,7 @@ const OverallAnalysisTab = ({
       
       // FILTER FIX: Skip unknown/empty designs
       if (!designCode || designCode === 'Unknown' || designCode === '' || 
+          designCode === '00' || designCode === '0' ||
           designName === 'Unknown' || designName === '') {
         return; // Skip this property
       }
