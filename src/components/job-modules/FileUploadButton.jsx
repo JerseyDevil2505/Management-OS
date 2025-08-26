@@ -281,8 +281,10 @@ const handleCodeFileUpdate = async () => {
     // Clear cache after code file update
     await supabase.rpc('clear_cache');
     
-    addNotification(`✅ Successfully updated code definitions for ${detectedVendor}`, 'success');
+    // Only update date stamp if we successfully got here
     setLastCodeProcessedDate(new Date().toISOString());
+    
+    addNotification(`✅ Successfully updated code definitions for ${detectedVendor}`, 'success');
     
     // Clear code file selection
     setCodeFile(null);
@@ -300,6 +302,7 @@ const handleCodeFileUpdate = async () => {
   } catch (error) {
     console.error('❌ Code file update failed:', error);
     addNotification(`Code file update failed: ${error.message}`, 'error');
+    // Don't update the date if we failed!
   } finally {
     setProcessing(false);
     setProcessingStatus('');
@@ -1392,11 +1395,20 @@ try {
         addNotification('❌ Update failed - all changes rolled back. Check logs for details.', 'error');
       }
       
-      // CRITICAL FIX: Update banner state immediately
-      addBatchLog('🔄 Refreshing UI state...', 'info');
-      setSourceFileVersion(newFileVersion);  // Use the newFileVersion we already calculated
-      setLastSourceProcessedDate(new Date().toISOString());  // Track our own date!
-      addBatchLog('✅ UI state refreshed successfully', 'success');
+      // CRITICAL FIX: Update banner state only if we had successful processing
+      if (totalProcessed > 0 && errorCount === 0) {
+        addBatchLog('🔄 Refreshing UI state...', 'info');
+        setSourceFileVersion(newFileVersion);  // Use the newFileVersion we already calculated
+        setLastSourceProcessedDate(new Date().toISOString());  // Track our own date!
+        addBatchLog('✅ UI state refreshed successfully', 'success');
+      } else if (totalProcessed > 0 && errorCount > 0) {
+        // Partial success - still update but note there were errors
+        addBatchLog('🔄 Refreshing UI state (with errors)...', 'warning');
+        setSourceFileVersion(newFileVersion);
+        setLastSourceProcessedDate(new Date().toISOString());
+        addBatchLog('⚠️ UI state refreshed but errors occurred', 'warning');
+      }
+      // If totalProcessed is 0, don't update the dates/version at all
       
       setBatchComplete(true);
       
