@@ -318,7 +318,7 @@ useEffect(() => {
         minSizeUnit: marketLandData.zoning_config[zone].min_size_unit || 'SF'
       };
     });
-    setEditingZoning(marketLandData.zoning_config);
+    setEditingZoning(convertedConfig);
   }
 }, [marketLandData]);// Only run when marketLandData actually changes
 
@@ -604,25 +604,29 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
     }
   }, [properties, salesFromYear, minSalePrice, normalizeToYear, equalizationRatio, outlierThreshold, getHPIMultiplier, timeNormalizedSales, normalizationStats, vendorType, parseCompositeKey, jobData.id, selectedCounty, worksheetService]);
 
-const saveSizeNormalizedValues = async (normalizedSales) => {
-  try {
-    // Save size normalized values to database
-    for (const sale of normalizedSales) {
-      if (sale.size_normalized_price) {
-        await supabase
-          .from('property_records')
-          .update({ 
-            values_norm_size: sale.size_normalized_price 
-          })
-          .eq('id', sale.id);
+  const saveSizeNormalizedValues = async (normalizedSales) => {
+    try {
+      // Save size normalized values to database
+      for (const sale of normalizedSales) {
+        if (sale.size_normalized_price) {
+          await supabase
+            .from('property_records')
+            .update({ 
+              values_norm_size: sale.size_normalized_price 
+            })
+            .eq('id', sale.id);
+        }
       }
+      
+      // Clear database cache after saving
+      await supabase.rpc('clear_cache');
+      
+      console.log('✅ Size normalized values saved to database');
+      
+    } catch (error) {
+      console.error('Error saving size normalized values:', error);
     }
-    console.log('✅ Size normalized values saved to database');
-    
-  } catch (error) {
-    console.error('Error saving size normalized values:', error);
-  }
-};
+  };
 
   const runSizeNormalization = useCallback(async () => {
     setIsProcessingSize(true);
@@ -1049,7 +1053,7 @@ const handleSalesDecision = async (saleId, decision) => {
     console.error('Error persisting decision to market_land_valuation:', error);
   }
 
-  // Handle immediate database operations for REJECTIONS
+// Handle immediate database operations for REJECTIONS
   if (decision === 'reject') {
     try {
       const { error } = await supabase
@@ -1063,6 +1067,8 @@ const handleSalesDecision = async (saleId, decision) => {
       if (error) {
         console.error('Error removing normalized values:', error);
       } else {
+        // Clear database cache after rejection
+        await supabase.rpc('clear_cache');
         console.log(`🗑️ Removed normalized values for rejected property ${saleId}`);
       }
     } catch (error) {
@@ -1139,6 +1145,9 @@ const handleSalesDecision = async (saleId, decision) => {
       
       // Save the entire state to market_land_valuation for persistence
       await worksheetService.saveTimeNormalizedSales(jobData.id, timeNormalizedSales, normalizationStats);
+
+      // Clear database cache after batch updates
+      await supabase.rpc('clear_cache');
 
       //Clear cache after saving decisions
       if (onUpdateJobCache && jobData?.id) {
@@ -1329,6 +1338,9 @@ const processSelectedProperties = async () => {
           .upsert(updates, { onConflict: 'property_composite_key' });
           
         if (error) throw error;
+
+        // Clear database cache after batch upsert
+        await supabase.rpc('clear_cache');
 
         // Clear cache after updating property records
         if (onUpdateJobCache && jobData?.id) {
@@ -2053,6 +2065,12 @@ const analyzeImportFile = async (file) => {
                               Package {normSortConfig.field === 'package' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
                             </th>
                             <th 
+                              className="px-4 py-3 text-right text-sm font-medium text-gray-700 w-24 cursor-pointer hover:bg-gray-100"
+                              onClick={() => handleNormalizationSort('values_mod_total')}
+                            >
+                              Assessed {normSortConfig.field === 'values_mod_total' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
+                            </th>
+                            <th 
                               className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-24 cursor-pointer hover:bg-gray-100"
                               onClick={() => handleNormalizationSort('sales_date')}
                             >
@@ -2157,6 +2175,9 @@ const analyzeImportFile = async (file) => {
                                         );
                                       }
                                     })()}
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-right">
+                                    ${sale.values_mod_total?.toLocaleString() || '0'}
                                   </td>
                                   <td className="px-4 py-3 text-sm">
                                     {sale.sales_date ? new Date(sale.sales_date).toLocaleDateString() : ''}
@@ -2830,15 +2851,9 @@ const analyzeImportFile = async (file) => {
                         </th>
                         <th 
                           className="px-3 py-2 text-left text-xs font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
-                          onClick={() => handleSort('location')}
-                        >
-                          Location {sortConfig.field === 'location' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                        </th>
-                        <th 
-                          className="px-3 py-2 text-left text-xs font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
                           onClick={() => handleSort('property_location')}
                         >
-                          Address {sortConfig.field === 'property_location' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                          Location {sortConfig.field === 'property_location' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
                         </th>
                         <th 
                           className="px-3 py-2 text-left text-xs font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
@@ -2957,7 +2972,6 @@ const analyzeImportFile = async (file) => {
                           )}
                         </div>
                       </td>
-                      <td className="px-3 py-2 text-sm">{prop.location || '-'}</td>
                       <td className="px-3 py-2 text-sm">{prop.property_location}</td>
                       <td className="px-3 py-2 text-sm">{prop.property_class}</td>
                       <td className="px-3 py-2 text-sm">{prop.building_class_display}</td>
