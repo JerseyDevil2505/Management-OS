@@ -39,6 +39,7 @@ const DataQualityTab = ({
   const [expandedCategories, setExpandedCategories] = useState(['mod_iv']);
   const [isRunningChecks, setIsRunningChecks] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [ignoredIssues, setIgnoredIssues] = useState(new Set());
   const [modalData, setModalData] = useState({ title: '', properties: [] });
 
   // Refs for uncontrolled inputs
@@ -61,6 +62,10 @@ const DataQualityTab = ({
       // Load quality score
       if (marketLandData.quality_score) {
         setQualityScore(marketLandData.quality_score);
+      }
+      // Load ignored issues
+      if (marketLandData.ignored_issues) {
+        setIgnoredIssues(new Set(marketLandData.ignored_issues));
       }
     }
   }, [marketLandData]);
@@ -1395,7 +1400,8 @@ const generateQCFormPDF = () => {
         warning_count: warningCount,
         info_count: infoCount,
         custom_checks: customChecks.length > 0 ? customChecks : null,
-        quality_check_results: qualityCheckResults
+        quality_check_results: qualityCheckResults,
+        ignored_issues: Array.from(ignoredIssues)
       };
       
       if (existing) {
@@ -1910,6 +1916,35 @@ const editCustomCheck = (check) => {
               <Download size={16} />
               Export to Excel
             </button>
+
+            {ignoredIssues.size > 0 && (
+              <button 
+                onClick={async () => {
+                  setIgnoredIssues(new Set());
+                  try {
+                    await supabase
+                      .from('market_land_valuation')
+                      .update({ 
+                        ignored_issues: [],
+                        updated_at: new Date().toISOString()
+                      })
+                      .eq('job_id', jobData.id);
+                    
+                    // Clear cache
+                    if (onUpdateJobCache && jobData?.id) {
+                      onUpdateJobCache(jobData.id, null);
+                    }
+                  } catch (error) {
+                    console.error('Error clearing ignored issues:', error);
+                  }
+                }}
+                className="px-4 py-2 bg-yellow-600 text-white rounded-lg font-medium hover:bg-yellow-700 transition-all flex items-center gap-2"
+              >
+                <X size={16} />
+                Clear {ignoredIssues.size} Ignored
+              </button>
+            )}
+            
             <button 
               onClick={generateQCFormPDF}
               className="px-4 py-2 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-all flex items-center gap-2"
@@ -2464,34 +2499,77 @@ const editCustomCheck = (check) => {
                     <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider bg-white">
                       Issue Details
                     </th>
+                    <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider bg-white">
+                      Action
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {modalData.properties.map((prop, index) => {
                     const property = prop.details;
+                    const issueKey = `${prop.property_key}-${prop.check}`;
+                    const isIgnored = ignoredIssues.has(issueKey);
                     
                     return (
-                      <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
-                        <td className="py-3 px-4 text-sm text-gray-900">
+                      <tr key={index} className={`border-b border-gray-100 hover:bg-gray-50 ${isIgnored ? 'opacity-50' : ''}`}>
+                        <td className={`py-3 px-4 text-sm text-gray-900 ${isIgnored ? 'line-through' : ''}`}>
                           {property?.property_block || ''}
                         </td>
-                        <td className="py-3 px-4 text-sm text-gray-900">
+                        <td className={`py-3 px-4 text-sm text-gray-900 ${isIgnored ? 'line-through' : ''}`}>
                           {property?.property_lot || ''}
                         </td>
-                        <td className="py-3 px-4 text-sm text-gray-900">
+                        <td className={`py-3 px-4 text-sm text-gray-900 ${isIgnored ? 'line-through' : ''}`}>
                           {property?.property_qualifier || ''}
                         </td>
-                        <td className="py-3 px-4 text-sm text-gray-900">
+                        <td className={`py-3 px-4 text-sm text-gray-900 ${isIgnored ? 'line-through' : ''}`}>
                           {property?.property_card || ''}
                         </td>
-                        <td className="py-3 px-4 text-sm text-gray-900">
+                        <td className={`py-3 px-4 text-sm text-gray-900 ${isIgnored ? 'line-through' : ''}`}>
                           {property?.property_location || ''}
                         </td>
-                        <td className="py-3 px-4 text-sm text-gray-900">
+                        <td className={`py-3 px-4 text-sm text-gray-900 ${isIgnored ? 'line-through' : ''}`}>
                           {property?.property_m4_class || ''}
                         </td>
-                        <td className="py-3 px-4 text-sm text-gray-600">
+                        <td className={`py-3 px-4 text-sm text-gray-600 ${isIgnored ? 'line-through' : ''}`}>
                           {prop.message}
+                        </td>
+                        <td className="py-3 px-4">
+                          <button
+                            onClick={async () => {
+                              const newIgnored = new Set(ignoredIssues);
+                              if (isIgnored) {
+                                newIgnored.delete(issueKey);
+                              } else {
+                                newIgnored.add(issueKey);
+                              }
+                              setIgnoredIssues(newIgnored);
+                              
+                              // Save to database immediately
+                              try {
+                                await supabase
+                                  .from('market_land_valuation')
+                                  .update({ 
+                                    ignored_issues: Array.from(newIgnored),
+                                    updated_at: new Date().toISOString()
+                                  })
+                                  .eq('job_id', jobData.id);
+                                  
+                                // Clear cache after update
+                                if (onUpdateJobCache && jobData?.id) {
+                                  onUpdateJobCache(jobData.id, null);
+                                }
+                              } catch (error) {
+                                console.error('Error saving ignored issues:', error);
+                              }
+                            }}
+                            className={`px-2 py-1 text-xs rounded transition-colors ${
+                              isIgnored 
+                                ? 'bg-green-100 text-green-700 hover:bg-green-200' 
+                                : 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
+                            }`}
+                          >
+                            {isIgnored ? 'Restore' : 'Ignore'}
+                          </button>
                         </td>
                       </tr>
                     );
