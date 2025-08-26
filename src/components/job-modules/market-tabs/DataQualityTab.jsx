@@ -555,7 +555,27 @@ const generateQCFormPDF = () => {
       const score = calculateQualityScore(results);
       setQualityScore(score);
       setCheckResults(results);
-     
+
+      // Calculate and update stats from actual results
+      let criticalCount = 0;
+      let warningCount = 0;
+      let infoCount = 0;
+
+      Object.values(results).forEach(category => {
+        category.forEach(issue => {
+          if (issue.severity === 'critical') criticalCount++;
+          else if (issue.severity === 'warning') warningCount++;
+          else if (issue.severity === 'info') infoCount++;
+        });
+      });
+
+      setIssueStats({
+        critical: criticalCount,
+        warning: warningCount,
+        info: infoCount,
+        total: criticalCount + warningCount + infoCount
+      });
+
       console.log('Quality check complete!');
     } catch (error) {
       console.error('Error running quality checks:', error);
