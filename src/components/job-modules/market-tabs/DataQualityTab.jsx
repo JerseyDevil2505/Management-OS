@@ -792,30 +792,28 @@ const generateQCFormPDF = () => {
     const totalLotSize = interpretCodes.getTotalLotSize(property, vendor, codeDefinitions);
     const lotFrontage = property.asset_lot_frontage || 0;
     
-    // Check if this is a condo (Type/Use starts with 6 in Microsystems or 60 in BRT)
-    // Both typeUse and typeUseStr are already declared earlier
-    const isCondo = (vendor === 'Microsystems' && typeUseStr.startsWith('6')) ||
-                    (vendor === 'BRT' && typeUseStr.startsWith('60'));
-    
-    // Check for SITE VALUE only (common for condos)
-    let hasSiteValueOnly = false;
-    if (vendor === 'BRT' && property.raw_data) {
-      let hasAcreageCode = false;
-      let hasSiteCode = false;
-      
-      for (let i = 1; i <= 6; i++) {
-        const code = property.raw_data[`LANDUR_${i}`];
-        if (code === '01' || code === '1') hasSiteCode = true;
-        if (code === '02' || code === '2') hasAcreageCode = true;
-      }
-      
-      hasSiteValueOnly = hasSiteCode && !hasAcreageCode;
-    }
-    
     // Check if we truly have zero lot size (getTotalLotSize returns acres or null)
     if ((!totalLotSize || parseFloat(totalLotSize) === 0) && lotFrontage === 0) {
-      // Skip the error if it's a condo with site value only
-      if (!(isCondo && hasSiteValueOnly)) {
+      // Skip condos with only site value
+      let skipError = false;
+      
+      if (typeUseStr && (typeUseStr.startsWith('6') || typeUseStr.startsWith('60'))) {
+        // It's a condo - check if it only has site value in BRT
+        if (vendor === 'BRT' && property.raw_data) {
+          let hasSiteOnly = false;
+          for (let i = 1; i <= 6; i++) {
+            const code = property.raw_data[`LANDUR_${i}`];
+            if (code === '01' || code === '1') hasSiteOnly = true;
+            if (code === '02' || code === '2') {
+              hasSiteOnly = false;  // Has acreage, not just site value
+              break;
+            }
+          }
+          skipError = hasSiteOnly;
+        }
+      }
+      
+      if (!skipError) {
         results.characteristics.push({
           check: 'zero_lot_size',
           severity: 'critical',
@@ -825,7 +823,6 @@ const generateQCFormPDF = () => {
         });
       }
     }
-    
     // LIVING AREA & YEAR BUILT
     const sfla = property.asset_sfla || 0;
     const yearBuilt = property.asset_year_built;
