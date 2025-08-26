@@ -129,36 +129,44 @@ export const interpretCodes = {
   },
   // BRT section to field mapping
   brtSectionMap: {
-    'asset_design_style': '23',
-    'asset_building_class': '20',
-    'asset_type_use': '21',
-    'asset_stories': '22',
-    'asset_ext_cond': '60',
-    'asset_int_cond': '60',  // Same section, different codes
-    'inspection_info_by': '53',
+    'asset_design_style': '9',
+    'asset_building_class': '6',
+    'asset_type_use': '7',
+    'asset_stories': '8',
+    'asset_ext_cond': '34',
+    'asset_int_cond': '34',
+    'inspection_info_by': '30',
     // Raw data fields
-    'roof_type': '24',
-    'roof_material': '25',
-    'exterior_finish': '26',
-    'foundation': '27',
-    'interior_finish': '28',
-    'floor_finish': '29',
-    'basement': '30',
-    'heat_source': '31',
-    'heat_system': '32',
-    'electric': '33',
-    'air_cond': '34',
-    'plumbing': '35',
-    'fireplace': '36',
-    'attic_dormer': '37',
-    'garages': '41',
-    'neighborhood': '50',
-    'view': '51',
-    'utilities': '52',
-    'road': '54',
-    'curbing': '55',
-    'sidewalk': '56',
-    'condition': '60',
+    'attached_items': '4',
+    'detached_items': '5',
+    'roof_type': '10',
+    'roof_material': '11',
+    'exterior_finish': '12',
+    'foundation': '13',
+    'interior_finish': '14',
+    'floor_finish': '15',
+    'basement': '16',
+    'heat_source': '17',
+    'heat_system': '18',
+    'electric': '19',
+    'air_cond': '20',
+    'plumbing': '21',
+    'fireplace': '22',
+    'attic_dormer': '23',
+    'unfinished_area': '24',
+    'miscellaneous': '25',
+    'roof_pitch': '26',
+    'neighborhood': '27',
+    'view': '28',
+    'utilities': '29',
+    'road': '31',
+    'class_adj': '32',
+    'sidewalk': '33',
+    'mkt_infl': '35',
+    'land_adj': '36',
+    'land_infl': '37',
+    'land_udessc': '38',
+    'field_call_result': '39',
     'vcs': 'special'  // Handle VCS differently
   },
 
@@ -184,7 +192,7 @@ export const interpretCodes = {
     // Return decoded value or original code if not found
     return codeDefinitions[lookupKey] || code;
   },
-    // ADD THIS: Core BRT lookup function
+  // ADD THIS: Core BRT lookup function
   getBRTValue: function(property, codeDefinitions, fieldName, sectionNumber) {
     if (!property || !codeDefinitions) return null;
     
@@ -197,19 +205,26 @@ export const interpretCodes = {
     if (!code || code.trim() === '') return null;
     
     // Check if we have sections (BRT structure)
-    if (!codeDefinitions.sections || !codeDefinitions.sections[sectionNumber]) {
+    if (!codeDefinitions.sections) {
       return code;
     }
     
-    const section = codeDefinitions.sections[sectionNumber];
-    const sectionMap = section.MAP || {};
+    // BRT stores numbered sections inside Residential
+    const section = codeDefinitions.sections.Residential?.[sectionNumber];
+    
+    if (!section || !section.MAP) {
+      return code;
+    }
     
     // Look through the MAP for matching code
-    for (const [key, value] of Object.entries(sectionMap)) {
+    for (const [key, value] of Object.entries(section.MAP)) {
       if (value.KEY === code || value.DATA?.KEY === code) {
         return value.DATA?.VALUE || value.VALUE || code;
       }
     }
+       
+    return code; // Return original if no match found
+  },
        
     return code; // Return original if no match found
   },
@@ -474,7 +489,7 @@ getInteriorConditionName: function(property, codeDefinitions, vendorType) {
   },
 
   // Get total lot size (aggregates multiple fields)
-  getTotalLotSize: function(property, vendorType) {
+  getTotalLotSize: function(property, vendorType, codeDefinitions) {
     if (!property) return 0;
     
     // First check standard fields
@@ -486,19 +501,56 @@ getInteriorConditionName: function(property, codeDefinitions, vendorType) {
       totalAcres = totalSf / 43560;
     }
     
-    // For BRT, also check LANDUR fields in raw_data
+    // For BRT, check front foot × depth first, then LANDUR codes
     if (vendorType === 'BRT' && property.raw_data) {
+      let foundFrontDepth = false;
+      
+      // Check for front foot × depth calculation
       for (let i = 1; i <= 6; i++) {
-        const landField = property.raw_data[`LANDUR_${i}`];
-        if (landField) {
-          const upperField = landField.toUpperCase();
-          const value = parseFloat(landField.replace(/[^0-9.]/g, ''));
+        const frontFoot = parseFloat(property.raw_data[`LANDFF_${i}`]) || 0;
+        const avgDepth = parseFloat(property.raw_data[`LANDAVGDEP_${i}`]) || 0;
+        
+        if (frontFoot > 0 && avgDepth > 0) {
+          const sf = frontFoot * avgDepth;
+          totalSf += sf;
+          foundFrontDepth = true;
+        }
+      }
+      
+      // If no front/depth data, check LANDUR codes with VCS interpretation
+      if (!foundFrontDepth && codeDefinitions) {
+        const propertyVCS = property.raw_data?.VCS || property.property_vcs;
+        
+        if (!propertyVCS) {
+          // No VCS - this is an error condition
+          console.warn(`Property ${property.property_composite_key} has no VCS for lot size calculation`);
+          return 0; // or return null to indicate error
+        }
+        
+        if (codeDefinitions.sections?.VCS?.[propertyVCS]) {
+          const vcsSection = codeDefinitions.sections.VCS[propertyVCS];
+          const urcSection = vcsSection['8']; // URC codes are in subsection 8
           
-          if (!isNaN(value)) {
-            if (upperField.includes('AC') || upperField.includes('ACRE')) {
-              totalAcres += value;
-            } else if (upperField.includes('SF') || upperField.includes('SITE')) {
-              totalSf += value;
+          if (urcSection?.MAP) {
+            for (let i = 1; i <= 6; i++) {
+              const landCode = property.raw_data[`LANDUR_${i}`];
+              const landUnits = parseFloat(property.raw_data[`LANDURUNITS_${i}`]) || 0;
+              
+              if (landCode && landUnits > 0) {
+                // Look up what this code means for this VCS
+                const codeEntry = urcSection.MAP[landCode];
+                if (codeEntry?.DATA?.VALUE) {
+                  const description = codeEntry.DATA.VALUE.toUpperCase();
+                  
+                  // Include if it contains AC or SF, but NOT if it's just SITE VALUE
+                  if ((description.includes('AC') || description.includes('ACRE')) && 
+                      !description.includes('SITE')) {
+                    totalAcres += landUnits;
+                  } else if (description.includes('SF') && !description.includes('SITE')) {
+                    totalSf += landUnits;
+                  }
+                }
+              }
             }
           }
         }
