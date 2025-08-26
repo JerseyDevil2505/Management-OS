@@ -791,7 +791,6 @@ const generateQCFormPDF = () => {
   // LOT SIZE CHECKS - Use the enhanced getTotalLotSize function
     const totalLotSize = interpretCodes.getTotalLotSize(property, vendor, codeDefinitions);
     const lotFrontage = property.asset_lot_frontage || 0;
-    const typeUse = property.asset_type_use || '';
     
     // Check if this is a condo (Type/Use starts with 6 in Microsystems or 60 in BRT)
     const isCondo = (vendor === 'Microsystems' && typeUse.toString().startsWith('6')) ||
