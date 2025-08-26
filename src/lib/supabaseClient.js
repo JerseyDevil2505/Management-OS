@@ -510,7 +510,7 @@ getTotalLotSize: function(property, vendorType, codeDefinitions) {
     }
   }
   
-  // BRT: Check LANDUR codes only if still no data
+// BRT: Check LANDUR codes only if still no data
   if (totalAcres === 0 && totalSf === 0 && vendorType === 'BRT' && property.raw_data && codeDefinitions) {
     const propertyVCS = property.raw_data?.VCS || property.property_vcs;
     
@@ -534,8 +534,11 @@ getTotalLotSize: function(property, vendorType, codeDefinitions) {
           const landCode = property.raw_data[`LANDUR_${i}`];
           const landUnits = parseFloat(property.raw_data[`LANDURUNITS_${i}`]) || 0;
           
-          if (landCode && landUnits > 0 && urcMap[landCode]?.MAP?.[1]?.DATA?.VALUE) {
-            const description = urcMap[landCode].MAP[1].DATA.VALUE.toUpperCase();
+          // BRT stores single digit codes without leading zero, pad them
+          const paddedCode = landCode ? String(landCode).padStart(2, '0') : null;
+          
+          if (paddedCode && landUnits > 0 && urcMap[paddedCode]?.MAP?.[1]?.DATA?.VALUE) {
+            const description = urcMap[paddedCode].MAP[1].DATA.VALUE.toUpperCase();
             
             if ((description.includes('ACRE') || description.includes('AC')) && 
                 !description.includes('SITE VALUE')) {
