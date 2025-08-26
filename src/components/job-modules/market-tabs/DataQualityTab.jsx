@@ -18,7 +18,8 @@ const DataQualityTab = ({
   vendorType,
   codeDefinitions,
   availableFields,
-  marketLandData    
+  marketLandData,    
+  onUpdateJobCache 
 }) => {
   // ==================== INTERNAL STATE MANAGEMENT ====================
   const [checkResults, setCheckResults] = useState({});
@@ -1388,6 +1389,12 @@ const generateQCFormPDF = () => {
           .from('market_land_valuation')
           .insert(saveData);
         if (error) throw error;
+      }
+
+      //Clear cache after saving quality results
+      if (onUpdateJobCache && jobData?.id) {
+        console.log('🗑️ Clearing cache after saving quality check results');
+        onUpdateJobCache(jobData.id, null);
       }
       
       setRunHistory(updatedHistory);
