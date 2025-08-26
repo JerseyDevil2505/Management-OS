@@ -793,8 +793,10 @@ const generateQCFormPDF = () => {
     const lotFrontage = property.asset_lot_frontage || 0;
     
     // Check if this is a condo (Type/Use starts with 6 in Microsystems or 60 in BRT)
-    const isCondo = (vendor === 'Microsystems' && typeUse.toString().startsWith('6')) ||
-                    (vendor === 'BRT' && typeUse.toString().startsWith('60'));
+    // typeUse is already declared earlier in the function
+    const typeUseStr = typeUse ? typeUse.toString() : '';
+    const isCondo = (vendor === 'Microsystems' && typeUseStr.startsWith('6')) ||
+                    (vendor === 'BRT' && typeUseStr.startsWith('60'));
     
     // Check for SITE VALUE only (common for condos)
     let hasSiteValueOnly = false;
