@@ -1512,6 +1512,7 @@ try {
       
       const vendor = detectVendorType(content, file.name);
       if (vendor) {
+        setDetectedVendor(vendor); 
         addNotification(`✅ Detected ${vendor} code file`, 'success');
       }
     } catch (error) {
