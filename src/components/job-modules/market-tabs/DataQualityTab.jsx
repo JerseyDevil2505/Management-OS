@@ -788,17 +788,17 @@ const generateQCFormPDF = () => {
       }
     }
     
-    // LOT SIZE CHECKS
-    const lotAcre = property.asset_lot_acre || 0;
-    const lotSf = property.asset_lot_sf || 0;
+    // LOT SIZE CHECKS - Use the enhanced getTotalLotSize function
+    const totalLotSize = interpretCodes.getTotalLotSize(property, vendor, codeDefinitions);
     const lotFrontage = property.asset_lot_frontage || 0;
     
-    if (lotAcre === 0 && lotSf === 0 && lotFrontage === 0) {
+    // Check if we truly have zero lot size (getTotalLotSize returns acres or null)
+    if ((!totalLotSize || parseFloat(totalLotSize) === 0) && lotFrontage === 0) {
       results.characteristics.push({
         check: 'zero_lot_size',
         severity: 'critical',
         property_key: property.property_composite_key,
-        message: 'Property has zero lot size (acre, sf, and frontage all zero)',
+        message: 'Property has zero lot size (no acre, sf, frontage, or LANDUR data)',
         details: property
       });
     }
