@@ -229,8 +229,15 @@ const JobContainer = ({
             }
 
           } catch (error) {
+            // Handle errors safely without accessing potentially consumed response streams
             console.error(`❌ Critical error loading properties:`, error);
-            throw new Error(`Failed to load property data: ${error.message}`);
+
+            // Create a safe error message without accessing error.message which might contain consumed streams
+            const errorMsg = error?.code || error?.status ?
+              `Supabase error ${error.status || error.code}` :
+              'Network or database connection error';
+
+            throw new Error(`Failed to load property data: ${errorMsg}`);
           }
         }
 
