@@ -1437,9 +1437,6 @@ const generateQCFormPDF = () => {
         if (error) throw error;
       }
 
-      // Clear database cache after save
-      await supabase.rpc('clear_cache');
-
       //Clear cache after saving quality results
       if (onUpdateJobCache && jobData?.id) {
         console.log('🗑️ Clearing cache after saving quality check results');
@@ -2576,9 +2573,6 @@ const editCustomCheck = (check) => {
                                     updated_at: new Date().toISOString()
                                   })
                                   .eq('job_id', jobData.id);
-
-                                // Clear database cache
-                                await supabase.rpc('clear_cache'); 
                                 
                                 // Clear cache after update
                                 if (onUpdateJobCache && jobData?.id) {
