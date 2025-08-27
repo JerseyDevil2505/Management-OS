@@ -94,6 +94,15 @@ useEffect(() => {
   });
 
   // ==========================================
+  // DATABASE CONCURRENCY CONTROL
+  // ==========================================
+  const dbOperationRef = useRef({
+    isLoading: false,
+    pendingOperations: 0,
+    lastOperationTime: 0
+  });
+
+  // ==========================================
   // PERSISTENT CACHE STATE
   // ==========================================
   const [masterCache, setMasterCache] = useState({
@@ -491,16 +500,61 @@ useEffect(() => {
       }
 
       // ==========================================
-      // EXECUTE QUERIES WITH TIMEOUT
+      // DATABASE CONCURRENCY CONTROL
       // ==========================================
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Database timeout')), 30000)
-      );
 
-      const results = await Promise.race([
-        Promise.all(loadPromises),
-        timeoutPromise
-      ]);
+      // Check if database is busy
+      const timeSinceLastOp = Date.now() - dbOperationRef.current.lastOperationTime;
+      const isBusy = dbOperationRef.current.isLoading || dbOperationRef.current.pendingOperations > 0;
+
+      // If this is a background refresh and database is busy, defer it
+      if (background && isBusy && timeSinceLastOp < 5000) {
+        console.log('🔄 Database busy, deferring background refresh');
+        setTimeout(() => loadMasterData(true), 10000); // Retry in 10 seconds
+        return masterCache;
+      }
+
+      // Mark operation as starting
+      dbOperationRef.current.isLoading = true;
+      dbOperationRef.current.pendingOperations++;
+      dbOperationRef.current.lastOperationTime = Date.now();
+
+      // ==========================================
+      // EXECUTE QUERIES WITH RETRY LOGIC
+      // ==========================================
+      const executeWithRetry = async (promises, maxRetries = 3) => {
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+          try {
+            // Adjust timeout based on background vs foreground
+            const timeoutDuration = background ? 60000 : 30000; // 60s for background, 30s for foreground
+
+            const timeoutPromise = new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('Database timeout')), timeoutDuration)
+            );
+
+            const results = await Promise.race([
+              Promise.all(promises),
+              timeoutPromise
+            ]);
+
+            return results;
+
+          } catch (error) {
+            console.log(`🔄 Database operation attempt ${attempt}/${maxRetries} failed:`, error.message);
+
+            if (attempt === maxRetries) {
+              throw error;
+            }
+
+            // Exponential backoff: 2s, 4s, 8s
+            const backoffTime = Math.min(2000 * Math.pow(2, attempt - 1), 8000);
+            console.log(`⏱️ Retrying in ${backoffTime}ms...`);
+            await new Promise(resolve => setTimeout(resolve, backoffTime));
+          }
+        }
+      };
+
+      const results = await executeWithRetry(loadPromises);
       
       // Process results
       const updates = {
@@ -714,21 +768,32 @@ useEffect(() => {
       }
 
       console.log(`✅ Data loaded from database in ${loadTime}ms`);
+
+      // Mark operation as complete
+      dbOperationRef.current.isLoading = false;
+      dbOperationRef.current.pendingOperations = Math.max(0, dbOperationRef.current.pendingOperations - 1);
+
       return newCache;
-      
+
     } catch (error) {
       console.error('❌ Error loading data:', error);
-      
+
+      // Always reset operation flags on error
+      dbOperationRef.current.isLoading = false;
+      dbOperationRef.current.pendingOperations = Math.max(0, dbOperationRef.current.pendingOperations - 1);
+
       if (!background) {
         setMasterCache(prev => ({ ...prev, isLoading: false }));
         setCacheStatus(prev => ({
           ...prev,
           isRefreshing: false,
           lastError: error.message,
-          message: 'Failed to load data'
+          message: error.message.includes('timeout') ?
+            'Database timeout - system may be busy. Please try again.' :
+            'Failed to load data'
         }));
       }
-      
+
       throw error;
     }
   }, [masterCache, saveToStorage]);

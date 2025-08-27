@@ -9,9 +9,18 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
     persistSession: true,
     autoRefreshToken: true,
   },
+  db: {
+    schema: 'public'
+  },
+  realtime: {
+    params: {
+      eventsPerSecond: 2
+    }
+  },
   global: {
     headers: {
-      'x-client-info': 'property-app'
+      'x-client-info': 'property-app',
+      'x-connection-pool': 'shared'
     },
     // Custom fetch with timeout and retry logic
     fetch: async (url, options = {}) => {
