@@ -2178,7 +2178,6 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
                         <option value="conservation">Conservation</option>
                         <option value="teardown">Teardown</option>
                         <option value="pre-construction">Pre-Construction</option>
-                        <option value="package">Package Sale</option>
                       </select>
                     </td>
                     <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB' }}>
@@ -2841,14 +2840,69 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
                   <thead style={{ position: 'sticky', top: 0, backgroundColor: '#F9FAFB' }}>
                     <tr>
                       <th style={{ padding: '8px', textAlign: 'left' }}>Select</th>
-                      <th style={{ padding: '8px', textAlign: 'left' }}>Block/Lot</th>
+                      <th style={{ padding: '8px', textAlign: 'left' }}>Block</th>
+                      <th style={{ padding: '8px', textAlign: 'left' }}>Lot</th>
+                      <th style={{ padding: '8px', textAlign: 'left' }}>Qual</th>
                       <th style={{ padding: '8px', textAlign: 'left' }}>Address</th>
-                      <th style={{ padding: '8px', textAlign: 'left' }}>Class</th>
+                      <th style={{ padding: '8px', textAlign: 'center' }}>Class</th>
+                      <th style={{ padding: '8px', textAlign: 'center' }}>Bldg</th>
+                      <th style={{ padding: '8px', textAlign: 'left' }}>Type</th>
+                      <th style={{ padding: '8px', textAlign: 'left' }}>Design</th>
+                      <th style={{ padding: '8px', textAlign: 'left' }}>VCS</th>
+                      <th style={{ padding: '8px', textAlign: 'left' }}>Zoning</th>
                       <th style={{ padding: '8px', textAlign: 'left' }}>Sale Date</th>
                       <th style={{ padding: '8px', textAlign: 'right' }}>Sale Price</th>
                       <th style={{ padding: '8px', textAlign: 'right' }}>Acres</th>
+                      <th style={{ padding: '8px', textAlign: 'right' }}>{getUnitLabel()}</th>
                     </tr>
                   </thead>
+                  <tbody>
+                    {searchResults.map(prop => {
+                      const typeName = interpretCodes.getTypeName(prop, jobData?.parsed_code_definitions, vendorType) || prop.asset_type_use || '-';
+                      const designName = interpretCodes.getDesignName(prop, jobData?.parsed_code_definitions, vendorType) || prop.asset_design_style || '-';
+                      const acres = calculateAcreage(prop);
+                      const pricePerUnit = getPricePerUnit(prop.sales_price, acres);
+                      
+                      return (
+                        <tr key={prop.id}>
+                          <td style={{ padding: '8px' }}>
+                            <input
+                              type="checkbox"
+                              checked={selectedToAdd.has(prop.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedToAdd(prev => new Set([...prev, prop.id]));
+                                } else {
+                                  setSelectedToAdd(prev => {
+                                    const newSet = new Set(prev);
+                                    newSet.delete(prop.id);
+                                    return newSet;
+                                  });
+                                }
+                              }}
+                            />
+                          </td>
+                          <td style={{ padding: '8px' }}>{prop.property_block}</td>
+                          <td style={{ padding: '8px' }}>{prop.property_lot}</td>
+                          <td style={{ padding: '8px' }}>{prop.property_qualifier && prop.property_qualifier !== 'NONE' ? prop.property_qualifier : ''}</td>
+                          <td style={{ padding: '8px' }}>{prop.property_location}</td>
+                          <td style={{ padding: '8px', textAlign: 'center' }}>{prop.property_m4_class}</td>
+                          <td style={{ padding: '8px', textAlign: 'center' }}>{prop.asset_building_class || '-'}</td>
+                          <td style={{ padding: '8px', fontSize: '11px' }}>{typeName}</td>
+                          <td style={{ padding: '8px', fontSize: '11px' }}>{designName}</td>
+                          <td style={{ padding: '8px' }}>{prop.new_vcs || '-'}</td>
+                          <td style={{ padding: '8px' }}>{prop.asset_zoning || '-'}</td>
+                          <td style={{ padding: '8px' }}>{prop.sales_date}</td>
+                          <td style={{ padding: '8px', textAlign: 'right' }}>${prop.sales_price?.toLocaleString()}</td>
+                          <td style={{ padding: '8px', textAlign: 'right' }}>{acres.toFixed(2)}</td>
+                          <td style={{ padding: '8px', textAlign: 'right', fontWeight: 'bold' }}>
+                            {valuationMode === 'sf' ? `$${pricePerUnit.toFixed(2)}` : `$${pricePerUnit.toLocaleString()}`}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
                   <tbody>
                     {searchResults.map(prop => (
                       <tr key={prop.id}>
