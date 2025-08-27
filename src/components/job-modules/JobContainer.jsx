@@ -174,76 +174,63 @@ const JobContainer = ({
 
       let allProperties = [];  // ADD THIS LINE!
 
-      // Now load the actual properties with pagination
+      // Use cursor-based pagination for large datasets (OFFSET is slow for large tables)
       if (count && count > 0) {
         allProperties = [];
-        const pageSize = 1000;
-        const totalPages = Math.ceil(count / pageSize);
+        const pageSize = 500; // Smaller batch size for reliability
+        let lastCompositeKey = '';
+        let hasMore = true;
 
-        for (let page = 0; page < totalPages; page++) {
-          const start = page * pageSize;
-          const end = Math.min(start + pageSize - 1, count - 1);
+        while (hasMore) {
+          console.log(`📥 Loading batch starting after "${lastCompositeKey}"...`);
 
-          console.log(`📥 Loading batch ${page + 1}/${totalPages} (${start}-${end})...`);
+          try {
+            // Build cursor-based query (much faster than OFFSET)
+            let dataQuery = supabase
+              .from('property_records')
+              .select('*')
+              .eq('job_id', selectedJob.id)
+              .order('property_composite_key')
+              .limit(pageSize);
 
-          // Retry logic for timeout-prone large offsets
-          let retryCount = 0;
-          const maxRetries = 3;
-          let batchData = null;
-
-          while (retryCount < maxRetries && !batchData) {
-            try {
-              // Build the query again for actual data
-              let dataQuery = supabase
-                .from('property_records')
-                .select('*')
-                .eq('job_id', selectedJob.id)
-                .order('property_composite_key')
-                .range(start, end);
-
-              // Apply assignment filter if needed
-              if (hasAssignments) {
-                dataQuery = dataQuery.eq('is_assigned_property', true);
-              }
-
-              const { data, error } = await dataQuery;
-
-              if (error) {
-                if (error.message?.includes('timeout') && retryCount < maxRetries - 1) {
-                  retryCount++;
-                  console.log(`⏱️ Batch ${page + 1} timeout, retry ${retryCount}/${maxRetries}...`);
-                  await new Promise(resolve => setTimeout(resolve, 2000 * retryCount)); // Exponential backoff
-                  continue;
-                } else {
-                  throw error;
-                }
-              }
-
-              batchData = data;
-
-            } catch (batchError) {
-              if (retryCount < maxRetries - 1) {
-                retryCount++;
-                console.log(`🔄 Batch ${page + 1} failed, retry ${retryCount}/${maxRetries}:`, batchError.message);
-                await new Promise(resolve => setTimeout(resolve, 2000 * retryCount));
-              } else {
-                console.error(`❌ Batch ${page + 1} failed after ${maxRetries} retries, skipping...`);
-                break; // Skip this batch and continue with next
-              }
+            // Apply assignment filter if needed
+            if (hasAssignments) {
+              dataQuery = dataQuery.eq('is_assigned_property', true);
             }
-          }
 
-          if (batchData && batchData.length > 0) {
-            allProperties.push(...batchData);
-            const loaded = allProperties.length;
-            setLoadedCount(loaded);
-            setLoadingProgress(Math.round((loaded / count) * 100));
-          }
+            // Cursor pagination: get records after the last one we loaded
+            if (lastCompositeKey) {
+              dataQuery = dataQuery.gt('property_composite_key', lastCompositeKey);
+            }
 
-          // Longer delay for large datasets to prevent overwhelming
-          if (page < totalPages - 1) {
-            const delay = count > 10000 ? 500 : 100; // Longer delay for big jobs
-            await new Promise(resolve => setTimeout(resolve, delay));
+            const { data, error } = await dataQuery;
+
+            if (error) throw error;
+
+            if (data && data.length > 0) {
+              allProperties.push(...data);
+              lastCompositeKey = data[data.length - 1].property_composite_key;
+
+              const loaded = allProperties.length;
+              setLoadedCount(loaded);
+              setLoadingProgress(Math.round((loaded / count) * 100));
+
+              // If we got less than pageSize, we're done
+              hasMore = data.length === pageSize;
+
+              console.log(`✅ Loaded ${data.length} properties (total: ${loaded}/${count})`);
+            } else {
+              hasMore = false;
+            }
+
+            // Small delay between batches
+            if (hasMore) {
+              await new Promise(resolve => setTimeout(resolve, 200));
+            }
+
+          } catch (error) {
+            console.error(`❌ Critical error loading properties:`, error);
+            throw new Error(`Failed to load property data: ${error.message}`);
           }
         }
 
@@ -787,7 +774,7 @@ const JobContainer = ({
                         Soon
                       </span>
                     )}
-                    {/* ���� NEW: Show analytics indicator for ProductionTracker */}
+                    {/* 🔧 NEW: Show analytics indicator for ProductionTracker */}
                     {module.id === 'production' && workflowStats?.isProcessed && (
                       <span className="text-xs bg-green-500 text-white px-2 py-1 rounded-full ml-1">
                         ✓
