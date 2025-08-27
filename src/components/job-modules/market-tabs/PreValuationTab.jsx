@@ -617,10 +617,6 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
             .eq('id', sale.id);
         }
       }
-      
-      // Clear database cache after saving
-      await supabase.rpc('clear_cache');
-      
       console.log('✅ Size normalized values saved to database');
       
     } catch (error) {
