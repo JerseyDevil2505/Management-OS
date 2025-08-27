@@ -1184,15 +1184,18 @@ useEffect(() => {
 
   const checkSession = async () => {
     try {
-      // Development auto-login
-      if (window.location.hostname.includes('production-black-seven') || 
+      // Development auto-login - expanded conditions
+      if (window.location.hostname.includes('production-black-seven') ||
           window.location.hostname === 'localhost' ||
           window.location.hostname.includes('github.dev') ||
-          window.location.hostname.includes('preview')) {
+          window.location.hostname.includes('preview') ||
+          window.location.hostname.includes('fly.dev') ||
+          window.location.hostname.includes('builder.io') ||
+          window.location.search.includes('dev=true')) {
         setUser({
           email: 'dev@lojik.com',
           role: 'admin',
-          employeeData: { 
+          employeeData: {
             name: 'Development Mode',
             role: 'admin'
           }
