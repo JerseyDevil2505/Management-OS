@@ -1055,36 +1055,26 @@ const handleSalesDecision = async (saleId, decision) => {
 
   // Handle immediate database operations for REJECTIONS
   if (decision === 'reject') {
-    // Only update if there are actually values to remove
-    const saleToReject = timeNormalizedSales.find(s => s.id === saleId);
-    if (saleToReject && (saleToReject.values_norm_time || saleToReject.values_norm_size)) {
-      try {
-        const { error } = await supabase
-          .from('property_records')
-          .update({ 
-            values_norm_time: null,
-            values_norm_size: null 
-          })
-          .eq('id', saleId);
-        
-        if (error) {
-          console.error('Error removing normalized values:', error);
-        } else {
-          // Clear database cache after rejection
-          await supabase.rpc('clear_cache');
-          console.log(`🗑️ Removed normalized values for rejected property ${saleId}`);
-        }
-      } catch (error) {
-        console.error('Error updating property_records:', error);
+    try {
+      const { error } = await supabase
+        .from('property_records')
+        .update({ 
+          values_norm_time: null,
+          values_norm_size: null 
+        })
+        .eq('id', saleId);
+      
+      if (error) {
+        console.error('Error removing normalized values:', error);
+      } else {
+        // Clear database cache after rejection
+        await supabase.rpc('clear_cache');
+        console.log(`🗑️ Removed normalized values for rejected property ${saleId}`);
       }
+    } catch (error) {
+      console.error('Error updating property_records:', error);
     }
-  }
-  
-  // Track unsaved changes
-  if (onDataChange) {
-    onDataChange();
-  }
-};
+  };
      
   const saveBatchDecisions = async () => {
     const keeps = timeNormalizedSales.filter(s => s.keep_reject === 'keep');
