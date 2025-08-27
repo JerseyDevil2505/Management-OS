@@ -85,7 +85,6 @@ const PRESERVED_FIELDS = [
   'values_norm_size',        // MarketAnalysis - calculated value
   'values_norm_time',        // MarketAnalysis - calculated value
   'sales_history',           // FileUploadButton - sales decisions
-  'processing_notes'         // User notes - if added should be kept
 ]
 
 // ===== CODE INTERPRETATION UTILITIES =====
