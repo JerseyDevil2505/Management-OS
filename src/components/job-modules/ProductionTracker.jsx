@@ -508,7 +508,7 @@ const ProductionTracker = ({
         let loadedBillingAnalytics = job.workflow_stats.billingAnalytics;
         let loadedValidationReport = job.workflow_stats.validationReport;
         
-        // Load current validation overrides and adjust totals
+        // Load current validation overrides for tracking (but don't add to count since they're already in inspection_data)
         const { data: currentOverrides, error: overrideError } = await supabase
           .from('inspection_data')
           .select('property_composite_key, override_applied, property_class')
@@ -517,21 +517,8 @@ const ProductionTracker = ({
           .eq('override_applied', true);
 
         if (!overrideError && currentOverrides && currentOverrides.length > 0) {
-          debugLog('PERSISTENCE', `Found ${currentOverrides.length} validation overrides to include in totals`);
-          
-          // Adjust the validInspections count to include overrides
-          const overrideCount = currentOverrides.length;
-          const savedOverrideCount = job.workflow_stats.validationOverrides?.length || 0;
-          
-          // If we have MORE overrides now than when analytics were saved, add the difference
-          if (overrideCount > savedOverrideCount) {
-            const additionalOverrides = overrideCount - savedOverrideCount;
-            loadedAnalytics = {
-              ...loadedAnalytics,
-              validInspections: loadedAnalytics.validInspections + additionalOverrides
-            };
-            debugLog('PERSISTENCE', `Adjusted validInspections from ${job.workflow_stats.validInspections} to ${loadedAnalytics.validInspections}`);
-          }
+          debugLog('PERSISTENCE', `Found ${currentOverrides.length} validation overrides (already counted in validInspections)`);
+          // Note: Overrides are already included in the inspection_data count, so we don't add them again
         }
         
         // Set all the state with potentially adjusted values
