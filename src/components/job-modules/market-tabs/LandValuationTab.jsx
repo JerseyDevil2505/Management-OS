@@ -49,6 +49,7 @@ const LandValuationTab = ({
   const [specialRegions, setSpecialRegions] = useState({});
   const [landNotes, setLandNotes] = useState({});
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showCopiedNotification, setShowCopiedNotification] = useState(false);
   const [searchFilters, setSearchFilters] = useState({
     class: '',
     block: '',
@@ -264,21 +265,17 @@ useEffect(() => {
 
   // ========== CALCULATE ACREAGE HELPER - ENHANCED ==========
   const calculateAcreage = useCallback((property) => {
+    // Always return acres - don't convert here
     const acres = interpretCodes.getCalculatedAcreage(property, vendorType);
-    
-    // Convert based on mode
-    if (valuationMode === 'sf') {
-      return parseFloat(acres) * 43560; // Convert to square feet
-    }
     return parseFloat(acres);
-  }, [vendorType, valuationMode]);
+  }, [vendorType]);
 
   // ========== GET PRICE PER UNIT ==========
   const getPricePerUnit = useCallback((price, size) => {
     if (valuationMode === 'acre') {
       return size > 0 ? Math.round(price / size) : 0;
     } else if (valuationMode === 'sf') {
-      return size > 0 ? (price / size).toFixed(2) : 0;
+      return size > 0 ? (price / (size * 43560)).toFixed(2) : 0;
     } else if (valuationMode === 'ff') {
       // For front foot, need frontage
       return 0; // Will be calculated differently
@@ -368,6 +365,14 @@ useEffect(() => {
       const nu = prop.sales_nu || '';
       const validNu = !nu || nu === '' || nu === ' ' || nu === '00' || nu === '07' || 
                       nu === '7' || nu.charCodeAt(0) === 32;
+
+      // Skip additional cards - they don't have land
+      const isAdditionalCard = prop.property_addl_card && 
+                        prop.property_addl_card !== 'NONE' && 
+                        prop.property_addl_card !== 'M';
+      if (isAdditionalCard) {
+        return false;
+      }
       
       // Standard vacant classes
       const isVacantClass = prop.property_m4_class === '1' || prop.property_m4_class === '3B';
@@ -412,6 +417,23 @@ useEffect(() => {
       
       // Auto-categorize teardowns and pre-construction
       let category = saleCategories[prop.id];
+      // Check for additional cards on same property
+      const hasAdditionalCards = properties.some(p => 
+        p.property_block === prop.property_block &&
+        p.property_lot === prop.property_lot &&
+        p.property_addl_card && 
+        p.property_addl_card !== 'NONE' &&
+        p.property_addl_card !== 'M' &&
+        p.sales_date === prop.sales_date
+      );
+
+      if (hasAdditionalCards && !isPackage) {
+        prop.packageData = {
+          is_package: true,
+          package_type: 'additional_cards',
+          package_count: 2
+        };
+      }
       if (!category) {
         if (prop.property_m4_class === '2' && prop.values_mod_improvement < 10000) {
           category = 'teardown';
@@ -728,6 +750,8 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
         [property.id]: `Copy this to Claude:\n${prompt}`
       }));
       window.open('https://claude.ai/new', '_blank');
+      setShowCopiedNotification(true);
+      setTimeout(() => setShowCopiedNotification(false), 5000);
     }
   };
 
@@ -1883,6 +1907,22 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
   // ========== RENDER LAND RATES TAB ==========
   const renderLandRatesTab = () => (
     <div style={{ padding: '20px' }}>
+      {showCopiedNotification && (
+        <div style={{
+          position: 'fixed',
+          top: '20px',
+          right: '20px',
+          backgroundColor: '#10B981',
+          color: 'white',
+          padding: '12px 20px',
+          borderRadius: '8px',
+          boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+          zIndex: 9999,
+          animation: 'slideIn 0.3s ease'
+        }}>
+          ✓ Prompt copied! Paste into Claude AI
+        </div>
+      )}
       {/* Mode Selection Buttons - TOP RIGHT */}
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
         <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold' }}>Land Valuation Analysis</h3>
@@ -2025,8 +2065,7 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
                 <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Block/Lot</th>
                 <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Address</th>
                 <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>VCS</th>
-                {valuationMode === 'ff' && (
-                  <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Zoning</th>
+                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Zoning</th>
                 )}
                 <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Special Region</th>
                 <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Category</th>
@@ -2070,11 +2109,9 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
                   <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB' }}>
                     {sale.new_vcs || '-'}
                   </td>
-                  {valuationMode === 'ff' && (
-                    <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB' }}>
-                      {sale.asset_zoning || '-'}
-                    </td>
-                  )}
+                  <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB' }}>
+                    {sale.asset_zoning || '-'}
+                  </td>
                   <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB' }}>
                     <select
                       value={specialRegions[sale.id] || 'Normal'}
@@ -2207,7 +2244,7 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
             {(() => {
               const rates = calculateRates();
               return (
-                <>
+<>
                   <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
                     <div style={{ fontSize: '12px', color: '#6B7280' }}>Total Sales</div>
                     <div style={{ fontSize: '20px', fontWeight: 'bold' }}>{vacantSales.length}</div>
@@ -2217,21 +2254,25 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
                     <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#10B981' }}>{includedSales.size}</div>
                   </div>
                   <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
-                    <div style={{ fontSize: '12px', color: '#6B7280' }}>Avg {getUnitLabel()}</div>
+                    <div style={{ fontSize: '12px', color: '#6B7280' }}>Raw Land</div>
                     <div style={{ fontSize: '20px', fontWeight: 'bold' }}>
-                      ${rates.average?.toLocaleString() || '0'}
+                      {vacantSales.filter(s => saleCategories[s.id] === 'raw_land').length}
                     </div>
                   </div>
                   <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
-                    <div style={{ fontSize: '12px', color: '#6B7280' }}>Median {getUnitLabel()}</div>
+                    <div style={{ fontSize: '12px', color: '#6B7280' }}>Teardowns</div>
                     <div style={{ fontSize: '20px', fontWeight: 'bold' }}>
-                      ${rates.median?.toLocaleString() || '0'}
+                      {vacantSales.filter(s => saleCategories[s.id] === 'teardown').length}
                     </div>
                   </div>
                   <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
-                    <div style={{ fontSize: '12px', color: '#6B7280' }}>Range</div>
-                    <div style={{ fontSize: '16px', fontWeight: 'bold' }}>
-                      ${rates.min?.toLocaleString() || '0'} - ${rates.max?.toLocaleString() || '0'}
+                    <div style={{ fontSize: '12px', color: '#6B7280' }}>Special</div>
+                    <div style={{ fontSize: '20px', fontWeight: 'bold' }}>
+                      {vacantSales.filter(s => 
+                        saleCategories[s.id] === 'wetlands' || 
+                        saleCategories[s.id] === 'conservation' ||
+                        saleCategories[s.id] === 'landlocked'
+                      ).length}
                     </div>
                   </div>
                 </>

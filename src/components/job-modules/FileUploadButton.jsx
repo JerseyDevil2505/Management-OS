@@ -16,10 +16,15 @@ const FileUploadButton = ({ job, onFileProcessed, isJobLoading = false, onDataRe
   const [showResultsModal, setShowResultsModal] = useState(false);
   const [comparisonResults, setComparisonResults] = useState(null);
   const [salesDecisions, setSalesDecisions] = useState(new Map());
-  const [sourceFileVersion, setSourceFileVersion] = useState(null);  // Changed from 1 to null
+  const [sourceFileVersion, setSourceFileVersion] = useState(null);  
   const [lastSourceProcessedDate, setLastSourceProcessedDate] = useState(null);
   const [lastCodeProcessedDate, setLastCodeProcessedDate] = useState(null);
-  const [isInitialized, setIsInitialized] = useState(false);  // Added new state
+  const [isInitialized, setIsInitialized] = useState(false);  
+
+  const [showReportsModal, setShowReportsModal] = useState(false);
+  const [reportsList, setReportsList] = useState([]);
+  const [reportCount, setReportCount] = useState(0);
+  const [loadingReports, setLoadingReports] = useState(false);
   
   // NEW: Batch processing modal state
   const [showBatchModal, setShowBatchModal] = useState(false);
@@ -246,96 +251,60 @@ const FileUploadButton = ({ job, onFileProcessed, isJobLoading = false, onDataRe
     }
   };
 
-  // FIXED: Handle code file update with proper Unicode sanitization and BRT support
-  const handleCodeFileUpdate = async () => {
-    if (!codeFile || !codeFileContent) {
-      addNotification('Please select a code file first', 'error');
-      return;
+// FIXED: Handle code file update with proper Unicode sanitization and BRT support
+const handleCodeFileUpdate = async () => {
+  if (!codeFile || !codeFileContent) {
+    addNotification('Please select a code file first', 'error');
+    return;
+  }
+
+  if (!detectedVendor) {
+    addNotification('Could not detect vendor type for code file', 'error');
+    return;
+  }
+
+  try {
+    setProcessing(true);
+    setProcessingStatus('Processing code file...');
+
+    // Call the actual processor to handle the code file properly
+    if (detectedVendor === 'BRT') {
+      const { brtProcessor } = await import('../../lib/data-pipeline/brt-processor.js');
+      await brtProcessor.processCodeFile(codeFileContent, job.id);
+    } else if (detectedVendor === 'Microsystems') {
+      const { microsystemsProcessor } = await import('../../lib/data-pipeline/microsystems-processor.js');
+      await microsystemsProcessor.processCodeFile(codeFileContent, job.id);
+    } else {
+      throw new Error('Unsupported vendor type');
+    }
+    
+    // Only update date stamp if we successfully got here
+    setLastCodeProcessedDate(new Date().toISOString());
+    
+    addNotification(`✅ Successfully updated code definitions for ${detectedVendor}`, 'success');
+    
+    // Clear code file selection
+    setCodeFile(null);
+    setCodeFileContent(null);
+    document.getElementById('code-file-upload').value = '';
+
+    // Notify parent component of the update
+    if (onFileProcessed) {
+      onFileProcessed({ 
+        type: 'code_update',
+        vendor: detectedVendor 
+      });
     }
 
-    if (!detectedVendor) {
-      addNotification('Could not detect vendor type for code file', 'error');
-      return;
-    }
-
-    try {
-      setProcessing(true);
-      setProcessingStatus('Processing code file...');
-
-      // Parse the code file
-      const parsedCodes = parseCodeFile(codeFileContent, detectedVendor);
-      
-      if (!parsedCodes) {
-        throw new Error('Failed to parse code file');
-      }
-
-      // Count codes for feedback
-      let codeCount = 0;
-      if (detectedVendor === 'BRT') {
-        // BRT has nested sections - count all entries
-        codeCount = Object.values(parsedCodes).reduce((total, section) => {
-          return total + (typeof section === 'object' ? Object.keys(section).length : 1);
-        }, 0);
-      } else {
-        // Microsystems has flat structure
-        codeCount = Object.keys(parsedCodes).length;
-      }
-
-      // FIXED: Properly escape special characters to prevent Unicode errors
-      const sanitizedContent = codeFileContent
-        .replace(/\\/g, '\\\\')  // Escape backslashes first
-        .replace(/'/g, "''")     // Escape single quotes for SQL
-        .replace(/\x00/g, '\\0') // Escape null bytes
-        .replace(/\n/g, '\\n')   // Escape newlines
-        .replace(/\r/g, '\\r')   // Escape carriage returns
-        .replace(/\x1a/g, '\\Z') // Escape Ctrl+Z
-        .replace(/\t/g, '\\t');  // Escape tabs
-
-      const newVersion = (job.code_file_version || 1) + 1;
-
-      // Update jobs table directly
-      const { error } = await supabase
-        .from('jobs')
-        .update({
-          code_file_content: sanitizedContent,
-          code_file_name: codeFile.name,
-          code_file_status: 'current',
-          code_file_uploaded_at: new Date().toISOString(),
-          code_file_version: newVersion,
-          parsed_code_definitions: parsedCodes,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', job.id);
-
-      if (error) {
-        throw new Error(`Failed to update job: ${error.message}`);
-      }
-
-      addNotification(`✅ Successfully updated ${codeCount} code definitions for ${detectedVendor}`, 'success');
-      setLastCodeProcessedDate(new Date().toISOString());  // Track code file update date
-      
-      // Clear code file selection
-      setCodeFile(null);
-      setCodeFileContent(null);
-      document.getElementById('code-file-upload').value = '';
-
-      // Notify parent component of the update
-      if (onFileProcessed) {
-        onFileProcessed({ 
-          type: 'code_update', 
-          codes_updated: codeCount,
-          vendor: detectedVendor 
-        });
-      }
-
-    } catch (error) {
-      console.error('❌ Code file update failed:', error);
-      addNotification(`Code file update failed: ${error.message}`, 'error');
-    } finally {
-      setProcessing(false);
-      setProcessingStatus('');
-    }
-  };
+  } catch (error) {
+    console.error('❌ Code file update failed:', error);
+    addNotification(`Code file update failed: ${error.message}`, 'error');
+    // Don't update the date if we failed!
+  } finally {
+    setProcessing(false);
+    setProcessingStatus('');
+  }
+};
 
   // FIXED: Parse files with exact processor logic
   const parseSourceFile = (fileContent, vendor) => {
@@ -610,51 +579,6 @@ const FileUploadButton = ({ job, onFileProcessed, isJobLoading = false, onDataRe
     window.URL.revokeObjectURL(url);
 
     addNotification('📊 Comparison report exported', 'success');
-  };
-
-  // NEW: View all reports
-  const viewAllReports = async () => {
-    try {
-      const { data: reports, error } = await supabase
-        .from('comparison_reports')
-        .select('*')
-        .eq('job_id', job.id)
-        .order('report_date', { ascending: false });
-
-      if (error) throw error;
-
-      addNotification(`Found ${reports.length} comparison reports for this job`, 'info');
-      
-      // Export all reports in old CSV format
-      if (reports.length > 0) {
-        let csvContent = "Report_Date,Change_Type,Block,Lot,Qualifier,Property_Location,Old_Value,New_Value,Status,Reviewed_By,Reviewed_Date\n";
-        
-        reports.forEach(report => {
-          const reportData = report.report_data;
-          if (reportData.changes) {
-            reportData.changes.forEach(change => {
-              csvContent += `"${change.Report_Date}","${change.Change_Type}","${change.Block}","${change.Lot}","${change.Qualifier}","${change.Property_Location}","${change.Old_Value}","${change.New_Value}","${change.Status}","${change.Reviewed_By || ''}","${change.Reviewed_Date || ''}"\n`;
-            });
-          }
-        });
-
-        const blob = new Blob([csvContent], { type: 'text/csv' });
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${job.name}_All_Comparison_Reports_${new Date().toISOString().split('T')[0]}.csv`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
-
-        addNotification('📊 All reports exported', 'success');
-      }
-      
-    } catch (error) {
-      console.error('Error fetching reports:', error);
-      addNotification('Error fetching reports: ' + error.message, 'error');
-    }
   };
 
   // FIXED: Comparison logic using property_records directly instead of current_properties view
@@ -1244,6 +1168,10 @@ try {
       // Save comparison report with sales decisions
       addBatchLog('💾 Saving comparison report to database...', 'info');
       await saveComparisonReport(comparisonResults, salesDecisions);
+      
+      // Refresh report count
+      await loadReportCount();
+      
       addBatchLog('✅ Comparison report saved successfully', 'success');
           
       // Store sales decisions as JSON in property records
@@ -1394,6 +1322,34 @@ try {
         addBatchLog('⚠️ Job metadata update failed', 'warning', { error: updateError.message });
         addNotification('Data processed but job update failed', 'warning');
       }
+
+      // Set flag for ProductionTracker to know data is stale
+      try {
+        const { data: currentJob } = await supabase
+          .from('jobs')
+          .select('workflow_stats')
+          .eq('id', job.id)
+          .single();
+
+        if (currentJob?.workflow_stats) {
+          const updatedWorkflowStats = {
+            ...currentJob.workflow_stats,
+            needsRefresh: true,
+            lastFileUpdate: new Date().toISOString()
+          };
+          
+          await supabase
+            .from('jobs')
+            .update({ 
+              workflow_stats: updatedWorkflowStats 
+            })
+            .eq('id', job.id);
+          
+          addBatchLog('🔄 Marked production analytics as needing refresh', 'info');
+        }
+      } catch (statsError) {
+        console.error('Error updating workflow stats flag:', statsError);
+      }      
       
       const totalProcessed = result.processed || 0;
       const errorCount = result.errors || 0;
@@ -1424,11 +1380,20 @@ try {
         addNotification('❌ Update failed - all changes rolled back. Check logs for details.', 'error');
       }
       
-      // CRITICAL FIX: Update banner state immediately
-      addBatchLog('🔄 Refreshing UI state...', 'info');
-      setSourceFileVersion(newFileVersion);  // Use the newFileVersion we already calculated
-      setLastSourceProcessedDate(new Date().toISOString());  // Track our own date!
-      addBatchLog('✅ UI state refreshed successfully', 'success');
+      // CRITICAL FIX: Update banner state only if we had successful processing
+      if (totalProcessed > 0 && errorCount === 0) {
+        addBatchLog('🔄 Refreshing UI state...', 'info');
+        setSourceFileVersion(newFileVersion);  // Use the newFileVersion we already calculated
+        setLastSourceProcessedDate(new Date().toISOString());  // Track our own date!
+        addBatchLog('✅ UI state refreshed successfully', 'success');
+      } else if (totalProcessed > 0 && errorCount > 0) {
+        // Partial success - still update but note there were errors
+        addBatchLog('🔄 Refreshing UI state (with errors)...', 'warning');
+        setSourceFileVersion(newFileVersion);
+        setLastSourceProcessedDate(new Date().toISOString());
+        addBatchLog('⚠️ UI state refreshed but errors occurred', 'warning');
+      }
+      // If totalProcessed is 0, don't update the dates/version at all
       
       setBatchComplete(true);
       
@@ -1512,6 +1477,7 @@ try {
       
       const vendor = detectVendorType(content, file.name);
       if (vendor) {
+        setDetectedVendor(vendor); 
         addNotification(`✅ Detected ${vendor} code file`, 'success');
       }
     } catch (error) {
@@ -1520,7 +1486,142 @@ try {
     }
   };
 
-  // ENHANCED: Batch Processing Modal with insert progress
+  // Reports List Modal - View all comparison reports
+  const ReportsListModal = () => {
+    if (!showReportsModal) return null;
+    
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="bg-white rounded-lg max-w-4xl w-full max-h-[80vh] overflow-hidden shadow-2xl flex flex-col">
+          {/* Header */}
+          <div className="p-4 border-b border-gray-200 bg-gray-50 shrink-0">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <FileText className="w-5 h-5 text-purple-600" />
+                <h2 className="text-lg font-bold text-gray-900">
+                  Comparison Reports History ({reportsList.length})
+                </h2>
+              </div>
+              <button
+                onClick={() => setShowReportsModal(false)}
+                className="text-gray-400 hover:text-gray-600 p-1"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto p-6">
+            {loadingReports ? (
+              <div className="flex justify-center items-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+              </div>
+            ) : reportsList.length === 0 ? (
+              <div className="text-center py-12">
+                <Database className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+                <p className="text-gray-600">No comparison reports found for this job</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {reportsList.map((report, idx) => {
+                  const reportData = report.report_data || {};
+                  const summary = reportData.summary || {};
+                  const totalChanges = (summary.missing || 0) + (summary.deletions || 0) + 
+                                     (summary.salesChanges || 0) + (summary.classChanges || 0);
+                  
+                  return (
+                    <div key={report.id || idx} className="border rounded-lg p-4 hover:bg-gray-50">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <div className="font-semibold text-gray-900">
+                            {formatDate(report.report_date)}
+                          </div>
+                          <div className="text-sm text-gray-600 mt-1">
+                            File: {reportData.source_file_name || 'Unknown'}
+                          </div>
+                          <div className="text-sm text-gray-600">
+                            Vendor: {reportData.vendor_detected || 'Unknown'}
+                          </div>
+                          <div className="flex gap-4 mt-2 text-xs">
+                            <span className="text-green-600">
+                              New: {summary.missing || 0}
+                            </span>
+                            <span className="text-red-600">
+                              Deleted: {summary.deletions || 0}
+                            </span>
+                            <span className="text-blue-600">
+                              Sales: {summary.salesChanges || 0}
+                            </span>
+                            <span className="text-purple-600">
+                              Class: {summary.classChanges || 0}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              // Export individual report
+                              if (reportData.changes) {
+                                let csvContent = "Report_Date,Change_Type,Block,Lot,Qualifier,Property_Location,Old_Value,New_Value,Status,Reviewed_By,Reviewed_Date\n";
+                                
+                                reportData.changes.forEach(change => {
+                                  csvContent += `"${change.Report_Date}","${change.Change_Type}","${change.Block}","${change.Lot}","${change.Qualifier}","${change.Property_Location}","${change.Old_Value}","${change.New_Value}","${change.Status}","${change.Reviewed_By || ''}","${change.Reviewed_Date || ''}"\n`;
+                                });
+
+                                const blob = new Blob([csvContent], { type: 'text/csv' });
+                                const url = window.URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = `${job.name}_Report_${formatDate(report.report_date).replace(/\//g, '-')}.csv`;
+                                document.body.appendChild(a);
+                                a.click();
+                                document.body.removeChild(a);
+                                window.URL.revokeObjectURL(url);
+
+                                addNotification('Report exported', 'success');
+                              }
+                            }}
+                            className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700"
+                          >
+                            <Download className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-between items-center shrink-0">
+            <div className="text-sm text-gray-600">
+              {reportsList.length} reports found
+            </div>
+            
+            <div className="flex space-x-3">
+              <button
+                onClick={viewAllReports}
+                className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 font-medium"
+              >
+                Export All Reports
+              </button>
+              <button
+                onClick={() => setShowReportsModal(false)}
+                className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 font-medium"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Batch Processing Modal - existing component
   const BatchProcessingModal = () => {
     if (!showBatchModal) return null;
     
@@ -2275,6 +2376,92 @@ try {
     });
   };
 
+  // Load comparison reports count for this job
+  const loadReportCount = async () => {
+    if (!job?.id) return;
+    
+    try {
+      const { count, error } = await supabase
+        .from('comparison_reports')
+        .select('*', { count: 'exact', head: true })
+        .eq('job_id', job.id);
+      
+      if (!error && count !== null) {
+        setReportCount(count);
+      }
+    } catch (error) {
+      console.error('Error loading report count:', error);
+    }
+  };
+
+    // NEW: View all reports
+  const viewAllReports = async () => {
+    try {
+      const { data: reports, error } = await supabase
+        .from('comparison_reports')
+        .select('*')
+        .eq('job_id', job.id)
+        .order('report_date', { ascending: false });
+
+      if (error) throw error;
+
+      addNotification(`Found ${reports.length} comparison reports for this job`, 'info');
+      
+      // Export all reports in old CSV format
+      if (reports.length > 0) {
+        let csvContent = "Report_Date,Change_Type,Block,Lot,Qualifier,Property_Location,Old_Value,New_Value,Status,Reviewed_By,Reviewed_Date\n";
+        
+        reports.forEach(report => {
+          const reportData = report.report_data;
+          if (reportData.changes) {
+            reportData.changes.forEach(change => {
+              csvContent += `"${change.Report_Date}","${change.Change_Type}","${change.Block}","${change.Lot}","${change.Qualifier}","${change.Property_Location}","${change.Old_Value}","${change.New_Value}","${change.Status}","${change.Reviewed_By || ''}","${change.Reviewed_Date || ''}"\n`;
+            });
+          }
+        });
+
+        const blob = new Blob([csvContent], { type: 'text/csv' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${job.name}_All_Comparison_Reports_${new Date().toISOString().split('T')[0]}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+
+        addNotification('📊 All reports exported', 'success');
+      }
+      
+    } catch (error) {
+      console.error('Error fetching reports:', error);
+      addNotification('Error fetching reports: ' + error.message, 'error');
+    }
+  };
+
+  // Load all comparison reports for display in modal
+  const loadReportsList = async () => {
+    if (!job?.id) return;
+    
+    setLoadingReports(true);
+    try {
+      const { data: reports, error } = await supabase
+        .from('comparison_reports')
+        .select('*')
+        .eq('job_id', job.id)
+        .order('report_date', { ascending: false });
+
+      if (error) throw error;
+
+      setReportsList(reports || []);
+    } catch (error) {
+      console.error('Error loading reports:', error);
+      addNotification('Error loading reports: ' + error.message, 'error');
+    } finally {
+      setLoadingReports(false);
+    }
+  };
+
   // Use file version from job prop instead of fetching
   useEffect(() => {
     if (!job?.id) return;
@@ -2290,6 +2477,20 @@ try {
     
     setIsInitialized(true);
   }, [job?.id, job?.current_file_version, job?.source_file_version]);
+
+  // Load report count when job changes
+  useEffect(() => {
+    if (job?.id) {
+      loadReportCount();
+    }
+  }, [job?.id]);  
+
+  // Load reports when modal opens
+  useEffect(() => {
+    if (showReportsModal) {
+      loadReportsList();
+    }
+  }, [showReportsModal]);
 
   const getFileStatusWithRealVersion = (timestamp, type) => {
     if (!timestamp) return 'Never';
@@ -2459,7 +2660,25 @@ try {
             </button>
           </>
         )}
+  </div>
+
+      {/* Comparison Reports Section */}
+      <div className="flex items-center gap-3 text-gray-300">
+        <Database className="w-4 h-4 text-purple-400" />
+        <span className="text-sm min-w-0 flex-1">
+          📊 Reports: {reportCount} saved comparison{reportCount !== 1 ? 's' : ''}
+        </span>
+        <button
+          onClick={() => setShowReportsModal(true)}
+          className="px-3 py-1 bg-purple-600 text-white text-xs rounded hover:bg-purple-700 flex items-center gap-1"
+        >
+          <Eye className="w-3 h-3" />
+          View History
+        </button>
       </div>
+
+      {/* Reports List Modal */}
+      <ReportsListModal />
 
       {/* Batch Processing Modal */}
       <BatchProcessingModal />

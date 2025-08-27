@@ -26,12 +26,9 @@ import LandValuationTab from './market-tabs/LandValuationTab';
 import CostValuationTab from './market-tabs/CostValuationTab';
 import AttributeCardsTab from './market-tabs/AttributeCardsTab';
 
-const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData }) => {
+const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData, onUpdateJobCache }) => {
   // ==================== STATE MANAGEMENT ====================
   const [activeTab, setActiveTab] = useState('data-quality');
-  const [isSaving, setIsSaving] = useState(false);
-  const [lastSaved, setLastSaved] = useState(null);
-  const [unsavedChanges, setUnsavedChanges] = useState(false);
   
   // ==================== DERIVE DATA FROM PROPS ====================
   // Extract vendor type and code definitions from jobData
@@ -85,42 +82,6 @@ const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData }) =>
     { id: 'attribute-cards', label: 'Attribute & Card Analytics', icon: '🎯' }
   ];
 
-  // ==================== SAVE FUNCTIONALITY ====================
-  const handleSave = async () => {
-    setIsSaving(true);
-    try {
-      // TODO: Implement save logic for current tab
-      // This will vary based on which tab is active
-      
-      // Example structure:
-      // if (activeTab === 'pre-valuation') {
-      //   await worksheetService.saveWorksheetData(jobData.id, worksheetData);
-      // } else if (activeTab === 'land-valuation') {
-      //   await landService.saveLandData(jobData.id, landData);
-      // }
-      
-      setLastSaved(new Date());
-      setUnsavedChanges(false);
-      console.log('Analysis data saved successfully');
-    } catch (error) {
-      console.error('Error saving analysis:', error);
-      alert('Failed to save data. Please try again.');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  // Auto-save reminder
-  useEffect(() => {
-    if (unsavedChanges) {
-      const timer = setTimeout(() => {
-        console.log('💾 Reminder: You have unsaved changes');
-      }, 60000); // Remind after 1 minute of unsaved changes
-      
-      return () => clearTimeout(timer);
-    }
-  }, [unsavedChanges]);
-
   // ==================== MAIN RENDER ====================
   return (
     <div className="min-h-screen bg-gray-50">
@@ -143,23 +104,6 @@ const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData }) =>
               <div className="text-sm text-gray-500">
                 {propertyCount.toLocaleString()} properties loaded
               </div>
-              {lastSaved && (
-                <span className="text-sm text-gray-500">
-                  Last saved: {lastSaved.toLocaleTimeString()}
-                </span>
-              )}
-              <button
-                onClick={handleSave}
-                disabled={isSaving || !unsavedChanges}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all ${
-                  isSaving || !unsavedChanges
-                    ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                    : 'bg-blue-600 text-white hover:bg-blue-700'
-                }`}
-              >
-                <Save size={16} />
-                {isSaving ? 'Saving...' : 'Save'}
-              </button>
             </div>
           </div>
         </div>
@@ -217,7 +161,7 @@ const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData }) =>
                 codeDefinitions={codeDefinitions}
                 availableFields={availableFields}
                 marketLandData={marketLandData}
-                onDataChange={() => setUnsavedChanges(true)}
+                onUpdateJobCache={onUpdateJobCache}
               />
             )}    
             
@@ -229,7 +173,7 @@ const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData }) =>
                 codeDefinitions={codeDefinitions}
                 marketLandData={marketLandData}
                 hpiData={hpiData}
-                onDataChange={() => setUnsavedChanges(true)}
+                onUpdateJobCache={onUpdateJobCache}
               />
             )}
             
@@ -241,7 +185,7 @@ const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData }) =>
                 codeDefinitions={codeDefinitions}
                 marketLandData={marketLandData}
                 hpiData={hpiData}
-                onDataChange={() => setUnsavedChanges(true)}
+                onUpdateJobCache={onUpdateJobCache}
               />
             )}      
             
@@ -252,7 +196,7 @@ const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData }) =>
                 vendorType={vendorType}
                 codeDefinitions={codeDefinitions}
                 marketLandData={marketLandData}
-                onDataChange={() => setUnsavedChanges(true)}
+                onUpdateJobCache={onUpdateJobCache}
               />
             )}
             
@@ -263,7 +207,7 @@ const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData }) =>
                 vendorType={vendorType}
                 codeDefinitions={codeDefinitions}
                 marketLandData={marketLandData}
-                onDataChange={() => setUnsavedChanges(true)}
+                onUpdateJobCache={onUpdateJobCache}
               />
             )}
             
@@ -274,30 +218,12 @@ const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData }) =>
                 vendorType={vendorType}
                 codeDefinitions={codeDefinitions}
                 marketLandData={marketLandData}
-                onDataChange={() => setUnsavedChanges(true)}
+                onUpdateJobCache={onUpdateJobCache}
               />
             )}
           </>
         )}
       </div>
-
-      {/* Floating Save Reminder */}
-      {unsavedChanges && (
-        <div className="fixed bottom-4 right-4 bg-yellow-50 border border-yellow-200 rounded-lg shadow-lg p-4 flex items-center gap-3">
-          <AlertCircle className="text-yellow-600" size={20} />
-          <div>
-            <p className="text-sm font-medium text-yellow-800">Unsaved Changes</p>
-            <p className="text-xs text-yellow-600">Remember to save your work</p>
-          </div>
-          <button
-            onClick={handleSave}
-            disabled={isSaving}
-            className="ml-4 px-3 py-1.5 bg-yellow-600 text-white text-sm font-medium rounded hover:bg-yellow-700 disabled:opacity-50"
-          >
-            {isSaving ? 'Saving...' : 'Save Now'}
-          </button>
-        </div>
-      )}
     </div>
   );
 };

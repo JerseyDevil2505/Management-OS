@@ -746,7 +746,7 @@ const AdminJobManagement = ({
         }
       }
 
-      // Database integration
+// Database integration
       const { data, error } = await supabase
         .from('county_hpi_data')
         .delete()
@@ -1230,6 +1230,7 @@ const AdminJobManagement = ({
   const deleteJob = async (job) => {
     try {
       await jobService.delete(job.id);
+      
       await refreshJobsWithAssignedCounts();
       setShowDeleteConfirm(null);
       addNotification('Job deleted successfully', 'success');

@@ -32,22 +32,29 @@ const OverallAnalysisTab = ({
     typeUse: null
   });
 
+  // Run analysis when baselines change
+  useEffect(() => {
+    if (filteredProperties.length > 0) {
+      runAnalysis();
+    }
+  }, [customBaselines.design, customBaselines.typeUse]);
+
   // Extract vendor type and code definitions
   const vendorType = jobData?.vendor_type || 'BRT';
   const codeDefinitions = jobData?.parsed_code_definitions || {};
 
   // ==================== CME BRACKET DEFINITIONS ====================
   const CME_BRACKETS = [
-    { min: 0, max: 99999, label: 'up to $99,999', color: '#ef4444', textColor: 'white' },
-    { min: 100000, max: 199999, label: '$100,000-$199,999', color: '#f97316', textColor: 'white' },
-    { min: 200000, max: 299999, label: '$200,000-$299,999', color: '#fb923c', textColor: 'white' },
-    { min: 300000, max: 399999, label: '$300,000-$399,999', color: '#fbbf24', textColor: 'black' },
-    { min: 400000, max: 499999, label: '$400,000-$499,999', color: '#facc15', textColor: 'black' },
-    { min: 500000, max: 749999, label: '$500,000-$749,999', color: '#84cc16', textColor: 'black' },
-    { min: 750000, max: 999999, label: '$750,000-$999,999', color: '#22c55e', textColor: 'white' },
-    { min: 1000000, max: 1499999, label: '$1,000,000-$1,499,999', color: '#3b82f6', textColor: 'white' },
-    { min: 1500000, max: 1999999, label: '$1,500,000-$1,999,999', color: '#6366f1', textColor: 'white' },
-    { min: 2000000, max: 99999999, label: 'Over $2,000,000', color: '#8b5cf6', textColor: 'white' }
+    { min: 0, max: 99999, label: 'up to $99,999', color: '#FF9999', textColor: 'black' },          // Light red/pink
+    { min: 100000, max: 199999, label: '$100,000-$199,999', color: '#FFB366', textColor: 'black' }, // Light orange
+    { min: 200000, max: 299999, label: '$200,000-$299,999', color: '#FFCC99', textColor: 'black' }, // Peach
+    { min: 300000, max: 399999, label: '$300,000-$399,999', color: '#FFFF99', textColor: 'black' }, // Light yellow
+    { min: 400000, max: 499999, label: '$400,000-$499,999', color: '#CCFF99', textColor: 'black' }, // Light green-yellow
+    { min: 500000, max: 749999, label: '$500,000-$749,999', color: '#99FF99', textColor: 'black' }, // Light green
+    { min: 750000, max: 999999, label: '$750,000-$999,999', color: '#99CCFF', textColor: 'black' }, // Light blue
+    { min: 1000000, max: 1499999, label: '$1,000,000-$1,499,999', color: '#9999FF', textColor: 'black' }, // Light purple
+    { min: 1500000, max: 1999999, label: '$1,500,000-$1,999,999', color: '#CC99FF', textColor: 'black' }, // Light violet
+    { min: 2000000, max: 99999999, label: 'Over $2,000,000', color: '#FF99FF', textColor: 'black' }      // Light magenta
   ];
 
   const getCMEBracket = (price) => {
@@ -157,8 +164,21 @@ const OverallAnalysisTab = ({
     // Count ALL properties for inventory
     filteredProperties.forEach(p => {
       const typeCode = p.asset_type_use || 'Unknown';
+      
+      // Skip empty, blank, "00", space, or Unknown type codes
+      if (!typeCode || typeCode === 'Unknown' || typeCode === '' || 
+          typeCode === '00' || typeCode === '0' || typeCode.trim() === '') {
+        return; // Skip this property
+      }
+      
       const category = getTypeCategory(typeCode);
       const typeName = interpretCodes.getTypeName(p, codeDefinitions, vendorType) || category;
+      
+      // Also skip if the name comes back as Unknown or Other
+      if (typeName === 'Unknown' || typeName === 'Other' || !typeName || typeName.trim() === '') {
+        return; // Skip this property
+      }
+      
       const key = `${typeCode}-${typeName}`;
       
       if (!groups[key]) {
@@ -266,9 +286,11 @@ const OverallAnalysisTab = ({
       const designCode = p.asset_design_style || 'Unknown';
       const designName = interpretCodes.getDesignName(p, codeDefinitions, vendorType) || designCode;
       
-      // FILTER FIX: Skip unknown/empty designs
+      // FILTER FIX: Skip unknown/empty designs - including "00" and whitespace
       if (!designCode || designCode === 'Unknown' || designCode === '' || 
-          designName === 'Unknown' || designName === '') {
+          designCode === '00' || designCode === '0' || designCode.trim() === '' ||
+          designName === 'Unknown' || designName === '' || designName.trim() === '' ||
+          designName === 'Other') {
         return; // Skip this property
       }
       
@@ -1108,6 +1130,23 @@ const OverallAnalysisTab = ({
     <div className="max-w-full mx-auto space-y-6">
       {/* Header */}
       <div className="bg-white rounded-lg shadow-sm p-6">
+        {/* Normalization Warning Banner */}
+        {properties.length > 0 && !properties.some(p => p.values_norm_time && p.values_norm_time > 0) && (
+          <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5" />
+              <div>
+                <div className="font-medium text-yellow-900">Time & Size Normalization Required</div>
+                <div className="text-sm text-yellow-800 mt-1">
+                  To see sale prices, adjusted prices, and CME brackets, please run Time & Size Normalization first.
+                  <br />
+                  <span className="font-medium">Go to: Pre-Valuation Setup tab → Time & Size Normalization</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+        
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-2xl font-bold text-gray-900">Overall Market Analysis</h2>
           <div className="flex gap-2">
@@ -1314,7 +1353,7 @@ const OverallAnalysisTab = ({
                           ...prev,
                           design: e.target.value || null
                         }));
-                        runAnalysis();
+     
                       }}
                       className="px-3 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >

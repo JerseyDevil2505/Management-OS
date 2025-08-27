@@ -457,7 +457,6 @@ export class BRTUpdater {
       property_lot: lotValue,
       property_qualifier: qualifierValue === 'NONE' ? null : qualifierValue,
       property_addl_card: cardValue === 'NONE' ? null : cardValue,
-      property_addl_lot: null,
       property_location: locationValue === 'NONE' ? null : locationValue,
       property_composite_key: `${yearCreated}${ccddCode}-${blockValue}-${lotValue}_${qualifierValue}-${cardValue}-${locationValue}`,
       property_cama_class: rawRecord.PROPCLASS,
@@ -519,36 +518,28 @@ export class BRTUpdater {
       asset_zoning: null,
       
       // Analysis and calculation fields
-      analysis_code: null,
-      analysis_version: 1,
-      condition_rating: null,
       location_analysis: null,
       new_vcs: null,
       total_baths_calculated: this.calculateTotalBaths(rawRecord),
       
       // Processing metadata
       processed_at: new Date().toISOString(),
-      processing_notes: null,
       validation_status: 'updated', // CHANGED: from 'imported' to 'updated'
       is_new_since_last_upload: false, // CHANGED: false for updates
-      is_retroactive_credit: false,
       
       // File tracking with version info
       source_file_name: versionInfo.source_file_name || null,
       source_file_version_id: versionInfo.source_file_version_id || null,
       source_file_uploaded_at: versionInfo.source_file_uploaded_at || new Date().toISOString(),
-      code_file_name: versionInfo.code_file_name || null,
       code_file_updated_at: versionInfo.code_file_updated_at || new Date().toISOString(),
       file_version: versionInfo.file_version || 1,
       upload_date: new Date().toISOString(),
       
       // Payroll and project tracking
-      payroll_period_start: null,
       project_start_date: null,
       
       // System metadata
       vendor_source: 'BRT',
-      import_session_id: versionInfo.import_session_id || null,
       created_by: '5df85ca3-7a54-4798-a665-c31da8d9caad',
       created_at: new Date().toISOString(), // Will be ignored on UPSERT
       updated_at: new Date().toISOString(),
@@ -817,49 +808,33 @@ export class BRTUpdater {
   }
 
   calculateLotAcres(rawRecord) {
-    let totalAcres = 0;
-    let totalSqFt = 0;
-    let foundAcres = false;
-    let foundSqFt = false;
-    
-    for (let i = 1; i <= 6; i++) {
-      const urCode = rawRecord[`LANDUR_${i}`];
-      const urValue = this.parseNumeric(rawRecord[`LANDURVALUE_${i}`]);
-      if (!urCode || !urValue) continue;
-      
-      const codeDescription = this.getCodeDescription(urCode);
-      if (codeDescription) {
-        if (codeDescription.toUpperCase().includes('ACRE') || 
-            codeDescription.toUpperCase().includes('AC')) {
-          totalAcres += urValue;
-          foundAcres = true;
-        } else if (codeDescription.toUpperCase().includes('SITE') && 
-                   !codeDescription.toUpperCase().includes('ACRE')) {
-          totalSqFt += urValue;
-          foundSqFt = true;
-        }
-      } else {
-        if (urCode.includes('AC')) {
-          totalAcres += urValue;
-          foundAcres = true;
-        } else if (urCode.includes('SF')) {
-          totalSqFt += urValue;
-          foundSqFt = true;
-        }
+    // 1. Try frontage × depth first
+    const frontage = this.calculateLotFrontage(rawRecord);
+    const depth = this.calculateLotDepth(rawRecord);
+    if (frontage && depth) {
+      const acres = (frontage * depth) / 43560;
+      if (acres > 0) {
+        return parseFloat(acres.toFixed(2));
       }
     }
     
-    if (!foundAcres && foundSqFt && totalSqFt > 0) {
-      totalAcres = totalSqFt / 43560;
+    // 2. Fall back to PROPERTY_ACREAGE (divide by 10000)
+    if (rawRecord.PROPERTY_ACREAGE) {
+      const propAcreage = parseFloat(rawRecord.PROPERTY_ACREAGE);
+      if (!isNaN(propAcreage) && propAcreage > 0) {
+        const acres = propAcreage / 10000;
+        return parseFloat(acres.toFixed(2));
+      }
     }
     
-    return totalAcres > 0 ? parseFloat(totalAcres.toFixed(3)) : null;
+    // 3. Skip LANDUR complexity
+    return null;
   }
 
-  calculateLotSquareFeet(rawRecord) {
-    const acres = this.calculateLotAcres(rawRecord);
-    return acres ? Math.round(acres * 43560) : null;
-  }
+    calculateLotSquareFeet(rawRecord) {
+      const acres = this.calculateLotAcres(rawRecord);
+      return acres ? Math.round(acres * 43560) : null;
+    }
 
   parseDate(dateString) {
     if (!dateString || dateString.trim() === '') return null;

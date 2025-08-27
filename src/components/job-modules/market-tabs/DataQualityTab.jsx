@@ -18,7 +18,8 @@ const DataQualityTab = ({
   vendorType,
   codeDefinitions,
   availableFields,
-  marketLandData    
+  marketLandData,    
+  onUpdateJobCache 
 }) => {
   // ==================== INTERNAL STATE MANAGEMENT ====================
   const [checkResults, setCheckResults] = useState({});
@@ -38,6 +39,7 @@ const DataQualityTab = ({
   const [expandedCategories, setExpandedCategories] = useState(['mod_iv']);
   const [isRunningChecks, setIsRunningChecks] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [ignoredIssues, setIgnoredIssues] = useState(new Set());
   const [modalData, setModalData] = useState({ title: '', properties: [] });
 
   // Refs for uncontrolled inputs
@@ -60,6 +62,10 @@ const DataQualityTab = ({
       // Load quality score
       if (marketLandData.quality_score) {
         setQualityScore(marketLandData.quality_score);
+      }
+      // Load ignored issues
+      if (marketLandData.ignored_issues) {
+        setIgnoredIssues(new Set(marketLandData.ignored_issues));
       }
     }
   }, [marketLandData]);
@@ -549,7 +555,27 @@ const generateQCFormPDF = () => {
       const score = calculateQualityScore(results);
       setQualityScore(score);
       setCheckResults(results);
-     
+
+      // Calculate and update stats from actual results
+      let criticalCount = 0;
+      let warningCount = 0;
+      let infoCount = 0;
+
+      Object.values(results).forEach(category => {
+        category.forEach(issue => {
+          if (issue.severity === 'critical') criticalCount++;
+          else if (issue.severity === 'warning') warningCount++;
+          else if (issue.severity === 'info') infoCount++;
+        });
+      });
+
+      setIssueStats({
+        critical: criticalCount,
+        warning: warningCount,
+        info: infoCount,
+        total: criticalCount + warningCount + infoCount
+      });
+
       console.log('Quality check complete!');
     } catch (error) {
       console.error('Error running quality checks:', error);
@@ -787,21 +813,41 @@ const generateQCFormPDF = () => {
       }
     }
     
-    // LOT SIZE CHECKS
-    const lotAcre = property.asset_lot_acre || 0;
-    const lotSf = property.asset_lot_sf || 0;
+  // LOT SIZE CHECKS - Use the enhanced getTotalLotSize function
+    const totalLotSize = interpretCodes.getTotalLotSize(property, vendor, codeDefinitions);
     const lotFrontage = property.asset_lot_frontage || 0;
     
-    if (lotAcre === 0 && lotSf === 0 && lotFrontage === 0) {
-      results.characteristics.push({
-        check: 'zero_lot_size',
-        severity: 'critical',
-        property_key: property.property_composite_key,
-        message: 'Property has zero lot size (acre, sf, and frontage all zero)',
-        details: property
-      });
+    // Check if we truly have zero lot size (getTotalLotSize returns acres or null)
+    if ((!totalLotSize || parseFloat(totalLotSize) === 0) && lotFrontage === 0) {
+      // Skip condos with only site value
+      let skipError = false;
+      
+      if (typeUseStr && (typeUseStr.startsWith('6') || typeUseStr.startsWith('60'))) {
+        // It's a condo - check if it only has site value in BRT
+        if (vendor === 'BRT' && property.raw_data) {
+          let hasSiteOnly = false;
+          for (let i = 1; i <= 6; i++) {
+            const code = property.raw_data[`LANDUR_${i}`];
+            if (code === '01' || code === '1') hasSiteOnly = true;
+            if (code === '02' || code === '2') {
+              hasSiteOnly = false;  // Has acreage, not just site value
+              break;
+            }
+          }
+          skipError = hasSiteOnly;
+        }
+      }
+      
+      if (!skipError) {
+        results.characteristics.push({
+          check: 'zero_lot_size',
+          severity: 'critical',
+          property_key: property.property_composite_key,
+          message: 'Property has zero lot size (no acre, sf, frontage, or LANDUR data)',
+          details: property
+        });
+      }
     }
-    
     // LIVING AREA & YEAR BUILT
     const sfla = property.asset_sfla || 0;
     const yearBuilt = property.asset_year_built;
@@ -1374,7 +1420,8 @@ const generateQCFormPDF = () => {
         warning_count: warningCount,
         info_count: infoCount,
         custom_checks: customChecks.length > 0 ? customChecks : null,
-        quality_check_results: qualityCheckResults
+        quality_check_results: qualityCheckResults,
+        ignored_issues: Array.from(ignoredIssues)
       };
       
       if (existing) {
@@ -1388,6 +1435,12 @@ const generateQCFormPDF = () => {
           .from('market_land_valuation')
           .insert(saveData);
         if (error) throw error;
+      }
+
+      //Clear cache after saving quality results
+      if (onUpdateJobCache && jobData?.id) {
+        console.log('🗑️ Clearing cache after saving quality check results');
+        onUpdateJobCache(jobData.id, null);
       }
       
       setRunHistory(updatedHistory);
@@ -1883,6 +1936,35 @@ const editCustomCheck = (check) => {
               <Download size={16} />
               Export to Excel
             </button>
+
+            {ignoredIssues.size > 0 && (
+              <button 
+                onClick={async () => {
+                  setIgnoredIssues(new Set());
+                  try {
+                    await supabase
+                      .from('market_land_valuation')
+                      .update({ 
+                        ignored_issues: [],
+                        updated_at: new Date().toISOString()
+                      })
+                      .eq('job_id', jobData.id);
+                    
+                    // Clear cache
+                    if (onUpdateJobCache && jobData?.id) {
+                      onUpdateJobCache(jobData.id, null);
+                    }
+                  } catch (error) {
+                    console.error('Error clearing ignored issues:', error);
+                  }
+                }}
+                className="px-4 py-2 bg-yellow-600 text-white rounded-lg font-medium hover:bg-yellow-700 transition-all flex items-center gap-2"
+              >
+                <X size={16} />
+                Clear {ignoredIssues.size} Ignored
+              </button>
+            )}
+            
             <button 
               onClick={generateQCFormPDF}
               className="px-4 py-2 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-all flex items-center gap-2"
@@ -2437,34 +2519,77 @@ const editCustomCheck = (check) => {
                     <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider bg-white">
                       Issue Details
                     </th>
+                    <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider bg-white">
+                      Action
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {modalData.properties.map((prop, index) => {
                     const property = prop.details;
+                    const issueKey = `${prop.property_key}-${prop.check}`;
+                    const isIgnored = ignoredIssues.has(issueKey);
                     
                     return (
-                      <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
-                        <td className="py-3 px-4 text-sm text-gray-900">
+                      <tr key={index} className={`border-b border-gray-100 hover:bg-gray-50 ${isIgnored ? 'opacity-50' : ''}`}>
+                        <td className={`py-3 px-4 text-sm text-gray-900 ${isIgnored ? 'line-through' : ''}`}>
                           {property?.property_block || ''}
                         </td>
-                        <td className="py-3 px-4 text-sm text-gray-900">
+                        <td className={`py-3 px-4 text-sm text-gray-900 ${isIgnored ? 'line-through' : ''}`}>
                           {property?.property_lot || ''}
                         </td>
-                        <td className="py-3 px-4 text-sm text-gray-900">
+                        <td className={`py-3 px-4 text-sm text-gray-900 ${isIgnored ? 'line-through' : ''}`}>
                           {property?.property_qualifier || ''}
                         </td>
-                        <td className="py-3 px-4 text-sm text-gray-900">
+                        <td className={`py-3 px-4 text-sm text-gray-900 ${isIgnored ? 'line-through' : ''}`}>
                           {property?.property_card || ''}
                         </td>
-                        <td className="py-3 px-4 text-sm text-gray-900">
+                        <td className={`py-3 px-4 text-sm text-gray-900 ${isIgnored ? 'line-through' : ''}`}>
                           {property?.property_location || ''}
                         </td>
-                        <td className="py-3 px-4 text-sm text-gray-900">
+                        <td className={`py-3 px-4 text-sm text-gray-900 ${isIgnored ? 'line-through' : ''}`}>
                           {property?.property_m4_class || ''}
                         </td>
-                        <td className="py-3 px-4 text-sm text-gray-600">
+                        <td className={`py-3 px-4 text-sm text-gray-600 ${isIgnored ? 'line-through' : ''}`}>
                           {prop.message}
+                        </td>
+                        <td className="py-3 px-4">
+                          <button
+                            onClick={async () => {
+                              const newIgnored = new Set(ignoredIssues);
+                              if (isIgnored) {
+                                newIgnored.delete(issueKey);
+                              } else {
+                                newIgnored.add(issueKey);
+                              }
+                              setIgnoredIssues(newIgnored);
+                              
+                              // Save to database immediately
+                              try {
+                                await supabase
+                                  .from('market_land_valuation')
+                                  .update({ 
+                                    ignored_issues: Array.from(newIgnored),
+                                    updated_at: new Date().toISOString()
+                                  })
+                                  .eq('job_id', jobData.id);
+                                
+                                // Clear cache after update
+                                if (onUpdateJobCache && jobData?.id) {
+                                  onUpdateJobCache(jobData.id, null);
+                                }
+                              } catch (error) {
+                                console.error('Error saving ignored issues:', error);
+                              }
+                            }}
+                            className={`px-2 py-1 text-xs rounded transition-colors ${
+                              isIgnored 
+                                ? 'bg-green-100 text-green-700 hover:bg-green-200' 
+                                : 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
+                            }`}
+                          >
+                            {isIgnored ? 'Restore' : 'Ignore'}
+                          </button>
                         </td>
                       </tr>
                     );

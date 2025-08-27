@@ -863,7 +863,7 @@ useEffect(() => {
   // JOB-LEVEL CACHE MANAGEMENT (SECOND TIER)
   // ==========================================
   const updateJobCache = useCallback((jobId, data) => {
-      console.log('🔍 updateJobCache called:', {
+    console.log('🔍 updateJobCache called:', {
       jobId,
       hasData: !!data,
       currentCacheKeys: Object.keys(masterCache.jobCache || {})
@@ -878,6 +878,7 @@ useEffect(() => {
           [jobId]: undefined
         }
       }));
+      // Don't trigger reload here - let FileUploadButton handle that
     } else {
       // Update cache for this job
       console.log(`📦 Updating cache for job ${jobId}`);
@@ -902,14 +903,30 @@ useEffect(() => {
     setActiveView('job-modules');
     // Update URL when job is selected
     window.history.pushState({}, '', `/job/${job.id}`);
-  }, []);
+    
+    // Clear job cache when selecting a job to force fresh data load
+    if (job?.id && masterCache.jobCache?.[job.id]) {
+      console.log(`🔄 Clearing cache for job ${job.id} on selection`);
+      setMasterCache(prev => ({
+        ...prev,
+        jobCache: {
+          ...prev.jobCache,
+          [job.id]: undefined
+        }
+      }));
+    }
+  }, [masterCache.jobCache]);
 
   const handleBackToJobs = useCallback(() => {
     setSelectedJob(null);
     setActiveView('admin-jobs');
     // Reset URL when going back to jobs
     window.history.pushState({}, '', '/admin-jobs');
-  }, []);
+    
+    // Refresh jobs data to show any updates made in modules
+    console.log('🔄 Refreshing jobs data after returning from modules');
+    loadMasterData({ force: true, components: ['jobs'] });
+  }, [loadMasterData]);
 
   const handleFileProcessed = useCallback(() => {
     // Clear cache for this job after file upload
@@ -1293,6 +1310,29 @@ useEffect(() => {
       }
     };
   }, []); // Only run once on mount
+
+   // ==========================================
+  // URL-BASED JOB RESTORATION (FIX FOR F5)
+  // ==========================================
+  useEffect(() => {
+    // Only run if we have jobs loaded and no job currently selected
+    if (masterCache.jobs && masterCache.jobs.length > 0 && !selectedJob) {
+      const path = window.location.pathname;
+      const parts = path.split('/');
+      
+      // Check if URL indicates a specific job
+      if (parts[1] === 'job' && parts[2]) {
+        const jobId = parts[2];
+        const job = masterCache.jobs.find(j => j.id === jobId);
+        
+        if (job) {
+          console.log('📍 Restoring job from URL after cache/data load:', jobId);
+          setSelectedJob(job);
+          setActiveView('job-modules');
+        }
+      }
+    }
+  }, [masterCache.jobs]); // Re-run when jobs are loaded/updated
 
   // ==========================================
   // VISIBILITY CHANGE HANDLER

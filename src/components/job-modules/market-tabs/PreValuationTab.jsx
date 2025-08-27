@@ -25,8 +25,15 @@ const PreValuationTab = ({
   hpiData,
   codeDefinitions,
   vendorType,
-  onDataChange 
+  onDataChange,
+  onUpdateJobCache 
 }) => {
+    console.log('PreValuationTab MOUNTED/UPDATED:', {
+    jobId: jobData?.id,
+    vendorType,
+    hasMarketLandData: !!marketLandData,
+    marketLandDataKeys: marketLandData ? Object.keys(marketLandData).length : 0
+  });
   // ==================== STATE MANAGEMENT ====================
   
   // Normalization Configuration State (matching HTML UI)
@@ -277,38 +284,43 @@ useEffect(() => {
 useEffect(() => {
   if (!marketLandData) return;
   
-  // Restore configuration from marketLandData prop
+  console.log('🔄 Restoring data from marketLandData...');
+  
+  // Always restore everything when we have marketLandData
   if (marketLandData.normalization_config) {
     const config = marketLandData.normalization_config;
-    if (config.equalizationRatio !== undefined) setEqualizationRatio(config.equalizationRatio);
-    if (config.outlierThreshold !== undefined) setOutlierThreshold(config.outlierThreshold);
-    if (config.normalizeToYear !== undefined) setNormalizeToYear(config.normalizeToYear);
-    if (config.salesFromYear !== undefined) setSalesFromYear(config.salesFromYear);
-    if (config.minSalePrice !== undefined) setMinSalePrice(config.minSalePrice);
-    if (config.selectedCounty !== undefined) setSelectedCounty(config.selectedCounty);
-    if (config.lastTimeNormalizationRun) setLastTimeNormalizationRun(config.lastTimeNormalizationRun);
-    if (config.lastSizeNormalizationRun) setLastSizeNormalizationRun(config.lastSizeNormalizationRun);
+    setEqualizationRatio(config.equalizationRatio || '');
+    setOutlierThreshold(config.outlierThreshold || '');
+    setNormalizeToYear(config.normalizeToYear || 2025);
+    setSalesFromYear(config.salesFromYear || 2012);
+    setMinSalePrice(config.minSalePrice || 100);
+    setSelectedCounty(config.selectedCounty || 'Bergen');
+    setLastTimeNormalizationRun(config.lastTimeNormalizationRun || null);
+    setLastSizeNormalizationRun(config.lastSizeNormalizationRun || null);
   }
   
-  // Restore normalized sales from marketLandData
   if (marketLandData.time_normalized_sales && marketLandData.time_normalized_sales.length > 0) {
+    console.log(`✅ Restoring ${marketLandData.time_normalized_sales.length} normalized sales`);
     setTimeNormalizedSales(marketLandData.time_normalized_sales);
   }
   
-  // Restore stats from marketLandData
   if (marketLandData.normalization_stats) {
+    console.log('📊 Restoring normalization stats:', marketLandData.normalization_stats);
     setNormalizationStats(marketLandData.normalization_stats);
   }
-
-  // Restore zoning requirements from marketLandData
-  if (marketLandData?.zoning_config) {
-    setEditingZoning(marketLandData.zoning_config);
-    console.log('✅ Restored zoning configuration from marketLandData');
+  
+  if (marketLandData.zoning_config) {
+    // Convert min_size_unit from database (snake_case) to minSizeUnit for UI (camelCase)
+    const convertedConfig = {};
+    Object.keys(marketLandData.zoning_config).forEach(zone => {
+      convertedConfig[zone] = {
+        ...marketLandData.zoning_config[zone],
+        minSizeUnit: marketLandData.zoning_config[zone].min_size_unit || 'SF'
+      };
+    });
+    setEditingZoning(convertedConfig);
   }
-  if (marketLandData.normalization_config || marketLandData.time_normalized_sales) {
-    console.log('✅ Restored saved normalization data from props');
-  }
-}, [marketLandData]);
+}, [marketLandData]);// Only run when marketLandData actually changes
 
   // ==================== WORKSHEET INITIALIZATION ====================
   useEffect(() => {
@@ -557,7 +569,7 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       
       setNormalizationStats(newStats);
       
-      // Save configuration and results to database
+      // Save configuration to database
       const config = {
         equalizationRatio,
         outlierThreshold,
@@ -569,11 +581,20 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       };
       
       await worksheetService.saveNormalizationConfig(jobData.id, config);
+      
+      // IMPORTANT: Save the normalized sales immediately to persist them
       await worksheetService.saveTimeNormalizedSales(jobData.id, normalized, newStats);
 
+      //Clear cache after saving normalization data
+      if (onUpdateJobCache && jobData?.id) {
+        console.log('🗑️ Clearing cache after time normalization');
+        onUpdateJobCache(jobData.id, null);
+      }
+      
       setLastTimeNormalizationRun(new Date().toISOString());
 
       console.log(`✅ Time normalization complete - preserved ${Object.keys(existingDecisions).length} keep/reject decisions`);
+      console.log('✅ Normalized sales saved to database for persistence');
     } catch (error) {
       console.error('Error during time normalization:', error);
       alert('Error during time normalization. Please check the console.');
@@ -583,25 +604,25 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
     }
   }, [properties, salesFromYear, minSalePrice, normalizeToYear, equalizationRatio, outlierThreshold, getHPIMultiplier, timeNormalizedSales, normalizationStats, vendorType, parseCompositeKey, jobData.id, selectedCounty, worksheetService]);
 
-const saveSizeNormalizedValues = async (normalizedSales) => {
-  try {
-    // Save size normalized values to database
-    for (const sale of normalizedSales) {
-      if (sale.size_normalized_price) {
-        await supabase
-          .from('property_records')
-          .update({ 
-            values_norm_size: sale.size_normalized_price 
-          })
-          .eq('id', sale.id);
+  const saveSizeNormalizedValues = async (normalizedSales) => {
+    try {
+      // Save size normalized values to database
+      for (const sale of normalizedSales) {
+        if (sale.size_normalized_price) {
+          await supabase
+            .from('property_records')
+            .update({ 
+              values_norm_size: sale.size_normalized_price 
+            })
+            .eq('id', sale.id);
+        }
       }
+      console.log('✅ Size normalized values saved to database');
+      
+    } catch (error) {
+      console.error('Error saving size normalized values:', error);
     }
-    console.log('✅ Size normalized values saved to database');
-    
-  } catch (error) {
-    console.error('Error saving size normalized values:', error);
-  }
-};
+  };
 
   const runSizeNormalization = useCallback(async () => {
     setIsProcessingSize(true);
@@ -711,8 +732,9 @@ const saveSizeNormalizedValues = async (normalizedSales) => {
         console.warn(`⚠️ Size normalization mismatch: ${acceptedSales.length} accepted but only ${totalSizeNormalized} normalized. Check for properties with 0 SFLA.`);
       }
       
-      setNormalizationStats(prev => ({
-        ...prev,
+      // Create the new stats object
+      const newStats = {
+        ...normalizationStats,
         acceptedSales: acceptedSales.length,
         sizeNormalized: totalSizeNormalized,
         singleFamily: groups.singleFamily?.length || 0,
@@ -720,15 +742,27 @@ const saveSizeNormalizedValues = async (normalizedSales) => {
         townhouses: groups.townhouses?.length || 0,
         conversions: groups.conversions?.length || 0,
         avgSizeAdjustment: avgAdjustment
-      }));
+      };
+
+      // Update the state
+      setNormalizationStats(newStats);
+
+      // Save the stats to market_land_valuation
+      await worksheetService.saveTimeNormalizedSales(jobData.id, timeNormalizedSales, newStats);
 
       // Save to database
       await saveSizeNormalizedValues(acceptedSales);
-      
+
+      //Clear cache after size normalization
+      if (onUpdateJobCache && jobData?.id) {
+        console.log('🗑️ Clearing cache after size normalization');
+        onUpdateJobCache(jobData.id, null);
+      }
+
       // Track the run date
       const runDate = new Date().toISOString();
       setLastSizeNormalizationRun(runDate);
-      
+
       // Save the date to config
       await worksheetService.saveNormalizationConfig(jobData.id, {
         lastSizeNormalizationRun: runDate
@@ -1007,31 +1041,50 @@ const handleSalesDecision = async (saleId, decision) => {
   };
   setNormalizationStats(newStats);
 
-  // Only do immediate database operations for REJECTIONS
-  if (decision === 'reject') {
-    try {
-      const { error } = await supabase
-        .from('property_records')
-        .update({ 
-          values_norm_time: null,
-          values_norm_size: null 
-        })
-        .eq('id', saleId);
-      
-      if (error) {
-        console.error('Error removing normalized values:', error);
-      } else {
-        console.log(`🗑️ Immediately removed normalized values for rejected property ${saleId}`);
-      }
-    } catch (error) {
-      console.error('Error updating database:', error);
+  // Save the updated sales list to market_land_valuation to persist decisions
+  try {
+    await worksheetService.saveTimeNormalizedSales(jobData.id, updatedSales, newStats);
+
+    //Clear cache after saving individual decision
+    if (onUpdateJobCache && jobData?.id) {
+      console.log('🗑️ Clearing cache after sales decision');
+      onUpdateJobCache(jobData.id, null);
     }
+    
+    console.log(`💾 Saved decision (${decision}) for property ${saleId} to database`);
+  } catch (error) {
+    console.error('Error persisting decision to market_land_valuation:', error);
   }
-  // KEEPS wait for batch save - no immediate database update
-  
-  // Track unsaved changes only for keeps that need saving
-  if (decision === 'keep' && onDataChange) {
-    onDataChange();
+
+  // Only remove from property_records if this was previously saved as "keep"
+  // (i.e., the values actually exist in the database)
+  if (decision === 'reject') {
+    // Find the sale in the current list
+    const sale = timeNormalizedSales.find(s => s.id === saleId);
+    
+    // Only update database if it was previously marked as 'keep'
+    // (which means values were saved to property_records)
+    if (sale && sale.keep_reject === 'keep') {
+      try {
+        const { error } = await supabase
+          .from('property_records')
+          .update({ 
+            values_norm_time: null,
+            values_norm_size: null 
+          })
+          .eq('id', saleId);
+        
+        if (error) {
+          console.error('Error removing normalized values:', error);
+        } else {
+          console.log(`🗑️ Removed normalized values for previously kept property ${saleId}`);
+        }
+      } catch (error) {
+        console.error('Error updating property_records:', error);
+      }
+    } else {
+      console.log(`📝 Marked ${saleId} as reject (was ${sale?.keep_reject || 'pending'}) - will handle in batch save`);
+    }
   }
 };
      
@@ -1098,6 +1151,12 @@ const handleSalesDecision = async (saleId, decision) => {
       
       // Save the entire state to market_land_valuation for persistence
       await worksheetService.saveTimeNormalizedSales(jobData.id, timeNormalizedSales, normalizationStats);
+
+      //Clear cache after saving decisions
+      if (onUpdateJobCache && jobData?.id) {
+        console.log('🗑️ Clearing cache after saving keep/reject decisions');
+        onUpdateJobCache(jobData.id, null);
+      }
       
       alert(`✅ Successfully saved ${keeps.length} keeps and ${rejects.length} rejects`);
     } catch (error) {
@@ -1226,6 +1285,12 @@ const handleSalesDecision = async (saleId, decision) => {
         ready_to_process: worksheetStats.readyToProcess,
         location_variations: locationVariations
       });
+
+      //Clear cache after auto-save
+      if (onUpdateJobCache && jobData?.id) {
+        console.log('🗑️ Clearing cache after auto-save worksheet');
+        onUpdateJobCache(jobData.id, null);
+      }
       
       setLastAutoSave(new Date());
       setUnsavedChanges(false);
@@ -1276,6 +1341,12 @@ const processSelectedProperties = async () => {
           .upsert(updates, { onConflict: 'property_composite_key' });
           
         if (error) throw error;
+
+        // Clear cache after updating property records
+        if (onUpdateJobCache && jobData?.id) {
+          console.log('🗑️ Clearing cache after processing worksheet properties');
+          onUpdateJobCache(jobData.id, null);
+        }
       }
       
       setProcessProgress({ 
@@ -1994,6 +2065,12 @@ const analyzeImportFile = async (file) => {
                               Package {normSortConfig.field === 'package' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
                             </th>
                             <th 
+                              className="px-4 py-3 text-right text-sm font-medium text-gray-700 w-24 cursor-pointer hover:bg-gray-100"
+                              onClick={() => handleNormalizationSort('values_mod_total')}
+                            >
+                              Assessed {normSortConfig.field === 'values_mod_total' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
+                            </th>
+                            <th 
                               className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-24 cursor-pointer hover:bg-gray-100"
                               onClick={() => handleNormalizationSort('sales_date')}
                             >
@@ -2098,6 +2175,9 @@ const analyzeImportFile = async (file) => {
                                         );
                                       }
                                     })()}
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-right">
+                                    ${sale.values_mod_total?.toLocaleString() || '0'}
                                   </td>
                                   <td className="px-4 py-3 text-sm">
                                     {sale.sales_date ? new Date(sale.sales_date).toLocaleDateString() : ''}
@@ -2771,15 +2851,9 @@ const analyzeImportFile = async (file) => {
                         </th>
                         <th 
                           className="px-3 py-2 text-left text-xs font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
-                          onClick={() => handleSort('location')}
-                        >
-                          Location {sortConfig.field === 'location' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                        </th>
-                        <th 
-                          className="px-3 py-2 text-left text-xs font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
                           onClick={() => handleSort('property_location')}
                         >
-                          Address {sortConfig.field === 'property_location' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                          Location {sortConfig.field === 'property_location' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
                         </th>
                         <th 
                           className="px-3 py-2 text-left text-xs font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
@@ -2898,7 +2972,6 @@ const analyzeImportFile = async (file) => {
                           )}
                         </div>
                       </td>
-                      <td className="px-3 py-2 text-sm">{prop.location || '-'}</td>
                       <td className="px-3 py-2 text-sm">{prop.property_location}</td>
                       <td className="px-3 py-2 text-sm">{prop.property_class}</td>
                       <td className="px-3 py-2 text-sm">{prop.building_class_display}</td>
@@ -3369,6 +3442,7 @@ const analyzeImportFile = async (file) => {
                           zoningRequirements[zone] = {
                             description: editingZoning[zone].description || '',
                             min_size: parseInt(editingZoning[zone].min_size) || null,
+                            min_size_unit: editingZoning[zone].minSizeUnit || 'SF',
                             min_frontage: parseInt(editingZoning[zone].min_frontage) || null,
                             min_depth: parseInt(editingZoning[zone].min_depth) || null,
                             depth_table: editingZoning[zone].depth_table || ''
@@ -3388,6 +3462,13 @@ const analyzeImportFile = async (file) => {
                         });
                         
                       if (error) throw error;
+
+                      //Clear cache after saving zoning
+                      if (onUpdateJobCache && jobData?.id) { 
+                        console.log('🗑️ Clearing cache after saving zoning');
+                        onUpdateJobCache(jobData.id, null);
+                      }
+                        
                       alert('✅ Zoning requirements saved successfully');
                     } catch (error) {
                       console.error('Error saving zoning data:', error);

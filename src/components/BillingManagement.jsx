@@ -783,7 +783,7 @@ const loadJobs = async () => {
           .update({ billing_setup_complete: true })
           .eq('id', selectedJob.id);
       }
-
+      
       setShowContractSetup(false);
       setSelectedJob(null);
       setBillingHistoryText('');
@@ -1076,6 +1076,7 @@ const loadJobs = async () => {
         .eq('id', planningJobId);
 
       if (error) throw error;
+      
       if (onRefresh) onRefresh();
     } catch (error) {
       console.error('Error updating planned contract:', error);
@@ -1255,11 +1256,7 @@ const loadJobs = async () => {
         .update({ percent_billed: newTotalPercentage })
         .eq('id', billingEvent.job_id);
 
-      // Give database time to commit
-      await new Promise(resolve => setTimeout(resolve, 500));
-
       // Update the job in state without reloading
-      setShowEditBilling(false);      
       setShowEditBilling(false);
       setEditingEvent(null);
       if (onRefresh) onRefresh();
@@ -1345,7 +1342,7 @@ const loadJobs = async () => {
           .update({ percent_billed: runningPercentage })
           .eq('id', newJob.id);
       }
-
+      
       setShowLegacyJobForm(false);
       setLegacyJobForm({
         jobName: '',
@@ -1469,7 +1466,7 @@ const loadJobs = async () => {
       console.error('Error importing expenses:', error);
       alert('Error importing file: ' + error.message);
     }
-  };  
+  };
   
   const getJobStatusColor = (job) => {
     const totals = calculateBillingTotals(job);
@@ -3734,7 +3731,7 @@ const loadJobs = async () => {
                       
                       if (error) throw error;
                     }
-
+                    
                     setShowReceivableForm(false);
                     setEditingReceivable(null);
                     setReceivableForm({

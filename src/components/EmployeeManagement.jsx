@@ -909,6 +909,9 @@ const loadEmployees = () => {
         initials: updatedData.initials || ''
       };
 
+      // Actually update the employee in database
+      await employeeService.update(employeeId, updateData);
+
       // Refresh data in App.js
       if (onRefresh) onRefresh();
       setEditingEmployee(null);
