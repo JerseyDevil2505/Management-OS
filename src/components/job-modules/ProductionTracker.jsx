@@ -477,9 +477,6 @@ const ProductionTracker = ({
 
       if (error) throw error;
       
-      // Clear cache after database operation
-      await supabase.rpc('clear_cache');
-      
       setOriginalCategoryConfig(configToSave);
       setHasUnsavedChanges(false);
       
@@ -597,9 +594,6 @@ const ProductionTracker = ({
 
       if (error) throw error;
 
-      // Clear cache after database operation
-      await supabase.rpc('clear_cache');
-
       setIsDateLocked(true);
       addNotification('✅ Project start date locked and saved to all property records', 'success');
 
@@ -627,9 +621,6 @@ const ProductionTracker = ({
         .eq('override_applied', true);
 
       if (error) throw error;
-      
-      // Clear cache after database operation
-      await supabase.rpc('clear_cache');
       
       // Update App.js state immediately after removing override
       if (onUpdateWorkflowStats && analytics) {
@@ -747,9 +738,6 @@ const ProductionTracker = ({
         });
 
       if (upsertError) throw upsertError;
-
-      // Clear cache after database operation
-      await supabase.rpc('clear_cache');
 
       // Close modal
       setShowOverrideModal(false);
@@ -1658,8 +1646,6 @@ const ProductionTracker = ({
             console.error('Error upserting to inspection_data:', upsertError);
             addNotification(`Error saving to inspection_data: ${upsertError.message}`, 'error');
           } else {
-            // Clear cache after database operation
-            await supabase.rpc('clear_cache');
             
             debugLog('PERSISTENCE', '✅ Successfully upserted ALL records to inspection_data');
             addNotification(`✅ Successfully saved ${inspectionDataBatch.length} records to inspection_data`, 'success');
@@ -1971,9 +1957,6 @@ const ProductionTracker = ({
           .lt('file_version', latestFileVersion);
         
         if (updateError) throw updateError;
-        
-        // Clear cache after database operation
-        await supabase.rpc('clear_cache');
         
         console.log(`✅ Synced ${count} validation overrides from older versions to version ${latestFileVersion}`);
         addNotification(`✅ Synced ${count} validation overrides to current version ${latestFileVersion}`, 'success');
