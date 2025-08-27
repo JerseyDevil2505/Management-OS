@@ -286,7 +286,6 @@ const OverallAnalysisTab = ({
           designName === 'Other') {
         return; // Skip this property
       }
-      }
       
       const key = `${designCode}-${designName}`;
       
