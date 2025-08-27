@@ -1074,7 +1074,8 @@ const handleSalesDecision = async (saleId, decision) => {
     } catch (error) {
       console.error('Error updating property_records:', error);
     }
-  };
+  }
+};
      
   const saveBatchDecisions = async () => {
     const keeps = timeNormalizedSales.filter(s => s.keep_reject === 'keep');
