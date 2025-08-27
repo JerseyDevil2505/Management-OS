@@ -32,6 +32,13 @@ const OverallAnalysisTab = ({
     typeUse: null
   });
 
+  // Run analysis when baselines change
+  useEffect(() => {
+    if (filteredProperties.length > 0) {
+      runAnalysis();
+    }
+  }, [customBaselines.design, customBaselines.typeUse]);
+
   // Extract vendor type and code definitions
   const vendorType = jobData?.vendor_type || 'BRT';
   const codeDefinitions = jobData?.parsed_code_definitions || {};
@@ -1346,7 +1353,7 @@ const OverallAnalysisTab = ({
                           ...prev,
                           design: e.target.value || null
                         }));
-                        runAnalysis();
+     
                       }}
                       className="px-3 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
