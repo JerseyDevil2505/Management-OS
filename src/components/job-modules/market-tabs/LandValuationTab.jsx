@@ -2064,7 +2064,9 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
             <thead>
               <tr style={{ backgroundColor: '#F9FAFB' }}>
                 <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Include</th>
-                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Block/Lot</th>
+                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Block</th>
+                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Lot</th>
+                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Qual</th>
                 <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Address</th>
                 <th style={{ padding: '8px', textAlign: 'center', borderBottom: '1px solid #E5E7EB' }}>Class</th>
                 <th style={{ padding: '8px', textAlign: 'center', borderBottom: '1px solid #E5E7EB' }}>Bldg</th>
@@ -2111,7 +2113,13 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
                       />
                     </td>
                     <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB' }}>
-                      {sale.property_block}/{sale.property_lot}
+                      {sale.property_block}
+                    </td>
+                    <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB' }}>
+                      {sale.property_lot}
+                    </td>
+                    <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB' }}>
+                      {sale.property_qualifier && sale.property_qualifier !== 'NONE' ? sale.property_qualifier : ''}
                     </td>
                     <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB' }}>
                       {sale.property_location}
@@ -2264,74 +2272,83 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
         
         {/* Method 1 Summary - MOVED TO BOTTOM */}
         <div style={{ padding: '15px', backgroundColor: '#F9FAFB', borderTop: '1px solid #E5E7EB' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '15px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '15px' }}>
             {(() => {
-              // Calculate average rate for checked items only
+              // Calculate average rate for checked items by category
               const checkedSales = vacantSales.filter(s => includedSales.has(s.id));
               
-              // Filter out special categories for rate calculation
-              const rateableSales = checkedSales.filter(s => 
-                saleCategories[s.id] !== 'wetlands' && 
-                saleCategories[s.id] !== 'landlocked' && 
-                saleCategories[s.id] !== 'conservation'
-              );
-              
-              let avgRate = 0;
-              if (rateableSales.length > 0) {
+              // Helper function to calculate average for a category
+              const getCategoryAverage = (filterFn) => {
+                const filtered = checkedSales.filter(filterFn);
+                if (filtered.length === 0) return { avg: 0, count: 0 };
+                
                 if (valuationMode === 'sf') {
-                  // For SF mode, recalculate the rate properly
-                  const totalPrice = rateableSales.reduce((sum, s) => sum + s.sales_price, 0);
-                  const totalSF = rateableSales.reduce((sum, s) => sum + (s.totalAcres * 43560), 0);
-                  avgRate = totalSF > 0 ? (totalPrice / totalSF).toFixed(2) : 0;
+                  const totalPrice = filtered.reduce((sum, s) => sum + s.sales_price, 0);
+                  const totalSF = filtered.reduce((sum, s) => sum + (s.totalAcres * 43560), 0);
+                  return { 
+                    avg: totalSF > 0 ? (totalPrice / totalSF).toFixed(2) : 0, 
+                    count: filtered.length 
+                  };
                 } else {
-                  // For acre mode
-                  avgRate = Math.round(rateableSales.reduce((sum, s) => sum + s.pricePerAcre, 0) / rateableSales.length);
+                  const avgRate = filtered.reduce((sum, s) => sum + s.pricePerAcre, 0) / filtered.length;
+                  return { 
+                    avg: Math.round(avgRate), 
+                    count: filtered.length 
+                  };
                 }
-              }
+              };
               
-              // Count by categories
-              const rawLandCount = checkedSales.filter(s => 
+              const rawLand = getCategoryAverage(s => 
                 saleCategories[s.id] === 'raw_land' || 
                 (!saleCategories[s.id] && s.property_m4_class === '1')
-              ).length;
+              );
               
-              const buildingLotCount = checkedSales.filter(s => 
+              const buildingLot = getCategoryAverage(s => 
                 saleCategories[s.id] === 'building_lot' ||
                 saleCategories[s.id] === 'teardown' ||
                 saleCategories[s.id] === 'pre-construction'
-              ).length;
+              );
               
-              const wetlandsCount = checkedSales.filter(s => saleCategories[s.id] === 'wetlands').length;
-              const landlockedCount = checkedSales.filter(s => saleCategories[s.id] === 'landlocked').length;
-              const conservationCount = checkedSales.filter(s => saleCategories[s.id] === 'conservation').length;
+              const wetlands = getCategoryAverage(s => saleCategories[s.id] === 'wetlands');
+              const landlocked = getCategoryAverage(s => saleCategories[s.id] === 'landlocked');
+              const conservation = getCategoryAverage(s => saleCategories[s.id] === 'conservation');
               
               return (
                 <>
                   <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
-                    <div style={{ fontSize: '12px', color: '#6B7280' }}>Avg {getUnitLabel()}</div>
-                    <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#10B981' }}>
-                      {valuationMode === 'sf' ? `$${avgRate}` : `$${avgRate.toLocaleString()}`}
-                    </div>
-                  </div>
-                  <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
                     <div style={{ fontSize: '12px', color: '#6B7280' }}>Raw Land</div>
-                    <div style={{ fontSize: '20px', fontWeight: 'bold' }}>{rawLandCount}</div>
+                    <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#10B981' }}>
+                      {valuationMode === 'sf' ? `$${rawLand.avg}` : `$${rawLand.avg.toLocaleString()}`}
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{rawLand.count} sales</div>
                   </div>
                   <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
                     <div style={{ fontSize: '12px', color: '#6B7280' }}>Building Lot</div>
-                    <div style={{ fontSize: '20px', fontWeight: 'bold' }}>{buildingLotCount}</div>
+                    <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#3B82F6' }}>
+                      {valuationMode === 'sf' ? `$${buildingLot.avg}` : `$${buildingLot.avg.toLocaleString()}`}
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{buildingLot.count} sales</div>
                   </div>
                   <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
                     <div style={{ fontSize: '12px', color: '#6B7280' }}>Wetlands</div>
-                    <div style={{ fontSize: '20px', fontWeight: 'bold' }}>{wetlandsCount}</div>
+                    <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#06B6D4' }}>
+                      {valuationMode === 'sf' ? `$${wetlands.avg}` : `$${wetlands.avg.toLocaleString()}`}
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{wetlands.count} sales</div>
                   </div>
                   <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
                     <div style={{ fontSize: '12px', color: '#6B7280' }}>Landlocked</div>
-                    <div style={{ fontSize: '20px', fontWeight: 'bold' }}>{landlockedCount}</div>
+                    <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#F59E0B' }}>
+                      {valuationMode === 'sf' ? `$${landlocked.avg}` : `$${landlocked.avg.toLocaleString()}`}
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{landlocked.count} sales</div>
                   </div>
                   <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
                     <div style={{ fontSize: '12px', color: '#6B7280' }}>Conservation</div>
-                    <div style={{ fontSize: '20px', fontWeight: 'bold' }}>{conservationCount}</div>
+                    <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#8B5CF6' }}>
+                      {valuationMode === 'sf' ? `$${conservation.avg}` : `$${conservation.avg.toLocaleString()}`}
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{conservation.count} sales</div>
                   </div>
                 </>
               );
