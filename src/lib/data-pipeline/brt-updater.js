@@ -808,49 +808,33 @@ export class BRTUpdater {
   }
 
   calculateLotAcres(rawRecord) {
-    let totalAcres = 0;
-    let totalSqFt = 0;
-    let foundAcres = false;
-    let foundSqFt = false;
-    
-    for (let i = 1; i <= 6; i++) {
-      const urCode = rawRecord[`LANDUR_${i}`];
-      const urValue = this.parseNumeric(rawRecord[`LANDURVALUE_${i}`]);
-      if (!urCode || !urValue) continue;
-      
-      const codeDescription = this.getCodeDescription(urCode);
-      if (codeDescription) {
-        if (codeDescription.toUpperCase().includes('ACRE') || 
-            codeDescription.toUpperCase().includes('AC')) {
-          totalAcres += urValue;
-          foundAcres = true;
-        } else if (codeDescription.toUpperCase().includes('SITE') && 
-                   !codeDescription.toUpperCase().includes('ACRE')) {
-          totalSqFt += urValue;
-          foundSqFt = true;
-        }
-      } else {
-        if (urCode.includes('AC')) {
-          totalAcres += urValue;
-          foundAcres = true;
-        } else if (urCode.includes('SF')) {
-          totalSqFt += urValue;
-          foundSqFt = true;
-        }
+    // 1. Try frontage × depth first
+    const frontage = this.calculateLotFrontage(rawRecord);
+    const depth = this.calculateLotDepth(rawRecord);
+    if (frontage && depth) {
+      const acres = (frontage * depth) / 43560;
+      if (acres > 0) {
+        return parseFloat(acres.toFixed(2));
       }
     }
     
-    if (!foundAcres && foundSqFt && totalSqFt > 0) {
-      totalAcres = totalSqFt / 43560;
+    // 2. Fall back to PROPERTY_ACREAGE (divide by 10000)
+    if (rawRecord.PROPERTY_ACREAGE) {
+      const propAcreage = parseFloat(rawRecord.PROPERTY_ACREAGE);
+      if (!isNaN(propAcreage) && propAcreage > 0) {
+        const acres = propAcreage / 10000;
+        return parseFloat(acres.toFixed(2));
+      }
     }
     
-    return totalAcres > 0 ? parseFloat(totalAcres.toFixed(3)) : null;
+    // 3. Skip LANDUR complexity
+    return null;
   }
 
-  calculateLotSquareFeet(rawRecord) {
-    const acres = this.calculateLotAcres(rawRecord);
-    return acres ? Math.round(acres * 43560) : null;
-  }
+    calculateLotSquareFeet(rawRecord) {
+      const acres = this.calculateLotAcres(rawRecord);
+      return acres ? Math.round(acres * 43560) : null;
+    }
 
   parseDate(dateString) {
     if (!dateString || dateString.trim() === '') return null;
