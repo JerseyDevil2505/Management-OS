@@ -555,11 +555,10 @@ const ProductionTracker = ({
         .eq('job_id', jobData.id)
         .eq('file_version', latestFileVersion)
         .not('project_start_date', 'is', null)
-        .limit(1)
-        .single();
+        .limit(1);
 
-      if (!error && records?.project_start_date) {
-        setProjectStartDate(records.project_start_date);
+      if (!error && records && records.length > 0 && records[0]?.project_start_date) {
+        setProjectStartDate(records[0].project_start_date);
         setIsDateLocked(true);
       }
     } catch (error) {
@@ -573,7 +572,12 @@ const ProductionTracker = ({
     }
 
     try {
-      const { error } = await supabase
+      // Validate date before sending to database
+    if (!projectStartDate || projectStartDate.trim() === '') {
+      throw new Error('Project start date cannot be empty');
+    }
+
+    const { error } = await supabase
         .from('property_records')
         .update({ project_start_date: projectStartDate })
         .eq('job_id', jobData.id)
