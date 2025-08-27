@@ -373,7 +373,20 @@ const JobContainer = ({
       
     } catch (error) {
       console.error('Error loading file versions:', error);
-      setVersionError(error.message);
+
+      // Handle different error types gracefully
+      let errorMessage = 'Unknown error occurred';
+      if (error?.message) {
+        errorMessage = error.message;
+      } else if (error?.code) {
+        errorMessage = `Database error: ${error.code}`;
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      } else if (error?.name === 'AbortError') {
+        errorMessage = 'Request timeout - dataset too large. Try again or contact support.';
+      }
+
+      setVersionError(errorMessage);
       
       // Fallback to basic job data
       const fallbackJobData = {
