@@ -690,6 +690,12 @@ const ProductionTracker = ({
         throw new Error(`Could not find property record for ${property.composite_key}`);
       }
 
+      // Helper function to validate date fields
+      const validateDate = (dateValue) => {
+        if (!dateValue || dateValue.trim() === '') return null;
+        return dateValue;
+      };
+
       // Build COMPLETE inspection_data record with ALL fields
       const completeOverrideRecord = {
         // Standard fields from property_records
@@ -703,17 +709,17 @@ const ProductionTracker = ({
         property_location: fullPropertyRecord.property_location || '',
         property_class: fullPropertyRecord.property_m4_class,
         measure_by: fullPropertyRecord.inspection_measure_by,
-        measure_date: fullPropertyRecord.inspection_measure_date,
+        measure_date: validateDate(fullPropertyRecord.inspection_measure_date),
         info_by_code: fullPropertyRecord.inspection_info_by,
         list_by: fullPropertyRecord.inspection_list_by,
-        list_date: fullPropertyRecord.inspection_list_date,
+        list_date: validateDate(fullPropertyRecord.inspection_list_date),
         price_by: fullPropertyRecord.inspection_price_by,
-        price_date: fullPropertyRecord.inspection_price_date,
-        
+        price_date: validateDate(fullPropertyRecord.inspection_price_date),
+
         // Module-specific fields
         project_start_date: projectStartDate,
         upload_date: new Date().toISOString(),
-        
+
         // Override-specific fields
         override_applied: true,
         override_reason: finalOverrideReason,
