@@ -183,36 +183,67 @@ const JobContainer = ({
         for (let page = 0; page < totalPages; page++) {
           const start = page * pageSize;
           const end = Math.min(start + pageSize - 1, count - 1);
-          
-          console.log(`📥 Loading batch ${page + 1}/${totalPages} (${start}-${end})...`);
-          
-          // Build the query again for actual data
-          let dataQuery = supabase
-            .from('property_records')
-            .select('*')
-            .eq('job_id', selectedJob.id)
-            .order('property_composite_key')
-            .range(start, end);
 
-          // Apply assignment filter if needed
-          if (hasAssignments) {
-            dataQuery = dataQuery.eq('is_assigned_property', true);
+          console.log(`📥 Loading batch ${page + 1}/${totalPages} (${start}-${end})...`);
+
+          // Retry logic for timeout-prone large offsets
+          let retryCount = 0;
+          const maxRetries = 3;
+          let batchData = null;
+
+          while (retryCount < maxRetries && !batchData) {
+            try {
+              // Build the query again for actual data
+              let dataQuery = supabase
+                .from('property_records')
+                .select('*')
+                .eq('job_id', selectedJob.id)
+                .order('property_composite_key')
+                .range(start, end);
+
+              // Apply assignment filter if needed
+              if (hasAssignments) {
+                dataQuery = dataQuery.eq('is_assigned_property', true);
+              }
+
+              const { data, error } = await dataQuery;
+
+              if (error) {
+                if (error.message?.includes('timeout') && retryCount < maxRetries - 1) {
+                  retryCount++;
+                  console.log(`⏱️ Batch ${page + 1} timeout, retry ${retryCount}/${maxRetries}...`);
+                  await new Promise(resolve => setTimeout(resolve, 2000 * retryCount)); // Exponential backoff
+                  continue;
+                } else {
+                  throw error;
+                }
+              }
+
+              batchData = data;
+
+            } catch (batchError) {
+              if (retryCount < maxRetries - 1) {
+                retryCount++;
+                console.log(`🔄 Batch ${page + 1} failed, retry ${retryCount}/${maxRetries}:`, batchError.message);
+                await new Promise(resolve => setTimeout(resolve, 2000 * retryCount));
+              } else {
+                console.error(`❌ Batch ${page + 1} failed after ${maxRetries} retries, skipping...`);
+                break; // Skip this batch and continue with next
+              }
+            }
           }
 
-          const { data, error } = await dataQuery;
-          
-          if (error) throw error;
-          
-          if (data) {
-            allProperties.push(...data);
+          if (batchData && batchData.length > 0) {
+            allProperties.push(...batchData);
             const loaded = allProperties.length;
             setLoadedCount(loaded);
             setLoadingProgress(Math.round((loaded / count) * 100));
           }
-          
-          // Small delay between batches to prevent overwhelming the server
+
+          // Longer delay for large datasets to prevent overwhelming
           if (page < totalPages - 1) {
-            await new Promise(resolve => setTimeout(resolve, 100));
+            const delay = count > 10000 ? 500 : 100; // Longer delay for big jobs
+            await new Promise(resolve => setTimeout(resolve, delay));
           }
         }
 
@@ -756,7 +787,7 @@ const JobContainer = ({
                         Soon
                       </span>
                     )}
-                    {/* 🔧 NEW: Show analytics indicator for ProductionTracker */}
+                    {/* ���� NEW: Show analytics indicator for ProductionTracker */}
                     {module.id === 'production' && workflowStats?.isProcessed && (
                       <span className="text-xs bg-green-500 text-white px-2 py-1 rounded-full ml-1">
                         ✓
