@@ -94,6 +94,15 @@ useEffect(() => {
   });
 
   // ==========================================
+  // DATABASE CONCURRENCY CONTROL
+  // ==========================================
+  const dbOperationRef = useRef({
+    isLoading: false,
+    pendingOperations: 0,
+    lastOperationTime: 0
+  });
+
+  // ==========================================
   // PERSISTENT CACHE STATE
   // ==========================================
   const [masterCache, setMasterCache] = useState({
