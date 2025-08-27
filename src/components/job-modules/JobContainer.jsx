@@ -23,6 +23,9 @@ const JobContainer = ({
   const [latestCodeVersion, setLatestCodeVersion] = useState(1);
   const [propertyRecordsCount, setPropertyRecordsCount] = useState(0);
   const [isLoadingVersion, setIsLoadingVersion] = useState(true);
+  // Track if current module made changes
+  const [moduleHasChanges, setModuleHasChanges] = useState(false);
+  
   const [versionError, setVersionError] = useState(null);
   
   // NEW: Property loading states
@@ -37,7 +40,7 @@ const JobContainer = ({
   const [hpiData, setHpiData] = useState([]);
   const [checklistItems, setChecklistItems] = useState([]);
   const [checklistStatus, setChecklistStatus] = useState([]);
-  const [employees, setEmployees] = useState([]);  // ADD THIS LINE  
+  const [employees, setEmployees] = useState([]); 
 
   // NEW: Data update notification for child components
   const [dataUpdateNotification, setDataUpdateNotification] = useState({
@@ -487,7 +490,11 @@ const JobContainer = ({
       }),
       onUpdateWorkflowStats: handleAnalyticsUpdate,  // Pass the analytics update handler
       currentWorkflowStats: workflowStats,  // Pass current workflow stats
-      onUpdateJobCache: onUpdateJobCache
+      onUpdateJobCache: onUpdateJobCache,
+      onDataChange: () => {
+        // Mark that this module made changes
+        setModuleHasChanges(true);
+      }
     };
 
     // 🔧 CRITICAL: Pass App.js state management to ProductionTracker
@@ -706,7 +713,19 @@ const JobContainer = ({
                 return (
                   <button
                     key={module.id}
-                    onClick={() => isAvailable && setActiveModule(module.id)}
+                    onClick={() => {
+                      if (isAvailable) {
+                        // If leaving a module that made changes, refresh data
+                        if (moduleHasChanges && activeModule !== module.id) {
+                          console.log(`Module ${activeModule} had changes, clearing cache...`);
+                          if (onUpdateJobCache && selectedJob?.id) {
+                            onUpdateJobCache(selectedJob.id, null);
+                          }
+                          setModuleHasChanges(false);
+                        }
+                        setActiveModule(module.id);
+                      }
+                    }}
                     disabled={!isAvailable || isLoading}
                     className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center gap-2 transition-colors ${
                       isActive
