@@ -684,7 +684,7 @@ const getPricePerUnit = useCallback((price, size) => {
     const existingIds = new Set(vacantSales.map(s => s.id));
     results = results.filter(p => !existingIds.has(p.id));
 
-    setSearchResults(results.slice(0, 100)); // Limit to 100 results
+    setSearchResults(results);
   };
   const addSelectedProperties = () => {
     const toAdd = properties.filter(p => selectedToAdd.has(p.id));
