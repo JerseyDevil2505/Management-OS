@@ -717,9 +717,6 @@ const loadInitialData = async () => {
       
       if (periodError) throw periodError;
       
-      // Clear cache after database operations
-      await supabase.rpc('clear_cache');
-      
       const processInfo = {
         startDate: payrollPeriod.startDate,
         endDate: payrollPeriod.endDate,
