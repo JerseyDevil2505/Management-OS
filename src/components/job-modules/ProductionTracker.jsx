@@ -1478,6 +1478,12 @@ const ProductionTracker = ({
             }
           }
 
+          // Helper function to validate date fields
+          const validateDate = (dateValue) => {
+            if (!dateValue || dateValue.trim() === '') return null;
+            return dateValue;
+          };
+
           // Prepare for inspection_data UPSERT
           const inspectionRecord = {
             job_id: jobData.id,
@@ -1490,12 +1496,12 @@ const ProductionTracker = ({
             property_location: record.property_location || '',
             property_class: propertyClass,
             measure_by: inspector,
-            measure_date: record.inspection_measure_date,
+            measure_date: validateDate(record.inspection_measure_date),
             info_by_code: infoByCode,
             list_by: record.inspection_list_by,
-            list_date: record.inspection_list_date,
+            list_date: validateDate(record.inspection_list_date),
             price_by: record.inspection_price_by,
-            price_date: record.inspection_price_date,
+            price_date: validateDate(record.inspection_price_date),
             project_start_date: projectStartDate,
             upload_date: new Date().toISOString(),
           };
@@ -1586,6 +1592,12 @@ const ProductionTracker = ({
             continue;
           }
           
+          // Helper function to validate date fields
+          const validateModalDate = (dateValue) => {
+            if (!dateValue || dateValue.trim() === '') return null;
+            return dateValue;
+          };
+
           const overrideRecord = {
             job_id: jobData.id,
             file_version: latestFileVersion,
@@ -1597,12 +1609,12 @@ const ProductionTracker = ({
             property_location: fullRecord.property_location || '',
             property_class: fullRecord.property_m4_class,
             measure_by: fullRecord.inspection_measure_by,
-            measure_date: fullRecord.inspection_measure_date,
+            measure_date: validateModalDate(fullRecord.inspection_measure_date),
             info_by_code: fullRecord.inspection_info_by,
             list_by: fullRecord.inspection_list_by,
-            list_date: fullRecord.inspection_list_date,
+            list_date: validateModalDate(fullRecord.inspection_list_date),
             price_by: fullRecord.inspection_price_by,
-            price_date: fullRecord.inspection_price_date,
+            price_date: validateModalDate(fullRecord.inspection_price_date),
             project_start_date: projectStartDate,
             upload_date: new Date().toISOString(),
             override_applied: true,
