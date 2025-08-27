@@ -1053,11 +1053,15 @@ const handleSalesDecision = async (saleId, decision) => {
     console.error('Error persisting decision to market_land_valuation:', error);
   }
 
-// Handle immediate database operations for REJECTIONS
+  // Only remove from property_records if this was previously saved as "keep"
+  // (i.e., the values actually exist in the database)
   if (decision === 'reject') {
-    // Only update if there are actually values to remove
-    const saleToReject = timeNormalizedSales.find(s => s.id === saleId);
-    if (saleToReject && (saleToReject.values_norm_time || saleToReject.values_norm_size)) {
+    // Find the sale in the current list
+    const sale = timeNormalizedSales.find(s => s.id === saleId);
+    
+    // Only update database if it was previously marked as 'keep'
+    // (which means values were saved to property_records)
+    if (sale && sale.keep_reject === 'keep') {
       try {
         const { error } = await supabase
           .from('property_records')
@@ -1072,11 +1076,13 @@ const handleSalesDecision = async (saleId, decision) => {
         } else {
           // Clear database cache after rejection
           await supabase.rpc('clear_cache');
-          console.log(`🗑️ Removed normalized values for rejected property ${saleId}`);
+          console.log(`🗑️ Removed normalized values for previously kept property ${saleId}`);
         }
       } catch (error) {
         console.error('Error updating property_records:', error);
       }
+    } else {
+      console.log(`📝 Marked ${saleId} as reject (was ${sale?.keep_reject || 'pending'}) - will handle in batch save`);
     }
   }
 };
