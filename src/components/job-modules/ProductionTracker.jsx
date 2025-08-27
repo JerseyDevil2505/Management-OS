@@ -505,40 +505,68 @@ const ProductionTracker = ({
     if (!jobData?.id) return;
 
     try {
-      const { data: job, error } = await supabase
+      console.log('📊 Loading persisted analytics...');
+
+      // Add timeout to prevent hangs
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Analytics loading timeout')), 10000)
+      );
+
+      const loadPromise = supabase
         .from('jobs')
         .select('workflow_stats, external_inspectors')
         .eq('id', jobData.id)
         .single();
-      
+
+      const { data: job, error } = await Promise.race([loadPromise, timeoutPromise]);
+
+      if (error) {
+        console.warn('⚠️ No persisted analytics found, starting fresh');
+        return;
+      }
+
       if (job?.external_inspectors) {
         setExternalInspectorsList(job.external_inspectors);
-      }     
+      }
 
-      if (!error && job?.workflow_stats && job.workflow_stats.totalRecords) {
+      if (job?.workflow_stats && job.workflow_stats.totalRecords) {
+        console.log('✅ Found persisted analytics, loading...');
+
         // Load the persisted analytics
         let loadedAnalytics = job.workflow_stats;
         let loadedBillingAnalytics = job.workflow_stats.billingAnalytics;
         let loadedValidationReport = job.workflow_stats.validationReport;
-        
-        // Load current validation overrides for tracking (but don't add to count since they're already in inspection_data)
-        const { data: currentOverrides, error: overrideError } = await supabase
-          .from('inspection_data')
-          .select('property_composite_key, override_applied, property_class')
-          .eq('job_id', jobData.id)
-          .eq('file_version', latestFileVersion)
-          .eq('override_applied', true);
 
-        if (!overrideError && currentOverrides && currentOverrides.length > 0) {
-          debugLog('PERSISTENCE', `Found ${currentOverrides.length} validation overrides (already counted in validInspections)`);
-          // Note: Overrides are already included in the inspection_data count, so we don't add them again
+        // Try to load validation overrides with timeout protection
+        try {
+          const overrideTimeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Override loading timeout')), 5000)
+          );
+
+          const overridePromise = supabase
+            .from('inspection_data')
+            .select('property_composite_key, override_applied, property_class')
+            .eq('job_id', jobData.id)
+            .eq('file_version', latestFileVersion)
+            .eq('override_applied', true);
+
+          const { data: currentOverrides, error: overrideError } = await Promise.race([
+            overridePromise,
+            overrideTimeoutPromise
+          ]);
+
+          if (!overrideError && currentOverrides && currentOverrides.length > 0) {
+            debugLog('PERSISTENCE', `Found ${currentOverrides.length} validation overrides (already counted in validInspections)`);
+          }
+        } catch (overrideLoadError) {
+          console.warn('⚠️ Override loading failed, continuing without:', overrideLoadError.message);
         }
-        
+
         // Set all the state with potentially adjusted values
         setAnalytics(loadedAnalytics);
         setBillingAnalytics(loadedBillingAnalytics);
         setValidationReport(loadedValidationReport);
-        
+
         if (job.workflow_stats.missingPropertiesReport) {
           setMissingPropertiesReport(job.workflow_stats.missingPropertiesReport);
         }
@@ -548,13 +576,17 @@ const ProductionTracker = ({
         if (job.workflow_stats.overrideMap) {
           setOverrideMap(job.workflow_stats.overrideMap);
         }
-        
+
         setProcessed(true);
         setSettingsLocked(true);
         setLoadedFromDatabase(true); // CRITICAL: Mark that we loaded from database
+        console.log('✅ Persisted analytics loaded successfully');
+      } else {
+        console.log('📊 No persisted analytics data found, component ready for fresh processing');
       }
     } catch (error) {
-      console.error('Error loading persisted analytics:', error);
+      console.error('❌ Error loading persisted analytics:', error);
+      addNotification('Failed to load previous analytics data, starting fresh', 'warning');
     }
   };
 
