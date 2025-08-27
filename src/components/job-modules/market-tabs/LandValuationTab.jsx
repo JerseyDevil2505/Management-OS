@@ -49,6 +49,7 @@ const LandValuationTab = ({
   const [specialRegions, setSpecialRegions] = useState({});
   const [landNotes, setLandNotes] = useState({});
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showCopiedNotification, setShowCopiedNotification] = useState(false);
   const [searchFilters, setSearchFilters] = useState({
     class: '',
     block: '',
