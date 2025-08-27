@@ -783,9 +783,6 @@ const loadJobs = async () => {
           .update({ billing_setup_complete: true })
           .eq('id', selectedJob.id);
       }
-
-      // Clear cache after all database operations
-      await supabase.rpc('clear_cache');
       
       setShowContractSetup(false);
       setSelectedJob(null);
@@ -971,9 +968,6 @@ const loadJobs = async () => {
         calculateGlobalMetrics();
       }
       
-      // Clear cache after all database operations
-      await supabase.rpc('clear_cache');
-      
       setShowBillingForm(false);
       setBillingForm({
         billingDate: new Date().toISOString().split('T')[0],
@@ -1064,9 +1058,6 @@ const loadJobs = async () => {
           }
         }
       }
-      
-      // Clear cache after all database operations
-      await supabase.rpc('clear_cache');
 
       setShowEditBilling(false);
       setEditingEvent(null);
@@ -1085,9 +1076,6 @@ const loadJobs = async () => {
         .eq('id', planningJobId);
 
       if (error) throw error;
-
-      //Clear cache after database operation
-      await supabase.rpc('clear_cache');
       
       if (onRefresh) onRefresh();
     } catch (error) {
@@ -1223,9 +1211,6 @@ const loadJobs = async () => {
         .update({ is_archived: true })
         .eq('id', planningJob.id);
 
-      //Clear cache after all database operations
-      await supabase.rpc('clear_cache');
-
       alert(`Successfully rolled over "${planningJob.job_name || planningJob.municipality}" to active jobs!`);
       setActiveTab('active');
       if (onRefresh) onRefresh();
@@ -1270,9 +1255,6 @@ const loadJobs = async () => {
         .from('jobs')
         .update({ percent_billed: newTotalPercentage })
         .eq('id', billingEvent.job_id);
-
-      // Clear cache after database operations
-      await supabase.rpc('clear_cache');
 
       // Update the job in state without reloading
       setShowEditBilling(false);
@@ -1360,9 +1342,6 @@ const loadJobs = async () => {
           .update({ percent_billed: runningPercentage })
           .eq('id', newJob.id);
       }
-
-      // Clear cache after all database operations
-      await supabase.rpc('clear_cache');
       
       setShowLegacyJobForm(false);
       setLegacyJobForm({
@@ -1474,9 +1453,6 @@ const loadJobs = async () => {
           .insert(expenseData);
         
         if (error) throw error;
-        
-        // Clear cache after database operations
-        await supabase.rpc('clear_cache');
         
         alert(`Successfully imported ${expenseData.length} expense entries`);
         setShowExpenseImport(false);
@@ -3755,9 +3731,6 @@ const loadJobs = async () => {
                       
                       if (error) throw error;
                     }
-
-                    // Clear cache after database operation
-                    await supabase.rpc('clear_cache');
                     
                     setShowReceivableForm(false);
                     setEditingReceivable(null);
@@ -3893,9 +3866,6 @@ const loadJobs = async () => {
                       });
                     
                     if (error) throw error;
-                    
-                    // Clear cache after database operation
-                    await supabase.rpc('clear_cache');
                     
                     setShowDistributionForm(false);
                     setDistributionForm({
