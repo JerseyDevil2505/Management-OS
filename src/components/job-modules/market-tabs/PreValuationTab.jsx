@@ -736,8 +736,9 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
         console.warn(`⚠️ Size normalization mismatch: ${acceptedSales.length} accepted but only ${totalSizeNormalized} normalized. Check for properties with 0 SFLA.`);
       }
       
-      setNormalizationStats(prev => ({
-        ...prev,
+      // Create the new stats object
+      const newStats = {
+        ...normalizationStats,
         acceptedSales: acceptedSales.length,
         sizeNormalized: totalSizeNormalized,
         singleFamily: groups.singleFamily?.length || 0,
@@ -745,7 +746,13 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
         townhouses: groups.townhouses?.length || 0,
         conversions: groups.conversions?.length || 0,
         avgSizeAdjustment: avgAdjustment
-      }));
+      };
+
+      // Update the state
+      setNormalizationStats(newStats);
+
+      // Save the stats to market_land_valuation
+      await worksheetService.saveTimeNormalizedSales(jobData.id, timeNormalizedSales, newStats);
 
       // Save to database
       await saveSizeNormalizedValues(acceptedSales);
@@ -755,11 +762,11 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
         console.log('🗑️ Clearing cache after size normalization');
         onUpdateJobCache(jobData.id, null);
       }
-        
+
       // Track the run date
       const runDate = new Date().toISOString();
       setLastSizeNormalizationRun(runDate);
-      
+
       // Save the date to config
       await worksheetService.saveNormalizationConfig(jobData.id, {
         lastSizeNormalizationRun: runDate
