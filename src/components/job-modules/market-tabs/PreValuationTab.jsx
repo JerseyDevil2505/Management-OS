@@ -1077,8 +1077,6 @@ const handleSalesDecision = async (saleId, decision) => {
         if (error) {
           console.error('Error removing normalized values:', error);
         } else {
-          // Clear database cache after rejection
-          await supabase.rpc('clear_cache');
           console.log(`🗑️ Removed normalized values for previously kept property ${saleId}`);
         }
       } catch (error) {
@@ -1153,9 +1151,6 @@ const handleSalesDecision = async (saleId, decision) => {
       
       // Save the entire state to market_land_valuation for persistence
       await worksheetService.saveTimeNormalizedSales(jobData.id, timeNormalizedSales, normalizationStats);
-
-      // Clear database cache after batch updates
-      await supabase.rpc('clear_cache');
 
       //Clear cache after saving decisions
       if (onUpdateJobCache && jobData?.id) {
@@ -1346,9 +1341,6 @@ const processSelectedProperties = async () => {
           .upsert(updates, { onConflict: 'property_composite_key' });
           
         if (error) throw error;
-
-        // Clear database cache after batch upsert
-        await supabase.rpc('clear_cache');
 
         // Clear cache after updating property records
         if (onUpdateJobCache && jobData?.id) {
