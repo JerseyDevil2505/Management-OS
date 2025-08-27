@@ -768,21 +768,32 @@ useEffect(() => {
       }
 
       console.log(`✅ Data loaded from database in ${loadTime}ms`);
+
+      // Mark operation as complete
+      dbOperationRef.current.isLoading = false;
+      dbOperationRef.current.pendingOperations = Math.max(0, dbOperationRef.current.pendingOperations - 1);
+
       return newCache;
-      
+
     } catch (error) {
       console.error('❌ Error loading data:', error);
-      
+
+      // Always reset operation flags on error
+      dbOperationRef.current.isLoading = false;
+      dbOperationRef.current.pendingOperations = Math.max(0, dbOperationRef.current.pendingOperations - 1);
+
       if (!background) {
         setMasterCache(prev => ({ ...prev, isLoading: false }));
         setCacheStatus(prev => ({
           ...prev,
           isRefreshing: false,
           lastError: error.message,
-          message: 'Failed to load data'
+          message: error.message.includes('timeout') ?
+            'Database timeout - system may be busy. Please try again.' :
+            'Failed to load data'
         }));
       }
-      
+
       throw error;
     }
   }, [masterCache, saveToStorage]);
