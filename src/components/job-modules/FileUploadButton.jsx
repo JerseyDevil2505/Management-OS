@@ -277,9 +277,6 @@ const handleCodeFileUpdate = async () => {
     } else {
       throw new Error('Unsupported vendor type');
     }
-
-    // Clear cache after code file update
-    await supabase.rpc('clear_cache');
     
     // Only update date stamp if we successfully got here
     setLastCodeProcessedDate(new Date().toISOString());
@@ -1168,16 +1165,9 @@ try {
         newVersion: newFileVersion  // FIX 1: Show correct version
       });
       
-      // Clear cache after property updates
-      await supabase.rpc('clear_cache');
-      addBatchLog('🔄 Cache cleared after property updates', 'success');
-      
       // Save comparison report with sales decisions
       addBatchLog('💾 Saving comparison report to database...', 'info');
       await saveComparisonReport(comparisonResults, salesDecisions);
-      
-      // Clear cache after comparison report save
-      await supabase.rpc('clear_cache');
       
       // Refresh report count
       await loadReportCount();
@@ -1306,9 +1296,6 @@ try {
           }
         }
         
-        // Clear cache after all sales decisions
-        await supabase.rpc('clear_cache');
-        
         addBatchLog(`✅ Processed ${salesProcessed}/${salesDecisions.size} sales decisions`, 'success', {
           reverted: salesReverted,
           keptNew: salesProcessed - salesReverted - salesBothStored,
@@ -1357,8 +1344,6 @@ try {
               workflow_stats: updatedWorkflowStats 
             })
             .eq('id', job.id);
-            
-          await supabase.rpc('clear_cache');
           
           addBatchLog('🔄 Marked production analytics as needing refresh', 'info');
         }
