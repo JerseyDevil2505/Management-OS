@@ -2903,36 +2903,6 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
                     })}
                   </tbody>
                 </table>
-                  <tbody>
-                    {searchResults.map(prop => (
-                      <tr key={prop.id}>
-                        <td style={{ padding: '8px' }}>
-                          <input
-                            type="checkbox"
-                            checked={selectedToAdd.has(prop.id)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSelectedToAdd(prev => new Set([...prev, prop.id]));
-                              } else {
-                                setSelectedToAdd(prev => {
-                                  const newSet = new Set(prev);
-                                  newSet.delete(prop.id);
-                                  return newSet;
-                                });
-                              }
-                            }}
-                          />
-                        </td>
-                        <td style={{ padding: '8px' }}>{prop.property_block}/{prop.property_lot}</td>
-                        <td style={{ padding: '8px' }}>{prop.property_location}</td>
-                        <td style={{ padding: '8px' }}>{prop.property_m4_class}</td>
-                        <td style={{ padding: '8px' }}>{prop.sales_date}</td>
-                        <td style={{ padding: '8px', textAlign: 'right' }}>${prop.sales_price?.toLocaleString()}</td>
-                        <td style={{ padding: '8px', textAlign: 'right' }}>{calculateAcreage(prop).toFixed(2)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
               </div>
               
               <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'space-between' }}>
