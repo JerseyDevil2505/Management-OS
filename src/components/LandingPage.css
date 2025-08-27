@@ -17,18 +17,7 @@
   overflow: hidden;
 }
 
-/* Add subtle pattern overlay */
-.landing-header::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-image: 
-    repeating-linear-gradient(45deg, transparent, transparent 35px, rgba(255,255,255,.05) 35px, rgba(255,255,255,.05) 70px);
-  pointer-events: none;
-}
+/* Removed pattern overlay that could cause blinking */
 
 .header-content {
   max-width: 1200px;
@@ -50,7 +39,7 @@
   height: 80px;
   object-fit: contain;
   filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.15));
-  animation: float 6s ease-in-out infinite;
+  animation: float 12s ease-in-out infinite;
 }
 
 @keyframes float {
@@ -58,7 +47,7 @@
     transform: translateY(0px);
   }
   50% {
-    transform: translateY(-10px);
+    transform: translateY(-3px);
   }
 }
 
