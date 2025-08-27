@@ -96,6 +96,19 @@ const ProductionTracker = ({
   const [processingComplete, setProcessingComplete] = useState(false); // NEW: Track when processing is done
   const [currentValidationIndex, setCurrentValidationIndex] = useState(0); // NEW: Track current validation item
 
+  // Add loading timeout to prevent infinite loading state
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      if (loading) {
+        console.error('❌ ProductionTracker loading timeout - forcing load');
+        addNotification('Production data loading timed out, showing with available data', 'warning');
+        setLoading(false);
+      }
+    }, 15000); // 15 second timeout
+
+    return () => clearTimeout(timeout);
+  }, [loading]);
+
   // NEW: Smart data staleness detection
   const isDataStale = currentWorkflowStats?.needsRefresh && 
                      currentWorkflowStats?.lastFileUpdate > currentWorkflowStats?.lastProcessed;
@@ -790,7 +803,7 @@ const ProductionTracker = ({
       }
       
       addNotification(`✅ Complete override record created: ${finalOverrideReason} for ${property.composite_key}`, 'success');
-      addNotification('🔄 Reprocessing analytics with complete override...', 'info');
+      addNotification('�� Reprocessing analytics with complete override...', 'info');
 
     } catch (error) {
       console.error('Error applying complete override:', error);
@@ -896,28 +909,63 @@ const ProductionTracker = ({
     addNotification('🔄 Session reset - settings unlocked', 'info');
   };
 
-// Initialize data loading
+// Initialize data loading with error handling and fallbacks
   useEffect(() => {
-    if (jobData?.id && properties && properties.length > 0 && inspectionData && employees) {
+    if (jobData?.id) {
       const initializeData = async () => {
-        // Load only the things that still need database calls
-        await loadAvailableInfoByCodes();
-        await loadProjectStartDate();
-        await loadVendorSource();
-        
-        // Process from props instead of loading
-        processEmployeeData();  // Uses employees prop
-        calculateValidationOverrides();  // Uses inspectionData prop
-        calculateCommercialCounts();     // Uses inspectionData prop
-        calculateUnassignedPropertyCount(); // Uses properties prop
-        
-        // Then load persisted analytics (which may need override data)
-        await loadPersistedAnalytics();
-        
-        setLoading(false);
+        try {
+          console.log('🔄 ProductionTracker initializing...', {
+            hasJobData: !!jobData?.id,
+            hasProperties: !!(properties && properties.length > 0),
+            hasInspectionData: !!inspectionData,
+            hasEmployees: !!(employees && employees.length > 0)
+          });
+
+          // Load core settings first (always needed)
+          await loadAvailableInfoByCodes();
+          await loadProjectStartDate();
+          await loadVendorSource();
+
+          // Process data from props with fallbacks
+          if (employees && employees.length > 0) {
+            processEmployeeData();
+          } else {
+            console.warn('⚠️ No employees data, using empty state');
+            setEmployeeData({});
+          }
+
+          if (inspectionData && inspectionData.length > 0) {
+            calculateValidationOverrides();
+            calculateCommercialCounts();
+          } else {
+            console.warn('⚠️ No inspection data, using empty state');
+            setValidationOverrides([]);
+            setCommercialCounts({ inspected: 0, priced: 0 });
+          }
+
+          if (properties && properties.length > 0) {
+            calculateUnassignedPropertyCount();
+          } else {
+            console.warn('⚠️ No properties data, using empty state');
+            setUnassignedPropertyCount(0);
+          }
+
+          // Load persisted analytics (may use override data)
+          await loadPersistedAnalytics();
+
+          console.log('✅ ProductionTracker initialized successfully');
+          setLoading(false);
+
+        } catch (error) {
+          console.error('❌ ProductionTracker initialization failed:', error);
+          addNotification(`Failed to initialize Production Tracker: ${error.message}`, 'error');
+          setLoading(false); // Still show component even if initialization fails
+        }
       };
-      
+
       initializeData();
+    } else {
+      console.warn('⚠️ ProductionTracker waiting for jobData...');
     }
   }, [jobData?.id, properties, inspectionData, employees]); // Added employees to deps
 
