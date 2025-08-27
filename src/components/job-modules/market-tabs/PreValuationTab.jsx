@@ -1053,26 +1053,30 @@ const handleSalesDecision = async (saleId, decision) => {
     console.error('Error persisting decision to market_land_valuation:', error);
   }
 
-// Handle immediate database operations for REJECTIONS
+  // Handle immediate database operations for REJECTIONS
   if (decision === 'reject') {
-    try {
-      const { error } = await supabase
-        .from('property_records')
-        .update({ 
-          values_norm_time: null,
-          values_norm_size: null 
-        })
-        .eq('id', saleId);
-      
-      if (error) {
-        console.error('Error removing normalized values:', error);
-      } else {
-        // Clear database cache after rejection
-        await supabase.rpc('clear_cache');
-        console.log(`🗑️ Removed normalized values for rejected property ${saleId}`);
+    // Only update if there are actually values to remove
+    const saleToReject = timeNormalizedSales.find(s => s.id === saleId);
+    if (saleToReject && (saleToReject.values_norm_time || saleToReject.values_norm_size)) {
+      try {
+        const { error } = await supabase
+          .from('property_records')
+          .update({ 
+            values_norm_time: null,
+            values_norm_size: null 
+          })
+          .eq('id', saleId);
+        
+        if (error) {
+          console.error('Error removing normalized values:', error);
+        } else {
+          // Clear database cache after rejection
+          await supabase.rpc('clear_cache');
+          console.log(`🗑️ Removed normalized values for rejected property ${saleId}`);
+        }
+      } catch (error) {
+        console.error('Error updating property_records:', error);
       }
-    } catch (error) {
-      console.error('Error updating property_records:', error);
     }
   }
   
