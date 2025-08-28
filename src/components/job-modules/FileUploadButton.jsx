@@ -303,7 +303,7 @@ const handleCodeFileUpdate = async () => {
 
     console.log(`🔧 Code Update - jobService.update result:`, updateResult);
 
-    addNotification(`✅ Successfully updated code definitions for ${detectedVendor}`, 'success');
+    addNotification(`��� Successfully updated code definitions for ${detectedVendor}`, 'success');
 
     // Clear code file selection
     setCodeFile(null);
@@ -934,7 +934,7 @@ const handleCodeFileUpdate = async () => {
         .single();
 
       if (versionData && !error) {
-        console.log(`�� Current file_version from DB: ${versionData.file_version}, updated_at: ${versionData.updated_at}`);
+        console.log(`📊 Current file_version from DB: ${versionData.file_version}, updated_at: ${versionData.updated_at}`);
         setCurrentFileVersion(versionData.file_version || 1);
         setLastUpdatedAt(versionData.updated_at);
       } else {
@@ -1056,12 +1056,20 @@ const handleCodeFileUpdate = async () => {
         originalError.apply(console, args);
       };
       
-      // Set initial state
+      // Set initial state with detailed logging
+      console.log('🚀 Starting batch operation with timeout protection...');
       setBatchInsertProgress(prev => ({
         ...prev,
         isInserting: true,
-        currentOperation: 'Initializing batch processing...'
+        currentOperation: 'Initializing batch processing...',
+        startTime: new Date().toISOString()
       }));
+
+      // Add a heartbeat to show we're still alive during initialization
+      const heartbeatInterval = setInterval(() => {
+        console.log('💓 Batch operation heartbeat - still initializing...');
+        addBatchLog('💓 Operation still running...', 'info');
+      }, 10000); // Every 10 seconds
       
       // Execute the operation with timeout protection
       Promise.race([
