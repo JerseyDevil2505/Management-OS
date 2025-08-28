@@ -80,7 +80,8 @@ async function getSourceFileDataForJob(jobId) {
     return result;
 
   } catch (error) {
-    console.error('Error getting source file data for job:', error);
+    console.error('Error getting source file data for job:', error.message);
+    console.error('Error details:', error);
     return null;
   }
 }
@@ -2521,7 +2522,8 @@ export const propertyService = {
         needsReprocessing: (needsReprocessingCount || 0) > 0
       };
     } catch (error) {
-      console.error('Error checking job reprocessing status:', error);
+      console.error('Error checking job reprocessing status:', error.message);
+      console.error('Error details:', error);
       return {
         hasSourceFile: false,
         recordsNeedingReprocessing: 0,
@@ -2544,7 +2546,8 @@ export const propertyService = {
       console.log('✅ Job reprocessing triggered:', data);
       return data;
     } catch (error) {
-      console.error('Error triggering job reprocessing:', error);
+      console.error('Error triggering job reprocessing:', error.message);
+      console.error('Error details:', error);
       throw error;
     }
   },
@@ -2621,7 +2624,8 @@ export const propertyService = {
         throw new Error(`Unsupported vendor type: ${vendorType}`);
       }
     } catch (error) {
-      console.error('Automatic reprocessing failed:', error);
+      console.error('Automatic reprocessing failed:', error.message);
+      console.error('Error details:', error);
       throw error;
     }
   }
