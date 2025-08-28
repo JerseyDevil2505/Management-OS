@@ -72,12 +72,7 @@ const JobContainer = ({
     setLoadedCount(0);
 
     try {
-        console.log('🔍 CACHE DEBUG:', {
-        hasJobCache: !!jobCache,
-        jobId: selectedJob.id,
-        hasCachedJob: !!(jobCache && jobCache[selectedJob.id]),
-        cacheKeys: jobCache ? Object.keys(jobCache) : []
-      });
+        console.log('🔍 Loading fresh data for job:', selectedJob.id);
       console.log('📡 Loading fresh data from database...');
 
       // Add timeout wrapper function
