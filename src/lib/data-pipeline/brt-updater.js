@@ -486,8 +486,6 @@ export class BRTUpdater {
       values_base_cost: this.parseNumeric(rawRecord.BASEREPLCOST),
       values_det_items: this.parseNumeric(rawRecord.DETACHEDITEMS),
       values_repl_cost: this.parseNumeric(rawRecord.REPLCOSTNEW),
-      values_norm_time: null,
-      values_norm_size: null,
       
       // Inspection fields
       inspection_info_by: this.parseInteger(rawRecord.INFOBY),
@@ -503,23 +501,21 @@ export class BRTUpdater {
       asset_design_style: rawRecord.DESIGN,
       asset_ext_cond: rawRecord.EXTERIORNC,
       asset_int_cond: rawRecord.INTERIORNC,
-      asset_key_page: null,
       asset_lot_acre: this.calculateLotAcres(rawRecord),
       asset_lot_depth: this.calculateLotDepth(rawRecord),
       asset_lot_frontage: this.calculateLotFrontage(rawRecord),
       asset_lot_sf: this.calculateLotSquareFeet(rawRecord),
-      asset_map_page: null,
       asset_neighborhood: rawRecord.NBHD,
       asset_sfla: this.parseNumeric(rawRecord.SFLA_TOTAL),
       asset_story_height: this.parseNumeric(rawRecord.STORYHGT),
       asset_type_use: rawRecord.TYPEUSE,
       asset_view: rawRecord.VIEW,
       asset_year_built: this.parseInteger(rawRecord.YEARBUILT),
-      asset_zoning: null,
-      
+
       // Analysis and calculation fields
-      location_analysis: null,
-      new_vcs: null,
+      // REMOVED: location_analysis, new_vcs, asset_map_page, asset_key_page,
+      //          asset_zoning, values_norm_size, values_norm_time
+      //          (moved to property_market_analysis table)
       total_baths_calculated: this.calculateTotalBaths(rawRecord),
       
       // Processing metadata
@@ -536,7 +532,7 @@ export class BRTUpdater {
       upload_date: new Date().toISOString(),
       
       // Payroll and project tracking
-      project_start_date: null,
+      // REMOVED: project_start_date (moved to jobs table)
       
       // System metadata
       vendor_source: 'BRT',
