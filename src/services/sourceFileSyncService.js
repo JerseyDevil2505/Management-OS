@@ -43,7 +43,7 @@ class SourceFileSyncService {
   constructor() {
     this.isRunning = false;
     this.lastRun = null;
-    this.runInterval = 5 * 60 * 1000; // 5 minutes
+    this.runInterval = 30 * 60 * 1000; // 30 minutes - reduced from 5 to prevent I/O spikes
     this.maxRetries = 3;
     this.retryDelay = 30000; // 30 seconds
   }
