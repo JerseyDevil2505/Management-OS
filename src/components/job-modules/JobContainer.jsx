@@ -1059,10 +1059,7 @@ const JobContainer = ({
                       if (isAvailable) {
                         // If leaving a module that made changes, refresh data
                         if (moduleHasChanges && activeModule !== module.id) {
-                          console.log(`Module ${activeModule} had changes, clearing cache...`);
-                          if (onUpdateJobCache && selectedJob?.id) {
-                            onUpdateJobCache(selectedJob.id, null);
-                          }
+                          console.log(`Module ${activeModule} had changes, will reload fresh data`);
                           setModuleHasChanges(false);
                         }
                         setActiveModule(module.id);
