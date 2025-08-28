@@ -507,14 +507,21 @@ export class MicrosystemsUpdater {
 
       // Process and store code file if provided
       if (codeFileContent) {
+        console.log('📝 Step 2: Processing code file...');
         await this.processCodeFile(codeFileContent, jobId);
+        console.log('✅ Step 2 completed: Code file processed');
+      } else {
+        console.log('⏭️ Step 2 skipped: No code file provided');
       }
-      
+
       // Parse source file
+      console.log('📝 Step 3: Parsing source file...');
       const records = this.parseSourceFile(sourceFileContent);
+      console.log(`✅ Step 3 completed: Parsed ${records.length} records from source file`);
 
       // NEW: Delete properties that exist in DB but are NOT in the source file (fixes recurring deletion modal)
-      console.log('🔍 Checking for properties to delete (not in source file)...');
+      console.log('📝 Step 4: Checking for properties to delete (not in source file)...');
+      console.log('⚠️ WARNING: This step can be slow with large datasets!');
       try {
         // Generate composite keys for all records in the source file
         const sourceFileKeys = records.map(rawRecord =>
