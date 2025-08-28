@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Building, Factory, TrendingUp, DollarSign, Scale, Database, AlertCircle } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
+import { initializeJob, formatBackendError } from '../../services/backendService';
 import ManagementChecklist from './ManagementChecklist';
 import ProductionTracker from './ProductionTracker';
 import MarketAnalysis from './MarketAnalysis';
