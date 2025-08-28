@@ -2521,8 +2521,14 @@ const handleCodeFileUpdate = async () => {
     } else if (type === 'code') {
       // Check if code file was updated
       const codeVersion = job.code_file_version || 1;
+      console.log(`🔧 Code Banner Debug - codeVersion: ${codeVersion}`);
+      console.log(`🔧 Code Banner Debug - job.code_file_uploaded_at: ${job.code_file_uploaded_at}`);
+      console.log(`🔧 Code Banner Debug - timestamp param: ${timestamp}`);
+
       if (codeVersion > 1) {
-        return `Updated via FileUpload (${formatDate(job.code_file_uploaded_at || timestamp)})`;
+        const uploadDate = job.code_file_uploaded_at || timestamp;
+        console.log(`🔧 Code Banner Debug - final uploadDate: ${uploadDate}`);
+        return `Updated via FileUpload (${formatDate(uploadDate)})`;
       } else {
         return `Imported at Job Creation (${formatDate(timestamp)})`;
       }
