@@ -2478,7 +2478,7 @@ export const propertyService = {
     }
   },
 
-  // NEW: Get raw data for a specific property from jobs.source_file_content
+  // NEW: Get source file data for a specific property from jobs.source_file_content
   async getRawDataForProperty(jobId, propertyCompositeKey) {
     try {
       const { data, error } = await supabase.rpc('get_raw_data_for_property', {
