@@ -2243,9 +2243,21 @@ try {
                     
                     // Call the updater to UPSERT the database with latest data
                     addBatchLog(`📊 Calling ${detectedVendor} updater for version refresh...`, 'info');
-                    
-                    // FIX 1: Calculate new file_version for property_records
-                    const newFileVersion = sourceFileVersion + 1;
+
+                    // FIX 1: Calculate new file_version for property_records - fetch current from DB
+                    addBatchLog('🔍 Fetching current file version from database...', 'info');
+                    const { data: currentVersionData, error: versionError } = await supabase
+                      .from('property_records')
+                      .select('file_version')
+                      .eq('job_id', job.id)
+                      .order('file_version', { ascending: false })
+                      .limit(1)
+                      .single();
+
+                    const currentFileVersion = currentVersionData?.file_version || 1;
+                    const newFileVersion = currentFileVersion + 1;
+
+                    addBatchLog(`📊 Current DB version: ${currentFileVersion}, incrementing to: ${newFileVersion}`, 'info');
                     
                     const result = await trackBatchInserts(async () => {
                       return await propertyService.updateCSVData(
