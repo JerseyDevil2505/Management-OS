@@ -26,6 +26,10 @@ const FileUploadButton = ({ job, onFileProcessed, isJobLoading = false, onDataRe
   const [reportsList, setReportsList] = useState([]);
   const [reportCount, setReportCount] = useState(0);
   const [loadingReports, setLoadingReports] = useState(false);
+
+  // Pagination for reports modal
+  const [currentReportPage, setCurrentReportPage] = useState(1);
+  const reportsPerPage = 5;
   
   // NEW: Batch processing modal state
   const [showBatchModal, setShowBatchModal] = useState(false);
