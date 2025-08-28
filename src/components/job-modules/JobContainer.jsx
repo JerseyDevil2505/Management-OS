@@ -186,8 +186,12 @@ const JobContainer = ({
       if (count && count > 0) {
         console.log(`📥 Loading ${count} properties using client-side pagination (500 per batch)...`);
 
-        const batchSize = 500;
+        const batchSize = 100; // MUCH smaller batches
         const totalBatches = Math.ceil(count / batchSize);
+        let retryCount = 0;
+        const maxRetries = 3;
+
+        console.log(`🚨 FIXED BATCHING: Will stop on first failure, ${batchSize} records per batch`);
 
         for (let batch = 0; batch < totalBatches; batch++) {
           const offset = batch * batchSize;
@@ -195,38 +199,64 @@ const JobContainer = ({
 
           console.log(`📦 Loading batch ${batch + 1}/${totalBatches} (${offset} to ${offset + limit - 1})`);
 
-          // Build the query for this batch
-          let batchQuery = supabase
-            .from('property_records')
-            .select('*')
-            .eq('job_id', selectedJob.id)
-            .order('property_composite_key')
-            .range(offset, offset + limit - 1);
+          try {
+            // Build the query for this batch
+            let batchQuery = supabase
+              .from('property_records')
+              .select('*')
+              .eq('job_id', selectedJob.id)
+              .order('property_composite_key')
+              .range(offset, offset + limit - 1);
 
-          // Apply assignment filter if needed
-          if (hasAssignments) {
-            batchQuery = batchQuery.eq('is_assigned_property', true);
-          }
+            // Apply assignment filter if needed
+            if (hasAssignments) {
+              batchQuery = batchQuery.eq('is_assigned_property', true);
+            }
 
-          const { data: batchData, error: batchError } = await batchQuery;
+            const { data: batchData, error: batchError } = await batchQuery;
 
-          if (batchError) {
-            console.error(`❌ Error loading batch ${batch + 1}:`, batchError);
-            throw batchError;
-          }
+            if (batchError) {
+              console.error(`❌ BATCH ${batch + 1} FAILED:`, batchError);
 
-          if (batchData && batchData.length > 0) {
-            allProperties.push(...batchData);
-            setLoadedCount(allProperties.length);
+              // CRITICAL FIX: Stop processing on first failure
+              if (batchError.message?.includes('timeout') || batchError.message?.includes('canceling statement')) {
+                console.error(`🛑 DATABASE TIMEOUT ON BATCH ${batch + 1} - STOPPING ALL PROCESSING`);
+                throw new Error(`Database timeout on batch ${batch + 1}. Loaded ${allProperties.length} of ${count} records before failure.`);
+              }
+
+              throw batchError;
+            }
+
+            if (batchData && batchData.length > 0) {
+              allProperties.push(...batchData);
+              setLoadedCount(allProperties.length);
+              setLoadingProgress(Math.round((allProperties.length / count) * 100));
+              console.log(`✅ Batch ${batch + 1} loaded: ${batchData.length} properties (total: ${allProperties.length})`);
+              retryCount = 0; // Reset retry count on success
+            } else {
+              console.warn(`⚠️ Batch ${batch + 1} returned no data`);
+            }
+
+            // Progressive delay - longer delay after more batches
+            const delay = Math.min(200 + (batch * 10), 1000);
+            if (batch < totalBatches - 1) {
+              console.log(`⏳ Waiting ${delay}ms before next batch...`);
+              await new Promise(resolve => setTimeout(resolve, delay));
+            }
+
+          } catch (error) {
+            console.error(`🚨 CRITICAL ERROR ON BATCH ${batch + 1}:`, error);
+
+            // STOP PROCESSING - don't continue to next batches
+            setIsLoadingProperties(false);
             setLoadingProgress(Math.round((allProperties.length / count) * 100));
-            console.log(`✅ Batch ${batch + 1} loaded: ${batchData.length} properties (total: ${allProperties.length})`);
-          } else {
-            console.warn(`⚠️ Batch ${batch + 1} returned no data`);
-          }
 
-          // Small delay between batches to prevent overwhelming the database
-          if (batch < totalBatches - 1) {
-            await new Promise(resolve => setTimeout(resolve, 100));
+            // Set partial data and error
+            setProperties(allProperties);
+            setVersionError(`Failed loading batch ${batch + 1}. Loaded ${allProperties.length} of ${count} records. Error: ${error.message}`);
+
+            console.error(`🛑 STOPPING BATCH PROCESSING - DO NOT CONTINUE`);
+            return; // EXIT THE FUNCTION COMPLETELY
           }
         }
 
