@@ -78,37 +78,7 @@ const JobContainer = ({
         hasCachedJob: !!(jobCache && jobCache[selectedJob.id]),
         cacheKeys: jobCache ? Object.keys(jobCache) : []
       });
-      // CHECK CACHE FIRST
-      if (jobCache && jobCache[selectedJob.id]) {
-        const cached = jobCache[selectedJob.id];
-        console.log(`🎯 CACHE DEBUG: Found cached data for job ${selectedJob.id}`);
-        console.log(`📊 CACHE DEBUG: Properties count: ${cached.properties?.length || 0}`);
-        console.log(`📊 CACHE DEBUG: Inspection data count: ${cached.inspectionData?.length || 0}`);
-        console.log(`📊 CACHE DEBUG: Cache timestamp: ${new Date(cached.timestamp || 0).toLocaleString()}`);
-
-        // TEMPORARILY DISABLE CACHE to debug the issue
-        console.log('🚨 CACHE DISABLED FOR DEBUGGING - LOADING FROM DATABASE');
-        // Use cached data immediately
-        // setProperties(cached.properties || []);
-        // setInspectionData(cached.inspectionData || []);
-        // setMarketLandData(cached.marketLandData || {});
-        // setHpiData(cached.hpiData || []);
-        // setChecklistItems(cached.checklistItems || []);
-        // setChecklistStatus(cached.checklistStatus || []);
-        // setEmployees(cached.employees || []);  // ADD THIS LINE
-        // setPropertyRecordsCount(cached.properties?.length || 0);
-        // setLatestFileVersion(cached.fileVersion || 1);
-        // setLatestCodeVersion(cached.codeVersion || 1);
-        // setJobData(cached.jobData || selectedJob);
-        // setIsLoadingVersion(false);
-        // setLoadingProgress(100);
-
-        // Cache exists? Use it. Period. No time checks.
-        // console.log('✅ Using cached data, skipping database load');
-        // return; // Skip database load entirely
-      }
-      
-      console.log('📡 Loading from database...');
+      console.log('📡 Loading fresh data from database...');
 
       // Add timeout wrapper function
       const withTimeout = (promise, timeoutMs = 15000, operation = 'database query') => {
