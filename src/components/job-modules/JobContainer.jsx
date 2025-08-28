@@ -302,13 +302,11 @@ const JobContainer = ({
         const preservedMap = {};
         allProperties.forEach(prop => {
           preservedMap[prop.property_composite_key] = {
-            project_start_date: prop.project_start_date,
             is_assigned_property: prop.is_assigned_property,
-            validation_status: prop.validation_status,
-            location_analysis: prop.location_analysis,
-            new_vcs: prop.new_vcs,
-            values_norm_time: prop.values_norm_time,
-            values_norm_size: prop.values_norm_size
+            validation_status: prop.validation_status
+            // REMOVED: project_start_date (moved to jobs table)
+            // REMOVED: location_analysis, new_vcs, values_norm_time, values_norm_size
+            //          (moved to property_market_analysis table)
           };
         });
         
