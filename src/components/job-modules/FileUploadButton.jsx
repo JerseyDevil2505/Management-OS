@@ -893,30 +893,36 @@ const handleCodeFileUpdate = async () => {
     }
   };
 
-  // CRITICAL FIX: Refresh banner state immediately after processing
-  const refreshBannerState = async () => {
+  // Fetch current file version from property_records
+  const fetchCurrentFileVersion = async () => {
     try {
-      
-      // Refresh source file version from property_records
-      const { data: sourceVersionData, error: sourceVersionError } = await supabase
+      const { data: versionData, error } = await supabase
         .from('property_records')
         .select('file_version')
         .eq('job_id', job.id)
+        .order('file_version', { ascending: false })
         .limit(1)
         .single();
-        
-      if (sourceVersionData && !sourceVersionError) {
-        setSourceFileVersion(sourceVersionData.file_version || 1);
+
+      if (versionData && !error) {
+        console.log(`📊 Current file_version from DB: ${versionData.file_version}`);
+        setCurrentFileVersion(versionData.file_version || 1);
       } else {
-        setSourceFileVersion(1);
+        console.log('📊 No records found, setting file_version to 1');
+        setCurrentFileVersion(1);
       }
-      
-      // Force a re-render of the component to update banner display
-      
     } catch (error) {
-      console.error('🔄 REFRESH - Error refreshing banner state:', error);
+      console.error('Error fetching file version:', error);
+      setCurrentFileVersion(1);
     }
   };
+
+  // Initialize file version on component mount
+  useEffect(() => {
+    if (job?.id) {
+      fetchCurrentFileVersion();
+    }
+  }, [job?.id]);
 
   // ENHANCED: Track batch insert operations from propertyService with better capture
   const trackBatchInserts = (operation) => {
