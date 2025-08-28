@@ -198,7 +198,8 @@ useEffect(() => {
         return true;
       }
     } catch (error) {
-      console.error('IndexedDB save failed:', error);
+      console.error('IndexedDB save failed:', error.message);
+      console.error('Error details:', error);
       
       // Fallback to localStorage for critical data
       try {
