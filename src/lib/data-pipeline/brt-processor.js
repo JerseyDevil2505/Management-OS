@@ -589,8 +589,6 @@ export class BRTProcessor {
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       
-      // Store complete raw data as JSON
-      raw_data: rawRecord
     };
   }
 

@@ -595,8 +595,6 @@ export class BRTUpdater {
       created_at: new Date().toISOString(), // Will be ignored on UPSERT
       updated_at: new Date().toISOString(),
       
-      // Store complete raw data as JSON
-      raw_data: rawRecord
     };
 
     // ENHANCED: Merge with preserved data - preserved fields take precedence
