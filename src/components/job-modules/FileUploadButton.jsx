@@ -312,7 +312,7 @@ const handleCodeFileUpdate = async () => {
 
     // Refresh job data in parent component
     if (onDataRefresh) {
-      console.log(`🔧 Code Update - Calling onDataRefresh to update job data`);
+      console.log(`���� Code Update - Calling onDataRefresh to update job data`);
       console.log(`🔧 Code Update - BEFORE refresh - job.code_file_uploaded_at: ${job.code_file_uploaded_at}`);
       console.log(`🔧 Code Update - BEFORE refresh - job.code_file_version: ${job.code_file_version}`);
 
@@ -2744,7 +2744,10 @@ const handleCodeFileUpdate = async () => {
           �� Reports: {reportCount} saved comparison{reportCount !== 1 ? 's' : ''}
         </span>
         <button
-          onClick={() => setShowReportsModal(true)}
+          onClick={() => {
+            setCurrentReportPage(1); // Reset to first page
+            setShowReportsModal(true);
+          }}
           className="px-3 py-1 bg-purple-600 text-white text-xs rounded hover:bg-purple-700 flex items-center gap-1"
         >
           <Eye className="w-3 h-3" />
