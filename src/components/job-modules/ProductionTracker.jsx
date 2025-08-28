@@ -1217,9 +1217,9 @@ const ProductionTracker = ({
         const hasMeasureBy = record.inspection_measure_by && record.inspection_measure_by.trim() !== '';
         const hasMeasureDate = record.inspection_measure_date;
 
-        // FIXED: A real inspection requires BOTH inspector AND date - info_by alone is not an inspection
+        // FIXED: Separate "not yet inspected" from "attempted but failed validation"
+        // If NO inspection attempt at all (no inspector AND no date), mark as "not yet inspected"
         if (!hasMeasureBy && !hasMeasureDate) {
-          // Property not yet inspected - info_by code alone doesn't count as inspected
           reasonNotAdded = hasInfoBy ?
             'Info_by code only - missing inspector and measure date' :
             'Not yet inspected';
@@ -1240,25 +1240,8 @@ const ProductionTracker = ({
           return;
         }
 
-        // Skip if no inspector recorded
-        if (!inspector || inspector.trim() === '') {
-          reasonNotAdded = 'Missing inspector initials';
-          missingProperties.push({
-            composite_key: propertyKey,
-            block: record.property_block,
-            lot: record.property_lot,
-            qualifier: record.property_qualifier || '',
-            card: record.property_addl_card || '1',
-            property_location: record.property_location || '',
-            property_class: propertyClass,
-            reason: reasonNotAdded,
-            inspector: '',
-            info_by_code: infoByCode,
-            measure_date: record.inspection_measure_date,
-            validation_issues: []
-          });
-          return;
-        }
+        // If we get here, there was SOME inspection attempt (inspector OR date exists)
+        // Continue processing to validate the attempt - don't early return
 
         // Skip inspections before project start date (removes old inspector noise)
         if (measuredDate && measuredDate < startDate) {
