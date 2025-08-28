@@ -1460,6 +1460,14 @@ try {
         addBatchLog('🔄 Triggering data refresh in JobContainer...', 'info');
         await onDataRefresh();
         addBatchLog('✅ JobContainer data refreshed', 'success');
+
+        // DEBUG: Small delay then check if JobContainer shows the new version
+        setTimeout(() => {
+          addBatchLog('⏰ Checking if JobContainer updated (after 2 second delay)...', 'info');
+          // This will show in console - user should check JobContainer UI
+        }, 2000);
+      } else {
+        addBatchLog('⚠️ No onDataRefresh callback provided!', 'warning');
       }
     } catch (error) {
       console.error('❌ Processing failed:', error);
