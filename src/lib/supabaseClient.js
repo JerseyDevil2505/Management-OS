@@ -617,10 +617,14 @@ getInteriorConditionName: function(property, codeDefinitions, vendorType) {
   },
 
   // Get raw data value with vendor awareness
-  getRawDataValue: function(property, fieldName, vendorType) {
-    if (!property || !property.raw_data) return null;
-    
-    const rawData = property.raw_data;
+  getRawDataValue: async function(property, fieldName, vendorType) {
+    if (!property) return null;
+
+    // Get source file data for this property
+    if (!property.job_id || !property.property_composite_key) return null;
+
+    const sourceData = await getSourceFileDataForProperty(property.job_id, property.property_composite_key);
+    if (!sourceData) return null;
     
     // Handle vendor-specific field name differences
     if (vendorType === 'BRT') {
