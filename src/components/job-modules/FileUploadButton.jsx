@@ -1104,7 +1104,7 @@ const handleCodeFileUpdate = async () => {
       setProcessing(true);
       setProcessingStatus(`Processing ${detectedVendor} data via updater...`);
       
-      addBatchLog('�� Starting file processing workflow', 'batch_start', {
+      addBatchLog('🚀 Starting file processing workflow', 'batch_start', {
         vendor: detectedVendor,
         fileName: sourceFile.name,
         changesDetected: comparisonResults.summary.missing + comparisonResults.summary.changes + comparisonResults.summary.deletions + comparisonResults.summary.salesChanges + comparisonResults.summary.classChanges,
@@ -2168,7 +2168,7 @@ const handleCodeFileUpdate = async () => {
                       return (
                         <div key={idx} className="text-xs text-yellow-700 font-mono">
                           {detectedVendor === 'BRT' ? 
-                            `${record.BLOCK}-${record.LOT} �� ${generatedKey}` :
+                            `${record.BLOCK}-${record.LOT} → ${generatedKey}` :
                             `${record.Block}-${record.Lot} → ${generatedKey}`
                           }
                         </div>
@@ -2515,9 +2515,15 @@ const handleCodeFileUpdate = async () => {
     if (!timestamp) return 'Never';
 
     if (type === 'source') {
+      // DEBUG: Log all job fields to see what's available
+      console.log(`🔍 Banner Debug - Available job fields:`, Object.keys(job));
+      console.log(`🔍 Banner Debug - job.current_file_version: ${job.current_file_version}`);
+      console.log(`🔍 Banner Debug - job.source_file_version: ${job.source_file_version}`);
+      console.log(`🔍 Banner Debug - full job object:`, job);
+
       // SIMPLE LOGIC: Check file_version from JobContainer data
       const fileVersion = job.current_file_version || job.source_file_version || 1;
-      console.log(`🔍 Banner Debug - file_version: ${fileVersion}`);
+      console.log(`🔍 Banner Debug - final file_version: ${fileVersion}`);
 
       if (fileVersion > 1) {
         return `Updated via FileUpload (${formatDate(job.source_file_uploaded_at || timestamp)})`;
