@@ -511,27 +511,27 @@ getInteriorConditionName: function(property, codeDefinitions, vendorType) {
 
     // First check source file data for the original text value
     if (property.job_id && property.property_composite_key) {
-      const sourceData = await getRawDataForProperty(property.job_id, property.property_composite_key);
-      if (sourceData) {
+      const rawData = await getRawDataForProperty(property.job_id, property.property_composite_key);
+      if (rawData) {
         if (vendorType === 'BRT') {
           // BRT stores in various possible field names
-          const rawStory = sourceData.STORYHGT ||
-                          sourceData.STORY_HEIGHT ||
-                          sourceData['Story Height'] ||
-                          sourceData.STORIES;
+          const rawStory = rawData.STORYHGT ||
+                          rawData.STORY_HEIGHT ||
+                          rawData['Story Height'] ||
+                          rawData.STORIES;
           if (rawStory) return rawStory;
         } else if (vendorType === 'Microsystems') {
           // Look for 510-prefixed fields in source data
-          for (const key in sourceData) {
+          for (const key in rawData) {
             if (key.startsWith('510')) {
-              const value = sourceData[key];
+              const value = rawData[key];
               if (value) return value;
             }
           }
           // Also check common field names
-          const rawStory = sourceData['Story Height'] ||
-                          sourceData.STORY_HEIGHT ||
-                          sourceData.STORIES;
+          const rawStory = rawData['Story Height'] ||
+                          rawData.STORY_HEIGHT ||
+                          rawData.STORIES;
           if (rawStory) return rawStory;
         }
       }
@@ -663,8 +663,8 @@ getInteriorConditionName: function(property, codeDefinitions, vendorType) {
     // Get source file data for this property
     if (!property.job_id || !property.property_composite_key) return null;
 
-    const sourceData = await getRawDataForProperty(property.job_id, property.property_composite_key);
-    if (!sourceData) return null;
+    const rawData = await getRawDataForProperty(property.job_id, property.property_composite_key);
+    if (!rawData) return null;
     
     // Handle vendor-specific field name differences
     if (vendorType === 'BRT') {
@@ -681,7 +681,7 @@ getInteriorConditionName: function(property, codeDefinitions, vendorType) {
         'info_by': 'INFOBY'
       };
       const brtField = brtFieldMap[fieldName] || fieldName;
-      return sourceData[brtField];
+      return rawData[brtField];
     } else if (vendorType === 'Microsystems') {
       const microFieldMap = {
         'bedrooms': 'Total Bedrms',
@@ -694,10 +694,10 @@ getInteriorConditionName: function(property, codeDefinitions, vendorType) {
         'info_by': 'Information By'
       };
       const microField = microFieldMap[fieldName] || fieldName;
-      return sourceData[microField];
+      return rawData[microField];
     }
 
-    return sourceData[fieldName];
+    return rawData[fieldName];
   },
 
 // Get total lot size (aggregates multiple fields)
@@ -720,8 +720,8 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
   
 // BRT: Check LANDUR codes only if still no data
   if (totalAcres === 0 && totalSf === 0 && vendorType === 'BRT' && property.job_id && property.property_composite_key && codeDefinitions) {
-    const sourceData = await getRawDataForProperty(property.job_id, property.property_composite_key);
-    const propertyVCS = sourceData?.VCS || property.property_vcs;
+    const rawData = await getRawDataForProperty(property.job_id, property.property_composite_key);
+    const propertyVCS = rawData?.VCS || property.property_vcs;
     
     if (propertyVCS && codeDefinitions.sections?.VCS) {
       let vcsData = codeDefinitions.sections.VCS[propertyVCS];
@@ -740,8 +740,8 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
         const urcMap = vcsData.MAP["8"].MAP;
         
         for (let i = 1; i <= 6; i++) {
-          const landCode = sourceData?.[`LANDUR_${i}`];
-          const landUnits = parseFloat(sourceData?.[`LANDURUNITS_${i}`]) || 0;
+          const landCode = rawData?.[`LANDUR_${i}`];
+          const landUnits = parseFloat(rawData?.[`LANDURUNITS_${i}`]) || 0;
           
           // BRT stores single digit codes without leading zero, pad them
           const paddedCode = landCode ? String(landCode).padStart(2, '0') : null;
@@ -775,12 +775,12 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
   getBathroomPlumbingSum: async function(property, vendorType) {
     if (!property || vendorType !== 'BRT' || !property.job_id || !property.property_composite_key) return 0;
 
-    const sourceData = await getRawDataForProperty(property.job_id, property.property_composite_key);
-    if (!sourceData) return 0;
+    const rawData = await getRawDataForProperty(property.job_id, property.property_composite_key);
+    if (!rawData) return 0;
 
     let sum = 0;
     for (let i = 2; i <= 6; i++) {
-      sum += parseInt(sourceData[`PLUMBING${i}FIX`]) || 0;
+      sum += parseInt(rawData[`PLUMBING${i}FIX`]) || 0;
     }
     return sum;
   },
@@ -789,21 +789,21 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
   getBathroomFixtureSum: async function(property, vendorType) {
     if (!property || vendorType !== 'Microsystems' || !property.job_id || !property.property_composite_key) return 0;
 
-    const sourceData = await getRawDataForProperty(property.job_id, property.property_composite_key);
-    if (!sourceData) return 0;
+    const rawData = await getRawDataForProperty(property.job_id, property.property_composite_key);
+    if (!rawData) return 0;
 
-    return (parseInt(sourceData['4 Fixture Bath']) || 0) +
-           (parseInt(sourceData['3 Fixture Bath']) || 0) +
-           (parseInt(sourceData['2 Fixture Bath']) || 0) +
-           (parseInt(sourceData['Num 5 Fixture Baths']) || 0);
+    return (parseInt(rawData['4 Fixture Bath']) || 0) +
+           (parseInt(rawData['3 Fixture Bath']) || 0) +
+           (parseInt(rawData['2 Fixture Bath']) || 0) +
+           (parseInt(rawData['Num 5 Fixture Baths']) || 0);
   },
 
   // Get bathroom room sum (Microsystems only - floor-specific fields)
   getBathroomRoomSum: async function(property, vendorType) {
     if (!property || vendorType !== 'Microsystems' || !property.job_id || !property.property_composite_key) return 0;
 
-    const sourceData = await getRawDataForProperty(property.job_id, property.property_composite_key);
-    if (!sourceData) return 0;
+    const rawData = await getRawDataForProperty(property.job_id, property.property_composite_key);
+    if (!rawData) return 0;
 
     let sum = 0;
     const floorSuffixes = ['B', '1', '2', '3'];
@@ -812,12 +812,12 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
     for (const fixture of fixtureTypes) {
       for (const floor of floorSuffixes) {
         const fieldName = `${fixture} ${floor}`;
-        sum += parseInt(sourceData[fieldName]) || 0;
+        sum += parseInt(rawData[fieldName]) || 0;
       }
     }
 
     // Add the summary 5-fixture field since there are no floor-specific ones
-    sum += parseInt(sourceData['Num 5 Fixture Baths']) || 0;
+    sum += parseInt(rawData['Num 5 Fixture Baths']) || 0;
 
     return sum;
   },
@@ -826,13 +826,13 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
   getBedroomRoomSum: async function(property, vendorType) {
     if (!property || vendorType !== 'Microsystems' || !property.job_id || !property.property_composite_key) return 0;
 
-    const sourceData = await getRawDataForProperty(property.job_id, property.property_composite_key);
-    if (!sourceData) return 0;
+    const rawData = await getRawDataForProperty(property.job_id, property.property_composite_key);
+    if (!rawData) return 0;
 
-    return (parseInt(sourceData['Bedrm B']) || 0) +
-           (parseInt(sourceData['Bedrm 1']) || 0) +
-           (parseInt(sourceData['Bedrm 2']) || 0) +
-           (parseInt(sourceData['Bedrm 3']) || 0);
+    return (parseInt(rawData['Bedrm B']) || 0) +
+           (parseInt(rawData['Bedrm 1']) || 0) +
+           (parseInt(rawData['Bedrm 2']) || 0) +
+           (parseInt(rawData['Bedrm 3']) || 0);
   },
 
   // Get VCS (Valuation Control Sector) description - aka Neighborhood
@@ -842,12 +842,12 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
     // Get VCS code from property (check multiple possible fields)
     let vcsCode = property.newVCS || property.new_vcs || property.vcs;
     if (!vcsCode && property.job_id && property.property_composite_key) {
-      const sourceData = await getRawDataForProperty(property.job_id, property.property_composite_key);
-      if (sourceData) {
-        vcsCode = sourceData.vcs ||
-                  sourceData.VCS ||
-                  sourceData.NEIGHBORHOOD ||
-                  sourceData.neighborhood;
+      const rawData = await getRawDataForProperty(property.job_id, property.property_composite_key);
+      if (rawData) {
+        vcsCode = rawData.vcs ||
+                  rawData.VCS ||
+                  rawData.NEIGHBORHOOD ||
+                  rawData.neighborhood;
       }
     }  
     
@@ -2446,7 +2446,7 @@ export const propertyService = {
       // Filter properties based on source file data field value
       const matchingProperties = [];
       for (const property of properties) {
-        const propertySourceData = sourceData.propertyMap.get(property.property_composite_key);
+        const propertySourceData = rawData.propertyMap.get(property.property_composite_key);
         if (propertySourceData && propertySourceData[fieldName] === value) {
           // Get full property data
           const { data: fullProperty, error: propError } = await supabase
