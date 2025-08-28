@@ -16,7 +16,7 @@ const FileUploadButton = ({ job, onFileProcessed, isJobLoading = false, onDataRe
   const [showResultsModal, setShowResultsModal] = useState(false);
   const [comparisonResults, setComparisonResults] = useState(null);
   const [salesDecisions, setSalesDecisions] = useState(new Map());
-  const [sourceFileVersion, setSourceFileVersion] = useState(null);  
+  const [currentFileVersion, setCurrentFileVersion] = useState(1);
   const [lastSourceProcessedDate, setLastSourceProcessedDate] = useState(null);
   const [lastCodeProcessedDate, setLastCodeProcessedDate] = useState(null);
   const [isInitialized, setIsInitialized] = useState(false);  
