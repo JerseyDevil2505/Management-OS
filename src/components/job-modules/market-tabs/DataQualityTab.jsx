@@ -507,19 +507,23 @@ const generateQCFormPDF = () => {
       rooms: [],
       custom: []
     };
-    
+
     try {
       const vendor = vendorType || jobData.vendor_source || 'BRT';
-      
+
+      // Create cache for raw data to avoid repeated RPC calls
+      const rawDataCache = new Map();
+      console.log('🔄 Starting quality checks with job-level raw data access...');
+
       const pageSize = 1000;
       const totalPages = Math.ceil(properties.length / pageSize);
-      
+
       for (let page = 0; page < totalPages; page++) {
         const batch = properties.slice(page * pageSize, (page + 1) * pageSize);
         console.log(`Processing batch ${page + 1} of ${totalPages}...`);
-        
+
         for (const property of batch) {
-          await runPropertyChecks(property, results);
+          await runPropertyChecks(property, results, rawDataCache);
         }
       }
 
