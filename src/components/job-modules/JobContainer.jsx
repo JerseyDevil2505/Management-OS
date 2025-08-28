@@ -240,7 +240,28 @@ const JobContainer = ({
             }
 
             if (batchData && batchData.length > 0) {
-              allProperties.push(...batchData);
+              // Flatten market analysis fields into property objects
+              const processedData = batchData.map(property => {
+                const marketAnalysis = property.property_market_analysis?.[0] || {};
+
+                // Remove the nested property_market_analysis and flatten fields
+                const { property_market_analysis, ...propertyData } = property;
+
+                return {
+                  ...propertyData,
+                  // Flatten market analysis fields back onto the property
+                  location_analysis: marketAnalysis.location_analysis || null,
+                  new_vcs: marketAnalysis.new_vcs || null,
+                  asset_map_page: marketAnalysis.asset_map_page || null,
+                  asset_key_page: marketAnalysis.asset_key_page || null,
+                  asset_zoning: marketAnalysis.asset_zoning || null,
+                  values_norm_size: marketAnalysis.values_norm_size || null,
+                  values_norm_time: marketAnalysis.values_norm_time || null,
+                  sales_history: marketAnalysis.sales_history || null
+                };
+              });
+
+              allProperties.push(...processedData);
               setLoadedCount(allProperties.length);
               setLoadingProgress(Math.round((allProperties.length / count) * 100));
               console.log(`✅ Batch ${batch + 1} loaded: ${batchData.length} properties (total: ${allProperties.length})`);
