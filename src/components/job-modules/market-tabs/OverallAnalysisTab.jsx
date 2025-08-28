@@ -287,7 +287,10 @@ const OverallAnalysisTab = ({
     
     filteredProperties.forEach(p => {
       const designCode = p.asset_design_style || 'Unknown';
-      const designName = interpretCodes.getDesignName(p, codeDefinitions, vendorType) || designCode;
+      // Use only synchronous Microsystems decoding to avoid async rendering issues
+      const designName = vendorType === 'Microsystems' && codeDefinitions
+        ? interpretCodes.getMicrosystemsValue?.(p, codeDefinitions, 'asset_design_style') || designCode
+        : designCode;
       
       // FILTER FIX: Skip unknown/empty designs - including "00" and whitespace
       if (!designCode || designCode === 'Unknown' || designCode === '' || 
