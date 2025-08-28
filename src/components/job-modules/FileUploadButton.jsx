@@ -284,7 +284,14 @@ const handleCodeFileUpdate = async () => {
 
     // Store in sessionStorage to persist across re-renders
     sessionStorage.setItem(`job_${job.id}_lastCodeProcessed`, processedDate);
-    
+
+    // Update job's code file version
+    const newCodeVersion = (job.code_file_version || 1) + 1;
+    await jobService.update(job.id, {
+      code_file_version: newCodeVersion,
+      code_file_uploaded_at: processedDate
+    });
+
     addNotification(`✅ Successfully updated code definitions for ${detectedVendor}`, 'success');
     
     // Clear code file selection
