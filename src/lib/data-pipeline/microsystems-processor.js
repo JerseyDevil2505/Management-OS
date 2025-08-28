@@ -132,7 +132,7 @@ export class MicrosystemsProcessor {
         .eq('id', jobId);
 
       if (error) {
-        console.error('❌ Error storing Microsystems source file in database:', error);
+        console.error('�� Error storing Microsystems source file in database:', error);
         throw error;
       }
 
@@ -542,7 +542,10 @@ export class MicrosystemsProcessor {
     
     try {
       console.log('🚀 Starting Enhanced Microsystems file processing with CLEANUP support...');
-      
+
+      // CRITICAL FIX: Store source file content in jobs table
+      await this.storeSourceFileInDatabase(sourceFileContent, jobId);
+
       // Process and store code file if provided
       if (codeFileContent) {
         await this.processCodeFile(codeFileContent, jobId);
