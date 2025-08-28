@@ -380,25 +380,7 @@ const JobContainer = ({
           console.log(`💾 Updating cache for job ${selectedJob.id} with ${allProperties.length} properties`);
         }
 
-        // BUILD PRESERVED FIELDS MAP for FileUploadButton
-        const preservedMap = {};
-        allProperties.forEach(prop => {
-          preservedMap[prop.property_composite_key] = {
-            is_assigned_property: prop.is_assigned_property,
-            validation_status: prop.validation_status
-            // REMOVED: project_start_date (moved to jobs table)
-            // REMOVED: location_analysis, new_vcs, values_norm_time, values_norm_size
-            //          (moved to property_market_analysis table)
-          };
-        });
-        
-        // Store in window for FileUploadButton to access (temporary solution)
-        if (window.preservedFieldsCache) {
-          window.preservedFieldsCache[selectedJob.id] = preservedMap;
-        } else {
-          window.preservedFieldsCache = { [selectedJob.id]: preservedMap };
-        }
-        console.log(`📦 Cached preserved fields for ${allProperties.length} properties`);
+        console.log(`✅ Loaded ${allProperties.length} properties - no caching`);
       } else {
         setProperties([]);
       }
