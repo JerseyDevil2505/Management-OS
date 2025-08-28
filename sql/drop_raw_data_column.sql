@@ -1,5 +1,5 @@
 -- Drop raw_data column from property_records table
--- CRITICAL: This architectural change stores complete source files in jobs.source_file_content
+-- CRITICAL: This architectural change stores complete raw files in jobs.raw_file_content
 -- instead of duplicating raw_data JSON in every property_records row
 -- PERFORMANCE IMPACT: Significant reduction in database size and improved query performance
 
@@ -61,7 +61,7 @@ SELECT
 FROM pg_class 
 WHERE relname = 'property_records';
 
--- Verify source_file_content is properly stored in jobs table
+-- Verify raw_file_content is properly stored in jobs table
 SELECT 
     id,
     job_name,
@@ -69,13 +69,13 @@ SELECT
     year_created,
     totalresidential,
     totalcommercial,
-    CASE 
-        WHEN source_file_content IS NOT NULL THEN 'HAS_SOURCE_FILE'
-        ELSE 'MISSING_SOURCE_FILE'
-    END as source_file_status,
-    source_file_size,
-    source_file_rows_count,
-    source_file_parsed_at
+    CASE
+        WHEN raw_file_content IS NOT NULL THEN 'HAS_RAW_FILE'
+        ELSE 'MISSING_RAW_FILE'
+    END as raw_file_status,
+    raw_file_size,
+    raw_file_rows_count,
+    raw_file_parsed_at
 FROM jobs 
 ORDER BY created_at DESC
 LIMIT 10;
@@ -84,12 +84,12 @@ LIMIT 10;
 SELECT 
     j.job_name,
     j.county,
-    j.source_file_size,
+    j.raw_file_size,
     COUNT(pr.id) as property_count
 FROM jobs j
 LEFT JOIN property_records pr ON j.id = pr.job_id
-WHERE j.source_file_content IS NOT NULL
-GROUP BY j.id, j.job_name, j.county, j.source_file_size
+WHERE j.raw_file_content IS NOT NULL
+GROUP BY j.id, j.job_name, j.county, j.raw_file_size
 ORDER BY j.created_at DESC
 LIMIT 5;
 
