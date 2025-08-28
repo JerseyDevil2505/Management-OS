@@ -46,9 +46,27 @@ export class BRTProcessor {
   }
 
   /**
+   * CRITICAL FIX: Optimize batch for database performance
+   */
+  optimizeBatchForDatabase(batch) {
+    return batch.map(record => {
+      // Remove null/undefined values to reduce payload size
+      const cleaned = {};
+      for (const [key, value] of Object.entries(record)) {
+        if (value !== null && value !== undefined && value !== '') {
+          cleaned[key] = value;
+        }
+      }
+      return cleaned;
+    });
+  }
+
+  /**
    * Insert batch with retry logic for connection issues
    */
   async insertBatchWithRetry(batch, batchNumber, retries = 50) {
+    // CRITICAL FIX: Optimize batch before processing
+    const optimizedBatch = this.optimizeBatchForDatabase(batch);
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
         console.log(`🔄 Batch ${batchNumber}, attempt ${attempt}...`);
@@ -717,7 +735,7 @@ export class BRTProcessor {
             
             if (!verifyError) {
               if (count === 0) {
-                console.log('�� Cleanup verification: All partial records successfully removed');
+                console.log('✅ Cleanup verification: All partial records successfully removed');
               } else {
                 console.warn(`⚠️ Cleanup verification: ${count} records still exist for job ${jobId}`);
               }
