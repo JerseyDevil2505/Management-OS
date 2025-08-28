@@ -2538,13 +2538,13 @@ export const propertyService = {
       });
 
       if (error) {
-        console.error('❌ RPC function error:', {
-          message: getErrorMessage(error),
-          details: error.details,
-          hint: error.hint,
-          code: error.code,
-          fullError: error
-        });
+        console.error('❌ RPC function error:');
+        console.error('  Message:', getErrorMessage(error));
+        console.error('  Details:', error.details);
+        console.error('  Hint:', error.hint);
+        console.error('  Code:', error.code);
+        console.error('  Full Error Object:', JSON.stringify(error, null, 2));
+        console.error('  Stack:', error.stack);
         throw error;
       }
 
