@@ -43,7 +43,7 @@ const FileUploadButton = ({ job, onFileProcessed, isJobLoading = false, onDataRe
   });
 
   const addNotification = (message, type = 'info') => {
-    const id = Date.now();
+    const id = Date.now() + Math.random(); // Make unique with random component
     const notification = { id, message, type, timestamp: new Date() };
     setNotifications(prev => [...prev, notification]);
     
@@ -1377,7 +1377,7 @@ try {
       
       // CRITICAL FIX: Update banner state only if we had successful processing
       if (totalProcessed > 0 && errorCount === 0) {
-        addBatchLog('🔄 Refreshing UI state...', 'info');
+        addBatchLog('���� Refreshing UI state...', 'info');
         setSourceFileVersion(newFileVersion);  // Use the newFileVersion we already calculated
         setLastSourceProcessedDate(new Date().toISOString());  // Track our own date!
         addBatchLog('✅ UI state refreshed successfully', 'success');
