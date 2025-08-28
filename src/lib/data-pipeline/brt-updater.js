@@ -575,7 +575,7 @@ export class BRTUpdater {
       
       // Processing metadata
       processed_at: new Date().toISOString(),
-      validation_status: 'updated', // CHANGED: from 'imported' to 'updated'
+      validation_status: versionInfo.is_automatic_sync ? 'auto_synced' : 'updated',
       is_new_since_last_upload: false, // CHANGED: false for updates
       
       // File tracking with version info
