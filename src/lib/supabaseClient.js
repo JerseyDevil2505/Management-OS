@@ -746,13 +746,16 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
   },
 
   // Get bathroom fixture sum (Microsystems only - summary fields)
-  getBathroomFixtureSum: function(property, vendorType) {
-    if (!property || !property.raw_data || vendorType !== 'Microsystems') return 0;
-    
-    return (parseInt(property.raw_data['4 Fixture Bath']) || 0) +
-           (parseInt(property.raw_data['3 Fixture Bath']) || 0) +
-           (parseInt(property.raw_data['2 Fixture Bath']) || 0) +
-           (parseInt(property.raw_data['Num 5 Fixture Baths']) || 0);
+  getBathroomFixtureSum: async function(property, vendorType) {
+    if (!property || vendorType !== 'Microsystems' || !property.job_id || !property.property_composite_key) return 0;
+
+    const sourceData = await getSourceFileDataForProperty(property.job_id, property.property_composite_key);
+    if (!sourceData) return 0;
+
+    return (parseInt(sourceData['4 Fixture Bath']) || 0) +
+           (parseInt(sourceData['3 Fixture Bath']) || 0) +
+           (parseInt(sourceData['2 Fixture Bath']) || 0) +
+           (parseInt(sourceData['Num 5 Fixture Baths']) || 0);
   },
 
   // Get bathroom room sum (Microsystems only - floor-specific fields)
