@@ -2494,9 +2494,13 @@ const handleCodeFileUpdate = async () => {
 
     if (type === 'source') {
       console.log(`🔍 Banner Debug - currentFileVersion: ${currentFileVersion}`);
+      console.log(`🔍 Banner Debug - job.source_file_uploaded_at: ${job.source_file_uploaded_at}`);
+      console.log(`🔍 Banner Debug - lastSourceProcessedDate: ${lastSourceProcessedDate}`);
 
       if (currentFileVersion > 1) {
-        return `Updated via FileUpload (${formatDate(lastSourceProcessedDate || job.source_file_uploaded_at || timestamp)})`;
+        // Use job.source_file_uploaded_at if available, otherwise use current timestamp
+        const uploadDate = job.source_file_uploaded_at || lastSourceProcessedDate || timestamp;
+        return `Updated via FileUpload (${formatDate(uploadDate)})`;
       } else {
         return `Imported at Job Creation (${formatDate(timestamp)})`;
       }
@@ -2664,7 +2668,7 @@ const handleCodeFileUpdate = async () => {
       <div className="flex items-center gap-3 text-gray-300">
         <Database className="w-4 h-4 text-purple-400" />
         <span className="text-sm min-w-0 flex-1">
-          📊 Reports: {reportCount} saved comparison{reportCount !== 1 ? 's' : ''}
+          �� Reports: {reportCount} saved comparison{reportCount !== 1 ? 's' : ''}
         </span>
         <button
           onClick={() => setShowReportsModal(true)}
