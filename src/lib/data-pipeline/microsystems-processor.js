@@ -360,8 +360,6 @@ export class MicrosystemsProcessor {
       values_base_cost: this.parseNumeric(rawRecord['Base Cost']),
       values_det_items: this.parseNumeric(rawRecord['Det Items']),
       values_repl_cost: this.parseNumeric(rawRecord['Cost New']),
-      values_norm_time: null, // Calculated later in FileUploadButton.jsx
-      values_norm_size: null, // Calculated later in FileUploadButton.jsx
       
       // Inspection fields
       inspection_info_by: rawRecord['Interior Finish3'], // Store letter codes directly (E, F, O, R, V)
@@ -377,23 +375,21 @@ export class MicrosystemsProcessor {
       asset_design_style: rawRecord['Style Code'],
       asset_ext_cond: rawRecord['Condition'],
       asset_int_cond: rawRecord['Interior Cond Or End Unit'],
-      asset_key_page: null, // User defined, created in module
       asset_lot_acre: this.parseNumeric(rawRecord['Lot Size In Acres'], 2),
       asset_lot_depth: this.calculateLotDepth(rawRecord),
       asset_lot_frontage: this.calculateLotFrontage(rawRecord),
       asset_lot_sf: this.parseInteger(rawRecord['Lot Size In Sf']),
-      asset_map_page: null, // User defined, created in module
       asset_neighborhood: rawRecord['Neighborhood'],
       asset_sfla: this.parseNumeric(rawRecord['Livable Area']),
       asset_story_height: this.parseNumeric(rawRecord['Story Height']),
       asset_type_use: rawRecord['Type Use Code'],
       asset_view: null, // Not available in Microsystems
       asset_year_built: this.parseInteger(rawRecord['Year Built']),
-      asset_zoning: null, // User defined, created in module
-      
+
       // Analysis and calculation fields
-      location_analysis: null, // User defined, created in module
-      new_vcs: null, // User defined, created in module
+      // REMOVED: location_analysis, new_vcs, asset_map_page, asset_key_page,
+      //          asset_zoning, values_norm_size, values_norm_time
+      //          (moved to property_market_analysis table)
       total_baths_calculated: this.calculateTotalBaths(rawRecord),
       
       // Processing metadata
@@ -410,7 +406,7 @@ export class MicrosystemsProcessor {
       upload_date: new Date().toISOString(),
       
       // Payroll and project tracking
-      project_start_date: null,
+      // REMOVED: project_start_date (moved to jobs table)
       
       // System metadata
       vendor_source: 'Microsystems',
