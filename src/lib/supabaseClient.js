@@ -783,13 +783,16 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
   },
 
   // Get bedroom room sum (Microsystems only)
-  getBedroomRoomSum: function(property, vendorType) {
-    if (!property || !property.raw_data || vendorType !== 'Microsystems') return 0;
-    
-    return (parseInt(property.raw_data['Bedrm B']) || 0) +
-           (parseInt(property.raw_data['Bedrm 1']) || 0) +
-           (parseInt(property.raw_data['Bedrm 2']) || 0) +
-           (parseInt(property.raw_data['Bedrm 3']) || 0);
+  getBedroomRoomSum: async function(property, vendorType) {
+    if (!property || vendorType !== 'Microsystems' || !property.job_id || !property.property_composite_key) return 0;
+
+    const sourceData = await getSourceFileDataForProperty(property.job_id, property.property_composite_key);
+    if (!sourceData) return 0;
+
+    return (parseInt(sourceData['Bedrm B']) || 0) +
+           (parseInt(sourceData['Bedrm 1']) || 0) +
+           (parseInt(sourceData['Bedrm 2']) || 0) +
+           (parseInt(sourceData['Bedrm 3']) || 0);
   },
 
   // Get VCS (Valuation Control Sector) description - aka Neighborhood
