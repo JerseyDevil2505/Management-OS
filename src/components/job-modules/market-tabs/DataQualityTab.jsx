@@ -2274,7 +2274,14 @@ const editCustomCheck = (check) => {
                   </div>
                   
                   <div className="border-t pt-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Conditions</label>
+                    <div className="flex justify-between items-center mb-2">
+                      <label className="block text-sm font-medium text-gray-700">Conditions</label>
+                      {allRawDataFields.length > 0 && (
+                        <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded">
+                          ✓ {allRawDataFields.length} raw data fields available
+                        </span>
+                      )}
+                    </div>
                     {currentCustomCheck.conditions.map((condition, index) => (
                       <div key={index} className="flex gap-2 items-center mb-2">
                         <select 
