@@ -1389,7 +1389,11 @@ try {
         // Partial success - still update but note there were errors
         addBatchLog('🔄 Refreshing UI state (with errors)...', 'warning');
         setSourceFileVersion(newFileVersion);
-        setLastSourceProcessedDate(new Date().toISOString());
+        const processedDate = new Date().toISOString();
+        setLastSourceProcessedDate(processedDate);
+        // Store in sessionStorage to persist across re-renders
+        sessionStorage.setItem(`job_${job.id}_lastSourceProcessed`, processedDate);
+        sessionStorage.setItem(`job_${job.id}_sourceFileVersion`, newFileVersion.toString());
         addBatchLog('⚠️ UI state refreshed but errors occurred', 'warning');
       }
       // If totalProcessed is 0, don't update the dates/version at all
