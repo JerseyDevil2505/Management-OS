@@ -124,10 +124,10 @@ export class MicrosystemsProcessor {
       const { error } = await supabase
         .from('jobs')
         .update({
-          source_file_content: sourceFileContent,
-          source_file_size: sourceFileContent.length,
-          source_file_rows_count: sourceFileContent.split('\n').length - 1, // Subtract header
-          source_file_parsed_at: new Date().toISOString()
+          raw_file_content: sourceFileContent,
+          raw_file_size: sourceFileContent.length,
+          raw_file_rows_count: sourceFileContent.split('\n').length - 1, // Subtract header
+          raw_file_parsed_at: new Date().toISOString()
         })
         .eq('id', jobId);
 
@@ -196,7 +196,7 @@ export class MicrosystemsProcessor {
           
           if (prefix === '140') {
             // InfoBy codes: single character only (old system limitation)
-            // Example: "140R   9999" → suffix="R"
+            // Example: "140R   9999" �� suffix="R"
             suffix = afterPrefix.charAt(0);
           } else {
             // Other codes: extract letters until space or number
