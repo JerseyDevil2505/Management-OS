@@ -647,10 +647,16 @@ const generateQCFormPDF = () => {
   const runPropertyChecks = async (property, results, rawDataCache) => {
     const vendor = property.vendor_source || jobData.vendor_source || 'BRT';
 
-    // Get raw data from cache or fetch from job-level storage
+    // Get raw data from cache or use FAST client-side parsing (skip slow RPC calls)
     let rawData = rawDataCache.get(property.property_composite_key);
     if (rawData === undefined) {
-      rawData = (await propertyService.getRawDataForProperty(property.job_id, property.property_composite_key)) || {};
+      try {
+        // Use client-side fallback directly - much faster than RPC calls!
+        rawData = (await propertyService.getRawDataForPropertyClientSide(property.job_id, property.property_composite_key)) || {};
+      } catch (error) {
+        console.warn(`Failed to get raw data for ${property.property_composite_key}:`, error);
+        rawData = {};
+      }
       rawDataCache.set(property.property_composite_key, rawData);
     }
     
