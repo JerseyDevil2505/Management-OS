@@ -1650,27 +1650,25 @@ const handleCodeFileUpdate = async () => {
                 <button
                   onClick={() => setCurrentReportPage(Math.max(1, currentReportPage - 1))}
                   disabled={currentReportPage === 1}
-                  className="p-2 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="p-2 rounded bg-gray-700 text-white hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
                   title="Previous page"
-                  style={{color: 'black'}}
                 >
-                  <svg className="w-4 h-4" fill="black" viewBox="0 0 20 20">
+                  <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
                   </svg>
                 </button>
 
-                <span className="text-sm font-bold" style={{color: 'black', fontWeight: 'bold'}}>
+                <span className="text-sm font-medium text-gray-700">
                   {currentReportPage} / {totalPages}
                 </span>
 
                 <button
                   onClick={() => setCurrentReportPage(Math.min(totalPages, currentReportPage + 1))}
                   disabled={currentReportPage === totalPages}
-                  className="p-2 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="p-2 rounded bg-gray-700 text-white hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
                   title="Next page"
-                  style={{color: 'black'}}
                 >
-                  <svg className="w-4 h-4" fill="black" viewBox="0 0 20 20">
+                  <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
                   </svg>
                 </button>
@@ -2420,7 +2418,7 @@ const handleCodeFileUpdate = async () => {
                       });
                       addNotification(`❌ ${error.message}`, 'error');
                     } else {
-                      addBatchLog('��� File refresh failed', 'error', { error: error.message });
+                      addBatchLog('❌ File refresh failed', 'error', { error: error.message });
                       addNotification(`Processing failed: ${error.message}`, 'error');
                     }
                   } finally {
