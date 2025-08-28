@@ -86,7 +86,8 @@ class SourceFileSyncService {
         } catch (error) {
           results.errors++;
           console.error(`❌ Failed to sync job ${job.job_name}:`, error.message);
-          
+          console.error('Error details:', error);
+
           // Log error to audit table
           await this.logSyncError(job.id, error);
         }
@@ -100,7 +101,8 @@ class SourceFileSyncService {
       this.lastRun = new Date().toISOString();
 
     } catch (error) {
-      console.error('❌ Sync cycle failed:', error);
+      console.error('❌ Sync cycle failed:', error.message);
+      console.error('Stack trace:', error.stack);
       await this.logSyncError(null, error);
     }
   }
@@ -139,7 +141,8 @@ class SourceFileSyncService {
           .eq('validation_status', 'needs_reprocessing');
 
         if (countError) {
-          console.error(`Error checking records for job ${job.job_name}:`, countError);
+          console.error(`Error checking records for job ${job.job_name}:`, countError.message);
+          console.error('Details:', countError);
           continue;
         }
 
@@ -153,7 +156,8 @@ class SourceFileSyncService {
 
       return jobsNeedingSync;
     } catch (error) {
-      console.error('Error finding jobs needing sync:', error);
+      console.error('Error finding jobs needing sync:', error.message);
+      console.error('Stack trace:', error.stack);
       throw error;
     }
   }
@@ -183,7 +187,8 @@ class SourceFileSyncService {
         await new Promise(resolve => setTimeout(resolve, this.retryDelay));
         return await this.processJobSync(job, retryCount + 1);
       } else {
-        console.error(`❌ Failed to sync job ${job.job_name} after ${this.maxRetries} retries:`, error);
+        console.error(`❌ Failed to sync job ${job.job_name} after ${this.maxRetries} retries:`, error.message);
+        console.error('Final error details:', error);
         throw error;
       }
     }
@@ -207,7 +212,8 @@ class SourceFileSyncService {
           }
         });
     } catch (error) {
-      console.error('Failed to log sync cycle:', error);
+      console.error('Failed to log sync cycle:', error.message);
+      console.error('Log error details:', error);
     }
   }
 
@@ -230,7 +236,8 @@ class SourceFileSyncService {
           }
         });
     } catch (error) {
-      console.error('Failed to log job sync:', error);
+      console.error('Failed to log job sync:', error.message);
+      console.error('Log error details:', error);
     }
   }
 
@@ -252,7 +259,8 @@ class SourceFileSyncService {
           }
         });
     } catch (logError) {
-      console.error('Failed to log sync error:', logError);
+      console.error('Failed to log sync error:', logError.message);
+      console.error('Log error details:', logError);
     }
   }
 
@@ -293,7 +301,8 @@ class SourceFileSyncService {
       if (error) throw error;
       return data;
     } catch (error) {
-      console.error('Error fetching sync history:', error);
+      console.error('Error fetching sync history:', error.message);
+      console.error('Error details:', error);
       return [];
     }
   }
