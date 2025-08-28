@@ -279,7 +279,11 @@ const handleCodeFileUpdate = async () => {
     }
     
     // Only update date stamp if we successfully got here
-    setLastCodeProcessedDate(new Date().toISOString());
+    const processedDate = new Date().toISOString();
+    setLastCodeProcessedDate(processedDate);
+
+    // Store in sessionStorage to persist across re-renders
+    sessionStorage.setItem(`job_${job.id}_lastCodeProcessed`, processedDate);
     
     addNotification(`✅ Successfully updated code definitions for ${detectedVendor}`, 'success');
     
