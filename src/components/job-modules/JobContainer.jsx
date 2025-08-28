@@ -240,6 +240,31 @@ const JobContainer = ({
         setProperties(allProperties);
         console.log(`✅ Successfully loaded ${allProperties.length} properties`);
 
+        // CRITICAL DEBUG: Check if properties have inspection data
+        const propertiesWithInspectors = allProperties.filter(p => p.inspection_measure_by && p.inspection_measure_by.trim() !== '');
+        const propertiesWithDates = allProperties.filter(p => p.inspection_measure_date);
+        const propertiesWithInfoBy = allProperties.filter(p => p.inspection_info_by);
+
+        console.log(`🔍 PROPERTIES DEBUG:`);
+        console.log(`  - Total properties: ${allProperties.length}`);
+        console.log(`  - With inspectors: ${propertiesWithInspectors.length}`);
+        console.log(`  - With measure dates: ${propertiesWithDates.length}`);
+        console.log(`  - With info_by codes: ${propertiesWithInfoBy.length}`);
+
+        // Sample first few properties to see their structure
+        console.log(`🔍 SAMPLE PROPERTIES (first 3):`);
+        allProperties.slice(0, 3).forEach((prop, idx) => {
+          console.log(`  Property ${idx + 1}:`, {
+            composite_key: prop.property_composite_key,
+            class: prop.property_m4_class,
+            inspector: prop.inspection_measure_by,
+            measure_date: prop.inspection_measure_date,
+            info_by: prop.inspection_info_by,
+            list_by: prop.inspection_list_by,
+            list_date: prop.inspection_list_date
+          });
+        });
+
         // Save to cache immediately while we have the data
         if (onUpdateJobCache && allProperties.length > 0) {
           console.log(`💾 Updating cache for job ${selectedJob.id} with ${allProperties.length} properties`);
@@ -532,6 +557,24 @@ const JobContainer = ({
 
     // 🔧 CRITICAL: Pass App.js state management to ProductionTracker
     if (activeModule === 'production') {
+      // CRITICAL DEBUG: Log what we're passing to ProductionTracker
+      console.log(`🚨 PASSING TO PRODUCTION TRACKER:`);
+      console.log(`  - properties.length: ${properties?.length || 0}`);
+      console.log(`  - inspectionData.length: ${inspectionData?.length || 0}`);
+      console.log(`  - employees.length: ${employees?.length || 0}`);
+      console.log(`  - jobData.id: ${jobData?.id}`);
+      console.log(`  - latestFileVersion: ${latestFileVersion}`);
+
+      if (properties && properties.length > 0) {
+        const sampleProp = properties[0];
+        console.log(`  - Sample property keys:`, Object.keys(sampleProp));
+        console.log(`  - Sample property inspection fields:`, {
+          inspection_measure_by: sampleProp.inspection_measure_by,
+          inspection_measure_date: sampleProp.inspection_measure_date,
+          inspection_info_by: sampleProp.inspection_info_by
+        });
+      }
+
       return {
         ...baseProps,
         // Pass current workflow stats from App.js
