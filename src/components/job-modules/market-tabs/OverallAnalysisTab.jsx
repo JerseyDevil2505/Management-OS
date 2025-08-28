@@ -562,11 +562,17 @@ const OverallAnalysisTab = ({
     // Build the cascading structure
     filteredProperties.forEach(p => {
       const vcs = p.new_vcs || p.property_vcs || 'Unknown';
-      const vcsDesc = interpretCodes.getVCSDescription(p, codeDefinitions, vendorType) || vcs;
+      // Use raw VCS code to avoid async rendering issues
+      const vcsDesc = vcs;
       const typeCode = p.asset_type_use || 'Unknown';
-      const typeName = interpretCodes.getTypeName(p, codeDefinitions, vendorType) || getTypeCategory(typeCode);
+      // Use only synchronous Microsystems decoding to avoid async rendering issues
+      const typeName = vendorType === 'Microsystems' && codeDefinitions
+        ? interpretCodes.getMicrosystemsValue?.(p, codeDefinitions, 'asset_type_use') || getTypeCategory(typeCode)
+        : getTypeCategory(typeCode);
       const designCode = p.asset_design_style || 'Unknown';
-      const designName = interpretCodes.getDesignName(p, codeDefinitions, vendorType) || designCode;
+      const designName = vendorType === 'Microsystems' && codeDefinitions
+        ? interpretCodes.getMicrosystemsValue?.(p, codeDefinitions, 'asset_design_style') || designCode
+        : designCode;
       
       // Initialize VCS level
       if (!vcsGroups[vcs]) {
@@ -1663,7 +1669,7 @@ const OverallAnalysisTab = ({
                                       <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgYearAll > 0 ? designGroup.avgYearAll : '—'}</div>
                                       <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgSizeAll > 0 ? formatNumber(designGroup.avgSizeAll) : '—'}</div>
                                       <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgYearSales > 0 ? designGroup.avgYearSales : '—'}</div>
-                                      <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgSizeSales > 0 ? formatNumber(designGroup.avgSizeSales) : '—'}</div>
+                                      <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgSizeSales > 0 ? formatNumber(designGroup.avgSizeSales) : '���'}</div>
                                       <div className="col-span-1 text-center text-xs text-gray-600">
                                         {designGroup.salesCount > 0 ? formatCurrency(designGroup.avgPrice) : '—'}
                                       </div>
