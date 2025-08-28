@@ -1418,7 +1418,7 @@ const handleCodeFileUpdate = async () => {
         addBatchLog('⚠️ UPDATE FAILED - All changes have been rolled back', 'error', {
           message: 'The update encountered errors and all changes were automatically reversed'
         });
-        addNotification('❌ Update failed - all changes rolled back. Check logs for details.', 'error');
+        addNotification('��� Update failed - all changes rolled back. Check logs for details.', 'error');
       }
 
       // Update local file version and date from DB
@@ -1526,10 +1526,16 @@ const handleCodeFileUpdate = async () => {
   // Reports List Modal - View all comparison reports
   const ReportsListModal = () => {
     if (!showReportsModal) return null;
-    
+
+    // Calculate pagination
+    const totalPages = Math.ceil(reportsList.length / reportsPerPage);
+    const startIndex = (currentReportPage - 1) * reportsPerPage;
+    const endIndex = startIndex + reportsPerPage;
+    const currentReports = reportsList.slice(startIndex, endIndex);
+
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-        <div className="bg-white rounded-lg max-w-4xl w-full max-h-[80vh] overflow-hidden shadow-2xl flex flex-col">
+        <div className="bg-white rounded-lg max-w-2xl w-full max-h-[70vh] overflow-hidden shadow-2xl flex flex-col">
           {/* Header */}
           <div className="p-4 border-b border-gray-200 bg-gray-50 shrink-0">
             <div className="flex items-center justify-between">
@@ -1561,7 +1567,7 @@ const handleCodeFileUpdate = async () => {
               </div>
             ) : (
               <div className="space-y-4">
-                {reportsList.map((report, idx) => {
+                {currentReports.map((report, idx) => {
                   const reportData = report.report_data || {};
                   const summary = reportData.summary || {};
                   const totalChanges = (summary.missing || 0) + (summary.deletions || 0) + 
@@ -1632,12 +1638,43 @@ const handleCodeFileUpdate = async () => {
             )}
           </div>
 
-          {/* Footer */}
+          {/* Footer with Pagination */}
           <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-between items-center shrink-0">
             <div className="text-sm text-gray-600">
-              {reportsList.length} reports found
+              Showing {startIndex + 1}-{Math.min(endIndex, reportsList.length)} of {reportsList.length} reports
             </div>
-            
+
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => setCurrentReportPage(Math.max(1, currentReportPage - 1))}
+                  disabled={currentReportPage === 1}
+                  className="p-2 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Previous page"
+                >
+                  <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                </button>
+
+                <span className="text-sm text-gray-600">
+                  {currentReportPage} / {totalPages}
+                </span>
+
+                <button
+                  onClick={() => setCurrentReportPage(Math.min(totalPages, currentReportPage + 1))}
+                  disabled={currentReportPage === totalPages}
+                  className="p-2 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Next page"
+                >
+                  <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                  </svg>
+                </button>
+              </div>
+            )}
+
             <div className="flex space-x-3">
               <button
                 onClick={viewAllReports}
