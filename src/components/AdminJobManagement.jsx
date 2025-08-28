@@ -4,7 +4,6 @@ import {
   DollarSign, Trash2, CheckCircle, Archive, TrendingUp, Target, AlertTriangle, X, Clock
 } from 'lucide-react';
 import { supabase, employeeService, jobService, planningJobService, utilityService, authService, propertyService } from '../lib/supabaseClient';
-import SourceFileSyncManager from './SourceFileSyncManager';
 
 // Accept jobMetrics props for live metrics integration
 const AdminJobManagement = ({ 
@@ -1561,7 +1560,7 @@ const AdminJobManagement = ({
                           <span className="font-bold">{formatElapsedTime(processingStatus.startTime)}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span>��� Job Created:</span>
+                          <span>🏢 Job Created:</span>
                           <span className="font-bold">{processingResults.jobName}</span>
                         </div>
                         <div className="flex justify-between">
@@ -2201,16 +2200,6 @@ const AdminJobManagement = ({
             >
               👥 Manager Assignments ({managers.filter(m => !`${m.first_name} ${m.last_name}`.toLowerCase().includes('tom davis')).length})
             </button>
-            <button
-              onClick={() => setActiveTab('source-file-sync')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'source-file-sync'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              🔄 Source File Sync
-            </button>
           </nav>
         </div>
       </div>
@@ -2770,66 +2759,6 @@ const AdminJobManagement = ({
                   </div>
                 );
               })}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Source File Sync Tab */}
-      {activeTab === 'source-file-sync' && (
-        <div className="space-y-6">
-          <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg border-2 border-purple-200 p-6">
-            <div className="flex items-center mb-6">
-              <Database className="w-8 h-8 mr-3 text-purple-600" />
-              <div>
-                <h2 className="text-2xl font-bold text-gray-800">🔄 Source File Synchronization</h2>
-                <p className="text-gray-600 mt-1">Manage synchronization between stored source files and property records</p>
-              </div>
-            </div>
-
-            {/* Show sync managers for each job that has source file content */}
-            <div className="space-y-6">
-              {jobs.filter(job => job.vendor_source).map(job => (
-                <div key={job.id} className="bg-white rounded-lg border border-gray-200 p-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900">{job.job_name || job.municipality}</h3>
-                      <div className="flex items-center gap-4 text-sm text-gray-600">
-                        <span>Vendor: {job.vendor_source}</span>
-                        <span>Properties: {(job.totalProperties || 0).toLocaleString()}</span>
-                        <span>County: {job.county}</span>
-                      </div>
-                    </div>
-                    <div className="text-sm text-gray-500">
-                      Job #{job.job_number}
-                    </div>
-                  </div>
-
-                  <SourceFileSyncManager
-                    job={job}
-                    onReprocessComplete={(result) => {
-                      console.log(`Job ${job.job_name} reprocessed:`, result);
-                      // Refresh the jobs data
-                      if (onRefresh) {
-                        onRefresh();
-                      }
-                    }}
-                  />
-                </div>
-              ))}
-
-              {jobs.filter(job => job.vendor_source).length === 0 && (
-                <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
-                  <Database className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No Jobs with Source Files</h3>
-                  <p className="text-gray-600 mb-4">
-                    Jobs need to have source file content stored to use source file synchronization.
-                  </p>
-                  <p className="text-sm text-gray-500">
-                    Upload files through the job modules to enable source file sync features.
-                  </p>
-                </div>
-              )}
             </div>
           </div>
         </div>
