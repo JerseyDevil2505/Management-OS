@@ -964,9 +964,11 @@ const OverallAnalysisTab = ({
     // Floor Analysis
     const floorGroups = {};
     condos.forEach(p => {
-      // Look for floor info in story height or design
+      // Look for floor info in story height or design - use only synchronous decoding
       const storyHeight = p.asset_story_height || '';
-      const designName = interpretCodes.getDesignName(p, codeDefinitions, vendorType) || p.asset_design_style || '';
+      const designName = vendorType === 'Microsystems' && codeDefinitions
+        ? interpretCodes.getMicrosystemsValue?.(p, codeDefinitions, 'asset_design_style') || p.asset_design_style || ''
+        : p.asset_design_style || '';
       let floor = 'Unknown';
       
       if (storyHeight.includes('1ST') || designName.includes('1ST FLOOR')) floor = '1ST FLOOR';
