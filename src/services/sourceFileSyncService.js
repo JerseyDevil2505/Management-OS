@@ -115,7 +115,7 @@ class SourceFileSyncService {
         try {
           await this.processJobSync(job);
           results.processed++;
-          console.log(`✅ Synced job: ${job.job_name} (${job.vendor_source})`);
+          console.log(`✅ Synced job: ${job.job_name} (${job.vendor_type})`);
         } catch (error) {
           results.errors++;
           console.error(`❌ Failed to sync job ${job.job_name}:`, getErrorMessage(error));
@@ -163,7 +163,7 @@ class SourceFileSyncService {
         `)
         .eq('validation_status', 'needs_reprocessing')
         .not('jobs.raw_file_content', 'is', null)
-        .in('jobs.vendor_source', ['BRT', 'Microsystems']);
+        .in('jobs.vendor_type', ['BRT', 'Microsystems']);
 
       if (error) throw error;
 

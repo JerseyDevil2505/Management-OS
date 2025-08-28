@@ -465,7 +465,7 @@ export class MicrosystemsProcessor {
       // REMOVED: project_start_date (moved to jobs table)
       
       // System metadata
-      vendor_source: 'Microsystems',
+      vendor_type: 'Microsystems',
       created_by: '5df85ca3-7a54-4798-a665-c31da8d9caad',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
