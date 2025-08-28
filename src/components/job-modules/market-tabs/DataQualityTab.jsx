@@ -39,6 +39,7 @@ const DataQualityTab = ({
   const [expandedCategories, setExpandedCategories] = useState(['mod_iv']);
   const [isRunningChecks, setIsRunningChecks] = useState(false);
   const [analysisProgress, setAnalysisProgress] = useState({ current: 0, total: 0, phase: '' });
+  const [allRawDataFields, setAllRawDataFields] = useState([]);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [ignoredIssues, setIgnoredIssues] = useState(new Set());
   const [modalData, setModalData] = useState({ title: '', properties: [] });
