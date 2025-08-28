@@ -503,7 +503,10 @@ export class MicrosystemsUpdater {
     
     try {
       console.log('🚀 Starting Enhanced Microsystems UPDATER (UPSERT) with field preservation and ROLLBACK support...');
-      
+
+      // CRITICAL FIX: Store source file content in jobs table
+      await this.storeSourceFileInDatabase(sourceFileContent, jobId);
+
       // Process and store code file if provided
       if (codeFileContent) {
         await this.processCodeFile(codeFileContent, jobId);
