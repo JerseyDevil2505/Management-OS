@@ -2309,7 +2309,22 @@ export const propertyService = {
         throw new Error('No source file content available for reprocessing');
       }
 
-      console.log('🔄 Starting manual reprocessing from stored source file...');
+      console.log('🔄 Starting automatic reprocessing from stored source file...');
+
+      // CRITICAL: Get the current file_version to avoid interfering with FileUploadButton versioning
+      const { data: currentVersionData, error: versionError } = await supabase
+        .from('property_records')
+        .select('file_version')
+        .eq('job_id', jobId)
+        .limit(1)
+        .single();
+
+      let currentVersion = 1;
+      if (currentVersionData && !versionError) {
+        currentVersion = currentVersionData.file_version || 1;
+      }
+
+      console.log(`📊 Using existing file_version ${currentVersion} for automatic sync (no increment)`);
 
       // Determine vendor type and call appropriate updater
       const vendorType = job.vendor_source;
@@ -2323,10 +2338,11 @@ export const propertyService = {
           job.year_created,
           job.ccdd_code,
           {
-            source_file_name: 'Reprocessed from stored source',
-            file_version: Date.now(), // Use timestamp as version
+            source_file_name: 'Auto-sync from stored source',
+            file_version: currentVersion, // FIXED: Use current version, don't increment
             preservedFieldsHandler: this.createPreservedFieldsHandler.bind(this),
-            preservedFields: PRESERVED_FIELDS
+            preservedFields: PRESERVED_FIELDS,
+            is_automatic_sync: true // Mark as automatic sync
           }
         );
       } else if (vendorType === 'Microsystems') {
@@ -2338,17 +2354,18 @@ export const propertyService = {
           job.year_created,
           job.ccdd_code,
           {
-            source_file_name: 'Reprocessed from stored source',
-            file_version: Date.now(), // Use timestamp as version
+            source_file_name: 'Auto-sync from stored source',
+            file_version: currentVersion, // FIXED: Use current version, don't increment
             preservedFieldsHandler: this.createPreservedFieldsHandler.bind(this),
-            preservedFields: PRESERVED_FIELDS
+            preservedFields: PRESERVED_FIELDS,
+            is_automatic_sync: true // Mark as automatic sync
           }
         );
       } else {
         throw new Error(`Unsupported vendor type: ${vendorType}`);
       }
     } catch (error) {
-      console.error('Manual reprocessing failed:', error);
+      console.error('Automatic reprocessing failed:', error);
       throw error;
     }
   }
