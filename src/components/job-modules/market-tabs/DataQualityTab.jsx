@@ -824,7 +824,7 @@ const generateQCFormPDF = () => {
     }
     
   // LOT SIZE CHECKS - Use the enhanced getTotalLotSize function
-    const totalLotSize = interpretCodes.getTotalLotSize(property, vendor, codeDefinitions);
+    const totalLotSize = await interpretCodes.getTotalLotSize(property, vendor, codeDefinitions);
     const lotFrontage = property.asset_lot_frontage || 0;
     
     // Check if we truly have zero lot size (getTotalLotSize returns acres or null)
@@ -953,7 +953,7 @@ const generateQCFormPDF = () => {
     // BEDROOM COUNT VALIDATION
     if ((m4Class === '2' || m4Class === '3A') && buildingClass > 10) {
       if (vendor === 'BRT') {
-        const bedTotal = interpretCodes.getRawDataValue(property, 'bedrooms', vendor);
+        const bedTotal = await interpretCodes.getRawDataValue(property, 'bedrooms', vendor);
         if (!bedTotal || parseInt(bedTotal) === 0) {
           results.rooms.push({
             check: 'zero_bedrooms',
@@ -964,7 +964,7 @@ const generateQCFormPDF = () => {
           });
         }
       } else if (vendor === 'Microsystems') {
-        const totalBeds = interpretCodes.getBedroomRoomSum(property, vendor);
+        const totalBeds = await interpretCodes.getBedroomRoomSum(property, vendor);
         
         if (totalBeds === 0) {
           results.rooms.push({
@@ -982,7 +982,7 @@ const generateQCFormPDF = () => {
     if ((m4Class === '2' || m4Class === '3A') && buildingClass > 10) {
       if (vendor === 'BRT') {
         const bathTotal = parseInt(rawData.BATHTOT) || 0;
-        const plumbingSum = interpretCodes.getBathroomPlumbingSum(property, vendor);
+        const plumbingSum = await interpretCodes.getBathroomPlumbingSum(property, vendor);
         
         if (bathTotal !== plumbingSum && plumbingSum > 0) {
           results.rooms.push({
@@ -994,8 +994,8 @@ const generateQCFormPDF = () => {
           });
         }
       } else if (vendor === 'Microsystems') {
-        const fixtureSum = interpretCodes.getBathroomFixtureSum(property, vendor);
-        const roomSum = interpretCodes.getBathroomRoomSum(property, vendor);
+        const fixtureSum = await interpretCodes.getBathroomFixtureSum(property, vendor);
+        const roomSum = await interpretCodes.getBathroomRoomSum(property, vendor);
         
         if (fixtureSum !== roomSum && roomSum > 0) {
           results.rooms.push({
