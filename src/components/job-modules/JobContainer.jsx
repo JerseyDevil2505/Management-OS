@@ -115,13 +115,25 @@ const JobContainer = ({
       }
       
       console.log('📡 Loading from database...');
-      
-      // Get ALL job data in ONE comprehensive query FIRST
-      const { data: jobData, error: jobError } = await supabase
-        .from('jobs')
-        .select('*')  // Get ALL fields for this job
-        .eq('id', selectedJob.id)
-        .single();
+
+      // Add timeout wrapper function
+      const withTimeout = (promise, timeoutMs = 15000, operation = 'database query') => {
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error(`${operation} timeout after ${timeoutMs/1000} seconds`)), timeoutMs);
+        });
+        return Promise.race([promise, timeoutPromise]);
+      };
+
+      // Get ALL job data in ONE comprehensive query FIRST with timeout
+      const { data: jobData, error: jobError } = await withTimeout(
+        supabase
+          .from('jobs')
+          .select('*')  // Get ALL fields for this job
+          .eq('id', selectedJob.id)
+          .single(),
+        10000,
+        'job data query'
+      );
 
       if (jobError) throw jobError;
       const hasAssignments = jobData?.has_property_assignments || false;
@@ -137,19 +149,27 @@ const JobContainer = ({
         dataVersionQuery = dataVersionQuery.eq('is_assigned_property', true);
       }
 
-      const { data: dataVersionData, error: dataVersionError } = await dataVersionQuery
-        .order('file_version', { ascending: false })
-        .limit(1)
-        .single();
+      const { data: dataVersionData, error: dataVersionError } = await withTimeout(
+        dataVersionQuery
+          .order('file_version', { ascending: false })
+          .limit(1)
+          .single(),
+        10000,
+        'data version query'
+      );
 
-      // Get as_of_date from inspection_data table
-      const { data: inspectionData, error: inspectionError } = await supabase
-        .from('inspection_data')
-        .select('upload_date')
-        .eq('job_id', selectedJob.id)
-        .order('upload_date', { ascending: false })
-        .limit(1)
-        .single();
+      // Get as_of_date from inspection_data table with timeout
+      const { data: inspectionData, error: inspectionError } = await withTimeout(
+        supabase
+          .from('inspection_data')
+          .select('upload_date')
+          .eq('job_id', selectedJob.id)
+          .order('upload_date', { ascending: false })
+          .limit(1)
+          .single(),
+        10000,
+        'inspection data query'
+      );
 
       if (dataVersionError && dataVersionError.code !== 'PGRST116') throw dataVersionError;
       // Don't throw on inspection error - it might not exist yet
@@ -181,8 +201,12 @@ const JobContainer = ({
         console.log('📋 Loading all properties (no assignments)');
       }
 
-      // Get count first
-      const { count, error: countError } = await propertyCountQuery;
+      // Get count first with timeout
+      const { count, error: countError } = await withTimeout(
+        propertyCountQuery,
+        15000,
+        'property count query'
+      );
       if (countError) throw countError;
 
       setPropertyRecordsCount(count || 0);
@@ -238,11 +262,12 @@ const JobContainer = ({
               batchQuery = batchQuery.eq('is_assigned_property', true);
             }
 
-            // Race the query against timeout
-            const { data: batchData, error: batchError } = await Promise.race([
+            // Use the timeout wrapper for consistency
+            const { data: batchData, error: batchError } = await withTimeout(
               batchQuery,
-              timeoutPromise
-            ]);
+              30000,
+              `property batch ${batch + 1}`
+            );
 
             if (batchError) {
               console.error(`❌ BATCH ${batch + 1} FAILED:`, batchError);
