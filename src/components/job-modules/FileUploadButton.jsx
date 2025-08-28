@@ -1388,9 +1388,11 @@ const handleCodeFileUpdate = async () => {
         });
         addNotification('❌ Update failed - all changes rolled back. Check logs for details.', 'error');
       }
-      
-      // SIMPLIFIED: No complex state updates needed - banner reads from job object after refresh
-      
+
+      // Update local file version and last processed date for banner
+      setLastSourceProcessedDate(new Date().toISOString());
+      await fetchCurrentFileVersion(); // Refresh file version from DB
+
       setBatchComplete(true);
       
       // Auto-close modal after 3 seconds if successful
