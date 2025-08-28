@@ -310,8 +310,18 @@ const handleCodeFileUpdate = async () => {
     if (onDataRefresh) {
       console.log(`🔧 Code Update - Calling onDataRefresh to update job data`);
       console.log(`🔧 Code Update - BEFORE refresh - job.code_file_uploaded_at: ${job.code_file_uploaded_at}`);
+      console.log(`🔧 Code Update - BEFORE refresh - job.code_file_version: ${job.code_file_version}`);
+
       await onDataRefresh();
+
       console.log(`🔧 Code Update - AFTER refresh - job.code_file_uploaded_at: ${job.code_file_uploaded_at}`);
+      console.log(`🔧 Code Update - AFTER refresh - job.code_file_version: ${job.code_file_version}`);
+
+      // Wait a bit and check again - sometimes React needs a moment to update props
+      setTimeout(() => {
+        console.log(`🔧 Code Update - DELAYED check - job.code_file_uploaded_at: ${job.code_file_uploaded_at}`);
+        console.log(`🔧 Code Update - DELAYED check - job.code_file_version: ${job.code_file_version}`);
+      }, 1000);
     }
 
     // Notify parent component of the update
