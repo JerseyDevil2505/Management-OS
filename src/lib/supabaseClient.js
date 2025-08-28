@@ -66,9 +66,9 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
 const sourceFileCache = new Map();
 
 /**
- * Get parsed source file data for a job (with caching)
+ * Get parsed raw data for a job (with caching)
  */
-async function getSourceFileDataForJob(jobId) {
+async function getRawDataForJob(jobId) {
   if (sourceFileCache.has(jobId)) {
     return sourceFileCache.get(jobId);
   }
