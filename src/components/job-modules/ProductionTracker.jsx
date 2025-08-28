@@ -1476,22 +1476,17 @@ const ProductionTracker = ({
           });
         }
 
-        // FIXED: Count ALL inspection attempts as "inspected", regardless of validation issues
-        // If we have inspector AND date, it's an inspection attempt
-        const hasInspectionAttempt = hasValidMeasuredBy && hasValidMeasuredDate;
+        // Process valid inspections - ONLY count if ALL 3 criteria are met
+        if (isValidInspection && hasValidInfoBy && hasValidMeasuredBy && hasValidMeasuredDate) {
 
-        if (hasInspectionAttempt) {
-          // Count ALL inspection attempts for manager progress tracking
+          // Count for manager progress (valid inspections against total properties)
           if (classBreakdown[propertyClass]) {
             classBreakdown[propertyClass].inspected++;
             billingByClass[propertyClass].inspected++;
-            // Only count as billable if it's also valid
-            if (isValidInspection && hasValidInfoBy) {
-              billingByClass[propertyClass].billable++;
-            }
+            billingByClass[propertyClass].billable++;
           }
 
-          // Inspector analytics - count ALL inspection attempts
+          // Inspector analytics - count valid inspections only
           inspectorStats[inspector].totalInspected++;
 
           const workDayString = measuredDate.toISOString().split('T')[0];
@@ -1501,31 +1496,28 @@ const ProductionTracker = ({
           if (isResidentialProperty) {
             inspectorStats[inspector].residentialInspected++;
             inspectorStats[inspector].residentialWorkDays.add(workDayString);
+
+            // Individual inspector credit: measure_by must equal list_by for personal achievement
+            if (isEntryCode && record.inspection_list_by === inspector) {
+              inspectorStats[inspector].entry++;
+            } else if (isRefusalCode && record.inspection_list_by === inspector) {
+              inspectorStats[inspector].refusal++;
+            }
+
+            // Global metrics: count ALL valid entries/refusals regardless of who did list work
+            if (isEntryCode && classBreakdown[propertyClass]) {
+              classBreakdown[propertyClass].entry++;
+            } else if (isRefusalCode && classBreakdown[propertyClass]) {
+              classBreakdown[propertyClass].refusal++;
+            }
           }
 
           if (isCommercialProperty) {
             inspectorStats[inspector].commercialInspected++;
             inspectorStats[inspector].commercialWorkDays.add(workDayString);
           }
-        }
 
-        // SEPARATE BLOCK: Only count business logic for VALID inspections
-        if (isValidInspection && hasValidInfoBy && hasValidMeasuredBy && hasValidMeasuredDate) {
-          // Individual inspector credit: measure_by must equal list_by for personal achievement
-          if (isResidentialProperty && isEntryCode && record.inspection_list_by === inspector) {
-            inspectorStats[inspector].entry++;
-          } else if (isResidentialProperty && isRefusalCode && record.inspection_list_by === inspector) {
-            inspectorStats[inspector].refusal++;
-          }
-
-          // Global metrics: count ALL valid entries/refusals regardless of who did list work
-          if (isResidentialProperty && isEntryCode && classBreakdown[propertyClass]) {
-            classBreakdown[propertyClass].entry++;
-          } else if (isResidentialProperty && isRefusalCode && classBreakdown[propertyClass]) {
-            classBreakdown[propertyClass].refusal++;
-          }
-
-          // Pricing logic with vendor detection (only for valid inspections)
+          // Pricing logic with vendor detection
           if (isCommercialProperty) {
             const currentVendor = actualVendor || jobData.vendor_type;
 
@@ -1555,7 +1547,7 @@ const ProductionTracker = ({
             return dateValue;
           };
 
-          // Prepare for inspection_data UPSERT (only for valid inspections)
+          // Prepare for inspection_data UPSERT
           const inspectionRecord = {
             job_id: jobData.id,
             file_version: latestFileVersion,
