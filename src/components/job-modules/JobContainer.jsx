@@ -200,6 +200,11 @@ const JobContainer = ({
           console.log(`📦 Loading batch ${batch + 1}/${totalBatches} (${offset} to ${offset + limit - 1})`);
 
           try {
+            // Add timeout handling to prevent hanging requests
+            const timeoutPromise = new Promise((_, reject) => {
+              setTimeout(() => reject(new Error(`Batch ${batch + 1} timeout after 30 seconds`)), 30000);
+            });
+
             // Build the query for this batch with market analysis fields
             let batchQuery = supabase
               .from('property_records')
@@ -225,7 +230,11 @@ const JobContainer = ({
               batchQuery = batchQuery.eq('is_assigned_property', true);
             }
 
-            const { data: batchData, error: batchError } = await batchQuery;
+            // Race the query against timeout
+            const { data: batchData, error: batchError } = await Promise.race([
+              batchQuery,
+              timeoutPromise
+            ]);
 
             if (batchError) {
               console.error(`❌ BATCH ${batch + 1} FAILED:`, batchError);
@@ -284,9 +293,14 @@ const JobContainer = ({
             setIsLoadingProperties(false);
             setLoadingProgress(Math.round((allProperties.length / count) * 100));
 
-            // Set partial data and error
-            setProperties(allProperties);
-            setVersionError(`Failed loading batch ${batch + 1}. Loaded ${allProperties.length} of ${count} records. Error: ${error.message}`);
+            // Set partial data and error - but ensure state is safe
+            try {
+              setProperties(allProperties);
+              setVersionError(`Failed loading batch ${batch + 1}. Loaded ${allProperties.length} of ${count} records. Error: ${error.message}`);
+            } catch (stateError) {
+              console.error('Error setting state after batch failure:', stateError);
+              setVersionError('Critical loading error - please refresh the page');
+            }
 
             console.error(`🛑 STOPPING BATCH PROCESSING - DO NOT CONTINUE`);
             return; // EXIT THE FUNCTION COMPLETELY
@@ -363,60 +377,111 @@ const JobContainer = ({
       let inspectionPage = 0;
       let hasMoreInspection = true;
       
-      while (hasMoreInspection) {
-        const start = inspectionPage * 1000;
-        const end = start + 999;
-        
-        const { data: batch, error } = await supabase
-          .from('inspection_data')
-          .select('*')
-          .eq('job_id', selectedJob.id)
-          .range(start, end);
-        
-        if (batch && batch.length > 0) {
-          allInspectionData.push(...batch);
-          inspectionPage++;
-          hasMoreInspection = batch.length === 1000;
-        } else {
-          hasMoreInspection = false;
+      try {
+        while (hasMoreInspection) {
+          const start = inspectionPage * 1000;
+          const end = start + 999;
+
+          const { data: batch, error } = await supabase
+            .from('inspection_data')
+            .select('*')
+            .eq('job_id', selectedJob.id)
+            .range(start, end);
+
+          if (error) {
+            console.error('Error loading inspection data batch:', error);
+            break; // Stop loading inspection data but continue with other data
+          }
+
+          if (batch && batch.length > 0) {
+            allInspectionData.push(...batch);
+            inspectionPage++;
+            hasMoreInspection = batch.length === 1000;
+          } else {
+            hasMoreInspection = false;
+          }
         }
+      } catch (inspectionError) {
+        console.error('Failed to load inspection data:', inspectionError);
+        // Continue with empty inspection data rather than failing completely
       }
       const inspectionDataFull = allInspectionData;
       
       // 2. Load market_land_valuation (for MarketAnalysis tabs)
-      let { data: marketData } = await supabase
-        .from('market_land_valuation')
-        .select('*')
-        .eq('job_id', selectedJob.id)
-        .single();
-      
-      // Create if doesn't exist
-      if (!marketData) {
-        const { data: newMarket } = await supabase
+      let marketData = null;
+      try {
+        const { data, error } = await supabase
           .from('market_land_valuation')
-          .insert({ job_id: selectedJob.id })
-          .select()
+          .select('*')
+          .eq('job_id', selectedJob.id)
           .single();
-        marketData = newMarket;
+
+        if (error && error.code !== 'PGRST116') {
+          console.error('Error loading market data:', error);
+        } else {
+          marketData = data;
+        }
+
+        // Create if doesn't exist
+        if (!marketData) {
+          try {
+            const { data: newMarket } = await supabase
+              .from('market_land_valuation')
+              .insert({ job_id: selectedJob.id })
+              .select()
+              .single();
+            marketData = newMarket;
+          } catch (createError) {
+            console.error('Error creating market data:', createError);
+            marketData = {}; // Fallback to empty object
+          }
+        }
+      } catch (marketError) {
+        console.error('Failed to load market data:', marketError);
+        marketData = {};
       }
-      
+
       // 3. Load county_hpi_data (for PreValuation normalization)
-      const { data: hpiData } = await supabase
-        .from('county_hpi_data')
-        .select('*')
-        .eq('county_name', jobData?.county || selectedJob.county)
-        .order('observation_year', { ascending: true });
-      
+      let hpiData = [];
+      try {
+        const { data, error } = await supabase
+          .from('county_hpi_data')
+          .select('*')
+          .eq('county_name', jobData?.county || selectedJob.county)
+          .order('observation_year', { ascending: true });
+
+        if (error) {
+          console.error('Error loading HPI data:', error);
+        } else {
+          hpiData = data || [];
+        }
+      } catch (hpiError) {
+        console.error('Failed to load HPI data:', hpiError);
+      }
+
       // 4. Load checklist data (for ManagementChecklist)
-      const { data: checklistItems } = await supabase
-        .from('checklist_items')
-        .select('*')
-        .eq('job_id', selectedJob.id);
-      
-      const { data: checklistStatus } = await supabase
-        .from('checklist_item_status')
-        .select('*')
-        .eq('job_id', selectedJob.id);
+      let checklistItems = [];
+      let checklistStatus = [];
+      try {
+        const [itemsResult, statusResult] = await Promise.allSettled([
+          supabase.from('checklist_items').select('*').eq('job_id', selectedJob.id),
+          supabase.from('checklist_item_status').select('*').eq('job_id', selectedJob.id)
+        ]);
+
+        if (itemsResult.status === 'fulfilled' && !itemsResult.value.error) {
+          checklistItems = itemsResult.value.data || [];
+        } else {
+          console.error('Error loading checklist items:', itemsResult.reason || itemsResult.value?.error);
+        }
+
+        if (statusResult.status === 'fulfilled' && !statusResult.value.error) {
+          checklistStatus = statusResult.value.data || [];
+        } else {
+          console.error('Error loading checklist status:', statusResult.reason || statusResult.value?.error);
+        }
+      } catch (checklistError) {
+        console.error('Failed to load checklist data:', checklistError);
+      }
 
       // 5. Load employees (for ProductionTracker inspector names)
       const { data: employeesData } = await supabase
