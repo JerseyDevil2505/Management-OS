@@ -2380,19 +2380,41 @@ export const propertyService = {
     return preservedDataMap;
   },
 
-  // Query raw_data JSON field for dynamic reporting
-  async queryRawData(jobId, fieldName, value) {
+  // Query source file data for dynamic reporting
+  async querySourceFileData(jobId, fieldName, value) {
     try {
-      const { data, error } = await supabase
+      // Get all properties for the job
+      const { data: properties, error } = await supabase
         .from('property_records')
-        .select('*')
-        .eq('job_id', jobId)
-        .eq(`raw_data->>${fieldName}`, value);
-      
+        .select('id, job_id, property_composite_key')
+        .eq('job_id', jobId);
+
       if (error) throw error;
-      return data;
+
+      const sourceData = await getSourceFileDataForJob(jobId);
+      if (!sourceData) return [];
+
+      // Filter properties based on source file data field value
+      const matchingProperties = [];
+      for (const property of properties) {
+        const propertySourceData = sourceData.propertyMap.get(property.property_composite_key);
+        if (propertySourceData && propertySourceData[fieldName] === value) {
+          // Get full property data
+          const { data: fullProperty, error: propError } = await supabase
+            .from('property_records')
+            .select('*')
+            .eq('id', property.id)
+            .single();
+
+          if (!propError && fullProperty) {
+            matchingProperties.push(fullProperty);
+          }
+        }
+      }
+
+      return matchingProperties;
     } catch (error) {
-      console.error('Property raw data query error:', error);
+      console.error('Property source file data query error:', error);
       return [];
     }
   },
