@@ -232,11 +232,6 @@ const JobContainer = ({
           console.log(`📦 Loading batch ${batch + 1}/${totalBatches} (${offset} to ${offset + limit - 1})`);
 
           try {
-            // Add timeout handling to prevent hanging requests
-            const timeoutPromise = new Promise((_, reject) => {
-              setTimeout(() => reject(new Error(`Batch ${batch + 1} timeout after 30 seconds`)), 30000);
-            });
-
             // Build the query for this batch with market analysis fields
             let batchQuery = supabase
               .from('property_records')
