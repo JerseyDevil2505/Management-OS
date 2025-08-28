@@ -22,12 +22,15 @@
 export class BatchProcessor {
   constructor(options = {}) {
     this.options = {
-      batchSize: options.batchSize || 500,
+      batchSize: options.batchSize || 50,  // CRITICAL FIX: Reduced from 500 to 50
       maxRetries: options.maxRetries || 3,
       retryDelay: options.retryDelay || 1000,
       maxConcurrency: options.maxConcurrency || 1,
       progressCallback: options.progressCallback || null,
       errorCallback: options.errorCallback || null,
+      operationTimeout: options.operationTimeout || 30000,  // NEW: 30 second timeout per batch
+      enableRollback: options.enableRollback !== false,  // NEW: Enable rollback by default
+      useTransactions: options.useTransactions !== false,  // NEW: Use database transactions
       ...options
     };
     
@@ -186,23 +189,31 @@ export class BatchProcessor {
    */
   async processBatchWithRetry(batch, batchIndex, processorFunction, options) {
     let lastError = null;
-    
+
     for (let attempt = 1; attempt <= options.maxRetries; attempt++) {
       try {
         // Check circuit breaker
         if (this.circuitBreaker.isOpen()) {
           throw new Error('Circuit breaker is open - too many failures');
         }
-        
+
         console.log(`🔄 Processing batch ${batchIndex + 1}, attempt ${attempt} (${batch.length} items)`);
-        
-        const result = await processorFunction(batch, batchIndex);
-        
+
+        // CRITICAL FIX: Add timeout wrapper for each batch operation
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error(`Batch timeout after ${options.operationTimeout}ms`)), options.operationTimeout)
+        );
+
+        const result = await Promise.race([
+          processorFunction(batch, batchIndex),
+          timeoutPromise
+        ]);
+
         // Update stats
         this.stats.processedItems += batch.length;
         this.stats.successfulBatches++;
         this.circuitBreaker.recordSuccess();
-        
+
         console.log(`✅ Batch ${batchIndex + 1} successful`);
         return result;
         
@@ -349,10 +360,13 @@ class CircuitBreaker {
 export class FileImportProcessor extends BatchProcessor {
   constructor(options = {}) {
     super({
-      batchSize: 500,
+      batchSize: 50,  // CRITICAL FIX: Reduced from 500 to 50
       maxRetries: 5,
       retryDelay: 2000,
       maxConcurrency: 1,
+      operationTimeout: 45000,  // NEW: 45 second timeout for file imports
+      enableRollback: true,  // NEW: Enable rollback for file imports
+      useTransactions: true,  // NEW: Use transactions for file imports
       ...options
     });
   }
@@ -455,11 +469,14 @@ export class FileImportProcessor extends BatchProcessor {
 export class APIBatchProcessor extends BatchProcessor {
   constructor(options = {}) {
     super({
-      batchSize: 100,
+      batchSize: 25,  // CRITICAL FIX: Reduced from 100 to 25 for API safety
       maxRetries: 3,
       retryDelay: 1000,
       maxConcurrency: 2,
       rateLimitDelay: 100,
+      operationTimeout: 15000,  // NEW: 15 second timeout for API calls
+      enableRollback: false,  // API calls usually can't be rolled back
+      useTransactions: false,
       ...options
     });
   }
