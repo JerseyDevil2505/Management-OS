@@ -1348,16 +1348,16 @@ useEffect(() => {
           });
         }
         
-        // Background refresh if needed
-        if (cached.shouldBackgroundRefresh) {
-          setTimeout(() => {
-            console.log('🔄 Starting background refresh...');
-            loadMasterData({ background: true });
-          }, 1000); // Wait 1 second before background refresh
-        }
-        
-        // Schedule next refresh
-        scheduleBackgroundRefresh();
+        // DISABLED: Background refresh - causing unwanted Supabase calls
+        // if (cached.shouldBackgroundRefresh) {
+        //   setTimeout(() => {
+        //     console.log('🔄 Starting background refresh...');
+        //     loadMasterData({ background: true });
+        //   }, 1000);
+        // }
+
+        // DISABLED: Schedule next refresh - causing unwanted Supabase calls
+        // scheduleBackgroundRefresh();
         
       } else {
         // No cache or expired - load fresh
@@ -1403,25 +1403,26 @@ useEffect(() => {
   }, [masterCache.jobs]); // Re-run when jobs are loaded/updated
 
   // ==========================================
-  // VISIBILITY CHANGE HANDLER
+  // VISIBILITY CHANGE HANDLER - DISABLED
   // ==========================================
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (!document.hidden && masterCache.isInitialized) {
-        const cacheAge = Date.now() - (masterCache.lastFetched.all || 0);
-        
-        if (cacheAge > CACHE_EXPIRY.warm) {
-          console.log('👁️ App became visible, cache is stale, refreshing...');
-          loadMasterData({ background: true });
-        } else {
-          console.log('👁️ App became visible, cache is fresh');
-        }
-      }
-    };
-    
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [masterCache, loadMasterData]);
+  // DISABLED: Causing unwanted automatic Supabase calls
+  // useEffect(() => {
+  //   const handleVisibilityChange = () => {
+  //     if (!document.hidden && masterCache.isInitialized) {
+  //       const cacheAge = Date.now() - (masterCache.lastFetched.all || 0);
+  //
+  //       if (cacheAge > CACHE_EXPIRY.warm) {
+  //         console.log('👁️ App became visible, cache is stale, refreshing...');
+  //         loadMasterData({ background: true });
+  //       } else {
+  //         console.log('👁️ App became visible, cache is fresh');
+  //       }
+  //     }
+  //   };
+  //
+  //   document.addEventListener('visibilitychange', handleVisibilityChange);
+  //   return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  // }, [masterCache, loadMasterData]);
 
   // ==========================================
   // PERFORMANCE REPORTING
@@ -1443,9 +1444,9 @@ useEffect(() => {
       });
     };
     
-    // Report every 5 minutes
-    const interval = setInterval(reportPerformance, 5 * 60 * 1000);
-    return () => clearInterval(interval);
+    // DISABLED: Report every 5 minutes - not needed in production
+    // const interval = setInterval(reportPerformance, 5 * 60 * 1000);
+    // return () => clearInterval(interval);
   }, []);
 
   // ==========================================
