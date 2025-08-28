@@ -815,7 +815,6 @@ const JobContainer = ({
       }),
       onUpdateWorkflowStats: handleAnalyticsUpdate,  // Pass the analytics update handler
       currentWorkflowStats: workflowStats,  // Pass current workflow stats
-      onUpdateJobCache: onUpdateJobCache,
       onDataChange: () => {
         // Mark that this module made changes
         setModuleHasChanges(true);
