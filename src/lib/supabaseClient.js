@@ -2583,6 +2583,14 @@ export const propertyService = {
     console.log(`🔄 Using client-side parsing for job ${jobId}, property ${propertyCompositeKey}`);
 
     const sourceData = await getSourceFileDataForJob(jobId);
+    console.log(`📊 Source data structure:`, {
+      hasSourceData: !!sourceData,
+      vendorType: sourceData?.vendorType,
+      hasPropertyMap: !!sourceData?.propertyMap,
+      propertyMapSize: sourceData?.propertyMap?.size || 0,
+      propertyMapType: sourceData?.propertyMap?.constructor?.name
+    });
+
     if (!sourceData || !sourceData.propertyMap) {
       console.warn('⚠️ No property map available for job');
       return null;
@@ -2594,7 +2602,9 @@ export const propertyService = {
       return rawData;
     }
 
-    console.warn(`⚠️ Property ${propertyCompositeKey} not found in parsed data`);
+    // Show some sample keys for debugging
+    const sampleKeys = Array.from(sourceData.propertyMap.keys()).slice(0, 3);
+    console.warn(`⚠️ Property ${propertyCompositeKey} not found in parsed data. Sample keys:`, sampleKeys);
     return null;
   },
 
