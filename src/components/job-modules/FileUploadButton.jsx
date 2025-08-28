@@ -2541,24 +2541,23 @@ const handleCodeFileUpdate = async () => {
 
   const getFileStatusWithRealVersion = (timestamp, type) => {
     if (!timestamp) return 'Never';
-    
+
     if (type === 'source') {
-      // Use our local date if we just processed, otherwise use job date
-      const displayDate = lastSourceProcessedDate || timestamp;
-      const result = sourceFileVersion === 1 
-        ? `Imported at Job Creation (${formatDate(displayDate)})`
-        : `Updated via FileUpload (${formatDate(displayDate)})`;
-      return result;
+      // SIMPLIFIED: Just check job.sourceFileStatus
+      if (job.sourceFileStatus === 'updated') {
+        return `Updated via FileUpload (${formatDate(job.source_file_uploaded_at || timestamp)})`;
+      } else {
+        return `Imported at Job Creation (${formatDate(timestamp)})`;
+      }
     } else if (type === 'code') {
-      // Use our local date if we just processed, otherwise use job date
-      const displayDate = lastCodeProcessedDate || timestamp;
-      const codeVersion = job.code_file_version || 1;
-      const result = codeVersion === 1 
-        ? `Imported at Job Creation (${formatDate(displayDate)})`
-        : `Updated via FileUpload (${formatDate(displayDate)})`;
-      return result;
+      // Check if code file was updated
+      if (job.code_file_uploaded_at) {
+        return `Updated via FileUpload (${formatDate(job.code_file_uploaded_at)})`;
+      } else {
+        return `Imported at Job Creation (${formatDate(timestamp)})`;
+      }
     }
-    
+
     return `Updated (${formatDate(timestamp)})`;
   };
 
