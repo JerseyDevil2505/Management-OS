@@ -1312,12 +1312,15 @@ const handleCodeFileUpdate = async () => {
        // Update job with new file info - removed source_file_version update
       addBatchLog('🔄 Updating job metadata...', 'info');
       try {
-        await jobService.update(job.id, {
+        const updateData = {
           sourceFileStatus: result.errors > 0 ? 'error' : 'updated',
           totalProperties: result.processed,
           source_file_uploaded_at: new Date().toISOString()
-        });
-        addBatchLog('✅ Job metadata updated successfully', 'success');
+        };
+
+        console.log('🔍 DEBUG - Updating job with:', updateData);
+        await jobService.update(job.id, updateData);
+        addBatchLog('✅ Job metadata updated successfully', 'success', updateData);
       } catch (updateError) {
         console.error('❌ Failed to update job:', updateError);
         addBatchLog('⚠️ Job metadata update failed', 'warning', { error: updateError.message });
