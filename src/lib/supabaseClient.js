@@ -40,23 +40,27 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
           
           clearTimeout(timeoutId);
           
-          // If response is ok, return it immediately
+          // If response is ok, return it
           if (response.ok) {
             return response;
           }
 
-          // Clone the response to avoid consuming the stream
-          const responseClone = response.clone();
-
           // If it's a server error (5xx), retry
           if (response.status >= 500 && attempt < maxRetries) {
             console.log(`🔄 Server error (${response.status}), retrying attempt ${attempt + 1}/${maxRetries}...`);
+            // Read and log the error to help debug, but don't return this response
+            try {
+              const errorText = await response.clone().text();
+              console.log(`Server error details:`, errorText.substring(0, 200));
+            } catch (e) {
+              // Ignore if we can't read the error
+            }
             await new Promise(resolve => setTimeout(resolve, 1000 * attempt)); // Exponential backoff
             continue;
           }
 
-          // For client errors (4xx), don't retry - return the clone
-          return responseClone;
+          // For client errors (4xx), don't retry
+          return response;
           
         } catch (error) {
           // If it's an abort error (timeout), retry if we have attempts left
@@ -1913,7 +1917,7 @@ export const checklistService = {
       
       if (error) throw error;
       
-      console.log(`��� Loaded inspection data page ${page} with ${data?.length || 0} records (total: ${count})`);
+      console.log(`✅ Loaded inspection data page ${page} with ${data?.length || 0} records (total: ${count})`);
       
       return {
         data: data || [],
