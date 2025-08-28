@@ -370,11 +370,6 @@ const JobContainer = ({
           });
         });
 
-        // Save to cache immediately while we have the data
-        if (onUpdateJobCache && allProperties.length > 0) {
-          console.log(`💾 Updating cache for job ${selectedJob.id} with ${allProperties.length} properties`);
-        }
-
         console.log(`✅ Loaded ${allProperties.length} properties - no caching`);
       } else {
         setProperties([]);
