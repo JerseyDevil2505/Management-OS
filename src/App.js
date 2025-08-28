@@ -339,7 +339,8 @@ useEffect(() => {
             new Date(fileData[0].updated_at) > new Date(prodData[0].upload_date) : false
         };
       } catch (error) {
-        console.error(`Error loading freshness for job ${job.id}:`, error);
+        console.error(`Error loading freshness for job ${job.id}:`, error.message);
+        console.error('Error details:', error);
         freshnessData[job.id] = {
           lastFileUpload: null,
           lastProductionRun: null,
