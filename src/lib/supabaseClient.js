@@ -351,13 +351,16 @@ brtParsedStructureMap: {
     return codeDefinitions[lookupKey] || code;
   },
 // Core BRT lookup function - updated to use mapping
-getBRTValue: function(property, codeDefinitions, fieldName) {
+getBRTValue: async function(property, codeDefinitions, fieldName) {
   if (!property || !codeDefinitions) return null;
-  
-  // Check both the property field and raw_data
+
+  // Check both the property field and source file data
   let code = property[fieldName];
-  if (!code && property.raw_data) {
-    code = property.raw_data[fieldName];
+  if (!code && property.job_id && property.property_composite_key) {
+    const sourceData = await getSourceFileDataForProperty(property.job_id, property.property_composite_key);
+    if (sourceData) {
+      code = sourceData[fieldName];
+    }
   }
   
   if (!code || code.trim() === '') return null;
