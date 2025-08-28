@@ -127,10 +127,10 @@ export class MicrosystemsUpdater {
       const { error } = await supabase
         .from('jobs')
         .update({
-          source_file_content: sourceFileContent,
-          source_file_size: sourceFileContent.length,
-          source_file_rows_count: sourceFileContent.split('\n').length - 1, // Subtract header
-          source_file_parsed_at: new Date().toISOString()
+          raw_file_content: sourceFileContent,
+          raw_file_size: sourceFileContent.length,
+          raw_file_rows_count: sourceFileContent.split('\n').length - 1, // Subtract header
+          raw_file_parsed_at: new Date().toISOString()
         })
         .eq('id', jobId);
 
@@ -521,7 +521,7 @@ export class MicrosystemsUpdater {
       // ENHANCED: Check if field preservation is enabled and get preserved data
       let preservedDataMap = new Map();
       if (versionInfo.preservedFieldsHandler && typeof versionInfo.preservedFieldsHandler === 'function') {
-        console.log('��� Field preservation enabled, fetching existing data...');
+        console.log('���� Field preservation enabled, fetching existing data...');
         
         // Generate composite keys for all records
         const compositeKeys = records.map(rawRecord => 
