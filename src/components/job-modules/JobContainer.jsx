@@ -87,26 +87,31 @@ const JobContainer = ({
       // CHECK CACHE FIRST
       if (jobCache && jobCache[selectedJob.id]) {
         const cached = jobCache[selectedJob.id];
-        console.log(`🎯 Using cached data for job ${selectedJob.id}`);
-        
+        console.log(`🎯 CACHE DEBUG: Found cached data for job ${selectedJob.id}`);
+        console.log(`📊 CACHE DEBUG: Properties count: ${cached.properties?.length || 0}`);
+        console.log(`📊 CACHE DEBUG: Inspection data count: ${cached.inspectionData?.length || 0}`);
+        console.log(`📊 CACHE DEBUG: Cache timestamp: ${new Date(cached.timestamp || 0).toLocaleString()}`);
+
+        // TEMPORARILY DISABLE CACHE to debug the issue
+        console.log('🚨 CACHE DISABLED FOR DEBUGGING - LOADING FROM DATABASE');
         // Use cached data immediately
-        setProperties(cached.properties || []);
-        setInspectionData(cached.inspectionData || []);
-        setMarketLandData(cached.marketLandData || {});
-        setHpiData(cached.hpiData || []);
-        setChecklistItems(cached.checklistItems || []);
-        setChecklistStatus(cached.checklistStatus || []);
-        setEmployees(cached.employees || []);  // ADD THIS LINE
-        setPropertyRecordsCount(cached.properties?.length || 0);
-        setLatestFileVersion(cached.fileVersion || 1);
-        setLatestCodeVersion(cached.codeVersion || 1);
-        setJobData(cached.jobData || selectedJob);
-        setIsLoadingVersion(false);
-        setLoadingProgress(100);
-        
+        // setProperties(cached.properties || []);
+        // setInspectionData(cached.inspectionData || []);
+        // setMarketLandData(cached.marketLandData || {});
+        // setHpiData(cached.hpiData || []);
+        // setChecklistItems(cached.checklistItems || []);
+        // setChecklistStatus(cached.checklistStatus || []);
+        // setEmployees(cached.employees || []);  // ADD THIS LINE
+        // setPropertyRecordsCount(cached.properties?.length || 0);
+        // setLatestFileVersion(cached.fileVersion || 1);
+        // setLatestCodeVersion(cached.codeVersion || 1);
+        // setJobData(cached.jobData || selectedJob);
+        // setIsLoadingVersion(false);
+        // setLoadingProgress(100);
+
         // Cache exists? Use it. Period. No time checks.
-        console.log('✅ Using cached data, skipping database load');
-        return; // Skip database load entirely
+        // console.log('✅ Using cached data, skipping database load');
+        // return; // Skip database load entirely
       }
       
       console.log('📡 Loading from database...');
@@ -143,7 +148,10 @@ const JobContainer = ({
       const currentFileVersion = dataVersionData?.file_version || 1;
       const currentCodeVersion = jobData?.code_file_version || 1;
       const hasAssignments = jobData?.has_property_assignments || false;
-      
+
+      console.log(`🔍 JOB DEBUG: has_property_assignments = ${hasAssignments}`);
+      console.log(`🔍 JOB DEBUG: Current file version = ${currentFileVersion}`);
+
       setLatestFileVersion(currentFileVersion);
       setLatestCodeVersion(currentCodeVersion);
       
