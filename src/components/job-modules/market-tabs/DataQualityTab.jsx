@@ -9,7 +9,7 @@ import {
   ChevronLeft
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { supabase, interpretCodes } from '../../../lib/supabaseClient';
+import { supabase, interpretCodes, propertyService } from '../../../lib/supabaseClient';
 
 const DataQualityTab = ({ 
   // Props from parent
@@ -2622,4 +2622,3 @@ const editCustomCheck = (check) => {
 };
 
 export default DataQualityTab;
-      
