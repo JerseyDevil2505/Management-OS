@@ -145,46 +145,25 @@ class SourceFileSyncService {
    */
   async findJobsNeedingSync() {
     try {
-      // OPTIMIZED: Get jobs that actually have records needing reprocessing in a single query
-      const { data: recordsNeedingSync, error } = await supabase
-        .from('property_records')
+      // FIXED: Look directly at jobs table for validation_status (job-level field)
+      const { data: jobsNeedingSync, error } = await supabase
+        .from('jobs')
         .select(`
-          job_id,
-          jobs!job_id (
-            id,
+          id,
           job_name,
           municipality,
           vendor_type,
           raw_file_content,
           raw_file_parsed_at,
           ccdd_code,
-            start_date
-          )
+          start_date,
+          validation_status
         `)
         .eq('validation_status', 'needs_reprocessing')
-        .not('jobs.raw_file_content', 'is', null)
-        .in('jobs.vendor_type', ['BRT', 'Microsystems']);
+        .not('raw_file_content', 'is', null)
+        .in('vendor_type', ['BRT', 'Microsystems']);
 
       if (error) throw error;
-
-      // Group by job and count records
-      const jobsMap = new Map();
-
-      recordsNeedingSync.forEach(record => {
-        const job = record.jobs;
-        if (job && job.id) {
-          if (jobsMap.has(job.id)) {
-            jobsMap.get(job.id).recordsNeedingSync++;
-          } else {
-            jobsMap.set(job.id, {
-              ...job,
-              recordsNeedingSync: 1
-            });
-          }
-        }
-      });
-
-      const jobsNeedingSync = Array.from(jobsMap.values());
       console.log(`📊 OPTIMIZED: Found ${jobsNeedingSync.length} jobs needing sync using single query`);
 
       return jobsNeedingSync;
