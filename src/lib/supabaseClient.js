@@ -24,6 +24,214 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
   }
 });
 
+// ===== SOURCE FILE DATA ACCESS HELPERS =====
+// These replace raw_data access with source file content parsing
+
+/**
+ * Cache for parsed source file data to avoid repeated parsing
+ */
+const sourceFileCache = new Map();
+
+/**
+ * Get parsed source file data for a job (with caching)
+ */
+async function getSourceFileDataForJob(jobId) {
+  if (sourceFileCache.has(jobId)) {
+    return sourceFileCache.get(jobId);
+  }
+
+  try {
+    const { data: job, error } = await supabase
+      .from('jobs')
+      .select('source_file_content, ccdd_code, start_date')
+      .eq('id', jobId)
+      .single();
+
+    if (error || !job?.source_file_content) {
+      return null;
+    }
+
+    // Determine vendor type and year
+    const vendorType = detectVendorTypeFromContent(job.source_file_content);
+    const yearCreated = new Date(job.start_date).getFullYear();
+    const ccddCode = job.ccdd_code;
+
+    // Parse the source file
+    const parsedData = parseSourceFileContent(job.source_file_content, vendorType);
+
+    // Create property lookup map by composite key
+    const propertyMap = new Map();
+    parsedData.forEach(record => {
+      const compositeKey = generateCompositeKeyFromRecord(record, vendorType, yearCreated, ccddCode);
+      propertyMap.set(compositeKey, record);
+    });
+
+    const result = {
+      vendorType,
+      yearCreated,
+      ccddCode,
+      propertyMap
+    };
+
+    // Cache for 5 minutes
+    sourceFileCache.set(jobId, result);
+    setTimeout(() => sourceFileCache.delete(jobId), 5 * 60 * 1000);
+
+    return result;
+
+  } catch (error) {
+    console.error('Error getting source file data for job:', error);
+    return null;
+  }
+}
+
+/**
+ * Get source file data for a specific property
+ */
+async function getSourceFileDataForProperty(jobId, propertyCompositeKey) {
+  const sourceData = await getSourceFileDataForJob(jobId);
+  if (!sourceData) return null;
+
+  return sourceData.propertyMap.get(propertyCompositeKey) || null;
+}
+
+/**
+ * Detect vendor type from source file content
+ */
+function detectVendorTypeFromContent(fileContent) {
+  const firstLine = fileContent.split('\n')[0];
+
+  if (firstLine.includes('BLOCK') && firstLine.includes('LOT') && firstLine.includes('QUALIFIER')) {
+    return 'BRT';
+  } else if (firstLine.includes('Block') && firstLine.includes('Lot') && firstLine.includes('Qual')) {
+    return 'Microsystems';
+  }
+
+  return 'Unknown';
+}
+
+/**
+ * Parse source file content based on vendor type
+ */
+function parseSourceFileContent(fileContent, vendorType) {
+  const lines = fileContent.split('\n').filter(line => line.trim());
+  if (lines.length < 2) return [];
+
+  let headers, separator;
+
+  if (vendorType === 'BRT') {
+    // Auto-detect BRT separator
+    const firstLine = lines[0];
+    const commaCount = (firstLine.match(/,/g) || []).length;
+    const tabCount = (firstLine.match(/\t/g) || []).length;
+
+    separator = (tabCount > 10 && tabCount > commaCount * 2) ? '\t' : ',';
+    headers = separator === ',' ? parseCSVLine(firstLine) : firstLine.split('\t').map(h => h.trim());
+  } else if (vendorType === 'Microsystems') {
+    separator = '|';
+    const originalHeaders = lines[0].split('|');
+    headers = renameDuplicateHeaders(originalHeaders);
+  }
+
+  const records = [];
+  for (let i = 1; i < lines.length; i++) {
+    let values;
+
+    if (vendorType === 'BRT') {
+      values = separator === ',' ? parseCSVLine(lines[i]) : lines[i].split('\t').map(v => v.trim());
+    } else if (vendorType === 'Microsystems') {
+      values = lines[i].split('|');
+    }
+
+    if (values.length !== headers.length) continue;
+
+    const record = {};
+    headers.forEach((header, index) => {
+      record[header] = values[index] || null;
+    });
+
+    records.push(record);
+  }
+
+  return records;
+}
+
+/**
+ * Generate composite key from source record
+ */
+function generateCompositeKeyFromRecord(record, vendorType, yearCreated, ccddCode) {
+  if (vendorType === 'BRT') {
+    const blockValue = String(record.BLOCK || '').trim();
+    const lotValue = String(record.LOT || '').trim();
+    const qualifierValue = String(record.QUALIFIER || '').trim() || 'NONE';
+    const cardValue = String(record.CARD || '').trim() || 'NONE';
+    const locationValue = String(record.PROPERTY_LOCATION || '').trim() || 'NONE';
+
+    return `${yearCreated}${ccddCode}-${blockValue}-${lotValue}_${qualifierValue}-${cardValue}-${locationValue}`;
+  } else if (vendorType === 'Microsystems') {
+    const blockValue = String(record['Block'] || '').trim();
+    const lotValue = String(record['Lot'] || '').trim();
+    const qualValue = String(record['Qual'] || '').trim() || 'NONE';
+    const bldgValue = String(record['Bldg'] || '').trim() || 'NONE';
+    const locationValue = String(record['Location'] || '').trim() || 'NONE';
+
+    return `${yearCreated}${ccddCode}-${blockValue}-${lotValue}_${qualValue}-${bldgValue}-${locationValue}`;
+  }
+
+  return null;
+}
+
+/**
+ * Parse CSV line with proper quote handling
+ */
+function parseCSVLine(line) {
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+  let i = 0;
+
+  while (i < line.length) {
+    const char = line[i];
+
+    if (char === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i += 2;
+        continue;
+      }
+      inQuotes = !inQuotes;
+    } else if (char === ',' && !inQuotes) {
+      result.push(current.trim());
+      current = '';
+      i++;
+      continue;
+    } else {
+      current += char;
+    }
+
+    i++;
+  }
+
+  result.push(current.trim());
+  return result;
+}
+
+/**
+ * Rename duplicate headers for Microsystems
+ */
+function renameDuplicateHeaders(originalHeaders) {
+  const headerCounts = {};
+  return originalHeaders.map(header => {
+    if (headerCounts[header]) {
+      headerCounts[header]++;
+      return `${header}${headerCounts[header]}`;
+    } else {
+      headerCounts[header] = 1;
+      return header;
+    }
+  });
+}
+
 // Define fields that must be preserved during file updates
 // ULTRA-OPTIMIZED: Only critical per-property fields
 const PRESERVED_FIELDS = [
