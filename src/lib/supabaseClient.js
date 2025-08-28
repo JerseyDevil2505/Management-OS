@@ -25,14 +25,17 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
 });
 
 // Define fields that must be preserved during file updates
-// OPTIMIZED: Only critical property_records fields (market analysis moved to separate table)
+// ULTRA-OPTIMIZED: Only critical per-property fields
 const PRESERVED_FIELDS = [
-  'project_start_date',      // ProductionTracker - user set
   'is_assigned_property',    // AdminJobManagement - from assignments
 ]
 
-// MOVED TO property_market_analysis table (no longer preserved in property_records):
-// - validation_status, location_analysis, new_vcs, asset_map_page, asset_key_page,
+// MOVED TO jobs table (job-level metrics, not per-property):
+// - project_start_date (inspection start date)
+// - validation_status (imported vs updated)
+
+// MOVED TO property_market_analysis table (market analysis fields):
+// - location_analysis, new_vcs, asset_map_page, asset_key_page,
 // - asset_zoning, values_norm_size, values_norm_time, sales_history
 
 // ===== CODE INTERPRETATION UTILITIES =====
@@ -1217,7 +1220,7 @@ export const jobService = {
         totalresidential: job.totalresidential || 0,
         totalcommercial: job.totalcommercial || 0,
         
-        // inspectedProperties: job.inspected_properties || 0,  // �� REMOVED 2025-01-XX: Field deleted from jobs table, now using live analytics
+        // inspectedProperties: job.inspected_properties || 0,  // ❌ REMOVED 2025-01-XX: Field deleted from jobs table, now using live analytics
         sourceFileStatus: job.source_file_status || 'pending',
         codeFileStatus: job.code_file_status || 'pending',
         vendorDetection: job.vendor_detection,
