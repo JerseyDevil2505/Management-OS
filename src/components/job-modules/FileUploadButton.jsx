@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Upload, FileText, CheckCircle, AlertTriangle, X, Database, Settings, Download, Eye, Calendar, RefreshCw } from 'lucide-react';
 import { jobService, propertyService, supabase, preservedFieldsHandler } from '../../lib/supabaseClient';
+import { uploadFile, processFile, formatBackendError } from '../../services/backendService';
 
 const FileUploadButton = ({ job, onFileProcessed, isJobLoading = false, onDataRefresh }) => {
   const [sourceFile, setSourceFile] = useState(null);
@@ -46,6 +47,11 @@ const FileUploadButton = ({ job, onFileProcessed, isJobLoading = false, onDataRe
     isInserting: false,
     currentOperation: ''
   });
+
+  // Backend service integration state
+  const [useBackendService, setUseBackendService] = useState(true); // Enable backend by default
+  const [backendProgress, setBackendProgress] = useState(null);
+  const [backendError, setBackendError] = useState(null);
 
   const addNotification = (message, type = 'info') => {
     const id = Date.now() + Math.random(); // Make unique with random component
