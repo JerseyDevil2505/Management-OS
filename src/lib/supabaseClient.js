@@ -466,31 +466,34 @@ getInteriorConditionName: function(property, codeDefinitions, vendorType) {
 },
 
   // ===== NEW: STORY HEIGHT / FLOOR INTERPRETER =====
-  getStoryHeight: function(property, codeDefinitions, vendorType) {
+  getStoryHeight: async function(property, codeDefinitions, vendorType) {
     if (!property) return null;
-    
-    // First check raw_data for the original text value
-    if (property.raw_data) {
-      if (vendorType === 'BRT') {
-        // BRT stores in various possible field names
-        const rawStory = property.raw_data.STORYHGT || 
-                        property.raw_data.STORY_HEIGHT ||
-                        property.raw_data['Story Height'] ||
-                        property.raw_data.STORIES;
-        if (rawStory) return rawStory;
-      } else if (vendorType === 'Microsystems') {
-        // Look for 510-prefixed fields in raw_data
-        for (const key in property.raw_data) {
-          if (key.startsWith('510')) {
-            const value = property.raw_data[key];
-            if (value) return value;
+
+    // First check source file data for the original text value
+    if (property.job_id && property.property_composite_key) {
+      const sourceData = await getSourceFileDataForProperty(property.job_id, property.property_composite_key);
+      if (sourceData) {
+        if (vendorType === 'BRT') {
+          // BRT stores in various possible field names
+          const rawStory = sourceData.STORYHGT ||
+                          sourceData.STORY_HEIGHT ||
+                          sourceData['Story Height'] ||
+                          sourceData.STORIES;
+          if (rawStory) return rawStory;
+        } else if (vendorType === 'Microsystems') {
+          // Look for 510-prefixed fields in source data
+          for (const key in sourceData) {
+            if (key.startsWith('510')) {
+              const value = sourceData[key];
+              if (value) return value;
+            }
           }
+          // Also check common field names
+          const rawStory = sourceData['Story Height'] ||
+                          sourceData.STORY_HEIGHT ||
+                          sourceData.STORIES;
+          if (rawStory) return rawStory;
         }
-        // Also check common field names
-        const rawStory = property.raw_data['Story Height'] ||
-                        property.raw_data.STORY_HEIGHT ||
-                        property.raw_data.STORIES;
-        if (rawStory) return rawStory;
       }
     }
     
