@@ -500,6 +500,8 @@ const generateQCFormPDF = () => {
 };
   const runQualityChecks = async () => {
     setIsRunningChecks(true);
+    setAnalysisProgress({ current: 0, total: properties.length, phase: 'Initializing...' });
+
     const results = {
       mod_iv: [],
       cama: [],
@@ -516,15 +518,31 @@ const generateQCFormPDF = () => {
       const rawDataCache = new Map();
       console.log('🔄 Starting quality checks with job-level raw data access...');
 
-      const pageSize = 1000;
+      const pageSize = 100; // Smaller batches for better progress tracking
       const totalPages = Math.ceil(properties.length / pageSize);
+      let processedCount = 0;
 
       for (let page = 0; page < totalPages; page++) {
         const batch = properties.slice(page * pageSize, (page + 1) * pageSize);
+        setAnalysisProgress({
+          current: processedCount,
+          total: properties.length,
+          phase: `Processing batch ${page + 1} of ${totalPages}...`
+        });
         console.log(`Processing batch ${page + 1} of ${totalPages}...`);
 
         for (const property of batch) {
           await runPropertyChecks(property, results, rawDataCache);
+          processedCount++;
+
+          // Update progress every 10 properties for smoother UI
+          if (processedCount % 10 === 0) {
+            setAnalysisProgress({
+              current: processedCount,
+              total: properties.length,
+              phase: `Analyzing properties...`
+            });
+          }
         }
       }
 
