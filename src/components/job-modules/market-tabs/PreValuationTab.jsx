@@ -610,11 +610,11 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       for (const sale of normalizedSales) {
         if (sale.size_normalized_price) {
           await supabase
-            .from('property_records')
-            .update({ 
-              values_norm_size: sale.size_normalized_price 
-            })
-            .eq('id', sale.id);
+            .from('property_market_analysis')
+            .upsert({
+              property_composite_key: sale.property_composite_key,
+              values_norm_size: sale.size_normalized_price
+            }, { onConflict: 'property_composite_key' });
         }
       }
       console.log('✅ Size normalized values saved to database');
@@ -1067,12 +1067,12 @@ const handleSalesDecision = async (saleId, decision) => {
     if (sale && sale.keep_reject === 'keep') {
       try {
         const { error } = await supabase
-          .from('property_records')
-          .update({ 
+          .from('property_market_analysis')
+          .update({
             values_norm_time: null,
-            values_norm_size: null 
+            values_norm_size: null
           })
-          .eq('id', saleId);
+          .eq('property_composite_key', sale.property_composite_key);
         
         if (error) {
           console.error('Error removing normalized values:', error);
@@ -1118,12 +1118,15 @@ const handleSalesDecision = async (saleId, decision) => {
           console.log(`💾 Batch ${Math.floor(i/500) + 1}: Saving IDs`, updates.slice(0, 3).map(u => u.id), '...');
           
           // Use Promise.all for parallel updates within batch
-          await Promise.all(updates.map(u => 
-            supabase
-              .from('property_records')
-              .update({ values_norm_time: u.values_norm_time })
-              .eq('id', u.id)
-          ));
+          await Promise.all(updates.map(u => {
+            const sale = batch.find(s => s.id === u.id);
+            return supabase
+              .from('property_market_analysis')
+              .upsert({
+                property_composite_key: sale.property_composite_key,
+                values_norm_time: u.values_norm_time
+              }, { onConflict: 'property_composite_key' });
+          }));
           
           console.log(`✅ Saved batch ${Math.floor(i/500) + 1} of ${Math.ceil(keeps.length/500)}`);
           setSaveProgress({ 
@@ -1140,10 +1143,12 @@ const handleSalesDecision = async (saleId, decision) => {
           const batch = rejects.slice(i, i + 500);
           const rejectIds = batch.map(s => s.id);
           
+          const rejectCompositeKeys = batch.map(s => s.property_composite_key);
+
           await supabase
-            .from('property_records')
+            .from('property_market_analysis')
             .update({ values_norm_time: null })
-            .in('id', rejectIds);
+            .in('property_composite_key', rejectCompositeKeys);
           
           console.log(`✅ Cleared batch ${Math.floor(i/500) + 1} of ${Math.ceil(rejects.length/500)}`);
         }
@@ -2110,7 +2115,7 @@ const analyzeImportFile = async (file) => {
                               className="px-4 py-3 text-center text-sm font-medium text-gray-700 w-28 cursor-pointer hover:bg-gray-100"
                               onClick={() => handleNormalizationSort('keep_reject')}
                             >
-                              Decision {normSortConfig.field === 'keep_reject' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
+                              Decision {normSortConfig.field === 'keep_reject' && (normSortConfig.direction === 'asc' ? '↑' : '��')}
                             </th>
                           </tr>
                         </thead>
