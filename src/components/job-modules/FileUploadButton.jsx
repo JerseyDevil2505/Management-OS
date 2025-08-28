@@ -1197,15 +1197,28 @@ const handleCodeFileUpdate = async () => {
       // Call the updater to UPSERT the database
       addBatchLog(`📊 Calling ${detectedVendor} updater (UPSERT mode)...`, 'info');
 
-      // SIMPLIFIED: Let propertyService handle version increments automatically
-      addBatchLog('📊 Processing file - database will increment file_version automatically', 'info');
+      // FIX: Calculate new file_version for property_records - fetch current from DB
+      addBatchLog('🔍 Fetching current file version from database...', 'info');
+      const { data: currentVersionData, error: versionError } = await supabase
+        .from('property_records')
+        .select('file_version')
+        .eq('job_id', job.id)
+        .order('file_version', { ascending: false })
+        .limit(1)
+        .single();
+
+      const currentFileVersion = currentVersionData?.file_version || 1;
+      const newFileVersion = currentFileVersion + 1;
+
+      addBatchLog(`📊 Current DB version: ${currentFileVersion}, incrementing to: ${newFileVersion}`, 'info');
 
       // Track batch operations
       const result = await trackBatchInserts(async () => {
         console.log('📤 Calling updateCSVData with:', {
           jobId: job.id,
           vendor: detectedVendor,
-          recordCount: sourceFileContent.split('\n').length - 1
+          recordCount: sourceFileContent.split('\n').length - 1,
+          newFileVersion: newFileVersion
         });
 
         try {
@@ -1220,6 +1233,7 @@ const handleCodeFileUpdate = async () => {
               source_file_name: sourceFile?.name,
               source_file_version_id: crypto.randomUUID(),
               source_file_uploaded_at: new Date().toISOString(),
+              file_version: newFileVersion,
               preservedFieldsHandler: preservedFieldsHandler,  // ADD THIS!
               preservedFields: [
                 'is_assigned_property',    // AdminJobManagement - from assignments
