@@ -584,9 +584,15 @@ const generateQCFormPDF = () => {
     }
   };
 
-  const runPropertyChecks = async (property, results) => {
+  const runPropertyChecks = async (property, results, rawDataCache) => {
     const vendor = property.vendor_source || jobData.vendor_source || 'BRT';
-    const rawData = property.raw_data || {};
+
+    // Get raw data from cache or fetch from job-level storage
+    let rawData = rawDataCache.get(property.property_composite_key);
+    if (rawData === undefined) {
+      rawData = (await propertyService.getRawDataForProperty(property.job_id, property.property_composite_key)) || {};
+      rawDataCache.set(property.property_composite_key, rawData);
+    }
     
     // MOD IV CHECKS
     const m4Class = property.property_m4_class;
