@@ -1086,9 +1086,16 @@ const handleCodeFileUpdate = async () => {
       }));
 
       // Add a heartbeat to show we're still alive during initialization
+      let heartbeatCount = 0;
       const heartbeatInterval = setInterval(() => {
-        console.log('💓 Batch operation heartbeat - still initializing...');
-        addBatchLog('💓 Operation still running...', 'info');
+        heartbeatCount++;
+        console.log(`💓 Batch operation heartbeat - still initializing... (${heartbeatCount * 10}s)`);
+        addBatchLog(`💓 Operation still running... (${heartbeatCount * 10} seconds)`, 'info');
+
+        // If stuck for more than 60 seconds, show warning
+        if (heartbeatCount >= 6) {
+          addBatchLog('⚠️ Operation appears stuck. Database may be overloaded or there\'s a query issue. Consider using Emergency Stop.', 'warning');
+        }
       }, 10000); // Every 10 seconds
       
       // Execute the operation with timeout protection (reduced from 5 to 2 minutes)
@@ -1276,7 +1283,7 @@ const handleCodeFileUpdate = async () => {
         } catch (updateError) {
           console.error('❌ updateCSVData failed:', updateError);
           // Add more specific error info to batch log
-          addBatchLog(`❌ Update failed: ${updateError.message}`, 'error', {
+          addBatchLog(`�� Update failed: ${updateError.message}`, 'error', {
             error: updateError.message,
             stack: updateError.stack,
             vendor: detectedVendor
