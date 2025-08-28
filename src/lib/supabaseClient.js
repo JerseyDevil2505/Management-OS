@@ -732,12 +732,15 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
   return finalAcres > 0 ? finalAcres : null;
 },
 // Get bathroom plumbing sum (BRT only)
-  getBathroomPlumbingSum: function(property, vendorType) {
-    if (!property || !property.raw_data || vendorType !== 'BRT') return 0;
-    
+  getBathroomPlumbingSum: async function(property, vendorType) {
+    if (!property || vendorType !== 'BRT' || !property.job_id || !property.property_composite_key) return 0;
+
+    const sourceData = await getSourceFileDataForProperty(property.job_id, property.property_composite_key);
+    if (!sourceData) return 0;
+
     let sum = 0;
     for (let i = 2; i <= 6; i++) {
-      sum += parseInt(property.raw_data[`PLUMBING${i}FIX`]) || 0;
+      sum += parseInt(sourceData[`PLUMBING${i}FIX`]) || 0;
     }
     return sum;
   },
