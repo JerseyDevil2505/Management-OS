@@ -540,22 +540,41 @@ export class BatchProcessor {
  */
 class CircuitBreaker {
   constructor(options = {}) {
-    this.failureThreshold = options.failureThreshold || 5;
-    this.recoveryTimeout = options.recoveryTimeout || 60000; // 1 minute
+    this.failureThreshold = options.failureThreshold || 3;  // CRITICAL FIX: Reduced from 5 to 3
+    this.recoveryTimeout = options.recoveryTimeout || 120000; // CRITICAL FIX: Increased to 2 minutes
     this.state = 'CLOSED'; // CLOSED, OPEN, HALF_OPEN
     this.failureCount = 0;
     this.lastFailureTime = null;
+    this.consecutiveTimeouts = 0;  // NEW: Track timeout failures specifically
+    this.timeoutThreshold = 2;  // NEW: Open circuit after 2 consecutive timeouts
   }
 
   recordSuccess() {
     this.failureCount = 0;
+    this.consecutiveTimeouts = 0;  // NEW: Reset timeout counter
     this.state = 'CLOSED';
   }
 
-  recordFailure() {
+  recordFailure(error) {
     this.failureCount++;
     this.lastFailureTime = Date.now();
-    
+
+    // CRITICAL FIX: Track timeout failures separately - they're more serious
+    if (error && error.message.includes('timeout')) {
+      this.consecutiveTimeouts++;
+      console.log(`🚨 Timeout failure #${this.consecutiveTimeouts} recorded`);
+
+      // Open circuit immediately on consecutive timeouts
+      if (this.consecutiveTimeouts >= this.timeoutThreshold) {
+        this.state = 'OPEN';
+        console.log(`⚡ CRITICAL: Circuit breaker opened after ${this.consecutiveTimeouts} consecutive timeouts`);
+        return;
+      }
+    } else {
+      this.consecutiveTimeouts = 0; // Reset if not a timeout
+    }
+
+    // Standard failure threshold
     if (this.failureCount >= this.failureThreshold) {
       this.state = 'OPEN';
       console.log(`⚡ Circuit breaker opened after ${this.failureCount} failures`);
@@ -572,6 +591,16 @@ class CircuitBreaker {
       return true;
     }
     return false;
+  }
+
+  // NEW: Get current status for debugging
+  getStatus() {
+    return {
+      state: this.state,
+      failureCount: this.failureCount,
+      consecutiveTimeouts: this.consecutiveTimeouts,
+      timeSinceLastFailure: this.lastFailureTime ? Date.now() - this.lastFailureTime : null
+    };
   }
 }
 
