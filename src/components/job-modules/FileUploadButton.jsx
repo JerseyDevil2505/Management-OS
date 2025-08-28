@@ -1,4 +1,4 @@
-  import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Upload, FileText, CheckCircle, AlertTriangle, X, Database, Settings, Download, Eye, Calendar, RefreshCw } from 'lucide-react';
 import { jobService, propertyService, supabase, preservedFieldsHandler } from '../../lib/supabaseClient';
 
@@ -1132,18 +1132,13 @@ try {
               file_version: newFileVersion,
               preservedFieldsHandler: preservedFieldsHandler,  // ADD THIS!
               preservedFields: [
-                'project_start_date',      // ProductionTracker - user set
                 'is_assigned_property',    // AdminJobManagement - from assignments
                 'validation_status',       // ProductionTracker - validation state
-                'location_analysis',       // MarketAnalysis - manually entered
-                'new_vcs',                 // AppealCoverage - manually set
-                'asset_map_page',          // MarketAnalysis worksheet - manually entered
-                'asset_key_page',          // MarketAnalysis worksheet - manually entered
-                'asset_zoning',            // MarketAnalysis worksheet - manually entered
-                'values_norm_size',        // MarketAnalysis - calculated value
-                'values_norm_time',        // MarketAnalysis - calculated value
-                'sales_history',           // FileUploadButton - sales decisions
                 'processing_notes'         // User notes - if added should be kept
+                // REMOVED: project_start_date (moved to jobs table)
+                // REMOVED: location_analysis, new_vcs, asset_map_page, asset_key_page,
+                //          asset_zoning, values_norm_size, values_norm_time, sales_history
+                //          (moved to property_market_analysis table)
               ]
             }
           );
@@ -1457,7 +1452,7 @@ try {
       if (vendor) {
         addNotification(`✅ Detected ${vendor} file format`, 'success');
       } else {
-        addNotification('⚠️ Could not detect vendor type', 'warning');
+        addNotification('��️ Could not detect vendor type', 'warning');
       }
     } catch (error) {
       console.error('Error reading file:', error);
@@ -2247,18 +2242,13 @@ try {
                           file_version: newFileVersion,
                           preservedFieldsHandler: preservedFieldsHandler,
                           preservedFields: [
-                            'project_start_date',      // ProductionTracker - user set
                             'is_assigned_property',    // AdminJobManagement - from assignments
                             'validation_status',       // ProductionTracker - validation state
-                            'location_analysis',       // MarketAnalysis - manually entered
-                            'new_vcs',                 // AppealCoverage - manually set
-                            'asset_map_page',          // MarketAnalysis worksheet - manually entered
-                            'asset_key_page',          // MarketAnalysis worksheet - manually entered
-                            'asset_zoning',            // MarketAnalysis worksheet - manually entered
-                            'values_norm_size',        // MarketAnalysis - calculated value
-                            'values_norm_time',        // MarketAnalysis - calculated value
-                            'sales_history',           // FileUploadButton - sales decisions
                             'processing_notes'         // User notes - if added should be kept
+                            // REMOVED: project_start_date (moved to jobs table)
+                            // REMOVED: location_analysis, new_vcs, asset_map_page, asset_key_page,
+                            //          asset_zoning, values_norm_size, values_norm_time, sales_history
+                            //          (moved to property_market_analysis table)
                           ]
                         }
                       );
