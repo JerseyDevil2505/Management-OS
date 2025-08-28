@@ -352,15 +352,36 @@ export class BatchProcessor {
       } catch (error) {
         lastError = error;
         this.circuitBreaker.recordFailure();
-        
+
         console.error(`❌ Batch ${batchIndex + 1} failed (attempt ${attempt}):`, error.message);
-        
+
+        // CRITICAL FIX: Rollback transaction on failure
+        if (transactionId && options.enableRollback) {
+          try {
+            const rollbackSuccess = await this.transactionManager.rollbackTransaction(
+              transactionId,
+              `Batch ${batchIndex + 1} failed: ${error.message}`
+            );
+            if (rollbackSuccess) {
+              this.stats.rolledBackBatches++;
+              console.log(`🔄 Successfully rolled back batch ${batchIndex + 1}`);
+            }
+          } catch (rollbackError) {
+            console.error(`💀 CRITICAL: Rollback failed for batch ${batchIndex + 1}:`, rollbackError.message);
+            // This is a critical failure - we can't recover
+            throw new Error(`Batch failed AND rollback failed: ${rollbackError.message}`);
+          } finally {
+            this.transactionManager.cleanupTransaction(transactionId);
+            transactionId = null; // Reset for next attempt
+          }
+        }
+
         // Check if error is retryable
         if (!this.isRetryableError(error)) {
           console.log(`💀 Non-retryable error for batch ${batchIndex + 1}`);
           break;
         }
-        
+
         // Don't retry on last attempt
         if (attempt < options.maxRetries) {
           const delay = this.calculateRetryDelay(attempt, options.retryDelay);
@@ -369,17 +390,17 @@ export class BatchProcessor {
         }
       }
     }
-    
+
     // All retries failed
     this.stats.failedItems += batch.length;
     this.stats.failedBatches++;
-    
+
     const error = new Error(`Batch ${batchIndex + 1} failed after ${options.maxRetries} attempts: ${lastError?.message}`);
-    
+
     if (options.errorCallback) {
       options.errorCallback(error, batch, batchIndex);
     }
-    
+
     throw error;
   }
 
