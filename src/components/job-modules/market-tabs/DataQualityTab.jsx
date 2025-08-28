@@ -562,14 +562,24 @@ const generateQCFormPDF = () => {
       
       // Run all custom checks automatically
       if (customChecks.length > 0) {
+        setAnalysisProgress({
+          current: 0,
+          total: customChecks.length,
+          phase: `Running ${customChecks.length} custom checks...`
+        });
         console.log(`Running ${customChecks.length} custom checks...`);
-        
+
         // Reset custom results first
         setCheckResults(prev => ({ ...prev, custom: [] }));
-        
+
         // Run each custom check
-        for (const check of customChecks) {
-          await runCustomCheck(check);
+        for (let i = 0; i < customChecks.length; i++) {
+          setAnalysisProgress({
+            current: i + 1,
+            total: customChecks.length,
+            phase: `Running custom check: ${customChecks[i].name}`
+          });
+          await runCustomCheck(customChecks[i]);
         }
       }
       
