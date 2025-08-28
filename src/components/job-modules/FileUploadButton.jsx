@@ -906,7 +906,7 @@ const handleCodeFileUpdate = async () => {
         .single();
 
       if (versionData && !error) {
-        console.log(`📊 Current file_version from DB: ${versionData.file_version}, updated_at: ${versionData.updated_at}`);
+        console.log(`���� Current file_version from DB: ${versionData.file_version}, updated_at: ${versionData.updated_at}`);
         setCurrentFileVersion(versionData.file_version || 1);
         setLastUpdatedAt(versionData.updated_at);
       } else {
@@ -1126,7 +1126,7 @@ const handleCodeFileUpdate = async () => {
       addBatchLog(`📊 Calling ${detectedVendor} updater (UPSERT mode)...`, 'info');
 
       // SIMPLIFIED: Let propertyService handle version increments automatically
-      addBatchLog('📊 Processing file - database will increment file_version automatically', 'info');
+      addBatchLog('��� Processing file - database will increment file_version automatically', 'info');
 
       // Track batch operations
       const result = await trackBatchInserts(async () => {
@@ -2498,12 +2498,11 @@ const handleCodeFileUpdate = async () => {
 
     if (type === 'source') {
       console.log(`🔍 Banner Debug - currentFileVersion: ${currentFileVersion}`);
-      console.log(`🔍 Banner Debug - job.source_file_uploaded_at: ${job.source_file_uploaded_at}`);
-      console.log(`🔍 Banner Debug - lastSourceProcessedDate: ${lastSourceProcessedDate}`);
+      console.log(`🔍 Banner Debug - lastUpdatedAt: ${lastUpdatedAt}`);
 
       if (currentFileVersion > 1) {
-        // Use job.source_file_uploaded_at if available, otherwise use current timestamp
-        const uploadDate = job.source_file_uploaded_at || lastSourceProcessedDate || timestamp;
+        // Use updated_at from property_records
+        const uploadDate = lastUpdatedAt || timestamp;
         return `Updated via FileUpload (${formatDate(uploadDate)})`;
       } else {
         return `Imported at Job Creation (${formatDate(timestamp)})`;
