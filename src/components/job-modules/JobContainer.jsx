@@ -200,10 +200,22 @@ const JobContainer = ({
           console.log(`📦 Loading batch ${batch + 1}/${totalBatches} (${offset} to ${offset + limit - 1})`);
 
           try {
-            // Build the query for this batch
+            // Build the query for this batch with market analysis fields
             let batchQuery = supabase
               .from('property_records')
-              .select('*')
+              .select(`
+                *,
+                property_market_analysis!left (
+                  location_analysis,
+                  new_vcs,
+                  asset_map_page,
+                  asset_key_page,
+                  asset_zoning,
+                  values_norm_size,
+                  values_norm_time,
+                  sales_history
+                )
+              `)
               .eq('job_id', selectedJob.id)
               .order('property_composite_key')
               .range(offset, offset + limit - 1);
