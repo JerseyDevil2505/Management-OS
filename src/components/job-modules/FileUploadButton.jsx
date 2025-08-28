@@ -2303,15 +2303,7 @@ const handleCodeFileUpdate = async () => {
                       addNotification('❌ Refresh failed - all changes rolled back. Check logs for details.', 'error');
                     }
                     
-                    // CRITICAL FIX: Update banner state immediately
-                    addBatchLog('🔄 Refreshing UI state...', 'info');
-                    const processedDate = new Date().toISOString();
-                    setSourceFileVersion(newFileVersion);  // Use the newFileVersion we already calculated
-                    setLastSourceProcessedDate(processedDate);
-                    // Store in sessionStorage to persist across re-renders
-                    sessionStorage.setItem(`job_${job.id}_lastSourceProcessed`, processedDate);
-                    sessionStorage.setItem(`job_${job.id}_sourceFileVersion`, newFileVersion.toString());
-                    addBatchLog('✅ UI state refreshed successfully', 'success');
+                    // SIMPLIFIED: No complex state updates needed - banner reads from job object after refresh
                     
                     setBatchComplete(true);
                     
