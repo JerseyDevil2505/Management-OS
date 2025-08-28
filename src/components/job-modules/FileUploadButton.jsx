@@ -2491,18 +2491,10 @@ const handleCodeFileUpdate = async () => {
     if (!timestamp) return 'Never';
 
     if (type === 'source') {
-      // DEBUG: Log all job fields to see what's available
-      console.log(`🔍 Banner Debug - Available job fields:`, Object.keys(job));
-      console.log(`🔍 Banner Debug - job.current_file_version: ${job.current_file_version}`);
-      console.log(`🔍 Banner Debug - job.source_file_version: ${job.source_file_version}`);
-      console.log(`🔍 Banner Debug - full job object:`, job);
+      console.log(`🔍 Banner Debug - currentFileVersion: ${currentFileVersion}`);
 
-      // SIMPLE LOGIC: Check file_version from JobContainer data
-      const fileVersion = job.current_file_version || job.source_file_version || 1;
-      console.log(`🔍 Banner Debug - final file_version: ${fileVersion}`);
-
-      if (fileVersion > 1) {
-        return `Updated via FileUpload (${formatDate(job.source_file_uploaded_at || timestamp)})`;
+      if (currentFileVersion > 1) {
+        return `Updated via FileUpload (${formatDate(lastSourceProcessedDate || job.source_file_uploaded_at || timestamp)})`;
       } else {
         return `Imported at Job Creation (${formatDate(timestamp)})`;
       }
