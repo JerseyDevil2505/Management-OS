@@ -1077,7 +1077,7 @@ const handleCodeFileUpdate = async () => {
       };
       
       // Set initial state with detailed logging
-      console.log('🚀 Starting batch operation with timeout protection...');
+      console.log('���� Starting batch operation with timeout protection...');
       setBatchInsertProgress(prev => ({
         ...prev,
         isInserting: true,
@@ -1954,6 +1954,26 @@ const handleCodeFileUpdate = async () => {
               {processing ? 'Processing in progress...' : `Completed ${batchLogs.length} operations`}
             </div>
             
+            {/* Emergency Stop Button - shows when processing but not complete */}
+            {processing && !batchComplete && (
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => {
+                    // Force stop the operation
+                    setProcessing(false);
+                    setBatchComplete(true);
+                    setIsProcessingLocked(false);
+                    addBatchLog('🛑 Operation manually stopped by user', 'warning');
+                    console.log('🛑 Emergency stop triggered - operation cancelled');
+                  }}
+                  className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 font-medium flex items-center space-x-2"
+                >
+                  <span>🛑</span>
+                  <span>Emergency Stop</span>
+                </button>
+              </div>
+            )}
+
             {batchComplete && (
               <div className="flex space-x-3">
                 <button
