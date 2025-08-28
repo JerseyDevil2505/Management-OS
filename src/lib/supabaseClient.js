@@ -1639,7 +1639,7 @@ export const jobService = {
       if (componentFields.code_file_uploaded_at) dbFields.code_file_uploaded_at = componentFields.code_file_uploaded_at;
 
       console.log('🔧 jobService.update - Input fields:', Object.keys(componentFields));
-      console.log('��� jobService.update - Mapped DB fields:', Object.keys(dbFields));
+      console.log('🔧 jobService.update - Mapped DB fields:', Object.keys(dbFields));
       console.log('🔧 jobService.update - DB field values:', dbFields);
 
       const { data, error } = await supabase
@@ -2565,13 +2565,13 @@ export const propertyService = {
       return await this.getRawDataForPropertyClientSide(jobId, propertyCompositeKey);
 
     } catch (error) {
-      console.error('❌ Error fetching raw data for property:', {
-        jobId,
-        propertyCompositeKey,
-        error: getErrorMessage(error),
-        fullError: error,
-        stack: error.stack
-      });
+      console.error('❌ Error fetching raw data for property:');
+      console.error('  Job ID:', jobId);
+      console.error('  Property Key:', propertyCompositeKey);
+      console.error('  Error Message:', getErrorMessage(error));
+      console.error('  Error Type:', error.constructor.name);
+      console.error('  Full Error:', JSON.stringify(error, null, 2));
+      console.error('  Stack:', error.stack);
 
       // Fallback: use client-side parsing
       console.log('🔄 Attempting client-side fallback...');
