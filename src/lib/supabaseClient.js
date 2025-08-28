@@ -1,5 +1,38 @@
 import { createClient } from '@supabase/supabase-js';
 
+/**
+ * Helper function to safely extract error message from any error type
+ */
+function getErrorMessage(error) {
+  if (!error) return 'Unknown error';
+
+  // If it's a string, return it directly
+  if (typeof error === 'string') return error;
+
+  // Try various error message properties
+  if (error.message) return error.message;
+  if (error.msg) return error.msg;
+  if (error.error) return error.error;
+  if (error.details) return error.details;
+
+  // If it's an object with specific error info
+  if (error.code && error.hint) {
+    return `${error.code}: ${error.hint}`;
+  }
+
+  // Try to stringify if it's an object
+  if (typeof error === 'object') {
+    try {
+      return JSON.stringify(error);
+    } catch (e) {
+      return 'Error object could not be serialized';
+    }
+  }
+
+  // Fallback to string conversion
+  return String(error);
+}
+
 const supabaseUrl = process.env.REACT_APP_SUPABASE_URL || 'https://zxvavttfvpsagzluqqwn.supabase.co';
 const supabaseKey = process.env.REACT_APP_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp4dmF2dHRmdnBzYWd6bHVxcXduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIzNDA4NjcsImV4cCI6MjA2NzkxNjg2N30.Rrn2pTnImCpBIoKPcdlzzZ9hMwnYtIO5s7i1ejwQReg';
 
