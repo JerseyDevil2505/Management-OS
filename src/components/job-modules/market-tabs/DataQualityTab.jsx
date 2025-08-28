@@ -614,6 +614,7 @@ const generateQCFormPDF = () => {
       console.error('Error running quality checks:', error);
     } finally {
       setIsRunningChecks(false);
+      setAnalysisProgress({ current: 0, total: 0, phase: '' });
     }
   };
 
