@@ -2574,13 +2574,13 @@ export const propertyService = {
   async getRawDataForPropertyClientSide(jobId, propertyCompositeKey) {
     console.log(`🔄 Using client-side parsing for job ${jobId}, property ${propertyCompositeKey}`);
 
-    const propertyMap = await getSourceFileDataForJob(jobId);
-    if (!propertyMap) {
+    const sourceData = await getSourceFileDataForJob(jobId);
+    if (!sourceData || !sourceData.propertyMap) {
       console.warn('⚠️ No property map available for job');
       return null;
     }
 
-    const rawData = propertyMap.get(propertyCompositeKey);
+    const rawData = sourceData.propertyMap.get(propertyCompositeKey);
     if (rawData) {
       console.log(`✅ Found raw data via client-side parsing for ${propertyCompositeKey}`);
       return rawData;
