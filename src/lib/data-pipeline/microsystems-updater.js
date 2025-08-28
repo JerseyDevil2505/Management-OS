@@ -521,7 +521,7 @@ export class MicrosystemsUpdater {
       // ENHANCED: Check if field preservation is enabled and get preserved data
       let preservedDataMap = new Map();
       if (versionInfo.preservedFieldsHandler && typeof versionInfo.preservedFieldsHandler === 'function') {
-        console.log('🔒 Field preservation enabled, fetching existing data...');
+        console.log('��� Field preservation enabled, fetching existing data...');
         
         // Generate composite keys for all records
         const compositeKeys = records.map(rawRecord => 
@@ -687,7 +687,12 @@ export class MicrosystemsUpdater {
         }
       }
       
-      console.log('🚀 Enhanced Microsystems UPDATER (UPSERT) complete:', results);
+      // NEW: Mark source file version as processed
+      if (sourceFileVersionId) {
+        await this.markSourceFileVersionProcessed(sourceFileVersionId, results);
+      }
+
+      console.log('🚀 Enhanced Microsystems UPDATER (UPSERT) complete with lineage tracking:', results);
       return results;
       
     } catch (error) {
