@@ -24,8 +24,12 @@ const JobContainer = ({
   const [isLoadingVersion, setIsLoadingVersion] = useState(true);
   // Track if current module made changes
   const [moduleHasChanges, setModuleHasChanges] = useState(false);
-  
+
   const [versionError, setVersionError] = useState(null);
+
+  // Backend service integration
+  const [backendAvailable, setBackendAvailable] = useState(true);
+  const [initializationMethod, setInitializationMethod] = useState('backend'); // 'backend' or 'direct'
   
   // NEW: Property loading states
   const [properties, setProperties] = useState([]);
