@@ -1626,6 +1626,12 @@ export const jobService = {
       } else {
       }
 
+      // File version and upload timestamp mappings (MISSING - causing code version update to fail!)
+      if (componentFields.source_file_version !== undefined) dbFields.source_file_version = componentFields.source_file_version;
+      if (componentFields.code_file_version !== undefined) dbFields.code_file_version = componentFields.code_file_version;
+      if (componentFields.source_file_uploaded_at) dbFields.source_file_uploaded_at = componentFields.source_file_uploaded_at;
+      if (componentFields.code_file_uploaded_at) dbFields.code_file_uploaded_at = componentFields.code_file_uploaded_at;
+
 
       const { data, error } = await supabase
        .from('jobs')
