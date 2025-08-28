@@ -415,11 +415,15 @@ const JobContainer = ({
           const start = inspectionPage * 1000;
           const end = start + 999;
 
-          const { data: batch, error } = await supabase
-            .from('inspection_data')
-            .select('*')
-            .eq('job_id', selectedJob.id)
-            .range(start, end);
+          const { data: batch, error } = await withTimeout(
+            supabase
+              .from('inspection_data')
+              .select('*')
+              .eq('job_id', selectedJob.id)
+              .range(start, end),
+            20000,
+            `inspection data batch ${inspectionPage + 1}`
+          );
 
           if (error) {
             console.error('Error loading inspection data batch:', error);
@@ -443,11 +447,15 @@ const JobContainer = ({
       // 2. Load market_land_valuation (for MarketAnalysis tabs)
       let marketData = null;
       try {
-        const { data, error } = await supabase
-          .from('market_land_valuation')
-          .select('*')
-          .eq('job_id', selectedJob.id)
-          .single();
+        const { data, error } = await withTimeout(
+          supabase
+            .from('market_land_valuation')
+            .select('*')
+            .eq('job_id', selectedJob.id)
+            .single(),
+          10000,
+          'market land valuation query'
+        );
 
         if (error && error.code !== 'PGRST116') {
           console.error('Error loading market data:', error);
@@ -458,11 +466,15 @@ const JobContainer = ({
         // Create if doesn't exist
         if (!marketData) {
           try {
-            const { data: newMarket } = await supabase
-              .from('market_land_valuation')
-              .insert({ job_id: selectedJob.id })
-              .select()
-              .single();
+            const { data: newMarket } = await withTimeout(
+              supabase
+                .from('market_land_valuation')
+                .insert({ job_id: selectedJob.id })
+                .select()
+                .single(),
+              10000,
+              'market land valuation insert'
+            );
             marketData = newMarket;
           } catch (createError) {
             console.error('Error creating market data:', createError);
@@ -477,11 +489,15 @@ const JobContainer = ({
       // 3. Load county_hpi_data (for PreValuation normalization)
       let hpiData = [];
       try {
-        const { data, error } = await supabase
-          .from('county_hpi_data')
-          .select('*')
-          .eq('county_name', jobData?.county || selectedJob.county)
-          .order('observation_year', { ascending: true });
+        const { data, error } = await withTimeout(
+          supabase
+            .from('county_hpi_data')
+            .select('*')
+            .eq('county_name', jobData?.county || selectedJob.county)
+            .order('observation_year', { ascending: true }),
+          10000,
+          'county HPI data query'
+        );
 
         if (error) {
           console.error('Error loading HPI data:', error);
@@ -497,8 +513,16 @@ const JobContainer = ({
       let checklistStatus = [];
       try {
         const [itemsResult, statusResult] = await Promise.allSettled([
-          supabase.from('checklist_items').select('*').eq('job_id', selectedJob.id),
-          supabase.from('checklist_item_status').select('*').eq('job_id', selectedJob.id)
+          withTimeout(
+            supabase.from('checklist_items').select('*').eq('job_id', selectedJob.id),
+            10000,
+            'checklist items query'
+          ),
+          withTimeout(
+            supabase.from('checklist_item_status').select('*').eq('job_id', selectedJob.id),
+            10000,
+            'checklist status query'
+          )
         ]);
 
         if (itemsResult.status === 'fulfilled' && !itemsResult.value.error) {
@@ -519,10 +543,14 @@ const JobContainer = ({
       // 5. Load employees (for ProductionTracker inspector names)
       let employeesData = [];
       try {
-        const { data, error } = await supabase
-          .from('employees')
-          .select('*')
-          .order('last_name', { ascending: true });
+        const { data, error } = await withTimeout(
+          supabase
+            .from('employees')
+            .select('*')
+            .order('last_name', { ascending: true }),
+          10000,
+          'employees query'
+        );
 
         if (error) {
           console.error('Error loading employees data:', error);
