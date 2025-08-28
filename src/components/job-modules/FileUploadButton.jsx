@@ -1104,7 +1104,7 @@ const handleCodeFileUpdate = async () => {
       setProcessing(true);
       setProcessingStatus(`Processing ${detectedVendor} data via updater...`);
       
-      addBatchLog('🚀 Starting file processing workflow', 'batch_start', {
+      addBatchLog('�� Starting file processing workflow', 'batch_start', {
         vendor: detectedVendor,
         fileName: sourceFile.name,
         changesDetected: comparisonResults.summary.missing + comparisonResults.summary.changes + comparisonResults.summary.deletions + comparisonResults.summary.salesChanges + comparisonResults.summary.classChanges,
@@ -2168,7 +2168,7 @@ const handleCodeFileUpdate = async () => {
                       return (
                         <div key={idx} className="text-xs text-yellow-700 font-mono">
                           {detectedVendor === 'BRT' ? 
-                            `${record.BLOCK}-${record.LOT} → ${generatedKey}` :
+                            `${record.BLOCK}-${record.LOT} �� ${generatedKey}` :
                             `${record.Block}-${record.Lot} → ${generatedKey}`
                           }
                         </div>
@@ -2304,10 +2304,8 @@ const handleCodeFileUpdate = async () => {
                     // Update job with new file info - removed source_file_version update
                     addBatchLog('🔄 Updating job metadata...', 'info');
                     await jobService.update(job.id, {
-                      sourceFileStatus: result.errors > 0 ? 'error' : (sourceFileVersion === 1 ? 'imported' : 'updated'),
                       totalProperties: result.processed,
                       source_file_uploaded_at: new Date().toISOString()
-                      // FIX 1: Removed source_file_version update - it's handled in property_records now
                     });
                     addBatchLog('✅ Job metadata updated', 'success');
                     
