@@ -1640,9 +1640,10 @@ useEffect(() => {
                 
                 {/* File Upload Controls */}
                 <div className="border-l border-white border-opacity-30 pl-6">
-                  <FileUploadButton 
-                    job={selectedJob} 
-                    onFileProcessed={handleFileProcessed} 
+                  <FileUploadButton
+                    job={selectedJob}
+                    onFileProcessed={handleFileProcessed}
+                    onDataRefresh={handleFileProcessed}
                   />
                 </div>
               </div>
