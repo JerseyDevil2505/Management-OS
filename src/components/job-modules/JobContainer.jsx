@@ -182,63 +182,61 @@ const JobContainer = ({
 
       let allProperties = [];  // ADD THIS LINE!
 
-      // Use server-side function for efficient loading (fixes 500 errors)
+      // Use client-side pagination with batches of 500
       if (count && count > 0) {
-        console.log(`📥 Loading ${count} properties using database function...`);
+        console.log(`📥 Loading ${count} properties using client-side pagination (500 per batch)...`);
 
-        try {
-          // Call server-side function instead of client-side pagination
-          const { data: functionResult, error } = await supabase
-            .rpc('get_properties_page', {
-              p_job_id: selectedJob.id,
-              p_offset: 0,
-              p_limit: count, // Load all at once server-side
-              p_assigned_only: hasAssignments,
-              p_order_by: 'property_composite_key'
-            });
+        const batchSize = 500;
+        const totalBatches = Math.ceil(count / batchSize);
 
-          if (error) {
-            console.error('❌ Database function error:', error);
-            throw error;
-          }
+        for (let batch = 0; batch < totalBatches; batch++) {
+          const offset = batch * batchSize;
+          const limit = Math.min(batchSize, count - offset);
 
-          if (functionResult && functionResult.properties) {
-            allProperties = functionResult.properties;
-            setLoadedCount(allProperties.length);
-            setLoadingProgress(100);
-            console.log(`✅ Loaded ${allProperties.length} properties via database function`);
-          } else {
-            console.warn('⚠️ Database function returned empty result');
-            allProperties = [];
-          }
+          console.log(`📦 Loading batch ${batch + 1}/${totalBatches} (${offset} to ${offset + limit - 1})`);
 
-        } catch (error) {
-          console.error(`❌ Critical error loading properties:`, error);
-
-          // Fallback to direct query if function doesn't exist
-          console.log('📋 Falling back to direct query...');
-          const { data: directData, error: directError } = await supabase
+          // Build the query for this batch
+          let batchQuery = supabase
             .from('property_records')
             .select('*')
             .eq('job_id', selectedJob.id)
-            .eq('is_assigned_property', hasAssignments ? true : undefined)
-            .order('property_composite_key');
+            .order('property_composite_key')
+            .range(offset, offset + limit - 1);
 
-          if (directError) {
-            const errorMsg = directError?.code || directError?.status ?
-              `Supabase error ${directError.status || directError.code}` :
-              'Network or database connection error';
-            throw new Error(`Failed to load property data: ${errorMsg}`);
+          // Apply assignment filter if needed
+          if (hasAssignments) {
+            batchQuery = batchQuery.eq('is_assigned_property', true);
           }
 
-          allProperties = directData || [];
-          setLoadedCount(allProperties.length);
-          setLoadingProgress(100);
-          console.log(`✅ Fallback loaded ${allProperties.length} properties`);
+          const { data: batchData, error: batchError } = await batchQuery;
+
+          if (batchError) {
+            console.error(`❌ Error loading batch ${batch + 1}:`, batchError);
+            throw batchError;
+          }
+
+          if (batchData && batchData.length > 0) {
+            allProperties.push(...batchData);
+            setLoadedCount(allProperties.length);
+            setLoadingProgress(Math.round((allProperties.length / count) * 100));
+            console.log(`✅ Batch ${batch + 1} loaded: ${batchData.length} properties (total: ${allProperties.length})`);
+          } else {
+            console.warn(`⚠️ Batch ${batch + 1} returned no data`);
+          }
+
+          // Small delay between batches to prevent overwhelming the database
+          if (batch < totalBatches - 1) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
         }
 
         setProperties(allProperties);
-        console.log(`✅ Successfully loaded ${allProperties.length} properties`);
+        setLoadingProgress(100);
+        console.log(`✅ Successfully loaded ${allProperties.length} properties via client-side pagination`);
+
+        if (allProperties.length !== count) {
+          console.warn(`⚠️ Expected ${count} properties but loaded ${allProperties.length}`);
+        }
 
         // CRITICAL DEBUG: Check if properties have inspection data
         const propertiesWithInspectors = allProperties.filter(p => p.inspection_measure_by && p.inspection_measure_by.trim() !== '');
