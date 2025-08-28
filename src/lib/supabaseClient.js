@@ -1639,7 +1639,7 @@ export const jobService = {
       if (componentFields.code_file_uploaded_at) dbFields.code_file_uploaded_at = componentFields.code_file_uploaded_at;
 
       console.log('🔧 jobService.update - Input fields:', Object.keys(componentFields));
-      console.log('🔧 jobService.update - Mapped DB fields:', Object.keys(dbFields));
+      console.log('��� jobService.update - Mapped DB fields:', Object.keys(dbFields));
       console.log('🔧 jobService.update - DB field values:', dbFields);
 
       const { data, error } = await supabase
@@ -2531,6 +2531,12 @@ export const propertyService = {
   async getRawDataForProperty(jobId, propertyCompositeKey) {
     try {
       console.log(`🔍 Fetching raw data for job ${jobId}, property ${propertyCompositeKey}`);
+      console.log(`📋 RPC Parameters:`, {
+        p_job_id: jobId,
+        p_property_composite_key: propertyCompositeKey,
+        jobIdType: typeof jobId,
+        propertyKeyType: typeof propertyCompositeKey
+      });
 
       const { data, error } = await supabase.rpc('get_raw_data_for_property', {
         p_job_id: jobId,
