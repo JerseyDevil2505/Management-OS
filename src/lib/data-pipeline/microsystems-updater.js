@@ -510,7 +510,52 @@ export class MicrosystemsUpdater {
       
       // Parse source file
       const records = this.parseSourceFile(sourceFileContent);
-      
+
+      // NEW: Delete properties that exist in DB but are NOT in the source file (fixes recurring deletion modal)
+      console.log('🔍 Checking for properties to delete (not in source file)...');
+      try {
+        // Generate composite keys for all records in the source file
+        const sourceFileKeys = records.map(rawRecord =>
+          `${yearCreated}${ccddCode}-${rawRecord['Block']}-${rawRecord['Lot']}_${(rawRecord['Qual'] || '').trim() || 'NONE'}-${(rawRecord['Bldg'] || '').trim() || 'NONE'}-${(rawRecord['Location'] || '').trim() || 'NONE'}`
+        );
+
+        console.log(`📊 Source file contains ${sourceFileKeys.length} properties`);
+
+        // Find properties in DB that are NOT in source file
+        const { data: existingProperties, error: fetchError } = await supabase
+          .from('property_records')
+          .select('id, property_composite_key, property_location')
+          .eq('job_id', jobId)
+          .not('property_composite_key', 'in', `(${sourceFileKeys.map(k => `"${k}"`).join(',')})`);
+
+        if (fetchError) {
+          console.warn('⚠️ Could not fetch existing properties for deletion check:', fetchError);
+        } else if (existingProperties && existingProperties.length > 0) {
+          console.log(`🗑️ Found ${existingProperties.length} properties to delete:`);
+          existingProperties.slice(0, 5).forEach(prop => {
+            console.log(`   - ${prop.property_location || 'No location'} (${prop.property_composite_key})`);
+          });
+
+          // Delete properties not in source file
+          const { error: deleteError } = await supabase
+            .from('property_records')
+            .delete()
+            .eq('job_id', jobId)
+            .not('property_composite_key', 'in', `(${sourceFileKeys.map(k => `"${k}"`).join(',')})`);
+
+          if (deleteError) {
+            console.warn('⚠️ Could not delete obsolete properties:', deleteError);
+          } else {
+            console.log(`✅ Successfully deleted ${existingProperties.length} obsolete properties`);
+          }
+        } else {
+          console.log('✅ No obsolete properties found');
+        }
+      } catch (deleteProcessError) {
+        console.warn('⚠️ Error during deletion process:', deleteProcessError);
+        // Continue with UPSERT even if deletion fails
+      }
+
       // ENHANCED: Check if field preservation is enabled and get preserved data
       let preservedDataMap = new Map();
       if (versionInfo.preservedFieldsHandler && typeof versionInfo.preservedFieldsHandler === 'function') {
