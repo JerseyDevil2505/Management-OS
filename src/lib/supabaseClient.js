@@ -2533,10 +2533,11 @@ export const propertyService = {
 
       if (error) {
         console.error('❌ RPC function error:', {
-          message: error.message,
+          message: getErrorMessage(error),
           details: error.details,
           hint: error.hint,
-          code: error.code
+          code: error.code,
+          fullError: error
         });
         throw error;
       }
