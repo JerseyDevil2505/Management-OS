@@ -1626,7 +1626,7 @@ const AdminJobManagement = ({
                         codeFile: null,
                         vendor: null,
                         vendorDetection: null,
-                        percentBilled: 0.00
+                        percentBilled: '0.00'
                       });
                       setFileAnalysis({
                         sourceFile: null,
