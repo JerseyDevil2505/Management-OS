@@ -53,10 +53,19 @@ export class BRTProcessor {
       try {
         console.log(`🔄 Batch ${batchNumber}, attempt ${attempt}...`);
         
-        const { data, error } = await supabase
+        // CRITICAL FIX: Optimize for 500+ records with timeout and minimal return
+        const insertPromise = supabase
           .from('property_records')
-          .insert(batch)
-          .select();  // This returns minimal data in v2
+          .insert(batch, {
+            count: 'exact',
+            returning: 'minimal'  // Only return count, not full record data
+          });
+
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Database timeout after 60 seconds')), 60000)
+        );
+
+        const { data, error } = await Promise.race([insertPromise, timeoutPromise]);
         
         if (!error) {
           console.log(`✅ Batch ${batchNumber} successful on attempt ${attempt}`);
@@ -708,7 +717,7 @@ export class BRTProcessor {
             
             if (!verifyError) {
               if (count === 0) {
-                console.log('✅ Cleanup verification: All partial records successfully removed');
+                console.log('�� Cleanup verification: All partial records successfully removed');
               } else {
                 console.warn(`⚠️ Cleanup verification: ${count} records still exist for job ${jobId}`);
               }
