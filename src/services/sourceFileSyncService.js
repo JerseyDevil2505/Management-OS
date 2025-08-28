@@ -141,51 +141,51 @@ class SourceFileSyncService {
   }
 
   /**
-   * Find jobs that need synchronization
+   * Find jobs that need synchronization - OPTIMIZED: Single query instead of N+1
    */
   async findJobsNeedingSync() {
     try {
-      // Get jobs where property records are marked as needing reprocessing
-      const { data: jobs, error } = await supabase
-        .from('jobs')
+      // OPTIMIZED: Get jobs that actually have records needing reprocessing in a single query
+      const { data: recordsNeedingSync, error } = await supabase
+        .from('property_records')
         .select(`
-          id,
-          job_name,
-          municipality,
-          vendor_source,
-          source_file_content,
-          source_file_parsed_at,
-          ccdd_code,
-          year_created
+          job_id,
+          jobs!job_id (
+            id,
+            job_name,
+            municipality,
+            vendor_source,
+            source_file_content,
+            source_file_parsed_at,
+            ccdd_code,
+            year_created
+          )
         `)
-        .not('source_file_content', 'is', null)
-        .in('vendor_source', ['BRT', 'Microsystems']);
+        .eq('validation_status', 'needs_reprocessing')
+        .not('jobs.source_file_content', 'is', null)
+        .in('jobs.vendor_source', ['BRT', 'Microsystems']);
 
       if (error) throw error;
 
-      const jobsNeedingSync = [];
+      // Group by job and count records
+      const jobsMap = new Map();
 
-      for (const job of jobs) {
-        // Check if this job has records needing reprocessing
-        const { count, error: countError } = await supabase
-          .from('property_records')
-          .select('*', { count: 'exact', head: true })
-          .eq('job_id', job.id)
-          .eq('validation_status', 'needs_reprocessing');
-
-        if (countError) {
-          console.error(`Error checking records for job ${job.job_name}:`, getErrorMessage(countError));
-          console.error('Details:', countError);
-          continue;
+      recordsNeedingSync.forEach(record => {
+        const job = record.jobs;
+        if (job && job.id) {
+          if (jobsMap.has(job.id)) {
+            jobsMap.get(job.id).recordsNeedingSync++;
+          } else {
+            jobsMap.set(job.id, {
+              ...job,
+              recordsNeedingSync: 1
+            });
+          }
         }
+      });
 
-        if (count > 0) {
-          jobsNeedingSync.push({
-            ...job,
-            recordsNeedingSync: count
-          });
-        }
-      }
+      const jobsNeedingSync = Array.from(jobsMap.values());
+      console.log(`📊 OPTIMIZED: Found ${jobsNeedingSync.length} jobs needing sync using single query`);
 
       return jobsNeedingSync;
     } catch (error) {
