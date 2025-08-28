@@ -2,15 +2,15 @@
 
 ## 🎯 **Problem Solved**
 
-Previously, when `jobs.source_file_content` was updated, there was no mechanism to automatically update the corresponding `property_records`. This created a synchronization gap where raw data and processed records could become inconsistent.
+Previously, when `jobs.raw_file_content` was updated, there was no mechanism to automatically update the corresponding `property_records`. This created a synchronization gap where raw data and processed records could become inconsistent.
 
 ## 🏗️ **Complete Solution Architecture**
 
 ### 1. **Database Triggers** (`sql/create_source_file_sync_triggers.sql`)
 
 #### **Automatic Trigger**
-- **Trigger**: `jobs_source_file_content_changed`
-- **Fires**: When `jobs.source_file_content` is updated
+- **Trigger**: `jobs_raw_file_content_changed`
+- **Fires**: When `jobs.raw_file_content` is updated
 - **Action**: Automatically marks all related `property_records` as `needs_reprocessing`
 
 #### **Helper Functions**
@@ -37,7 +37,7 @@ Previously, when `jobs.source_file_content` was updated, there was no mechanism 
 #### **New Functions Added to `propertyService`**
 
 ```javascript
-// Get raw data for specific property from jobs.source_file_content
+// Get raw data for specific property from jobs.raw_file_content
 await propertyService.getRawDataForProperty(jobId, compositeKey)
 
 // Check if job needs reprocessing
@@ -73,7 +73,7 @@ import SourceFileSyncManager from '../components/SourceFileSyncManager';
 ## 🔄 **How It Works**
 
 ### **Automatic Flow**
-1. User updates `jobs.source_file_content` (e.g., via direct database edit)
+1. User updates `jobs.raw_file_content` (e.g., via direct database edit)
 2. Database trigger detects the change
 3. All related `property_records` are marked `validation_status = 'needs_reprocessing'`
 4. Audit log entry is created
@@ -89,10 +89,10 @@ import SourceFileSyncManager from '../components/SourceFileSyncManager';
 ## 📊 **Database Schema Changes**
 
 ### **New Columns in `jobs`**
-- `source_file_content` - Complete source file text (already added)
-- `source_file_size` - Size in bytes (already added)  
-- `source_file_rows_count` - Number of data rows (already added)
-- `source_file_parsed_at` - When source was last parsed (already added)
+- `raw_file_content` - Complete raw file text (already added)
+- `raw_file_size` - Size in bytes (already added)
+- `raw_file_rows_count` - Number of data rows (already added)
+- `raw_file_parsed_at` - When raw file was last parsed (already added)
 
 ### **New Table: `audit_log`**
 ```sql
@@ -116,7 +116,7 @@ CREATE TABLE audit_log (
 ### **Scenario 1: Admin Updates Source File**
 ```sql
 -- Admin updates source file content
-UPDATE jobs SET source_file_content = '...' WHERE id = 'job-id';
+UPDATE jobs SET raw_file_content = '...' WHERE id = 'job-id';
 
 -- Trigger automatically marks records for reprocessing
 -- Use SourceFileSyncManager UI to complete reprocessing
@@ -168,7 +168,7 @@ console.log('Original data:', rawData);
 ### **3. Test the System**
 ```sql
 -- Test automatic trigger
-UPDATE jobs SET source_file_content = 'test content' WHERE id = 'test-job-id';
+UPDATE jobs SET raw_file_content = 'test content' WHERE id = 'test-job-id';
 
 -- Check if records were marked for reprocessing  
 SELECT COUNT(*) FROM property_records 
