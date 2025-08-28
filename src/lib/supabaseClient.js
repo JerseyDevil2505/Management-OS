@@ -397,9 +397,9 @@ getBRTValue: async function(property, codeDefinitions, fieldName) {
   // Check both the property field and source file data
   let code = property[fieldName];
   if (!code && property.job_id && property.property_composite_key) {
-    const sourceData = await getRawDataForProperty(property.job_id, property.property_composite_key);
-    if (sourceData) {
-      code = sourceData[fieldName];
+    const rawData = await getRawDataForProperty(property.job_id, property.property_composite_key);
+    if (rawData) {
+      code = rawData[fieldName];
     }
   }
   
