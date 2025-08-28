@@ -834,10 +834,10 @@ const generateQCFormPDF = () => {
       
       if (typeUseStr && (typeUseStr.startsWith('6') || typeUseStr.startsWith('60'))) {
         // It's a condo - check if it only has site value in BRT
-        if (vendor === 'BRT' && property.raw_data) {
+        if (vendor === 'BRT' && rawData) {
           let hasSiteOnly = false;
           for (let i = 1; i <= 6; i++) {
-            const code = property.raw_data[`LANDUR_${i}`];
+            const code = rawData[`LANDUR_${i}`];
             if (code === '01' || code === '1') hasSiteOnly = true;
             if (code === '02' || code === '2') {
               hasSiteOnly = false;  // Has acreage, not just site value
@@ -1463,7 +1463,7 @@ const generateQCFormPDF = () => {
         total: totalIssues
       });
       
-      console.log(`✅ Saved: ${totalIssues} issues found`);
+      console.log(`�� Saved: ${totalIssues} issues found`);
       
     } catch (error) {
       console.error('Error saving:', error);
