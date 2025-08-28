@@ -96,19 +96,6 @@ const ProductionTracker = ({
   const [processingComplete, setProcessingComplete] = useState(false); // NEW: Track when processing is done
   const [currentValidationIndex, setCurrentValidationIndex] = useState(0); // NEW: Track current validation item
 
-  // Add loading timeout to prevent infinite loading state
-  useEffect(() => {
-    const timeout = setTimeout(() => {
-      if (loading) {
-        console.error('❌ ProductionTracker loading timeout - forcing load');
-        addNotification('Production data loading timed out, showing with available data', 'warning');
-        setLoading(false);
-      }
-    }, 15000); // 15 second timeout
-
-    return () => clearTimeout(timeout);
-  }, [loading]);
-
   // NEW: Smart data staleness detection
   const isDataStale = currentWorkflowStats?.needsRefresh && 
                      currentWorkflowStats?.lastFileUpdate > currentWorkflowStats?.lastProcessed;
@@ -505,68 +492,53 @@ const ProductionTracker = ({
     if (!jobData?.id) return;
 
     try {
-      console.log('📊 Loading persisted analytics...');
-
-      // Add timeout to prevent hangs
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Analytics loading timeout')), 10000)
-      );
-
-      const loadPromise = supabase
+      const { data: job, error } = await supabase
         .from('jobs')
         .select('workflow_stats, external_inspectors')
         .eq('id', jobData.id)
         .single();
-
-      const { data: job, error } = await Promise.race([loadPromise, timeoutPromise]);
-
-      if (error) {
-        console.warn('⚠️ No persisted analytics found, starting fresh');
-        return;
-      }
-
+      
       if (job?.external_inspectors) {
         setExternalInspectorsList(job.external_inspectors);
-      }
+      }     
 
-      if (job?.workflow_stats && job.workflow_stats.totalRecords) {
-        console.log('✅ Found persisted analytics, loading...');
-
+      if (!error && job?.workflow_stats && job.workflow_stats.totalRecords) {
         // Load the persisted analytics
         let loadedAnalytics = job.workflow_stats;
         let loadedBillingAnalytics = job.workflow_stats.billingAnalytics;
         let loadedValidationReport = job.workflow_stats.validationReport;
+        
+        // Load current validation overrides and adjust totals
+        const { data: currentOverrides, error: overrideError } = await supabase
+          .from('inspection_data')
+          .select('property_composite_key, override_applied, property_class')
+          .eq('job_id', jobData.id)
+          .eq('file_version', latestFileVersion)
+          .eq('override_applied', true);
 
-        // Try to load validation overrides with timeout protection
-        try {
-          const overrideTimeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Override loading timeout')), 5000)
-          );
-
-          const overridePromise = supabase
-            .from('inspection_data')
-            .select('property_composite_key, override_applied, property_class')
-            .eq('job_id', jobData.id)
-            .eq('file_version', latestFileVersion)
-            .eq('override_applied', true);
-
-          const { data: currentOverrides, error: overrideError } = await Promise.race([
-            overridePromise,
-            overrideTimeoutPromise
-          ]);
-
-          if (!overrideError && currentOverrides && currentOverrides.length > 0) {
-            debugLog('PERSISTENCE', `Found ${currentOverrides.length} validation overrides (already counted in validInspections)`);
+        if (!overrideError && currentOverrides && currentOverrides.length > 0) {
+          debugLog('PERSISTENCE', `Found ${currentOverrides.length} validation overrides to include in totals`);
+          
+          // Adjust the validInspections count to include overrides
+          const overrideCount = currentOverrides.length;
+          const savedOverrideCount = job.workflow_stats.validationOverrides?.length || 0;
+          
+          // If we have MORE overrides now than when analytics were saved, add the difference
+          if (overrideCount > savedOverrideCount) {
+            const additionalOverrides = overrideCount - savedOverrideCount;
+            loadedAnalytics = {
+              ...loadedAnalytics,
+              validInspections: loadedAnalytics.validInspections + additionalOverrides
+            };
+            debugLog('PERSISTENCE', `Adjusted validInspections from ${job.workflow_stats.validInspections} to ${loadedAnalytics.validInspections}`);
           }
-        } catch (overrideLoadError) {
-          console.warn('⚠️ Override loading failed, continuing without:', overrideLoadError.message);
         }
-
+        
         // Set all the state with potentially adjusted values
         setAnalytics(loadedAnalytics);
         setBillingAnalytics(loadedBillingAnalytics);
         setValidationReport(loadedValidationReport);
-
+        
         if (job.workflow_stats.missingPropertiesReport) {
           setMissingPropertiesReport(job.workflow_stats.missingPropertiesReport);
         }
@@ -576,17 +548,13 @@ const ProductionTracker = ({
         if (job.workflow_stats.overrideMap) {
           setOverrideMap(job.workflow_stats.overrideMap);
         }
-
+        
         setProcessed(true);
         setSettingsLocked(true);
         setLoadedFromDatabase(true); // CRITICAL: Mark that we loaded from database
-        console.log('✅ Persisted analytics loaded successfully');
-      } else {
-        console.log('📊 No persisted analytics data found, component ready for fresh processing');
       }
     } catch (error) {
-      console.error('❌ Error loading persisted analytics:', error);
-      addNotification('Failed to load previous analytics data, starting fresh', 'warning');
+      console.error('Error loading persisted analytics:', error);
     }
   };
 
@@ -600,10 +568,11 @@ const ProductionTracker = ({
         .eq('job_id', jobData.id)
         .eq('file_version', latestFileVersion)
         .not('project_start_date', 'is', null)
-        .limit(1);
+        .limit(1)
+        .single();
 
-      if (!error && records && records.length > 0 && records[0]?.project_start_date) {
-        setProjectStartDate(records[0].project_start_date);
+      if (!error && records?.project_start_date) {
+        setProjectStartDate(records.project_start_date);
         setIsDateLocked(true);
       }
     } catch (error) {
@@ -617,12 +586,7 @@ const ProductionTracker = ({
     }
 
     try {
-      // Validate date before sending to database
-    if (!projectStartDate || projectStartDate.trim() === '') {
-      throw new Error('Project start date cannot be empty');
-    }
-
-    const { error } = await supabase
+      const { error } = await supabase
         .from('property_records')
         .update({ project_start_date: projectStartDate })
         .eq('job_id', jobData.id)
@@ -735,12 +699,6 @@ const ProductionTracker = ({
         throw new Error(`Could not find property record for ${property.composite_key}`);
       }
 
-      // Helper function to validate date fields
-      const validateDate = (dateValue) => {
-        if (!dateValue || dateValue.trim() === '') return null;
-        return dateValue;
-      };
-
       // Build COMPLETE inspection_data record with ALL fields
       const completeOverrideRecord = {
         // Standard fields from property_records
@@ -754,17 +712,17 @@ const ProductionTracker = ({
         property_location: fullPropertyRecord.property_location || '',
         property_class: fullPropertyRecord.property_m4_class,
         measure_by: fullPropertyRecord.inspection_measure_by,
-        measure_date: validateDate(fullPropertyRecord.inspection_measure_date),
+        measure_date: fullPropertyRecord.inspection_measure_date,
         info_by_code: fullPropertyRecord.inspection_info_by,
         list_by: fullPropertyRecord.inspection_list_by,
-        list_date: validateDate(fullPropertyRecord.inspection_list_date),
+        list_date: fullPropertyRecord.inspection_list_date,
         price_by: fullPropertyRecord.inspection_price_by,
-        price_date: validateDate(fullPropertyRecord.inspection_price_date),
-
+        price_date: fullPropertyRecord.inspection_price_date,
+        
         // Module-specific fields
         project_start_date: projectStartDate,
         upload_date: new Date().toISOString(),
-
+        
         // Override-specific fields
         override_applied: true,
         override_reason: finalOverrideReason,
@@ -835,7 +793,7 @@ const ProductionTracker = ({
       }
       
       addNotification(`✅ Complete override record created: ${finalOverrideReason} for ${property.composite_key}`, 'success');
-      addNotification('�� Reprocessing analytics with complete override...', 'info');
+      addNotification('🔄 Reprocessing analytics with complete override...', 'info');
 
     } catch (error) {
       console.error('Error applying complete override:', error);
@@ -941,63 +899,28 @@ const ProductionTracker = ({
     addNotification('🔄 Session reset - settings unlocked', 'info');
   };
 
-// Initialize data loading with error handling and fallbacks
+// Initialize data loading
   useEffect(() => {
-    if (jobData?.id) {
+    if (jobData?.id && properties && properties.length > 0 && inspectionData && employees) {
       const initializeData = async () => {
-        try {
-          console.log('🔄 ProductionTracker initializing...', {
-            hasJobData: !!jobData?.id,
-            hasProperties: !!(properties && properties.length > 0),
-            hasInspectionData: !!inspectionData,
-            hasEmployees: !!(employees && employees.length > 0)
-          });
-
-          // Load core settings first (always needed)
-          await loadAvailableInfoByCodes();
-          await loadProjectStartDate();
-          await loadVendorSource();
-
-          // Process data from props with fallbacks
-          if (employees && employees.length > 0) {
-            processEmployeeData();
-          } else {
-            console.warn('⚠️ No employees data, using empty state');
-            setEmployeeData({});
-          }
-
-          if (inspectionData && inspectionData.length > 0) {
-            calculateValidationOverrides();
-            calculateCommercialCounts();
-          } else {
-            console.warn('⚠️ No inspection data, using empty state');
-            setValidationOverrides([]);
-            setCommercialCounts({ inspected: 0, priced: 0 });
-          }
-
-          if (properties && properties.length > 0) {
-            calculateUnassignedPropertyCount();
-          } else {
-            console.warn('⚠️ No properties data, using empty state');
-            setUnassignedPropertyCount(0);
-          }
-
-          // Load persisted analytics (may use override data)
-          await loadPersistedAnalytics();
-
-          console.log('✅ ProductionTracker initialized successfully');
-          setLoading(false);
-
-        } catch (error) {
-          console.error('❌ ProductionTracker initialization failed:', error);
-          addNotification(`Failed to initialize Production Tracker: ${error.message}`, 'error');
-          setLoading(false); // Still show component even if initialization fails
-        }
+        // Load only the things that still need database calls
+        await loadAvailableInfoByCodes();
+        await loadProjectStartDate();
+        await loadVendorSource();
+        
+        // Process from props instead of loading
+        processEmployeeData();  // Uses employees prop
+        calculateValidationOverrides();  // Uses inspectionData prop
+        calculateCommercialCounts();     // Uses inspectionData prop
+        calculateUnassignedPropertyCount(); // Uses properties prop
+        
+        // Then load persisted analytics (which may need override data)
+        await loadPersistedAnalytics();
+        
+        setLoading(false);
       };
-
+      
       initializeData();
-    } else {
-      console.warn('⚠️ ProductionTracker waiting for jobData...');
     }
   }, [jobData?.id, properties, inspectionData, employees]); // Added employees to deps
 
@@ -1217,12 +1140,10 @@ const ProductionTracker = ({
         const hasMeasureBy = record.inspection_measure_by && record.inspection_measure_by.trim() !== '';
         const hasMeasureDate = record.inspection_measure_date;
 
-        // FIXED: A real inspection requires BOTH inspector AND date - info_by alone is not an inspection
-        if (!hasMeasureBy && !hasMeasureDate) {
-          // Property not yet inspected - info_by code alone doesn't count as inspected
-          reasonNotAdded = hasInfoBy ?
-            'Info_by code only - missing inspector and measure date' :
-            'Not yet inspected';
+        // If ALL three core fields are null/empty, it's not inspected
+        if (!hasInfoBy && !hasMeasureBy && !hasMeasureDate) {
+          // Property not yet inspected - no inspection data at all
+          reasonNotAdded = 'Not yet inspected';
           missingProperties.push({
             composite_key: propertyKey,
             block: record.property_block,
@@ -1233,7 +1154,7 @@ const ProductionTracker = ({
             property_class: propertyClass,
             reason: reasonNotAdded,
             inspector: '',
-            info_by_code: hasInfoBy ? record.inspection_info_by : '',
+            info_by_code: '',
             measure_date: null,
             validation_issues: []
           });
@@ -1560,12 +1481,6 @@ const ProductionTracker = ({
             }
           }
 
-          // Helper function to validate date fields
-          const validateDate = (dateValue) => {
-            if (!dateValue || dateValue.trim() === '') return null;
-            return dateValue;
-          };
-
           // Prepare for inspection_data UPSERT
           const inspectionRecord = {
             job_id: jobData.id,
@@ -1578,12 +1493,12 @@ const ProductionTracker = ({
             property_location: record.property_location || '',
             property_class: propertyClass,
             measure_by: inspector,
-            measure_date: validateDate(record.inspection_measure_date),
+            measure_date: record.inspection_measure_date,
             info_by_code: infoByCode,
             list_by: record.inspection_list_by,
-            list_date: validateDate(record.inspection_list_date),
+            list_date: record.inspection_list_date,
             price_by: record.inspection_price_by,
-            price_date: validateDate(record.inspection_price_date),
+            price_date: record.inspection_price_date,
             project_start_date: projectStartDate,
             upload_date: new Date().toISOString(),
           };
@@ -1674,12 +1589,6 @@ const ProductionTracker = ({
             continue;
           }
           
-          // Helper function to validate date fields
-          const validateModalDate = (dateValue) => {
-            if (!dateValue || dateValue.trim() === '') return null;
-            return dateValue;
-          };
-
           const overrideRecord = {
             job_id: jobData.id,
             file_version: latestFileVersion,
@@ -1691,12 +1600,12 @@ const ProductionTracker = ({
             property_location: fullRecord.property_location || '',
             property_class: fullRecord.property_m4_class,
             measure_by: fullRecord.inspection_measure_by,
-            measure_date: validateModalDate(fullRecord.inspection_measure_date),
+            measure_date: fullRecord.inspection_measure_date,
             info_by_code: fullRecord.inspection_info_by,
             list_by: fullRecord.inspection_list_by,
-            list_date: validateModalDate(fullRecord.inspection_list_date),
+            list_date: fullRecord.inspection_list_date,
             price_by: fullRecord.inspection_price_by,
-            price_date: validateModalDate(fullRecord.inspection_price_date),
+            price_date: fullRecord.inspection_price_date,
             project_start_date: projectStartDate,
             upload_date: new Date().toISOString(),
             override_applied: true,
