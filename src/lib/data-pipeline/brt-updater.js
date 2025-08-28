@@ -589,7 +589,6 @@ export class BRTUpdater {
       // REMOVED: project_start_date (moved to jobs table)
       
       // System metadata
-      vendor_type: 'BRT',
       created_by: '5df85ca3-7a54-4798-a665-c31da8d9caad',
       created_at: new Date().toISOString(), // Will be ignored on UPSERT
       updated_at: new Date().toISOString(),
