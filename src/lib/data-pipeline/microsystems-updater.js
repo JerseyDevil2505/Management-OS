@@ -679,13 +679,8 @@ export class MicrosystemsUpdater {
           }
         }
       }
-      
-      // NEW: Mark source file version as processed
-      if (sourceFileVersionId) {
-        await this.markSourceFileVersionProcessed(sourceFileVersionId, results);
-      }
 
-      console.log('🚀 Enhanced Microsystems UPDATER (UPSERT) complete with lineage tracking:', results);
+      console.log('🚀 Enhanced Microsystems UPDATER (UPSERT) complete:', results);
       return results;
       
     } catch (error) {

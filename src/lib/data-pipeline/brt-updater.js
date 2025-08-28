@@ -806,13 +806,8 @@ export class BRTUpdater {
           }
         }
       }
-      
-      // NEW: Mark source file version as processed
-      if (sourceFileVersionId) {
-        await this.markSourceFileVersionProcessed(sourceFileVersionId, results);
-      }
 
-      console.log('🚀 ENHANCED BRT UPDATER (UPSERT) COMPLETE WITH ALL SECTIONS AND LINEAGE TRACKING:', results);
+      console.log('🚀 ENHANCED BRT UPDATER (UPSERT) COMPLETE WITH ALL SECTIONS:', results);
       return results;
       
     } catch (error) {
