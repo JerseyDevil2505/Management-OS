@@ -25,19 +25,15 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
 });
 
 // Define fields that must be preserved during file updates
+// OPTIMIZED: Only critical property_records fields (market analysis moved to separate table)
 const PRESERVED_FIELDS = [
   'project_start_date',      // ProductionTracker - user set
   'is_assigned_property',    // AdminJobManagement - from assignments
-  'validation_status',       // ProductionTracker - validation state
-  'location_analysis',       // MarketAnalysis - manually entered
-  'new_vcs',                 // AppealCoverage - manually set
-  'asset_map_page',          // MarketAnalysis worksheet - manually entered
-  'asset_key_page',          // MarketAnalysis worksheet - manually entered
-  'asset_zoning',            // MarketAnalysis worksheet - manually entered
-  'values_norm_size',        // MarketAnalysis - calculated value
-  'values_norm_time',        // MarketAnalysis - calculated value
-  'sales_history',           // FileUploadButton - sales decisions
 ]
+
+// MOVED TO property_market_analysis table (no longer preserved in property_records):
+// - validation_status, location_analysis, new_vcs, asset_map_page, asset_key_page,
+// - asset_zoning, values_norm_size, values_norm_time, sales_history
 
 // ===== CODE INTERPRETATION UTILITIES =====
 // Utilities for interpreting vendor-specific codes in MarketLandAnalysis
@@ -1221,7 +1217,7 @@ export const jobService = {
         totalresidential: job.totalresidential || 0,
         totalcommercial: job.totalcommercial || 0,
         
-        // inspectedProperties: job.inspected_properties || 0,  // ❌ REMOVED 2025-01-XX: Field deleted from jobs table, now using live analytics
+        // inspectedProperties: job.inspected_properties || 0,  // �� REMOVED 2025-01-XX: Field deleted from jobs table, now using live analytics
         sourceFileStatus: job.source_file_status || 'pending',
         codeFileStatus: job.code_file_status || 'pending',
         vendorDetection: job.vendor_detection,
