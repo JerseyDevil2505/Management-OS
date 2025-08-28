@@ -126,13 +126,13 @@ async function getRawDataForJob(jobId) {
 }
 
 /**
- * Get source file data for a specific property
+ * Get raw data for a specific property
  */
-async function getSourceFileDataForProperty(jobId, propertyCompositeKey) {
-  const sourceData = await getSourceFileDataForJob(jobId);
-  if (!sourceData) return null;
+async function getRawDataForProperty(jobId, propertyCompositeKey) {
+  const rawData = await getRawDataForJob(jobId);
+  if (!rawData) return null;
 
-  return sourceData.propertyMap.get(propertyCompositeKey) || null;
+  return rawData.propertyMap.get(propertyCompositeKey) || null;
 }
 
 /**
