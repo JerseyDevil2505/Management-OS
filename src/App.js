@@ -156,7 +156,6 @@ useEffect(() => {
 
   // Job selection state
   const [selectedJob, setSelectedJob] = useState(null);
-  const [fileRefreshTrigger, setFileRefreshTrigger] = useState(0);
 
     // Authentication state
   const [user, setUser] = useState(null);
