@@ -258,7 +258,7 @@ export class MicrosystemsUpdater {
       console.log(`📂 Organized into ${Object.keys(this.allCodes).length} field groups`);
       console.log(`🎯 InfoBy codes (140 prefix): ${Object.keys(this.allCodes['140'] || {}).join(', ')}`);
       console.log(`🏠 HVAC codes (8 prefix): ${Object.keys(this.allCodes['8'] || {}).join(', ')}`);
-      console.log(`🏗️ Design codes (520 prefix): ${Object.keys(this.allCodes['520'] || {}).join(', ')}`);
+      console.log(`🏗�� Design codes (520 prefix): ${Object.keys(this.allCodes['520'] || {}).join(', ')}`);
       
       // Store code file in jobs table
       await this.storeCodeFileInDatabase(codeFileContent, jobId);
@@ -630,14 +630,16 @@ export class MicrosystemsUpdater {
         }).length;
         console.log(`📊 Preserving user-defined fields in ${preservedCount} records`);
       }
-      
+
       const results = {
         processed: 0,
         errors: 0,
         warnings: []
       };
-      
-      console.log(`Batch UPSERTING ${propertyRecords.length} property records...`);
+
+      console.log('✅ INITIALIZATION COMPLETE - All steps finished successfully!');
+      console.log('🚀 Starting batch UPSERT processing...');
+      console.log(`📊 Processing ${propertyRecords.length} property records in batches...`);
       const batchSize = 500; // Reduced from 1000
       let consecutiveErrors = 0;
       
