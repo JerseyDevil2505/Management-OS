@@ -170,13 +170,12 @@ useEffect(() => {
   // PERSISTENT STORAGE HELPERS
   // ==========================================
   const saveToStorage = useCallback(async (data) => {
-    console.log('💾 Saving to storage, jobCache keys:', Object.keys(data.jobCache || {}));
+    console.log('💾 Saving to storage - no caching');
     try {
       // Try IndexedDB first (no size limits)
       if (dbRef.current) {
         const dataToStore = {
           ...data,
-          jobCache: data.jobCache || {},
           timestamp: Date.now(),
           version: CACHE_VERSION
         };
