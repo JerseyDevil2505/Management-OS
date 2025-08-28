@@ -90,20 +90,26 @@ async function getSourceFileDataForJob(jobId) {
     const ccddCode = job.ccdd_code;
 
     // Parse the source file
-    const parsedData = parseSourceFileContent(job.raw_file_content, vendorType);
+    const parsedData = parseSourceFileContent(job.raw_file_content, vendorType) || [];
 
     // Create property lookup map by composite key
     const propertyMap = new Map();
-    parsedData.forEach(record => {
-      const compositeKey = generateCompositeKeyFromRecord(record, vendorType, yearCreated, ccddCode);
-      propertyMap.set(compositeKey, record);
-    });
+    if (Array.isArray(parsedData)) {
+      parsedData.forEach(record => {
+        if (record) {
+          const compositeKey = generateCompositeKeyFromRecord(record, vendorType, yearCreated, ccddCode);
+          if (compositeKey) {
+            propertyMap.set(compositeKey, record);
+          }
+        }
+      });
+    }
 
     const result = {
-      vendorType,
-      yearCreated,
-      ccddCode,
-      propertyMap
+      vendorType: vendorType || 'Unknown',
+      yearCreated: yearCreated || new Date().getFullYear(),
+      ccddCode: ccddCode || '',
+      propertyMap: propertyMap || new Map()
     };
 
     // Cache for 5 minutes
