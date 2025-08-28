@@ -2524,17 +2524,70 @@ export const propertyService = {
   // NEW: Get raw file data for a specific property from jobs.raw_file_content
   async getRawDataForProperty(jobId, propertyCompositeKey) {
     try {
+      console.log(`🔍 Fetching raw data for job ${jobId}, property ${propertyCompositeKey}`);
+
       const { data, error } = await supabase.rpc('get_raw_data_for_property', {
         p_job_id: jobId,
         p_property_composite_key: propertyCompositeKey
       });
 
-      if (error) throw error;
-      return data;
+      if (error) {
+        console.error('❌ RPC function error:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        });
+        throw error;
+      }
+
+      if (data) {
+        console.log(`✅ Found raw data for property ${propertyCompositeKey}`);
+        return data;
+      }
+
+      console.warn(`⚠️ No raw data found for property ${propertyCompositeKey}, trying client-side fallback...`);
+
+      // Fallback: use client-side parsing
+      return await this.getRawDataForPropertyClientSide(jobId, propertyCompositeKey);
+
     } catch (error) {
-      console.error('Error fetching raw data for property:', error);
+      console.error('❌ Error fetching raw data for property:', {
+        jobId,
+        propertyCompositeKey,
+        error: error.message,
+        stack: error.stack
+      });
+
+      // Fallback: use client-side parsing
+      console.log('🔄 Attempting client-side fallback...');
+      try {
+        return await this.getRawDataForPropertyClientSide(jobId, propertyCompositeKey);
+      } catch (fallbackError) {
+        console.error('❌ Client-side fallback also failed:', fallbackError);
+        return null;
+      }
+    }
+  },
+
+  // Fallback: Client-side raw data parsing
+  async getRawDataForPropertyClientSide(jobId, propertyCompositeKey) {
+    console.log(`🔄 Using client-side parsing for job ${jobId}, property ${propertyCompositeKey}`);
+
+    const propertyMap = await getSourceFileDataForJob(jobId);
+    if (!propertyMap) {
+      console.warn('⚠️ No property map available for job');
       return null;
     }
+
+    const rawData = propertyMap.get(propertyCompositeKey);
+    if (rawData) {
+      console.log(`✅ Found raw data via client-side parsing for ${propertyCompositeKey}`);
+      return rawData;
+    }
+
+    console.warn(`⚠️ Property ${propertyCompositeKey} not found in parsed data`);
+    return null;
   },
 
   // NEW: Check if job needs reprocessing due to source file changes
