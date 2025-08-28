@@ -115,6 +115,35 @@ export class MicrosystemsProcessor {
   }
 
   /**
+   * CRITICAL FIX: Store source file content in jobs table (eliminates raw_data duplication)
+   */
+  async storeSourceFileInDatabase(sourceFileContent, jobId) {
+    try {
+      console.log('💾 Storing complete Microsystems source file in jobs table...');
+
+      const { error } = await supabase
+        .from('jobs')
+        .update({
+          source_file_content: sourceFileContent,
+          source_file_size: sourceFileContent.length,
+          source_file_rows_count: sourceFileContent.split('\n').length - 1, // Subtract header
+          source_file_parsed_at: new Date().toISOString()
+        })
+        .eq('id', jobId);
+
+      if (error) {
+        console.error('❌ Error storing Microsystems source file in database:', error);
+        throw error;
+      }
+
+      console.log('✅ Complete Microsystems source file stored successfully in jobs table');
+    } catch (error) {
+      console.error('❌ Failed to store Microsystems source file:', error);
+      // Don't throw - continue with processing even if storage fails
+    }
+  }
+
+  /**
    * FIXED: Process Microsystems code file with proper AAACCCCSSSS parsing
    * Handles pipe-delimited format: CODE|DESCRIPTION|RATE|CONSTANT|CATEGORY|TABLE|UPDATED
    * Examples: "140R   9999|REFUSED INT|0|0|INFORMATION|0|07/05/18|"
