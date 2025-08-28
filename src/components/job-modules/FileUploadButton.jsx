@@ -1313,7 +1313,6 @@ const handleCodeFileUpdate = async () => {
       addBatchLog('🔄 Updating job metadata...', 'info');
       try {
         const updateData = {
-          sourceFileStatus: result.errors > 0 ? 'error' : 'updated',
           totalProperties: result.processed,
           source_file_uploaded_at: new Date().toISOString()
         };
