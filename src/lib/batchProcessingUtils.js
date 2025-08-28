@@ -15,7 +15,6 @@
  * - Background data processing
  */
 
-import { performanceMonitor } from './streamingDataService.js';
 
 /**
  * BATCH PROCESSOR CLASS - Main batch processing engine
@@ -606,11 +605,6 @@ export const batchPerformanceUtils = {
       memoryUsage: process.memoryUsage ? process.memoryUsage() : null
     };
     
-    performanceMonitor.logQuery(
-      'BATCH_PROCESSING',
-      performance.totalTime,
-      items.length
-    );
     
     console.log('📊 Batch performance:', performance);
     
