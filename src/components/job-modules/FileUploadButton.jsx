@@ -1099,7 +1099,8 @@ const handleCodeFileUpdate = async () => {
         
         resolve(result);
       }).catch(error => {
-        // Restore original console methods
+        // Clear heartbeat and restore original console methods
+        clearInterval(heartbeatInterval);
         console.log = originalLog;
         console.error = originalError;
         
