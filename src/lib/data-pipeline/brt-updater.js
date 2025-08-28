@@ -218,6 +218,35 @@ export class BRTUpdater {
   }
 
   /**
+   * CRITICAL FIX: Store source file content in jobs table (eliminates raw_data duplication)
+   */
+  async storeSourceFileInDatabase(sourceFileContent, jobId) {
+    try {
+      console.log('💾 Storing complete source file in jobs table (UPDATER)...');
+
+      const { error } = await supabase
+        .from('jobs')
+        .update({
+          source_file_content: sourceFileContent,
+          source_file_size: sourceFileContent.length,
+          source_file_rows_count: sourceFileContent.split('\n').length - 1, // Subtract header
+          source_file_parsed_at: new Date().toISOString()
+        })
+        .eq('id', jobId);
+
+      if (error) {
+        console.error('❌ Error storing source file in database:', error);
+        throw error;
+      }
+
+      console.log('✅ Complete source file stored successfully in jobs table (UPDATER)');
+    } catch (error) {
+      console.error('❌ Failed to store source file:', error);
+      // Don't throw - continue with processing even if storage fails
+    }
+  }
+
+  /**
    * Store code file content and parsed definitions in jobs table
    */
   async storeCodeFileInDatabase(codeFileContent, jobId) {
@@ -591,7 +620,10 @@ export class BRTUpdater {
     
     try {
       console.log('🚀 Starting ENHANCED BRT UPDATER (UPSERT) with COMPLETE section parsing, field preservation, and ROLLBACK support...');
-      
+
+      // CRITICAL FIX: Store source file content in jobs table
+      await this.storeSourceFileInDatabase(sourceFileContent, jobId);
+
       // Process and store code file if provided
       if (codeFileContent) {
         await this.processCodeFile(codeFileContent, jobId);
