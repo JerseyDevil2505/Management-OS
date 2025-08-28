@@ -621,7 +621,7 @@ export class BRTUpdater {
       // CRITICAL FIX: Store source file content in jobs table
       console.log('📝 Step 1: Storing source file in database...');
       await this.storeSourceFileInDatabase(sourceFileContent, jobId);
-      console.log('✅ Step 1 completed: Source file stored');
+      console.log('�� Step 1 completed: Source file stored');
 
       // Process and store code file if provided
       if (codeFileContent) {
@@ -765,14 +765,16 @@ export class BRTUpdater {
         }).length;
         console.log(`📊 Preserving user-defined fields in ${preservedCount} records`);
       }
-      
+
       const results = {
         processed: 0,
         errors: 0,
         warnings: []
       };
-      
-      console.log(`Batch UPSERTING ${propertyRecords.length} property records...`);
+
+      console.log('✅ INITIALIZATION COMPLETE - All steps finished successfully!');
+      console.log('🚀 Starting batch UPSERT processing...');
+      console.log(`📊 Processing ${propertyRecords.length} property records in batches...`);
       const batchSize = 500; // Reduced from 1000
       let consecutiveErrors = 0;
       
