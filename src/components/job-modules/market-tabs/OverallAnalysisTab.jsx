@@ -879,10 +879,13 @@ const OverallAnalysisTab = ({
     const vcsBedroomGroups = {};
     condos.forEach(p => {
       const vcs = p.new_vcs || p.property_vcs || 'Unknown';
-      const vcsDesc = interpretCodes.getVCSDescription(p, codeDefinitions, vendorType) || vcs;
-      
-      // Look for bedroom info in design description
-      const designName = interpretCodes.getDesignName(p, codeDefinitions, vendorType) || p.asset_design_style || '';
+      // Use raw VCS code to avoid async rendering issues
+      const vcsDesc = vcs;
+
+      // Look for bedroom info in design description - use only synchronous decoding
+      const designName = vendorType === 'Microsystems' && codeDefinitions
+        ? interpretCodes.getMicrosystemsValue?.(p, codeDefinitions, 'asset_design_style') || p.asset_design_style || ''
+        : p.asset_design_style || '';
       let bedrooms = 'Unknown';
       
       if (designName.includes('1BED') || designName.includes('1 BED')) bedrooms = '1BED';
@@ -1509,7 +1512,7 @@ const OverallAnalysisTab = ({
                             </td>
                             <td className="px-4 py-3 text-sm text-center">{group.salesCount}</td>
                             <td className="px-4 py-3 text-sm text-center">
-                              {group.avgYearSales > 0 ? group.avgYearSales : '—'}
+                              {group.avgYearSales > 0 ? group.avgYearSales : '���'}
                             </td>
                             <td className="px-4 py-3 text-sm text-center">
                               {group.avgSizeSales > 0 ? formatNumber(group.avgSizeSales) : '—'}
