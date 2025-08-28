@@ -351,9 +351,13 @@ export class BatchProcessor {
         
       } catch (error) {
         lastError = error;
-        this.circuitBreaker.recordFailure();
+        this.circuitBreaker.recordFailure(error);  // CRITICAL FIX: Pass error for timeout tracking
 
         console.error(`❌ Batch ${batchIndex + 1} failed (attempt ${attempt}):`, error.message);
+
+        // CRITICAL FIX: Log circuit breaker status for debugging
+        const cbStatus = this.circuitBreaker.getStatus();
+        console.log(`⚡ Circuit breaker status:`, cbStatus);
 
         // CRITICAL FIX: Rollback transaction on failure
         if (transactionId && options.enableRollback) {
