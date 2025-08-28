@@ -37,20 +37,46 @@ export class MicrosystemsUpdater {
   }
 
   /**
+   * CRITICAL FIX: Optimize batch for database performance
+   */
+  optimizeBatchForDatabase(batch) {
+    return batch.map(record => {
+      // Remove null/undefined values to reduce payload size
+      const cleaned = {};
+      for (const [key, value] of Object.entries(record)) {
+        if (value !== null && value !== undefined && value !== '') {
+          cleaned[key] = value;
+        }
+      }
+      return cleaned;
+    });
+  }
+
+  /**
    * Upsert batch with retry logic for connection issues
    */
   async upsertBatchWithRetry(batch, batchNumber, retries = 50) {
+    // CRITICAL FIX: Optimize batch before processing
+    const optimizedBatch = this.optimizeBatchForDatabase(batch);
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
         console.log(`🔄 UPSERT Batch ${batchNumber}, attempt ${attempt}...`);
         
-        const { data, error } = await supabase
+        // CRITICAL FIX: Optimize for 500+ records with timeout and minimal return
+        const upsertPromise = supabase
           .from('property_records')
-          .upsert(batch, {
+          .upsert(optimizedBatch, {
             onConflict: 'property_composite_key',
-            ignoreDuplicates: false
-          })
-          .select();  // Add this to prevent returning all columns
+            ignoreDuplicates: false,
+            count: 'exact',
+            returning: 'minimal'  // Only return count, not full record data
+          });
+
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Database timeout after 60 seconds')), 60000)
+        );
+
+        const { data, error } = await Promise.race([upsertPromise, timeoutPromise]);
         
         if (!error) {
           console.log(`✅ UPSERT Batch ${batchNumber} successful on attempt ${attempt}`);
