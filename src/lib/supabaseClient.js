@@ -22,67 +22,34 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
       'x-client-info': 'property-app',
       'x-connection-pool': 'shared'
     },
-    // Custom fetch with timeout and retry logic
+    // Simplified fetch with just timeout - let Supabase handle retries
     fetch: async (url, options = {}) => {
-      const timeout = options.timeout || 60000; // Default 60 seconds, can be overridden
-      const maxRetries = 3;
-      
-      for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        try {
-          // Create an AbortController for timeout
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), timeout);
-          
-          const response = await fetch(url, {
-            ...options,
-            signal: controller.signal
-          });
-          
-          clearTimeout(timeoutId);
-          
-          // If response is ok, return it
-          if (response.ok) {
-            return response;
-          }
+      const timeout = options.timeout || 30000; // Shorter timeout - 30 seconds
 
-          // If it's a server error (5xx), retry
-          if (response.status >= 500 && attempt < maxRetries) {
-            console.log(`🔄 Server error (${response.status}), retrying attempt ${attempt + 1}/${maxRetries}...`);
-            // Read and log the error to help debug, but don't return this response
-            try {
-              const errorText = await response.clone().text();
-              console.log(`Server error details:`, errorText.substring(0, 200));
-            } catch (e) {
-              // Ignore if we can't read the error
-            }
-            await new Promise(resolve => setTimeout(resolve, 1000 * attempt)); // Exponential backoff
-            continue;
-          }
+      // Create an AbortController for timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
 
-          // For client errors (4xx), don't retry
-          return response;
-          
-        } catch (error) {
-          // If it's an abort error (timeout), retry if we have attempts left
-          if (error.name === 'AbortError' && attempt < maxRetries) {
-            console.log(`⏱️ Request timeout, retrying attempt ${attempt + 1}/${maxRetries}...`);
-            await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
-            continue;
-          }
-          
-          // If it's a network error and we have retries left, try again
-          if (error.name === 'TypeError' && error.message === 'Failed to fetch' && attempt < maxRetries) {
-            console.log(`🌐 Network error, retrying attempt ${attempt + 1}/${maxRetries}...`);
-            await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
-            continue;
-          }
-          
-          // If we're out of retries or it's a different error, throw it
-          if (attempt === maxRetries) {
-            console.error(`❌ Failed after ${maxRetries} attempts:`, error);
-          }
-          throw error;
+      try {
+        const response = await fetch(url, {
+          ...options,
+          signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+
+        // Always return the response - let Supabase handle errors
+        return response;
+
+      } catch (error) {
+        clearTimeout(timeoutId);
+
+        if (error.name === 'AbortError') {
+          console.error(`⏱️ Request timeout after ${timeout/1000}s: ${url}`);
+          throw new Error(`Request timeout after ${timeout/1000} seconds`);
         }
+
+        throw error;
       }
     }
   }
