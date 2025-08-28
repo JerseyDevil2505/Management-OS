@@ -76,21 +76,21 @@ async function getSourceFileDataForJob(jobId) {
   try {
     const { data: job, error } = await supabase
       .from('jobs')
-      .select('source_file_content, ccdd_code, start_date')
+      .select('raw_file_content, ccdd_code, start_date')
       .eq('id', jobId)
       .single();
 
-    if (error || !job?.source_file_content) {
+    if (error || !job?.raw_file_content) {
       return null;
     }
 
     // Determine vendor type and year
-    const vendorType = detectVendorTypeFromContent(job.source_file_content);
+    const vendorType = detectVendorTypeFromContent(job.raw_file_content);
     const yearCreated = new Date(job.start_date).getFullYear();
     const ccddCode = job.ccdd_code;
 
     // Parse the source file
-    const parsedData = parseSourceFileContent(job.source_file_content, vendorType);
+    const parsedData = parseSourceFileContent(job.raw_file_content, vendorType);
 
     // Create property lookup map by composite key
     const propertyMap = new Map();
@@ -2533,7 +2533,7 @@ export const propertyService = {
     try {
       const { data: job, error: jobError } = await supabase
         .from('jobs')
-        .select('source_file_content, source_file_parsed_at, updated_at')
+        .select('raw_file_content, raw_file_parsed_at, updated_at')
         .eq('id', jobId)
         .single();
 
@@ -2548,8 +2548,8 @@ export const propertyService = {
       if (countError) throw countError;
 
       return {
-        hasSourceFile: !!job.source_file_content,
-        sourceFileParsedAt: job.source_file_parsed_at,
+        hasSourceFile: !!job.raw_file_content,
+        sourceFileParsedAt: job.raw_file_parsed_at,
         lastUpdated: job.updated_at,
         recordsNeedingReprocessing: needsReprocessingCount || 0,
         needsReprocessing: (needsReprocessingCount || 0) > 0
@@ -2597,8 +2597,8 @@ export const propertyService = {
 
       if (jobError) throw jobError;
 
-      if (!job.source_file_content) {
-        throw new Error('No source file content available for reprocessing');
+      if (!job.raw_file_content) {
+        throw new Error('No raw file content available for reprocessing');
       }
 
       console.log('🔄 Starting automatic reprocessing from stored source file...');
@@ -2624,7 +2624,7 @@ export const propertyService = {
       if (vendorType === 'BRT') {
         const { brtUpdater } = await import('./data-pipeline/brt-updater.js');
         return await brtUpdater.processFile(
-          job.source_file_content,
+          job.raw_file_content,
           job.code_file_content,
           jobId,
           job.year_created,
@@ -2640,7 +2640,7 @@ export const propertyService = {
       } else if (vendorType === 'Microsystems') {
         const { microsystemsUpdater } = await import('./data-pipeline/microsystems-updater.js');
         return await microsystemsUpdater.processFile(
-          job.source_file_content,
+          job.raw_file_content,
           job.code_file_content,
           jobId,
           job.year_created,
