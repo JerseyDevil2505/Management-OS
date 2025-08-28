@@ -164,9 +164,23 @@ class SourceFileSyncService {
         .in('vendor_type', ['BRT', 'Microsystems']);
 
       if (error) throw error;
-      console.log(`📊 OPTIMIZED: Found ${jobsNeedingSync.length} jobs needing sync using single query`);
 
-      return jobsNeedingSync;
+      // Add recordsNeedingSync count (we'll count all records for each job)
+      const jobsWithCounts = await Promise.all(jobsNeedingSync.map(async (job) => {
+        const { count } = await supabase
+          .from('property_records')
+          .select('*', { count: 'exact', head: true })
+          .eq('job_id', job.id);
+
+        return {
+          ...job,
+          recordsNeedingSync: count || 0
+        };
+      }));
+
+      console.log(`📊 FIXED: Found ${jobsWithCounts.length} jobs needing sync (looking at jobs.validation_status)`);
+
+      return jobsWithCounts;
     } catch (error) {
       console.error('Error finding jobs needing sync:', getErrorMessage(error));
       console.error('Error details:', error);
