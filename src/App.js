@@ -135,7 +135,6 @@ useEffect(() => {
     // Additional Data for Components
     countyHpiData: [],
     jobResponsibilities: [],
-    jobFreshness: {},
     
     // Cache Metadata
     version: CACHE_VERSION,
