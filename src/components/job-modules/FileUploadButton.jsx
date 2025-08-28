@@ -1104,15 +1104,24 @@ const handleCodeFileUpdate = async () => {
         console.log = originalLog;
         console.error = originalError;
         
+        const isTimeout = error.message && error.message.includes('timeout');
+        const errorMessage = isTimeout ?
+          'Batch processing timeout - try refreshing and uploading again' :
+          'Batch processing failed';
+
         setBatchInsertProgress(prev => ({
           ...prev,
           isInserting: false,
-          currentOperation: 'Batch processing failed',
+          currentOperation: errorMessage,
           insertAttempts: prev.insertAttempts.map(a => ({
             ...a,
             status: a.status === 'success' ? 'success' : 'failed'
           }))
         }));
+
+        if (isTimeout) {
+          addBatchLog('⏰ Operation timed out after 5 minutes. Try refreshing the page and uploading again.', 'error');
+        }
         
         addBatchLog(`❌ Batch processing failed: ${error.message}`, 'error');
         
