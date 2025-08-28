@@ -906,7 +906,7 @@ const handleCodeFileUpdate = async () => {
         .single();
 
       if (versionData && !error) {
-        console.log(`���� Current file_version from DB: ${versionData.file_version}, updated_at: ${versionData.updated_at}`);
+        console.log(`📊 Current file_version from DB: ${versionData.file_version}, updated_at: ${versionData.updated_at}`);
         setCurrentFileVersion(versionData.file_version || 1);
         setLastUpdatedAt(versionData.updated_at);
       } else {
@@ -1126,7 +1126,7 @@ const handleCodeFileUpdate = async () => {
       addBatchLog(`📊 Calling ${detectedVendor} updater (UPSERT mode)...`, 'info');
 
       // SIMPLIFIED: Let propertyService handle version increments automatically
-      addBatchLog('��� Processing file - database will increment file_version automatically', 'info');
+      addBatchLog('📊 Processing file - database will increment file_version automatically', 'info');
 
       // Track batch operations
       const result = await trackBatchInserts(async () => {
@@ -1393,9 +1393,8 @@ const handleCodeFileUpdate = async () => {
         addNotification('❌ Update failed - all changes rolled back. Check logs for details.', 'error');
       }
 
-      // Update local file version and last processed date for banner
-      setLastSourceProcessedDate(new Date().toISOString());
-      await fetchCurrentFileVersion(); // Refresh file version from DB
+      // Update local file version and date from DB
+      await fetchCurrentFileVersion(); // Refresh file version and updated_at from DB
 
       setBatchComplete(true);
       
