@@ -923,42 +923,6 @@ useEffect(() => {
   }, [masterCache, saveToStorage]);
 
   // ==========================================
-  // JOB-LEVEL CACHE MANAGEMENT (SECOND TIER)
-  // ==========================================
-  const updateJobCache = useCallback((jobId, data) => {
-    console.log('🔍 updateJobCache called:', {
-      jobId,
-      hasData: !!data,
-      currentCacheKeys: Object.keys(masterCache.jobCache || {})
-    });
-    if (data === null) {
-      // Clear cache for this job (used after FileUpload)
-      console.log(`🗑️ Clearing cache for job ${jobId}`);
-      setMasterCache(prev => ({
-        ...prev,
-        jobCache: {
-          ...prev.jobCache,
-          [jobId]: undefined
-        }
-      }));
-      // Don't trigger reload here - let FileUploadButton handle that
-    } else {
-      // Update cache for this job
-      console.log(`📦 Updating cache for job ${jobId}`);
-      setMasterCache(prev => ({
-        ...prev,
-        jobCache: {
-          ...prev.jobCache,
-          [jobId]: {
-            ...data,
-            timestamp: Date.now()
-          }
-        }
-      }));
-    }
-  }, []);
-
-  // ==========================================
   // JOB SELECTION HANDLERS
   // ==========================================
   const handleJobSelect = useCallback((job) => {
@@ -966,19 +930,8 @@ useEffect(() => {
     setActiveView('job-modules');
     // Update URL when job is selected
     window.history.pushState({}, '', `/job/${job.id}`);
-    
-    // Clear job cache when selecting a job to force fresh data load
-    if (job?.id && masterCache.jobCache?.[job.id]) {
-      console.log(`🔄 Clearing cache for job ${job.id} on selection`);
-      setMasterCache(prev => ({
-        ...prev,
-        jobCache: {
-          ...prev.jobCache,
-          [job.id]: undefined
-        }
-      }));
-    }
-  }, [masterCache.jobCache]);
+    console.log(`🔄 Selected job ${job.id} - will load fresh data`);
+  }, []);
 
   const handleBackToJobs = useCallback(() => {
     setSelectedJob(null);
