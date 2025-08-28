@@ -2203,7 +2203,7 @@ export const propertyService = {
   async bulkUpdateInspections(inspectionUpdates) {
     try {
       const updates = await Promise.all(
-        inspectionUpdates.map(update => 
+        inspectionUpdates.map(update =>
           supabase
             .from('property_records')
             .update({
@@ -2214,10 +2214,141 @@ export const propertyService = {
             .select()
         )
       );
-      
+
       return updates.map(result => result.data).flat();
     } catch (error) {
       console.error('Property bulk inspection update error:', error);
+      throw error;
+    }
+  },
+
+  // NEW: Get raw data for a specific property from jobs.source_file_content
+  async getRawDataForProperty(jobId, propertyCompositeKey) {
+    try {
+      const { data, error } = await supabase.rpc('get_raw_data_for_property', {
+        p_job_id: jobId,
+        p_property_composite_key: propertyCompositeKey
+      });
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error fetching raw data for property:', error);
+      return null;
+    }
+  },
+
+  // NEW: Check if job needs reprocessing due to source file changes
+  async checkJobReprocessingStatus(jobId) {
+    try {
+      const { data: job, error: jobError } = await supabase
+        .from('jobs')
+        .select('source_file_content, source_file_parsed_at, updated_at')
+        .eq('id', jobId)
+        .single();
+
+      if (jobError) throw jobError;
+
+      const { count: needsReprocessingCount, error: countError } = await supabase
+        .from('property_records')
+        .select('*', { count: 'exact', head: true })
+        .eq('job_id', jobId)
+        .eq('validation_status', 'needs_reprocessing');
+
+      if (countError) throw countError;
+
+      return {
+        hasSourceFile: !!job.source_file_content,
+        sourceFileParsedAt: job.source_file_parsed_at,
+        lastUpdated: job.updated_at,
+        recordsNeedingReprocessing: needsReprocessingCount || 0,
+        needsReprocessing: (needsReprocessingCount || 0) > 0
+      };
+    } catch (error) {
+      console.error('Error checking job reprocessing status:', error);
+      return {
+        hasSourceFile: false,
+        recordsNeedingReprocessing: 0,
+        needsReprocessing: false,
+        error: error.message
+      };
+    }
+  },
+
+  // NEW: Trigger reprocessing of property records from source file
+  async triggerJobReprocessing(jobId, force = false) {
+    try {
+      const { data, error } = await supabase.rpc('app_reprocess_job_from_source', {
+        p_job_id: jobId,
+        p_force: force
+      });
+
+      if (error) throw error;
+
+      console.log('✅ Job reprocessing triggered:', data);
+      return data;
+    } catch (error) {
+      console.error('Error triggering job reprocessing:', error);
+      throw error;
+    }
+  },
+
+  // NEW: Manually reprocess property records using current processors
+  async manualReprocessFromSource(jobId) {
+    try {
+      // First, get the job details and source file content
+      const { data: job, error: jobError } = await supabase
+        .from('jobs')
+        .select('*')
+        .eq('id', jobId)
+        .single();
+
+      if (jobError) throw jobError;
+
+      if (!job.source_file_content) {
+        throw new Error('No source file content available for reprocessing');
+      }
+
+      console.log('🔄 Starting manual reprocessing from stored source file...');
+
+      // Determine vendor type and call appropriate updater
+      const vendorType = job.vendor_source;
+
+      if (vendorType === 'BRT') {
+        const { brtUpdater } = await import('./data-pipeline/brt-updater.js');
+        return await brtUpdater.processFile(
+          job.source_file_content,
+          job.code_file_content,
+          jobId,
+          job.year_created,
+          job.ccdd_code,
+          {
+            source_file_name: 'Reprocessed from stored source',
+            file_version: Date.now(), // Use timestamp as version
+            preservedFieldsHandler: this.createPreservedFieldsHandler.bind(this),
+            preservedFields: PRESERVED_FIELDS
+          }
+        );
+      } else if (vendorType === 'Microsystems') {
+        const { microsystemsUpdater } = await import('./data-pipeline/microsystems-updater.js');
+        return await microsystemsUpdater.processFile(
+          job.source_file_content,
+          job.code_file_content,
+          jobId,
+          job.year_created,
+          job.ccdd_code,
+          {
+            source_file_name: 'Reprocessed from stored source',
+            file_version: Date.now(), // Use timestamp as version
+            preservedFieldsHandler: this.createPreservedFieldsHandler.bind(this),
+            preservedFields: PRESERVED_FIELDS
+          }
+        );
+      } else {
+        throw new Error(`Unsupported vendor type: ${vendorType}`);
+      }
+    } catch (error) {
+      console.error('Manual reprocessing failed:', error);
       throw error;
     }
   }
