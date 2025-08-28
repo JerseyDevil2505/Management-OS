@@ -152,12 +152,10 @@ const JobContainer = ({
         .single();
 
       if (dataVersionError && dataVersionError.code !== 'PGRST116') throw dataVersionError;
-      if (jobError) throw jobError;
       // Don't throw on inspection error - it might not exist yet
 
       const currentFileVersion = dataVersionData?.file_version || 1;
       const currentCodeVersion = jobData?.code_file_version || 1;
-      const hasAssignments = jobData?.has_property_assignments || false;
 
       console.log(`🔍 JOB DEBUG: has_property_assignments = ${hasAssignments}`);
       console.log(`🔍 JOB DEBUG: Current file version = ${currentFileVersion}`);
