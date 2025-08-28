@@ -619,17 +619,26 @@ export class BRTUpdater {
       console.log('🚀 Starting ENHANCED BRT UPDATER (UPSERT) with COMPLETE section parsing, field preservation, and ROLLBACK support...');
 
       // CRITICAL FIX: Store source file content in jobs table
+      console.log('📝 Step 1: Storing source file in database...');
       await this.storeSourceFileInDatabase(sourceFileContent, jobId);
+      console.log('✅ Step 1 completed: Source file stored');
 
       // Process and store code file if provided
       if (codeFileContent) {
+        console.log('📝 Step 2: Processing code file...');
         await this.processCodeFile(codeFileContent, jobId);
+        console.log('✅ Step 2 completed: Code file processed');
+      } else {
+        console.log('⏭️ Step 2 skipped: No code file provided');
       }
       
+      console.log('📝 Step 3: Parsing source file...');
       const records = this.parseSourceFile(sourceFileContent);
+      console.log(`✅ Step 3 completed: Parsed ${records.length} records from source file`);
 
       // NEW: Delete properties that exist in DB but are NOT in the source file (fixes recurring deletion modal)
-      console.log('🔍 Checking for properties to delete (not in source file)...');
+      console.log('📝 Step 4: Checking for properties to delete (not in source file)...');
+      console.log('⚠️ WARNING: This step can be slow with large datasets!');
       try {
         // Generate composite keys for all records in the source file
         const sourceFileKeys = records.map(rawRecord => {
@@ -645,11 +654,32 @@ export class BRTUpdater {
         console.log(`📊 Source file contains ${sourceFileKeys.length} properties`);
 
         // Find properties in DB that are NOT in source file
-        const { data: existingProperties, error: fetchError } = await supabase
+        console.log('🗂️ Querying database for existing properties to check for deletions...');
+        console.log(`🔍 Searching for properties NOT in ${sourceFileKeys.length} source file keys...`);
+
+        // OPTIMIZATION: Add timeout to prevent infinite hanging
+        const deletionCheckPromise = supabase
           .from('property_records')
           .select('id, property_composite_key, property_location')
           .eq('job_id', jobId)
           .not('property_composite_key', 'in', `(${sourceFileKeys.map(k => `"${k}"`).join(',')})`);
+
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Deletion check timeout after 30 seconds - database may be overloaded')), 30000)
+        );
+
+        let existingProperties = null;
+        let fetchError = null;
+
+        try {
+          const result = await Promise.race([deletionCheckPromise, timeoutPromise]);
+          existingProperties = result.data;
+          fetchError = result.error;
+          console.log('✅ Deletion check query completed successfully');
+        } catch (timeoutError) {
+          console.error('❌ DELETION CHECK TIMED OUT:', timeoutError.message);
+          fetchError = timeoutError;
+        }
 
         if (fetchError) {
           console.warn('⚠️ Could not fetch existing properties for deletion check:', fetchError);
@@ -682,22 +712,24 @@ export class BRTUpdater {
       // ENHANCED: Check if field preservation is enabled and get preserved data
       let preservedDataMap = new Map();
       if (versionInfo.preservedFieldsHandler && typeof versionInfo.preservedFieldsHandler === 'function') {
-        console.log('🔒 Field preservation enabled, fetching existing data...');
-        
+        console.log('📝 Step 5: Field preservation enabled, fetching existing data...');
+
         // Generate composite keys for all records
+        console.log('🔑 Generating composite keys for field preservation...');
         const compositeKeys = records.map(rawRecord => {
           const blockValue = this.preserveStringValue(rawRecord.BLOCK);
           const lotValue = this.preserveStringValue(rawRecord.LOT);
           const qualifierValue = this.preserveStringValue(rawRecord.QUALIFIER) || 'NONE';
           const cardValue = this.preserveStringValue(rawRecord.CARD) || 'NONE';
           const locationValue = this.preserveStringValue(rawRecord.PROPERTY_LOCATION) || 'NONE';
-          
+
           return `${yearCreated}${ccddCode}-${blockValue}-${lotValue}_${qualifierValue}-${cardValue}-${locationValue}`;
         });
-        
+
         // Fetch preserved data using the handler from supabaseClient
+        console.log(`🔍 Fetching preserved field data for ${compositeKeys.length} properties...`);
         preservedDataMap = await versionInfo.preservedFieldsHandler(jobId, compositeKeys);
-        console.log(`✅ Fetched preserved data for ${preservedDataMap.size} properties`);
+        console.log(`✅ Step 5 completed: Fetched preserved data for ${preservedDataMap.size} properties`);
       }
       
       const propertyRecords = [];
