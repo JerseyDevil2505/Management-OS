@@ -806,7 +806,10 @@ const OverallAnalysisTab = ({
     const designGroups = {};
     condos.forEach(p => {
       const designCode = p.asset_design_style || 'Unknown';
-      const designName = interpretCodes.getDesignName(p, codeDefinitions, vendorType) || designCode;
+      // Use only synchronous Microsystems decoding to avoid async rendering issues
+      const designName = vendorType === 'Microsystems' && codeDefinitions
+        ? interpretCodes.getMicrosystemsValue?.(p, codeDefinitions, 'asset_design_style') || designCode
+        : designCode;
       
       // Skip unknown/empty designs
       if (!designCode || designCode === 'Unknown' || designCode === '' || 
