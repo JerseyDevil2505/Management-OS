@@ -928,7 +928,9 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
           designConsistency,
           designDetails: {
             uniqueDesigns,
-            dominantDesign: interpretCodes.getDesignName?.({ asset_design_style: dominantDesign }, codeDefinitions, vendorType) || dominantDesign,
+            dominantDesign: vendorType === 'Microsystems' && codeDefinitions
+              ? interpretCodes.getMicrosystemsValue?.({ asset_design_style: dominantDesign }, codeDefinitions, 'asset_design_style') || dominantDesign
+              : dominantDesign,
             dominantPercent: dominantPercent.toFixed(0)
           }
         };
