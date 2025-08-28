@@ -1577,31 +1577,38 @@ const ProductionTracker = ({
           }
         }
 
-        // Track properties that didn't make it to inspection_data (only if they had no inspection attempt)
-        if (!wasAddedToInspectionData && !hasInspectionAttempt) {
-          // This property was already added to missingProperties earlier with proper reason
-          // No need to duplicate here
-        } else if (!wasAddedToInspectionData && hasInspectionAttempt) {
-          // This property had an inspection attempt but failed validation
-          const reasons = [];
-          if (!hasValidInfoBy) reasons.push(`Invalid InfoBy code: ${infoByCode}`);
-          if (propertyIssues[propertyKey]?.issues) reasons.push(...propertyIssues[propertyKey].issues);
+        // Track properties that didn't make it to inspection_data
+        if (!wasAddedToInspectionData) {
+          // Check if this property was already categorized as "Not yet inspected" earlier
+          const alreadyAddedAsNotInspected = missingProperties.some(p =>
+            p.composite_key === propertyKey &&
+            (p.reason === 'Not yet inspected' || p.reason.includes('Info_by code only'))
+          );
 
-          reasonNotAdded = `Failed validation: ${reasons.join(', ')}`;
+          if (!alreadyAddedAsNotInspected) {
+            // This property had some inspection attempt but failed validation
+            const reasons = [];
+            if (!hasValidInfoBy) reasons.push(`Invalid InfoBy code: ${infoByCode}`);
+            if (!hasValidMeasuredBy) reasons.push('Missing/invalid inspector');
+            if (!hasValidMeasuredDate) reasons.push('Missing/invalid measure date');
+            if (propertyIssues[propertyKey]?.issues) reasons.push(...propertyIssues[propertyKey].issues);
 
-          missingProperties.push({
-            composite_key: propertyKey,
-            block: record.property_block,
-            lot: record.property_lot,
-            qualifier: record.property_qualifier || '',
-            property_location: record.property_location || '',
-            property_class: propertyClass,
-            reason: reasonNotAdded,
-            inspector: inspector,
-            info_by_code: infoByCode,
-            measure_date: record.inspection_measure_date,
-            validation_issues: propertyIssues[propertyKey]?.issues || []
-          });
+            reasonNotAdded = `Failed validation: ${reasons.join(', ')}`;
+
+            missingProperties.push({
+              composite_key: propertyKey,
+              block: record.property_block,
+              lot: record.property_lot,
+              qualifier: record.property_qualifier || '',
+              property_location: record.property_location || '',
+              property_class: propertyClass,
+              reason: reasonNotAdded,
+              inspector: inspector,
+              info_by_code: infoByCode,
+              measure_date: record.inspection_measure_date,
+              validation_issues: propertyIssues[propertyKey]?.issues || []
+            });
+          }
         }
       });
 
