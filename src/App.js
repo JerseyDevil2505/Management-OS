@@ -1684,9 +1684,6 @@ useEffect(() => {
             <JobContainer
               selectedJob={selectedJob}
               onBackToJobs={handleBackToJobs}
-              jobCache={masterCache.jobCache}
-              onUpdateJobCache={updateJobCache}
-              fileRefreshTrigger={fileRefreshTrigger}
               onWorkflowStatsUpdate={handleWorkflowStatsUpdate}
             />
           </div>
