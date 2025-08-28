@@ -158,7 +158,7 @@ class SourceFileSyncService {
           raw_file_content,
           raw_file_parsed_at,
           ccdd_code,
-            year_created
+            start_date
           )
         `)
         .eq('validation_status', 'needs_reprocessing')
