@@ -740,7 +740,6 @@ useEffect(() => {
       const newCache = {
         ...masterCache,
         ...updates,
-        jobCache: masterCache.jobCache || {},  // ADD THIS LINE - preserve existing jobCache
         lastFetched: {
           ...masterCache.lastFetched,
           ...updates.lastFetched,
