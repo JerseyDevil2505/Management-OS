@@ -2276,7 +2276,7 @@ try {
                     // Update job with new file info - removed source_file_version update
                     addBatchLog('🔄 Updating job metadata...', 'info');
                     await jobService.update(job.id, {
-                      sourceFileStatus: result.errors > 0 ? 'error' : 'imported',
+                      sourceFileStatus: result.errors > 0 ? 'error' : (sourceFileVersion === 1 ? 'imported' : 'updated'),
                       totalProperties: result.processed,
                       source_file_uploaded_at: new Date().toISOString()
                       // FIX 1: Removed source_file_version update - it's handled in property_records now
