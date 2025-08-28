@@ -10,6 +10,7 @@ import JobContainer from './components/job-modules/JobContainer';
 import FileUploadButton from './components/job-modules/FileUploadButton';
 import LandingPage from './components/LandingPage';
 import UserManagement from './components/UserManagement';
+import { sourceFileSyncService } from './services/sourceFileSyncService';
 
 // ==========================================
 // PERSISTENT CACHE CONFIGURATION
