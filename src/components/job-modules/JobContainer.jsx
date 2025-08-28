@@ -729,11 +729,7 @@ const JobContainer = ({
   const handleFileProcessed = async (fileType, fileName) => {
     console.log(`���� File processed: ${fileType} - ${fileName}`);
     
-    // Clear cache for this job since data changed
-    if (onUpdateJobCache && selectedJob?.id) {
-      console.log(`🗑️ Clearing cache for job ${selectedJob.id} after file update`);
-      onUpdateJobCache(selectedJob.id, null);
-    }
+    console.log(`📝 File processed - will reload fresh data`);
     
     // Refresh file version data when new files are uploaded
     await loadLatestFileVersions();
@@ -859,7 +855,7 @@ const JobContainer = ({
       };
     }
 
-    // ��� Future modules can get their specific props here
+    // 🔧 Future modules can get their specific props here
     if (activeModule === 'checklist') {
       return {
         ...baseProps,
