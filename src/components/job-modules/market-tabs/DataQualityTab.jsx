@@ -540,11 +540,26 @@ const generateQCFormPDF = () => {
     try {
       const vendor = vendorType || jobData.vendor_source || 'BRT';
 
-      // Create cache for raw data to avoid repeated RPC calls
-      const rawDataCache = new Map();
-      console.log('🔄 Starting quality checks with job-level raw data access...');
+      // Parse ALL job raw data ONCE at the beginning (major performance improvement)
+      setAnalysisProgress({ current: 0, total: properties.length, phase: 'Parsing job raw data...' });
+      console.log('🔄 Parsing job raw data once for performance...');
 
-      const pageSize = 500; // Larger batches for better performance
+      const jobRawData = await propertyService.getRawDataForJob(jobData.id);
+      const rawDataCache = new Map();
+
+      if (jobRawData && jobRawData.propertyMap) {
+        // Pre-populate cache with all property raw data
+        for (const [compositeKey, rawData] of jobRawData.propertyMap.entries()) {
+          rawDataCache.set(compositeKey, rawData);
+        }
+        console.log(`✅ Cached raw data for ${rawDataCache.size} properties`);
+      } else {
+        console.warn('⚠️ No job raw data found, proceeding with empty cache');
+      }
+
+      console.log('🔄 Starting quality checks with pre-cached raw data...');
+
+      const pageSize = 1000; // Larger batches since we're not doing RPC calls
       const totalPages = Math.ceil(properties.length / pageSize);
       let processedCount = 0;
 
@@ -558,11 +573,11 @@ const generateQCFormPDF = () => {
         console.log(`Processing batch ${page + 1} of ${totalPages}...`);
 
         for (const property of batch) {
-          await runPropertyChecks(property, results, rawDataCache);
+          runPropertyChecks(property, results, rawDataCache); // No await needed now!
           processedCount++;
 
-          // Update progress every 50 properties to reduce UI overhead
-          if (processedCount % 50 === 0) {
+          // Update progress every 100 properties since it's much faster now
+          if (processedCount % 100 === 0) {
             setAnalysisProgress({
               current: processedCount,
               total: properties.length,
