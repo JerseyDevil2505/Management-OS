@@ -1164,25 +1164,8 @@ const handleCodeFileUpdate = async () => {
       
       addBatchLog('✅ Property data processing completed', 'success', {
         processed: result.processed,
-        errors: result.errors,
-        newVersion: newFileVersion  // FIX 1: Show correct version
+        errors: result.errors
       });
-
-      // DEBUG: Verify the version was actually saved to database
-      addBatchLog('🔍 Verifying version was saved to database...', 'info');
-      const { data: verifyVersionData, error: verifyError } = await supabase
-        .from('property_records')
-        .select('file_version')
-        .eq('job_id', job.id)
-        .order('file_version', { ascending: false })
-        .limit(1)
-        .single();
-
-      if (verifyVersionData) {
-        addBatchLog(`✅ Database verification: Latest version is now ${verifyVersionData.file_version}`, 'success');
-      } else {
-        addBatchLog(`❌ Database verification failed: ${verifyError?.message}`, 'error');
-      }
       
       // Save comparison report with sales decisions
       addBatchLog('💾 Saving comparison report to database...', 'info');
