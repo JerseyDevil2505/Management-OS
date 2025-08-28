@@ -905,18 +905,172 @@ export class MicrosystemsUpdater {
    */
   getCodesByCategory(category) {
     const result = {};
-    
+
     for (const fieldPrefix of Object.keys(this.allCodes)) {
       const fieldCodes = this.allCodes[fieldPrefix];
-      
+
       for (const code of Object.keys(fieldCodes)) {
         if (fieldCodes[code].category === category) {
           result[code] = fieldCodes[code];
         }
       }
     }
-    
+
     return result;
+  }
+
+  // ===== PROPERTY LINEAGE TRACKING METHODS =====
+
+  /**
+   * Store complete source file version for lineage tracking
+   */
+  async storeSourceFileVersion(sourceFileContent, jobId, fileVersion, yearCreated, ccddCode) {
+    try {
+      console.log(`📚 Storing Microsystems source file version ${fileVersion} for lineage tracking...`);
+
+      // Parse source file to extract property composite keys
+      const records = this.parseSourceFile(sourceFileContent);
+      const propertyKeys = [];
+
+      records.forEach(rawRecord => {
+        const compositeKey = `${yearCreated}${ccddCode}-${rawRecord['Block']}-${rawRecord['Lot']}_${(rawRecord['Qual'] || '').trim() || 'NONE'}-${(rawRecord['Bldg'] || '').trim() || 'NONE'}-${(rawRecord['Location'] || '').trim() || 'NONE'}`;
+        propertyKeys.push(compositeKey);
+      });
+
+      // Get previous version for comparison
+      const { data: previousVersion } = await supabase
+        .from('source_file_versions')
+        .select('property_composite_keys')
+        .eq('job_id', jobId)
+        .eq('file_version', fileVersion - 1)
+        .single();
+
+      let propertiesAdded = [];
+      let propertiesRemoved = [];
+
+      if (previousVersion) {
+        const previousKeys = new Set(previousVersion.property_composite_keys);
+        const currentKeys = new Set(propertyKeys);
+
+        // Find added and removed properties
+        propertiesAdded = [...currentKeys].filter(key => !previousKeys.has(key));
+        propertiesRemoved = [...previousKeys].filter(key => !currentKeys.has(key));
+
+        console.log(`📊 Version ${fileVersion} changes: +${propertiesAdded.length} added, -${propertiesRemoved.length} removed`);
+      } else {
+        console.log(`📊 Version ${fileVersion} is the first version with ${propertyKeys.length} properties`);
+      }
+
+      // Store source file version
+      const { data: sourceFileVersionRecord, error } = await supabase
+        .from('source_file_versions')
+        .insert([{
+          job_id: jobId,
+          file_version: fileVersion,
+          file_content: sourceFileContent,
+          vendor_type: 'Microsystems',
+          original_filename: 'Microsystems_Source_File.txt',
+          file_size: sourceFileContent.length,
+          row_count: records.length,
+          property_composite_keys: propertyKeys,
+          properties_added: propertiesAdded,
+          properties_removed: propertiesRemoved,
+          properties_modified: [], // TODO: Implement field-level change detection
+          uploaded_by: null, // TODO: Get actual user ID
+          processing_status: 'stored'
+        }])
+        .select()
+        .single();
+
+      if (error) {
+        console.error('❌ Error storing Microsystems source file version:', error);
+        return null;
+      }
+
+      // Record lifecycle events
+      await this.recordLifecycleEvents(
+        jobId, fileVersion, propertiesAdded, propertiesRemoved, sourceFileVersionRecord.id
+      );
+
+      console.log(`✅ Microsystems source file version ${fileVersion} stored with lineage tracking`);
+      return sourceFileVersionRecord.id;
+
+    } catch (error) {
+      console.error('❌ Failed to store Microsystems source file version:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Record property lifecycle events (added, removed)
+   */
+  async recordLifecycleEvents(jobId, fileVersion, addedProperties, removedProperties, sourceFileVersionId) {
+    try {
+      const events = [];
+
+      // Record added properties
+      addedProperties.forEach(propertyKey => {
+        events.push({
+          job_id: jobId,
+          property_composite_key: propertyKey,
+          event_type: 'ADDED',
+          from_file_version: null,
+          to_file_version: fileVersion,
+          source_file_version_id: sourceFileVersionId
+        });
+      });
+
+      // Record removed properties
+      removedProperties.forEach(propertyKey => {
+        events.push({
+          job_id: jobId,
+          property_composite_key: propertyKey,
+          event_type: 'REMOVED',
+          from_file_version: fileVersion - 1,
+          to_file_version: fileVersion,
+          source_file_version_id: sourceFileVersionId
+        });
+      });
+
+      if (events.length > 0) {
+        const { error } = await supabase
+          .from('property_lifecycle_events')
+          .insert(events);
+
+        if (error) {
+          console.error('❌ Error recording Microsystems lifecycle events:', error);
+        } else {
+          console.log(`✅ Recorded ${events.length} Microsystems lifecycle events for version ${fileVersion}`);
+        }
+      }
+
+    } catch (error) {
+      console.error('❌ Failed to record Microsystems lifecycle events:', error);
+    }
+  }
+
+  /**
+   * Mark source file version as processed
+   */
+  async markSourceFileVersionProcessed(sourceFileVersionId, processingResults) {
+    try {
+      const { error } = await supabase
+        .from('source_file_versions')
+        .update({
+          processing_status: processingResults.errors > 0 ? 'failed' : 'processed',
+          processed_at: new Date().toISOString()
+        })
+        .eq('id', sourceFileVersionId);
+
+      if (error) {
+        console.error('❌ Error marking Microsystems source file version as processed:', error);
+      } else {
+        console.log(`✅ Microsystems source file version marked as processed`);
+      }
+
+    } catch (error) {
+      console.error('❌ Failed to mark Microsystems source file version as processed:', error);
+    }
   }
 }
 
