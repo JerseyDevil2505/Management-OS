@@ -154,15 +154,15 @@ class SourceFileSyncService {
             id,
             job_name,
             municipality,
-            vendor_source,
-            source_file_content,
-            source_file_parsed_at,
-            ccdd_code,
+          vendor_source,
+          raw_file_content,
+          raw_file_parsed_at,
+          ccdd_code,
             year_created
           )
         `)
         .eq('validation_status', 'needs_reprocessing')
-        .not('jobs.source_file_content', 'is', null)
+        .not('jobs.raw_file_content', 'is', null)
         .in('jobs.vendor_source', ['BRT', 'Microsystems']);
 
       if (error) throw error;
