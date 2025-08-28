@@ -304,6 +304,7 @@ export class BatchProcessor {
    */
   async processBatchWithRetry(batch, batchIndex, processorFunction, options) {
     let lastError = null;
+    let transactionId = null;
 
     for (let attempt = 1; attempt <= options.maxRetries; attempt++) {
       try {
@@ -314,15 +315,31 @@ export class BatchProcessor {
 
         console.log(`🔄 Processing batch ${batchIndex + 1}, attempt ${attempt} (${batch.length} items)`);
 
+        // CRITICAL FIX: Start transaction if enabled
+        if (options.enableRollback && options.useTransactions) {
+          transactionId = await this.transactionManager.startTransaction(batchIndex + 1);
+        }
+
         // CRITICAL FIX: Add timeout wrapper for each batch operation
         const timeoutPromise = new Promise((_, reject) =>
           setTimeout(() => reject(new Error(`Batch timeout after ${options.operationTimeout}ms`)), options.operationTimeout)
         );
 
+        // Wrap processor function to support transaction recording
+        const wrappedProcessor = options.useTransactions ?
+          (batch, index) => this.wrapProcessorWithTransaction(processorFunction, batch, index, transactionId) :
+          processorFunction;
+
         const result = await Promise.race([
-          processorFunction(batch, batchIndex),
+          wrappedProcessor(batch, batchIndex),
           timeoutPromise
         ]);
+
+        // CRITICAL FIX: Commit transaction on success
+        if (transactionId) {
+          this.transactionManager.commitTransaction(transactionId);
+          this.successfulTransactions.push(transactionId);
+        }
 
         // Update stats
         this.stats.processedItems += batch.length;
