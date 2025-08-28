@@ -287,24 +287,36 @@ const handleCodeFileUpdate = async () => {
     sessionStorage.setItem(`job_${job.id}_lastCodeProcessed`, processedDate);
 
     // Update job's code file version
-    const newCodeVersion = (job.code_file_version || 1) + 1;
-    await jobService.update(job.id, {
+    const currentCodeVersion = job.code_file_version || 1;
+    const newCodeVersion = currentCodeVersion + 1;
+
+    console.log(`🔧 Code Update - Current version: ${currentCodeVersion}, New version: ${newCodeVersion}`);
+
+    const updateResult = await jobService.update(job.id, {
       code_file_version: newCodeVersion,
       code_file_uploaded_at: processedDate
     });
 
+    console.log(`🔧 Code Update - jobService.update result:`, updateResult);
+
     addNotification(`✅ Successfully updated code definitions for ${detectedVendor}`, 'success');
-    
+
     // Clear code file selection
     setCodeFile(null);
     setCodeFileContent(null);
     document.getElementById('code-file-upload').value = '';
 
+    // Refresh job data in parent component
+    if (onDataRefresh) {
+      console.log(`🔧 Code Update - Calling onDataRefresh to update job data`);
+      await onDataRefresh();
+    }
+
     // Notify parent component of the update
     if (onFileProcessed) {
-      onFileProcessed({ 
+      onFileProcessed({
         type: 'code_update',
-        vendor: detectedVendor 
+        vendor: detectedVendor
       });
     }
 
