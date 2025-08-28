@@ -1200,7 +1200,7 @@ const handleCodeFileUpdate = async () => {
         }
       });
       
-      addBatchLog('�� Property data processing completed', 'success', {
+      addBatchLog('✅ Property data processing completed', 'success', {
         processed: result.processed,
         errors: result.errors
       });
@@ -1652,8 +1652,9 @@ const handleCodeFileUpdate = async () => {
                   disabled={currentReportPage === 1}
                   className="p-2 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
                   title="Previous page"
+                  style={{color: 'black'}}
                 >
-                  <svg className="w-4 h-4" style={{color: '#1f2937'}} fill="currentColor" viewBox="0 0 20 20">
+                  <svg className="w-4 h-4" fill="black" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
                   </svg>
                 </button>
