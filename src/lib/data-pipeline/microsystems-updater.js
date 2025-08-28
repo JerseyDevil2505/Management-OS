@@ -522,11 +522,32 @@ export class MicrosystemsUpdater {
         console.log(`📊 Source file contains ${sourceFileKeys.length} properties`);
 
         // Find properties in DB that are NOT in source file
-        const { data: existingProperties, error: fetchError } = await supabase
+        console.log('🗂️ Querying database for existing properties to check for deletions...');
+        console.log(`🔍 Searching for properties NOT in ${sourceFileKeys.length} source file keys...`);
+
+        // OPTIMIZATION: Add timeout to prevent infinite hanging
+        const deletionCheckPromise = supabase
           .from('property_records')
           .select('id, property_composite_key, property_location')
           .eq('job_id', jobId)
           .not('property_composite_key', 'in', `(${sourceFileKeys.map(k => `"${k}"`).join(',')})`);
+
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Deletion check timeout after 30 seconds - database may be overloaded')), 30000)
+        );
+
+        let existingProperties = null;
+        let fetchError = null;
+
+        try {
+          const result = await Promise.race([deletionCheckPromise, timeoutPromise]);
+          existingProperties = result.data;
+          fetchError = result.error;
+          console.log('✅ Deletion check query completed successfully');
+        } catch (timeoutError) {
+          console.error('❌ DELETION CHECK TIMED OUT:', timeoutError.message);
+          fetchError = timeoutError;
+        }
 
         if (fetchError) {
           console.warn('⚠️ Could not fetch existing properties for deletion check:', fetchError);
