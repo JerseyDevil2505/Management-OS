@@ -894,27 +894,30 @@ const handleCodeFileUpdate = async () => {
     }
   };
 
-  // Fetch current file version from property_records
+  // Fetch current file version and updated_at from property_records
   const fetchCurrentFileVersion = async () => {
     try {
       const { data: versionData, error } = await supabase
         .from('property_records')
-        .select('file_version')
+        .select('file_version, updated_at')
         .eq('job_id', job.id)
         .order('file_version', { ascending: false })
         .limit(1)
         .single();
 
       if (versionData && !error) {
-        console.log(`📊 Current file_version from DB: ${versionData.file_version}`);
+        console.log(`📊 Current file_version from DB: ${versionData.file_version}, updated_at: ${versionData.updated_at}`);
         setCurrentFileVersion(versionData.file_version || 1);
+        setLastUpdatedAt(versionData.updated_at);
       } else {
         console.log('📊 No records found, setting file_version to 1');
         setCurrentFileVersion(1);
+        setLastUpdatedAt(null);
       }
     } catch (error) {
       console.error('Error fetching file version:', error);
       setCurrentFileVersion(1);
+      setLastUpdatedAt(null);
     }
   };
 
