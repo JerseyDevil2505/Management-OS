@@ -19,38 +19,7 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
   },
   global: {
     headers: {
-      'x-client-info': 'property-app',
-      'x-connection-pool': 'shared'
-    },
-    // Simplified fetch with just timeout - let Supabase handle retries
-    fetch: async (url, options = {}) => {
-      const timeout = options.timeout || 30000; // Shorter timeout - 30 seconds
-
-      // Create an AbortController for timeout
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), timeout);
-
-      try {
-        const response = await fetch(url, {
-          ...options,
-          signal: controller.signal
-        });
-
-        clearTimeout(timeoutId);
-
-        // Always return the response - let Supabase handle errors
-        return response;
-
-      } catch (error) {
-        clearTimeout(timeoutId);
-
-        if (error.name === 'AbortError') {
-          console.error(`⏱️ Request timeout after ${timeout/1000}s: ${url}`);
-          throw new Error(`Request timeout after ${timeout/1000} seconds`);
-        }
-
-        throw error;
-      }
+      'x-client-info': 'property-app'
     }
   }
 });
