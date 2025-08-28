@@ -1659,7 +1659,7 @@ const handleCodeFileUpdate = async () => {
                   </svg>
                 </button>
 
-                <span className="text-sm font-medium" style={{color: '#1f2937'}}>
+                <span className="text-sm font-bold" style={{color: 'black', fontWeight: 'bold'}}>
                   {currentReportPage} / {totalPages}
                 </span>
 
