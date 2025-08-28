@@ -2489,18 +2489,27 @@ try {
     }
   };
 
-  // Use file version from job prop instead of fetching
+  // Use file version from sessionStorage first, then job prop
   useEffect(() => {
     if (!job?.id) return;
 
-    // Get version from job's property_records or default to 1
-    // This should be passed from JobContainer which already has the data
-    const currentVersion = job.current_file_version || job.source_file_version || 1;
+    // CRITICAL FIX: Check sessionStorage first to preserve state across redeploys
+    const storedVersion = sessionStorage.getItem(`job_${job.id}_sourceFileVersion`);
+    const storedDate = sessionStorage.getItem(`job_${job.id}_lastSourceProcessed`);
 
-    // CRITICAL FIX: Only set version if we haven't processed anything yet
-    // Don't override state if we just completed processing
-    if (sourceFileVersion === null && !processing) {
-      setSourceFileVersion(currentVersion);
+    if (storedVersion && storedDate) {
+      // Restore from sessionStorage
+      setSourceFileVersion(parseInt(storedVersion));
+      setLastSourceProcessedDate(storedDate);
+      console.log(`🔄 Restored from sessionStorage: version ${storedVersion}, date ${storedDate}`);
+    } else {
+      // Fall back to job prop data
+      const currentVersion = job.current_file_version || job.source_file_version || 1;
+
+      // Only set version if we haven't processed anything yet
+      if (sourceFileVersion === null && !processing) {
+        setSourceFileVersion(currentVersion);
+      }
     }
 
     setIsInitialized(true);
