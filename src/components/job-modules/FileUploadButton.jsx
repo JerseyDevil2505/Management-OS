@@ -1197,20 +1197,47 @@ const handleCodeFileUpdate = async () => {
       // Call the updater to UPSERT the database
       addBatchLog(`📊 Calling ${detectedVendor} updater (UPSERT mode)...`, 'info');
 
-      // FIX: Calculate new file_version for property_records - fetch current from DB
+      // FIX: Calculate new file_version for property_records - fetch current from DB with timeout
       addBatchLog('🔍 Fetching current file version from database...', 'info');
-      const { data: currentVersionData, error: versionError } = await supabase
-        .from('property_records')
-        .select('file_version')
-        .eq('job_id', job.id)
-        .order('file_version', { ascending: false })
-        .limit(1)
-        .single();
 
-      const currentFileVersion = currentVersionData?.file_version || 1;
-      const newFileVersion = currentFileVersion + 1;
+      let currentFileVersion = 1;
+      let newFileVersion = 2;
 
-      addBatchLog(`📊 Current DB version: ${currentFileVersion}, incrementing to: ${newFileVersion}`, 'info');
+      try {
+        // Add 10-second timeout to prevent hanging
+        const versionPromise = supabase
+          .from('property_records')
+          .select('file_version')
+          .eq('job_id', job.id)
+          .order('file_version', { ascending: false })
+          .limit(1)
+          .single();
+
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Version fetch timeout after 10 seconds')), 10000)
+        );
+
+        const { data: currentVersionData, error: versionError } = await Promise.race([
+          versionPromise,
+          timeoutPromise
+        ]);
+
+        if (versionError && versionError.code !== 'PGRST116') {
+          throw versionError;
+        }
+
+        currentFileVersion = currentVersionData?.file_version || 1;
+        newFileVersion = currentFileVersion + 1;
+
+        addBatchLog(`📊 Current DB version: ${currentFileVersion}, incrementing to: ${newFileVersion}`, 'info');
+
+      } catch (error) {
+        addBatchLog(`⚠️ Version fetch failed: ${error.message}, using default version increment`, 'warning');
+        // Fallback: get a reasonable version number
+        currentFileVersion = Date.now() % 100; // Use timestamp as version
+        newFileVersion = currentFileVersion + 1;
+        addBatchLog(`📊 Using fallback version: ${newFileVersion}`, 'info');
+      }
 
       // Track batch operations
       const result = await trackBatchInserts(async () => {
