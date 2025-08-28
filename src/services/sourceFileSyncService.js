@@ -152,9 +152,9 @@ class SourceFileSyncService {
           job_id,
           jobs!job_id (
             id,
-            job_name,
-            municipality,
-          vendor_source,
+          job_name,
+          municipality,
+          vendor_type,
           raw_file_content,
           raw_file_parsed_at,
           ccdd_code,
