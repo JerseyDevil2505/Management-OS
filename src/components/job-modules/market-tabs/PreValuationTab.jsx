@@ -1,4 +1,4 @@
-  import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase, interpretCodes, worksheetService, checklistService } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx';
 import { 
@@ -1325,7 +1325,7 @@ const processSelectedProperties = async () => {
           message: `Processing batch ${Math.floor(i/batchSize) + 1} of ${Math.ceil(toProcess.length/batchSize)}...` 
         });
         
-        // Build update array for batch upsert
+        // Build update array for batch upsert to property_market_analysis table
         const updates = batch.map(prop => ({
           property_composite_key: prop.property_composite_key,
           new_vcs: prop.new_vcs,
@@ -1334,10 +1334,10 @@ const processSelectedProperties = async () => {
           asset_map_page: prop.asset_map_page,
           asset_key_page: prop.asset_key_page
         }));
-        
+
         // Use upsert for batch processing
         const { error } = await supabase
-          .from('property_records')
+          .from('property_market_analysis')
           .upsert(updates, { onConflict: 'property_composite_key' });
           
         if (error) throw error;
