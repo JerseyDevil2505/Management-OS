@@ -1217,10 +1217,12 @@ const ProductionTracker = ({
         const hasMeasureBy = record.inspection_measure_by && record.inspection_measure_by.trim() !== '';
         const hasMeasureDate = record.inspection_measure_date;
 
-        // If ALL three core fields are null/empty, it's not inspected
-        if (!hasInfoBy && !hasMeasureBy && !hasMeasureDate) {
-          // Property not yet inspected - no inspection data at all
-          reasonNotAdded = 'Not yet inspected';
+        // FIXED: A real inspection requires BOTH inspector AND date - info_by alone is not an inspection
+        if (!hasMeasureBy && !hasMeasureDate) {
+          // Property not yet inspected - info_by code alone doesn't count as inspected
+          reasonNotAdded = hasInfoBy ?
+            'Info_by code only - missing inspector and measure date' :
+            'Not yet inspected';
           missingProperties.push({
             composite_key: propertyKey,
             block: record.property_block,
@@ -1231,7 +1233,7 @@ const ProductionTracker = ({
             property_class: propertyClass,
             reason: reasonNotAdded,
             inspector: '',
-            info_by_code: '',
+            info_by_code: hasInfoBy ? record.inspection_info_by : '',
             measure_date: null,
             validation_issues: []
           });
