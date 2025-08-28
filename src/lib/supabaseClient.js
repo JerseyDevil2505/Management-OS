@@ -796,7 +796,7 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
   },
 
   // Get VCS (Valuation Control Sector) description - aka Neighborhood
-  getVCSDescription: function(property, codeDefinitions, vendorType) {
+  getVCSDescription: async function(property, codeDefinitions, vendorType) {
     if (!property || !codeDefinitions) return null;
     
     // Get VCS code from property (check multiple possible fields)
