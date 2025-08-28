@@ -544,7 +544,7 @@ const generateQCFormPDF = () => {
       const rawDataCache = new Map();
       console.log('🔄 Starting quality checks with job-level raw data access...');
 
-      const pageSize = 100; // Smaller batches for better progress tracking
+      const pageSize = 500; // Larger batches for better performance
       const totalPages = Math.ceil(properties.length / pageSize);
       let processedCount = 0;
 
@@ -561,8 +561,8 @@ const generateQCFormPDF = () => {
           await runPropertyChecks(property, results, rawDataCache);
           processedCount++;
 
-          // Update progress every 10 properties for smoother UI
-          if (processedCount % 10 === 0) {
+          // Update progress every 50 properties to reduce UI overhead
+          if (processedCount % 50 === 0) {
             setAnalysisProgress({
               current: processedCount,
               total: properties.length,
