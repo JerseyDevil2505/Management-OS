@@ -621,11 +621,6 @@ export class BRTUpdater {
       // CRITICAL FIX: Store source file content in jobs table
       await this.storeSourceFileInDatabase(sourceFileContent, jobId);
 
-      // NEW: Store complete source file version for lineage tracking
-      const sourceFileVersionId = await this.storeSourceFileVersion(
-        sourceFileContent, jobId, processingVersion, yearCreated, ccddCode
-      );
-
       // Process and store code file if provided
       if (codeFileContent) {
         await this.processCodeFile(codeFileContent, jobId);
