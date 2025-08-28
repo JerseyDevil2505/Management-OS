@@ -610,6 +610,7 @@ export class BRTUpdater {
    * CLEANED: Removed surgical fix functions - job totals handled by AdminJobManagement/FileUploadButton
    * ENHANCED: Added field preservation support
    * CRITICAL: Added automatic rollback for failed batches
+   * NEW: Added complete property lineage tracking
    */
   async processFile(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, versionInfo = {}) {
     // Track successful batches for rollback
@@ -621,6 +622,11 @@ export class BRTUpdater {
 
       // CRITICAL FIX: Store source file content in jobs table
       await this.storeSourceFileInDatabase(sourceFileContent, jobId);
+
+      // NEW: Store complete source file version for lineage tracking
+      const sourceFileVersionId = await this.storeSourceFileVersion(
+        sourceFileContent, jobId, processingVersion, yearCreated, ccddCode
+      );
 
       // Process and store code file if provided
       if (codeFileContent) {
@@ -808,7 +814,12 @@ export class BRTUpdater {
         }
       }
       
-      console.log('🚀 ENHANCED BRT UPDATER (UPSERT) COMPLETE WITH ALL SECTIONS:', results);
+      // NEW: Mark source file version as processed
+      if (sourceFileVersionId) {
+        await this.markSourceFileVersionProcessed(sourceFileVersionId, results);
+      }
+
+      console.log('🚀 ENHANCED BRT UPDATER (UPSERT) COMPLETE WITH ALL SECTIONS AND LINEAGE TRACKING:', results);
       return results;
       
     } catch (error) {
