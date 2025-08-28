@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { 
+import {
   Upload, Plus, Edit3, Users, FileText, Calendar, MapPin, Database, Settings, Eye,
-  DollarSign, Trash2, CheckCircle, Archive, TrendingUp, Target, AlertTriangle, X, Clock 
+  DollarSign, Trash2, CheckCircle, Archive, TrendingUp, Target, AlertTriangle, X, Clock
 } from 'lucide-react';
 import { supabase, employeeService, jobService, planningJobService, utilityService, authService, propertyService } from '../lib/supabaseClient';
+import SourceFileSyncManager from './SourceFileSyncManager';
 
 // Accept jobMetrics props for live metrics integration
 const AdminJobManagement = ({ 
