@@ -286,8 +286,8 @@ class SourceFileSyncService {
           record_id: jobId,
           action: 'sync_error',
           changes: {
-            error: error.message,
-            stack: error.stack,
+            error: getErrorMessage(error),
+            stack: error.stack || 'No stack trace available',
             timestamp: new Date().toISOString()
           }
         });
