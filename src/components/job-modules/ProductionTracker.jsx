@@ -1476,17 +1476,22 @@ const ProductionTracker = ({
           });
         }
 
-        // Process valid inspections
-        if (isValidInspection && hasValidInfoBy && hasValidMeasuredBy && hasValidMeasuredDate) {
-          
-          // Count for manager progress (valid inspections against total properties)
+        // FIXED: Count ALL inspection attempts as "inspected", regardless of validation issues
+        // If we have inspector AND date, it's an inspection attempt
+        const hasInspectionAttempt = hasValidMeasuredBy && hasValidMeasuredDate;
+
+        if (hasInspectionAttempt) {
+          // Count ALL inspection attempts for manager progress tracking
           if (classBreakdown[propertyClass]) {
             classBreakdown[propertyClass].inspected++;
             billingByClass[propertyClass].inspected++;
-            billingByClass[propertyClass].billable++;
+            // Only count as billable if it's also valid
+            if (isValidInspection && hasValidInfoBy) {
+              billingByClass[propertyClass].billable++;
+            }
           }
 
-          // Inspector analytics - count valid inspections only
+          // Inspector analytics - count ALL inspection attempts
           inspectorStats[inspector].totalInspected++;
             
           const workDayString = measuredDate.toISOString().split('T')[0];
