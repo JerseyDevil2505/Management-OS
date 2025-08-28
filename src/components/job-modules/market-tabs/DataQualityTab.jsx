@@ -9,7 +9,7 @@ import {
   ChevronLeft
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { supabase, interpretCodes } from '../../../lib/supabaseClient';
+import { supabase, interpretCodes, propertyService } from '../../../lib/supabaseClient';
 
 const DataQualityTab = ({ 
   // Props from parent
@@ -38,6 +38,8 @@ const DataQualityTab = ({
   const [dataQualityActiveSubTab, setDataQualityActiveSubTab] = useState('overview');
   const [expandedCategories, setExpandedCategories] = useState(['mod_iv']);
   const [isRunningChecks, setIsRunningChecks] = useState(false);
+  const [analysisProgress, setAnalysisProgress] = useState({ current: 0, total: 0, phase: '' });
+  const [allRawDataFields, setAllRawDataFields] = useState([]);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [ignoredIssues, setIgnoredIssues] = useState(new Set());
   const [modalData, setModalData] = useState({ title: '', properties: [] });
@@ -106,8 +108,33 @@ const DataQualityTab = ({
         window.removeEventListener('keydown', handleEsc);
       };
     }
-  }, [showDetailsModal]);  
-  
+  }, [showDetailsModal]);
+
+  // Populate raw data fields from a sample property
+  useEffect(() => {
+    const populateRawDataFields = async () => {
+      if (properties.length > 0 && jobData?.id) {
+        try {
+          // Get raw data from the first property to discover available fields
+          const sampleProperty = properties[0];
+          const rawData = await propertyService.getRawDataForProperty(
+            sampleProperty.job_id,
+            sampleProperty.property_composite_key
+          );
+
+          if (rawData && typeof rawData === 'object') {
+            const fieldNames = Object.keys(rawData).sort();
+            setAllRawDataFields(fieldNames);
+            console.log(`📋 Discovered ${fieldNames.length} raw data fields for custom checks`);
+          }
+        } catch (error) {
+          console.error('Error loading raw data fields:', error);
+        }
+      }
+    };
+
+    populateRawDataFields();
+  }, [properties, jobData?.id]);
 
   // ==================== DATA QUALITY FUNCTIONS ====================
   const exportToExcel = () => {
@@ -499,6 +526,8 @@ const generateQCFormPDF = () => {
 };
   const runQualityChecks = async () => {
     setIsRunningChecks(true);
+    setAnalysisProgress({ current: 0, total: properties.length, phase: 'Initializing...' });
+
     const results = {
       mod_iv: [],
       cama: [],
@@ -507,19 +536,39 @@ const generateQCFormPDF = () => {
       rooms: [],
       custom: []
     };
-    
+
     try {
       const vendor = vendorType || jobData.vendor_source || 'BRT';
-      
-      const pageSize = 1000;
+
+      // Create cache for raw data to avoid repeated RPC calls
+      const rawDataCache = new Map();
+      console.log('🔄 Starting quality checks with job-level raw data access...');
+
+      const pageSize = 2000; // Much larger batches with fast client-side parsing
       const totalPages = Math.ceil(properties.length / pageSize);
-      
+      let processedCount = 0;
+
       for (let page = 0; page < totalPages; page++) {
         const batch = properties.slice(page * pageSize, (page + 1) * pageSize);
+        setAnalysisProgress({
+          current: processedCount,
+          total: properties.length,
+          phase: `Processing batch ${page + 1} of ${totalPages}...`
+        });
         console.log(`Processing batch ${page + 1} of ${totalPages}...`);
-        
+
         for (const property of batch) {
-          await runPropertyChecks(property, results);
+          await runPropertyChecks(property, results, rawDataCache);
+          processedCount++;
+
+          // Update progress every 200 properties since it's much faster now
+          if (processedCount % 200 === 0) {
+            setAnalysisProgress({
+              current: processedCount,
+              total: properties.length,
+              phase: `Analyzing properties...`
+            });
+          }
         }
       }
 
@@ -539,14 +588,24 @@ const generateQCFormPDF = () => {
       
       // Run all custom checks automatically
       if (customChecks.length > 0) {
+        setAnalysisProgress({
+          current: 0,
+          total: customChecks.length,
+          phase: `Running ${customChecks.length} custom checks...`
+        });
         console.log(`Running ${customChecks.length} custom checks...`);
-        
+
         // Reset custom results first
         setCheckResults(prev => ({ ...prev, custom: [] }));
-        
+
         // Run each custom check
-        for (const check of customChecks) {
-          await runCustomCheck(check);
+        for (let i = 0; i < customChecks.length; i++) {
+          setAnalysisProgress({
+            current: i + 1,
+            total: customChecks.length,
+            phase: `Running custom check: ${customChecks[i].name}`
+          });
+          await runCustomCheck(customChecks[i]);
         }
       }
       
@@ -581,12 +640,25 @@ const generateQCFormPDF = () => {
       console.error('Error running quality checks:', error);
     } finally {
       setIsRunningChecks(false);
+      setAnalysisProgress({ current: 0, total: 0, phase: '' });
     }
   };
 
-  const runPropertyChecks = async (property, results) => {
+  const runPropertyChecks = async (property, results, rawDataCache) => {
     const vendor = property.vendor_source || jobData.vendor_source || 'BRT';
-    const rawData = property.raw_data || {};
+
+    // Get raw data from cache or use FAST client-side parsing (skip slow RPC calls)
+    let rawData = rawDataCache.get(property.property_composite_key);
+    if (rawData === undefined) {
+      try {
+        // Use client-side fallback directly - much faster than RPC calls!
+        rawData = (await propertyService.getRawDataForPropertyClientSide(property.job_id, property.property_composite_key)) || {};
+      } catch (error) {
+        console.warn(`Failed to get raw data for ${property.property_composite_key}:`, error);
+        rawData = {};
+      }
+      rawDataCache.set(property.property_composite_key, rawData);
+    }
     
     // MOD IV CHECKS
     const m4Class = property.property_m4_class;
@@ -814,7 +886,7 @@ const generateQCFormPDF = () => {
     }
     
   // LOT SIZE CHECKS - Use the enhanced getTotalLotSize function
-    const totalLotSize = interpretCodes.getTotalLotSize(property, vendor, codeDefinitions);
+    const totalLotSize = await interpretCodes.getTotalLotSize(property, vendor, codeDefinitions);
     const lotFrontage = property.asset_lot_frontage || 0;
     
     // Check if we truly have zero lot size (getTotalLotSize returns acres or null)
@@ -824,10 +896,10 @@ const generateQCFormPDF = () => {
       
       if (typeUseStr && (typeUseStr.startsWith('6') || typeUseStr.startsWith('60'))) {
         // It's a condo - check if it only has site value in BRT
-        if (vendor === 'BRT' && property.raw_data) {
+        if (vendor === 'BRT' && rawData) {
           let hasSiteOnly = false;
           for (let i = 1; i <= 6; i++) {
-            const code = property.raw_data[`LANDUR_${i}`];
+            const code = rawData[`LANDUR_${i}`];
             if (code === '01' || code === '1') hasSiteOnly = true;
             if (code === '02' || code === '2') {
               hasSiteOnly = false;  // Has acreage, not just site value
@@ -943,7 +1015,7 @@ const generateQCFormPDF = () => {
     // BEDROOM COUNT VALIDATION
     if ((m4Class === '2' || m4Class === '3A') && buildingClass > 10) {
       if (vendor === 'BRT') {
-        const bedTotal = interpretCodes.getRawDataValue(property, 'bedrooms', vendor);
+        const bedTotal = await interpretCodes.getRawDataValue(property, 'bedrooms', vendor);
         if (!bedTotal || parseInt(bedTotal) === 0) {
           results.rooms.push({
             check: 'zero_bedrooms',
@@ -954,7 +1026,7 @@ const generateQCFormPDF = () => {
           });
         }
       } else if (vendor === 'Microsystems') {
-        const totalBeds = interpretCodes.getBedroomRoomSum(property, vendor);
+        const totalBeds = await interpretCodes.getBedroomRoomSum(property, vendor);
         
         if (totalBeds === 0) {
           results.rooms.push({
@@ -972,7 +1044,7 @@ const generateQCFormPDF = () => {
     if ((m4Class === '2' || m4Class === '3A') && buildingClass > 10) {
       if (vendor === 'BRT') {
         const bathTotal = parseInt(rawData.BATHTOT) || 0;
-        const plumbingSum = interpretCodes.getBathroomPlumbingSum(property, vendor);
+        const plumbingSum = await interpretCodes.getBathroomPlumbingSum(property, vendor);
         
         if (bathTotal !== plumbingSum && plumbingSum > 0) {
           results.rooms.push({
@@ -984,8 +1056,8 @@ const generateQCFormPDF = () => {
           });
         }
       } else if (vendor === 'Microsystems') {
-        const fixtureSum = interpretCodes.getBathroomFixtureSum(property, vendor);
-        const roomSum = interpretCodes.getBathroomRoomSum(property, vendor);
+        const fixtureSum = await interpretCodes.getBathroomFixtureSum(property, vendor);
+        const roomSum = await interpretCodes.getBathroomRoomSum(property, vendor);
         
         if (fixtureSum !== roomSum && roomSum > 0) {
           results.rooms.push({
@@ -1453,7 +1525,7 @@ const generateQCFormPDF = () => {
         total: totalIssues
       });
       
-      console.log(`✅ Saved: ${totalIssues} issues found`);
+      console.log(`�� Saved: ${totalIssues} issues found`);
       
     } catch (error) {
       console.error('Error saving:', error);
@@ -1619,17 +1691,26 @@ const editCustomCheck = (check) => {
   
   const runCustomCheck = async (check) => {
     const results = { custom: [] };
-    
+    const rawDataCache = new Map(); // Cache for this custom check run
+
     for (const property of properties) {
       let conditionMet = true;
-      
+
       for (let i = 0; i < check.conditions.length; i++) {
         const condition = check.conditions[i];
-            
+
         let fieldValue;
         if (condition.field.startsWith('raw_data.')) {
           const rawFieldName = condition.field.replace('raw_data.', '');
-          fieldValue = property.raw_data ? property.raw_data[rawFieldName] : null;
+
+          // Get raw data from cache or fetch from job-level storage
+          let rawData = rawDataCache.get(property.property_composite_key);
+          if (rawData === undefined) {
+            rawData = (await propertyService.getRawDataForProperty(property.job_id, property.property_composite_key)) || {};
+            rawDataCache.set(property.property_composite_key, rawData);
+          }
+
+          fieldValue = rawData[rawFieldName] || null;
         } else {
           fieldValue = property[condition.field];
         }
@@ -1724,22 +1805,32 @@ const editCustomCheck = (check) => {
       ...checkResults,
       custom: []
     };
-    
+
     // Run all custom checks and collect results
+    const rawDataCache = new Map(); // Cache for all custom checks
+
     for (const check of customChecks) {
       const customResults = [];
-      
+
       for (const property of properties) {
         let conditionMet = true;
-        
+
         // Check conditions (same logic as runCustomCheck)
         for (let i = 0; i < check.conditions.length; i++) {
           const condition = check.conditions[i];
-          
+
           let fieldValue;
           if (condition.field.startsWith('raw_data.')) {
             const rawFieldName = condition.field.replace('raw_data.', '');
-            fieldValue = property.raw_data ? property.raw_data[rawFieldName] : null;
+
+            // Get raw data from cache or fetch from job-level storage
+            let rawData = rawDataCache.get(property.property_composite_key);
+            if (rawData === undefined) {
+              rawData = (await propertyService.getRawDataForProperty(property.job_id, property.property_composite_key)) || {};
+              rawDataCache.set(property.property_composite_key, rawData);
+            }
+
+            fieldValue = rawData[rawFieldName] || null;
           } else {
             fieldValue = property[condition.field];
           }
@@ -1913,18 +2004,43 @@ const editCustomCheck = (check) => {
           </div>
 
           <div className="flex gap-3 mb-6">
-            <button 
+            <button
               onClick={runQualityChecks}
               disabled={isRunningChecks || properties.length === 0}
               className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-all ${
                 isRunningChecks || properties.length === 0
-                  ? 'bg-gray-400 text-white cursor-not-allowed' 
+                  ? 'bg-gray-400 text-white cursor-not-allowed'
                   : 'bg-blue-600 text-white hover:bg-blue-700'
               }`}
             >
               <RefreshCw size={16} className={isRunningChecks ? 'animate-spin' : ''} />
               {isRunningChecks ? 'Running Analysis...' : 'Run Analysis'}
             </button>
+
+            {/* Progress Bar */}
+            {isRunningChecks && analysisProgress.total > 0 && (
+              <div className="flex-1 min-w-0">
+                <div className="bg-white border border-gray-300 rounded-lg p-3">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-sm font-medium text-gray-700">
+                      {analysisProgress.phase}
+                    </span>
+                    <span className="text-sm text-gray-500">
+                      {analysisProgress.current.toLocaleString()} / {analysisProgress.total.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div
+                      className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${(analysisProgress.current / analysisProgress.total) * 100}%` }}
+                    ></div>
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    {Math.round((analysisProgress.current / analysisProgress.total) * 100)}% complete
+                  </div>
+                </div>
+              </div>
+            )}
             
             <button 
               onClick={exportToExcel}
@@ -2164,7 +2280,14 @@ const editCustomCheck = (check) => {
                   </div>
                   
                   <div className="border-t pt-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Conditions</label>
+                    <div className="flex justify-between items-center mb-2">
+                      <label className="block text-sm font-medium text-gray-700">Conditions</label>
+                      {allRawDataFields.length > 0 && (
+                        <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded">
+                          ✓ {allRawDataFields.length} raw data fields available
+                        </span>
+                      )}
+                    </div>
                     {currentCustomCheck.conditions.map((condition, index) => (
                       <div key={index} className="flex gap-2 items-center mb-2">
                         <select 
@@ -2239,9 +2362,9 @@ const editCustomCheck = (check) => {
                             <option value="newVCS">New VCS</option>
                           </optgroup>
                           
-                          {availableFields.length > 0 && (
-                            <optgroup label={`Raw Data Fields (${vendorType || 'Vendor'})`}>
-                              {availableFields.map(field => (
+                          {(allRawDataFields.length > 0 || availableFields.length > 0) && (
+                            <optgroup label={`Raw Data Fields (${allRawDataFields.length || availableFields.length} available)`}>
+                              {(allRawDataFields.length > 0 ? allRawDataFields : availableFields).map(field => (
                                 <option key={field} value={`raw_data.${field}`}>
                                   {field}
                                 </option>
@@ -2622,4 +2745,3 @@ const editCustomCheck = (check) => {
 };
 
 export default DataQualityTab;
-      

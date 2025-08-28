@@ -1,5 +1,38 @@
 import { createClient } from '@supabase/supabase-js';
 
+/**
+ * Helper function to safely extract error message from any error type
+ */
+function getErrorMessage(error) {
+  if (!error) return 'Unknown error';
+
+  // If it's a string, return it directly
+  if (typeof error === 'string') return error;
+
+  // Try various error message properties
+  if (error.message) return error.message;
+  if (error.msg) return error.msg;
+  if (error.error) return error.error;
+  if (error.details) return error.details;
+
+  // If it's an object with specific error info
+  if (error.code && error.hint) {
+    return `${error.code}: ${error.hint}`;
+  }
+
+  // Try to stringify if it's an object
+  if (typeof error === 'object') {
+    try {
+      return JSON.stringify(error);
+    } catch (e) {
+      return 'Error object could not be serialized';
+    }
+  }
+
+  // Fallback to string conversion
+  return String(error);
+}
+
 const supabaseUrl = process.env.REACT_APP_SUPABASE_URL || 'https://zxvavttfvpsagzluqqwn.supabase.co';
 const supabaseKey = process.env.REACT_APP_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp4dmF2dHRmdnBzYWd6bHVxcXduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIzNDA4NjcsImV4cCI6MjA2NzkxNjg2N30.Rrn2pTnImCpBIoKPcdlzzZ9hMwnYtIO5s7i1ejwQReg';
 
@@ -19,82 +52,239 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
   },
   global: {
     headers: {
-      'x-client-info': 'property-app',
-      'x-connection-pool': 'shared'
-    },
-    // Custom fetch with timeout and retry logic
-    fetch: async (url, options = {}) => {
-      const timeout = options.timeout || 60000; // Default 60 seconds, can be overridden
-      const maxRetries = 3;
-      
-      for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        try {
-          // Create an AbortController for timeout
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), timeout);
-          
-          const response = await fetch(url, {
-            ...options,
-            signal: controller.signal
-          });
-          
-          clearTimeout(timeoutId);
-          
-          // If response is ok, return it
-          if (response.ok) {
-            return response;
-          }
-          
-          // If it's a server error (5xx), retry
-          if (response.status >= 500 && attempt < maxRetries) {
-            console.log(`🔄 Server error (${response.status}), retrying attempt ${attempt + 1}/${maxRetries}...`);
-            await new Promise(resolve => setTimeout(resolve, 1000 * attempt)); // Exponential backoff
-            continue;
-          }
-          
-          // For client errors (4xx), don't retry
-          return response;
-          
-        } catch (error) {
-          // If it's an abort error (timeout), retry if we have attempts left
-          if (error.name === 'AbortError' && attempt < maxRetries) {
-            console.log(`⏱️ Request timeout, retrying attempt ${attempt + 1}/${maxRetries}...`);
-            await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
-            continue;
-          }
-          
-          // If it's a network error and we have retries left, try again
-          if (error.name === 'TypeError' && error.message === 'Failed to fetch' && attempt < maxRetries) {
-            console.log(`🌐 Network error, retrying attempt ${attempt + 1}/${maxRetries}...`);
-            await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
-            continue;
-          }
-          
-          // If we're out of retries or it's a different error, throw it
-          if (attempt === maxRetries) {
-            console.error(`❌ Failed after ${maxRetries} attempts:`, error);
-          }
-          throw error;
-        }
-      }
+      'x-client-info': 'property-app'
     }
   }
 });
 
+// ===== SOURCE FILE DATA ACCESS HELPERS =====
+// These replace raw_data access with source file content parsing
+
+/**
+ * Cache for parsed source file data to avoid repeated parsing
+ */
+const sourceFileCache = new Map();
+
+/**
+ * Get parsed raw data for a job (with caching)
+ */
+async function getRawDataForJob(jobId) {
+  if (sourceFileCache.has(jobId)) {
+    return sourceFileCache.get(jobId);
+  }
+
+  try {
+    const { data: job, error } = await supabase
+      .from('jobs')
+      .select('raw_file_content, ccdd_code, start_date')
+      .eq('id', jobId)
+      .single();
+
+    if (error || !job?.raw_file_content) {
+      return null;
+    }
+
+    // Determine vendor type and year
+    const vendorType = detectVendorTypeFromContent(job.raw_file_content);
+    const yearCreated = new Date(job.start_date).getFullYear();
+    const ccddCode = job.ccdd_code;
+
+    // Parse the source file
+    const parsedData = parseSourceFileContent(job.raw_file_content, vendorType) || [];
+
+    // Create property lookup map by composite key
+    const propertyMap = new Map();
+    if (Array.isArray(parsedData)) {
+      parsedData.forEach(record => {
+        if (record) {
+          const compositeKey = generateCompositeKeyFromRecord(record, vendorType, yearCreated, ccddCode);
+          if (compositeKey) {
+            propertyMap.set(compositeKey, record);
+          }
+        }
+      });
+    }
+
+    const result = {
+      vendorType: vendorType || 'Unknown',
+      yearCreated: yearCreated || new Date().getFullYear(),
+      ccddCode: ccddCode || '',
+      propertyMap: propertyMap || new Map()
+    };
+
+    // Cache for 5 minutes
+    sourceFileCache.set(jobId, result);
+    setTimeout(() => sourceFileCache.delete(jobId), 5 * 60 * 1000);
+
+    return result;
+
+  } catch (error) {
+    console.error('Error getting source file data for job:', getErrorMessage(error));
+    console.error('Error details:', error);
+    return null;
+  }
+}
+
+/**
+ * Get raw data for a specific property
+ */
+async function getRawDataForProperty(jobId, propertyCompositeKey) {
+  const rawData = await getRawDataForJob(jobId);
+  if (!rawData) return null;
+
+  return rawData.propertyMap.get(propertyCompositeKey) || null;
+}
+
+/**
+ * Detect vendor type from source file content
+ */
+function detectVendorTypeFromContent(fileContent) {
+  const firstLine = fileContent.split('\n')[0];
+
+  if (firstLine.includes('BLOCK') && firstLine.includes('LOT') && firstLine.includes('QUALIFIER')) {
+    return 'BRT';
+  } else if (firstLine.includes('Block') && firstLine.includes('Lot') && firstLine.includes('Qual')) {
+    return 'Microsystems';
+  }
+
+  return 'Unknown';
+}
+
+/**
+ * Parse source file content based on vendor type
+ */
+function parseSourceFileContent(fileContent, vendorType) {
+  const lines = fileContent.split('\n').filter(line => line.trim());
+  if (lines.length < 2) return [];
+
+  let headers, separator;
+
+  if (vendorType === 'BRT') {
+    // Auto-detect BRT separator
+    const firstLine = lines[0];
+    const commaCount = (firstLine.match(/,/g) || []).length;
+    const tabCount = (firstLine.match(/\t/g) || []).length;
+
+    separator = (tabCount > 10 && tabCount > commaCount * 2) ? '\t' : ',';
+    headers = separator === ',' ? parseCSVLine(firstLine) : firstLine.split('\t').map(h => h.trim());
+  } else if (vendorType === 'Microsystems') {
+    separator = '|';
+    const originalHeaders = lines[0].split('|');
+    headers = renameDuplicateHeaders(originalHeaders);
+  }
+
+  const records = [];
+  for (let i = 1; i < lines.length; i++) {
+    let values;
+
+    if (vendorType === 'BRT') {
+      values = separator === ',' ? parseCSVLine(lines[i]) : lines[i].split('\t').map(v => v.trim());
+    } else if (vendorType === 'Microsystems') {
+      values = lines[i].split('|');
+    }
+
+    if (values.length !== headers.length) continue;
+
+    const record = {};
+    headers.forEach((header, index) => {
+      record[header] = values[index] || null;
+    });
+
+    records.push(record);
+  }
+
+  return records;
+}
+
+/**
+ * Generate composite key from source record
+ */
+function generateCompositeKeyFromRecord(record, vendorType, yearCreated, ccddCode) {
+  if (vendorType === 'BRT') {
+    const blockValue = String(record.BLOCK || '').trim();
+    const lotValue = String(record.LOT || '').trim();
+    const qualifierValue = String(record.QUALIFIER || '').trim() || 'NONE';
+    const cardValue = String(record.CARD || '').trim() || 'NONE';
+    const locationValue = String(record.PROPERTY_LOCATION || '').trim() || 'NONE';
+
+    return `${yearCreated}${ccddCode}-${blockValue}-${lotValue}_${qualifierValue}-${cardValue}-${locationValue}`;
+  } else if (vendorType === 'Microsystems') {
+    const blockValue = String(record['Block'] || '').trim();
+    const lotValue = String(record['Lot'] || '').trim();
+    const qualValue = String(record['Qual'] || '').trim() || 'NONE';
+    const bldgValue = String(record['Bldg'] || '').trim() || 'NONE';
+    const locationValue = String(record['Location'] || '').trim() || 'NONE';
+
+    return `${yearCreated}${ccddCode}-${blockValue}-${lotValue}_${qualValue}-${bldgValue}-${locationValue}`;
+  }
+
+  return null;
+}
+
+/**
+ * Parse CSV line with proper quote handling
+ */
+function parseCSVLine(line) {
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+  let i = 0;
+
+  while (i < line.length) {
+    const char = line[i];
+
+    if (char === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i += 2;
+        continue;
+      }
+      inQuotes = !inQuotes;
+    } else if (char === ',' && !inQuotes) {
+      result.push(current.trim());
+      current = '';
+      i++;
+      continue;
+    } else {
+      current += char;
+    }
+
+    i++;
+  }
+
+  result.push(current.trim());
+  return result;
+}
+
+/**
+ * Rename duplicate headers for Microsystems
+ */
+function renameDuplicateHeaders(originalHeaders) {
+  const headerCounts = {};
+  return originalHeaders.map(header => {
+    if (headerCounts[header]) {
+      headerCounts[header]++;
+      return `${header}${headerCounts[header]}`;
+    } else {
+      headerCounts[header] = 1;
+      return header;
+    }
+  });
+}
+
 // Define fields that must be preserved during file updates
+// ULTRA-OPTIMIZED: Only critical per-property fields
 const PRESERVED_FIELDS = [
-  'project_start_date',      // ProductionTracker - user set
   'is_assigned_property',    // AdminJobManagement - from assignments
-  'validation_status',       // ProductionTracker - validation state
-  'location_analysis',       // MarketAnalysis - manually entered
-  'new_vcs',                 // AppealCoverage - manually set
-  'asset_map_page',          // MarketAnalysis worksheet - manually entered
-  'asset_key_page',          // MarketAnalysis worksheet - manually entered
-  'asset_zoning',            // MarketAnalysis worksheet - manually entered
-  'values_norm_size',        // MarketAnalysis - calculated value
-  'values_norm_time',        // MarketAnalysis - calculated value
-  'sales_history',           // FileUploadButton - sales decisions
 ]
+
+// MOVED TO jobs table (job-level metrics, not per-property):
+// - project_start_date (inspection start date)
+// - validation_status (imported vs updated)
+
+// MOVED TO property_market_analysis table (market analysis fields):
+// - location_analysis, new_vcs, asset_map_page, asset_key_page,
+// - asset_zoning, values_norm_size, values_norm_time, sales_history
 
 // ===== CODE INTERPRETATION UTILITIES =====
 // Utilities for interpreting vendor-specific codes in MarketLandAnalysis
@@ -201,13 +391,16 @@ brtParsedStructureMap: {
     return codeDefinitions[lookupKey] || code;
   },
 // Core BRT lookup function - updated to use mapping
-getBRTValue: function(property, codeDefinitions, fieldName) {
+getBRTValue: async function(property, codeDefinitions, fieldName) {
   if (!property || !codeDefinitions) return null;
-  
-  // Check both the property field and raw_data
+
+  // Check both the property field and source file data
   let code = property[fieldName];
-  if (!code && property.raw_data) {
-    code = property.raw_data[fieldName];
+  if (!code && property.job_id && property.property_composite_key) {
+    const rawData = await getRawDataForProperty(property.job_id, property.property_composite_key);
+    if (rawData) {
+      code = rawData[fieldName];
+    }
   }
   
   if (!code || code.trim() === '') return null;
@@ -313,31 +506,34 @@ getInteriorConditionName: function(property, codeDefinitions, vendorType) {
 },
 
   // ===== NEW: STORY HEIGHT / FLOOR INTERPRETER =====
-  getStoryHeight: function(property, codeDefinitions, vendorType) {
+  getStoryHeight: async function(property, codeDefinitions, vendorType) {
     if (!property) return null;
-    
-    // First check raw_data for the original text value
-    if (property.raw_data) {
-      if (vendorType === 'BRT') {
-        // BRT stores in various possible field names
-        const rawStory = property.raw_data.STORYHGT || 
-                        property.raw_data.STORY_HEIGHT ||
-                        property.raw_data['Story Height'] ||
-                        property.raw_data.STORIES;
-        if (rawStory) return rawStory;
-      } else if (vendorType === 'Microsystems') {
-        // Look for 510-prefixed fields in raw_data
-        for (const key in property.raw_data) {
-          if (key.startsWith('510')) {
-            const value = property.raw_data[key];
-            if (value) return value;
+
+    // First check source file data for the original text value
+    if (property.job_id && property.property_composite_key) {
+      const rawData = await getRawDataForProperty(property.job_id, property.property_composite_key);
+      if (rawData) {
+        if (vendorType === 'BRT') {
+          // BRT stores in various possible field names
+          const rawStory = rawData.STORYHGT ||
+                          rawData.STORY_HEIGHT ||
+                          rawData['Story Height'] ||
+                          rawData.STORIES;
+          if (rawStory) return rawStory;
+        } else if (vendorType === 'Microsystems') {
+          // Look for 510-prefixed fields in source data
+          for (const key in rawData) {
+            if (key.startsWith('510')) {
+              const value = rawData[key];
+              if (value) return value;
+            }
           }
+          // Also check common field names
+          const rawStory = rawData['Story Height'] ||
+                          rawData.STORY_HEIGHT ||
+                          rawData.STORIES;
+          if (rawStory) return rawStory;
         }
-        // Also check common field names
-        const rawStory = property.raw_data['Story Height'] ||
-                        property.raw_data.STORY_HEIGHT ||
-                        property.raw_data.STORIES;
-        if (rawStory) return rawStory;
       }
     }
     
@@ -461,10 +657,14 @@ getInteriorConditionName: function(property, codeDefinitions, vendorType) {
   },
 
   // Get raw data value with vendor awareness
-  getRawDataValue: function(property, fieldName, vendorType) {
-    if (!property || !property.raw_data) return null;
-    
-    const rawData = property.raw_data;
+  getRawDataValue: async function(property, fieldName, vendorType) {
+    if (!property) return null;
+
+    // Get source file data for this property
+    if (!property.job_id || !property.property_composite_key) return null;
+
+    const rawData = await getRawDataForProperty(property.job_id, property.property_composite_key);
+    if (!rawData) return null;
     
     // Handle vendor-specific field name differences
     if (vendorType === 'BRT') {
@@ -496,12 +696,12 @@ getInteriorConditionName: function(property, codeDefinitions, vendorType) {
       const microField = microFieldMap[fieldName] || fieldName;
       return rawData[microField];
     }
-    
+
     return rawData[fieldName];
   },
 
 // Get total lot size (aggregates multiple fields)
-getTotalLotSize: function(property, vendorType, codeDefinitions) {
+getTotalLotSize: async function(property, vendorType, codeDefinitions) {
   if (!property) return null;
   
   // First check direct acre/sf fields
@@ -519,8 +719,9 @@ getTotalLotSize: function(property, vendorType, codeDefinitions) {
   }
   
 // BRT: Check LANDUR codes only if still no data
-  if (totalAcres === 0 && totalSf === 0 && vendorType === 'BRT' && property.raw_data && codeDefinitions) {
-    const propertyVCS = property.raw_data?.VCS || property.property_vcs;
+  if (totalAcres === 0 && totalSf === 0 && vendorType === 'BRT' && property.job_id && property.property_composite_key && codeDefinitions) {
+    const rawData = await getRawDataForProperty(property.job_id, property.property_composite_key);
+    const propertyVCS = rawData?.VCS || property.property_vcs;
     
     if (propertyVCS && codeDefinitions.sections?.VCS) {
       let vcsData = codeDefinitions.sections.VCS[propertyVCS];
@@ -539,8 +740,8 @@ getTotalLotSize: function(property, vendorType, codeDefinitions) {
         const urcMap = vcsData.MAP["8"].MAP;
         
         for (let i = 1; i <= 6; i++) {
-          const landCode = property.raw_data[`LANDUR_${i}`];
-          const landUnits = parseFloat(property.raw_data[`LANDURUNITS_${i}`]) || 0;
+          const landCode = rawData?.[`LANDUR_${i}`];
+          const landUnits = parseFloat(rawData?.[`LANDURUNITS_${i}`]) || 0;
           
           // BRT stores single digit codes without leading zero, pad them
           const paddedCode = landCode ? String(landCode).padStart(2, '0') : null;
@@ -571,68 +772,83 @@ getTotalLotSize: function(property, vendorType, codeDefinitions) {
   return finalAcres > 0 ? finalAcres : null;
 },
 // Get bathroom plumbing sum (BRT only)
-  getBathroomPlumbingSum: function(property, vendorType) {
-    if (!property || !property.raw_data || vendorType !== 'BRT') return 0;
-    
+  getBathroomPlumbingSum: async function(property, vendorType) {
+    if (!property || vendorType !== 'BRT' || !property.job_id || !property.property_composite_key) return 0;
+
+    const rawData = await getRawDataForProperty(property.job_id, property.property_composite_key);
+    if (!rawData) return 0;
+
     let sum = 0;
     for (let i = 2; i <= 6; i++) {
-      sum += parseInt(property.raw_data[`PLUMBING${i}FIX`]) || 0;
+      sum += parseInt(rawData[`PLUMBING${i}FIX`]) || 0;
     }
     return sum;
   },
 
   // Get bathroom fixture sum (Microsystems only - summary fields)
-  getBathroomFixtureSum: function(property, vendorType) {
-    if (!property || !property.raw_data || vendorType !== 'Microsystems') return 0;
-    
-    return (parseInt(property.raw_data['4 Fixture Bath']) || 0) +
-           (parseInt(property.raw_data['3 Fixture Bath']) || 0) +
-           (parseInt(property.raw_data['2 Fixture Bath']) || 0) +
-           (parseInt(property.raw_data['Num 5 Fixture Baths']) || 0);
+  getBathroomFixtureSum: async function(property, vendorType) {
+    if (!property || vendorType !== 'Microsystems' || !property.job_id || !property.property_composite_key) return 0;
+
+    const rawData = await getRawDataForProperty(property.job_id, property.property_composite_key);
+    if (!rawData) return 0;
+
+    return (parseInt(rawData['4 Fixture Bath']) || 0) +
+           (parseInt(rawData['3 Fixture Bath']) || 0) +
+           (parseInt(rawData['2 Fixture Bath']) || 0) +
+           (parseInt(rawData['Num 5 Fixture Baths']) || 0);
   },
 
   // Get bathroom room sum (Microsystems only - floor-specific fields)
-  getBathroomRoomSum: function(property, vendorType) {
-    if (!property || !property.raw_data || vendorType !== 'Microsystems') return 0;
-    
+  getBathroomRoomSum: async function(property, vendorType) {
+    if (!property || vendorType !== 'Microsystems' || !property.job_id || !property.property_composite_key) return 0;
+
+    const rawData = await getRawDataForProperty(property.job_id, property.property_composite_key);
+    if (!rawData) return 0;
+
     let sum = 0;
     const floorSuffixes = ['B', '1', '2', '3'];
     const fixtureTypes = ['2 Fixture Bath', '3 Fixture Bath', '4 Fixture Bath'];
-    
+
     for (const fixture of fixtureTypes) {
       for (const floor of floorSuffixes) {
         const fieldName = `${fixture} ${floor}`;
-        sum += parseInt(property.raw_data[fieldName]) || 0;
+        sum += parseInt(rawData[fieldName]) || 0;
       }
     }
-    
+
     // Add the summary 5-fixture field since there are no floor-specific ones
-    sum += parseInt(property.raw_data['Num 5 Fixture Baths']) || 0;
-    
+    sum += parseInt(rawData['Num 5 Fixture Baths']) || 0;
+
     return sum;
   },
 
   // Get bedroom room sum (Microsystems only)
-  getBedroomRoomSum: function(property, vendorType) {
-    if (!property || !property.raw_data || vendorType !== 'Microsystems') return 0;
-    
-    return (parseInt(property.raw_data['Bedrm B']) || 0) +
-           (parseInt(property.raw_data['Bedrm 1']) || 0) +
-           (parseInt(property.raw_data['Bedrm 2']) || 0) +
-           (parseInt(property.raw_data['Bedrm 3']) || 0);
+  getBedroomRoomSum: async function(property, vendorType) {
+    if (!property || vendorType !== 'Microsystems' || !property.job_id || !property.property_composite_key) return 0;
+
+    const rawData = await getRawDataForProperty(property.job_id, property.property_composite_key);
+    if (!rawData) return 0;
+
+    return (parseInt(rawData['Bedrm B']) || 0) +
+           (parseInt(rawData['Bedrm 1']) || 0) +
+           (parseInt(rawData['Bedrm 2']) || 0) +
+           (parseInt(rawData['Bedrm 3']) || 0);
   },
 
   // Get VCS (Valuation Control Sector) description - aka Neighborhood
-  getVCSDescription: function(property, codeDefinitions, vendorType) {
+  getVCSDescription: async function(property, codeDefinitions, vendorType) {
     if (!property || !codeDefinitions) return null;
     
     // Get VCS code from property (check multiple possible fields)
     let vcsCode = property.newVCS || property.new_vcs || property.vcs;
-    if (!vcsCode && property.raw_data) {
-      vcsCode = property.raw_data.vcs || 
-                property.raw_data.VCS || 
-                property.raw_data.NEIGHBORHOOD ||
-                property.raw_data.neighborhood;
+    if (!vcsCode && property.job_id && property.property_composite_key) {
+      const rawData = await getRawDataForProperty(property.job_id, property.property_composite_key);
+      if (rawData) {
+        vcsCode = rawData.vcs ||
+                  rawData.VCS ||
+                  rawData.NEIGHBORHOOD ||
+                  rawData.neighborhood;
+      }
     }  
     
     if (!vcsCode || vcsCode.toString().trim() === '') return null;
@@ -1416,6 +1632,15 @@ export const jobService = {
       } else {
       }
 
+      // File version and upload timestamp mappings (MISSING - causing code version update to fail!)
+      if (componentFields.source_file_version !== undefined) dbFields.source_file_version = componentFields.source_file_version;
+      if (componentFields.code_file_version !== undefined) dbFields.code_file_version = componentFields.code_file_version;
+      if (componentFields.source_file_uploaded_at) dbFields.source_file_uploaded_at = componentFields.source_file_uploaded_at;
+      if (componentFields.code_file_uploaded_at) dbFields.code_file_uploaded_at = componentFields.code_file_uploaded_at;
+
+      console.log('🔧 jobService.update - Input fields:', Object.keys(componentFields));
+      console.log('🔧 jobService.update - Mapped DB fields:', Object.keys(dbFields));
+      console.log('🔧 jobService.update - DB field values:', dbFields);
 
       const { data, error } = await supabase
        .from('jobs')
@@ -2204,19 +2429,41 @@ export const propertyService = {
     return preservedDataMap;
   },
 
-  // Query raw_data JSON field for dynamic reporting
-  async queryRawData(jobId, fieldName, value) {
+  // Query source file data for dynamic reporting
+  async querySourceFileData(jobId, fieldName, value) {
     try {
-      const { data, error } = await supabase
+      // Get all properties for the job
+      const { data: properties, error } = await supabase
         .from('property_records')
-        .select('*')
-        .eq('job_id', jobId)
-        .eq(`raw_data->>${fieldName}`, value);
-      
+        .select('id, job_id, property_composite_key')
+        .eq('job_id', jobId);
+
       if (error) throw error;
-      return data;
+
+      const rawData = await getRawDataForJob(jobId);
+      if (!rawData) return [];
+
+      // Filter properties based on source file data field value
+      const matchingProperties = [];
+      for (const property of properties) {
+        const propertySourceData = rawData.propertyMap.get(property.property_composite_key);
+        if (propertySourceData && propertySourceData[fieldName] === value) {
+          // Get full property data
+          const { data: fullProperty, error: propError } = await supabase
+            .from('property_records')
+            .select('*')
+            .eq('id', property.id)
+            .single();
+
+          if (!propError && fullProperty) {
+            matchingProperties.push(fullProperty);
+          }
+        }
+      }
+
+      return matchingProperties;
     } catch (error) {
-      console.error('Property raw data query error:', error);
+      console.error('Property source file data query error:', error);
       return [];
     }
   },
@@ -2261,7 +2508,7 @@ export const propertyService = {
   async bulkUpdateInspections(inspectionUpdates) {
     try {
       const updates = await Promise.all(
-        inspectionUpdates.map(update => 
+        inspectionUpdates.map(update =>
           supabase
             .from('property_records')
             .update({
@@ -2272,10 +2519,236 @@ export const propertyService = {
             .select()
         )
       );
-      
+
       return updates.map(result => result.data).flat();
     } catch (error) {
       console.error('Property bulk inspection update error:', error);
+      throw error;
+    }
+  },
+
+  // NEW: Get raw file data for a specific property from jobs.raw_file_content
+  async getRawDataForProperty(jobId, propertyCompositeKey) {
+    try {
+      console.log(`🔍 Fetching raw data for job ${jobId}, property ${propertyCompositeKey}`);
+      console.log(`📋 RPC Parameters:`, {
+        p_job_id: jobId,
+        p_property_composite_key: propertyCompositeKey,
+        jobIdType: typeof jobId,
+        propertyKeyType: typeof propertyCompositeKey
+      });
+
+      const { data, error } = await supabase.rpc('get_raw_data_for_property', {
+        p_job_id: jobId,
+        p_property_composite_key: propertyCompositeKey
+      });
+
+      if (error) {
+        console.error('❌ RPC function error:');
+        console.error('  Message:', getErrorMessage(error));
+        console.error('  Details:', error.details);
+        console.error('  Hint:', error.hint);
+        console.error('  Code:', error.code);
+        console.error('  Full Error Object:', JSON.stringify(error, null, 2));
+        console.error('  Stack:', error.stack);
+        throw error;
+      }
+
+      if (data) {
+        console.log(`✅ Found raw data for property ${propertyCompositeKey}`);
+        return data;
+      }
+
+      console.warn(`⚠️ No raw data found for property ${propertyCompositeKey}, trying client-side fallback...`);
+
+      // Fallback: use client-side parsing
+      return await this.getRawDataForPropertyClientSide(jobId, propertyCompositeKey);
+
+    } catch (error) {
+      console.error('❌ Error fetching raw data for property:');
+      console.error('  Job ID:', jobId);
+      console.error('  Property Key:', propertyCompositeKey);
+      console.error('  Error Message:', getErrorMessage(error));
+      console.error('  Error Type:', error.constructor.name);
+      console.error('  Full Error:', JSON.stringify(error, null, 2));
+      console.error('  Stack:', error.stack);
+
+      // Fallback: use client-side parsing
+      console.log('🔄 Attempting client-side fallback...');
+      try {
+        return await this.getRawDataForPropertyClientSide(jobId, propertyCompositeKey);
+      } catch (fallbackError) {
+        console.error('❌ Client-side fallback also failed:');
+        console.error('  Fallback Error Message:', getErrorMessage(fallbackError));
+        console.error('  Fallback Error Type:', fallbackError.constructor.name);
+        console.error('  Fallback Error Stack:', fallbackError.stack);
+        console.error('  Full Fallback Error:', JSON.stringify(fallbackError, null, 2));
+        return null;
+      }
+    }
+  },
+
+  // Fallback: Client-side raw data parsing
+  async getRawDataForPropertyClientSide(jobId, propertyCompositeKey) {
+    console.log(`🔄 Using client-side parsing for job ${jobId}, property ${propertyCompositeKey}`);
+
+    const rawData = await getRawDataForJob(jobId);
+    console.log(`📊 Raw data structure:`, {
+      hasRawData: !!rawData,
+      vendorType: rawData?.vendorType,
+      hasPropertyMap: !!rawData?.propertyMap,
+      propertyMapSize: rawData?.propertyMap?.size || 0,
+      propertyMapType: rawData?.propertyMap?.constructor?.name
+    });
+
+    if (!rawData || !rawData.propertyMap) {
+      console.warn('⚠️ No property map available for job');
+      return null;
+    }
+
+    const propertyRawData = rawData.propertyMap.get(propertyCompositeKey);
+    if (propertyRawData) {
+      console.log(`✅ Found raw data via client-side parsing for ${propertyCompositeKey}`);
+      return propertyRawData;
+    }
+
+    // Show some sample keys for debugging
+    const sampleKeys = Array.from(rawData.propertyMap.keys()).slice(0, 3);
+    console.warn(`⚠️ Property ${propertyCompositeKey} not found in parsed data. Sample keys:`, sampleKeys);
+    return null;
+  },
+
+  // NEW: Check if job needs reprocessing due to source file changes
+  async checkJobReprocessingStatus(jobId) {
+    try {
+      const { data: job, error: jobError } = await supabase
+        .from('jobs')
+        .select('raw_file_content, raw_file_parsed_at, updated_at')
+        .eq('id', jobId)
+        .single();
+
+      if (jobError) throw jobError;
+
+      const { count: needsReprocessingCount, error: countError } = await supabase
+        .from('property_records')
+        .select('*', { count: 'exact', head: true })
+        .eq('job_id', jobId)
+        .eq('validation_status', 'needs_reprocessing');
+
+      if (countError) throw countError;
+
+      return {
+        hasSourceFile: !!job.raw_file_content,
+        sourceFileParsedAt: job.raw_file_parsed_at,
+        lastUpdated: job.updated_at,
+        recordsNeedingReprocessing: needsReprocessingCount || 0,
+        needsReprocessing: (needsReprocessingCount || 0) > 0
+      };
+    } catch (error) {
+      console.error('Error checking job reprocessing status:', getErrorMessage(error));
+      console.error('Error details:', error);
+      return {
+        hasSourceFile: false,
+        recordsNeedingReprocessing: 0,
+        needsReprocessing: false,
+        error: getErrorMessage(error)
+      };
+    }
+  },
+
+  // NEW: Trigger reprocessing of property records from source file
+  async triggerJobReprocessing(jobId, force = false) {
+    try {
+      const { data, error } = await supabase.rpc('app_reprocess_job_from_source', {
+        p_job_id: jobId,
+        p_force: force
+      });
+
+      if (error) throw error;
+
+      console.log('✅ Job reprocessing triggered:', data);
+      return data;
+    } catch (error) {
+      console.error('Error triggering job reprocessing:', getErrorMessage(error));
+      console.error('Error details:', error);
+      throw error;
+    }
+  },
+
+  // NEW: Manually reprocess property records using current processors
+  async manualReprocessFromSource(jobId) {
+    try {
+      // First, get the job details and source file content
+      const { data: job, error: jobError } = await supabase
+        .from('jobs')
+        .select('*')
+        .eq('id', jobId)
+        .single();
+
+      if (jobError) throw jobError;
+
+      if (!job.raw_file_content) {
+        throw new Error('No raw file content available for reprocessing');
+      }
+
+      console.log('🔄 Starting automatic reprocessing from stored source file...');
+
+      // CRITICAL: Get the current file_version to avoid interfering with FileUploadButton versioning
+      const { data: currentVersionData, error: versionError } = await supabase
+        .from('property_records')
+        .select('file_version')
+        .eq('job_id', jobId)
+        .limit(1)
+        .single();
+
+      let currentVersion = 1;
+      if (currentVersionData && !versionError) {
+        currentVersion = currentVersionData.file_version || 1;
+      }
+
+      console.log(`📊 Using existing file_version ${currentVersion} for automatic sync (no increment)`);
+
+      // Determine vendor type and call appropriate updater
+      const vendorType = job.vendor_source;
+
+      if (vendorType === 'BRT') {
+        const { brtUpdater } = await import('./data-pipeline/brt-updater.js');
+        return await brtUpdater.processFile(
+          job.raw_file_content,
+          job.code_file_content,
+          jobId,
+          job.year_created,
+          job.ccdd_code,
+          {
+            source_file_name: 'Auto-sync from stored source',
+            file_version: currentVersion, // FIXED: Use current version, don't increment
+            preservedFieldsHandler: this.createPreservedFieldsHandler.bind(this),
+            preservedFields: PRESERVED_FIELDS,
+            is_automatic_sync: true // Mark as automatic sync
+          }
+        );
+      } else if (vendorType === 'Microsystems') {
+        const { microsystemsUpdater } = await import('./data-pipeline/microsystems-updater.js');
+        return await microsystemsUpdater.processFile(
+          job.raw_file_content,
+          job.code_file_content,
+          jobId,
+          job.year_created,
+          job.ccdd_code,
+          {
+            source_file_name: 'Auto-sync from stored source',
+            file_version: currentVersion, // FIXED: Use current version, don't increment
+            preservedFieldsHandler: this.createPreservedFieldsHandler.bind(this),
+            preservedFields: PRESERVED_FIELDS,
+            is_automatic_sync: true // Mark as automatic sync
+          }
+        );
+      } else {
+        throw new Error(`Unsupported vendor type: ${vendorType}`);
+      }
+    } catch (error) {
+      console.error('Automatic reprocessing failed:', getErrorMessage(error));
+      console.error('Error details:', error);
       throw error;
     }
   }

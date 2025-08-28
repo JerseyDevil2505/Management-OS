@@ -1,6 +1,7 @@
-  import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Upload, FileText, CheckCircle, AlertTriangle, X, Database, Settings, Download, Eye, Calendar, RefreshCw } from 'lucide-react';
 import { jobService, propertyService, supabase, preservedFieldsHandler } from '../../lib/supabaseClient';
+import { uploadFile, processFile, formatBackendError } from '../../services/backendService';
 
 const FileUploadButton = ({ job, onFileProcessed, isJobLoading = false, onDataRefresh }) => {
   const [sourceFile, setSourceFile] = useState(null);
@@ -16,8 +17,9 @@ const FileUploadButton = ({ job, onFileProcessed, isJobLoading = false, onDataRe
   const [showResultsModal, setShowResultsModal] = useState(false);
   const [comparisonResults, setComparisonResults] = useState(null);
   const [salesDecisions, setSalesDecisions] = useState(new Map());
-  const [sourceFileVersion, setSourceFileVersion] = useState(null);  
+  const [currentFileVersion, setCurrentFileVersion] = useState(1);
   const [lastSourceProcessedDate, setLastSourceProcessedDate] = useState(null);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
   const [lastCodeProcessedDate, setLastCodeProcessedDate] = useState(null);
   const [isInitialized, setIsInitialized] = useState(false);  
 
@@ -25,6 +27,10 @@ const FileUploadButton = ({ job, onFileProcessed, isJobLoading = false, onDataRe
   const [reportsList, setReportsList] = useState([]);
   const [reportCount, setReportCount] = useState(0);
   const [loadingReports, setLoadingReports] = useState(false);
+
+  // Pagination for reports modal
+  const [currentReportPage, setCurrentReportPage] = useState(1);
+  const reportsPerPage = 5;
   
   // NEW: Batch processing modal state
   const [showBatchModal, setShowBatchModal] = useState(false);
@@ -42,8 +48,13 @@ const FileUploadButton = ({ job, onFileProcessed, isJobLoading = false, onDataRe
     currentOperation: ''
   });
 
+  // Backend service integration state
+  const [useBackendService, setUseBackendService] = useState(true); // Enable backend by default
+  const [backendProgress, setBackendProgress] = useState(null);
+  const [backendError, setBackendError] = useState(null);
+
   const addNotification = (message, type = 'info') => {
-    const id = Date.now();
+    const id = Date.now() + Math.random(); // Make unique with random component
     const notification = { id, message, type, timestamp: new Date() };
     setNotifications(prev => [...prev, notification]);
     
@@ -59,7 +70,7 @@ const FileUploadButton = ({ job, onFileProcessed, isJobLoading = false, onDataRe
   // NEW: Add log entry to batch processing
   const addBatchLog = (message, type = 'info', details = null) => {
     const logEntry = {
-      id: Date.now(),
+      id: Date.now() + Math.random(), // Make unique with random component
       timestamp: new Date().toISOString(),
       message,
       type,
@@ -279,20 +290,55 @@ const handleCodeFileUpdate = async () => {
     }
     
     // Only update date stamp if we successfully got here
-    setLastCodeProcessedDate(new Date().toISOString());
-    
+    const processedDate = new Date().toISOString();
+    setLastCodeProcessedDate(processedDate);
+
+    // Store in sessionStorage to persist across re-renders
+    sessionStorage.setItem(`job_${job.id}_lastCodeProcessed`, processedDate);
+
+    // Update job's code file version
+    const currentCodeVersion = job.code_file_version || 1;
+    const newCodeVersion = currentCodeVersion + 1;
+
+    console.log(`🔧 Code Update - Current version: ${currentCodeVersion}, New version: ${newCodeVersion}`);
+
+    const updateResult = await jobService.update(job.id, {
+      code_file_version: newCodeVersion,
+      code_file_uploaded_at: processedDate
+    });
+
+    console.log(`🔧 Code Update - jobService.update result:`, updateResult);
+
     addNotification(`✅ Successfully updated code definitions for ${detectedVendor}`, 'success');
-    
+
     // Clear code file selection
     setCodeFile(null);
     setCodeFileContent(null);
     document.getElementById('code-file-upload').value = '';
 
+    // Refresh job data in parent component
+    if (onDataRefresh) {
+      console.log(`🔧 Code Update - Calling onDataRefresh to update job data`);
+      console.log(`🔧 Code Update - BEFORE refresh - job.code_file_uploaded_at: ${job.code_file_uploaded_at}`);
+      console.log(`🔧 Code Update - BEFORE refresh - job.code_file_version: ${job.code_file_version}`);
+
+      await onDataRefresh();
+
+      console.log(`🔧 Code Update - AFTER refresh - job.code_file_uploaded_at: ${job.code_file_uploaded_at}`);
+      console.log(`🔧 Code Update - AFTER refresh - job.code_file_version: ${job.code_file_version}`);
+
+      // Wait a bit and check again - sometimes React needs a moment to update props
+      setTimeout(() => {
+        console.log(`🔧 Code Update - DELAYED check - job.code_file_uploaded_at: ${job.code_file_uploaded_at}`);
+        console.log(`🔧 Code Update - DELAYED check - job.code_file_version: ${job.code_file_version}`);
+      }, 1000);
+    }
+
     // Notify parent component of the update
     if (onFileProcessed) {
-      onFileProcessed({ 
+      onFileProcessed({
         type: 'code_update',
-        vendor: detectedVendor 
+        vendor: detectedVendor
       });
     }
 
@@ -882,30 +928,59 @@ const handleCodeFileUpdate = async () => {
     }
   };
 
-  // CRITICAL FIX: Refresh banner state immediately after processing
-  const refreshBannerState = async () => {
+  // Fetch current file version and updated_at from property_records
+  const fetchCurrentFileVersion = async () => {
     try {
-      
-      // Refresh source file version from property_records
-      const { data: sourceVersionData, error: sourceVersionError } = await supabase
+      // First get job assignment status
+      const { data: jobData, error: jobError } = await supabase
+        .from('jobs')
+        .select('has_property_assignments')
+        .eq('id', job.id)
+        .single();
+
+      if (jobError) throw jobError;
+      const hasAssignments = jobData?.has_property_assignments || false;
+
+      // Build query with assignment filter if needed (same logic as JobContainer)
+      let versionQuery = supabase
         .from('property_records')
-        .select('file_version')
-        .eq('job_id', job.id)
+        .select('file_version, updated_at')
+        .eq('job_id', job.id);
+
+      if (hasAssignments) {
+        versionQuery = versionQuery.eq('is_assigned_property', true);
+        console.log('📊 Fetching file version for assigned properties only');
+      } else {
+        console.log('📊 Fetching file version for all properties');
+      }
+
+      const { data: versionData, error } = await versionQuery
+        .order('file_version', { ascending: false })
         .limit(1)
         .single();
-        
-      if (sourceVersionData && !sourceVersionError) {
-        setSourceFileVersion(sourceVersionData.file_version || 1);
+
+      if (versionData && !error) {
+        console.log(`📊 Current file_version from DB: ${versionData.file_version}, updated_at: ${versionData.updated_at}`);
+        setCurrentFileVersion(versionData.file_version || 1);
+        setLastUpdatedAt(versionData.updated_at);
       } else {
-        setSourceFileVersion(1);
+        console.log('📊 No records found, setting file_version to 1');
+        setCurrentFileVersion(1);
+        setLastUpdatedAt(null);
       }
-      
-      // Force a re-render of the component to update banner display
-      
     } catch (error) {
-      console.error('🔄 REFRESH - Error refreshing banner state:', error);
+      console.error('Error fetching file version:', error);
+      setCurrentFileVersion(1);
+      setLastUpdatedAt(null);
     }
   };
+
+  // Initialize file version on component mount
+  useEffect(() => {
+    if (job?.id) {
+      fetchCurrentFileVersion();
+    }
+  }, [job?.id]);
 
   // ENHANCED: Track batch insert operations from propertyService with better capture
   const trackBatchInserts = (operation) => {
@@ -1007,16 +1082,37 @@ const handleCodeFileUpdate = async () => {
         originalError.apply(console, args);
       };
       
-      // Set initial state
+      // Set initial state with detailed logging
+      console.log('���� Starting batch operation with timeout protection...');
       setBatchInsertProgress(prev => ({
         ...prev,
         isInserting: true,
-        currentOperation: 'Initializing batch processing...'
+        currentOperation: 'Initializing batch processing...',
+        startTime: new Date().toISOString()
       }));
+
+      // Add a heartbeat to show we're still alive during initialization
+      let heartbeatCount = 0;
+      const heartbeatInterval = setInterval(() => {
+        heartbeatCount++;
+        console.log(`💓 Batch operation heartbeat - still initializing... (${heartbeatCount * 10}s)`);
+        addBatchLog(`💓 Operation still running... (${heartbeatCount * 10} seconds)`, 'info');
+
+        // If stuck for more than 60 seconds, show warning
+        if (heartbeatCount >= 6) {
+          addBatchLog('⚠️ Operation appears stuck. Database may be overloaded or there\'s a query issue. Consider using Emergency Stop.', 'warning');
+        }
+      }, 10000); // Every 10 seconds
       
-      // Execute the operation
-      operation().then(result => {
-        // Restore original console methods
+      // Execute the operation with timeout protection (reduced from 5 to 2 minutes)
+      Promise.race([
+        operation(),
+        new Promise((_, timeoutReject) =>
+          setTimeout(() => timeoutReject(new Error('Batch processing timeout after 2 minutes')), 2 * 60 * 1000)
+        )
+      ]).then(result => {
+        // Clear heartbeat and restore original console methods
+        clearInterval(heartbeatInterval);
         console.log = originalLog;
         console.error = originalError;
         
@@ -1036,19 +1132,29 @@ const handleCodeFileUpdate = async () => {
         
         resolve(result);
       }).catch(error => {
-        // Restore original console methods
+        // Clear heartbeat and restore original console methods
+        clearInterval(heartbeatInterval);
         console.log = originalLog;
         console.error = originalError;
         
+        const isTimeout = error.message && error.message.includes('timeout');
+        const errorMessage = isTimeout ?
+          'Batch processing timeout - try refreshing and uploading again' :
+          'Batch processing failed';
+
         setBatchInsertProgress(prev => ({
           ...prev,
           isInserting: false,
-          currentOperation: 'Batch processing failed',
+          currentOperation: errorMessage,
           insertAttempts: prev.insertAttempts.map(a => ({
             ...a,
             status: a.status === 'success' ? 'success' : 'failed'
           }))
         }));
+
+        if (isTimeout) {
+          addBatchLog('⏰ Operation timed out after 2 minutes. The database may be overloaded or there\'s a query issue. Try refreshing the page and uploading again.', 'error');
+        }
         
         addBatchLog(`❌ Batch processing failed: ${error.message}`, 'error');
         
@@ -1074,7 +1180,7 @@ const handleCodeFileUpdate = async () => {
     setIsProcessingLocked(true);
     
     // Wait for initialization
-    if (!isInitialized || sourceFileVersion === null) {
+    if (!isInitialized) {
       addNotification('System initializing, please try again in a moment', 'warning');
       setIsProcessingLocked(false); // Reset lock on early return
       return;
@@ -1103,21 +1209,59 @@ const handleCodeFileUpdate = async () => {
       
       // Call the updater to UPSERT the database
       addBatchLog(`📊 Calling ${detectedVendor} updater (UPSERT mode)...`, 'info');
-      
-      // FIX 1: Calculate new file_version for property_records
-      const newFileVersion = sourceFileVersion + 1;
-      
+
+      // FIX: Calculate new file_version for property_records - fetch current from DB with timeout
+      addBatchLog('🔍 Fetching current file version from database...', 'info');
+
+      let currentFileVersion = 1;
+      let newFileVersion = 2;
+
+      try {
+        // Add 10-second timeout to prevent hanging
+        const versionPromise = supabase
+          .from('property_records')
+          .select('file_version')
+          .eq('job_id', job.id)
+          .order('file_version', { ascending: false })
+          .limit(1)
+          .single();
+
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Version fetch timeout after 10 seconds')), 10000)
+        );
+
+        const { data: currentVersionData, error: versionError } = await Promise.race([
+          versionPromise,
+          timeoutPromise
+        ]);
+
+        if (versionError && versionError.code !== 'PGRST116') {
+          throw versionError;
+        }
+
+        currentFileVersion = currentVersionData?.file_version || 1;
+        newFileVersion = currentFileVersion + 1;
+
+        addBatchLog(`📊 Current DB version: ${currentFileVersion}, incrementing to: ${newFileVersion}`, 'info');
+
+      } catch (error) {
+        addBatchLog(`⚠️ Version fetch failed: ${error.message}, using default version increment`, 'warning');
+        // Fallback: get a reasonable version number
+        currentFileVersion = Date.now() % 100; // Use timestamp as version
+        newFileVersion = currentFileVersion + 1;
+        addBatchLog(`📊 Using fallback version: ${newFileVersion}`, 'info');
+      }
+
       // Track batch operations
       const result = await trackBatchInserts(async () => {
-        // Log what we're sending to help debug
         console.log('📤 Calling updateCSVData with:', {
           jobId: job.id,
           vendor: detectedVendor,
-          fileVersion: newFileVersion,
-          recordCount: sourceFileContent.split('\n').length - 1
+          recordCount: sourceFileContent.split('\n').length - 1,
+          newFileVersion: newFileVersion
         });
-        
-try {
+
+        try {
           return await propertyService.updateCSVData(
             sourceFileContent,
             codeFileContent,
@@ -1132,25 +1276,20 @@ try {
               file_version: newFileVersion,
               preservedFieldsHandler: preservedFieldsHandler,  // ADD THIS!
               preservedFields: [
-                'project_start_date',      // ProductionTracker - user set
                 'is_assigned_property',    // AdminJobManagement - from assignments
                 'validation_status',       // ProductionTracker - validation state
-                'location_analysis',       // MarketAnalysis - manually entered
-                'new_vcs',                 // AppealCoverage - manually set
-                'asset_map_page',          // MarketAnalysis worksheet - manually entered
-                'asset_key_page',          // MarketAnalysis worksheet - manually entered
-                'asset_zoning',            // MarketAnalysis worksheet - manually entered
-                'values_norm_size',        // MarketAnalysis - calculated value
-                'values_norm_time',        // MarketAnalysis - calculated value
-                'sales_history',           // FileUploadButton - sales decisions
                 'processing_notes'         // User notes - if added should be kept
+                // REMOVED: project_start_date (moved to jobs table)
+                // REMOVED: location_analysis, new_vcs, asset_map_page, asset_key_page,
+                //          asset_zoning, values_norm_size, values_norm_time, sales_history
+                //          (moved to property_market_analysis table)
               ]
             }
           );
         } catch (updateError) {
           console.error('❌ updateCSVData failed:', updateError);
           // Add more specific error info to batch log
-          addBatchLog(`❌ Update failed: ${updateError.message}`, 'error', {
+          addBatchLog(`�� Update failed: ${updateError.message}`, 'error', {
             error: updateError.message,
             stack: updateError.stack,
             vendor: detectedVendor
@@ -1161,8 +1300,7 @@ try {
       
       addBatchLog('✅ Property data processing completed', 'success', {
         processed: result.processed,
-        errors: result.errors,
-        newVersion: newFileVersion  // FIX 1: Show correct version
+        errors: result.errors
       });
       
       // Save comparison report with sales decisions
@@ -1310,13 +1448,14 @@ try {
        // Update job with new file info - removed source_file_version update
       addBatchLog('🔄 Updating job metadata...', 'info');
       try {
-        await jobService.update(job.id, {
-          sourceFileStatus: result.errors > 0 ? 'error' : 'imported',
+        const updateData = {
           totalProperties: result.processed,
           source_file_uploaded_at: new Date().toISOString()
-          // FIX 1: Removed source_file_version update - it's handled in property_records now
-        });
-        addBatchLog('✅ Job metadata updated successfully', 'success');
+        };
+
+        console.log('🔍 DEBUG - Updating job with:', updateData);
+        await jobService.update(job.id, updateData);
+        addBatchLog('✅ Job metadata updated successfully', 'success', updateData);
       } catch (updateError) {
         console.error('❌ Failed to update job:', updateError);
         addBatchLog('⚠️ Job metadata update failed', 'warning', { error: updateError.message });
@@ -1377,24 +1516,12 @@ try {
         addBatchLog('⚠️ UPDATE FAILED - All changes have been rolled back', 'error', {
           message: 'The update encountered errors and all changes were automatically reversed'
         });
-        addNotification('❌ Update failed - all changes rolled back. Check logs for details.', 'error');
+        addNotification('��� Update failed - all changes rolled back. Check logs for details.', 'error');
       }
-      
-      // CRITICAL FIX: Update banner state only if we had successful processing
-      if (totalProcessed > 0 && errorCount === 0) {
-        addBatchLog('🔄 Refreshing UI state...', 'info');
-        setSourceFileVersion(newFileVersion);  // Use the newFileVersion we already calculated
-        setLastSourceProcessedDate(new Date().toISOString());  // Track our own date!
-        addBatchLog('✅ UI state refreshed successfully', 'success');
-      } else if (totalProcessed > 0 && errorCount > 0) {
-        // Partial success - still update but note there were errors
-        addBatchLog('🔄 Refreshing UI state (with errors)...', 'warning');
-        setSourceFileVersion(newFileVersion);
-        setLastSourceProcessedDate(new Date().toISOString());
-        addBatchLog('⚠️ UI state refreshed but errors occurred', 'warning');
-      }
-      // If totalProcessed is 0, don't update the dates/version at all
-      
+
+      // Update local file version and date from DB
+      await fetchCurrentFileVersion(); // Refresh file version and updated_at from DB
+
       setBatchComplete(true);
       
       // Auto-close modal after 3 seconds if successful
@@ -1418,6 +1545,14 @@ try {
         addBatchLog('🔄 Triggering data refresh in JobContainer...', 'info');
         await onDataRefresh();
         addBatchLog('✅ JobContainer data refreshed', 'success');
+
+        // DEBUG: Small delay then check if JobContainer shows the new version
+        setTimeout(() => {
+          addBatchLog('⏰ Checking if JobContainer updated (after 2 second delay)...', 'info');
+          // This will show in console - user should check JobContainer UI
+        }, 2000);
+      } else {
+        addBatchLog('⚠️ No onDataRefresh callback provided!', 'warning');
       }
     } catch (error) {
       console.error('❌ Processing failed:', error);
@@ -1457,7 +1592,7 @@ try {
       if (vendor) {
         addNotification(`✅ Detected ${vendor} file format`, 'success');
       } else {
-        addNotification('⚠️ Could not detect vendor type', 'warning');
+        addNotification('��️ Could not detect vendor type', 'warning');
       }
     } catch (error) {
       console.error('Error reading file:', error);
@@ -1489,10 +1624,16 @@ try {
   // Reports List Modal - View all comparison reports
   const ReportsListModal = () => {
     if (!showReportsModal) return null;
-    
+
+    // Calculate pagination
+    const totalPages = Math.ceil(reportsList.length / reportsPerPage);
+    const startIndex = (currentReportPage - 1) * reportsPerPage;
+    const endIndex = startIndex + reportsPerPage;
+    const currentReports = reportsList.slice(startIndex, endIndex);
+
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-        <div className="bg-white rounded-lg max-w-4xl w-full max-h-[80vh] overflow-hidden shadow-2xl flex flex-col">
+        <div className="bg-white rounded-lg max-w-2xl w-full max-h-[70vh] overflow-hidden shadow-2xl flex flex-col">
           {/* Header */}
           <div className="p-4 border-b border-gray-200 bg-gray-50 shrink-0">
             <div className="flex items-center justify-between">
@@ -1524,7 +1665,7 @@ try {
               </div>
             ) : (
               <div className="space-y-4">
-                {reportsList.map((report, idx) => {
+                {currentReports.map((report, idx) => {
                   const reportData = report.report_data || {};
                   const summary = reportData.summary || {};
                   const totalChanges = (summary.missing || 0) + (summary.deletions || 0) + 
@@ -1595,12 +1736,43 @@ try {
             )}
           </div>
 
-          {/* Footer */}
+          {/* Footer with Pagination */}
           <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-between items-center shrink-0">
             <div className="text-sm text-gray-600">
-              {reportsList.length} reports found
+              Showing {startIndex + 1}-{Math.min(endIndex, reportsList.length)} of {reportsList.length} reports
             </div>
-            
+
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => setCurrentReportPage(Math.max(1, currentReportPage - 1))}
+                  disabled={currentReportPage === 1}
+                  className="p-2 rounded bg-gray-700 text-white hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Previous page"
+                >
+                  <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                </button>
+
+                <span className="text-sm font-medium text-gray-700">
+                  {currentReportPage} / {totalPages}
+                </span>
+
+                <button
+                  onClick={() => setCurrentReportPage(Math.min(totalPages, currentReportPage + 1))}
+                  disabled={currentReportPage === totalPages}
+                  className="p-2 rounded bg-gray-700 text-white hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Next page"
+                >
+                  <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                  </svg>
+                </button>
+              </div>
+            )}
+
             <div className="flex space-x-3">
               <button
                 onClick={viewAllReports}
@@ -1795,6 +1967,26 @@ try {
               {processing ? 'Processing in progress...' : `Completed ${batchLogs.length} operations`}
             </div>
             
+            {/* Emergency Stop Button - shows when processing but not complete */}
+            {processing && !batchComplete && (
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => {
+                    // Force stop the operation
+                    setProcessing(false);
+                    setBatchComplete(true);
+                    setIsProcessingLocked(false);
+                    addBatchLog('🛑 Operation manually stopped by user', 'warning');
+                    console.log('🛑 Emergency stop triggered - operation cancelled');
+                  }}
+                  className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 font-medium flex items-center space-x-2"
+                >
+                  <span>🛑</span>
+                  <span>Emergency Stop</span>
+                </button>
+              </div>
+            )}
+
             {batchComplete && (
               <div className="flex space-x-3">
                 <button
@@ -2228,9 +2420,21 @@ try {
                     
                     // Call the updater to UPSERT the database with latest data
                     addBatchLog(`📊 Calling ${detectedVendor} updater for version refresh...`, 'info');
-                    
-                    // FIX 1: Calculate new file_version for property_records
-                    const newFileVersion = sourceFileVersion + 1;
+
+                    // FIX 1: Calculate new file_version for property_records - fetch current from DB
+                    addBatchLog('🔍 Fetching current file version from database...', 'info');
+                    const { data: currentVersionData, error: versionError } = await supabase
+                      .from('property_records')
+                      .select('file_version')
+                      .eq('job_id', job.id)
+                      .order('file_version', { ascending: false })
+                      .limit(1)
+                      .single();
+
+                    const currentFileVersion = currentVersionData?.file_version || 1;
+                    const newFileVersion = currentFileVersion + 1;
+
+                    addBatchLog(`📊 Current DB version: ${currentFileVersion}, incrementing to: ${newFileVersion}`, 'info');
                     
                     const result = await trackBatchInserts(async () => {
                       return await propertyService.updateCSVData(
@@ -2247,18 +2451,13 @@ try {
                           file_version: newFileVersion,
                           preservedFieldsHandler: preservedFieldsHandler,
                           preservedFields: [
-                            'project_start_date',      // ProductionTracker - user set
                             'is_assigned_property',    // AdminJobManagement - from assignments
                             'validation_status',       // ProductionTracker - validation state
-                            'location_analysis',       // MarketAnalysis - manually entered
-                            'new_vcs',                 // AppealCoverage - manually set
-                            'asset_map_page',          // MarketAnalysis worksheet - manually entered
-                            'asset_key_page',          // MarketAnalysis worksheet - manually entered
-                            'asset_zoning',            // MarketAnalysis worksheet - manually entered
-                            'values_norm_size',        // MarketAnalysis - calculated value
-                            'values_norm_time',        // MarketAnalysis - calculated value
-                            'sales_history',           // FileUploadButton - sales decisions
                             'processing_notes'         // User notes - if added should be kept
+                            // REMOVED: project_start_date (moved to jobs table)
+                            // REMOVED: location_analysis, new_vcs, asset_map_page, asset_key_page,
+                            //          asset_zoning, values_norm_size, values_norm_time, sales_history
+                            //          (moved to property_market_analysis table)
                           ]
                         }
                       );
@@ -2266,8 +2465,7 @@ try {
                     
                     addBatchLog('✅ Data refresh completed', 'success', {
                       processed: result.processed,
-                      errors: result.errors,
-                      newVersion: newFileVersion  // FIX 1: Show correct version
+                      errors: result.errors
                     });
                     
                     // Save comparison report (showing no changes)
@@ -2278,10 +2476,8 @@ try {
                     // Update job with new file info - removed source_file_version update
                     addBatchLog('🔄 Updating job metadata...', 'info');
                     await jobService.update(job.id, {
-                      sourceFileStatus: result.errors > 0 ? 'error' : 'imported',
                       totalProperties: result.processed,
                       source_file_uploaded_at: new Date().toISOString()
-                      // FIX 1: Removed source_file_version update - it's handled in property_records now
                     });
                     addBatchLog('✅ Job metadata updated', 'success');
                     
@@ -2297,14 +2493,11 @@ try {
                     }
                     // Check if rollback occurred during refresh
                     if (result.warnings && result.warnings.some(w => w.includes('rolled back'))) {
-                      addBatchLog('⚠️ REFRESH FAILED - All changes have been rolled back', 'error');
+                      addBatchLog('⚠�� REFRESH FAILED - All changes have been rolled back', 'error');
                       addNotification('❌ Refresh failed - all changes rolled back. Check logs for details.', 'error');
                     }
                     
-                    // CRITICAL FIX: Update banner state immediately
-                    addBatchLog('🔄 Refreshing UI state...', 'info');
-                    setSourceFileVersion(newFileVersion);  // Use the newFileVersion we already calculated
-                    addBatchLog('✅ UI state refreshed successfully', 'success');
+                    // SIMPLIFIED: No complex state updates needed - banner reads from job object after refresh
                     
                     setBatchComplete(true);
                     
@@ -2462,21 +2655,11 @@ try {
     }
   };
 
-  // Use file version from job prop instead of fetching
+  // SIMPLIFIED: Basic initialization - no complex version tracking needed
   useEffect(() => {
     if (!job?.id) return;
-    
-    // Get version from job's property_records or default to 1
-    // This should be passed from JobContainer which already has the data
-    const currentVersion = job.current_file_version || job.source_file_version || 1;
-    
-    // Only set if different to avoid unnecessary renders
-    if (sourceFileVersion !== currentVersion) {
-      setSourceFileVersion(currentVersion);
-    }
-    
     setIsInitialized(true);
-  }, [job?.id, job?.current_file_version, job?.source_file_version]);
+  }, [job?.id]);
 
   // Load report count when job changes
   useEffect(() => {
@@ -2494,24 +2677,34 @@ try {
 
   const getFileStatusWithRealVersion = (timestamp, type) => {
     if (!timestamp) return 'Never';
-    
+
     if (type === 'source') {
-      // Use our local date if we just processed, otherwise use job date
-      const displayDate = lastSourceProcessedDate || timestamp;
-      const result = sourceFileVersion === 1 
-        ? `Imported at Job Creation (${formatDate(displayDate)})`
-        : `Updated via FileUpload (${formatDate(displayDate)})`;
-      return result;
+      console.log(`🔍 Banner Debug - currentFileVersion: ${currentFileVersion}`);
+      console.log(`🔍 Banner Debug - lastUpdatedAt: ${lastUpdatedAt}`);
+
+      if (currentFileVersion > 1) {
+        // Use updated_at from property_records
+        const uploadDate = lastUpdatedAt || timestamp;
+        return `Updated via FileUpload (${formatDate(uploadDate)})`;
+      } else {
+        return `Imported at Job Creation (${formatDate(timestamp)})`;
+      }
     } else if (type === 'code') {
-      // Use our local date if we just processed, otherwise use job date
-      const displayDate = lastCodeProcessedDate || timestamp;
+      // Check if code file was updated
       const codeVersion = job.code_file_version || 1;
-      const result = codeVersion === 1 
-        ? `Imported at Job Creation (${formatDate(displayDate)})`
-        : `Updated via FileUpload (${formatDate(displayDate)})`;
-      return result;
+      console.log(`🔧 Code Banner Debug - codeVersion: ${codeVersion}`);
+      console.log(`🔧 Code Banner Debug - job.code_file_uploaded_at: ${job.code_file_uploaded_at}`);
+      console.log(`🔧 Code Banner Debug - timestamp param: ${timestamp}`);
+
+      if (codeVersion > 1) {
+        const uploadDate = job.code_file_uploaded_at || timestamp;
+        console.log(`🔧 Code Banner Debug - final uploadDate: ${uploadDate}`);
+        return `Updated via FileUpload (${formatDate(uploadDate)})`;
+      } else {
+        return `Imported at Job Creation (${formatDate(timestamp)})`;
+      }
     }
-    
+
     return `Updated (${formatDate(timestamp)})`;
   };
 
@@ -2666,10 +2859,13 @@ try {
       <div className="flex items-center gap-3 text-gray-300">
         <Database className="w-4 h-4 text-purple-400" />
         <span className="text-sm min-w-0 flex-1">
-          📊 Reports: {reportCount} saved comparison{reportCount !== 1 ? 's' : ''}
+          �� Reports: {reportCount} saved comparison{reportCount !== 1 ? 's' : ''}
         </span>
         <button
-          onClick={() => setShowReportsModal(true)}
+          onClick={() => {
+            setCurrentReportPage(1); // Reset to first page
+            setShowReportsModal(true);
+          }}
           className="px-3 py-1 bg-purple-600 text-white text-xs rounded hover:bg-purple-700 flex items-center gap-1"
         >
           <Eye className="w-3 h-3" />

@@ -37,20 +37,46 @@ export class MicrosystemsUpdater {
   }
 
   /**
+   * CRITICAL FIX: Optimize batch for database performance
+   */
+  optimizeBatchForDatabase(batch) {
+    return batch.map(record => {
+      // Remove null/undefined values to reduce payload size
+      const cleaned = {};
+      for (const [key, value] of Object.entries(record)) {
+        if (value !== null && value !== undefined && value !== '') {
+          cleaned[key] = value;
+        }
+      }
+      return cleaned;
+    });
+  }
+
+  /**
    * Upsert batch with retry logic for connection issues
    */
   async upsertBatchWithRetry(batch, batchNumber, retries = 50) {
+    // CRITICAL FIX: Optimize batch before processing
+    const optimizedBatch = this.optimizeBatchForDatabase(batch);
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
         console.log(`🔄 UPSERT Batch ${batchNumber}, attempt ${attempt}...`);
         
-        const { data, error } = await supabase
+        // CRITICAL FIX: Optimize for 500+ records with timeout and minimal return
+        const upsertPromise = supabase
           .from('property_records')
-          .upsert(batch, {
+          .upsert(optimizedBatch, {
             onConflict: 'property_composite_key',
-            ignoreDuplicates: false
-          })
-          .select();  // Add this to prevent returning all columns
+            ignoreDuplicates: false,
+            count: 'exact',
+            returning: 'minimal'  // Only return count, not full record data
+          });
+
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Database timeout after 60 seconds')), 60000)
+        );
+
+        const { data, error } = await Promise.race([upsertPromise, timeoutPromise]);
         
         if (!error) {
           console.log(`✅ UPSERT Batch ${batchNumber} successful on attempt ${attempt}`);
@@ -88,6 +114,35 @@ export class MicrosystemsUpdater {
         }
         return { error: networkError };
       }
+    }
+  }
+
+  /**
+   * CRITICAL FIX: Store source file content in jobs table (eliminates raw_data duplication)
+   */
+  async storeSourceFileInDatabase(sourceFileContent, jobId) {
+    try {
+      console.log('💾 Storing complete Microsystems source file in jobs table (UPDATER)...');
+
+      const { error } = await supabase
+        .from('jobs')
+        .update({
+          raw_file_content: sourceFileContent,
+          raw_file_size: sourceFileContent.length,
+          raw_file_rows_count: sourceFileContent.split('\n').length - 1, // Subtract header
+          raw_file_parsed_at: new Date().toISOString()
+        })
+        .eq('id', jobId);
+
+      if (error) {
+        console.error('❌ Error storing Microsystems source file in database:', error);
+        throw error;
+      }
+
+      console.log('✅ Complete Microsystems source file stored successfully in jobs table (UPDATER)');
+    } catch (error) {
+      console.error('❌ Failed to store Microsystems source file:', error);
+      // Don't throw - continue with processing even if storage fails
     }
   }
 
@@ -203,7 +258,7 @@ export class MicrosystemsUpdater {
       console.log(`📂 Organized into ${Object.keys(this.allCodes).length} field groups`);
       console.log(`🎯 InfoBy codes (140 prefix): ${Object.keys(this.allCodes['140'] || {}).join(', ')}`);
       console.log(`🏠 HVAC codes (8 prefix): ${Object.keys(this.allCodes['8'] || {}).join(', ')}`);
-      console.log(`🏗️ Design codes (520 prefix): ${Object.keys(this.allCodes['520'] || {}).join(', ')}`);
+      console.log(`🏗�� Design codes (520 prefix): ${Object.keys(this.allCodes['520'] || {}).join(', ')}`);
       
       // Store code file in jobs table
       await this.storeCodeFileInDatabase(codeFileContent, jobId);
@@ -366,8 +421,6 @@ export class MicrosystemsUpdater {
       values_base_cost: this.parseNumeric(rawRecord['Base Cost']),
       values_det_items: this.parseNumeric(rawRecord['Det Items']),
       values_repl_cost: this.parseNumeric(rawRecord['Cost New']),
-      values_norm_time: null, // Calculated later in FileUploadButton.jsx
-      values_norm_size: null, // Calculated later in FileUploadButton.jsx
       
       // Inspection fields
       inspection_info_by: rawRecord['Interior Finish3'], // Store letter codes directly (E, F, O, R, V)
@@ -383,28 +436,25 @@ export class MicrosystemsUpdater {
       asset_design_style: rawRecord['Style Code'],
       asset_ext_cond: rawRecord['Condition'],
       asset_int_cond: rawRecord['Interior Cond Or End Unit'],
-      asset_key_page: null, // User defined, created in module
       asset_lot_acre: this.parseNumeric(rawRecord['Lot Size In Acres'], 2),
       asset_lot_depth: this.calculateLotDepth(rawRecord),
       asset_lot_frontage: this.calculateLotFrontage(rawRecord),
       asset_lot_sf: this.parseInteger(rawRecord['Lot Size In Sf']),
-      asset_map_page: null, // User defined, created in module
       asset_neighborhood: rawRecord['Neighborhood'],
       asset_sfla: this.parseNumeric(rawRecord['Livable Area']),
       asset_story_height: this.parseNumeric(rawRecord['Story Height']),
       asset_type_use: rawRecord['Type Use Code'],
       asset_view: null, // Not available in Microsystems
       asset_year_built: this.parseInteger(rawRecord['Year Built']),
-      asset_zoning: null, // User defined, created in module
-      
+
       // Analysis and calculation fields
-      location_analysis: null, // User defined, created in module
-      new_vcs: null, // User defined, created in module
+      // REMOVED: location_analysis, new_vcs, asset_map_page, asset_key_page,
+      //          asset_zoning, values_norm_size, values_norm_time
+      //          (moved to property_market_analysis table)
       total_baths_calculated: this.calculateTotalBaths(rawRecord),
       
       // Processing metadata
       processed_at: new Date().toISOString(),
-      validation_status: 'updated',
       is_new_since_last_upload: false, // UPSERT operation
       
       // File tracking with version info
@@ -416,16 +466,13 @@ export class MicrosystemsUpdater {
       upload_date: new Date().toISOString(),
       
       // Payroll and project tracking
-      project_start_date: null,
+      // REMOVED: project_start_date (moved to jobs table)
       
       // System metadata
-      vendor_source: 'Microsystems',
       created_by: '5df85ca3-7a54-4798-a665-c31da8d9caad',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       
-      // Store complete raw data as JSON
-      raw_data: rawRecord
     };
 
     // ENHANCED: Merge with preserved data - preserved fields take precedence
@@ -452,19 +499,97 @@ export class MicrosystemsUpdater {
     
     try {
       console.log('🚀 Starting Enhanced Microsystems UPDATER (UPSERT) with field preservation and ROLLBACK support...');
-      
+
+      // CRITICAL FIX: Store source file content in jobs table
+      console.log('📝 Step 1: Storing source file in database...');
+      await this.storeSourceFileInDatabase(sourceFileContent, jobId);
+      console.log('✅ Step 1 completed: Source file stored');
+
       // Process and store code file if provided
       if (codeFileContent) {
+        console.log('📝 Step 2: Processing code file...');
         await this.processCodeFile(codeFileContent, jobId);
+        console.log('✅ Step 2 completed: Code file processed');
+      } else {
+        console.log('⏭️ Step 2 skipped: No code file provided');
       }
-      
+
       // Parse source file
+      console.log('📝 Step 3: Parsing source file...');
       const records = this.parseSourceFile(sourceFileContent);
-      
+      console.log(`✅ Step 3 completed: Parsed ${records.length} records from source file`);
+
+      // NEW: Delete properties that exist in DB but are NOT in the source file (fixes recurring deletion modal)
+      console.log('📝 Step 4: Checking for properties to delete (not in source file)...');
+      console.log('⚠️ WARNING: This step can be slow with large datasets!');
+      try {
+        // Generate composite keys for all records in the source file
+        const sourceFileKeys = records.map(rawRecord =>
+          `${yearCreated}${ccddCode}-${rawRecord['Block']}-${rawRecord['Lot']}_${(rawRecord['Qual'] || '').trim() || 'NONE'}-${(rawRecord['Bldg'] || '').trim() || 'NONE'}-${(rawRecord['Location'] || '').trim() || 'NONE'}`
+        );
+
+        console.log(`📊 Source file contains ${sourceFileKeys.length} properties`);
+
+        // Find properties in DB that are NOT in source file
+        console.log('🗂️ Querying database for existing properties to check for deletions...');
+        console.log(`🔍 Searching for properties NOT in ${sourceFileKeys.length} source file keys...`);
+
+        // OPTIMIZATION: Add timeout to prevent infinite hanging
+        const deletionCheckPromise = supabase
+          .from('property_records')
+          .select('id, property_composite_key, property_location')
+          .eq('job_id', jobId)
+          .not('property_composite_key', 'in', `(${sourceFileKeys.map(k => `"${k}"`).join(',')})`);
+
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Deletion check timeout after 30 seconds - database may be overloaded')), 30000)
+        );
+
+        let existingProperties = null;
+        let fetchError = null;
+
+        try {
+          const result = await Promise.race([deletionCheckPromise, timeoutPromise]);
+          existingProperties = result.data;
+          fetchError = result.error;
+          console.log('✅ Deletion check query completed successfully');
+        } catch (timeoutError) {
+          console.error('❌ DELETION CHECK TIMED OUT:', timeoutError.message);
+          fetchError = timeoutError;
+        }
+
+        if (fetchError) {
+          console.warn('⚠️ Could not fetch existing properties for deletion check:', fetchError);
+        } else if (existingProperties && existingProperties.length > 0) {
+          console.log(`🗑️ Found ${existingProperties.length} properties to delete:`);
+          existingProperties.slice(0, 5).forEach(prop => {
+            console.log(`   - ${prop.property_location || 'No location'} (${prop.property_composite_key})`);
+          });
+
+          // Delete properties not in source file
+          const { error: deleteError } = await supabase
+            .from('property_records')
+            .delete()
+            .eq('job_id', jobId)
+            .not('property_composite_key', 'in', `(${sourceFileKeys.map(k => `"${k}"`).join(',')})`);
+
+          if (deleteError) {
+            console.warn('⚠️ Could not delete obsolete properties:', deleteError);
+          } else {
+            console.log(`✅ Successfully deleted ${existingProperties.length} obsolete properties`);
+          }
+        } else {
+          console.log('✅ No obsolete properties found');
+        }
+      } catch (deleteProcessError) {
+        console.warn('⚠️ Error during deletion process:', deleteProcessError);
+        // Continue with UPSERT even if deletion fails
+      }
+
       // ENHANCED: Check if field preservation is enabled and get preserved data
       let preservedDataMap = new Map();
       if (versionInfo.preservedFieldsHandler && typeof versionInfo.preservedFieldsHandler === 'function') {
-        console.log('🔒 Field preservation enabled, fetching existing data...');
+        console.log('���� Field preservation enabled, fetching existing data...');
         
         // Generate composite keys for all records
         const compositeKeys = records.map(rawRecord => 
@@ -505,14 +630,16 @@ export class MicrosystemsUpdater {
         }).length;
         console.log(`📊 Preserving user-defined fields in ${preservedCount} records`);
       }
-      
+
       const results = {
         processed: 0,
         errors: 0,
         warnings: []
       };
-      
-      console.log(`Batch UPSERTING ${propertyRecords.length} property records...`);
+
+      console.log('✅ INITIALIZATION COMPLETE - All steps finished successfully!');
+      console.log('🚀 Starting batch UPSERT processing...');
+      console.log(`📊 Processing ${propertyRecords.length} property records in batches...`);
       const batchSize = 500; // Reduced from 1000
       let consecutiveErrors = 0;
       
@@ -624,12 +751,12 @@ export class MicrosystemsUpdater {
           
           // Small delay between successful batches
           if (i + batchSize < propertyRecords.length) {
-            console.log(`⏳ Pausing 0.5s before next batch...`);
+            console.log(`�� Pausing 0.5s before next batch...`);
             await new Promise(resolve => setTimeout(resolve, 500));
           }
         }
       }
-      
+
       console.log('🚀 Enhanced Microsystems UPDATER (UPSERT) complete:', results);
       return results;
       
@@ -843,18 +970,172 @@ export class MicrosystemsUpdater {
    */
   getCodesByCategory(category) {
     const result = {};
-    
+
     for (const fieldPrefix of Object.keys(this.allCodes)) {
       const fieldCodes = this.allCodes[fieldPrefix];
-      
+
       for (const code of Object.keys(fieldCodes)) {
         if (fieldCodes[code].category === category) {
           result[code] = fieldCodes[code];
         }
       }
     }
-    
+
     return result;
+  }
+
+  // ===== PROPERTY LINEAGE TRACKING METHODS =====
+
+  /**
+   * Store complete source file version for lineage tracking
+   */
+  async storeSourceFileVersion(sourceFileContent, jobId, fileVersion, yearCreated, ccddCode) {
+    try {
+      console.log(`📚 Storing Microsystems source file version ${fileVersion} for lineage tracking...`);
+
+      // Parse source file to extract property composite keys
+      const records = this.parseSourceFile(sourceFileContent);
+      const propertyKeys = [];
+
+      records.forEach(rawRecord => {
+        const compositeKey = `${yearCreated}${ccddCode}-${rawRecord['Block']}-${rawRecord['Lot']}_${(rawRecord['Qual'] || '').trim() || 'NONE'}-${(rawRecord['Bldg'] || '').trim() || 'NONE'}-${(rawRecord['Location'] || '').trim() || 'NONE'}`;
+        propertyKeys.push(compositeKey);
+      });
+
+      // Get previous version for comparison
+      const { data: previousVersion } = await supabase
+        .from('source_file_versions')
+        .select('property_composite_keys')
+        .eq('job_id', jobId)
+        .eq('file_version', fileVersion - 1)
+        .single();
+
+      let propertiesAdded = [];
+      let propertiesRemoved = [];
+
+      if (previousVersion) {
+        const previousKeys = new Set(previousVersion.property_composite_keys);
+        const currentKeys = new Set(propertyKeys);
+
+        // Find added and removed properties
+        propertiesAdded = [...currentKeys].filter(key => !previousKeys.has(key));
+        propertiesRemoved = [...previousKeys].filter(key => !currentKeys.has(key));
+
+        console.log(`📊 Version ${fileVersion} changes: +${propertiesAdded.length} added, -${propertiesRemoved.length} removed`);
+      } else {
+        console.log(`📊 Version ${fileVersion} is the first version with ${propertyKeys.length} properties`);
+      }
+
+      // Store source file version
+      const { data: sourceFileVersionRecord, error } = await supabase
+        .from('source_file_versions')
+        .insert([{
+          job_id: jobId,
+          file_version: fileVersion,
+          file_content: sourceFileContent,
+          vendor_type: 'Microsystems',
+          original_filename: 'Microsystems_Source_File.txt',
+          file_size: sourceFileContent.length,
+          row_count: records.length,
+          property_composite_keys: propertyKeys,
+          properties_added: propertiesAdded,
+          properties_removed: propertiesRemoved,
+          properties_modified: [], // TODO: Implement field-level change detection
+          uploaded_by: null, // TODO: Get actual user ID
+          processing_status: 'stored'
+        }])
+        .select()
+        .single();
+
+      if (error) {
+        console.error('❌ Error storing Microsystems source file version:', error);
+        return null;
+      }
+
+      // Record lifecycle events
+      await this.recordLifecycleEvents(
+        jobId, fileVersion, propertiesAdded, propertiesRemoved, sourceFileVersionRecord.id
+      );
+
+      console.log(`✅ Microsystems source file version ${fileVersion} stored with lineage tracking`);
+      return sourceFileVersionRecord.id;
+
+    } catch (error) {
+      console.error('❌ Failed to store Microsystems source file version:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Record property lifecycle events (added, removed)
+   */
+  async recordLifecycleEvents(jobId, fileVersion, addedProperties, removedProperties, sourceFileVersionId) {
+    try {
+      const events = [];
+
+      // Record added properties
+      addedProperties.forEach(propertyKey => {
+        events.push({
+          job_id: jobId,
+          property_composite_key: propertyKey,
+          event_type: 'ADDED',
+          from_file_version: null,
+          to_file_version: fileVersion,
+          source_file_version_id: sourceFileVersionId
+        });
+      });
+
+      // Record removed properties
+      removedProperties.forEach(propertyKey => {
+        events.push({
+          job_id: jobId,
+          property_composite_key: propertyKey,
+          event_type: 'REMOVED',
+          from_file_version: fileVersion - 1,
+          to_file_version: fileVersion,
+          source_file_version_id: sourceFileVersionId
+        });
+      });
+
+      if (events.length > 0) {
+        const { error } = await supabase
+          .from('property_lifecycle_events')
+          .insert(events);
+
+        if (error) {
+          console.error('❌ Error recording Microsystems lifecycle events:', error);
+        } else {
+          console.log(`✅ Recorded ${events.length} Microsystems lifecycle events for version ${fileVersion}`);
+        }
+      }
+
+    } catch (error) {
+      console.error('❌ Failed to record Microsystems lifecycle events:', error);
+    }
+  }
+
+  /**
+   * Mark source file version as processed
+   */
+  async markSourceFileVersionProcessed(sourceFileVersionId, processingResults) {
+    try {
+      const { error } = await supabase
+        .from('source_file_versions')
+        .update({
+          processing_status: processingResults.errors > 0 ? 'failed' : 'processed',
+          processed_at: new Date().toISOString()
+        })
+        .eq('id', sourceFileVersionId);
+
+      if (error) {
+        console.error('❌ Error marking Microsystems source file version as processed:', error);
+      } else {
+        console.log(`✅ Microsystems source file version marked as processed`);
+      }
+
+    } catch (error) {
+      console.error('❌ Failed to mark Microsystems source file version as processed:', error);
+    }
   }
 }
 

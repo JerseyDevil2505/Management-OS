@@ -2089,9 +2089,13 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
             </thead>
             <tbody>
               {vacantSales.map((sale, index) => {
-                // Get human-readable names
-                const typeName = interpretCodes.getTypeName(sale, jobData?.parsed_code_definitions, vendorType) || sale.asset_type_use || '-';
-                const designName = interpretCodes.getDesignName(sale, jobData?.parsed_code_definitions, vendorType) || sale.asset_design_style || '-';
+                // Get human-readable names - use only synchronous decoding to avoid async rendering issues
+                const typeName = vendorType === 'Microsystems' && jobData?.parsed_code_definitions
+                  ? interpretCodes.getMicrosystemsValue?.(sale, jobData.parsed_code_definitions, 'asset_type_use') || sale.asset_type_use || '-'
+                  : sale.asset_type_use || '-';
+                const designName = vendorType === 'Microsystems' && jobData?.parsed_code_definitions
+                  ? interpretCodes.getMicrosystemsValue?.(sale, jobData.parsed_code_definitions, 'asset_design_style') || sale.asset_design_style || '-'
+                  : sale.asset_design_style || '-';
                 
                 return (
                   <tr key={sale.id} style={{ backgroundColor: index % 2 === 0 ? 'white' : '#F9FAFB' }}>
@@ -2858,8 +2862,13 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
                   </thead>
                   <tbody>
                     {searchResults.map(prop => {
-                      const typeName = interpretCodes.getTypeName(prop, jobData?.parsed_code_definitions, vendorType) || prop.asset_type_use || '-';
-                      const designName = interpretCodes.getDesignName(prop, jobData?.parsed_code_definitions, vendorType) || prop.asset_design_style || '-';
+                      // Use only synchronous decoding to avoid async rendering issues
+                      const typeName = vendorType === 'Microsystems' && jobData?.parsed_code_definitions
+                        ? interpretCodes.getMicrosystemsValue?.(prop, jobData.parsed_code_definitions, 'asset_type_use') || prop.asset_type_use || '-'
+                        : prop.asset_type_use || '-';
+                      const designName = vendorType === 'Microsystems' && jobData?.parsed_code_definitions
+                        ? interpretCodes.getMicrosystemsValue?.(prop, jobData.parsed_code_definitions, 'asset_design_style') || prop.asset_design_style || '-'
+                        : prop.asset_design_style || '-';
                       const acres = calculateAcreage(prop);
                       const pricePerUnit = getPricePerUnit(prop.sales_price, acres);
                       
@@ -3528,7 +3537,3 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
 };
 
 export default LandValuationTab;
-      
-  
-  
-  

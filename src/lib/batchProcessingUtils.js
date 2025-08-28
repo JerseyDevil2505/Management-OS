@@ -15,7 +15,6 @@
  * - Background data processing
  */
 
-import { performanceMonitor } from './streamingDataService.js';
 
 /**
  * BATCH PROCESSOR CLASS - Main batch processing engine
@@ -84,7 +83,8 @@ export class BatchProcessor {
       this.stats.endTime = Date.now();
       const duration = this.stats.endTime - this.stats.startTime;
       
-      console.error(`❌ Batch processing failed after ${duration}ms:`, error);
+      console.error(`❌ Batch processing failed after ${duration}ms:`, error.message);
+      console.error('Error details:', error);
       
       return {
         success: false,
@@ -606,11 +606,6 @@ export const batchPerformanceUtils = {
       memoryUsage: process.memoryUsage ? process.memoryUsage() : null
     };
     
-    performanceMonitor.logQuery(
-      'BATCH_PROCESSING',
-      performance.totalTime,
-      items.length
-    );
     
     console.log('📊 Batch performance:', performance);
     

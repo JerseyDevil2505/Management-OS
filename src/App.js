@@ -10,6 +10,7 @@ import JobContainer from './components/job-modules/JobContainer';
 import FileUploadButton from './components/job-modules/FileUploadButton';
 import LandingPage from './components/LandingPage';
 import UserManagement from './components/UserManagement';
+import { sourceFileSyncService } from './services/sourceFileSyncService';
 
 // ==========================================
 // PERSISTENT CACHE CONFIGURATION
@@ -112,7 +113,6 @@ useEffect(() => {
     managers: [],
     planningJobs: [],
     archivedJobs: [],
-    jobCache: {},
     
     // Billing Data
     activeJobs: [],
@@ -135,7 +135,6 @@ useEffect(() => {
     // Additional Data for Components
     countyHpiData: [],
     jobResponsibilities: [],
-    jobFreshness: {},
     
     // Cache Metadata
     version: CACHE_VERSION,
@@ -156,7 +155,6 @@ useEffect(() => {
 
   // Job selection state
   const [selectedJob, setSelectedJob] = useState(null);
-  const [fileRefreshTrigger, setFileRefreshTrigger] = useState(0);
 
     // Authentication state
   const [user, setUser] = useState(null);
@@ -170,13 +168,12 @@ useEffect(() => {
   // PERSISTENT STORAGE HELPERS
   // ==========================================
   const saveToStorage = useCallback(async (data) => {
-    console.log('💾 Saving to storage, jobCache keys:', Object.keys(data.jobCache || {}));
+    console.log('💾 Saving to storage - no caching');
     try {
       // Try IndexedDB first (no size limits)
       if (dbRef.current) {
         const dataToStore = {
           ...data,
-          jobCache: data.jobCache || {},
           timestamp: Date.now(),
           version: CACHE_VERSION
         };
@@ -197,7 +194,8 @@ useEffect(() => {
         return true;
       }
     } catch (error) {
-      console.error('IndexedDB save failed:', error);
+      console.error('IndexedDB save failed:', error.message);
+      console.error('Error details:', error);
       
       // Fallback to localStorage for critical data
       try {
@@ -240,9 +238,7 @@ useEffect(() => {
           }
         }
         
-        // Ensure jobCache is loaded
-        fullData.jobCache = fullData.jobCache || {};
-        console.log('📦 Loaded from storage, jobCache keys:', Object.keys(fullData.jobCache));
+        console.log('📦 Loaded from storage - no caching');
         
         const loadTime = Date.now() - startTime;
         console.log(`⚡ Cache loaded from IndexedDB in ${loadTime}ms (age: ${Math.floor(cacheAge / 60000)} minutes)`);
@@ -337,7 +333,8 @@ useEffect(() => {
             new Date(fileData[0].updated_at) > new Date(prodData[0].upload_date) : false
         };
       } catch (error) {
-        console.error(`Error loading freshness for job ${job.id}:`, error);
+        console.error(`Error loading freshness for job ${job.id}:`, error.message);
+        console.error('Error details:', error);
         freshnessData[job.id] = {
           lastFileUpload: null,
           lastProductionRun: null,
@@ -741,7 +738,6 @@ useEffect(() => {
       const newCache = {
         ...masterCache,
         ...updates,
-        jobCache: masterCache.jobCache || {},  // ADD THIS LINE - preserve existing jobCache
         lastFetched: {
           ...masterCache.lastFetched,
           ...updates.lastFetched,
@@ -925,42 +921,6 @@ useEffect(() => {
   }, [masterCache, saveToStorage]);
 
   // ==========================================
-  // JOB-LEVEL CACHE MANAGEMENT (SECOND TIER)
-  // ==========================================
-  const updateJobCache = useCallback((jobId, data) => {
-    console.log('🔍 updateJobCache called:', {
-      jobId,
-      hasData: !!data,
-      currentCacheKeys: Object.keys(masterCache.jobCache || {})
-    });
-    if (data === null) {
-      // Clear cache for this job (used after FileUpload)
-      console.log(`🗑️ Clearing cache for job ${jobId}`);
-      setMasterCache(prev => ({
-        ...prev,
-        jobCache: {
-          ...prev.jobCache,
-          [jobId]: undefined
-        }
-      }));
-      // Don't trigger reload here - let FileUploadButton handle that
-    } else {
-      // Update cache for this job
-      console.log(`📦 Updating cache for job ${jobId}`);
-      setMasterCache(prev => ({
-        ...prev,
-        jobCache: {
-          ...prev.jobCache,
-          [jobId]: {
-            ...data,
-            timestamp: Date.now()
-          }
-        }
-      }));
-    }
-  }, []);
-
-  // ==========================================
   // JOB SELECTION HANDLERS
   // ==========================================
   const handleJobSelect = useCallback((job) => {
@@ -968,19 +928,8 @@ useEffect(() => {
     setActiveView('job-modules');
     // Update URL when job is selected
     window.history.pushState({}, '', `/job/${job.id}`);
-    
-    // Clear job cache when selecting a job to force fresh data load
-    if (job?.id && masterCache.jobCache?.[job.id]) {
-      console.log(`🔄 Clearing cache for job ${job.id} on selection`);
-      setMasterCache(prev => ({
-        ...prev,
-        jobCache: {
-          ...prev.jobCache,
-          [job.id]: undefined
-        }
-      }));
-    }
-  }, [masterCache.jobCache]);
+    console.log(`🔄 Selected job ${job.id} - will load fresh data`);
+  }, []);
 
   const handleBackToJobs = useCallback(() => {
     setSelectedJob(null);
@@ -994,12 +943,12 @@ useEffect(() => {
   }, [loadMasterData]);
 
   const handleFileProcessed = useCallback(() => {
-    // Clear cache for this job after file upload
+    // File processed - trigger fresh data reload
     if (selectedJob) {
-      updateJobCache(selectedJob.id, null);
-      setFileRefreshTrigger(prev => prev + 1);
+      console.log('📁 File processed - will reload fresh data');
+      loadMasterData({ force: true, components: ['jobs'] });
     }
-  }, [selectedJob, updateJobCache]);
+  }, [selectedJob, loadMasterData]);
 
   const handleWorkflowStatsUpdate = useCallback(() => {
     // Refresh jobs data when workflow stats change (from ProductionTracker)
@@ -1348,16 +1297,16 @@ useEffect(() => {
           });
         }
         
-        // Background refresh if needed
-        if (cached.shouldBackgroundRefresh) {
-          setTimeout(() => {
-            console.log('🔄 Starting background refresh...');
-            loadMasterData({ background: true });
-          }, 1000); // Wait 1 second before background refresh
-        }
-        
-        // Schedule next refresh
-        scheduleBackgroundRefresh();
+        // DISABLED: Background refresh - causing unwanted Supabase calls
+        // if (cached.shouldBackgroundRefresh) {
+        //   setTimeout(() => {
+        //     console.log('🔄 Starting background refresh...');
+        //     loadMasterData({ background: true });
+        //   }, 1000);
+        // }
+
+        // DISABLED: Schedule next refresh - causing unwanted Supabase calls
+        // scheduleBackgroundRefresh();
         
       } else {
         // No cache or expired - load fresh
@@ -1403,25 +1352,26 @@ useEffect(() => {
   }, [masterCache.jobs]); // Re-run when jobs are loaded/updated
 
   // ==========================================
-  // VISIBILITY CHANGE HANDLER
+  // VISIBILITY CHANGE HANDLER - DISABLED
   // ==========================================
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (!document.hidden && masterCache.isInitialized) {
-        const cacheAge = Date.now() - (masterCache.lastFetched.all || 0);
-        
-        if (cacheAge > CACHE_EXPIRY.warm) {
-          console.log('👁️ App became visible, cache is stale, refreshing...');
-          loadMasterData({ background: true });
-        } else {
-          console.log('👁️ App became visible, cache is fresh');
-        }
-      }
-    };
-    
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [masterCache, loadMasterData]);
+  // DISABLED: Causing unwanted automatic Supabase calls
+  // useEffect(() => {
+  //   const handleVisibilityChange = () => {
+  //     if (!document.hidden && masterCache.isInitialized) {
+  //       const cacheAge = Date.now() - (masterCache.lastFetched.all || 0);
+  //
+  //       if (cacheAge > CACHE_EXPIRY.warm) {
+  //         console.log('👁️ App became visible, cache is stale, refreshing...');
+  //         loadMasterData({ background: true });
+  //       } else {
+  //         console.log('👁️ App became visible, cache is fresh');
+  //       }
+  //     }
+  //   };
+  //
+  //   document.addEventListener('visibilitychange', handleVisibilityChange);
+  //   return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  // }, [masterCache, loadMasterData]);
 
   // ==========================================
   // PERFORMANCE REPORTING
@@ -1430,23 +1380,40 @@ useEffect(() => {
     const reportPerformance = () => {
       const stats = performanceRef.current;
       const uptime = (Date.now() - stats.appStartTime) / 1000;
-      
+
       console.log('📊 Performance Report:', {
         uptime: `${Math.floor(uptime / 60)}m ${Math.floor(uptime % 60)}s`,
         cacheHits: stats.cacheHits,
         cacheMisses: stats.cacheMisses,
-        cacheHitRate: stats.cacheHits + stats.cacheMisses > 0 
+        cacheHitRate: stats.cacheHits + stats.cacheMisses > 0
           ? `${Math.round((stats.cacheHits / (stats.cacheHits + stats.cacheMisses)) * 100)}%`
           : 'N/A',
         dbQueries: stats.dbQueries,
         avgLoadTime: `${Math.round(stats.avgLoadTime)}ms`
       });
     };
-    
-    // Report every 5 minutes
-    const interval = setInterval(reportPerformance, 5 * 60 * 1000);
-    return () => clearInterval(interval);
+
+    // DISABLED: Report every 5 minutes - not needed in production
+    // const interval = setInterval(reportPerformance, 5 * 60 * 1000);
+    // return () => clearInterval(interval);
   }, []);
+
+  // ==========================================
+  // AUTOMATIC SOURCE FILE SYNC SERVICE
+  // ==========================================
+  useEffect(() => {
+    // Start the automatic sync service when user is authenticated and app is initialized
+    if (user && masterCache.isInitialized) {
+      console.log('🔄 Starting automatic source file sync service...');
+      sourceFileSyncService.start();
+
+      // Cleanup when component unmounts
+      return () => {
+        console.log('🛑 Stopping automatic source file sync service...');
+        sourceFileSyncService.stop();
+      };
+    }
+  }, [user, masterCache.isInitialized]);
 
   // ==========================================
   // RENDER UI
@@ -1619,9 +1586,10 @@ useEffect(() => {
                 
                 {/* File Upload Controls */}
                 <div className="border-l border-white border-opacity-30 pl-6">
-                  <FileUploadButton 
-                    job={selectedJob} 
-                    onFileProcessed={handleFileProcessed} 
+                  <FileUploadButton
+                    job={selectedJob}
+                    onFileProcessed={handleFileProcessed}
+                    onDataRefresh={handleFileProcessed}
                   />
                 </div>
               </div>
@@ -1663,8 +1631,6 @@ useEffect(() => {
             inspectionData={masterCache.inspectionData}
             workflowStats={masterCache.workflowStats}
             onDataUpdate={updateCacheItem}
-            jobCache={masterCache.jobCache}
-            onUpdateJobCache={updateJobCache}
             onRefresh={() => loadMasterData({ force: true, components: ['jobs'] })}
           />
         )}
@@ -1715,9 +1681,6 @@ useEffect(() => {
             <JobContainer
               selectedJob={selectedJob}
               onBackToJobs={handleBackToJobs}
-              jobCache={masterCache.jobCache}
-              onUpdateJobCache={updateJobCache}
-              fileRefreshTrigger={fileRefreshTrigger}
               onWorkflowStatsUpdate={handleWorkflowStatsUpdate}
             />
           </div>

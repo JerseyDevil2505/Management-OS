@@ -43,13 +43,11 @@ const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData, onUp
   // Build available fields list from properties for custom checks
   const availableFields = useMemo(() => {
     if (properties && properties.length > 0) {
-      const firstProp = properties[0];
-      const rawDataFields = firstProp.raw_data ? Object.keys(firstProp.raw_data) : [];
-      
-      // Sort raw data fields alphabetically
-      rawDataFields.sort();
-      
-      console.log(`📋 Found ${rawDataFields.length} raw data fields for custom checks`);
+      // Raw data fields now come from source file content parsing
+      // For now, return empty array - this functionality would need job context for source file access
+      const rawDataFields = [];
+
+      console.log(`📋 Raw data fields now accessed via source file content (job context required)`);
       return rawDataFields;
     }
     return [];
