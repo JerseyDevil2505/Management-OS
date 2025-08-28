@@ -59,7 +59,7 @@ const FileUploadButton = ({ job, onFileProcessed, isJobLoading = false, onDataRe
   // NEW: Add log entry to batch processing
   const addBatchLog = (message, type = 'info', details = null) => {
     const logEntry = {
-      id: Date.now(),
+      id: Date.now() + Math.random(), // Make unique with random component
       timestamp: new Date().toISOString(),
       message,
       type,
