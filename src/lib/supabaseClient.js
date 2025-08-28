@@ -801,11 +801,14 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
     
     // Get VCS code from property (check multiple possible fields)
     let vcsCode = property.newVCS || property.new_vcs || property.vcs;
-    if (!vcsCode && property.raw_data) {
-      vcsCode = property.raw_data.vcs || 
-                property.raw_data.VCS || 
-                property.raw_data.NEIGHBORHOOD ||
-                property.raw_data.neighborhood;
+    if (!vcsCode && property.job_id && property.property_composite_key) {
+      const sourceData = await getSourceFileDataForProperty(property.job_id, property.property_composite_key);
+      if (sourceData) {
+        vcsCode = sourceData.vcs ||
+                  sourceData.VCS ||
+                  sourceData.NEIGHBORHOOD ||
+                  sourceData.neighborhood;
+      }
     }  
     
     if (!vcsCode || vcsCode.toString().trim() === '') return null;
