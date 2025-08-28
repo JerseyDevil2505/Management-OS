@@ -669,7 +669,15 @@ const JobContainer = ({
         setEmployees(employeesData || []);
         console.log('✅ All additional data tables loaded');
       } catch (stateError) {
-        console.error('Error setting state for additional data:', stateError);
+        console.error('❌ STATE SETTING ERROR FOR ADDITIONAL DATA:');
+        console.error(`  Error Message: ${stateError.message || 'Unknown error'}`);
+        console.error(`  Error Type: ${stateError.constructor.name}`);
+        console.error(`  Data Sizes: inspection=${inspectionDataFull?.length || 0}, market=${marketData ? 'object' : 'null'}, hpi=${hpiData?.length || 0}`);
+        console.error(`  Job ID: ${selectedJob.id}`);
+        if (stateError.stack) {
+          console.error(`  Stack: ${stateError.stack}`);
+        }
+        console.error(`  Full Error:`, stateError);
         // Set safe defaults if state setting fails
         setInspectionData([]);
         setMarketLandData({});
@@ -722,7 +730,34 @@ const JobContainer = ({
       }
       
     } catch (error) {
-      console.error('Error loading file versions:', error);
+      // ENHANCED: Comprehensive error logging for main catch block
+      console.error('❌ CRITICAL ERROR IN LOADLATESTFILEVERSIONS:');
+      console.error(`  Error Type: ${error.constructor.name}`);
+      console.error(`  Error Message: ${error.message || 'Unknown error'}`);
+      console.error(`  Error Code: ${error.code || 'No code'}`);
+      console.error(`  Error Details: ${error.details || 'No details'}`);
+      console.error(`  Error Hint: ${error.hint || 'No hint'}`);
+      console.error(`  Job ID: ${selectedJob.id}`);
+      console.error(`  Job Name: ${selectedJob.name || 'Unknown'}`);
+      console.error(`  Function Stage: ${isLoadingVersion ? 'Initial Loading' : isLoadingProperties ? 'Property Loading' : 'Data Processing'}`);
+      if (error.stack) {
+        console.error(`  Stack Trace: ${error.stack}`);
+      }
+      console.error(`  Full Error Object:`, error);
+
+      // Additional analysis for specific error types
+      if (error.message?.includes('timeout')) {
+        console.error(`  🔍 TIMEOUT ANALYSIS:`);
+        console.error(`    - Function timed out during data loading`);
+        console.error(`    - This indicates database performance issues`);
+        console.error(`    - Try reducing batch sizes or checking database load`);
+      }
+      if (error.message?.includes('canceling statement')) {
+        console.error(`  🔍 CANCELLATION ANALYSIS:`);
+        console.error(`    - Database query was cancelled`);
+        console.error(`    - This often indicates resource constraints`);
+        console.error(`    - Consider optimizing queries or database indexing`);
+      }
 
       // Handle different error types gracefully
       let errorMessage = 'Unknown error occurred';
@@ -736,6 +771,7 @@ const JobContainer = ({
         errorMessage = 'Request timeout - dataset too large. Try again or contact support.';
       }
 
+      console.error(`📝 Setting version error message: ${errorMessage}`);
       setVersionError(errorMessage);
       
       // Fallback to basic job data
@@ -761,7 +797,7 @@ const JobContainer = ({
 
   // Handle file upload completion - refresh version data
   const handleFileProcessed = async (fileType, fileName) => {
-    console.log(`📁 File processed: ${fileType} - ${fileName}`);
+    console.log(`���� File processed: ${fileType} - ${fileName}`);
     
     // Clear cache for this job since data changed
     if (onUpdateJobCache && selectedJob?.id) {
