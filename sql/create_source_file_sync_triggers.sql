@@ -26,8 +26,8 @@ DECLARE
     v_composite_key text;
     i integer;
 BEGIN
-    -- Get source file content and vendor type
-    SELECT source_file_content, vendor_source 
+    -- Get raw file content and vendor type
+    SELECT raw_file_content, vendor_source
     INTO v_source_content, v_vendor_source
     FROM jobs j
     LEFT JOIN property_records pr ON j.id = pr.job_id
@@ -126,8 +126,8 @@ BEGIN
         RETURN jsonb_build_object('error', 'Job not found');
     END IF;
     
-    IF v_job_record.source_file_content IS NULL THEN
-        RETURN jsonb_build_object('error', 'No source file content found');
+    IF v_job_record.raw_file_content IS NULL THEN
+        RETURN jsonb_build_object('error', 'No raw file content found');
     END IF;
     
     -- Log the reprocessing attempt
@@ -142,9 +142,9 @@ BEGIN
         p_job_id,
         'reprocess_from_source',
         jsonb_build_object(
-            'trigger', 'source_file_content_updated',
+            'trigger', 'raw_file_content_updated',
             'vendor_source', v_job_record.vendor_source,
-            'source_file_size', length(v_job_record.source_file_content)
+            'raw_file_size', length(v_job_record.raw_file_content)
         ),
         now()
     );
@@ -167,11 +167,11 @@ $$ LANGUAGE plpgsql;
 
 -- 3. CREATE TRIGGER FUNCTION FOR SOURCE FILE CONTENT CHANGES
 -- =============================================================================
-CREATE OR REPLACE FUNCTION trigger_source_file_content_changed()
+CREATE OR REPLACE FUNCTION trigger_raw_file_content_changed()
 RETURNS trigger AS $$
 BEGIN
-    -- Only trigger if source_file_content actually changed
-    IF OLD.source_file_content IS DISTINCT FROM NEW.source_file_content THEN
+    -- Only trigger if raw_file_content actually changed
+    IF OLD.raw_file_content IS DISTINCT FROM NEW.raw_file_content THEN
         -- Log the change
         INSERT INTO audit_log (
             table_name,
@@ -182,10 +182,10 @@ BEGIN
         ) VALUES (
             'jobs',
             NEW.id,
-            'source_file_content_updated',
+            'raw_file_content_updated',
             jsonb_build_object(
-                'old_size', coalesce(length(OLD.source_file_content), 0),
-                'new_size', coalesce(length(NEW.source_file_content), 0),
+                'old_size', coalesce(length(OLD.raw_file_content), 0),
+                'new_size', coalesce(length(NEW.raw_file_content), 0),
                 'vendor_source', NEW.vendor_source
             ),
             now()
@@ -201,13 +201,13 @@ $$ LANGUAGE plpgsql;
 
 -- 4. CREATE THE ACTUAL TRIGGER
 -- =============================================================================
-DROP TRIGGER IF EXISTS jobs_source_file_content_changed ON jobs;
+DROP TRIGGER IF EXISTS jobs_raw_file_content_changed ON jobs;
 
-CREATE TRIGGER jobs_source_file_content_changed
+CREATE TRIGGER jobs_raw_file_content_changed
     AFTER UPDATE ON jobs
     FOR EACH ROW
-    WHEN (OLD.source_file_content IS DISTINCT FROM NEW.source_file_content)
-    EXECUTE FUNCTION trigger_source_file_content_changed();
+    WHEN (OLD.raw_file_content IS DISTINCT FROM NEW.raw_file_content)
+    EXECUTE FUNCTION trigger_raw_file_content_changed();
 
 -- 5. CREATE AUDIT LOG TABLE IF IT DOESN'T EXIST
 -- =============================================================================
@@ -245,8 +245,8 @@ BEGIN
         );
     END IF;
     
-    -- Check if source file content exists
-    IF v_job.source_file_content IS NULL THEN
+    -- Check if raw file content exists
+    IF v_job.raw_file_content IS NULL THEN
         RETURN jsonb_build_object(
             'success', false,
             'error', 'No source file content available for reprocessing'
@@ -274,7 +274,7 @@ BEGIN
             'force', p_force,
             'records_needing_reprocessing', v_needs_reprocessing_count,
             'vendor_source', v_job.vendor_source,
-            'source_file_size', length(v_job.source_file_content)
+            'raw_file_size', length(v_job.raw_file_content)
         ),
         now()
     );
@@ -312,7 +312,7 @@ SELECT
     triggerdef
 FROM pg_triggers 
 WHERE tablename = 'jobs' 
-AND triggername = 'jobs_source_file_content_changed';
+AND triggername = 'jobs_raw_file_content_changed';
 
 -- Test the get_raw_data_for_property function
 -- (Replace with actual job_id and composite_key for testing)
