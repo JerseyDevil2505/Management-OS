@@ -450,7 +450,6 @@ export class MicrosystemsProcessor {
       
       // Processing metadata
       processed_at: new Date().toISOString(),
-      validation_status: 'imported',
       is_new_since_last_upload: true,
       
       // File tracking with version info
