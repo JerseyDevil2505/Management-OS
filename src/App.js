@@ -944,12 +944,12 @@ useEffect(() => {
   }, [loadMasterData]);
 
   const handleFileProcessed = useCallback(() => {
-    // Clear cache for this job after file upload
+    // File processed - trigger fresh data reload
     if (selectedJob) {
-      updateJobCache(selectedJob.id, null);
-      setFileRefreshTrigger(prev => prev + 1);
+      console.log('📁 File processed - will reload fresh data');
+      loadMasterData({ force: true, components: ['jobs'] });
     }
-  }, [selectedJob, updateJobCache]);
+  }, [selectedJob, loadMasterData]);
 
   const handleWorkflowStatsUpdate = useCallback(() => {
     // Refresh jobs data when workflow stats change (from ProductionTracker)
