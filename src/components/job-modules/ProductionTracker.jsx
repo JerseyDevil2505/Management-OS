@@ -1493,7 +1493,7 @@ const ProductionTracker = ({
 
           // Inspector analytics - count ALL inspection attempts
           inspectorStats[inspector].totalInspected++;
-            
+
           const workDayString = measuredDate.toISOString().split('T')[0];
           inspectorStats[inspector].allWorkDays.add(workDayString);
 
@@ -1501,50 +1501,51 @@ const ProductionTracker = ({
           if (isResidentialProperty) {
             inspectorStats[inspector].residentialInspected++;
             inspectorStats[inspector].residentialWorkDays.add(workDayString);
-            
-            // Individual inspector credit: measure_by must equal list_by for personal achievement
-            if (isEntryCode && record.inspection_list_by === inspector) {
-              inspectorStats[inspector].entry++;
-            } else if (isRefusalCode && record.inspection_list_by === inspector) {
-              inspectorStats[inspector].refusal++;
-            }
-            
-            // Global metrics: count ALL valid entries/refusals regardless of who did list work
-            if (isEntryCode && classBreakdown[propertyClass]) {
-              classBreakdown[propertyClass].entry++;
-            } else if (isRefusalCode && classBreakdown[propertyClass]) {
-              classBreakdown[propertyClass].refusal++;
-            }
           }
-          
+
           if (isCommercialProperty) {
             inspectorStats[inspector].commercialInspected++;
             inspectorStats[inspector].commercialWorkDays.add(workDayString);
           }
+        }
 
-          // Pricing logic with vendor detection
+        // SEPARATE BLOCK: Only count business logic for VALID inspections
+        if (isValidInspection && hasValidInfoBy && hasValidMeasuredBy && hasValidMeasuredDate) {
+          // Individual inspector credit: measure_by must equal list_by for personal achievement
+          if (isResidentialProperty && isEntryCode && record.inspection_list_by === inspector) {
+            inspectorStats[inspector].entry++;
+          } else if (isResidentialProperty && isRefusalCode && record.inspection_list_by === inspector) {
+            inspectorStats[inspector].refusal++;
+          }
+
+          // Global metrics: count ALL valid entries/refusals regardless of who did list work
+          if (isResidentialProperty && isEntryCode && classBreakdown[propertyClass]) {
+            classBreakdown[propertyClass].entry++;
+          } else if (isResidentialProperty && isRefusalCode && classBreakdown[propertyClass]) {
+            classBreakdown[propertyClass].refusal++;
+          }
+
+          // Pricing logic with vendor detection (only for valid inspections)
           if (isCommercialProperty) {
             const currentVendor = actualVendor || jobData.vendor_type;
 
-
-            if (currentVendor === 'BRT' && 
-                record.inspection_price_by && 
+            if (currentVendor === 'BRT' &&
+                record.inspection_price_by &&
                 record.inspection_price_by.trim() !== '' &&
-                priceDate && 
+                priceDate &&
                 priceDate >= startDate) {
-              
+
               inspectorStats[inspector].priced++;
               inspectorStats[inspector].pricingWorkDays.add(priceDate.toISOString().split('T')[0]);
               if (classBreakdown[propertyClass]) {
                 classBreakdown[propertyClass].priced++;
               }
-              
+
             } else if (currentVendor === 'Microsystems' && isPricedCode) {
               inspectorStats[inspector].priced++;
               if (classBreakdown[propertyClass]) {
                 classBreakdown[propertyClass].priced++;
               }
-            } else {
             }
           }
 
@@ -1554,7 +1555,7 @@ const ProductionTracker = ({
             return dateValue;
           };
 
-          // Prepare for inspection_data UPSERT
+          // Prepare for inspection_data UPSERT (only for valid inspections)
           const inspectionRecord = {
             job_id: jobData.id,
             file_version: latestFileVersion,
