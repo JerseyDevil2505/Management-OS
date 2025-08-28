@@ -1432,23 +1432,40 @@ useEffect(() => {
     const reportPerformance = () => {
       const stats = performanceRef.current;
       const uptime = (Date.now() - stats.appStartTime) / 1000;
-      
+
       console.log('📊 Performance Report:', {
         uptime: `${Math.floor(uptime / 60)}m ${Math.floor(uptime % 60)}s`,
         cacheHits: stats.cacheHits,
         cacheMisses: stats.cacheMisses,
-        cacheHitRate: stats.cacheHits + stats.cacheMisses > 0 
+        cacheHitRate: stats.cacheHits + stats.cacheMisses > 0
           ? `${Math.round((stats.cacheHits / (stats.cacheHits + stats.cacheMisses)) * 100)}%`
           : 'N/A',
         dbQueries: stats.dbQueries,
         avgLoadTime: `${Math.round(stats.avgLoadTime)}ms`
       });
     };
-    
+
     // DISABLED: Report every 5 minutes - not needed in production
     // const interval = setInterval(reportPerformance, 5 * 60 * 1000);
     // return () => clearInterval(interval);
   }, []);
+
+  // ==========================================
+  // AUTOMATIC SOURCE FILE SYNC SERVICE
+  // ==========================================
+  useEffect(() => {
+    // Start the automatic sync service when user is authenticated and app is initialized
+    if (user && masterCache.isInitialized) {
+      console.log('🔄 Starting automatic source file sync service...');
+      sourceFileSyncService.start();
+
+      // Cleanup when component unmounts
+      return () => {
+        console.log('🛑 Stopping automatic source file sync service...');
+        sourceFileSyncService.stop();
+      };
+    }
+  }, [user, masterCache.isInitialized]);
 
   // ==========================================
   // RENDER UI
