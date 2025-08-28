@@ -2440,8 +2440,8 @@ export const propertyService = {
 
       if (error) throw error;
 
-      const sourceData = await getSourceFileDataForJob(jobId);
-      if (!sourceData) return [];
+      const rawData = await getRawDataForJob(jobId);
+      if (!rawData) return [];
 
       // Filter properties based on source file data field value
       const matchingProperties = [];
