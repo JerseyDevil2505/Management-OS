@@ -1629,17 +1629,26 @@ const editCustomCheck = (check) => {
   
   const runCustomCheck = async (check) => {
     const results = { custom: [] };
-    
+    const rawDataCache = new Map(); // Cache for this custom check run
+
     for (const property of properties) {
       let conditionMet = true;
-      
+
       for (let i = 0; i < check.conditions.length; i++) {
         const condition = check.conditions[i];
-            
+
         let fieldValue;
         if (condition.field.startsWith('raw_data.')) {
           const rawFieldName = condition.field.replace('raw_data.', '');
-          fieldValue = property.raw_data ? property.raw_data[rawFieldName] : null;
+
+          // Get raw data from cache or fetch from job-level storage
+          let rawData = rawDataCache.get(property.property_composite_key);
+          if (rawData === undefined) {
+            rawData = (await propertyService.getRawDataForProperty(property.job_id, property.property_composite_key)) || {};
+            rawDataCache.set(property.property_composite_key, rawData);
+          }
+
+          fieldValue = rawData[rawFieldName] || null;
         } else {
           fieldValue = property[condition.field];
         }
