@@ -198,7 +198,7 @@ const JobContainer = ({
         propertyCountQuery = propertyCountQuery.eq('is_assigned_property', true);
         console.log('📋 Loading only assigned properties (has_property_assignments = true)');
       } else {
-        console.log('��� Loading all properties (no assignments)');
+        console.log('📋 Loading all properties (no assignments)');
       }
 
       // Get count first with timeout
@@ -464,7 +464,16 @@ const JobContainer = ({
           );
 
           if (error) {
-            console.error('Error loading inspection data batch:', error);
+            console.error('❌ INSPECTION DATA BATCH ERROR:');
+            console.error(`  Batch: ${inspectionPage + 1}, Range: ${start}-${end}`);
+            console.error(`  Error Message: ${error.message || 'Unknown error'}`);
+            console.error(`  Error Code: ${error.code || 'No code'}`);
+            console.error(`  Error Details: ${error.details || 'No details'}`);
+            console.error(`  Job ID: ${selectedJob.id}`);
+            if (error.stack) {
+              console.error(`  Stack: ${error.stack}`);
+            }
+            console.error(`  Full Error:`, error);
             break; // Stop loading inspection data but continue with other data
           }
 
@@ -477,7 +486,16 @@ const JobContainer = ({
           }
         }
       } catch (inspectionError) {
-        console.error('Failed to load inspection data:', inspectionError);
+        console.error('❌ INSPECTION DATA LOADING FAILED:');
+        console.error(`  Error Message: ${inspectionError.message || 'Unknown error'}`);
+        console.error(`  Error Type: ${inspectionError.constructor.name}`);
+        console.error(`  Job ID: ${selectedJob.id}`);
+        console.error(`  Pages Attempted: ${inspectionPage}`);
+        console.error(`  Records Loaded: ${allInspectionData.length}`);
+        if (inspectionError.stack) {
+          console.error(`  Stack: ${inspectionError.stack}`);
+        }
+        console.error(`  Full Error:`, inspectionError);
         // Continue with empty inspection data rather than failing completely
       }
       const inspectionDataFull = allInspectionData;
@@ -496,7 +514,11 @@ const JobContainer = ({
         );
 
         if (error && error.code !== 'PGRST116') {
-          console.error('Error loading market data:', error);
+          console.error('❌ MARKET DATA LOADING ERROR:');
+          console.error(`  Error Message: ${error.message || 'Unknown error'}`);
+          console.error(`  Error Code: ${error.code}`);
+          console.error(`  Job ID: ${selectedJob.id}`);
+          console.error(`  Full Error:`, error);
         } else {
           marketData = data;
         }
@@ -515,12 +537,20 @@ const JobContainer = ({
             );
             marketData = newMarket;
           } catch (createError) {
-            console.error('Error creating market data:', createError);
+            console.error('❌ MARKET DATA CREATION ERROR:');
+            console.error(`  Error Message: ${createError.message || 'Unknown error'}`);
+            console.error(`  Error Code: ${createError.code || 'No code'}`);
+            console.error(`  Job ID: ${selectedJob.id}`);
+            console.error(`  Full Error:`, createError);
             marketData = {}; // Fallback to empty object
           }
         }
       } catch (marketError) {
-        console.error('Failed to load market data:', marketError);
+        console.error('❌ MARKET DATA LOADING FAILED:');
+        console.error(`  Error Message: ${marketError.message || 'Unknown error'}`);
+        console.error(`  Error Type: ${marketError.constructor.name}`);
+        console.error(`  Job ID: ${selectedJob.id}`);
+        console.error(`  Full Error:`, marketError);
         marketData = {};
       }
 
@@ -538,12 +568,22 @@ const JobContainer = ({
         );
 
         if (error) {
-          console.error('Error loading HPI data:', error);
+          console.error('❌ HPI DATA LOADING ERROR:');
+          console.error(`  Error Message: ${error.message || 'Unknown error'}`);
+          console.error(`  Error Code: ${error.code || 'No code'}`);
+          console.error(`  County: ${jobData?.county || selectedJob.county}`);
+          console.error(`  Job ID: ${selectedJob.id}`);
+          console.error(`  Full Error:`, error);
         } else {
           hpiData = data || [];
         }
       } catch (hpiError) {
-        console.error('Failed to load HPI data:', hpiError);
+        console.error('❌ HPI DATA LOADING FAILED:');
+        console.error(`  Error Message: ${hpiError.message || 'Unknown error'}`);
+        console.error(`  Error Type: ${hpiError.constructor.name}`);
+        console.error(`  County: ${jobData?.county || selectedJob.county}`);
+        console.error(`  Job ID: ${selectedJob.id}`);
+        console.error(`  Full Error:`, hpiError);
       }
 
       // 4. Load checklist data (for ManagementChecklist)
@@ -566,16 +606,30 @@ const JobContainer = ({
         if (itemsResult.status === 'fulfilled' && !itemsResult.value.error) {
           checklistItems = itemsResult.value.data || [];
         } else {
-          console.error('Error loading checklist items:', itemsResult.reason || itemsResult.value?.error);
+          const error = itemsResult.reason || itemsResult.value?.error;
+          console.error('❌ CHECKLIST ITEMS LOADING ERROR:');
+          console.error(`  Error Message: ${error?.message || 'Unknown error'}`);
+          console.error(`  Error Code: ${error?.code || 'No code'}`);
+          console.error(`  Job ID: ${selectedJob.id}`);
+          console.error(`  Full Error:`, error);
         }
 
         if (statusResult.status === 'fulfilled' && !statusResult.value.error) {
           checklistStatus = statusResult.value.data || [];
         } else {
-          console.error('Error loading checklist status:', statusResult.reason || statusResult.value?.error);
+          const error = statusResult.reason || statusResult.value?.error;
+          console.error('❌ CHECKLIST STATUS LOADING ERROR:');
+          console.error(`  Error Message: ${error?.message || 'Unknown error'}`);
+          console.error(`  Error Code: ${error?.code || 'No code'}`);
+          console.error(`  Job ID: ${selectedJob.id}`);
+          console.error(`  Full Error:`, error);
         }
       } catch (checklistError) {
-        console.error('Failed to load checklist data:', checklistError);
+        console.error('❌ CHECKLIST DATA LOADING FAILED:');
+        console.error(`  Error Message: ${checklistError.message || 'Unknown error'}`);
+        console.error(`  Error Type: ${checklistError.constructor.name}`);
+        console.error(`  Job ID: ${selectedJob.id}`);
+        console.error(`  Full Error:`, checklistError);
       }
 
       // 5. Load employees (for ProductionTracker inspector names)
@@ -591,12 +645,18 @@ const JobContainer = ({
         );
 
         if (error) {
-          console.error('Error loading employees data:', error);
+          console.error('❌ EMPLOYEES DATA LOADING ERROR:');
+          console.error(`  Error Message: ${error.message || 'Unknown error'}`);
+          console.error(`  Error Code: ${error.code || 'No code'}`);
+          console.error(`  Full Error:`, error);
         } else {
           employeesData = data || [];
         }
       } catch (employeesError) {
-        console.error('Failed to load employees data:', employeesError);
+        console.error('❌ EMPLOYEES DATA LOADING FAILED:');
+        console.error(`  Error Message: ${employeesError.message || 'Unknown error'}`);
+        console.error(`  Error Type: ${employeesError.constructor.name}`);
+        console.error(`  Full Error:`, employeesError);
       }
 
       // SET ALL THE LOADED DATA TO STATE - with error boundaries
