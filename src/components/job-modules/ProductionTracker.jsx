@@ -1585,16 +1585,18 @@ const ProductionTracker = ({
           }
         }
 
-        // Track properties that didn't make it to inspection_data
-        if (!wasAddedToInspectionData) {
+        // Track properties that didn't make it to inspection_data (only if they had no inspection attempt)
+        if (!wasAddedToInspectionData && !hasInspectionAttempt) {
+          // This property was already added to missingProperties earlier with proper reason
+          // No need to duplicate here
+        } else if (!wasAddedToInspectionData && hasInspectionAttempt) {
+          // This property had an inspection attempt but failed validation
           const reasons = [];
           if (!hasValidInfoBy) reasons.push(`Invalid InfoBy code: ${infoByCode}`);
-          if (!hasValidMeasuredBy) reasons.push('Missing/invalid inspector');
-          if (!hasValidMeasuredDate) reasons.push('Missing/invalid measure date');
           if (propertyIssues[propertyKey]?.issues) reasons.push(...propertyIssues[propertyKey].issues);
-          
+
           reasonNotAdded = `Failed validation: ${reasons.join(', ')}`;
-          
+
           missingProperties.push({
             composite_key: propertyKey,
             block: record.property_block,
