@@ -2556,7 +2556,8 @@ export const propertyService = {
       console.error('❌ Error fetching raw data for property:', {
         jobId,
         propertyCompositeKey,
-        error: error.message,
+        error: getErrorMessage(error),
+        fullError: error,
         stack: error.stack
       });
 
