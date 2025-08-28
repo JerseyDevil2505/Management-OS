@@ -1632,8 +1632,6 @@ useEffect(() => {
             inspectionData={masterCache.inspectionData}
             workflowStats={masterCache.workflowStats}
             onDataUpdate={updateCacheItem}
-            jobCache={masterCache.jobCache}
-            onUpdateJobCache={updateJobCache}
             onRefresh={() => loadMasterData({ force: true, components: ['jobs'] })}
           />
         )}
