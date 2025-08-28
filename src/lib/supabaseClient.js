@@ -661,7 +661,7 @@ getInteriorConditionName: function(property, codeDefinitions, vendorType) {
   },
 
 // Get total lot size (aggregates multiple fields)
-getTotalLotSize: function(property, vendorType, codeDefinitions) {
+getTotalLotSize: async function(property, vendorType, codeDefinitions) {
   if (!property) return null;
   
   // First check direct acre/sf fields
