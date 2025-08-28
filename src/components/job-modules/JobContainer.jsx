@@ -484,19 +484,41 @@ const JobContainer = ({
       }
 
       // 5. Load employees (for ProductionTracker inspector names)
-      const { data: employeesData } = await supabase
-        .from('employees')
-        .select('*')
-        .order('last_name', { ascending: true });
+      let employeesData = [];
+      try {
+        const { data, error } = await supabase
+          .from('employees')
+          .select('*')
+          .order('last_name', { ascending: true });
 
-      // SET ALL THE LOADED DATA TO STATE
-      setInspectionData(inspectionDataFull || []);
-      setMarketLandData(marketData || {});
-      setHpiData(hpiData || []);
-      setChecklistItems(checklistItems || []);
-      setChecklistStatus(checklistStatus || []);
-      setEmployees(employeesData || []);  // ADD THIS LINE
-      console.log('✅ All additional data tables loaded');
+        if (error) {
+          console.error('Error loading employees data:', error);
+        } else {
+          employeesData = data || [];
+        }
+      } catch (employeesError) {
+        console.error('Failed to load employees data:', employeesError);
+      }
+
+      // SET ALL THE LOADED DATA TO STATE - with error boundaries
+      try {
+        setInspectionData(inspectionDataFull || []);
+        setMarketLandData(marketData || {});
+        setHpiData(hpiData || []);
+        setChecklistItems(checklistItems || []);
+        setChecklistStatus(checklistStatus || []);
+        setEmployees(employeesData || []);
+        console.log('✅ All additional data tables loaded');
+      } catch (stateError) {
+        console.error('Error setting state for additional data:', stateError);
+        // Set safe defaults if state setting fails
+        setInspectionData([]);
+        setMarketLandData({});
+        setHpiData([]);
+        setChecklistItems([]);
+        setChecklistStatus([]);
+        setEmployees([]);
+      }
 
       // Prepare enriched job data with all the fetched info
       const enrichedJobData = {
