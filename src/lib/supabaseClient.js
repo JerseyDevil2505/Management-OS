@@ -641,7 +641,7 @@ getInteriorConditionName: function(property, codeDefinitions, vendorType) {
         'info_by': 'INFOBY'
       };
       const brtField = brtFieldMap[fieldName] || fieldName;
-      return rawData[brtField];
+      return sourceData[brtField];
     } else if (vendorType === 'Microsystems') {
       const microFieldMap = {
         'bedrooms': 'Total Bedrms',
@@ -654,10 +654,10 @@ getInteriorConditionName: function(property, codeDefinitions, vendorType) {
         'info_by': 'Information By'
       };
       const microField = microFieldMap[fieldName] || fieldName;
-      return rawData[microField];
+      return sourceData[microField];
     }
-    
-    return rawData[fieldName];
+
+    return sourceData[fieldName];
   },
 
 // Get total lot size (aggregates multiple fields)
