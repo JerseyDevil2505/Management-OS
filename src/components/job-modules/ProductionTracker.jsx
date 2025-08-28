@@ -1132,7 +1132,14 @@ const ProductionTracker = ({
         billingByClass[cls] = { total: 0, inspected: 0, billable: 0 };
       });
 
+      // DEBUG: Track processing counts
+      let processedCount = 0;
+      let validInspectionCount = 0;
+      let skippedReasons = {};
+
       rawData.forEach((record, index) => {
+        processedCount++;
+
         const inspector = record.inspection_measure_by || 'UNASSIGNED';
         const propertyClass = record.property_m4_class || 'UNKNOWN';
         const infoByCode = record.inspection_info_by;
@@ -1140,6 +1147,17 @@ const ProductionTracker = ({
         const listDate = record.inspection_list_date ? new Date(record.inspection_list_date) : null;
         const priceDate = record.inspection_price_date ? new Date(record.inspection_price_date) : null;
         const propertyKey = record.property_composite_key;
+
+        // DEBUG: Log first few properties in detail
+        if (index < 5) {
+          console.log(`🔍 Processing property ${index + 1}:`, {
+            key: propertyKey,
+            class: propertyClass,
+            inspector: inspector,
+            measure_date: record.inspection_measure_date,
+            info_by: infoByCode
+          });
+        }
 
         // Track this property's processing status
         let wasAddedToInspectionData = false;
