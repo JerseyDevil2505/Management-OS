@@ -2500,12 +2500,13 @@ try {
     // CRITICAL FIX: Check sessionStorage first to preserve state across redeploys
     const storedVersion = sessionStorage.getItem(`job_${job.id}_sourceFileVersion`);
     const storedDate = sessionStorage.getItem(`job_${job.id}_lastSourceProcessed`);
+    const storedCodeDate = sessionStorage.getItem(`job_${job.id}_lastCodeProcessed`);
 
     if (storedVersion && storedDate) {
-      // Restore from sessionStorage
+      // Restore source file state from sessionStorage
       setSourceFileVersion(parseInt(storedVersion));
       setLastSourceProcessedDate(storedDate);
-      console.log(`🔄 Restored from sessionStorage: version ${storedVersion}, date ${storedDate}`);
+      console.log(`🔄 Restored source from sessionStorage: version ${storedVersion}, date ${storedDate}`);
     } else {
       // Fall back to job prop data
       const currentVersion = job.current_file_version || job.source_file_version || 1;
@@ -2514,6 +2515,12 @@ try {
       if (sourceFileVersion === null && !processing) {
         setSourceFileVersion(currentVersion);
       }
+    }
+
+    // Restore code file state from sessionStorage
+    if (storedCodeDate) {
+      setLastCodeProcessedDate(storedCodeDate);
+      console.log(`🔄 Restored code date from sessionStorage: ${storedCodeDate}`);
     }
 
     setIsInitialized(true);
