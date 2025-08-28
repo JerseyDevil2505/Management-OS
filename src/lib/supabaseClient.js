@@ -20,9 +20,33 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
   global: {
     headers: {
       'x-client-info': 'property-app'
+    },
+    // CRITICAL FIX: Add proper fetch timeout configuration
+    fetch: (url, options = {}) => {
+      return fetch(url, {
+        ...options,
+        signal: AbortSignal.timeout(30000), // 30 second timeout for all requests
+      });
     }
   }
 });
+
+// CRITICAL FIX: Add timeout wrapper for database operations
+export const withTimeout = async (operation, timeoutMs = 30000, operationName = 'database operation') => {
+  const timeoutPromise = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error(`${operationName} timeout after ${timeoutMs}ms`)), timeoutMs)
+  );
+
+  try {
+    return await Promise.race([operation, timeoutPromise]);
+  } catch (error) {
+    if (error.message.includes('timeout')) {
+      console.error(`🚨 TIMEOUT: ${operationName} failed after ${timeoutMs}ms`);
+      throw new Error(`Database operation timed out. The system may be overloaded. Please try again with smaller batches.`);
+    }
+    throw error;
+  }
+};
 
 // Define fields that must be preserved during file updates
 // ULTRA-OPTIMIZED: Only critical per-property fields
