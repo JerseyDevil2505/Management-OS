@@ -2862,8 +2862,13 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
                   </thead>
                   <tbody>
                     {searchResults.map(prop => {
-                      const typeName = interpretCodes.getTypeName(prop, jobData?.parsed_code_definitions, vendorType) || prop.asset_type_use || '-';
-                      const designName = interpretCodes.getDesignName(prop, jobData?.parsed_code_definitions, vendorType) || prop.asset_design_style || '-';
+                      // Use only synchronous decoding to avoid async rendering issues
+                      const typeName = vendorType === 'Microsystems' && jobData?.parsed_code_definitions
+                        ? interpretCodes.getMicrosystemsValue?.(prop, jobData.parsed_code_definitions, 'asset_type_use') || prop.asset_type_use || '-'
+                        : prop.asset_type_use || '-';
+                      const designName = vendorType === 'Microsystems' && jobData?.parsed_code_definitions
+                        ? interpretCodes.getMicrosystemsValue?.(prop, jobData.parsed_code_definitions, 'asset_design_style') || prop.asset_design_style || '-'
+                        : prop.asset_design_style || '-';
                       const acres = calculateAcreage(prop);
                       const pricePerUnit = getPricePerUnit(prop.sales_price, acres);
                       
