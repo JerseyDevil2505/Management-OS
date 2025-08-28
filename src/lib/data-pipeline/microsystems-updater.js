@@ -455,7 +455,6 @@ export class MicrosystemsUpdater {
       
       // Processing metadata
       processed_at: new Date().toISOString(),
-      validation_status: versionInfo.is_automatic_sync ? 'auto_synced' : 'updated',
       is_new_since_last_upload: false, // UPSERT operation
       
       // File tracking with version info
@@ -470,7 +469,7 @@ export class MicrosystemsUpdater {
       // REMOVED: project_start_date (moved to jobs table)
       
       // System metadata
-      vendor_source: 'Microsystems',
+      vendor_type: 'Microsystems',
       created_by: '5df85ca3-7a54-4798-a665-c31da8d9caad',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -681,7 +680,7 @@ export class MicrosystemsUpdater {
           
           // Small delay between successful batches
           if (i + batchSize < propertyRecords.length) {
-            console.log(`⏳ Pausing 0.5s before next batch...`);
+            console.log(`�� Pausing 0.5s before next batch...`);
             await new Promise(resolve => setTimeout(resolve, 500));
           }
         }
