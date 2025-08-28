@@ -113,7 +113,6 @@ useEffect(() => {
     managers: [],
     planningJobs: [],
     archivedJobs: [],
-    jobCache: {},
     
     // Billing Data
     activeJobs: [],
