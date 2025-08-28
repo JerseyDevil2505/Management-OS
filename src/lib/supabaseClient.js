@@ -2578,7 +2578,11 @@ export const propertyService = {
       try {
         return await this.getRawDataForPropertyClientSide(jobId, propertyCompositeKey);
       } catch (fallbackError) {
-        console.error('❌ Client-side fallback also failed:', fallbackError);
+        console.error('❌ Client-side fallback also failed:');
+        console.error('  Fallback Error Message:', getErrorMessage(fallbackError));
+        console.error('  Fallback Error Type:', fallbackError.constructor.name);
+        console.error('  Fallback Error Stack:', fallbackError.stack);
+        console.error('  Full Fallback Error:', JSON.stringify(fallbackError, null, 2));
         return null;
       }
     }
