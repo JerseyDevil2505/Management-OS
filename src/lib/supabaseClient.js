@@ -679,8 +679,9 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
   }
   
 // BRT: Check LANDUR codes only if still no data
-  if (totalAcres === 0 && totalSf === 0 && vendorType === 'BRT' && property.raw_data && codeDefinitions) {
-    const propertyVCS = property.raw_data?.VCS || property.property_vcs;
+  if (totalAcres === 0 && totalSf === 0 && vendorType === 'BRT' && property.job_id && property.property_composite_key && codeDefinitions) {
+    const sourceData = await getSourceFileDataForProperty(property.job_id, property.property_composite_key);
+    const propertyVCS = sourceData?.VCS || property.property_vcs;
     
     if (propertyVCS && codeDefinitions.sections?.VCS) {
       let vcsData = codeDefinitions.sections.VCS[propertyVCS];
