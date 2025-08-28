@@ -2271,8 +2271,7 @@ const handleCodeFileUpdate = async () => {
                     
                     addBatchLog('✅ Data refresh completed', 'success', {
                       processed: result.processed,
-                      errors: result.errors,
-                      newVersion: newFileVersion  // FIX 1: Show correct version
+                      errors: result.errors
                     });
                     
                     // Save comparison report (showing no changes)
