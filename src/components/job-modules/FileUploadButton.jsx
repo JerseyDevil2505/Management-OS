@@ -925,10 +925,30 @@ const handleCodeFileUpdate = async () => {
   // Fetch current file version and updated_at from property_records
   const fetchCurrentFileVersion = async () => {
     try {
-      const { data: versionData, error } = await supabase
+      // First get job assignment status
+      const { data: jobData, error: jobError } = await supabase
+        .from('jobs')
+        .select('has_property_assignments')
+        .eq('id', job.id)
+        .single();
+
+      if (jobError) throw jobError;
+      const hasAssignments = jobData?.has_property_assignments || false;
+
+      // Build query with assignment filter if needed (same logic as JobContainer)
+      let versionQuery = supabase
         .from('property_records')
         .select('file_version, updated_at')
-        .eq('job_id', job.id)
+        .eq('job_id', job.id);
+
+      if (hasAssignments) {
+        versionQuery = versionQuery.eq('is_assigned_property', true);
+        console.log('📊 Fetching file version for assigned properties only');
+      } else {
+        console.log('📊 Fetching file version for all properties');
+      }
+
+      const { data: versionData, error } = await versionQuery
         .order('file_version', { ascending: false })
         .limit(1)
         .single();
