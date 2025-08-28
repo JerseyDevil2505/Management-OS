@@ -459,6 +459,74 @@ export class BatchProcessor {
   }
 
   /**
+   * CRITICAL FIX: Wrap processor function with transaction recording
+   */
+  async wrapProcessorWithTransaction(processorFunction, batch, batchIndex, transactionId) {
+    // Create a proxy around common database operations to record them
+    const recordedSupabase = this.createTransactionProxy(transactionId);
+
+    // Call the original processor with our transaction-aware supabase client
+    return await processorFunction(batch, batchIndex, recordedSupabase);
+  }
+
+  /**
+   * CRITICAL FIX: Create transaction-aware Supabase proxy
+   */
+  createTransactionProxy(transactionId) {
+    const self = this;
+
+    return {
+      from: (table) => ({
+        insert: (data) => {
+          const operation = {
+            type: 'insert',
+            table,
+            conditions: data.id ? { id: data.id } : data,
+            originalData: null
+          };
+          self.transactionManager.recordOperation(transactionId, operation);
+          return withTimeout(supabase.from(table).insert(data), self.options.operationTimeout, `insert into ${table}`);
+        },
+
+        update: async (data) => {
+          // For updates, we need to store original data for rollback
+          const operation = {
+            type: 'update',
+            table,
+            conditions: {},
+            originalData: null
+          };
+          self.transactionManager.recordOperation(transactionId, operation);
+          return withTimeout(supabase.from(table).update(data), self.options.operationTimeout, `update ${table}`);
+        },
+
+        upsert: (data) => {
+          const operation = {
+            type: 'upsert',
+            table,
+            conditions: data.id ? { id: data.id } : data,
+            originalData: data
+          };
+          self.transactionManager.recordOperation(transactionId, operation);
+          return withTimeout(supabase.from(table).upsert(data), self.options.operationTimeout, `upsert into ${table}`);
+        },
+
+        delete: async () => {
+          // For deletes, we need to fetch the data first for rollback
+          const operation = {
+            type: 'delete',
+            table,
+            conditions: {},
+            originalData: null
+          };
+          self.transactionManager.recordOperation(transactionId, operation);
+          return withTimeout(supabase.from(table).delete(), self.options.operationTimeout, `delete from ${table}`);
+        }
+      })
+    };
+  }
+
+  /**
    * Cancel processing
    */
   cancel() {
