@@ -2582,28 +2582,28 @@ export const propertyService = {
   async getRawDataForPropertyClientSide(jobId, propertyCompositeKey) {
     console.log(`🔄 Using client-side parsing for job ${jobId}, property ${propertyCompositeKey}`);
 
-    const sourceData = await getSourceFileDataForJob(jobId);
-    console.log(`📊 Source data structure:`, {
-      hasSourceData: !!sourceData,
-      vendorType: sourceData?.vendorType,
-      hasPropertyMap: !!sourceData?.propertyMap,
-      propertyMapSize: sourceData?.propertyMap?.size || 0,
-      propertyMapType: sourceData?.propertyMap?.constructor?.name
+    const rawData = await getRawDataForJob(jobId);
+    console.log(`📊 Raw data structure:`, {
+      hasRawData: !!rawData,
+      vendorType: rawData?.vendorType,
+      hasPropertyMap: !!rawData?.propertyMap,
+      propertyMapSize: rawData?.propertyMap?.size || 0,
+      propertyMapType: rawData?.propertyMap?.constructor?.name
     });
 
-    if (!sourceData || !sourceData.propertyMap) {
+    if (!rawData || !rawData.propertyMap) {
       console.warn('⚠️ No property map available for job');
       return null;
     }
 
-    const rawData = sourceData.propertyMap.get(propertyCompositeKey);
-    if (rawData) {
+    const propertyRawData = rawData.propertyMap.get(propertyCompositeKey);
+    if (propertyRawData) {
       console.log(`✅ Found raw data via client-side parsing for ${propertyCompositeKey}`);
-      return rawData;
+      return propertyRawData;
     }
 
     // Show some sample keys for debugging
-    const sampleKeys = Array.from(sourceData.propertyMap.keys()).slice(0, 3);
+    const sampleKeys = Array.from(rawData.propertyMap.keys()).slice(0, 3);
     console.warn(`⚠️ Property ${propertyCompositeKey} not found in parsed data. Sample keys:`, sampleKeys);
     return null;
   },
