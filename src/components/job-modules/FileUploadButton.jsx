@@ -1091,7 +1091,7 @@ const handleCodeFileUpdate = async () => {
     setIsProcessingLocked(true);
     
     // Wait for initialization
-    if (!isInitialized || sourceFileVersion === null) {
+    if (!isInitialized || currentFileVersion === null) {
       addNotification('System initializing, please try again in a moment', 'warning');
       setIsProcessingLocked(false); // Reset lock on early return
       return;
@@ -2307,7 +2307,7 @@ const handleCodeFileUpdate = async () => {
                     }
                     // Check if rollback occurred during refresh
                     if (result.warnings && result.warnings.some(w => w.includes('rolled back'))) {
-                      addBatchLog('⚠️ REFRESH FAILED - All changes have been rolled back', 'error');
+                      addBatchLog('⚠�� REFRESH FAILED - All changes have been rolled back', 'error');
                       addNotification('❌ Refresh failed - all changes rolled back. Check logs for details.', 'error');
                     }
                     
