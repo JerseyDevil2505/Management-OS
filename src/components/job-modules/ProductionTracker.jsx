@@ -591,19 +591,17 @@ const ProductionTracker = ({
   };
 
   const loadProjectStartDate = async () => {
-    if (!jobData?.id || !latestFileVersion) return;
+    if (!jobData?.id) return;
 
     try {
-      const { data: records, error } = await supabase
-        .from('property_records')
+      const { data: job, error } = await supabase
+        .from('jobs')
         .select('project_start_date')
-        .eq('job_id', jobData.id)
-        .eq('file_version', latestFileVersion)
-        .not('project_start_date', 'is', null)
-        .limit(1);
+        .eq('id', jobData.id)
+        .single();
 
-      if (!error && records && records.length > 0 && records[0]?.project_start_date) {
-        setProjectStartDate(records[0].project_start_date);
+      if (!error && job?.project_start_date) {
+        setProjectStartDate(job.project_start_date);
         setIsDateLocked(true);
       }
     } catch (error) {
@@ -611,7 +609,7 @@ const ProductionTracker = ({
   };
 
   const lockStartDate = async () => {
-    if (!projectStartDate || !jobData?.id || !latestFileVersion) {
+    if (!projectStartDate || !jobData?.id) {
       addNotification('Please set a project start date first', 'error');
       return;
     }
@@ -623,15 +621,14 @@ const ProductionTracker = ({
     }
 
     const { error } = await supabase
-        .from('property_records')
+        .from('jobs')
         .update({ project_start_date: projectStartDate })
-        .eq('job_id', jobData.id)
-        .eq('file_version', latestFileVersion);
+        .eq('id', jobData.id);
 
       if (error) throw error;
 
       setIsDateLocked(true);
-      addNotification('✅ Project start date locked and saved to all property records', 'success');
+      addNotification('✅ Project start date locked and saved to job', 'success');
 
     } catch (error) {
       console.error('Error locking start date:', error);
@@ -1016,7 +1013,7 @@ const ProductionTracker = ({
 
   // ENHANCED: Process analytics with manager-focused counting and inspection_data persistence
   const processAnalytics = async () => {
-    if (!projectStartDate || !jobData?.id || !latestFileVersion) {
+    if (!projectStartDate || !jobData?.id) {
       addNotification('Project start date and job data required', 'error');
       return null;
     }
