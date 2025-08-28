@@ -116,20 +116,30 @@ const JobContainer = ({
       
       console.log('📡 Loading from database...');
       
-      // Get data version AND source file date from property_records table
-      const { data: dataVersionData, error: dataVersionError } = await supabase
-        .from('property_records')
-        .select('file_version, updated_at')
-        .eq('job_id', selectedJob.id)
-        .order('file_version', { ascending: false })
-        .limit(1)
-        .single();
-
-      // Get ALL job data in ONE comprehensive query
+      // Get ALL job data in ONE comprehensive query FIRST
       const { data: jobData, error: jobError } = await supabase
         .from('jobs')
         .select('*')  // Get ALL fields for this job
         .eq('id', selectedJob.id)
+        .single();
+
+      if (jobError) throw jobError;
+      const hasAssignments = jobData?.has_property_assignments || false;
+
+      // Get data version AND source file date from property_records table
+      // Apply assignment filter if needed to get the correct date
+      let dataVersionQuery = supabase
+        .from('property_records')
+        .select('file_version, updated_at')
+        .eq('job_id', selectedJob.id);
+
+      if (hasAssignments) {
+        dataVersionQuery = dataVersionQuery.eq('is_assigned_property', true);
+      }
+
+      const { data: dataVersionData, error: dataVersionError } = await dataVersionQuery
+        .order('file_version', { ascending: false })
+        .limit(1)
         .single();
 
       // Get as_of_date from inspection_data table
