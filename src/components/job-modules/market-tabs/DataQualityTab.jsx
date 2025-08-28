@@ -2349,9 +2349,9 @@ const editCustomCheck = (check) => {
                             <option value="newVCS">New VCS</option>
                           </optgroup>
                           
-                          {allRawDataFields.length > 0 && (
-                            <optgroup label={`All Raw Data Fields (${allRawDataFields.length} available)`}>
-                              {allRawDataFields.map(field => (
+                          {(allRawDataFields.length > 0 || availableFields.length > 0) && (
+                            <optgroup label={`Raw Data Fields (${allRawDataFields.length || availableFields.length} available)`}>
+                              {(allRawDataFields.length > 0 ? allRawDataFields : availableFields).map(field => (
                                 <option key={field} value={`raw_data.${field}`}>
                                   {field}
                                 </option>
