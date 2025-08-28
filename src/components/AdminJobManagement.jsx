@@ -90,7 +90,7 @@ const AdminJobManagement = ({
     codeFile: null,
     vendor: null,
     vendorDetection: null,
-    percentBilled: ''
+    percentBilled: '0.00'
   });
 
   const [newPlanningJob, setNewPlanningJob] = useState({
@@ -964,7 +964,7 @@ const AdminJobManagement = ({
         sourceFileStatus: 'processing',
         codeFileStatus: 'current',
         vendorDetection: { vendor: newJob.vendor },
-        percent_billed: newJob.percentBilled,
+        percent_billed: parseFloat(newJob.percentBilled) || 0,
         source_file_version: 1,
         code_file_version: 1,
         source_file_name: newJob.sourceFile.name,
@@ -1164,7 +1164,7 @@ const AdminJobManagement = ({
         name: newJob.name,
         municipality: newJob.municipality,
         dueDate: newJob.dueDate,
-        percent_billed: newJob.percentBilled
+        percent_billed: parseFloat(newJob.percentBilled) || 0
       };
 
       await jobService.update(editingJob.id, updateData);
@@ -1729,7 +1729,7 @@ const AdminJobManagement = ({
                       min="0"
                       max="100"
                       value={newJob.percentBilled}
-                      onChange={(e) => setNewJob({...newJob, percentBilled: parseFloat(e.target.value) || 0})}
+                      onChange={(e) => setNewJob({...newJob, percentBilled: e.target.value || '0.00'})}
                       className="w-20 px-2 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       placeholder="0.00"
                     />
@@ -2422,19 +2422,19 @@ const AdminJobManagement = ({
                             onClick={() => {
                               setEditingJob(job);
                               setNewJob({
-                                name: job.name,
-                                ccddCode: job.ccdd || job.ccddCode,
-                                municipality: job.municipality,
-                                county: job.county,
-                                state: job.state,
-                                dueDate: job.dueDate,
-                                assignedManagers: job.assignedManagers || [],
-                                sourceFile: null,
-                                codeFile: null,
-                                vendor: job.vendor,
-                                vendorDetection: job.vendorDetection,
-                                percentBilled: job.percent_billed || ''
-                              });
+                  name: job.name || '',
+                  ccddCode: job.ccdd || job.ccddCode || '',
+                  municipality: job.municipality || '',
+                  county: job.county || '',
+                  state: job.state || 'NJ',
+                  dueDate: job.dueDate || '',
+                  assignedManagers: job.assignedManagers || [],
+                  sourceFile: null,
+                  codeFile: null,
+                  vendor: job.vendor || null,
+                  vendorDetection: job.vendorDetection || null,
+                  percentBilled: job.percent_billed ? job.percent_billed.toString() : '0.00'
+                });
                               setShowCreateJob(true);
                             }}
                             className="px-3 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
