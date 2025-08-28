@@ -1256,7 +1256,7 @@ const AdminJobManagement = ({
       codeFile: null,
       vendor: null,
       vendorDetection: null,
-      percentBilled: 0.00
+      percentBilled: '0.00'
     });
     setFileAnalysis({
       sourceFile: null,
@@ -1282,9 +1282,9 @@ const AdminJobManagement = ({
 
   const convertPlanningToJob = (planningJob) => {
     setNewJob({
-      name: `${planningJob.municipality} ${new Date(planningJob.end_date).getFullYear()}`,
-      ccddCode: planningJob.ccddCode,
-      municipality: planningJob.municipality,
+      name: `${planningJob.municipality || ''} ${new Date(planningJob.end_date).getFullYear()}`,
+      ccddCode: planningJob.ccddCode || '',
+      municipality: planningJob.municipality || '',
       county: '',
       state: 'NJ',
       dueDate: '',
@@ -1293,7 +1293,7 @@ const AdminJobManagement = ({
       codeFile: null,
       vendor: null,
       vendorDetection: null,
-      percentBilled: 0.00
+      percentBilled: '0.00'
     });
     setShowCreateJob(true);
   };
@@ -2525,11 +2525,11 @@ const AdminJobManagement = ({
                         onClick={() => {
                           setEditingPlanning(planningJob);
                           setNewPlanningJob({
-                            ccddCode: planningJob.ccddCode,
-                            municipality: planningJob.municipality,
-                            dueDate: planningJob.end_date,
-                            comments: planningJob.comments || ''
-                          });
+          ccddCode: planningJob.ccddCode || '',
+          municipality: planningJob.municipality || '',
+          dueDate: planningJob.end_date || '',
+          comments: planningJob.comments || ''
+        });
                           setShowEditPlanning(true);
                         }}
                         className="px-3 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
