@@ -700,8 +700,8 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
         const urcMap = vcsData.MAP["8"].MAP;
         
         for (let i = 1; i <= 6; i++) {
-          const landCode = property.raw_data[`LANDUR_${i}`];
-          const landUnits = parseFloat(property.raw_data[`LANDURUNITS_${i}`]) || 0;
+          const landCode = sourceData?.[`LANDUR_${i}`];
+          const landUnits = parseFloat(sourceData?.[`LANDURUNITS_${i}`]) || 0;
           
           // BRT stores single digit codes without leading zero, pad them
           const paddedCode = landCode ? String(landCode).padStart(2, '0') : null;
