@@ -2515,6 +2515,9 @@ const handleCodeFileUpdate = async () => {
     if (!timestamp) return 'Never';
 
     if (type === 'source') {
+      // DEBUG: Log what we're checking
+      console.log(`🔍 Banner Debug - job.sourceFileStatus: "${job.sourceFileStatus}", updated_at: ${job.source_file_uploaded_at}`);
+
       // SIMPLIFIED: Just check job.sourceFileStatus
       if (job.sourceFileStatus === 'updated') {
         return `Updated via FileUpload (${formatDate(job.source_file_uploaded_at || timestamp)})`;
