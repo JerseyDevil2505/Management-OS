@@ -2455,18 +2455,19 @@ try {
   // Use file version from job prop instead of fetching
   useEffect(() => {
     if (!job?.id) return;
-    
+
     // Get version from job's property_records or default to 1
     // This should be passed from JobContainer which already has the data
     const currentVersion = job.current_file_version || job.source_file_version || 1;
-    
-    // Only set if different to avoid unnecessary renders
-    if (sourceFileVersion !== currentVersion) {
+
+    // CRITICAL FIX: Only set version if we haven't processed anything yet
+    // Don't override state if we just completed processing
+    if (sourceFileVersion === null && !processing) {
       setSourceFileVersion(currentVersion);
     }
-    
+
     setIsInitialized(true);
-  }, [job?.id, job?.current_file_version, job?.source_file_version]);
+  }, [job?.id]);
 
   // Load report count when job changes
   useEffect(() => {
