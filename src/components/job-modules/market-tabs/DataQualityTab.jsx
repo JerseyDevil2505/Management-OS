@@ -108,8 +108,33 @@ const DataQualityTab = ({
         window.removeEventListener('keydown', handleEsc);
       };
     }
-  }, [showDetailsModal]);  
-  
+  }, [showDetailsModal]);
+
+  // Populate raw data fields from a sample property
+  useEffect(() => {
+    const populateRawDataFields = async () => {
+      if (properties.length > 0 && jobData?.id) {
+        try {
+          // Get raw data from the first property to discover available fields
+          const sampleProperty = properties[0];
+          const rawData = await propertyService.getRawDataForProperty(
+            sampleProperty.job_id,
+            sampleProperty.property_composite_key
+          );
+
+          if (rawData && typeof rawData === 'object') {
+            const fieldNames = Object.keys(rawData).sort();
+            setAllRawDataFields(fieldNames);
+            console.log(`📋 Discovered ${fieldNames.length} raw data fields for custom checks`);
+          }
+        } catch (error) {
+          console.error('Error loading raw data fields:', error);
+        }
+      }
+    };
+
+    populateRawDataFields();
+  }, [properties, jobData?.id]);
 
   // ==================== DATA QUALITY FUNCTIONS ====================
   const exportToExcel = () => {
