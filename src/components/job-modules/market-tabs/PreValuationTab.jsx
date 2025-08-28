@@ -194,41 +194,36 @@ const PreValuationTab = ({
   
   const getBuildingClassDisplay = useCallback((property) => {
     if (!property) return '';
-    
-    // Use interpretCodes to get the proper display name
-    const className = interpretCodes.getBuildingClassName?.(
-      property, 
-      codeDefinitions, 
-      vendorType
-    );
-    
-    return className || property.asset_building_class || '';
-  }, [codeDefinitions, vendorType]);
+
+    // For now, just return the raw field since getBuildingClassName doesn't exist
+    // and we need to avoid async calls in render
+    return property.asset_building_class || '';
+  }, []);
 
   const getTypeUseDisplay = useCallback((property) => {
     if (!property) return '';
-    
-    // Use interpretCodes to get the proper type/use name
-    const typeName = interpretCodes.getTypeName?.(
-      property, 
-      codeDefinitions, 
-      vendorType
-    );
-    
-    return typeName || property.asset_type_use || '';
+
+    // Use only synchronous Microsystems decoding to avoid async rendering issues
+    if (vendorType === 'Microsystems' && codeDefinitions) {
+      const decoded = interpretCodes.getMicrosystemsValue?.(property, codeDefinitions, 'asset_type_use');
+      return decoded || property.asset_type_use || '';
+    }
+
+    // For BRT, return raw value since getBRTValue is async
+    return property.asset_type_use || '';
   }, [codeDefinitions, vendorType]);
 
   const getDesignDisplay = useCallback((property) => {
     if (!property) return '';
-    
-    // Use interpretCodes to get the proper design name
-    const designName = interpretCodes.getDesignName?.(
-      property, 
-      codeDefinitions, 
-      vendorType
-    );
-    
-    return designName || property.asset_design_style || '';
+
+    // Use only synchronous Microsystems decoding to avoid async rendering issues
+    if (vendorType === 'Microsystems' && codeDefinitions) {
+      const decoded = interpretCodes.getMicrosystemsValue?.(property, codeDefinitions, 'asset_design_style');
+      return decoded || property.asset_design_style || '';
+    }
+
+    // For BRT, return raw value since getBRTValue is async
+    return property.asset_design_style || '';
   }, [codeDefinitions, vendorType]);
 
   const parseCompositeKey = useCallback((compositeKey) => {
