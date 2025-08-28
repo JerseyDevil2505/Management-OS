@@ -74,7 +74,7 @@ export class BRTProcessor {
         // CRITICAL FIX: Optimize for 500+ records with timeout and minimal return
         const insertPromise = supabase
           .from('property_records')
-          .insert(batch, {
+          .insert(optimizedBatch, {
             count: 'exact',
             returning: 'minimal'  // Only return count, not full record data
           });
