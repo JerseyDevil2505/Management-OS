@@ -1091,7 +1091,7 @@ const handleCodeFileUpdate = async () => {
     setIsProcessingLocked(true);
     
     // Wait for initialization
-    if (!isInitialized || currentFileVersion === null) {
+    if (!isInitialized) {
       addNotification('System initializing, please try again in a moment', 'warning');
       setIsProcessingLocked(false); // Reset lock on early return
       return;
