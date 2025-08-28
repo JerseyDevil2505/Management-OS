@@ -934,7 +934,7 @@ const handleCodeFileUpdate = async () => {
         .single();
 
       if (versionData && !error) {
-        console.log(`📊 Current file_version from DB: ${versionData.file_version}, updated_at: ${versionData.updated_at}`);
+        console.log(`�� Current file_version from DB: ${versionData.file_version}, updated_at: ${versionData.updated_at}`);
         setCurrentFileVersion(versionData.file_version || 1);
         setLastUpdatedAt(versionData.updated_at);
       } else {
@@ -1063,8 +1063,13 @@ const handleCodeFileUpdate = async () => {
         currentOperation: 'Initializing batch processing...'
       }));
       
-      // Execute the operation
-      operation().then(result => {
+      // Execute the operation with timeout protection
+      Promise.race([
+        operation(),
+        new Promise((_, timeoutReject) =>
+          setTimeout(() => timeoutReject(new Error('Batch processing timeout after 5 minutes')), 5 * 60 * 1000)
+        )
+      ]).then(result => {
         // Restore original console methods
         console.log = originalLog;
         console.error = originalError;
