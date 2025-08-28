@@ -83,7 +83,8 @@ export class BatchProcessor {
       this.stats.endTime = Date.now();
       const duration = this.stats.endTime - this.stats.startTime;
       
-      console.error(`❌ Batch processing failed after ${duration}ms:`, error);
+      console.error(`❌ Batch processing failed after ${duration}ms:`, error.message);
+      console.error('Error details:', error);
       
       return {
         success: false,
