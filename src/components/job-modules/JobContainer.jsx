@@ -198,7 +198,7 @@ const JobContainer = ({
         propertyCountQuery = propertyCountQuery.eq('is_assigned_property', true);
         console.log('📋 Loading only assigned properties (has_property_assignments = true)');
       } else {
-        console.log('📋 Loading all properties (no assignments)');
+        console.log('��� Loading all properties (no assignments)');
       }
 
       // Get count first with timeout
@@ -265,7 +265,20 @@ const JobContainer = ({
             );
 
             if (batchError) {
-              console.error(`❌ BATCH ${batch + 1} FAILED:`, batchError);
+              // ENHANCED: Detailed error logging with all available information
+              console.error(`❌ BATCH ${batch + 1} FAILED:`);
+              console.error(`  Error Message: ${batchError.message || 'Unknown error'}`);
+              console.error(`  Error Code: ${batchError.code || 'No code'}`);
+              console.error(`  Error Details: ${batchError.details || 'No details'}`);
+              console.error(`  Error Hint: ${batchError.hint || 'No hint'}`);
+              console.error(`  Batch Info: ${offset}-${offset + limit - 1} of ${count} total records`);
+              console.error(`  Query: property_records with market_analysis join`);
+              console.error(`  Job ID: ${selectedJob.id}`);
+              console.error(`  Has Assignments Filter: ${hasAssignments}`);
+              if (batchError.stack) {
+                console.error(`  Stack Trace: ${batchError.stack}`);
+              }
+              console.error(`  Full Error Object:`, batchError);
 
               // CRITICAL FIX: Stop processing on first failure
               if (batchError.message?.includes('timeout') || batchError.message?.includes('canceling statement')) {
@@ -315,7 +328,32 @@ const JobContainer = ({
             }
 
           } catch (error) {
-            console.error(`🚨 CRITICAL ERROR ON BATCH ${batch + 1}:`, error);
+            // ENHANCED: Comprehensive error logging for debugging
+            console.error(`🚨 CRITICAL ERROR ON BATCH ${batch + 1}:`);
+            console.error(`  Error Type: ${error.constructor.name}`);
+            console.error(`  Error Message: ${error.message || 'Unknown error'}`);
+            console.error(`  Error Code: ${error.code || 'No code'}`);
+            console.error(`  Error Details: ${error.details || 'No details'}`);
+            console.error(`  Error Hint: ${error.hint || 'No hint'}`);
+            console.error(`  Batch Range: ${offset}-${offset + limit - 1} (${limit} records)`);
+            console.error(`  Total Expected: ${count} records`);
+            console.error(`  Loaded So Far: ${allProperties.length} records`);
+            console.error(`  Progress: ${Math.round((allProperties.length / count) * 100)}%`);
+            console.error(`  Job ID: ${selectedJob.id}`);
+            console.error(`  Assignment Filter: ${hasAssignments}`);
+            if (error.stack) {
+              console.error(`  Stack Trace: ${error.stack}`);
+            }
+            console.error(`  Full Error Object:`, error);
+
+            // Additional context for timeout errors
+            if (error.message?.includes('timeout')) {
+              console.error(`  🔍 TIMEOUT ANALYSIS:`);
+              console.error(`    - Timeout occurred after 30 seconds`);
+              console.error(`    - This suggests database performance issues`);
+              console.error(`    - Consider reducing batch size or optimizing query`);
+              console.error(`    - Current batch size: ${batchSize} records`);
+            }
 
             // STOP PROCESSING - don't continue to next batches
             setIsLoadingProperties(false);
@@ -324,13 +362,18 @@ const JobContainer = ({
             // Set partial data and error - but ensure state is safe
             try {
               setProperties(allProperties);
-              setVersionError(`Failed loading batch ${batch + 1}. Loaded ${allProperties.length} of ${count} records. Error: ${error.message}`);
+              const errorMsg = `Failed loading batch ${batch + 1}. Loaded ${allProperties.length} of ${count} records. Error: ${error.message || 'Unknown database error'}`;
+              setVersionError(errorMsg);
+              console.error(`📝 Setting version error: ${errorMsg}`);
             } catch (stateError) {
-              console.error('Error setting state after batch failure:', stateError);
+              console.error('❌ Error setting state after batch failure:');
+              console.error(`  State Error Message: ${stateError.message}`);
+              console.error(`  State Error Stack: ${stateError.stack}`);
               setVersionError('Critical loading error - please refresh the page');
             }
 
             console.error(`🛑 STOPPING BATCH PROCESSING - DO NOT CONTINUE`);
+            console.error(`📊 FINAL STATS: Loaded ${allProperties.length}/${count} records before failure`);
             return; // EXIT THE FUNCTION COMPLETELY
           }
         }
