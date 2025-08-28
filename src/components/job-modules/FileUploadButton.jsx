@@ -309,7 +309,9 @@ const handleCodeFileUpdate = async () => {
     // Refresh job data in parent component
     if (onDataRefresh) {
       console.log(`🔧 Code Update - Calling onDataRefresh to update job data`);
+      console.log(`🔧 Code Update - BEFORE refresh - job.code_file_uploaded_at: ${job.code_file_uploaded_at}`);
       await onDataRefresh();
+      console.log(`🔧 Code Update - AFTER refresh - job.code_file_uploaded_at: ${job.code_file_uploaded_at}`);
     }
 
     // Notify parent component of the update
