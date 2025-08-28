@@ -145,20 +145,23 @@ export class BatchProcessor {
       useTransactions: options.useTransactions !== false,  // NEW: Use database transactions
       ...options
     };
-    
+
     this.stats = {
       totalItems: 0,
       processedItems: 0,
       failedItems: 0,
       successfulBatches: 0,
       failedBatches: 0,
+      rolledBackBatches: 0,  // NEW: Track rollback count
       startTime: null,
       endTime: null,
       errors: []
     };
-    
+
     this.isCancelled = false;
     this.circuitBreaker = new CircuitBreaker();
+    this.transactionManager = new TransactionManager();  // NEW: Transaction support
+    this.successfulTransactions = [];  // NEW: Track successful batches for cleanup
   }
 
   /**
@@ -751,7 +754,7 @@ export const batchPerformanceUtils = {
     const sampleSize = Math.min(1000, items.length);
     const testItems = items.slice(0, sampleSize);
     
-    console.log('���� Testing optimal batch size...');
+    console.log('🔍 Testing optimal batch size...');
     
     const results = [];
     
