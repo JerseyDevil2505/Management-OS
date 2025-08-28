@@ -8,14 +8,12 @@ import FinalValuation from './FinalValuation';
 import AppealCoverage from './AppealCoverage';
 
 // 🔧 ENHANCED: Accept App.js workflow state management props + file refresh trigger
-const JobContainer = ({ 
-  selectedJob, 
-  onBackToJobs, 
-  workflowStats, 
+const JobContainer = ({
+  selectedJob,
+  onBackToJobs,
+  workflowStats,
   onUpdateWorkflowStats,
-  fileRefreshTrigger,
-  jobCache,          
-  onUpdateJobCache    
+  fileRefreshTrigger
 }) => {
   const [activeModule, setActiveModule] = useState('checklist');
   const [jobData, setJobData] = useState(null);
@@ -65,11 +63,7 @@ const JobContainer = ({
 
   const loadLatestFileVersions = async () => {
     if (!selectedJob?.id) return;
-    console.log('🔍 CACHE DEBUG:', {
-      hasOnUpdateJobCache: !!onUpdateJobCache,
-      hasJobCache: !!jobCache,
-      jobCacheKeys: jobCache ? Object.keys(jobCache) : 'no cache'
-    });
+    console.log('📝 LOADING JOB DATA - No caching, fresh data every time');
 
     setIsLoadingVersion(true);
     setVersionError(null);
