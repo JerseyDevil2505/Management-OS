@@ -1,19 +1,131 @@
 /**
- * BATCH PROCESSING UTILITIES
- * 
+ * BATCH PROCESSING UTILITIES - CRITICAL FIXES APPLIED
+ *
  * ENTERPRISE-GRADE BATCH PROCESSING:
+ * - FIXED: Reduced batch sizes from 500 to 50 records
+ * - FIXED: Added proper timeouts (30s per batch operation)
+ * - FIXED: Transaction-based rollback mechanism
  * - Handles failures gracefully with exponential backoff
  * - Progress tracking and cancellation support
  * - Memory-efficient chunking for large datasets
  * - Comprehensive error reporting and recovery
  * - Circuit breaker pattern for repeated failures
- * 
+ *
  * USE CASES:
- * - Large file imports (16K+ records)
- * - Bulk database operations
+ * - Large file imports (16K+ records) - now processed in 50-record chunks
+ * - Bulk database operations with proper rollback
  * - API rate-limited operations
  * - Background data processing
  */
+
+import { supabase, withTimeout } from './supabaseClient.js';
+
+/**
+ * CRITICAL FIX: Transaction Manager for proper rollback support
+ */
+export class TransactionManager {
+  constructor() {
+    this.activeTransactions = new Map();
+    this.transactionId = 0;
+  }
+
+  async startTransaction(batchId) {
+    const txId = ++this.transactionId;
+    console.log(`🔄 Starting transaction ${txId} for batch ${batchId}`);
+
+    // Store transaction metadata
+    this.activeTransactions.set(txId, {
+      batchId,
+      startTime: Date.now(),
+      operations: [],
+      status: 'active'
+    });
+
+    return txId;
+  }
+
+  async rollbackTransaction(txId, reason) {
+    const tx = this.activeTransactions.get(txId);
+    if (!tx) {
+      console.warn(`⚠️ Cannot rollback transaction ${txId} - not found`);
+      return false;
+    }
+
+    console.log(`🔄 Rolling back transaction ${txId} for batch ${tx.batchId}: ${reason}`);
+
+    try {
+      // Execute rollback operations in reverse order
+      for (let i = tx.operations.length - 1; i >= 0; i--) {
+        const op = tx.operations[i];
+        await this.executeRollbackOperation(op);
+      }
+
+      tx.status = 'rolled_back';
+      console.log(`✅ Transaction ${txId} rolled back successfully`);
+      return true;
+
+    } catch (error) {
+      console.error(`❌ Rollback failed for transaction ${txId}:`, error);
+      tx.status = 'rollback_failed';
+      throw new Error(`Rollback failed: ${error.message}`);
+    }
+  }
+
+  async executeRollbackOperation(operation) {
+    const { type, table, conditions, originalData } = operation;
+
+    switch (type) {
+      case 'insert':
+        // Delete the inserted record
+        await withTimeout(
+          supabase.from(table).delete().match(conditions),
+          10000,
+          `rollback insert from ${table}`
+        );
+        break;
+
+      case 'update':
+        // Restore original values
+        await withTimeout(
+          supabase.from(table).update(originalData).match(conditions),
+          10000,
+          `rollback update to ${table}`
+        );
+        break;
+
+      case 'delete':
+        // Re-insert the deleted record
+        await withTimeout(
+          supabase.from(table).insert(originalData),
+          10000,
+          `rollback delete from ${table}`
+        );
+        break;
+
+      default:
+        console.warn(`Unknown rollback operation type: ${type}`);
+    }
+  }
+
+  recordOperation(txId, operation) {
+    const tx = this.activeTransactions.get(txId);
+    if (tx && tx.status === 'active') {
+      tx.operations.push(operation);
+    }
+  }
+
+  commitTransaction(txId) {
+    const tx = this.activeTransactions.get(txId);
+    if (tx) {
+      tx.status = 'committed';
+      console.log(`✅ Transaction ${txId} committed for batch ${tx.batchId}`);
+    }
+  }
+
+  cleanupTransaction(txId) {
+    this.activeTransactions.delete(txId);
+  }
+}
 
 
 /**
@@ -639,7 +751,7 @@ export const batchPerformanceUtils = {
     const sampleSize = Math.min(1000, items.length);
     const testItems = items.slice(0, sampleSize);
     
-    console.log('🔍 Testing optimal batch size...');
+    console.log('���� Testing optimal batch size...');
     
     const results = [];
     
