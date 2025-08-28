@@ -174,46 +174,59 @@ const JobContainer = ({
 
       let allProperties = [];  // ADD THIS LINE!
 
-      // Now load the actual properties with pagination
+      // Use server-side function for efficient loading (fixes 500 errors)
       if (count && count > 0) {
-        allProperties = [];
-        const pageSize = 1000;
-        const totalPages = Math.ceil(count / pageSize);
+        console.log(`📥 Loading ${count} properties using database function...`);
 
-        for (let page = 0; page < totalPages; page++) {
-          const start = page * pageSize;
-          const end = Math.min(start + pageSize - 1, count - 1);
-          
-          console.log(`📥 Loading batch ${page + 1}/${totalPages} (${start}-${end})...`);
-          
-          // Build the query again for actual data
-          let dataQuery = supabase
+        try {
+          // Call server-side function instead of client-side pagination
+          const { data: functionResult, error } = await supabase
+            .rpc('get_properties_page', {
+              p_job_id: selectedJob.id,
+              p_offset: 0,
+              p_limit: count, // Load all at once server-side
+              p_assigned_only: hasAssignments,
+              p_order_by: 'property_composite_key'
+            });
+
+          if (error) {
+            console.error('❌ Database function error:', error);
+            throw error;
+          }
+
+          if (functionResult && functionResult.properties) {
+            allProperties = functionResult.properties;
+            setLoadedCount(allProperties.length);
+            setLoadingProgress(100);
+            console.log(`✅ Loaded ${allProperties.length} properties via database function`);
+          } else {
+            console.warn('⚠️ Database function returned empty result');
+            allProperties = [];
+          }
+
+        } catch (error) {
+          console.error(`❌ Critical error loading properties:`, error);
+
+          // Fallback to direct query if function doesn't exist
+          console.log('📋 Falling back to direct query...');
+          const { data: directData, error: directError } = await supabase
             .from('property_records')
             .select('*')
             .eq('job_id', selectedJob.id)
-            .order('property_composite_key')
-            .range(start, end);
+            .eq('is_assigned_property', hasAssignments ? true : undefined)
+            .order('property_composite_key');
 
-          // Apply assignment filter if needed
-          if (hasAssignments) {
-            dataQuery = dataQuery.eq('is_assigned_property', true);
+          if (directError) {
+            const errorMsg = directError?.code || directError?.status ?
+              `Supabase error ${directError.status || directError.code}` :
+              'Network or database connection error';
+            throw new Error(`Failed to load property data: ${errorMsg}`);
           }
 
-          const { data, error } = await dataQuery;
-          
-          if (error) throw error;
-          
-          if (data) {
-            allProperties.push(...data);
-            const loaded = allProperties.length;
-            setLoadedCount(loaded);
-            setLoadingProgress(Math.round((loaded / count) * 100));
-          }
-          
-          // Small delay between batches to prevent overwhelming the server
-          if (page < totalPages - 1) {
-            await new Promise(resolve => setTimeout(resolve, 100));
-          }
+          allProperties = directData || [];
+          setLoadedCount(allProperties.length);
+          setLoadingProgress(100);
+          console.log(`✅ Fallback loaded ${allProperties.length} properties`);
         }
 
         setProperties(allProperties);
@@ -222,7 +235,6 @@ const JobContainer = ({
         // Save to cache immediately while we have the data
         if (onUpdateJobCache && allProperties.length > 0) {
           console.log(`💾 Updating cache for job ${selectedJob.id} with ${allProperties.length} properties`);
-          // We'll finish this after you confirm this is the right spot
         }
 
         // BUILD PRESERVED FIELDS MAP for FileUploadButton
@@ -373,7 +385,20 @@ const JobContainer = ({
       
     } catch (error) {
       console.error('Error loading file versions:', error);
-      setVersionError(error.message);
+
+      // Handle different error types gracefully
+      let errorMessage = 'Unknown error occurred';
+      if (error?.message) {
+        errorMessage = error.message;
+      } else if (error?.code) {
+        errorMessage = `Database error: ${error.code}`;
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      } else if (error?.name === 'AbortError') {
+        errorMessage = 'Request timeout - dataset too large. Try again or contact support.';
+      }
+
+      setVersionError(errorMessage);
       
       // Fallback to basic job data
       const fallbackJobData = {
