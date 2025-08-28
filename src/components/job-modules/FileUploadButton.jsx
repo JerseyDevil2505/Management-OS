@@ -303,7 +303,7 @@ const handleCodeFileUpdate = async () => {
 
     console.log(`🔧 Code Update - jobService.update result:`, updateResult);
 
-    addNotification(`��� Successfully updated code definitions for ${detectedVendor}`, 'success');
+    addNotification(`✅ Successfully updated code definitions for ${detectedVendor}`, 'success');
 
     // Clear code file selection
     setCodeFile(null);
@@ -1078,7 +1078,8 @@ const handleCodeFileUpdate = async () => {
           setTimeout(() => timeoutReject(new Error('Batch processing timeout after 5 minutes')), 5 * 60 * 1000)
         )
       ]).then(result => {
-        // Restore original console methods
+        // Clear heartbeat and restore original console methods
+        clearInterval(heartbeatInterval);
         console.log = originalLog;
         console.error = originalError;
         
