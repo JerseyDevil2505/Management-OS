@@ -52,6 +52,8 @@ const FileUploadButton = ({ job, onFileProcessed, isJobLoading = false, onDataRe
   const [useBackendService, setUseBackendService] = useState(true); // Enable backend by default
   const [backendProgress, setBackendProgress] = useState(null);
   const [backendError, setBackendError] = useState(null);
+  const [backendAvailable, setBackendAvailable] = useState(null); // null = unknown, true/false = available/unavailable
+  const [processingMethod, setProcessingMethod] = useState('checking'); // 'checking', 'backend', 'supabase'
 
   const addNotification = (message, type = 'info') => {
     const id = Date.now() + Math.random(); // Make unique with random component
