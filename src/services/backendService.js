@@ -24,7 +24,15 @@ class BackendError extends Error {
  */
 async function makeRequest(endpoint, options = {}) {
   const url = `${BACKEND_URL}${endpoint}`;
-  
+
+  console.log('🔍 BACKEND DEBUG - Making request:', {
+    url,
+    method: options.method || 'GET',
+    BACKEND_URL,
+    endpoint,
+    timestamp: new Date().toISOString()
+  });
+
   const defaultOptions = {
     headers: {
       'Content-Type': 'application/json',
@@ -43,9 +51,21 @@ async function makeRequest(endpoint, options = {}) {
     }
   };
 
+  console.log('🔍 BACKEND DEBUG - Request options:', {
+    method: requestOptions.method || 'GET',
+    headers: Object.keys(requestOptions.headers),
+    timeout: requestOptions.timeout,
+    hasBody: !!requestOptions.body
+  });
+
   try {
+    console.log('🔍 BACKEND DEBUG - Starting fetch request...');
+
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), requestOptions.timeout);
+    const timeoutId = setTimeout(() => {
+      console.error('🔍 BACKEND DEBUG - Request timeout after', requestOptions.timeout, 'ms');
+      controller.abort();
+    }, requestOptions.timeout);
 
     const response = await fetch(url, {
       ...requestOptions,
@@ -54,8 +74,21 @@ async function makeRequest(endpoint, options = {}) {
 
     clearTimeout(timeoutId);
 
+    console.log('🔍 BACKEND DEBUG - Fetch response received:', {
+      status: response.status,
+      statusText: response.statusText,
+      ok: response.ok,
+      headers: Object.fromEntries(response.headers.entries())
+    });
+
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
+      const errorData = await response.json().catch((e) => {
+        console.error('🔍 BACKEND DEBUG - Failed to parse error response as JSON:', e);
+        return {};
+      });
+
+      console.error('🔍 BACKEND DEBUG - Backend returned error:', errorData);
+
       throw new BackendError(
         errorData.message || `HTTP ${response.status}: ${response.statusText}`,
         response.status,
@@ -64,9 +97,19 @@ async function makeRequest(endpoint, options = {}) {
       );
     }
 
+    console.log('🔍 BACKEND DEBUG - Request successful');
     return response;
 
   } catch (error) {
+    console.error('🔍 BACKEND DEBUG - Request failed:', {
+      errorName: error.name,
+      errorMessage: error.message,
+      errorType: typeof error,
+      isAbortError: error.name === 'AbortError',
+      isBackendError: error instanceof BackendError,
+      stack: error.stack
+    });
+
     if (error.name === 'AbortError') {
       throw new BackendError(
         'Request timeout - operation took too long',
@@ -80,12 +123,20 @@ async function makeRequest(endpoint, options = {}) {
       throw error;
     }
 
-    throw new BackendError(
+    // Network errors, CORS errors, connection refused, etc.
+    const networkError = new BackendError(
       error.message || 'Network error occurred',
       0,
       endpoint,
-      { originalError: error.message }
+      {
+        originalError: error.message,
+        errorType: error.name,
+        url: url
+      }
     );
+
+    console.error('🔍 BACKEND DEBUG - Throwing BackendError:', networkError);
+    throw networkError;
   }
 }
 
