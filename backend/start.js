@@ -7,24 +7,14 @@
 const fs = require('fs');
 const path = require('path');
 
-// Check if .env file exists
+// Try to load .env file if it exists, but don't require it
 const envPath = path.join(__dirname, '.env');
-if (!fs.existsSync(envPath)) {
-  console.error('❌ Error: .env file not found!');
-  console.log('\n📋 Create backend/.env with these variables:');
-  console.log(`
-NODE_ENV=development
-PORT=3001
-FRONTEND_URL=http://localhost:3000
-NEON_DATABASE_URL=your-neon-connection-string
-SUPABASE_URL=https://zxvavttfvpsagzluqqwn.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-`);
-  process.exit(1);
+if (fs.existsSync(envPath)) {
+  require('dotenv').config();
+  console.log('📄 Loaded .env file');
+} else {
+  console.log('📄 No .env file found, using system environment variables');
 }
-
-// Load environment variables
-require('dotenv').config();
 
 // Validate required environment variables
 const requiredEnvVars = [
