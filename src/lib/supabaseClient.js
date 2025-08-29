@@ -2394,12 +2394,11 @@ export const propertyService = {
       for (let i = 0; i < compositeKeys.length; i += chunkSize) {
         const chunk = compositeKeys.slice(i, i + chunkSize);
 
-        // ULTRA-OPTIMIZED: Only fetch records that actually have assignments
+        // OPTIMIZED: Fetch all properties for full update processing
         const { data: existingRecords, error } = await supabase
           .from('property_records')
           .select('property_composite_key, is_assigned_property')
           .eq('job_id', jobId)
-          .eq('is_assigned_property', true)
           .in('property_composite_key', chunk);
 
         if (error) {
