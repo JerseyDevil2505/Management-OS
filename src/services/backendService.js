@@ -4,7 +4,7 @@
  * Replaces direct Supabase calls for heavy operations
  */
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || null; // Disable backend service in dev
 
 // ===== ERROR HANDLING =====
 
