@@ -616,6 +616,12 @@ const handleCodeFileUpdate = async () => {
       // Remove duplicates from modified properties
       const uniquePropertiesModified = [...new Set(propertiesModified)];
 
+      console.log(`📊 Property tracking summary:`, {
+        added: propertiesAdded.length,
+        removed: propertiesRemoved.length,
+        modified: uniquePropertiesModified.length
+      });
+
       const { data, error } = await supabase
         .from('comparison_reports')
         .insert([{
