@@ -36,7 +36,5 @@
       "last 1 safari version"
     ]
   },
-  "devDependencies": {
-    "concurrently": "^9.2.1"
-  }
+  "devDependencies": {}
 }
