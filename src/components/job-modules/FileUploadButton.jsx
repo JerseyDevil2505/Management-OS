@@ -1599,7 +1599,7 @@ const handleCodeFileUpdate = async () => {
         addBatchLog('⚠️ UPDATE FAILED - All changes have been rolled back', 'error', {
           message: 'The update encountered errors and all changes were automatically reversed'
         });
-        addNotification('����� Update failed - all changes rolled back. Check logs for details.', 'error');
+        addNotification('��� Update failed - all changes rolled back. Check logs for details.', 'error');
       }
 
       // Update local file version and date from DB
@@ -2059,7 +2059,7 @@ const handleCodeFileUpdate = async () => {
                     setProcessing(false);
                     setBatchComplete(true);
                     setIsProcessingLocked(false);
-                    addBatchLog('���� Operation manually stopped by user', 'warning');
+                    addBatchLog('����� Operation manually stopped by user', 'warning');
                     console.log('🛑 Emergency stop triggered - operation cancelled');
                   }}
                   className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 font-medium flex items-center space-x-2"
@@ -2759,9 +2759,6 @@ const handleCodeFileUpdate = async () => {
     if (!timestamp) return 'Never';
 
     if (type === 'source') {
-      console.log(`🔍 Banner Debug - currentFileVersion: ${currentFileVersion}`);
-      console.log(`🔍 Banner Debug - lastUpdatedAt: ${lastUpdatedAt}`);
-
       if (currentFileVersion > 1) {
         // Use updated_at from property_records
         const uploadDate = lastUpdatedAt || timestamp;
