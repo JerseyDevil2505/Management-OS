@@ -550,11 +550,80 @@ const handleCodeFileUpdate = async () => {
         comparison_timestamp: new Date().toISOString()
       };
 
+      // Extract property keys for the new structured fields
+      const propertiesAdded = [];
+      const propertiesRemoved = [];
+      const propertiesModified = [];
+
+      // Extract added property keys (from source file records)
+      if (comparisonResults.details.missing?.length > 0) {
+        comparisonResults.details.missing.forEach(record => {
+          // Generate composite key from source record
+          const blockField = detectedVendor === 'BRT' ? 'BLOCK' : 'Block';
+          const lotField = detectedVendor === 'BRT' ? 'LOT' : 'Lot';
+          const qualifierField = detectedVendor === 'BRT' ? 'QUALIFIER' : 'Qual';
+          const cardField = detectedVendor === 'BRT' ? 'CARD' : 'Bldg';
+          const locationField = detectedVendor === 'BRT' ? 'PROPERTY_LOCATION' : 'Location';
+
+          // Construct composite key similar to processors
+          const year = job.start_date ? new Date(job.start_date).getFullYear() : new Date().getFullYear();
+          const ccddCode = job.ccdd_code || '';
+          const block = String(record[blockField] || '').trim();
+          const lot = String(record[lotField] || '').trim();
+          const qualifier = String(record[qualifierField] || '').trim() || 'NONE';
+          const card = String(record[cardField] || '').trim() || 'NONE';
+          const location = String(record[locationField] || '').trim() || 'NONE';
+
+          const compositeKey = `${year}${ccddCode}-${block}-${lot}_${qualifier}-${card}-${location}`;
+          propertiesAdded.push(compositeKey);
+        });
+      }
+
+      // Extract removed property keys (from database records)
+      if (comparisonResults.details.deletions?.length > 0) {
+        comparisonResults.details.deletions.forEach(record => {
+          if (record.property_composite_key) {
+            propertiesRemoved.push(record.property_composite_key);
+          }
+        });
+      }
+
+      // Extract modified property keys (from various change types)
+      if (comparisonResults.details.changes?.length > 0) {
+        comparisonResults.details.changes.forEach(record => {
+          if (record.property_composite_key) {
+            propertiesModified.push(record.property_composite_key);
+          }
+        });
+      }
+
+      if (comparisonResults.details.classChanges?.length > 0) {
+        comparisonResults.details.classChanges.forEach(change => {
+          if (change.property_composite_key) {
+            propertiesModified.push(change.property_composite_key);
+          }
+        });
+      }
+
+      if (comparisonResults.details.salesChanges?.length > 0) {
+        comparisonResults.details.salesChanges.forEach(change => {
+          if (change.property_composite_key) {
+            propertiesModified.push(change.property_composite_key);
+          }
+        });
+      }
+
+      // Remove duplicates from modified properties
+      const uniquePropertiesModified = [...new Set(propertiesModified)];
+
       const { data, error } = await supabase
         .from('comparison_reports')
         .insert([{
           job_id: job.id,
           report_data: reportData,
+          properties_added: propertiesAdded,
+          properties_removed: propertiesRemoved,
+          properties_modified: uniquePropertiesModified,
           report_date: new Date().toISOString(),
           generated_by: 'FileUploadButton',
           status: 'generated'
