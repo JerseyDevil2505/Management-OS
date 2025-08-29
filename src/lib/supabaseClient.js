@@ -1620,7 +1620,7 @@ export const jobService = {
         dbFields.target_completion_date = componentFields.dueDate;
       }
       if (componentFields.totalProperties !== undefined) dbFields.total_properties = componentFields.totalProperties;
-      // if (componentFields.inspectedProperties !== undefined) dbFields.inspected_properties = componentFields.inspectedProperties;  // ��� REMOVED 2025-01-XX: Field deleted from jobs table
+      // if (componentFields.inspectedProperties !== undefined) dbFields.inspected_properties = componentFields.inspectedProperties;  // ❌ REMOVED 2025-01-XX: Field deleted from jobs table
       if (componentFields.sourceFileStatus) dbFields.source_file_status = componentFields.sourceFileStatus;
       if (componentFields.codeFileStatus) dbFields.code_file_status = componentFields.codeFileStatus;
       if (componentFields.vendorDetection) dbFields.vendor_detection = componentFields.vendorDetection;
@@ -1638,9 +1638,6 @@ export const jobService = {
       if (componentFields.source_file_uploaded_at) dbFields.source_file_uploaded_at = componentFields.source_file_uploaded_at;
       if (componentFields.code_file_uploaded_at) dbFields.code_file_uploaded_at = componentFields.code_file_uploaded_at;
 
-      console.log('🔧 jobService.update - Input fields:', Object.keys(componentFields));
-      console.log('🔧 jobService.update - Mapped DB fields:', Object.keys(dbFields));
-      console.log('🔧 jobService.update - DB field values:', dbFields);
 
       const { data, error } = await supabase
        .from('jobs')
