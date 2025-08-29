@@ -101,6 +101,24 @@ const FileUploadButton = ({ job, onFileProcessed, isJobLoading = false, onDataRe
     });
   };
 
+  // Check backend availability
+  const checkBackendAvailability = async () => {
+    try {
+      const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
+      const response = await fetch(`${backendUrl}/api/health`, {
+        method: 'GET',
+        signal: AbortSignal.timeout(5000) // 5 second timeout
+      });
+      const available = response.ok;
+      setBackendAvailable(available);
+      return available;
+    } catch (error) {
+      console.log('Backend not available:', error.message);
+      setBackendAvailable(false);
+      return false;
+    }
+  };
+
   // FIXED: Use exact same date parsing method as processors
   const parseDate = (dateString) => {
     if (!dateString || dateString.trim() === '') return null;
