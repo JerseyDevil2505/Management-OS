@@ -2120,7 +2120,7 @@ export const checklistService = {
   },
 
   // NEW: Get inspection data with pagination for 2nd/3rd attempt mailers
-  async getInspectionData(jobId, page = 1, pageSize = 500) {
+  async getInspectionData(jobId, page = 1, pageSize = 100) {
     try {
       const from = (page - 1) * pageSize;
       const to = from + pageSize - 1;
