@@ -2423,11 +2423,15 @@ export const propertyService = {
         console.log(`🔍 DEBUG: Chunk ${chunkNumber} query completed in ${chunkEndTime - chunkStartTime}ms`);
 
         if (error) {
-          console.error('Error fetching preserved data:', error);
+          console.error(`❌ DEBUG: Chunk ${chunkNumber} failed:`, error);
+          console.error(`❌ DEBUG: Error code: ${error.code}, message: ${error.message}`);
           continue;
         }
 
+        console.log(`✅ DEBUG: Chunk ${chunkNumber} returned ${existingRecords?.length || 0} records`);
+
         // Build preservation map
+        let recordsWithData = 0;
         existingRecords?.forEach(record => {
           const preserved = {};
           PRESERVED_FIELDS.forEach(field => {
@@ -2435,17 +2439,26 @@ export const propertyService = {
               preserved[field] = record[field];
             }
           });
-          
+
           // Only add to map if there's data to preserve
           if (Object.keys(preserved).length > 0) {
             preservedDataMap.set(record.property_composite_key, preserved);
+            recordsWithData++;
           }
         });
+
+        console.log(`🔍 DEBUG: Chunk ${chunkNumber} added ${recordsWithData} records with preserved data`);
       }
-      
-      console.log(`✅ Loaded preserved data for ${preservedDataMap.size} properties`);
+
+      const totalTime = Date.now() - startTime;
+      console.log(`✅ DEBUG: Preserved fields handler completed in ${totalTime}ms`);
+      console.log(`✅ DEBUG: Final result: ${preservedDataMap.size} properties with preserved data`);
+
     } catch (error) {
-      console.error('Error in createPreservedFieldsHandler:', error);
+      const totalTime = Date.now() - startTime;
+      console.error(`❌ DEBUG: Error in createPreservedFieldsHandler after ${totalTime}ms:`, error);
+      console.error(`❌ DEBUG: Error type: ${error.constructor.name}`);
+      console.error(`❌ DEBUG: Error stack:`, error.stack);
     }
 
     return preservedDataMap;
