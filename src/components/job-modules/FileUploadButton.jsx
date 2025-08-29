@@ -1352,8 +1352,7 @@ const handleCodeFileUpdate = async () => {
           );
 
           const endTime = Date.now();
-          console.log(`🔍 DEBUG: updateCSVData completed in ${endTime - startTime}ms`);
-          addBatchLog(`🔍 DEBUG: updateCSVData completed in ${endTime - startTime}ms`, 'info');
+          addBatchLog(`✅ Processing completed in ${endTime - startTime}ms`, 'info');
 
           return result;
         } catch (updateError) {
