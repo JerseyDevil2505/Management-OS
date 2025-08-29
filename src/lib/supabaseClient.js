@@ -2386,13 +2386,31 @@ export const propertyService = {
 
   // Helper method to create a preserved fields handler for the updaters
   async createPreservedFieldsHandler(jobId, compositeKeys) {
+    console.log(`🔍 DEBUG: Starting preserved fields handler for job ${jobId}`);
+    console.log(`🔍 DEBUG: Total composite keys to process: ${compositeKeys.length}`);
+    console.log(`🔍 DEBUG: PRESERVED_FIELDS to fetch: [${PRESERVED_FIELDS.join(', ')}]`);
+
+    const startTime = Date.now();
     const preservedDataMap = new Map();
 
     try {
+      // Check if we have any preserved fields to fetch
+      if (PRESERVED_FIELDS.length === 0) {
+        console.log(`✅ DEBUG: No preserved fields configured, returning empty map`);
+        return preservedDataMap;
+      }
+
       // OPTIMIZED: Only one field, larger chunks, no delay
       const chunkSize = 1000;
+      const totalChunks = Math.ceil(compositeKeys.length / chunkSize);
+      console.log(`🔍 DEBUG: Processing ${totalChunks} chunks of ${chunkSize} records each`);
+
       for (let i = 0; i < compositeKeys.length; i += chunkSize) {
         const chunk = compositeKeys.slice(i, i + chunkSize);
+        const chunkNumber = Math.floor(i / chunkSize) + 1;
+
+        console.log(`🔍 DEBUG: Processing chunk ${chunkNumber}/${totalChunks} (${chunk.length} keys)`);
+        const chunkStartTime = Date.now();
 
         // OPTIMIZED: Fetch all properties for full update processing
         const { data: existingRecords, error } = await supabase
@@ -2400,6 +2418,9 @@ export const propertyService = {
           .select('property_composite_key, is_assigned_property')
           .eq('job_id', jobId)
           .in('property_composite_key', chunk);
+
+        const chunkEndTime = Date.now();
+        console.log(`🔍 DEBUG: Chunk ${chunkNumber} query completed in ${chunkEndTime - chunkStartTime}ms`);
 
         if (error) {
           console.error('Error fetching preserved data:', error);
