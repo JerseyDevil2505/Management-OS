@@ -150,11 +150,12 @@ const JobContainer = ({
       setIsLoadingVersion(false);
       setIsLoadingProperties(true);
 
-      // Build query for property count
+      // Build query for property count - ONLY latest version
       let propertyCountQuery = supabase
         .from('property_records')
         .select('*', { count: 'exact', head: true })
-        .eq('job_id', selectedJob.id);
+        .eq('job_id', selectedJob.id)
+        .eq('file_version', currentFileVersion);  // ← ONLY count latest version!
 
       // Apply assignment filter if needed
       if (hasAssignments) {
@@ -196,6 +197,7 @@ const JobContainer = ({
 
           try {
             // Build the query for this batch with market analysis fields
+            // CRITICAL FIX: Load only the latest version of properties
             let batchQuery = supabase
               .from('property_records')
               .select(`
@@ -212,6 +214,7 @@ const JobContainer = ({
                 )
               `)
               .eq('job_id', selectedJob.id)
+              .eq('file_version', currentFileVersion)  // ← ONLY load latest version!
               .order('property_composite_key')
               .range(offset, offset + limit - 1);
 
