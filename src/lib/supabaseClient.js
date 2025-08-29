@@ -2163,7 +2163,13 @@ export const checklistService = {
         allData = [...allData, ...result.data];
         hasMore = result.hasMore;
         page++;
-        
+
+        // Add timing gap between page loads to prevent database overload
+        if (hasMore) {
+          console.log(`⏳ Waiting 250ms before next page to prevent database overload...`);
+          await new Promise(resolve => setTimeout(resolve, 250));
+        }
+
         // Safety limit to prevent infinite loops
         if (page > 100) {
           console.warn('Reached pagination limit of 100 pages');
