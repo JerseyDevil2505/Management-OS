@@ -140,8 +140,6 @@ const JobContainer = ({
       const currentFileVersion = dataVersionData?.file_version || 1;
       const currentCodeVersion = jobData?.code_file_version || 1;
 
-      console.log(`🔍 JOB DEBUG: has_property_assignments = ${hasAssignments}`);
-      console.log(`🔍 JOB DEBUG: Current file version = ${currentFileVersion}`);
 
       setLatestFileVersion(currentFileVersion);
       setLatestCodeVersion(currentCodeVersion);
@@ -160,9 +158,6 @@ const JobContainer = ({
       // Apply assignment filter if needed
       if (hasAssignments) {
         propertyCountQuery = propertyCountQuery.eq('is_assigned_property', true);
-        console.log('📋 Loading only assigned properties (has_property_assignments = true)');
-      } else {
-        console.log('📋 Loading all properties (no assignments)');
       }
 
       // Get count first with timeout
@@ -174,26 +169,22 @@ const JobContainer = ({
       if (countError) throw countError;
 
       setPropertyRecordsCount(count || 0);
-      console.log(`📊 Total properties to load: ${count}`);
 
       let allProperties = [];  // ADD THIS LINE!
 
-      // Use client-side pagination with batches of 500
+      // Use client-side pagination with batches
       if (count && count > 0) {
-        console.log(`📥 Loading ${count} properties using client-side pagination (500 per batch)...`);
-
-        const batchSize = 100; // MUCH smaller batches
+        const batchSize = 100;
         const totalBatches = Math.ceil(count / batchSize);
         let retryCount = 0;
         const maxRetries = 3;
 
-        console.log(`🚨 FIXED BATCHING: Will stop on first failure, ${batchSize} records per batch`);
+        console.log(`📥 Loading ${count} properties in ${totalBatches} batches...`);
 
         for (let batch = 0; batch < totalBatches; batch++) {
           const offset = batch * batchSize;
           const limit = Math.min(batchSize, count - offset);
 
-          console.log(`📦 Loading batch ${batch + 1}/${totalBatches} (${offset} to ${offset + limit - 1})`);
 
           try {
             // Build the query for this batch with market analysis fields
@@ -280,16 +271,12 @@ const JobContainer = ({
               allProperties.push(...processedData);
               setLoadedCount(allProperties.length);
               setLoadingProgress(Math.round((allProperties.length / count) * 100));
-              console.log(`✅ Batch ${batch + 1} loaded: ${batchData.length} properties (total: ${allProperties.length})`);
               retryCount = 0; // Reset retry count on success
-            } else {
-              console.warn(`⚠️ Batch ${batch + 1} returned no data`);
             }
 
             // Progressive delay - longer delay after more batches
             const delay = Math.min(200 + (batch * 10), 1000);
             if (batch < totalBatches - 1) {
-              console.log(`⏳ Waiting ${delay}ms before next batch...`);
               await new Promise(resolve => setTimeout(resolve, delay));
             }
 
@@ -346,47 +333,17 @@ const JobContainer = ({
 
         setProperties(allProperties);
         setLoadingProgress(100);
-        console.log(`✅ Successfully loaded ${allProperties.length} properties via client-side pagination`);
 
         if (allProperties.length !== count) {
           console.warn(`⚠️ Expected ${count} properties but loaded ${allProperties.length}`);
         }
 
-        // CRITICAL DEBUG: Check if properties have inspection data
-        const propertiesWithInspectors = allProperties.filter(p => p.inspection_measure_by && p.inspection_measure_by.trim() !== '');
-        const propertiesWithDates = allProperties.filter(p => p.inspection_measure_date);
-        const propertiesWithInfoBy = allProperties.filter(p => p.inspection_info_by);
-
-        console.log(`🔍 PROPERTIES DEBUG:`);
-        console.log(`  - Total properties: ${allProperties.length}`);
-        console.log(`  - With inspectors: ${propertiesWithInspectors.length}`);
-        console.log(`  - With measure dates: ${propertiesWithDates.length}`);
-        console.log(`  - With info_by codes: ${propertiesWithInfoBy.length}`);
-
-        // Sample first few properties to see their structure
-        console.log(`🔍 SAMPLE PROPERTIES (first 3):`);
-        allProperties.slice(0, 3).forEach((prop, idx) => {
-          console.log(`  Property ${idx + 1}:`, {
-            composite_key: prop.property_composite_key,
-            class: prop.property_m4_class,
-            inspector: prop.inspection_measure_by,
-            measure_date: prop.inspection_measure_date,
-            info_by: prop.inspection_info_by,
-            list_by: prop.inspection_list_by,
-            list_date: prop.inspection_list_date
-          });
-        });
-
-        console.log(`✅ Loaded ${allProperties.length} properties - no caching`);
       } else {
         setProperties([]);
       }
 
-// LOAD ADDITIONAL DATA TABLES per the guide
+// Load additional data tables
       console.log('📊 Loading additional data tables...');
-      
-      // 1. Load inspection_data with pagination (could be 16K+ records!)
-      console.log('📊 Loading inspection data with pagination...');
       const allInspectionData = [];
       let inspectionPage = 0;
       let hasMoreInspection = true;
@@ -610,7 +567,6 @@ const JobContainer = ({
         setChecklistItems(checklistItems || []);
         setChecklistStatus(checklistStatus || []);
         setEmployees(employeesData || []);
-        console.log('✅ All additional data tables loaded');
       } catch (stateError) {
         console.error('❌ STATE SETTING ERROR FOR ADDITIONAL DATA:');
         console.error(`  Error Message: ${stateError.message || 'Unknown error'}`);
@@ -654,7 +610,7 @@ const JobContainer = ({
       
       setJobData(enrichedJobData);
 
-      console.log(`✅ All data loaded successfully - ${allProperties.length} properties`);
+      console.log(`✅ Job data loaded: ${allProperties.length} properties`);
       
     } catch (error) {
       // ENHANCED: Comprehensive error logging for main catch block
