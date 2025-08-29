@@ -1,4 +1,4 @@
-  import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase, interpretCodes, worksheetService, checklistService } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx';
 import { 
@@ -79,7 +79,7 @@ const PreValuationTab = ({
   const [worksheetSearchTerm, setWorksheetSearchTerm] = useState('');
   const [worksheetFilter, setWorksheetFilter] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(50);
+  const [itemsPerPage] = useState(100);
   const [normCurrentPage, setNormCurrentPage] = useState(1);
   const [normItemsPerPage, setNormItemsPerPage] = useState(100);
   const [unsavedChanges, setUnsavedChanges] = useState(false);
@@ -194,41 +194,36 @@ const PreValuationTab = ({
   
   const getBuildingClassDisplay = useCallback((property) => {
     if (!property) return '';
-    
-    // Use interpretCodes to get the proper display name
-    const className = interpretCodes.getBuildingClassName?.(
-      property, 
-      codeDefinitions, 
-      vendorType
-    );
-    
-    return className || property.asset_building_class || '';
-  }, [codeDefinitions, vendorType]);
+
+    // For now, just return the raw field since getBuildingClassName doesn't exist
+    // and we need to avoid async calls in render
+    return property.asset_building_class || '';
+  }, []);
 
   const getTypeUseDisplay = useCallback((property) => {
     if (!property) return '';
-    
-    // Use interpretCodes to get the proper type/use name
-    const typeName = interpretCodes.getTypeName?.(
-      property, 
-      codeDefinitions, 
-      vendorType
-    );
-    
-    return typeName || property.asset_type_use || '';
+
+    // Use only synchronous Microsystems decoding to avoid async rendering issues
+    if (vendorType === 'Microsystems' && codeDefinitions) {
+      const decoded = interpretCodes.getMicrosystemsValue?.(property, codeDefinitions, 'asset_type_use');
+      return decoded || property.asset_type_use || '';
+    }
+
+    // For BRT, return raw value since getBRTValue is async
+    return property.asset_type_use || '';
   }, [codeDefinitions, vendorType]);
 
   const getDesignDisplay = useCallback((property) => {
     if (!property) return '';
-    
-    // Use interpretCodes to get the proper design name
-    const designName = interpretCodes.getDesignName?.(
-      property, 
-      codeDefinitions, 
-      vendorType
-    );
-    
-    return designName || property.asset_design_style || '';
+
+    // Use only synchronous Microsystems decoding to avoid async rendering issues
+    if (vendorType === 'Microsystems' && codeDefinitions) {
+      const decoded = interpretCodes.getMicrosystemsValue?.(property, codeDefinitions, 'asset_design_style');
+      return decoded || property.asset_design_style || '';
+    }
+
+    // For BRT, return raw value since getBRTValue is async
+    return property.asset_design_style || '';
   }, [codeDefinitions, vendorType]);
 
   const parseCompositeKey = useCallback((compositeKey) => {
@@ -610,11 +605,11 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       for (const sale of normalizedSales) {
         if (sale.size_normalized_price) {
           await supabase
-            .from('property_records')
-            .update({ 
-              values_norm_size: sale.size_normalized_price 
-            })
-            .eq('id', sale.id);
+            .from('property_market_analysis')
+            .upsert({
+              property_composite_key: sale.property_composite_key,
+              values_norm_size: sale.size_normalized_price
+            }, { onConflict: 'property_composite_key' });
         }
       }
       console.log('✅ Size normalized values saved to database');
@@ -933,7 +928,9 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
           designConsistency,
           designDetails: {
             uniqueDesigns,
-            dominantDesign: interpretCodes.getDesignName?.({ asset_design_style: dominantDesign }, codeDefinitions, vendorType) || dominantDesign,
+            dominantDesign: vendorType === 'Microsystems' && codeDefinitions
+              ? interpretCodes.getMicrosystemsValue?.({ asset_design_style: dominantDesign }, codeDefinitions, 'asset_design_style') || dominantDesign
+              : dominantDesign,
             dominantPercent: dominantPercent.toFixed(0)
           }
         };
@@ -1067,12 +1064,12 @@ const handleSalesDecision = async (saleId, decision) => {
     if (sale && sale.keep_reject === 'keep') {
       try {
         const { error } = await supabase
-          .from('property_records')
-          .update({ 
+          .from('property_market_analysis')
+          .update({
             values_norm_time: null,
-            values_norm_size: null 
+            values_norm_size: null
           })
-          .eq('id', saleId);
+          .eq('property_composite_key', sale.property_composite_key);
         
         if (error) {
           console.error('Error removing normalized values:', error);
@@ -1118,12 +1115,15 @@ const handleSalesDecision = async (saleId, decision) => {
           console.log(`💾 Batch ${Math.floor(i/500) + 1}: Saving IDs`, updates.slice(0, 3).map(u => u.id), '...');
           
           // Use Promise.all for parallel updates within batch
-          await Promise.all(updates.map(u => 
-            supabase
-              .from('property_records')
-              .update({ values_norm_time: u.values_norm_time })
-              .eq('id', u.id)
-          ));
+          await Promise.all(updates.map(u => {
+            const sale = batch.find(s => s.id === u.id);
+            return supabase
+              .from('property_market_analysis')
+              .upsert({
+                property_composite_key: sale.property_composite_key,
+                values_norm_time: u.values_norm_time
+              }, { onConflict: 'property_composite_key' });
+          }));
           
           console.log(`✅ Saved batch ${Math.floor(i/500) + 1} of ${Math.ceil(keeps.length/500)}`);
           setSaveProgress({ 
@@ -1140,10 +1140,12 @@ const handleSalesDecision = async (saleId, decision) => {
           const batch = rejects.slice(i, i + 500);
           const rejectIds = batch.map(s => s.id);
           
+          const rejectCompositeKeys = batch.map(s => s.property_composite_key);
+
           await supabase
-            .from('property_records')
+            .from('property_market_analysis')
             .update({ values_norm_time: null })
-            .in('id', rejectIds);
+            .in('property_composite_key', rejectCompositeKeys);
           
           console.log(`✅ Cleared batch ${Math.floor(i/500) + 1} of ${Math.ceil(rejects.length/500)}`);
         }
@@ -1325,7 +1327,7 @@ const processSelectedProperties = async () => {
           message: `Processing batch ${Math.floor(i/batchSize) + 1} of ${Math.ceil(toProcess.length/batchSize)}...` 
         });
         
-        // Build update array for batch upsert
+        // Build update array for batch upsert to property_market_analysis table
         const updates = batch.map(prop => ({
           property_composite_key: prop.property_composite_key,
           new_vcs: prop.new_vcs,
@@ -1334,10 +1336,10 @@ const processSelectedProperties = async () => {
           asset_map_page: prop.asset_map_page,
           asset_key_page: prop.asset_key_page
         }));
-        
+
         // Use upsert for batch processing
         const { error } = await supabase
-          .from('property_records')
+          .from('property_market_analysis')
           .upsert(updates, { onConflict: 'property_composite_key' });
           
         if (error) throw error;
@@ -2110,7 +2112,7 @@ const analyzeImportFile = async (file) => {
                               className="px-4 py-3 text-center text-sm font-medium text-gray-700 w-28 cursor-pointer hover:bg-gray-100"
                               onClick={() => handleNormalizationSort('keep_reject')}
                             >
-                              Decision {normSortConfig.field === 'keep_reject' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
+                              Decision {normSortConfig.field === 'keep_reject' && (normSortConfig.direction === 'asc' ? '↑' : '��')}
                             </th>
                           </tr>
                         </thead>

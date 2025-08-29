@@ -271,16 +271,18 @@ useEffect(() => {
   }, [vendorType]);
 
   // ========== GET PRICE PER UNIT ==========
-  const getPricePerUnit = useCallback((price, size) => {
-    if (valuationMode === 'acre') {
-      return size > 0 ? Math.round(price / size) : 0;
-    } else if (valuationMode === 'sf') {
-      return size > 0 ? (price / (size * 43560)).toFixed(2) : 0;
-    } else if (valuationMode === 'ff') {
-      // For front foot, need frontage
-      return 0; // Will be calculated differently
-    }
-  }, [valuationMode]);
+const getPricePerUnit = useCallback((price, size) => {
+  if (valuationMode === 'acre') {
+    return size > 0 ? Math.round(price / size) : 0;
+  } else if (valuationMode === 'sf') {
+    // size is already in acres, convert to SF then calculate price per SF
+    const sizeInSF = size * 43560;
+    return sizeInSF > 0 ? parseFloat(price / sizeInSF) : 0;
+  } else if (valuationMode === 'ff') {
+    // For front foot, need frontage
+    return 0; // Will be calculated differently
+  }
+}, [valuationMode]);
 
   // ========== GET UNIT LABEL ==========
   const getUnitLabel = useCallback(() => {
@@ -682,7 +684,7 @@ useEffect(() => {
     const existingIds = new Set(vacantSales.map(s => s.id));
     results = results.filter(p => !existingIds.has(p.id));
 
-    setSearchResults(results.slice(0, 100)); // Limit to 100 results
+    setSearchResults(results);
   };
   const addSelectedProperties = () => {
     const toAdd = properties.filter(p => selectedToAdd.has(p.id));
@@ -2062,11 +2064,16 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
             <thead>
               <tr style={{ backgroundColor: '#F9FAFB' }}>
                 <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Include</th>
-                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Block/Lot</th>
+                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Block</th>
+                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Lot</th>
+                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Qual</th>
                 <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Address</th>
+                <th style={{ padding: '8px', textAlign: 'center', borderBottom: '1px solid #E5E7EB' }}>Class</th>
+                <th style={{ padding: '8px', textAlign: 'center', borderBottom: '1px solid #E5E7EB' }}>Bldg</th>
+                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Type</th>
+                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Design</th>
                 <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>VCS</th>
                 <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Zoning</th>
-                )}
                 <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Special Region</th>
                 <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Category</th>
                 <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Sale Date</th>
@@ -2081,159 +2088,187 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
               </tr>
             </thead>
             <tbody>
-              {vacantSales.map((sale, index) => (
-                <tr key={sale.id} style={{ backgroundColor: index % 2 === 0 ? 'white' : '#F9FAFB' }}>
-                  <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB' }}>
-                    <input
-                      type="checkbox"
-                      checked={includedSales.has(sale.id)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setIncludedSales(prev => new Set([...prev, sale.id]));
-                        } else {
-                          setIncludedSales(prev => {
-                            const newSet = new Set(prev);
-                            newSet.delete(sale.id);
-                            return newSet;
-                          });
-                        }
-                      }}
-                    />
-                  </td>
-                  <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB' }}>
-                    {sale.property_block}/{sale.property_lot}
-                  </td>
-                  <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB' }}>
-                    {sale.property_location}
-                  </td>
-                  <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB' }}>
-                    {sale.new_vcs || '-'}
-                  </td>
-                  <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB' }}>
-                    {sale.asset_zoning || '-'}
-                  </td>
-                  <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB' }}>
-                    <select
-                      value={specialRegions[sale.id] || 'Normal'}
-                      onChange={(e) => setSpecialRegions(prev => ({ ...prev, [sale.id]: e.target.value }))}
-                      style={{
-                        padding: '4px',
-                        border: '1px solid #D1D5DB',
-                        borderRadius: '4px',
-                        fontSize: '12px'
-                      }}
-                    >
-                      {SPECIAL_REGIONS.map(region => (
-                        <option key={region} value={region}>{region}</option>
-                      ))}
-                    </select>
-                  </td>
-                  <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB' }}>
-                    <select
-                      value={saleCategories[sale.id] || sale.autoCategory || 'uncategorized'}
-                      onChange={(e) => setSaleCategories(prev => ({ ...prev, [sale.id]: e.target.value }))}
-                      style={{
-                        padding: '4px',
-                        border: '1px solid #D1D5DB',
-                        borderRadius: '4px',
-                        fontSize: '12px',
-                        backgroundColor: sale.autoCategory ? '#FEF3C7' : 'white'
-                      }}
-                    >
-                      <option value="uncategorized">Uncategorized</option>
-                      <option value="raw_land">Raw Land</option>
-                      <option value="wetlands">Wetlands</option>
-                      <option value="landlocked">Landlocked</option>
-                      <option value="conservation">Conservation</option>
-                      <option value="teardown">Teardown</option>
-                      <option value="pre-construction">Pre-Construction</option>
-                      <option value="package">Package Sale</option>
-                    </select>
-                  </td>
-                  <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB' }}>
-                    {sale.sales_date}
-                  </td>
-                  <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB', textAlign: 'right' }}>
-                    ${sale.sales_price?.toLocaleString()}
-                  </td>
-                  <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB', textAlign: 'right' }}>
-                    {valuationMode === 'sf' ? 
-                      Math.round(sale.totalAcres * 43560).toLocaleString() : 
-                      sale.totalAcres?.toFixed(2)}
-                  </td>
-                  <td style={{ 
-                    padding: '8px', 
-                    borderBottom: '1px solid #E5E7EB', 
-                    textAlign: 'right',
-                    fontWeight: 'bold',
-                    color: sale.pricePerAcre > 100000 ? '#EF4444' : '#10B981'
-                  }}>
-                    {valuationMode === 'sf' ? 
-                      `$${(sale.pricePerAcre / 43560).toFixed(2)}` :
-                      `$${sale.pricePerAcre?.toLocaleString()}`}
-                  </td>
-                  <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB', textAlign: 'center' }}>
-                    {sale.packageData && (
-                      <span style={{
-                        backgroundColor: '#FEE2E2',
-                        color: '#DC2626',
-                        padding: '2px 6px',
-                        borderRadius: '4px',
-                        fontSize: '11px'
-                      }}>
-                        {sale.packageData.package_count}
-                      </span>
-                    )}
-                  </td>
-                  <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB' }}>
-                    <input
-                      type="text"
-                      value={landNotes[sale.id] || ''}
-                      onChange={(e) => setLandNotes(prev => ({ ...prev, [sale.id]: e.target.value }))}
-                      placeholder="Add notes..."
-                      style={{
-                        width: '200px',
-                        padding: '4px',
-                        border: '1px solid #D1D5DB',
-                        borderRadius: '4px',
-                        fontSize: '12px'
-                      }}
-                    />
-                  </td>
-                  <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB' }}>
-                    <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
-                      <button
-                        onClick={() => handlePropertyResearch(sale)}
-                        title="Research with AI"
+              {vacantSales.map((sale, index) => {
+                // Get human-readable names - use only synchronous decoding to avoid async rendering issues
+                const typeName = vendorType === 'Microsystems' && jobData?.parsed_code_definitions
+                  ? interpretCodes.getMicrosystemsValue?.(sale, jobData.parsed_code_definitions, 'asset_type_use') || sale.asset_type_use || '-'
+                  : sale.asset_type_use || '-';
+                const designName = vendorType === 'Microsystems' && jobData?.parsed_code_definitions
+                  ? interpretCodes.getMicrosystemsValue?.(sale, jobData.parsed_code_definitions, 'asset_design_style') || sale.asset_design_style || '-'
+                  : sale.asset_design_style || '-';
+                
+                return (
+                  <tr key={sale.id} style={{ backgroundColor: index % 2 === 0 ? 'white' : '#F9FAFB' }}>
+                    <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB' }}>
+                      <input
+                        type="checkbox"
+                        checked={includedSales.has(sale.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setIncludedSales(prev => new Set([...prev, sale.id]));
+                          } else {
+                            setIncludedSales(prev => {
+                              const newSet = new Set(prev);
+                              newSet.delete(sale.id);
+                              return newSet;
+                            });
+                          }
+                        }}
+                      />
+                    </td>
+                    <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB' }}>
+                      {sale.property_block}
+                    </td>
+                    <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB' }}>
+                      {sale.property_lot}
+                    </td>
+                    <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB' }}>
+                      {sale.property_qualifier && sale.property_qualifier !== 'NONE' ? sale.property_qualifier : ''}
+                    </td>
+                    <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB' }}>
+                      {sale.property_location}
+                    </td>
+                    <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB', textAlign: 'center' }}>
+                      {sale.property_m4_class || '-'}
+                    </td>
+                    <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB', textAlign: 'center' }}>
+                      {sale.asset_building_class || '-'}
+                    </td>
+                    <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB', fontSize: '11px' }}>
+                      {typeName}
+                    </td>
+                    <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB', fontSize: '11px' }}>
+                      {designName}
+                    </td>
+                    <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB' }}>
+                      {sale.new_vcs || '-'}
+                    </td>
+                    <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB' }}>
+                      {sale.asset_zoning || '-'}
+                    </td>
+                    <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB' }}>
+                      <select
+                        value={specialRegions[sale.id] || 'Normal'}
+                        onChange={(e) => setSpecialRegions(prev => ({ ...prev, [sale.id]: e.target.value }))}
                         style={{
                           padding: '4px',
-                          backgroundColor: '#8B5CF6',
-                          color: 'white',
-                          border: 'none',
+                          border: '1px solid #D1D5DB',
                           borderRadius: '4px',
-                          cursor: 'pointer'
+                          fontSize: '12px'
                         }}
                       >
-                        <Search size={14} />
-                      </button>
-                      <button
-                        onClick={() => removeSale(sale.id)}
-                        title="Remove"
+                        {SPECIAL_REGIONS.map(region => (
+                          <option key={region} value={region}>{region}</option>
+                        ))}
+                      </select>
+                    </td>
+                    <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB' }}>
+                      <select
+                        value={saleCategories[sale.id] || sale.autoCategory || 'uncategorized'}
+                        onChange={(e) => setSaleCategories(prev => ({ ...prev, [sale.id]: e.target.value }))}
                         style={{
                           padding: '4px',
-                          backgroundColor: '#EF4444',
-                          color: 'white',
-                          border: 'none',
+                          border: '1px solid #D1D5DB',
                           borderRadius: '4px',
-                          cursor: 'pointer'
+                          fontSize: '12px',
+                          backgroundColor: sale.autoCategory ? '#FEF3C7' : 'white'
                         }}
                       >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                        <option value="uncategorized">Uncategorized</option>
+                        <option value="raw_land">Raw Land</option>
+                        <option value="building_lot">Building Lot</option>
+                        <option value="wetlands">Wetlands</option>
+                        <option value="landlocked">Landlocked</option>
+                        <option value="conservation">Conservation</option>
+                        <option value="teardown">Teardown</option>
+                        <option value="pre-construction">Pre-Construction</option>
+                      </select>
+                    </td>
+                    <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB' }}>
+                      {sale.sales_date}
+                    </td>
+                    <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB', textAlign: 'right' }}>
+                      ${sale.sales_price?.toLocaleString()}
+                    </td>
+                    <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB', textAlign: 'right' }}>
+                      {valuationMode === 'sf' ? 
+                        Math.round(sale.totalAcres * 43560).toLocaleString() : 
+                        sale.totalAcres?.toFixed(2)}
+                    </td>
+                    <td style={{ 
+                      padding: '8px', 
+                      borderBottom: '1px solid #E5E7EB', 
+                      textAlign: 'right',
+                      fontWeight: 'bold',
+                      color: sale.pricePerAcre > 100000 ? '#EF4444' : '#10B981'
+                    }}>
+                      {valuationMode === 'sf' ? 
+                        `$${(sale.sales_price / (sale.totalAcres * 43560)).toFixed(2)}` :
+                        `$${sale.pricePerAcre?.toLocaleString()}`}
+                    </td>
+                    <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB', textAlign: 'center' }}>
+                      {sale.packageData && (
+                        <span style={{
+                          backgroundColor: '#FEE2E2',
+                          color: '#DC2626',
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          fontSize: '11px'
+                        }}>
+                          {sale.packageData.package_count}
+                        </span>
+                      )}
+                    </td>
+                    <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB' }}>
+                      <input
+                        type="text"
+                        value={landNotes[sale.id] || ''}
+                        onChange={(e) => setLandNotes(prev => ({ ...prev, [sale.id]: e.target.value }))}
+                        placeholder="Add notes..."
+                        style={{
+                          width: '200px',
+                          padding: '4px',
+                          border: '1px solid #D1D5DB',
+                          borderRadius: '4px',
+                          fontSize: '12px'
+                        }}
+                      />
+                    </td>
+                    <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB' }}>
+                      <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
+                        <button
+                          onClick={() => handlePropertyResearch(sale)}
+                          title="Research with AI"
+                          style={{
+                            padding: '4px',
+                            backgroundColor: '#8B5CF6',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <Search size={14} />
+                        </button>
+                        <button
+                          onClick={() => removeSale(sale.id)}
+                          title="Remove"
+                          style={{
+                            padding: '4px',
+                            backgroundColor: '#EF4444',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -2242,38 +2277,81 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
         <div style={{ padding: '15px', backgroundColor: '#F9FAFB', borderTop: '1px solid #E5E7EB' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '15px' }}>
             {(() => {
-              const rates = calculateRates();
+              // Calculate average rate for checked items by category
+              const checkedSales = vacantSales.filter(s => includedSales.has(s.id));
+              
+              // Helper function to calculate average for a category
+              const getCategoryAverage = (filterFn) => {
+                const filtered = checkedSales.filter(filterFn);
+                if (filtered.length === 0) return { avg: 0, count: 0 };
+                
+                if (valuationMode === 'sf') {
+                  const totalPrice = filtered.reduce((sum, s) => sum + s.sales_price, 0);
+                  const totalSF = filtered.reduce((sum, s) => sum + (s.totalAcres * 43560), 0);
+                  return { 
+                    avg: totalSF > 0 ? (totalPrice / totalSF).toFixed(2) : 0, 
+                    count: filtered.length 
+                  };
+                } else {
+                  const avgRate = filtered.reduce((sum, s) => sum + s.pricePerAcre, 0) / filtered.length;
+                  return { 
+                    avg: Math.round(avgRate), 
+                    count: filtered.length 
+                  };
+                }
+              };
+              
+              const rawLand = getCategoryAverage(s => 
+                saleCategories[s.id] === 'raw_land' || 
+                (!saleCategories[s.id] && s.property_m4_class === '1')
+              );
+              
+              const buildingLot = getCategoryAverage(s => 
+                saleCategories[s.id] === 'building_lot' ||
+                saleCategories[s.id] === 'teardown' ||
+                saleCategories[s.id] === 'pre-construction'
+              );
+              
+              const wetlands = getCategoryAverage(s => saleCategories[s.id] === 'wetlands');
+              const landlocked = getCategoryAverage(s => saleCategories[s.id] === 'landlocked');
+              const conservation = getCategoryAverage(s => saleCategories[s.id] === 'conservation');
+              
               return (
-<>
-                  <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
-                    <div style={{ fontSize: '12px', color: '#6B7280' }}>Total Sales</div>
-                    <div style={{ fontSize: '20px', fontWeight: 'bold' }}>{vacantSales.length}</div>
-                  </div>
-                  <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
-                    <div style={{ fontSize: '12px', color: '#6B7280' }}>Included</div>
-                    <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#10B981' }}>{includedSales.size}</div>
-                  </div>
+                <>
                   <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
                     <div style={{ fontSize: '12px', color: '#6B7280' }}>Raw Land</div>
-                    <div style={{ fontSize: '20px', fontWeight: 'bold' }}>
-                      {vacantSales.filter(s => saleCategories[s.id] === 'raw_land').length}
+                    <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#10B981' }}>
+                      {valuationMode === 'sf' ? `$${rawLand.avg}` : `$${rawLand.avg.toLocaleString()}`}
                     </div>
+                    <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{rawLand.count} sales</div>
                   </div>
                   <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
-                    <div style={{ fontSize: '12px', color: '#6B7280' }}>Teardowns</div>
-                    <div style={{ fontSize: '20px', fontWeight: 'bold' }}>
-                      {vacantSales.filter(s => saleCategories[s.id] === 'teardown').length}
+                    <div style={{ fontSize: '12px', color: '#6B7280' }}>Building Lot</div>
+                    <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#3B82F6' }}>
+                      {valuationMode === 'sf' ? `$${buildingLot.avg}` : `$${buildingLot.avg.toLocaleString()}`}
                     </div>
+                    <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{buildingLot.count} sales</div>
                   </div>
                   <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
-                    <div style={{ fontSize: '12px', color: '#6B7280' }}>Special</div>
-                    <div style={{ fontSize: '20px', fontWeight: 'bold' }}>
-                      {vacantSales.filter(s => 
-                        saleCategories[s.id] === 'wetlands' || 
-                        saleCategories[s.id] === 'conservation' ||
-                        saleCategories[s.id] === 'landlocked'
-                      ).length}
+                    <div style={{ fontSize: '12px', color: '#6B7280' }}>Wetlands</div>
+                    <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#06B6D4' }}>
+                      {valuationMode === 'sf' ? `$${wetlands.avg}` : `$${wetlands.avg.toLocaleString()}`}
                     </div>
+                    <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{wetlands.count} sales</div>
+                  </div>
+                  <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
+                    <div style={{ fontSize: '12px', color: '#6B7280' }}>Landlocked</div>
+                    <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#F59E0B' }}>
+                      {valuationMode === 'sf' ? `$${landlocked.avg}` : `$${landlocked.avg.toLocaleString()}`}
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{landlocked.count} sales</div>
+                  </div>
+                  <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
+                    <div style={{ fontSize: '12px', color: '#6B7280' }}>Conservation</div>
+                    <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#8B5CF6' }}>
+                      {valuationMode === 'sf' ? `$${conservation.avg}` : `$${conservation.avg.toLocaleString()}`}
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{conservation.count} sales</div>
                   </div>
                 </>
               );
@@ -2766,42 +2844,72 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
                   <thead style={{ position: 'sticky', top: 0, backgroundColor: '#F9FAFB' }}>
                     <tr>
                       <th style={{ padding: '8px', textAlign: 'left' }}>Select</th>
-                      <th style={{ padding: '8px', textAlign: 'left' }}>Block/Lot</th>
+                      <th style={{ padding: '8px', textAlign: 'left' }}>Block</th>
+                      <th style={{ padding: '8px', textAlign: 'left' }}>Lot</th>
+                      <th style={{ padding: '8px', textAlign: 'left' }}>Qual</th>
                       <th style={{ padding: '8px', textAlign: 'left' }}>Address</th>
-                      <th style={{ padding: '8px', textAlign: 'left' }}>Class</th>
+                      <th style={{ padding: '8px', textAlign: 'center' }}>Class</th>
+                      <th style={{ padding: '8px', textAlign: 'center' }}>Bldg</th>
+                      <th style={{ padding: '8px', textAlign: 'left' }}>Type</th>
+                      <th style={{ padding: '8px', textAlign: 'left' }}>Design</th>
+                      <th style={{ padding: '8px', textAlign: 'left' }}>VCS</th>
+                      <th style={{ padding: '8px', textAlign: 'left' }}>Zoning</th>
                       <th style={{ padding: '8px', textAlign: 'left' }}>Sale Date</th>
                       <th style={{ padding: '8px', textAlign: 'right' }}>Sale Price</th>
                       <th style={{ padding: '8px', textAlign: 'right' }}>Acres</th>
+                      <th style={{ padding: '8px', textAlign: 'right' }}>{getUnitLabel()}</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {searchResults.map(prop => (
-                      <tr key={prop.id}>
-                        <td style={{ padding: '8px' }}>
-                          <input
-                            type="checkbox"
-                            checked={selectedToAdd.has(prop.id)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSelectedToAdd(prev => new Set([...prev, prop.id]));
-                              } else {
-                                setSelectedToAdd(prev => {
-                                  const newSet = new Set(prev);
-                                  newSet.delete(prop.id);
-                                  return newSet;
-                                });
-                              }
-                            }}
-                          />
-                        </td>
-                        <td style={{ padding: '8px' }}>{prop.property_block}/{prop.property_lot}</td>
-                        <td style={{ padding: '8px' }}>{prop.property_location}</td>
-                        <td style={{ padding: '8px' }}>{prop.property_m4_class}</td>
-                        <td style={{ padding: '8px' }}>{prop.sales_date}</td>
-                        <td style={{ padding: '8px', textAlign: 'right' }}>${prop.sales_price?.toLocaleString()}</td>
-                        <td style={{ padding: '8px', textAlign: 'right' }}>{calculateAcreage(prop).toFixed(2)}</td>
-                      </tr>
-                    ))}
+                    {searchResults.map(prop => {
+                      // Use only synchronous decoding to avoid async rendering issues
+                      const typeName = vendorType === 'Microsystems' && jobData?.parsed_code_definitions
+                        ? interpretCodes.getMicrosystemsValue?.(prop, jobData.parsed_code_definitions, 'asset_type_use') || prop.asset_type_use || '-'
+                        : prop.asset_type_use || '-';
+                      const designName = vendorType === 'Microsystems' && jobData?.parsed_code_definitions
+                        ? interpretCodes.getMicrosystemsValue?.(prop, jobData.parsed_code_definitions, 'asset_design_style') || prop.asset_design_style || '-'
+                        : prop.asset_design_style || '-';
+                      const acres = calculateAcreage(prop);
+                      const pricePerUnit = getPricePerUnit(prop.sales_price, acres);
+                      
+                      return (
+                        <tr key={prop.id}>
+                          <td style={{ padding: '8px' }}>
+                            <input
+                              type="checkbox"
+                              checked={selectedToAdd.has(prop.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedToAdd(prev => new Set([...prev, prop.id]));
+                                } else {
+                                  setSelectedToAdd(prev => {
+                                    const newSet = new Set(prev);
+                                    newSet.delete(prop.id);
+                                    return newSet;
+                                  });
+                                }
+                              }}
+                            />
+                          </td>
+                          <td style={{ padding: '8px' }}>{prop.property_block}</td>
+                          <td style={{ padding: '8px' }}>{prop.property_lot}</td>
+                          <td style={{ padding: '8px' }}>{prop.property_qualifier && prop.property_qualifier !== 'NONE' ? prop.property_qualifier : ''}</td>
+                          <td style={{ padding: '8px' }}>{prop.property_location}</td>
+                          <td style={{ padding: '8px', textAlign: 'center' }}>{prop.property_m4_class}</td>
+                          <td style={{ padding: '8px', textAlign: 'center' }}>{prop.asset_building_class || '-'}</td>
+                          <td style={{ padding: '8px', fontSize: '11px' }}>{typeName}</td>
+                          <td style={{ padding: '8px', fontSize: '11px' }}>{designName}</td>
+                          <td style={{ padding: '8px' }}>{prop.new_vcs || '-'}</td>
+                          <td style={{ padding: '8px' }}>{prop.asset_zoning || '-'}</td>
+                          <td style={{ padding: '8px' }}>{prop.sales_date}</td>
+                          <td style={{ padding: '8px', textAlign: 'right' }}>${prop.sales_price?.toLocaleString()}</td>
+                          <td style={{ padding: '8px', textAlign: 'right' }}>{acres.toFixed(2)}</td>
+                          <td style={{ padding: '8px', textAlign: 'right', fontWeight: 'bold' }}>
+                            {valuationMode === 'sf' ? `$${pricePerUnit.toFixed(2)}` : `$${pricePerUnit.toLocaleString()}`}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -3429,7 +3537,3 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
 };
 
 export default LandValuationTab;
-      
-  
-  
-  

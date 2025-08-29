@@ -172,7 +172,10 @@ const OverallAnalysisTab = ({
       }
       
       const category = getTypeCategory(typeCode);
-      const typeName = interpretCodes.getTypeName(p, codeDefinitions, vendorType) || category;
+      // Use only synchronous Microsystems decoding to avoid async rendering issues
+      const typeName = vendorType === 'Microsystems' && codeDefinitions
+        ? interpretCodes.getMicrosystemsValue?.(p, codeDefinitions, 'asset_type_use') || category
+        : category;
       
       // Also skip if the name comes back as Unknown or Other
       if (typeName === 'Unknown' || typeName === 'Other' || !typeName || typeName.trim() === '') {
@@ -284,7 +287,10 @@ const OverallAnalysisTab = ({
     
     filteredProperties.forEach(p => {
       const designCode = p.asset_design_style || 'Unknown';
-      const designName = interpretCodes.getDesignName(p, codeDefinitions, vendorType) || designCode;
+      // Use only synchronous Microsystems decoding to avoid async rendering issues
+      const designName = vendorType === 'Microsystems' && codeDefinitions
+        ? interpretCodes.getMicrosystemsValue?.(p, codeDefinitions, 'asset_design_style') || designCode
+        : designCode;
       
       // FILTER FIX: Skip unknown/empty designs - including "00" and whitespace
       if (!designCode || designCode === 'Unknown' || designCode === '' || 
@@ -556,11 +562,17 @@ const OverallAnalysisTab = ({
     // Build the cascading structure
     filteredProperties.forEach(p => {
       const vcs = p.new_vcs || p.property_vcs || 'Unknown';
-      const vcsDesc = interpretCodes.getVCSDescription(p, codeDefinitions, vendorType) || vcs;
+      // Use raw VCS code to avoid async rendering issues
+      const vcsDesc = vcs;
       const typeCode = p.asset_type_use || 'Unknown';
-      const typeName = interpretCodes.getTypeName(p, codeDefinitions, vendorType) || getTypeCategory(typeCode);
+      // Use only synchronous Microsystems decoding to avoid async rendering issues
+      const typeName = vendorType === 'Microsystems' && codeDefinitions
+        ? interpretCodes.getMicrosystemsValue?.(p, codeDefinitions, 'asset_type_use') || getTypeCategory(typeCode)
+        : getTypeCategory(typeCode);
       const designCode = p.asset_design_style || 'Unknown';
-      const designName = interpretCodes.getDesignName(p, codeDefinitions, vendorType) || designCode;
+      const designName = vendorType === 'Microsystems' && codeDefinitions
+        ? interpretCodes.getMicrosystemsValue?.(p, codeDefinitions, 'asset_design_style') || designCode
+        : designCode;
       
       // Initialize VCS level
       if (!vcsGroups[vcs]) {
@@ -794,7 +806,10 @@ const OverallAnalysisTab = ({
     const designGroups = {};
     condos.forEach(p => {
       const designCode = p.asset_design_style || 'Unknown';
-      const designName = interpretCodes.getDesignName(p, codeDefinitions, vendorType) || designCode;
+      // Use only synchronous Microsystems decoding to avoid async rendering issues
+      const designName = vendorType === 'Microsystems' && codeDefinitions
+        ? interpretCodes.getMicrosystemsValue?.(p, codeDefinitions, 'asset_design_style') || designCode
+        : designCode;
       
       // Skip unknown/empty designs
       if (!designCode || designCode === 'Unknown' || designCode === '' || 
@@ -864,10 +879,13 @@ const OverallAnalysisTab = ({
     const vcsBedroomGroups = {};
     condos.forEach(p => {
       const vcs = p.new_vcs || p.property_vcs || 'Unknown';
-      const vcsDesc = interpretCodes.getVCSDescription(p, codeDefinitions, vendorType) || vcs;
-      
-      // Look for bedroom info in design description
-      const designName = interpretCodes.getDesignName(p, codeDefinitions, vendorType) || p.asset_design_style || '';
+      // Use raw VCS code to avoid async rendering issues
+      const vcsDesc = vcs;
+
+      // Look for bedroom info in design description - use only synchronous decoding
+      const designName = vendorType === 'Microsystems' && codeDefinitions
+        ? interpretCodes.getMicrosystemsValue?.(p, codeDefinitions, 'asset_design_style') || p.asset_design_style || ''
+        : p.asset_design_style || '';
       let bedrooms = 'Unknown';
       
       if (designName.includes('1BED') || designName.includes('1 BED')) bedrooms = '1BED';
@@ -946,9 +964,11 @@ const OverallAnalysisTab = ({
     // Floor Analysis
     const floorGroups = {};
     condos.forEach(p => {
-      // Look for floor info in story height or design
+      // Look for floor info in story height or design - use only synchronous decoding
       const storyHeight = p.asset_story_height || '';
-      const designName = interpretCodes.getDesignName(p, codeDefinitions, vendorType) || p.asset_design_style || '';
+      const designName = vendorType === 'Microsystems' && codeDefinitions
+        ? interpretCodes.getMicrosystemsValue?.(p, codeDefinitions, 'asset_design_style') || p.asset_design_style || ''
+        : p.asset_design_style || '';
       let floor = 'Unknown';
       
       if (storyHeight.includes('1ST') || designName.includes('1ST FLOOR')) floor = '1ST FLOOR';
@@ -1494,7 +1514,7 @@ const OverallAnalysisTab = ({
                             </td>
                             <td className="px-4 py-3 text-sm text-center">{group.salesCount}</td>
                             <td className="px-4 py-3 text-sm text-center">
-                              {group.avgYearSales > 0 ? group.avgYearSales : '—'}
+                              {group.avgYearSales > 0 ? group.avgYearSales : '���'}
                             </td>
                             <td className="px-4 py-3 text-sm text-center">
                               {group.avgSizeSales > 0 ? formatNumber(group.avgSizeSales) : '—'}
@@ -1657,7 +1677,7 @@ const OverallAnalysisTab = ({
                                       <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgYearAll > 0 ? designGroup.avgYearAll : '—'}</div>
                                       <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgSizeAll > 0 ? formatNumber(designGroup.avgSizeAll) : '—'}</div>
                                       <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgYearSales > 0 ? designGroup.avgYearSales : '—'}</div>
-                                      <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgSizeSales > 0 ? formatNumber(designGroup.avgSizeSales) : '—'}</div>
+                                      <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgSizeSales > 0 ? formatNumber(designGroup.avgSizeSales) : '���'}</div>
                                       <div className="col-span-1 text-center text-xs text-gray-600">
                                         {designGroup.salesCount > 0 ? formatCurrency(designGroup.avgPrice) : '—'}
                                       </div>

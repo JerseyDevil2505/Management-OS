@@ -94,6 +94,15 @@ useEffect(() => {
   });
 
   // ==========================================
+  // DATABASE CONCURRENCY CONTROL
+  // ==========================================
+  const dbOperationRef = useRef({
+    isLoading: false,
+    pendingOperations: 0,
+    lastOperationTime: 0
+  });
+
+  // ==========================================
   // PERSISTENT CACHE STATE
   // ==========================================
   const [masterCache, setMasterCache] = useState({
@@ -103,7 +112,6 @@ useEffect(() => {
     managers: [],
     planningJobs: [],
     archivedJobs: [],
-    jobCache: {},
     
     // Billing Data
     activeJobs: [],
@@ -126,7 +134,6 @@ useEffect(() => {
     // Additional Data for Components
     countyHpiData: [],
     jobResponsibilities: [],
-    jobFreshness: {},
     
     // Cache Metadata
     version: CACHE_VERSION,
@@ -147,7 +154,6 @@ useEffect(() => {
 
   // Job selection state
   const [selectedJob, setSelectedJob] = useState(null);
-  const [fileRefreshTrigger, setFileRefreshTrigger] = useState(0);
 
     // Authentication state
   const [user, setUser] = useState(null);
@@ -161,13 +167,12 @@ useEffect(() => {
   // PERSISTENT STORAGE HELPERS
   // ==========================================
   const saveToStorage = useCallback(async (data) => {
-    console.log('💾 Saving to storage, jobCache keys:', Object.keys(data.jobCache || {}));
+    console.log('💾 Saving to storage - no caching');
     try {
       // Try IndexedDB first (no size limits)
       if (dbRef.current) {
         const dataToStore = {
           ...data,
-          jobCache: data.jobCache || {},
           timestamp: Date.now(),
           version: CACHE_VERSION
         };
@@ -188,7 +193,8 @@ useEffect(() => {
         return true;
       }
     } catch (error) {
-      console.error('IndexedDB save failed:', error);
+      console.error('IndexedDB save failed:', error.message);
+      console.error('Error details:', error);
       
       // Fallback to localStorage for critical data
       try {
@@ -231,9 +237,7 @@ useEffect(() => {
           }
         }
         
-        // Ensure jobCache is loaded
-        fullData.jobCache = fullData.jobCache || {};
-        console.log('📦 Loaded from storage, jobCache keys:', Object.keys(fullData.jobCache));
+        console.log('📦 Loaded from storage - no caching');
         
         const loadTime = Date.now() - startTime;
         console.log(`⚡ Cache loaded from IndexedDB in ${loadTime}ms (age: ${Math.floor(cacheAge / 60000)} minutes)`);
@@ -275,7 +279,7 @@ useEffect(() => {
         if (fallback) {
           const parsed = JSON.parse(fallback);
           if (parsed.version === CACHE_VERSION) {
-            console.log('📦 Using localStorage fallback');
+            console.log('���� Using localStorage fallback');
             return {
               data: parsed,
               cacheAge: Date.now() - parsed.timestamp,
@@ -328,7 +332,8 @@ useEffect(() => {
             new Date(fileData[0].updated_at) > new Date(prodData[0].upload_date) : false
         };
       } catch (error) {
-        console.error(`Error loading freshness for job ${job.id}:`, error);
+        console.error(`Error loading freshness for job ${job.id}:`, error.message);
+        console.error('Error details:', error);
         freshnessData[job.id] = {
           lastFileUpload: null,
           lastProductionRun: null,
@@ -491,16 +496,61 @@ useEffect(() => {
       }
 
       // ==========================================
-      // EXECUTE QUERIES WITH TIMEOUT
+      // DATABASE CONCURRENCY CONTROL
       // ==========================================
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Database timeout')), 30000)
-      );
 
-      const results = await Promise.race([
-        Promise.all(loadPromises),
-        timeoutPromise
-      ]);
+      // Check if database is busy
+      const timeSinceLastOp = Date.now() - dbOperationRef.current.lastOperationTime;
+      const isBusy = dbOperationRef.current.isLoading || dbOperationRef.current.pendingOperations > 0;
+
+      // If this is a background refresh and database is busy, defer it
+      if (background && isBusy && timeSinceLastOp < 5000) {
+        console.log('🔄 Database busy, deferring background refresh');
+        setTimeout(() => loadMasterData(true), 10000); // Retry in 10 seconds
+        return masterCache;
+      }
+
+      // Mark operation as starting
+      dbOperationRef.current.isLoading = true;
+      dbOperationRef.current.pendingOperations++;
+      dbOperationRef.current.lastOperationTime = Date.now();
+
+      // ==========================================
+      // EXECUTE QUERIES WITH RETRY LOGIC
+      // ==========================================
+      const executeWithRetry = async (promises, maxRetries = 3) => {
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+          try {
+            // Adjust timeout based on background vs foreground
+            const timeoutDuration = background ? 60000 : 30000; // 60s for background, 30s for foreground
+
+            const timeoutPromise = new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('Database timeout')), timeoutDuration)
+            );
+
+            const results = await Promise.race([
+              Promise.all(promises),
+              timeoutPromise
+            ]);
+
+            return results;
+
+          } catch (error) {
+            console.log(`🔄 Database operation attempt ${attempt}/${maxRetries} failed:`, error.message);
+
+            if (attempt === maxRetries) {
+              throw error;
+            }
+
+            // Exponential backoff: 2s, 4s, 8s
+            const backoffTime = Math.min(2000 * Math.pow(2, attempt - 1), 8000);
+            console.log(`⏱️ Retrying in ${backoffTime}ms...`);
+            await new Promise(resolve => setTimeout(resolve, backoffTime));
+          }
+        }
+      };
+
+      const results = await executeWithRetry(loadPromises);
       
       // Process results
       const updates = {
@@ -687,7 +737,6 @@ useEffect(() => {
       const newCache = {
         ...masterCache,
         ...updates,
-        jobCache: masterCache.jobCache || {},  // ADD THIS LINE - preserve existing jobCache
         lastFetched: {
           ...masterCache.lastFetched,
           ...updates.lastFetched,
@@ -714,21 +763,32 @@ useEffect(() => {
       }
 
       console.log(`✅ Data loaded from database in ${loadTime}ms`);
+
+      // Mark operation as complete
+      dbOperationRef.current.isLoading = false;
+      dbOperationRef.current.pendingOperations = Math.max(0, dbOperationRef.current.pendingOperations - 1);
+
       return newCache;
-      
+
     } catch (error) {
       console.error('❌ Error loading data:', error);
-      
+
+      // Always reset operation flags on error
+      dbOperationRef.current.isLoading = false;
+      dbOperationRef.current.pendingOperations = Math.max(0, dbOperationRef.current.pendingOperations - 1);
+
       if (!background) {
         setMasterCache(prev => ({ ...prev, isLoading: false }));
         setCacheStatus(prev => ({
           ...prev,
           isRefreshing: false,
           lastError: error.message,
-          message: 'Failed to load data'
+          message: error.message.includes('timeout') ?
+            'Database timeout - system may be busy. Please try again.' :
+            'Failed to load data'
         }));
       }
-      
+
       throw error;
     }
   }, [masterCache, saveToStorage]);
@@ -860,42 +920,6 @@ useEffect(() => {
   }, [masterCache, saveToStorage]);
 
   // ==========================================
-  // JOB-LEVEL CACHE MANAGEMENT (SECOND TIER)
-  // ==========================================
-  const updateJobCache = useCallback((jobId, data) => {
-    console.log('🔍 updateJobCache called:', {
-      jobId,
-      hasData: !!data,
-      currentCacheKeys: Object.keys(masterCache.jobCache || {})
-    });
-    if (data === null) {
-      // Clear cache for this job (used after FileUpload)
-      console.log(`🗑️ Clearing cache for job ${jobId}`);
-      setMasterCache(prev => ({
-        ...prev,
-        jobCache: {
-          ...prev.jobCache,
-          [jobId]: undefined
-        }
-      }));
-      // Don't trigger reload here - let FileUploadButton handle that
-    } else {
-      // Update cache for this job
-      console.log(`📦 Updating cache for job ${jobId}`);
-      setMasterCache(prev => ({
-        ...prev,
-        jobCache: {
-          ...prev.jobCache,
-          [jobId]: {
-            ...data,
-            timestamp: Date.now()
-          }
-        }
-      }));
-    }
-  }, []);
-
-  // ==========================================
   // JOB SELECTION HANDLERS
   // ==========================================
   const handleJobSelect = useCallback((job) => {
@@ -903,19 +927,8 @@ useEffect(() => {
     setActiveView('job-modules');
     // Update URL when job is selected
     window.history.pushState({}, '', `/job/${job.id}`);
-    
-    // Clear job cache when selecting a job to force fresh data load
-    if (job?.id && masterCache.jobCache?.[job.id]) {
-      console.log(`🔄 Clearing cache for job ${job.id} on selection`);
-      setMasterCache(prev => ({
-        ...prev,
-        jobCache: {
-          ...prev.jobCache,
-          [job.id]: undefined
-        }
-      }));
-    }
-  }, [masterCache.jobCache]);
+    console.log(`🔄 Selected job ${job.id} - will load fresh data`);
+  }, []);
 
   const handleBackToJobs = useCallback(() => {
     setSelectedJob(null);
@@ -929,12 +942,12 @@ useEffect(() => {
   }, [loadMasterData]);
 
   const handleFileProcessed = useCallback(() => {
-    // Clear cache for this job after file upload
+    // File processed - trigger fresh data reload
     if (selectedJob) {
-      updateJobCache(selectedJob.id, null);
-      setFileRefreshTrigger(prev => prev + 1);
+      console.log('📁 File processed - will reload fresh data');
+      loadMasterData({ force: true, components: ['jobs'] });
     }
-  }, [selectedJob, updateJobCache]);
+  }, [selectedJob, loadMasterData]);
 
   const handleWorkflowStatsUpdate = useCallback(() => {
     // Refresh jobs data when workflow stats change (from ProductionTracker)
@@ -1184,15 +1197,18 @@ useEffect(() => {
 
   const checkSession = async () => {
     try {
-      // Development auto-login
-      if (window.location.hostname.includes('production-black-seven') || 
+      // Development auto-login - expanded conditions
+      if (window.location.hostname.includes('production-black-seven') ||
           window.location.hostname === 'localhost' ||
           window.location.hostname.includes('github.dev') ||
-          window.location.hostname.includes('preview')) {
+          window.location.hostname.includes('preview') ||
+          window.location.hostname.includes('fly.dev') ||
+          window.location.hostname.includes('builder.io') ||
+          window.location.search.includes('dev=true')) {
         setUser({
           email: 'dev@lojik.com',
           role: 'admin',
-          employeeData: { 
+          employeeData: {
             name: 'Development Mode',
             role: 'admin'
           }
@@ -1280,16 +1296,16 @@ useEffect(() => {
           });
         }
         
-        // Background refresh if needed
-        if (cached.shouldBackgroundRefresh) {
-          setTimeout(() => {
-            console.log('🔄 Starting background refresh...');
-            loadMasterData({ background: true });
-          }, 1000); // Wait 1 second before background refresh
-        }
-        
-        // Schedule next refresh
-        scheduleBackgroundRefresh();
+        // DISABLED: Background refresh - causing unwanted Supabase calls
+        // if (cached.shouldBackgroundRefresh) {
+        //   setTimeout(() => {
+        //     console.log('🔄 Starting background refresh...');
+        //     loadMasterData({ background: true });
+        //   }, 1000);
+        // }
+
+        // DISABLED: Schedule next refresh - causing unwanted Supabase calls
+        // scheduleBackgroundRefresh();
         
       } else {
         // No cache or expired - load fresh
@@ -1335,25 +1351,26 @@ useEffect(() => {
   }, [masterCache.jobs]); // Re-run when jobs are loaded/updated
 
   // ==========================================
-  // VISIBILITY CHANGE HANDLER
+  // VISIBILITY CHANGE HANDLER - DISABLED
   // ==========================================
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (!document.hidden && masterCache.isInitialized) {
-        const cacheAge = Date.now() - (masterCache.lastFetched.all || 0);
-        
-        if (cacheAge > CACHE_EXPIRY.warm) {
-          console.log('👁️ App became visible, cache is stale, refreshing...');
-          loadMasterData({ background: true });
-        } else {
-          console.log('👁️ App became visible, cache is fresh');
-        }
-      }
-    };
-    
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [masterCache, loadMasterData]);
+  // DISABLED: Causing unwanted automatic Supabase calls
+  // useEffect(() => {
+  //   const handleVisibilityChange = () => {
+  //     if (!document.hidden && masterCache.isInitialized) {
+  //       const cacheAge = Date.now() - (masterCache.lastFetched.all || 0);
+  //
+  //       if (cacheAge > CACHE_EXPIRY.warm) {
+  //         console.log('👁️ App became visible, cache is stale, refreshing...');
+  //         loadMasterData({ background: true });
+  //       } else {
+  //         console.log('👁️ App became visible, cache is fresh');
+  //       }
+  //     }
+  //   };
+  //
+  //   document.addEventListener('visibilitychange', handleVisibilityChange);
+  //   return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  // }, [masterCache, loadMasterData]);
 
   // ==========================================
   // PERFORMANCE REPORTING
@@ -1362,23 +1379,24 @@ useEffect(() => {
     const reportPerformance = () => {
       const stats = performanceRef.current;
       const uptime = (Date.now() - stats.appStartTime) / 1000;
-      
+
       console.log('📊 Performance Report:', {
         uptime: `${Math.floor(uptime / 60)}m ${Math.floor(uptime % 60)}s`,
         cacheHits: stats.cacheHits,
         cacheMisses: stats.cacheMisses,
-        cacheHitRate: stats.cacheHits + stats.cacheMisses > 0 
+        cacheHitRate: stats.cacheHits + stats.cacheMisses > 0
           ? `${Math.round((stats.cacheHits / (stats.cacheHits + stats.cacheMisses)) * 100)}%`
           : 'N/A',
         dbQueries: stats.dbQueries,
         avgLoadTime: `${Math.round(stats.avgLoadTime)}ms`
       });
     };
-    
-    // Report every 5 minutes
-    const interval = setInterval(reportPerformance, 5 * 60 * 1000);
-    return () => clearInterval(interval);
+
+    // DISABLED: Report every 5 minutes - not needed in production
+    // const interval = setInterval(reportPerformance, 5 * 60 * 1000);
+    // return () => clearInterval(interval);
   }, []);
+
 
   // ==========================================
   // RENDER UI
@@ -1551,9 +1569,10 @@ useEffect(() => {
                 
                 {/* File Upload Controls */}
                 <div className="border-l border-white border-opacity-30 pl-6">
-                  <FileUploadButton 
-                    job={selectedJob} 
-                    onFileProcessed={handleFileProcessed} 
+                  <FileUploadButton
+                    job={selectedJob}
+                    onFileProcessed={handleFileProcessed}
+                    onDataRefresh={handleFileProcessed}
                   />
                 </div>
               </div>
@@ -1595,8 +1614,6 @@ useEffect(() => {
             inspectionData={masterCache.inspectionData}
             workflowStats={masterCache.workflowStats}
             onDataUpdate={updateCacheItem}
-            jobCache={masterCache.jobCache}
-            onUpdateJobCache={updateJobCache}
             onRefresh={() => loadMasterData({ force: true, components: ['jobs'] })}
           />
         )}
@@ -1647,9 +1664,6 @@ useEffect(() => {
             <JobContainer
               selectedJob={selectedJob}
               onBackToJobs={handleBackToJobs}
-              jobCache={masterCache.jobCache}
-              onUpdateJobCache={updateJobCache}
-              fileRefreshTrigger={fileRefreshTrigger}
               onWorkflowStatsUpdate={handleWorkflowStatsUpdate}
             />
           </div>

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { 
+import {
   Upload, Plus, Edit3, Users, FileText, Calendar, MapPin, Database, Settings, Eye,
-  DollarSign, Trash2, CheckCircle, Archive, TrendingUp, Target, AlertTriangle, X, Clock 
+  DollarSign, Trash2, CheckCircle, Archive, TrendingUp, Target, AlertTriangle, X, Clock
 } from 'lucide-react';
 import { supabase, employeeService, jobService, planningJobService, utilityService, authService, propertyService } from '../lib/supabaseClient';
 
@@ -90,7 +90,7 @@ const AdminJobManagement = ({
     codeFile: null,
     vendor: null,
     vendorDetection: null,
-    percentBilled: ''
+    percentBilled: '0.00'
   });
 
   const [newPlanningJob, setNewPlanningJob] = useState({
@@ -497,7 +497,7 @@ const AdminJobManagement = ({
       const QUERY_BATCH_SIZE = 100;
       for (let i = 0; i < assignmentKeys.length; i += QUERY_BATCH_SIZE) {
         const keyBatch = assignmentKeys.slice(i, i + QUERY_BATCH_SIZE);
-        
+
         const { data: batchMatches, error: matchError } = await supabase
           .from('property_records')
           .select('property_composite_key, property_m4_class')
@@ -509,9 +509,15 @@ const AdminJobManagement = ({
           addNotification('Error checking property matches: ' + matchError.message, 'error');
           return;
         }
-        
+
         if (batchMatches) {
           matchedProperties = [...matchedProperties, ...batchMatches];
+        }
+
+        // Add timing gap between batches to prevent database overload
+        if (i + QUERY_BATCH_SIZE < assignmentKeys.length) {
+          console.log(`⏳ Waiting 200ms before next batch to prevent database overload...`);
+          await new Promise(resolve => setTimeout(resolve, 200));
         }
       }
 
@@ -626,29 +632,37 @@ const AdminJobManagement = ({
       const archived = updatedJobs.filter(job => job.status === 'archived' || job.status === 'draft');
       
       // Calculate assigned property counts for jobs with assignments
-      const jobsWithAssignedCounts = await Promise.all(
-        activeJobs.map(async (job) => {
-          if (job.has_property_assignments) {
-            // Dynamically count assigned properties
-            const { count, error } = await supabase
-              .from('property_records')
-              .select('id', { count: 'exact' })
-              .eq('job_id', job.id)
-              .eq('is_assigned_property', true);
+      // Use sequential processing with timing gaps to prevent database overload
+      const jobsWithAssignedCounts = [];
 
-            if (!error) {
-              job.assignedPropertyCount = count;
-            }
+      for (let i = 0; i < activeJobs.length; i++) {
+        const job = activeJobs[i];
+
+        if (job.has_property_assignments) {
+          // Dynamically count assigned properties
+          const { count, error } = await supabase
+            .from('property_records')
+            .select('id', { count: 'exact' })
+            .eq('job_id', job.id)
+            .eq('is_assigned_property', true);
+
+          if (!error) {
+            job.assignedPropertyCount = count;
           }
-          
-          return {
-            ...job,
-            status: job.status === 'active' ? 'Active' : (job.status || 'Active'),
-            county: capitalizeCounty(job.county),
-            percentBilled: job.percent_billed || 0.00
-          };
-        })
-      );
+
+          // Add small delay between database queries to prevent overload
+          if (i < activeJobs.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 200));
+          }
+        }
+
+        jobsWithAssignedCounts.push({
+          ...job,
+          status: job.status === 'active' ? 'Active' : (job.status || 'Active'),
+          county: capitalizeCounty(job.county),
+          percentBilled: job.percent_billed || 0.00
+        });
+      }
 
       setJobs(jobsWithAssignedCounts);
       setArchivedJobs(archived.map(job => ({
@@ -964,7 +978,7 @@ const AdminJobManagement = ({
         sourceFileStatus: 'processing',
         codeFileStatus: 'current',
         vendorDetection: { vendor: newJob.vendor },
-        percent_billed: newJob.percentBilled,
+        percent_billed: parseFloat(newJob.percentBilled) || 0,
         source_file_version: 1,
         code_file_version: 1,
         source_file_name: newJob.sourceFile.name,
@@ -1164,7 +1178,7 @@ const AdminJobManagement = ({
         name: newJob.name,
         municipality: newJob.municipality,
         dueDate: newJob.dueDate,
-        percent_billed: newJob.percentBilled
+        percent_billed: parseFloat(newJob.percentBilled) || 0
       };
 
       await jobService.update(editingJob.id, updateData);
@@ -1256,7 +1270,7 @@ const AdminJobManagement = ({
       codeFile: null,
       vendor: null,
       vendorDetection: null,
-      percentBilled: 0.00
+      percentBilled: '0.00'
     });
     setFileAnalysis({
       sourceFile: null,
@@ -1282,9 +1296,9 @@ const AdminJobManagement = ({
 
   const convertPlanningToJob = (planningJob) => {
     setNewJob({
-      name: `${planningJob.municipality} ${new Date(planningJob.end_date).getFullYear()}`,
-      ccddCode: planningJob.ccddCode,
-      municipality: planningJob.municipality,
+      name: `${planningJob.municipality || ''} ${new Date(planningJob.end_date).getFullYear()}`,
+      ccddCode: planningJob.ccddCode || '',
+      municipality: planningJob.municipality || '',
       county: '',
       state: 'NJ',
       dueDate: '',
@@ -1293,7 +1307,7 @@ const AdminJobManagement = ({
       codeFile: null,
       vendor: null,
       vendorDetection: null,
-      percentBilled: 0.00
+      percentBilled: '0.00'
     });
     setShowCreateJob(true);
   };
@@ -1626,7 +1640,7 @@ const AdminJobManagement = ({
                         codeFile: null,
                         vendor: null,
                         vendorDetection: null,
-                        percentBilled: 0.00
+                        percentBilled: '0.00'
                       });
                       setFileAnalysis({
                         sourceFile: null,
@@ -1729,7 +1743,7 @@ const AdminJobManagement = ({
                       min="0"
                       max="100"
                       value={newJob.percentBilled}
-                      onChange={(e) => setNewJob({...newJob, percentBilled: parseFloat(e.target.value) || 0})}
+                      onChange={(e) => setNewJob({...newJob, percentBilled: e.target.value || '0.00'})}
                       className="w-20 px-2 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       placeholder="0.00"
                     />
@@ -2193,8 +2207,8 @@ const AdminJobManagement = ({
             <button
               onClick={() => setActiveTab('manager-assignments')}
               className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'manager-assignments' 
-                  ? 'border-blue-500 text-blue-600' 
+                activeTab === 'manager-assignments'
+                  ? 'border-blue-500 text-blue-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
@@ -2422,19 +2436,19 @@ const AdminJobManagement = ({
                             onClick={() => {
                               setEditingJob(job);
                               setNewJob({
-                                name: job.name,
-                                ccddCode: job.ccdd || job.ccddCode,
-                                municipality: job.municipality,
-                                county: job.county,
-                                state: job.state,
-                                dueDate: job.dueDate,
-                                assignedManagers: job.assignedManagers || [],
-                                sourceFile: null,
-                                codeFile: null,
-                                vendor: job.vendor,
-                                vendorDetection: job.vendorDetection,
-                                percentBilled: job.percent_billed || ''
-                              });
+                  name: job.name || '',
+                  ccddCode: job.ccdd || job.ccddCode || '',
+                  municipality: job.municipality || '',
+                  county: job.county || '',
+                  state: job.state || 'NJ',
+                  dueDate: job.dueDate || '',
+                  assignedManagers: job.assignedManagers || [],
+                  sourceFile: null,
+                  codeFile: null,
+                  vendor: job.vendor || null,
+                  vendorDetection: job.vendorDetection || null,
+                  percentBilled: job.percent_billed ? job.percent_billed.toString() : '0.00'
+                });
                               setShowCreateJob(true);
                             }}
                             className="px-3 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
@@ -2525,11 +2539,11 @@ const AdminJobManagement = ({
                         onClick={() => {
                           setEditingPlanning(planningJob);
                           setNewPlanningJob({
-                            ccddCode: planningJob.ccddCode,
-                            municipality: planningJob.municipality,
-                            dueDate: planningJob.end_date,
-                            comments: planningJob.comments || ''
-                          });
+          ccddCode: planningJob.ccddCode || '',
+          municipality: planningJob.municipality || '',
+          dueDate: planningJob.end_date || '',
+          comments: planningJob.comments || ''
+        });
                           setShowEditPlanning(true);
                         }}
                         className="px-3 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"

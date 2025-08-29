@@ -36,17 +36,44 @@ export class MicrosystemsProcessor {
   }
 
   /**
+   * CRITICAL FIX: Optimize batch for database performance
+   */
+  optimizeBatchForDatabase(batch) {
+    return batch.map(record => {
+      // Remove null/undefined values to reduce payload size
+      const cleaned = {};
+      for (const [key, value] of Object.entries(record)) {
+        if (value !== null && value !== undefined && value !== '') {
+          cleaned[key] = value;
+        }
+      }
+      return cleaned;
+    });
+  }
+
+  /**
    * Insert batch with retry logic for connection issues
    */
   async insertBatchWithRetry(batch, batchNumber, retries = 50) {
+    // CRITICAL FIX: Optimize batch before processing
+    const optimizedBatch = this.optimizeBatchForDatabase(batch);
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
         console.log(`Batch ${batchNumber}, attempt ${attempt}...`);
         
-        const { data, error } = await supabase
+        // CRITICAL FIX: Optimize for 500+ records with timeout and minimal return
+        const insertPromise = supabase
           .from('property_records')
-          .insert(batch)
-          .select();  // Add this to prevent returning all columns
+          .insert(optimizedBatch, {
+            count: 'exact',
+            returning: 'minimal'  // Only return count, not full record data
+          });
+
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Database timeout after 60 seconds')), 60000)
+        );
+
+        const { data, error } = await Promise.race([insertPromise, timeoutPromise]);
         
         if (!error) {
           console.log(`Batch ${batchNumber} successful on attempt ${attempt}`);
@@ -84,6 +111,35 @@ export class MicrosystemsProcessor {
         }
         return { error: networkError };
       }
+    }
+  }
+
+  /**
+   * CRITICAL FIX: Store source file content in jobs table (eliminates raw_data duplication)
+   */
+  async storeSourceFileInDatabase(sourceFileContent, jobId) {
+    try {
+      console.log('💾 Storing complete Microsystems source file in jobs table...');
+
+      const { error } = await supabase
+        .from('jobs')
+        .update({
+          raw_file_content: sourceFileContent,
+          raw_file_size: sourceFileContent.length,
+          raw_file_rows_count: sourceFileContent.split('\n').length - 1, // Subtract header
+          raw_file_parsed_at: new Date().toISOString()
+        })
+        .eq('id', jobId);
+
+      if (error) {
+        console.error('�� Error storing Microsystems source file in database:', error);
+        throw error;
+      }
+
+      console.log('✅ Complete Microsystems source file stored successfully in jobs table');
+    } catch (error) {
+      console.error('❌ Failed to store Microsystems source file:', error);
+      // Don't throw - continue with processing even if storage fails
     }
   }
 
@@ -140,7 +196,7 @@ export class MicrosystemsProcessor {
           
           if (prefix === '140') {
             // InfoBy codes: single character only (old system limitation)
-            // Example: "140R   9999" → suffix="R"
+            // Example: "140R   9999" �� suffix="R"
             suffix = afterPrefix.charAt(0);
           } else {
             // Other codes: extract letters until space or number
@@ -360,8 +416,6 @@ export class MicrosystemsProcessor {
       values_base_cost: this.parseNumeric(rawRecord['Base Cost']),
       values_det_items: this.parseNumeric(rawRecord['Det Items']),
       values_repl_cost: this.parseNumeric(rawRecord['Cost New']),
-      values_norm_time: null, // Calculated later in FileUploadButton.jsx
-      values_norm_size: null, // Calculated later in FileUploadButton.jsx
       
       // Inspection fields
       inspection_info_by: rawRecord['Interior Finish3'], // Store letter codes directly (E, F, O, R, V)
@@ -377,28 +431,25 @@ export class MicrosystemsProcessor {
       asset_design_style: rawRecord['Style Code'],
       asset_ext_cond: rawRecord['Condition'],
       asset_int_cond: rawRecord['Interior Cond Or End Unit'],
-      asset_key_page: null, // User defined, created in module
       asset_lot_acre: this.parseNumeric(rawRecord['Lot Size In Acres'], 2),
       asset_lot_depth: this.calculateLotDepth(rawRecord),
       asset_lot_frontage: this.calculateLotFrontage(rawRecord),
       asset_lot_sf: this.parseInteger(rawRecord['Lot Size In Sf']),
-      asset_map_page: null, // User defined, created in module
       asset_neighborhood: rawRecord['Neighborhood'],
       asset_sfla: this.parseNumeric(rawRecord['Livable Area']),
       asset_story_height: this.parseNumeric(rawRecord['Story Height']),
       asset_type_use: rawRecord['Type Use Code'],
       asset_view: null, // Not available in Microsystems
       asset_year_built: this.parseInteger(rawRecord['Year Built']),
-      asset_zoning: null, // User defined, created in module
-      
+
       // Analysis and calculation fields
-      location_analysis: null, // User defined, created in module
-      new_vcs: null, // User defined, created in module
+      // REMOVED: location_analysis, new_vcs, asset_map_page, asset_key_page,
+      //          asset_zoning, values_norm_size, values_norm_time
+      //          (moved to property_market_analysis table)
       total_baths_calculated: this.calculateTotalBaths(rawRecord),
       
       // Processing metadata
       processed_at: new Date().toISOString(),
-      validation_status: 'imported',
       is_new_since_last_upload: true,
       
       // File tracking with version info
@@ -410,16 +461,13 @@ export class MicrosystemsProcessor {
       upload_date: new Date().toISOString(),
       
       // Payroll and project tracking
-      project_start_date: null,
+      // REMOVED: project_start_date (moved to jobs table)
       
       // System metadata
-      vendor_source: 'Microsystems',
       created_by: '5df85ca3-7a54-4798-a665-c31da8d9caad',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       
-      // Store complete raw data as JSON
-      raw_data: rawRecord
     };
   }
 
@@ -490,7 +538,10 @@ export class MicrosystemsProcessor {
     
     try {
       console.log('🚀 Starting Enhanced Microsystems file processing with CLEANUP support...');
-      
+
+      // CRITICAL FIX: Store source file content in jobs table
+      await this.storeSourceFileInDatabase(sourceFileContent, jobId);
+
       // Process and store code file if provided
       if (codeFileContent) {
         await this.processCodeFile(codeFileContent, jobId);
@@ -524,7 +575,7 @@ export class MicrosystemsProcessor {
       };
       
       console.log(`Batch inserting ${propertyRecords.length} property records...`);
-      const batchSize = 500; // Reduced from 1000
+      const batchSize = 250; // Optimized for stability and error resilience
       let consecutiveErrors = 0;
       
       for (let i = 0; i < propertyRecords.length; i += batchSize) {

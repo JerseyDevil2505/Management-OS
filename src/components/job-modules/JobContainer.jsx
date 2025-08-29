@@ -8,14 +8,12 @@ import FinalValuation from './FinalValuation';
 import AppealCoverage from './AppealCoverage';
 
 // 🔧 ENHANCED: Accept App.js workflow state management props + file refresh trigger
-const JobContainer = ({ 
-  selectedJob, 
-  onBackToJobs, 
-  workflowStats, 
+const JobContainer = ({
+  selectedJob,
+  onBackToJobs,
+  workflowStats,
   onUpdateWorkflowStats,
-  fileRefreshTrigger,
-  jobCache,          
-  onUpdateJobCache    
+  fileRefreshTrigger
 }) => {
   const [activeModule, setActiveModule] = useState('checklist');
   const [jobData, setJobData] = useState(null);
@@ -25,8 +23,9 @@ const JobContainer = ({
   const [isLoadingVersion, setIsLoadingVersion] = useState(true);
   // Track if current module made changes
   const [moduleHasChanges, setModuleHasChanges] = useState(false);
-  
+
   const [versionError, setVersionError] = useState(null);
+
   
   // NEW: Property loading states
   const [properties, setProperties] = useState([]);
@@ -65,85 +64,83 @@ const JobContainer = ({
 
   const loadLatestFileVersions = async () => {
     if (!selectedJob?.id) return;
-    console.log('🔍 CACHE DEBUG:', {
-      hasOnUpdateJobCache: !!onUpdateJobCache,
-      hasJobCache: !!jobCache,
-      jobCacheKeys: jobCache ? Object.keys(jobCache) : 'no cache'
-    });
+    console.log('📝 LOADING JOB DATA - No caching, fresh data every time');
 
     setIsLoadingVersion(true);
     setVersionError(null);
-    setIsLoadingProperties(false); // Don't set this to true yet
+    setIsLoadingProperties(false);
     setLoadingProgress(0);
     setLoadedCount(0);
 
+    // Direct database method
+    console.log('📊 Loading job data using direct database calls...');
+
     try {
-        console.log('🔍 CACHE DEBUG:', {
-        hasJobCache: !!jobCache,
-        jobId: selectedJob.id,
-        hasCachedJob: !!(jobCache && jobCache[selectedJob.id]),
-        cacheKeys: jobCache ? Object.keys(jobCache) : []
-      });
-      // CHECK CACHE FIRST
-      if (jobCache && jobCache[selectedJob.id]) {
-        const cached = jobCache[selectedJob.id];
-        console.log(`🎯 Using cached data for job ${selectedJob.id}`);
-        
-        // Use cached data immediately
-        setProperties(cached.properties || []);
-        setInspectionData(cached.inspectionData || []);
-        setMarketLandData(cached.marketLandData || {});
-        setHpiData(cached.hpiData || []);
-        setChecklistItems(cached.checklistItems || []);
-        setChecklistStatus(cached.checklistStatus || []);
-        setEmployees(cached.employees || []);  // ADD THIS LINE
-        setPropertyRecordsCount(cached.properties?.length || 0);
-        setLatestFileVersion(cached.fileVersion || 1);
-        setLatestCodeVersion(cached.codeVersion || 1);
-        setJobData(cached.jobData || selectedJob);
-        setIsLoadingVersion(false);
-        setLoadingProgress(100);
-        
-        // Cache exists? Use it. Period. No time checks.
-        console.log('✅ Using cached data, skipping database load');
-        return; // Skip database load entirely
-      }
-      
-      console.log('📡 Loading from database...');
-      
+        console.log('🔍 Loading fresh data for job:', selectedJob.id);
+      console.log('📡 Loading fresh data from database...');
+
+      // Add timeout wrapper function
+      const withTimeout = (promise, timeoutMs = 15000, operation = 'database query') => {
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error(`${operation} timeout after ${timeoutMs/1000} seconds`)), timeoutMs);
+        });
+        return Promise.race([promise, timeoutPromise]);
+      };
+
+      // Get ALL job data in ONE comprehensive query FIRST with timeout
+      const { data: jobData, error: jobError } = await withTimeout(
+        supabase
+          .from('jobs')
+          .select('*')  // Get ALL fields for this job
+          .eq('id', selectedJob.id)
+          .single(),
+        10000,
+        'job data query'
+      );
+
+      if (jobError) throw jobError;
+      const hasAssignments = jobData?.has_property_assignments || false;
+
       // Get data version AND source file date from property_records table
-      const { data: dataVersionData, error: dataVersionError } = await supabase
+      // Apply assignment filter if needed to get the correct date
+      let dataVersionQuery = supabase
         .from('property_records')
         .select('file_version, updated_at')
-        .eq('job_id', selectedJob.id)
-        .order('file_version', { ascending: false })
-        .limit(1)
-        .single();
+        .eq('job_id', selectedJob.id);
 
-      // Get ALL job data in ONE comprehensive query
-      const { data: jobData, error: jobError } = await supabase
-        .from('jobs')
-        .select('*')  // Get ALL fields for this job
-        .eq('id', selectedJob.id)
-        .single();
+      if (hasAssignments) {
+        dataVersionQuery = dataVersionQuery.eq('is_assigned_property', true);
+      }
 
-      // Get as_of_date from inspection_data table
-      const { data: inspectionData, error: inspectionError } = await supabase
-        .from('inspection_data')
-        .select('upload_date')
-        .eq('job_id', selectedJob.id)
-        .order('upload_date', { ascending: false })
-        .limit(1)
-        .single();
+      const { data: dataVersionData, error: dataVersionError } = await withTimeout(
+        dataVersionQuery
+          .order('file_version', { ascending: false })
+          .limit(1)
+          .single(),
+        10000,
+        'data version query'
+      );
+
+      // Get as_of_date from inspection_data table with timeout
+      const { data: inspectionData, error: inspectionError } = await withTimeout(
+        supabase
+          .from('inspection_data')
+          .select('upload_date')
+          .eq('job_id', selectedJob.id)
+          .order('upload_date', { ascending: false })
+          .limit(1)
+          .single(),
+        10000,
+        'inspection data query'
+      );
 
       if (dataVersionError && dataVersionError.code !== 'PGRST116') throw dataVersionError;
-      if (jobError) throw jobError;
       // Don't throw on inspection error - it might not exist yet
 
       const currentFileVersion = dataVersionData?.file_version || 1;
       const currentCodeVersion = jobData?.code_file_version || 1;
-      const hasAssignments = jobData?.has_property_assignments || false;
-      
+
+
       setLatestFileVersion(currentFileVersion);
       setLatestCodeVersion(currentCodeVersion);
       
@@ -151,183 +148,443 @@ const JobContainer = ({
       setIsLoadingVersion(false);
       setIsLoadingProperties(true);
 
-      // Build query for property count
+      // Build query for property count - ONLY latest version
       let propertyCountQuery = supabase
         .from('property_records')
         .select('*', { count: 'exact', head: true })
-        .eq('job_id', selectedJob.id);
+        .eq('job_id', selectedJob.id)
+        .eq('file_version', currentFileVersion);  // ← ONLY count latest version!
 
       // Apply assignment filter if needed
       if (hasAssignments) {
         propertyCountQuery = propertyCountQuery.eq('is_assigned_property', true);
-        console.log('📋 Loading only assigned properties (has_property_assignments = true)');
-      } else {
-        console.log('📋 Loading all properties (no assignments)');
       }
 
-      // Get count first
-      const { count, error: countError } = await propertyCountQuery;
+      // Get count first with timeout
+      const { count, error: countError } = await withTimeout(
+        propertyCountQuery,
+        15000,
+        'property count query'
+      );
       if (countError) throw countError;
 
       setPropertyRecordsCount(count || 0);
-      console.log(`📊 Total properties to load: ${count}`);
 
       let allProperties = [];  // ADD THIS LINE!
 
-      // Now load the actual properties with pagination
+      // Use client-side pagination with batches
       if (count && count > 0) {
-        allProperties = [];
-        const pageSize = 1000;
-        const totalPages = Math.ceil(count / pageSize);
+        const batchSize = 100;
+        const totalBatches = Math.ceil(count / batchSize);
+        let retryCount = 0;
+        const maxRetries = 3;
 
-        for (let page = 0; page < totalPages; page++) {
-          const start = page * pageSize;
-          const end = Math.min(start + pageSize - 1, count - 1);
-          
-          console.log(`📥 Loading batch ${page + 1}/${totalPages} (${start}-${end})...`);
-          
-          // Build the query again for actual data
-          let dataQuery = supabase
-            .from('property_records')
-            .select('*')
-            .eq('job_id', selectedJob.id)
-            .order('property_composite_key')
-            .range(start, end);
+        console.log(`📥 Loading ${count} properties in ${totalBatches} batches...`);
 
-          // Apply assignment filter if needed
-          if (hasAssignments) {
-            dataQuery = dataQuery.eq('is_assigned_property', true);
-          }
+        for (let batch = 0; batch < totalBatches; batch++) {
+          const offset = batch * batchSize;
+          const limit = Math.min(batchSize, count - offset);
 
-          const { data, error } = await dataQuery;
-          
-          if (error) throw error;
-          
-          if (data) {
-            allProperties.push(...data);
-            const loaded = allProperties.length;
-            setLoadedCount(loaded);
-            setLoadingProgress(Math.round((loaded / count) * 100));
-          }
-          
-          // Small delay between batches to prevent overwhelming the server
-          if (page < totalPages - 1) {
-            await new Promise(resolve => setTimeout(resolve, 100));
+
+          try {
+            // Build the query for this batch with market analysis fields
+            // CRITICAL FIX: Load only the latest version of properties
+            let batchQuery = supabase
+              .from('property_records')
+              .select(`
+                *,
+                property_market_analysis!left (
+                  location_analysis,
+                  new_vcs,
+                  asset_map_page,
+                  asset_key_page,
+                  asset_zoning,
+                  values_norm_size,
+                  values_norm_time,
+                  sales_history
+                )
+              `)
+              .eq('job_id', selectedJob.id)
+              .eq('file_version', currentFileVersion)  // ← ONLY load latest version!
+              .order('property_composite_key')
+              .range(offset, offset + limit - 1);
+
+            // Apply assignment filter if needed
+            if (hasAssignments) {
+              batchQuery = batchQuery.eq('is_assigned_property', true);
+            }
+
+            // Use the timeout wrapper for consistency
+            const { data: batchData, error: batchError } = await withTimeout(
+              batchQuery,
+              30000,
+              `property batch ${batch + 1}`
+            );
+
+            if (batchError) {
+              // ENHANCED: Detailed error logging with all available information
+              console.error(`❌ BATCH ${batch + 1} FAILED:`);
+              console.error(`  Error Message: ${batchError.message || 'Unknown error'}`);
+              console.error(`  Error Code: ${batchError.code || 'No code'}`);
+              console.error(`  Error Details: ${batchError.details || 'No details'}`);
+              console.error(`  Error Hint: ${batchError.hint || 'No hint'}`);
+              console.error(`  Batch Info: ${offset}-${offset + limit - 1} of ${count} total records`);
+              console.error(`  Query: property_records with market_analysis join`);
+              console.error(`  Job ID: ${selectedJob.id}`);
+              console.error(`  Has Assignments Filter: ${hasAssignments}`);
+              if (batchError.stack) {
+                console.error(`  Stack Trace: ${batchError.stack}`);
+              }
+              console.error(`  Full Error Object:`, batchError);
+
+              // CRITICAL FIX: Stop processing on first failure
+              if (batchError.message?.includes('timeout') || batchError.message?.includes('canceling statement')) {
+                console.error(`🛑 DATABASE TIMEOUT ON BATCH ${batch + 1} - STOPPING ALL PROCESSING`);
+                throw new Error(`Database timeout on batch ${batch + 1}. Loaded ${allProperties.length} of ${count} records before failure.`);
+              }
+
+              throw batchError;
+            }
+
+            if (batchData && batchData.length > 0) {
+              // Flatten market analysis fields into property objects
+              const processedData = batchData.map(property => {
+                const marketAnalysis = property.property_market_analysis?.[0] || {};
+
+                // Remove the nested property_market_analysis and flatten fields
+                const { property_market_analysis, ...propertyData } = property;
+
+                return {
+                  ...propertyData,
+                  // Flatten market analysis fields back onto the property
+                  location_analysis: marketAnalysis.location_analysis || null,
+                  new_vcs: marketAnalysis.new_vcs || null,
+                  asset_map_page: marketAnalysis.asset_map_page || null,
+                  asset_key_page: marketAnalysis.asset_key_page || null,
+                  asset_zoning: marketAnalysis.asset_zoning || null,
+                  values_norm_size: marketAnalysis.values_norm_size || null,
+                  values_norm_time: marketAnalysis.values_norm_time || null,
+                  sales_history: marketAnalysis.sales_history || null
+                };
+              });
+
+              allProperties.push(...processedData);
+              setLoadedCount(allProperties.length);
+              setLoadingProgress(Math.round((allProperties.length / count) * 100));
+              retryCount = 0; // Reset retry count on success
+            }
+
+            // Progressive delay - longer delay after more batches
+            const delay = Math.min(200 + (batch * 10), 1000);
+            if (batch < totalBatches - 1) {
+              await new Promise(resolve => setTimeout(resolve, delay));
+            }
+
+          } catch (error) {
+            // ENHANCED: Comprehensive error logging for debugging
+            console.error(`🚨 CRITICAL ERROR ON BATCH ${batch + 1}:`);
+            console.error(`  Error Type: ${error.constructor.name}`);
+            console.error(`  Error Message: ${error.message || 'Unknown error'}`);
+            console.error(`  Error Code: ${error.code || 'No code'}`);
+            console.error(`  Error Details: ${error.details || 'No details'}`);
+            console.error(`  Error Hint: ${error.hint || 'No hint'}`);
+            console.error(`  Batch Range: ${offset}-${offset + limit - 1} (${limit} records)`);
+            console.error(`  Total Expected: ${count} records`);
+            console.error(`  Loaded So Far: ${allProperties.length} records`);
+            console.error(`  Progress: ${Math.round((allProperties.length / count) * 100)}%`);
+            console.error(`  Job ID: ${selectedJob.id}`);
+            console.error(`  Assignment Filter: ${hasAssignments}`);
+            if (error.stack) {
+              console.error(`  Stack Trace: ${error.stack}`);
+            }
+            console.error(`  Full Error Object:`, error);
+
+            // Additional context for timeout errors
+            if (error.message?.includes('timeout')) {
+              console.error(`  🔍 TIMEOUT ANALYSIS:`);
+              console.error(`    - Timeout occurred after 30 seconds`);
+              console.error(`    - This suggests database performance issues`);
+              console.error(`    - Consider reducing batch size or optimizing query`);
+              console.error(`    - Current batch size: ${batchSize} records`);
+            }
+
+            // STOP PROCESSING - don't continue to next batches
+            setIsLoadingProperties(false);
+            setLoadingProgress(Math.round((allProperties.length / count) * 100));
+
+            // Set partial data and error - but ensure state is safe
+            try {
+              setProperties(allProperties);
+              const errorMsg = `Failed loading batch ${batch + 1}. Loaded ${allProperties.length} of ${count} records. Error: ${error.message || 'Unknown database error'}`;
+              setVersionError(errorMsg);
+              console.error(`📝 Setting version error: ${errorMsg}`);
+            } catch (stateError) {
+              console.error('❌ Error setting state after batch failure:');
+              console.error(`  State Error Message: ${stateError.message}`);
+              console.error(`  State Error Stack: ${stateError.stack}`);
+              setVersionError('Critical loading error - please refresh the page');
+            }
+
+            console.error(`🛑 STOPPING BATCH PROCESSING - DO NOT CONTINUE`);
+            console.error(`📊 FINAL STATS: Loaded ${allProperties.length}/${count} records before failure`);
+            return; // EXIT THE FUNCTION COMPLETELY
           }
         }
 
         setProperties(allProperties);
-        console.log(`✅ Successfully loaded ${allProperties.length} properties`);
+        setLoadingProgress(100);
 
-        // Save to cache immediately while we have the data
-        if (onUpdateJobCache && allProperties.length > 0) {
-          console.log(`💾 Updating cache for job ${selectedJob.id} with ${allProperties.length} properties`);
-          // We'll finish this after you confirm this is the right spot
+        if (allProperties.length !== count) {
+          console.warn(`⚠️ Expected ${count} properties but loaded ${allProperties.length}`);
         }
 
-        // BUILD PRESERVED FIELDS MAP for FileUploadButton
-        const preservedMap = {};
-        allProperties.forEach(prop => {
-          preservedMap[prop.property_composite_key] = {
-            project_start_date: prop.project_start_date,
-            is_assigned_property: prop.is_assigned_property,
-            validation_status: prop.validation_status,
-            location_analysis: prop.location_analysis,
-            new_vcs: prop.new_vcs,
-            values_norm_time: prop.values_norm_time,
-            values_norm_size: prop.values_norm_size
-          };
-        });
-        
-        // Store in window for FileUploadButton to access (temporary solution)
-        if (window.preservedFieldsCache) {
-          window.preservedFieldsCache[selectedJob.id] = preservedMap;
-        } else {
-          window.preservedFieldsCache = { [selectedJob.id]: preservedMap };
-        }
-        console.log(`📦 Cached preserved fields for ${allProperties.length} properties`);
       } else {
         setProperties([]);
       }
 
-// LOAD ADDITIONAL DATA TABLES per the guide
+// Load additional data tables
       console.log('📊 Loading additional data tables...');
-      
-      // 1. Load inspection_data with pagination (could be 16K+ records!)
-      console.log('📊 Loading inspection data with pagination...');
       const allInspectionData = [];
       let inspectionPage = 0;
       let hasMoreInspection = true;
       
-      while (hasMoreInspection) {
-        const start = inspectionPage * 1000;
-        const end = start + 999;
-        
-        const { data: batch, error } = await supabase
-          .from('inspection_data')
-          .select('*')
-          .eq('job_id', selectedJob.id)
-          .range(start, end);
-        
-        if (batch && batch.length > 0) {
-          allInspectionData.push(...batch);
-          inspectionPage++;
-          hasMoreInspection = batch.length === 1000;
-        } else {
-          hasMoreInspection = false;
+      try {
+        while (hasMoreInspection) {
+          const start = inspectionPage * 1000;
+          const end = start + 999;
+
+          const { data: batch, error } = await withTimeout(
+            supabase
+              .from('inspection_data')
+              .select('*')
+              .eq('job_id', selectedJob.id)
+              .range(start, end),
+            20000,
+            `inspection data batch ${inspectionPage + 1}`
+          );
+
+          if (error) {
+            console.error('❌ INSPECTION DATA BATCH ERROR:');
+            console.error(`  Batch: ${inspectionPage + 1}, Range: ${start}-${end}`);
+            console.error(`  Error Message: ${error.message || 'Unknown error'}`);
+            console.error(`  Error Code: ${error.code || 'No code'}`);
+            console.error(`  Error Details: ${error.details || 'No details'}`);
+            console.error(`  Job ID: ${selectedJob.id}`);
+            if (error.stack) {
+              console.error(`  Stack: ${error.stack}`);
+            }
+            console.error(`  Full Error:`, error);
+            break; // Stop loading inspection data but continue with other data
+          }
+
+          if (batch && batch.length > 0) {
+            allInspectionData.push(...batch);
+            inspectionPage++;
+            hasMoreInspection = batch.length === 1000;
+          } else {
+            hasMoreInspection = false;
+          }
         }
+      } catch (inspectionError) {
+        console.error('❌ INSPECTION DATA LOADING FAILED:');
+        console.error(`  Error Message: ${inspectionError.message || 'Unknown error'}`);
+        console.error(`  Error Type: ${inspectionError.constructor.name}`);
+        console.error(`  Job ID: ${selectedJob.id}`);
+        console.error(`  Pages Attempted: ${inspectionPage}`);
+        console.error(`  Records Loaded: ${allInspectionData.length}`);
+        if (inspectionError.stack) {
+          console.error(`  Stack: ${inspectionError.stack}`);
+        }
+        console.error(`  Full Error:`, inspectionError);
+        // Continue with empty inspection data rather than failing completely
       }
       const inspectionDataFull = allInspectionData;
       
       // 2. Load market_land_valuation (for MarketAnalysis tabs)
-      let { data: marketData } = await supabase
-        .from('market_land_valuation')
-        .select('*')
-        .eq('job_id', selectedJob.id)
-        .single();
-      
-      // Create if doesn't exist
-      if (!marketData) {
-        const { data: newMarket } = await supabase
-          .from('market_land_valuation')
-          .insert({ job_id: selectedJob.id })
-          .select()
-          .single();
-        marketData = newMarket;
+      let marketData = null;
+      try {
+        const { data, error } = await withTimeout(
+          supabase
+            .from('market_land_valuation')
+            .select('*')
+            .eq('job_id', selectedJob.id)
+            .single(),
+          10000,
+          'market land valuation query'
+        );
+
+        if (error && error.code !== 'PGRST116') {
+          console.error('❌ MARKET DATA LOADING ERROR:');
+          console.error(`  Error Message: ${error.message || 'Unknown error'}`);
+          console.error(`  Error Code: ${error.code}`);
+          console.error(`  Job ID: ${selectedJob.id}`);
+          console.error(`  Full Error:`, error);
+        } else {
+          marketData = data;
+        }
+
+        // Create if doesn't exist
+        if (!marketData) {
+          try {
+            const { data: newMarket } = await withTimeout(
+              supabase
+                .from('market_land_valuation')
+                .insert({ job_id: selectedJob.id })
+                .select()
+                .single(),
+              10000,
+              'market land valuation insert'
+            );
+            marketData = newMarket;
+          } catch (createError) {
+            console.error('❌ MARKET DATA CREATION ERROR:');
+            console.error(`  Error Message: ${createError.message || 'Unknown error'}`);
+            console.error(`  Error Code: ${createError.code || 'No code'}`);
+            console.error(`  Job ID: ${selectedJob.id}`);
+            console.error(`  Full Error:`, createError);
+            marketData = {}; // Fallback to empty object
+          }
+        }
+      } catch (marketError) {
+        console.error('❌ MARKET DATA LOADING FAILED:');
+        console.error(`  Error Message: ${marketError.message || 'Unknown error'}`);
+        console.error(`  Error Type: ${marketError.constructor.name}`);
+        console.error(`  Job ID: ${selectedJob.id}`);
+        console.error(`  Full Error:`, marketError);
+        marketData = {};
       }
-      
+
       // 3. Load county_hpi_data (for PreValuation normalization)
-      const { data: hpiData } = await supabase
-        .from('county_hpi_data')
-        .select('*')
-        .eq('county_name', jobData?.county || selectedJob.county)
-        .order('observation_year', { ascending: true });
-      
+      let hpiData = [];
+      try {
+        const { data, error } = await withTimeout(
+          supabase
+            .from('county_hpi_data')
+            .select('*')
+            .eq('county_name', jobData?.county || selectedJob.county)
+            .order('observation_year', { ascending: true }),
+          10000,
+          'county HPI data query'
+        );
+
+        if (error) {
+          console.error('❌ HPI DATA LOADING ERROR:');
+          console.error(`  Error Message: ${error.message || 'Unknown error'}`);
+          console.error(`  Error Code: ${error.code || 'No code'}`);
+          console.error(`  County: ${jobData?.county || selectedJob.county}`);
+          console.error(`  Job ID: ${selectedJob.id}`);
+          console.error(`  Full Error:`, error);
+        } else {
+          hpiData = data || [];
+        }
+      } catch (hpiError) {
+        console.error('❌ HPI DATA LOADING FAILED:');
+        console.error(`  Error Message: ${hpiError.message || 'Unknown error'}`);
+        console.error(`  Error Type: ${hpiError.constructor.name}`);
+        console.error(`  County: ${jobData?.county || selectedJob.county}`);
+        console.error(`  Job ID: ${selectedJob.id}`);
+        console.error(`  Full Error:`, hpiError);
+      }
+
       // 4. Load checklist data (for ManagementChecklist)
-      const { data: checklistItems } = await supabase
-        .from('checklist_items')
-        .select('*')
-        .eq('job_id', selectedJob.id);
-      
-      const { data: checklistStatus } = await supabase
-        .from('checklist_item_status')
-        .select('*')
-        .eq('job_id', selectedJob.id);
+      let checklistItems = [];
+      let checklistStatus = [];
+      try {
+        const [itemsResult, statusResult] = await Promise.allSettled([
+          withTimeout(
+            supabase.from('checklist_items').select('*').eq('job_id', selectedJob.id),
+            10000,
+            'checklist items query'
+          ),
+          withTimeout(
+            supabase.from('checklist_item_status').select('*').eq('job_id', selectedJob.id),
+            10000,
+            'checklist status query'
+          )
+        ]);
+
+        if (itemsResult.status === 'fulfilled' && !itemsResult.value.error) {
+          checklistItems = itemsResult.value.data || [];
+        } else {
+          const error = itemsResult.reason || itemsResult.value?.error;
+          console.error('❌ CHECKLIST ITEMS LOADING ERROR:');
+          console.error(`  Error Message: ${error?.message || 'Unknown error'}`);
+          console.error(`  Error Code: ${error?.code || 'No code'}`);
+          console.error(`  Job ID: ${selectedJob.id}`);
+          console.error(`  Full Error:`, error);
+        }
+
+        if (statusResult.status === 'fulfilled' && !statusResult.value.error) {
+          checklistStatus = statusResult.value.data || [];
+        } else {
+          const error = statusResult.reason || statusResult.value?.error;
+          console.error('❌ CHECKLIST STATUS LOADING ERROR:');
+          console.error(`  Error Message: ${error?.message || 'Unknown error'}`);
+          console.error(`  Error Code: ${error?.code || 'No code'}`);
+          console.error(`  Job ID: ${selectedJob.id}`);
+          console.error(`  Full Error:`, error);
+        }
+      } catch (checklistError) {
+        console.error('❌ CHECKLIST DATA LOADING FAILED:');
+        console.error(`  Error Message: ${checklistError.message || 'Unknown error'}`);
+        console.error(`  Error Type: ${checklistError.constructor.name}`);
+        console.error(`  Job ID: ${selectedJob.id}`);
+        console.error(`  Full Error:`, checklistError);
+      }
 
       // 5. Load employees (for ProductionTracker inspector names)
-      const { data: employeesData } = await supabase
-        .from('employees')
-        .select('*')
-        .order('last_name', { ascending: true });
+      let employeesData = [];
+      try {
+        const { data, error } = await withTimeout(
+          supabase
+            .from('employees')
+            .select('*')
+            .order('last_name', { ascending: true }),
+          10000,
+          'employees query'
+        );
 
-      // SET ALL THE LOADED DATA TO STATE
-      setInspectionData(inspectionDataFull || []);
-      setMarketLandData(marketData || {});
-      setHpiData(hpiData || []);
-      setChecklistItems(checklistItems || []);
-      setChecklistStatus(checklistStatus || []);
-      setEmployees(employeesData || []);  // ADD THIS LINE
-      console.log('✅ All additional data tables loaded');
+        if (error) {
+          console.error('❌ EMPLOYEES DATA LOADING ERROR:');
+          console.error(`  Error Message: ${error.message || 'Unknown error'}`);
+          console.error(`  Error Code: ${error.code || 'No code'}`);
+          console.error(`  Full Error:`, error);
+        } else {
+          employeesData = data || [];
+        }
+      } catch (employeesError) {
+        console.error('❌ EMPLOYEES DATA LOADING FAILED:');
+        console.error(`  Error Message: ${employeesError.message || 'Unknown error'}`);
+        console.error(`  Error Type: ${employeesError.constructor.name}`);
+        console.error(`  Full Error:`, employeesError);
+      }
+
+      // SET ALL THE LOADED DATA TO STATE - with error boundaries
+      try {
+        setInspectionData(inspectionDataFull || []);
+        setMarketLandData(marketData || {});
+        setHpiData(hpiData || []);
+        setChecklistItems(checklistItems || []);
+        setChecklistStatus(checklistStatus || []);
+        setEmployees(employeesData || []);
+      } catch (stateError) {
+        console.error('❌ STATE SETTING ERROR FOR ADDITIONAL DATA:');
+        console.error(`  Error Message: ${stateError.message || 'Unknown error'}`);
+        console.error(`  Error Type: ${stateError.constructor.name}`);
+        console.error(`  Data Sizes: inspection=${inspectionDataFull?.length || 0}, market=${marketData ? 'object' : 'null'}, hpi=${hpiData?.length || 0}`);
+        console.error(`  Job ID: ${selectedJob.id}`);
+        if (stateError.stack) {
+          console.error(`  Stack: ${stateError.stack}`);
+        }
+        console.error(`  Full Error:`, stateError);
+        // Set safe defaults if state setting fails
+        setInspectionData([]);
+        setMarketLandData({});
+        setHpiData([]);
+        setChecklistItems([]);
+        setChecklistStatus([]);
+        setEmployees([]);
+      }
 
       // Prepare enriched job data with all the fetched info
       const enrichedJobData = {
@@ -353,27 +610,52 @@ const JobContainer = ({
       
       setJobData(enrichedJobData);
 
-      // UPDATE CACHE with loaded data - NOW WE HAVE EVERYTHING!
-      if (onUpdateJobCache && allProperties && allProperties.length > 0) {
-        console.log(`💾 Updating cache for job ${selectedJob.id} with ${allProperties.length} properties`);
-        onUpdateJobCache(selectedJob.id, {
-          properties: allProperties,
-          jobData: enrichedJobData,
-          inspectionData: inspectionDataFull || [],
-          marketLandData: marketData || {},
-          hpiData: hpiData || [],
-          checklistItems: checklistItems || [],
-          checklistStatus: checklistStatus || [],
-          employees: employeesData || [],  // ADD THIS LINE
-          fileVersion: currentFileVersion,
-          codeVersion: currentCodeVersion,
-          timestamp: Date.now()
-        });
-      }
+      console.log(`✅ Job data loaded: ${allProperties.length} properties`);
       
     } catch (error) {
-      console.error('Error loading file versions:', error);
-      setVersionError(error.message);
+      // ENHANCED: Comprehensive error logging for main catch block
+      console.error('❌ CRITICAL ERROR IN LOADLATESTFILEVERSIONS:');
+      console.error(`  Error Type: ${error.constructor.name}`);
+      console.error(`  Error Message: ${error.message || 'Unknown error'}`);
+      console.error(`  Error Code: ${error.code || 'No code'}`);
+      console.error(`  Error Details: ${error.details || 'No details'}`);
+      console.error(`  Error Hint: ${error.hint || 'No hint'}`);
+      console.error(`  Job ID: ${selectedJob.id}`);
+      console.error(`  Job Name: ${selectedJob.name || 'Unknown'}`);
+      console.error(`  Function Stage: ${isLoadingVersion ? 'Initial Loading' : isLoadingProperties ? 'Property Loading' : 'Data Processing'}`);
+      if (error.stack) {
+        console.error(`  Stack Trace: ${error.stack}`);
+      }
+      console.error(`  Full Error Object:`, error);
+
+      // Additional analysis for specific error types
+      if (error.message?.includes('timeout')) {
+        console.error(`  🔍 TIMEOUT ANALYSIS:`);
+        console.error(`    - Function timed out during data loading`);
+        console.error(`    - This indicates database performance issues`);
+        console.error(`    - Try reducing batch sizes or checking database load`);
+      }
+      if (error.message?.includes('canceling statement')) {
+        console.error(`  🔍 CANCELLATION ANALYSIS:`);
+        console.error(`    - Database query was cancelled`);
+        console.error(`    - This often indicates resource constraints`);
+        console.error(`    - Consider optimizing queries or database indexing`);
+      }
+
+      // Handle different error types gracefully
+      let errorMessage = 'Unknown error occurred';
+      if (error?.message) {
+        errorMessage = error.message;
+      } else if (error?.code) {
+        errorMessage = `Database error: ${error.code}`;
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      } else if (error?.name === 'AbortError') {
+        errorMessage = 'Request timeout - dataset too large. Try again or contact support.';
+      }
+
+      console.error(`📝 Setting version error message: ${errorMessage}`);
+      setVersionError(errorMessage);
       
       // Fallback to basic job data
       const fallbackJobData = {
@@ -398,13 +680,9 @@ const JobContainer = ({
 
   // Handle file upload completion - refresh version data
   const handleFileProcessed = async (fileType, fileName) => {
-    console.log(`📁 File processed: ${fileType} - ${fileName}`);
+    console.log(`���� File processed: ${fileType} - ${fileName}`);
     
-    // Clear cache for this job since data changed
-    if (onUpdateJobCache && selectedJob?.id) {
-      console.log(`🗑️ Clearing cache for job ${selectedJob.id} after file update`);
-      onUpdateJobCache(selectedJob.id, null);
-    }
+    console.log(`📝 File processed - will reload fresh data`);
     
     // Refresh file version data when new files are uploaded
     await loadLatestFileVersions();
@@ -490,7 +768,6 @@ const JobContainer = ({
       }),
       onUpdateWorkflowStats: handleAnalyticsUpdate,  // Pass the analytics update handler
       currentWorkflowStats: workflowStats,  // Pass current workflow stats
-      onUpdateJobCache: onUpdateJobCache,
       onDataChange: () => {
         // Mark that this module made changes
         setModuleHasChanges(true);
@@ -499,6 +776,24 @@ const JobContainer = ({
 
     // 🔧 CRITICAL: Pass App.js state management to ProductionTracker
     if (activeModule === 'production') {
+      // CRITICAL DEBUG: Log what we're passing to ProductionTracker
+      console.log(`🚨 PASSING TO PRODUCTION TRACKER:`);
+      console.log(`  - properties.length: ${properties?.length || 0}`);
+      console.log(`  - inspectionData.length: ${inspectionData?.length || 0}`);
+      console.log(`  - employees.length: ${employees?.length || 0}`);
+      console.log(`  - jobData.id: ${jobData?.id}`);
+      console.log(`  - latestFileVersion: ${latestFileVersion}`);
+
+      if (properties && properties.length > 0) {
+        const sampleProp = properties[0];
+        console.log(`  - Sample property keys:`, Object.keys(sampleProp));
+        console.log(`  - Sample property inspection fields:`, {
+          inspection_measure_by: sampleProp.inspection_measure_by,
+          inspection_measure_date: sampleProp.inspection_measure_date,
+          inspection_info_by: sampleProp.inspection_info_by
+        });
+      }
+
       return {
         ...baseProps,
         // Pass current workflow stats from App.js
@@ -717,10 +1012,7 @@ const JobContainer = ({
                       if (isAvailable) {
                         // If leaving a module that made changes, refresh data
                         if (moduleHasChanges && activeModule !== module.id) {
-                          console.log(`Module ${activeModule} had changes, clearing cache...`);
-                          if (onUpdateJobCache && selectedJob?.id) {
-                            onUpdateJobCache(selectedJob.id, null);
-                          }
+                          console.log(`Module ${activeModule} had changes, will reload fresh data`);
                           setModuleHasChanges(false);
                         }
                         setActiveModule(module.id);

@@ -46,17 +46,44 @@ export class BRTProcessor {
   }
 
   /**
+   * CRITICAL FIX: Optimize batch for database performance
+   */
+  optimizeBatchForDatabase(batch) {
+    return batch.map(record => {
+      // Remove null/undefined values to reduce payload size
+      const cleaned = {};
+      for (const [key, value] of Object.entries(record)) {
+        if (value !== null && value !== undefined && value !== '') {
+          cleaned[key] = value;
+        }
+      }
+      return cleaned;
+    });
+  }
+
+  /**
    * Insert batch with retry logic for connection issues
    */
   async insertBatchWithRetry(batch, batchNumber, retries = 50) {
+    // CRITICAL FIX: Optimize batch before processing
+    const optimizedBatch = this.optimizeBatchForDatabase(batch);
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
         console.log(`🔄 Batch ${batchNumber}, attempt ${attempt}...`);
         
-        const { data, error } = await supabase
+        // CRITICAL FIX: Optimize for 500+ records with timeout and minimal return
+        const insertPromise = supabase
           .from('property_records')
-          .insert(batch)
-          .select();  // This returns minimal data in v2
+          .insert(optimizedBatch, {
+            count: 'exact',
+            returning: 'minimal'  // Only return count, not full record data
+          });
+
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Database timeout after 60 seconds')), 60000)
+        );
+
+        const { data, error } = await Promise.race([insertPromise, timeoutPromise]);
         
         if (!error) {
           console.log(`✅ Batch ${batchNumber} successful on attempt ${attempt}`);
@@ -183,6 +210,35 @@ export class BRTProcessor {
     } catch (error) {
       console.error('❌ Error parsing BRT code file:', error);
       throw error;
+    }
+  }
+
+  /**
+   * CRITICAL FIX: Store source file content in jobs table (eliminates raw_data duplication)
+   */
+  async storeSourceFileInDatabase(sourceFileContent, jobId) {
+    try {
+      console.log('💾 Storing complete source file in jobs table...');
+
+      const { error } = await supabase
+        .from('jobs')
+        .update({
+          raw_file_content: sourceFileContent,
+          raw_file_size: sourceFileContent.length,
+          raw_file_rows_count: sourceFileContent.split('\n').length - 1, // Subtract header
+          raw_file_parsed_at: new Date().toISOString()
+        })
+        .eq('id', jobId);
+
+      if (error) {
+        console.error('❌ Error storing source file in database:', error);
+        throw error;
+      }
+
+      console.log('✅ Complete source file stored successfully in jobs table');
+    } catch (error) {
+      console.error('❌ Failed to store source file:', error);
+      // Don't throw - continue with processing even if storage fails
     }
   }
 
@@ -479,8 +535,6 @@ export class BRTProcessor {
       values_base_cost: this.parseNumeric(rawRecord.BASEREPLCOST),
       values_det_items: this.parseNumeric(rawRecord.DETACHEDITEMS),
       values_repl_cost: this.parseNumeric(rawRecord.REPLCOSTNEW),
-      values_norm_time: null,
-      values_norm_size: null,
       
       // Inspection fields
       inspection_info_by: this.parseInteger(rawRecord.INFOBY),
@@ -496,28 +550,25 @@ export class BRTProcessor {
       asset_design_style: rawRecord.DESIGN,
       asset_ext_cond: rawRecord.EXTERIORNC,
       asset_int_cond: rawRecord.INTERIORNC,
-      asset_key_page: null,
       asset_lot_acre: this.calculateLotAcres(rawRecord),
       asset_lot_depth: this.calculateLotDepth(rawRecord),
       asset_lot_frontage: this.calculateLotFrontage(rawRecord),
       asset_lot_sf: this.calculateLotSquareFeet(rawRecord),
-      asset_map_page: null,
       asset_neighborhood: rawRecord.NBHD,
       asset_sfla: this.parseNumeric(rawRecord.SFLA_TOTAL),
       asset_story_height: this.parseNumeric(rawRecord.STORYHGT),
       asset_type_use: rawRecord.TYPEUSE,
       asset_view: rawRecord.VIEW,
       asset_year_built: this.parseInteger(rawRecord.YEARBUILT),
-      asset_zoning: null,
-      
+
       // Analysis and calculation fields
-      location_analysis: null,
-      new_vcs: null,
+      // REMOVED: location_analysis, new_vcs, asset_map_page, asset_key_page,
+      //          asset_zoning, values_norm_size, values_norm_time
+      //          (moved to property_market_analysis table)
       total_baths_calculated: this.calculateTotalBaths(rawRecord),
       
       // Processing metadata
       processed_at: new Date().toISOString(),
-      validation_status: 'imported',
       is_new_since_last_upload: true,
       
       // File tracking with version info
@@ -529,16 +580,13 @@ export class BRTProcessor {
       upload_date: new Date().toISOString(),
       
       // Payroll and project tracking
-      project_start_date: null,
+      // REMOVED: project_start_date (moved to jobs table)
       
       // System metadata
-      vendor_source: 'BRT',
       created_by: '5df85ca3-7a54-4798-a665-c31da8d9caad',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       
-      // Store complete raw data as JSON
-      raw_data: rawRecord
     };
   }
 
@@ -605,12 +653,15 @@ export class BRTProcessor {
     
     try {
       console.log('🚀 Starting ENHANCED BRT file processing with CLEANUP support...');
-      
+
+      // CRITICAL FIX: Store source file content in jobs table
+      await this.storeSourceFileInDatabase(sourceFileContent, jobId);
+
       // Process and store code file if provided
       if (codeFileContent) {
         await this.processCodeFile(codeFileContent, jobId);
       }
-      
+
       const records = this.parseSourceFile(sourceFileContent);
       
       // Calculate property totals BEFORE processing
@@ -634,7 +685,7 @@ export class BRTProcessor {
       };
       
       console.log(`Batch inserting ${propertyRecords.length} property records...`);
-      const batchSize = 500; // Reduced from 1000
+      const batchSize = 250; // Optimized for stability and error resilience
       let consecutiveErrors = 0;
       
       for (let i = 0; i < propertyRecords.length; i += batchSize) {
@@ -642,7 +693,7 @@ export class BRTProcessor {
         const batchNumber = Math.floor(i / batchSize) + 1;
         const totalBatches = Math.ceil(propertyRecords.length / batchSize);
         
-        console.log(`🚀 Processing batch ${batchNumber} of ${totalBatches}: records ${i + 1} to ${Math.min(i + batchSize, propertyRecords.length)}`);
+        console.log(`��� Processing batch ${batchNumber} of ${totalBatches}: records ${i + 1} to ${Math.min(i + batchSize, propertyRecords.length)}`);
         
         const result = await this.insertBatchWithRetry(batch, batchNumber);
         

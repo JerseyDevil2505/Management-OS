@@ -559,20 +559,19 @@ const ProductionTracker = ({
   };
 
   const loadProjectStartDate = async () => {
-    if (!jobData?.id || !latestFileVersion) return;
+    if (!jobData?.id) return;
 
     try {
-      const { data: records, error } = await supabase
-        .from('property_records')
+      const { data: job, error } = await supabase
+        .from('jobs')
         .select('project_start_date')
-        .eq('job_id', jobData.id)
-        .eq('file_version', latestFileVersion)
-        .not('project_start_date', 'is', null)
-        .limit(1)
+
+        .eq('id', jobData.id)
         .single();
 
-      if (!error && records?.project_start_date) {
-        setProjectStartDate(records.project_start_date);
+      if (!error && job?.project_start_date) {
+        setProjectStartDate(job.project_start_date);
+
         setIsDateLocked(true);
       }
     } catch (error) {
@@ -580,22 +579,27 @@ const ProductionTracker = ({
   };
 
   const lockStartDate = async () => {
-    if (!projectStartDate || !jobData?.id || !latestFileVersion) {
+    if (!projectStartDate || !jobData?.id) {
       addNotification('Please set a project start date first', 'error');
       return;
     }
 
     try {
-      const { error } = await supabase
-        .from('property_records')
+
+      // Validate date before sending to database
+    if (!projectStartDate || projectStartDate.trim() === '') {
+      throw new Error('Project start date cannot be empty');
+    }
+
+    const { error } = await supabase
+        .from('jobs')
         .update({ project_start_date: projectStartDate })
-        .eq('job_id', jobData.id)
-        .eq('file_version', latestFileVersion);
+        .eq('id', jobData.id);
 
       if (error) throw error;
 
       setIsDateLocked(true);
-      addNotification('✅ Project start date locked and saved to all property records', 'success');
+      addNotification('✅ Project start date locked and saved to job', 'success');
 
     } catch (error) {
       console.error('Error locking start date:', error);
@@ -939,7 +943,7 @@ const ProductionTracker = ({
 
   // ENHANCED: Process analytics with manager-focused counting and inspection_data persistence
   const processAnalytics = async () => {
-    if (!projectStartDate || !jobData?.id || !latestFileVersion) {
+    if (!projectStartDate || !jobData?.id) {
       addNotification('Project start date and job data required', 'error');
       return null;
     }
@@ -998,6 +1002,39 @@ const ProductionTracker = ({
       // Use properties from props instead of loading from database
       const rawData = properties;
       debugLog('ANALYTICS', `✅ Using ${rawData?.length || 0} property records from props for analysis`);
+
+      // CRITICAL DEBUG: Detailed analysis of received properties
+      if (!rawData || rawData.length === 0) {
+        console.error('🚨 NO PROPERTIES RECEIVED BY PRODUCTION TRACKER!');
+        console.log('Properties prop:', properties);
+        console.log('JobData:', jobData);
+        addNotification('ERROR: No properties data received. Check JobContainer.', 'error');
+        return null;
+      }
+
+      // Check data quality
+      const propertiesWithInspectors = rawData.filter(p => p.inspection_measure_by && p.inspection_measure_by.trim() !== '');
+      const propertiesWithDates = rawData.filter(p => p.inspection_measure_date);
+      const propertiesWithInfoBy = rawData.filter(p => p.inspection_info_by);
+
+      console.log(`🔍 PRODUCTION TRACKER RECEIVED:`);
+      console.log(`  - Total properties: ${rawData.length}`);
+      console.log(`  - With inspectors: ${propertiesWithInspectors.length}`);
+      console.log(`  - With measure dates: ${propertiesWithDates.length}`);
+      console.log(`  - With info_by codes: ${propertiesWithInfoBy.length}`);
+
+      // Log sample data structure
+      if (rawData.length > 0) {
+        const sample = rawData[0];
+        console.log(`🔍 SAMPLE PROPERTY STRUCTURE:`, {
+          composite_key: sample.property_composite_key,
+          class: sample.property_m4_class,
+          inspector: sample.inspection_measure_by,
+          measure_date: sample.inspection_measure_date,
+          info_by: sample.inspection_info_by,
+          available_keys: Object.keys(sample).filter(k => k.startsWith('inspection_'))
+        });
+      }
       
       // Show notification if large dataset
       if (rawData.length > 5000) {
@@ -1022,7 +1059,14 @@ const ProductionTracker = ({
         billingByClass[cls] = { total: 0, inspected: 0, billable: 0 };
       });
 
+      // DEBUG: Track processing counts
+      let processedCount = 0;
+      let validInspectionCount = 0;
+      let skippedReasons = {};
+
       rawData.forEach((record, index) => {
+        processedCount++;
+
         const inspector = record.inspection_measure_by || 'UNASSIGNED';
         const propertyClass = record.property_m4_class || 'UNKNOWN';
         const infoByCode = record.inspection_info_by;
@@ -1030,6 +1074,17 @@ const ProductionTracker = ({
         const listDate = record.inspection_list_date ? new Date(record.inspection_list_date) : null;
         const priceDate = record.inspection_price_date ? new Date(record.inspection_price_date) : null;
         const propertyKey = record.property_composite_key;
+
+        // DEBUG: Log first few properties in detail
+        if (index < 5) {
+          console.log(`🔍 Processing property ${index + 1}:`, {
+            key: propertyKey,
+            class: propertyClass,
+            inspector: inspector,
+            measure_date: record.inspection_measure_date,
+            info_by: infoByCode
+          });
+        }
 
         // Track this property's processing status
         let wasAddedToInspectionData = false;
@@ -1140,10 +1195,14 @@ const ProductionTracker = ({
         const hasMeasureBy = record.inspection_measure_by && record.inspection_measure_by.trim() !== '';
         const hasMeasureDate = record.inspection_measure_date;
 
-        // If ALL three core fields are null/empty, it's not inspected
-        if (!hasInfoBy && !hasMeasureBy && !hasMeasureDate) {
-          // Property not yet inspected - no inspection data at all
-          reasonNotAdded = 'Not yet inspected';
+
+        // FIXED: Separate "not yet inspected" from "attempted but failed validation"
+        // If NO inspection attempt at all (no inspector AND no date), mark as "not yet inspected"
+        if (!hasMeasureBy && !hasMeasureDate) {
+          reasonNotAdded = hasInfoBy ?
+            'Info_by code only - missing inspector and measure date' :
+            'Not yet inspected';
+
           missingProperties.push({
             composite_key: propertyKey,
             block: record.property_block,
@@ -1161,25 +1220,8 @@ const ProductionTracker = ({
           return;
         }
 
-        // Skip if no inspector recorded
-        if (!inspector || inspector.trim() === '') {
-          reasonNotAdded = 'Missing inspector initials';
-          missingProperties.push({
-            composite_key: propertyKey,
-            block: record.property_block,
-            lot: record.property_lot,
-            qualifier: record.property_qualifier || '',
-            card: record.property_addl_card || '1',
-            property_location: record.property_location || '',
-            property_class: propertyClass,
-            reason: reasonNotAdded,
-            inspector: '',
-            info_by_code: infoByCode,
-            measure_date: record.inspection_measure_date,
-            validation_issues: []
-          });
-          return;
-        }
+        // If we get here, there was SOME inspection attempt (inspector OR date exists)
+        // Continue processing to validate the attempt - don't early return
 
         // Skip inspections before project start date (removes old inspector noise)
         if (measuredDate && measuredDate < startDate) {
@@ -1414,9 +1456,20 @@ const ProductionTracker = ({
           });
         }
 
-        // Process valid inspections
+        // Process valid inspections - ONLY count if ALL 3 criteria are met
         if (isValidInspection && hasValidInfoBy && hasValidMeasuredBy && hasValidMeasuredDate) {
-          
+          validInspectionCount++;
+
+          // DEBUG: Log first few valid inspections
+          if (validInspectionCount <= 5) {
+            console.log(`🚀 VALID INSPECTION ${validInspectionCount}: ${propertyKey}`, {
+              inspector,
+              info_by: infoByCode,
+              measure_date: record.inspection_measure_date,
+              class: propertyClass
+            });
+          }
+
           // Count for manager progress (valid inspections against total properties)
           if (classBreakdown[propertyClass]) {
             classBreakdown[propertyClass].inspected++;
@@ -1426,7 +1479,7 @@ const ProductionTracker = ({
 
           // Inspector analytics - count valid inspections only
           inspectorStats[inspector].totalInspected++;
-            
+
           const workDayString = measuredDate.toISOString().split('T')[0];
           inspectorStats[inspector].allWorkDays.add(workDayString);
 
@@ -1434,14 +1487,14 @@ const ProductionTracker = ({
           if (isResidentialProperty) {
             inspectorStats[inspector].residentialInspected++;
             inspectorStats[inspector].residentialWorkDays.add(workDayString);
-            
+
             // Individual inspector credit: measure_by must equal list_by for personal achievement
             if (isEntryCode && record.inspection_list_by === inspector) {
               inspectorStats[inspector].entry++;
             } else if (isRefusalCode && record.inspection_list_by === inspector) {
               inspectorStats[inspector].refusal++;
             }
-            
+
             // Global metrics: count ALL valid entries/refusals regardless of who did list work
             if (isEntryCode && classBreakdown[propertyClass]) {
               classBreakdown[propertyClass].entry++;
@@ -1449,7 +1502,7 @@ const ProductionTracker = ({
               classBreakdown[propertyClass].refusal++;
             }
           }
-          
+
           if (isCommercialProperty) {
             inspectorStats[inspector].commercialInspected++;
             inspectorStats[inspector].commercialWorkDays.add(workDayString);
@@ -1459,25 +1512,23 @@ const ProductionTracker = ({
           if (isCommercialProperty) {
             const currentVendor = actualVendor || jobData.vendor_type;
 
-
-            if (currentVendor === 'BRT' && 
-                record.inspection_price_by && 
+            if (currentVendor === 'BRT' &&
+                record.inspection_price_by &&
                 record.inspection_price_by.trim() !== '' &&
-                priceDate && 
+                priceDate &&
                 priceDate >= startDate) {
-              
+
               inspectorStats[inspector].priced++;
               inspectorStats[inspector].pricingWorkDays.add(priceDate.toISOString().split('T')[0]);
               if (classBreakdown[propertyClass]) {
                 classBreakdown[propertyClass].priced++;
               }
-              
+
             } else if (currentVendor === 'Microsystems' && isPricedCode) {
               inspectorStats[inspector].priced++;
               if (classBreakdown[propertyClass]) {
                 classBreakdown[propertyClass].priced++;
               }
-            } else {
             }
           }
 
@@ -1513,29 +1564,45 @@ const ProductionTracker = ({
 
         // Track properties that didn't make it to inspection_data
         if (!wasAddedToInspectionData) {
-          const reasons = [];
-          if (!hasValidInfoBy) reasons.push(`Invalid InfoBy code: ${infoByCode}`);
-          if (!hasValidMeasuredBy) reasons.push('Missing/invalid inspector');
-          if (!hasValidMeasuredDate) reasons.push('Missing/invalid measure date');
-          if (propertyIssues[propertyKey]?.issues) reasons.push(...propertyIssues[propertyKey].issues);
-          
-          reasonNotAdded = `Failed validation: ${reasons.join(', ')}`;
-          
-          missingProperties.push({
-            composite_key: propertyKey,
-            block: record.property_block,
-            lot: record.property_lot,
-            qualifier: record.property_qualifier || '',
-            property_location: record.property_location || '',
-            property_class: propertyClass,
-            reason: reasonNotAdded,
-            inspector: inspector,
-            info_by_code: infoByCode,
-            measure_date: record.inspection_measure_date,
-            validation_issues: propertyIssues[propertyKey]?.issues || []
-          });
+          // Check if this property was already categorized as "Not yet inspected" earlier
+          const alreadyAddedAsNotInspected = missingProperties.some(p =>
+            p.composite_key === propertyKey &&
+            (p.reason === 'Not yet inspected' || p.reason.includes('Info_by code only'))
+          );
+
+          if (!alreadyAddedAsNotInspected) {
+            // This property had some inspection attempt but failed validation
+            const reasons = [];
+            if (!hasValidInfoBy) reasons.push(`Invalid InfoBy code: ${infoByCode}`);
+            if (!hasValidMeasuredBy) reasons.push('Missing/invalid inspector');
+            if (!hasValidMeasuredDate) reasons.push('Missing/invalid measure date');
+            if (propertyIssues[propertyKey]?.issues) reasons.push(...propertyIssues[propertyKey].issues);
+
+            reasonNotAdded = `Failed validation: ${reasons.join(', ')}`;
+
+            missingProperties.push({
+              composite_key: propertyKey,
+              block: record.property_block,
+              lot: record.property_lot,
+              qualifier: record.property_qualifier || '',
+              property_location: record.property_location || '',
+              property_class: propertyClass,
+              reason: reasonNotAdded,
+              inspector: inspector,
+              info_by_code: infoByCode,
+              measure_date: record.inspection_measure_date,
+              validation_issues: propertyIssues[propertyKey]?.issues || []
+            });
+          }
         }
       });
+
+      // DEBUG: Final processing summary
+      console.log(`📊 FINAL PROCESSING SUMMARY:`);
+      console.log(`  - Total properties processed: ${processedCount}`);
+      console.log(`  - Valid inspections found: ${validInspectionCount}`);
+      console.log(`  - Total with overrides: ${existingOverrides?.length || 0}`);
+      console.log(`  - FINAL COUNT (valid + overrides): ${validInspectionCount + (existingOverrides?.length || 0)}`);
 
       // Process ALL records first - collect validation issues and valid records
       debugLog('ANALYTICS', `Finished processing ${rawData.length} records. Found ${pendingValidationsList.length} validation issues.`);
