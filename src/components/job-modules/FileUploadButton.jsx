@@ -2750,60 +2750,6 @@ const handleCodeFileUpdate = async () => {
         ))}
       </div>
 
-      {/* Backend Status Indicator */}
-      <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-600 bg-gray-800">
-        <Database className="w-4 h-4" />
-        <span className="text-sm font-medium text-gray-300">Processing:</span>
-        {!useBackendService ? (
-          <div className="flex items-center gap-2">
-            <span className="text-blue-400 text-xs">🔄 Direct Supabase</span>
-            <span className="text-gray-500 text-xs">(Cloud Deployment)</span>
-            <button
-              onClick={() => setUseBackendService(true)}
-              className="text-blue-400 hover:text-blue-300 text-xs"
-              title="Enable backend processing if available"
-            >
-              (enable backend)
-            </button>
-          </div>
-        ) : backendAvailable === null ? (
-          <span className="text-yellow-400 text-xs">⏳ Checking backend...</span>
-        ) : backendAvailable ? (
-          <div className="flex items-center gap-2">
-            <span className="text-green-400 text-xs">✅ Enhanced Backend</span>
-            <button
-              onClick={() => setUseBackendService(false)}
-              className="text-gray-400 hover:text-gray-300 text-xs"
-              title="Disable backend processing"
-            >
-              (disable)
-            </button>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2">
-            <span className="text-orange-400 text-xs">❌ Backend Offline</span>
-            <button
-              onClick={checkBackendAvailability}
-              className="text-blue-400 hover:text-blue-300 text-xs"
-              title="Retry backend connection"
-            >
-              (retry)
-            </button>
-            <button
-              onClick={() => setUseBackendService(false)}
-              className="text-gray-400 hover:text-gray-300 text-xs"
-              title="Use direct Supabase processing"
-            >
-              (use supabase)
-            </button>
-          </div>
-        )}
-        {processingMethod === 'backend' && backendProgress && (
-          <div className="text-xs text-blue-400">
-            📊 {backendProgress.message || 'Processing...'}
-          </div>
-        )}
-      </div>
 
       {/* Source File Section */}
       <div className="flex items-center gap-3 text-gray-300">
