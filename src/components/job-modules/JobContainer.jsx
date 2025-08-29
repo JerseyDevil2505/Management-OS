@@ -72,66 +72,8 @@ const JobContainer = ({
     setLoadingProgress(0);
     setLoadedCount(0);
 
-    // Try backend service first if available
-    if (backendAvailable && initializationMethod === 'backend') {
-      try {
-        console.log('🚀 Attempting backend service initialization...');
-
-        const result = await initializeJob(selectedJob.id, {
-          userId: 'current-user', // TODO: Get from auth context
-          skipCache: false,
-          onProgress: (progress) => {
-            console.log('📊 Backend progress:', progress);
-
-            if (progress.type === 'property_counts') {
-              setPropertyRecordsCount(progress.data.total_count || 0);
-            }
-
-            if (progress.type === 'initialization_complete') {
-              console.log('✅ Backend initialization completed');
-            }
-          }
-        });
-
-        if (result.success) {
-          console.log('✅ Backend initialization successful, processing results...');
-
-          // Process backend results and set state
-          const { results } = result;
-
-          if (results.job_info) {
-            const backendJobData = {
-              ...selectedJob,
-              ...results.job_info.data,
-              latest_data_version: 1, // TODO: Get from backend
-              latest_code_version: 1, // TODO: Get from backend
-              property_count: results.property_counts?.data?.total_count || 0
-            };
-            setJobData(backendJobData);
-          }
-
-          if (results.property_counts) {
-            setPropertyRecordsCount(results.property_counts.data.total_count || 0);
-          }
-
-          // Set successful backend state
-          setIsLoadingVersion(false);
-          setIsLoadingProperties(false);
-          setInitializationMethod('backend');
-          console.log('✅ Backend initialization completed successfully');
-          return;
-        }
-
-      } catch (error) {
-        console.warn('⚠️ Backend service failed, falling back to direct method:', formatBackendError(error));
-        setBackendAvailable(false);
-        setInitializationMethod('direct');
-        // Continue to direct method below
-      }
-    }
-
-    // Direct database method (original code)
-    console.log('📊 Using direct database method...');
+    // Direct database method
+    console.log('📊 Loading job data using direct database calls...');
 
     try {
         console.log('🔍 Loading fresh data for job:', selectedJob.id);
