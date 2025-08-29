@@ -1193,9 +1193,6 @@ const handleCodeFileUpdate = async () => {
       clearBatchLogs();
       setShowBatchModal(true);
       setProcessing(true);
-      setBackendError(null);
-      setBackendProgress(null);
-      setProcessingMethod('checking');
 
       // Try backend first if enabled
       if (useBackendService) {
