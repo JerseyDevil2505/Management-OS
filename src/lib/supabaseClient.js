@@ -1620,7 +1620,7 @@ export const jobService = {
         dbFields.target_completion_date = componentFields.dueDate;
       }
       if (componentFields.totalProperties !== undefined) dbFields.total_properties = componentFields.totalProperties;
-      // if (componentFields.inspectedProperties !== undefined) dbFields.inspected_properties = componentFields.inspectedProperties;  // ❌ REMOVED 2025-01-XX: Field deleted from jobs table
+      // if (componentFields.inspectedProperties !== undefined) dbFields.inspected_properties = componentFields.inspectedProperties;  // ��� REMOVED 2025-01-XX: Field deleted from jobs table
       if (componentFields.sourceFileStatus) dbFields.source_file_status = componentFields.sourceFileStatus;
       if (componentFields.codeFileStatus) dbFields.code_file_status = componentFields.codeFileStatus;
       if (componentFields.vendorDetection) dbFields.vendor_detection = componentFields.vendorDetection;
@@ -2386,31 +2386,22 @@ export const propertyService = {
 
   // Helper method to create a preserved fields handler for the updaters
   async createPreservedFieldsHandler(jobId, compositeKeys) {
-    console.log(`🔍 DEBUG: Starting preserved fields handler for job ${jobId}`);
-    console.log(`🔍 DEBUG: Total composite keys to process: ${compositeKeys.length}`);
-    console.log(`🔍 DEBUG: PRESERVED_FIELDS to fetch: [${PRESERVED_FIELDS.join(', ')}]`);
-
-    const startTime = Date.now();
     const preservedDataMap = new Map();
 
     try {
       // Check if we have any preserved fields to fetch
       if (PRESERVED_FIELDS.length === 0) {
-        console.log(`✅ DEBUG: No preserved fields configured, returning empty map`);
         return preservedDataMap;
       }
+
+      console.log(`🔄 Preserving fields for ${compositeKeys.length} properties...`);
 
       // OPTIMIZED: Only one field, larger chunks, no delay
       const chunkSize = 1000;
       const totalChunks = Math.ceil(compositeKeys.length / chunkSize);
-      console.log(`🔍 DEBUG: Processing ${totalChunks} chunks of ${chunkSize} records each`);
 
       for (let i = 0; i < compositeKeys.length; i += chunkSize) {
         const chunk = compositeKeys.slice(i, i + chunkSize);
-        const chunkNumber = Math.floor(i / chunkSize) + 1;
-
-        console.log(`🔍 DEBUG: Processing chunk ${chunkNumber}/${totalChunks} (${chunk.length} keys)`);
-        const chunkStartTime = Date.now();
 
         // OPTIMIZED: Fetch all properties for full update processing
         const { data: existingRecords, error } = await supabase
@@ -2419,19 +2410,12 @@ export const propertyService = {
           .eq('job_id', jobId)
           .in('property_composite_key', chunk);
 
-        const chunkEndTime = Date.now();
-        console.log(`🔍 DEBUG: Chunk ${chunkNumber} query completed in ${chunkEndTime - chunkStartTime}ms`);
-
         if (error) {
-          console.error(`❌ DEBUG: Chunk ${chunkNumber} failed:`, error);
-          console.error(`❌ DEBUG: Error code: ${error.code}, message: ${error.message}`);
+          console.error(`❌ Failed to fetch preserved fields for chunk:`, error.message);
           continue;
         }
 
-        console.log(`✅ DEBUG: Chunk ${chunkNumber} returned ${existingRecords?.length || 0} records`);
-
         // Build preservation map
-        let recordsWithData = 0;
         existingRecords?.forEach(record => {
           const preserved = {};
           PRESERVED_FIELDS.forEach(field => {
@@ -2443,22 +2427,14 @@ export const propertyService = {
           // Only add to map if there's data to preserve
           if (Object.keys(preserved).length > 0) {
             preservedDataMap.set(record.property_composite_key, preserved);
-            recordsWithData++;
           }
         });
-
-        console.log(`🔍 DEBUG: Chunk ${chunkNumber} added ${recordsWithData} records with preserved data`);
       }
 
-      const totalTime = Date.now() - startTime;
-      console.log(`✅ DEBUG: Preserved fields handler completed in ${totalTime}ms`);
-      console.log(`✅ DEBUG: Final result: ${preservedDataMap.size} properties with preserved data`);
+      console.log(`✅ Preserved ${preservedDataMap.size} property assignments`);
 
     } catch (error) {
-      const totalTime = Date.now() - startTime;
-      console.error(`❌ DEBUG: Error in createPreservedFieldsHandler after ${totalTime}ms:`, error);
-      console.error(`❌ DEBUG: Error type: ${error.constructor.name}`);
-      console.error(`❌ DEBUG: Error stack:`, error.stack);
+      console.error(`❌ Error in preserved fields handler:`, error.message);
     }
 
     return preservedDataMap;
