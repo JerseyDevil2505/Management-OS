@@ -6,6 +6,14 @@
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
 
+// Debug logging for backend configuration
+console.log('🔍 BACKEND DEBUG - Service configuration:', {
+  REACT_APP_BACKEND_URL: process.env.REACT_APP_BACKEND_URL,
+  BACKEND_URL: BACKEND_URL,
+  env_keys: Object.keys(process.env).filter(k => k.includes('BACKEND')),
+  timestamp: new Date().toISOString()
+});
+
 // ===== ERROR HANDLING =====
 
 class BackendError extends Error {
@@ -24,7 +32,15 @@ class BackendError extends Error {
  */
 async function makeRequest(endpoint, options = {}) {
   const url = `${BACKEND_URL}${endpoint}`;
-  
+
+  console.log('🔍 BACKEND DEBUG - Making request:', {
+    url,
+    method: options.method || 'GET',
+    BACKEND_URL,
+    endpoint,
+    timestamp: new Date().toISOString()
+  });
+
   const defaultOptions = {
     headers: {
       'Content-Type': 'application/json',
@@ -43,9 +59,21 @@ async function makeRequest(endpoint, options = {}) {
     }
   };
 
+  console.log('🔍 BACKEND DEBUG - Request options:', {
+    method: requestOptions.method || 'GET',
+    headers: Object.keys(requestOptions.headers),
+    timeout: requestOptions.timeout,
+    hasBody: !!requestOptions.body
+  });
+
   try {
+    console.log('🔍 BACKEND DEBUG - Starting fetch request...');
+
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), requestOptions.timeout);
+    const timeoutId = setTimeout(() => {
+      console.error('🔍 BACKEND DEBUG - Request timeout after', requestOptions.timeout, 'ms');
+      controller.abort();
+    }, requestOptions.timeout);
 
     const response = await fetch(url, {
       ...requestOptions,
@@ -54,8 +82,21 @@ async function makeRequest(endpoint, options = {}) {
 
     clearTimeout(timeoutId);
 
+    console.log('🔍 BACKEND DEBUG - Fetch response received:', {
+      status: response.status,
+      statusText: response.statusText,
+      ok: response.ok,
+      headers: Object.fromEntries(response.headers.entries())
+    });
+
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
+      const errorData = await response.json().catch((e) => {
+        console.error('🔍 BACKEND DEBUG - Failed to parse error response as JSON:', e);
+        return {};
+      });
+
+      console.error('🔍 BACKEND DEBUG - Backend returned error:', errorData);
+
       throw new BackendError(
         errorData.message || `HTTP ${response.status}: ${response.statusText}`,
         response.status,
@@ -64,9 +105,19 @@ async function makeRequest(endpoint, options = {}) {
       );
     }
 
+    console.log('🔍 BACKEND DEBUG - Request successful');
     return response;
 
   } catch (error) {
+    console.error('🔍 BACKEND DEBUG - Request failed:', {
+      errorName: error.name,
+      errorMessage: error.message,
+      errorType: typeof error,
+      isAbortError: error.name === 'AbortError',
+      isBackendError: error instanceof BackendError,
+      stack: error.stack
+    });
+
     if (error.name === 'AbortError') {
       throw new BackendError(
         'Request timeout - operation took too long',
@@ -80,12 +131,20 @@ async function makeRequest(endpoint, options = {}) {
       throw error;
     }
 
-    throw new BackendError(
+    // Network errors, CORS errors, connection refused, etc.
+    const networkError = new BackendError(
       error.message || 'Network error occurred',
       0,
       endpoint,
-      { originalError: error.message }
+      {
+        originalError: error.message,
+        errorType: error.name,
+        url: url
+      }
     );
+
+    console.error('🔍 BACKEND DEBUG - Throwing BackendError:', networkError);
+    throw networkError;
   }
 }
 
@@ -120,6 +179,43 @@ function getAuthHeaders() {
  */
 export async function initializeJob(jobId, options = {}) {
   const { onProgress, skipCache = false, userId } = options;
+
+  console.log('🔍 BACKEND DEBUG - Job initialization starting:', {
+    jobId,
+    userId,
+    skipCache,
+    BACKEND_URL,
+    timestamp: new Date().toISOString()
+  });
+
+  // First check if backend is reachable
+  console.log('🔍 BACKEND DEBUG - Checking backend health...');
+  try {
+    const healthResponse = await fetch(`${BACKEND_URL}/api/health`, {
+      method: 'GET',
+      timeout: 5000
+    });
+    console.log('🔍 BACKEND DEBUG - Health check response:', {
+      status: healthResponse.status,
+      ok: healthResponse.ok
+    });
+  } catch (healthError) {
+    console.error('🔍 BACKEND DEBUG - Health check failed:', {
+      error: healthError.message,
+      name: healthError.name,
+      url: `${BACKEND_URL}/api/health`
+    });
+    throw new BackendError(
+      `Backend service unreachable at ${BACKEND_URL}. Health check failed: ${healthError.message}`,
+      503,
+      'health_check',
+      {
+        healthError: healthError.message,
+        backendUrl: BACKEND_URL,
+        suggestion: 'Check if backend service is running'
+      }
+    );
+  }
 
   try {
     const response = await makeRequest(`/api/jobs/initialize/${jobId}`, {
