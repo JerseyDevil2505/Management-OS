@@ -1650,7 +1650,7 @@ export const jobService = {
        .single();
       
       if (error) {
-        console.error('❌ DEBUG - Supabase update error:', error);
+        console.error('❌ Job update error:', error);
         throw error;
       }
       
