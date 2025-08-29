@@ -1194,37 +1194,7 @@ const handleCodeFileUpdate = async () => {
       setShowBatchModal(true);
       setProcessing(true);
 
-      // Try backend first if enabled
-      if (useBackendService) {
-        addBatchLog('🔍 Checking backend availability...', 'info');
-        setProcessingStatus('Checking backend availability...');
-
-        const backendIsAvailable = await checkBackendAvailability();
-
-        if (backendIsAvailable) {
-          addNotification('🚀 Using enhanced backend processing', 'success');
-          try {
-            setProcessingMethod('backend');
-            await handleBackendProcessing();
-            return; // Exit early if backend processing succeeds
-          } catch (backendError) {
-            console.error('Backend processing failed, falling back to Supabase:', backendError);
-            addBatchLog('⚠️ Backend failed, falling back to direct Supabase processing', 'warning');
-            addNotification('Backend unavailable, using direct processing', 'warning');
-            setBackendError(formatBackendError(backendError));
-            setProcessingMethod('supabase');
-          }
-        } else {
-          addBatchLog('⚠️ Backend not available, using direct Supabase processing', 'warning');
-          addNotification('Backend offline, using direct processing', 'warning');
-          setProcessingMethod('supabase');
-        }
-      } else {
-        addBatchLog('📋 Backend disabled, using direct Supabase processing', 'info');
-        setProcessingMethod('supabase');
-      }
-
-      // Fallback to original Supabase processing
+      // Direct Supabase processing
       setProcessingStatus(`Processing ${detectedVendor} data via Supabase...`);
 
       addBatchLog('🚀 Starting direct Supabase processing workflow', 'batch_start', {
