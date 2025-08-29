@@ -544,7 +544,7 @@ const generateQCFormPDF = () => {
       const rawDataCache = new Map();
       console.log('🔄 Starting quality checks with job-level raw data access...');
 
-      const pageSize = 2000; // Much larger batches with fast client-side parsing
+      const pageSize = 100; // Process data in batches of 100
       const totalPages = Math.ceil(properties.length / pageSize);
       let processedCount = 0;
 
