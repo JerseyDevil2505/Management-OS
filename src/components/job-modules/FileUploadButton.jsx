@@ -1217,13 +1217,49 @@ const handleCodeFileUpdate = async () => {
       clearBatchLogs();
       setShowBatchModal(true);
       setProcessing(true);
-      setProcessingStatus(`Processing ${detectedVendor} data via updater...`);
-      
-      addBatchLog('🚀 Starting file processing workflow', 'batch_start', {
+      setBackendError(null);
+      setBackendProgress(null);
+      setProcessingMethod('checking');
+
+      // Try backend first if enabled
+      if (useBackendService) {
+        addBatchLog('🔍 Checking backend availability...', 'info');
+        setProcessingStatus('Checking backend availability...');
+
+        const backendIsAvailable = await checkBackendAvailability();
+
+        if (backendIsAvailable) {
+          addNotification('🚀 Using enhanced backend processing', 'success');
+          try {
+            setProcessingMethod('backend');
+            await handleBackendProcessing();
+            return; // Exit early if backend processing succeeds
+          } catch (backendError) {
+            console.error('Backend processing failed, falling back to Supabase:', backendError);
+            addBatchLog('⚠️ Backend failed, falling back to direct Supabase processing', 'warning');
+            addNotification('Backend unavailable, using direct processing', 'warning');
+            setBackendError(formatBackendError(backendError));
+            setProcessingMethod('supabase');
+          }
+        } else {
+          addBatchLog('⚠️ Backend not available, using direct Supabase processing', 'warning');
+          addNotification('Backend offline, using direct processing', 'warning');
+          setProcessingMethod('supabase');
+        }
+      } else {
+        addBatchLog('📋 Backend disabled, using direct Supabase processing', 'info');
+        setProcessingMethod('supabase');
+      }
+
+      // Fallback to original Supabase processing
+      setProcessingStatus(`Processing ${detectedVendor} data via Supabase...`);
+
+      addBatchLog('🚀 Starting direct Supabase processing workflow', 'batch_start', {
         vendor: detectedVendor,
         fileName: sourceFile.name,
         changesDetected: comparisonResults.summary.missing + comparisonResults.summary.changes + comparisonResults.summary.deletions + comparisonResults.summary.salesChanges + comparisonResults.summary.classChanges,
-        salesDecisions: salesDecisions.size
+        salesDecisions: salesDecisions.size,
+        method: 'supabase'
       });
       
       
