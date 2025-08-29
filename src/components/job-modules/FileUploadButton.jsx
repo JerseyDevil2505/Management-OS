@@ -1328,15 +1328,19 @@ const handleCodeFileUpdate = async () => {
 
       // Track batch operations
       const result = await trackBatchInserts(async () => {
-        console.log('📤 Calling updateCSVData with:', {
-          jobId: job.id,
-          vendor: detectedVendor,
-          recordCount: sourceFileContent.split('\n').length - 1,
-          newFileVersion: newFileVersion
-        });
+        console.log('🔍 DEBUG: FileUploadButton calling updateCSVData with:');
+        console.log('  jobId:', job.id);
+        console.log('  vendor:', detectedVendor);
+        console.log('  recordCount:', sourceFileContent.split('\n').length - 1);
+        console.log('  newFileVersion:', newFileVersion);
+        console.log('  preservedFieldsHandler type:', typeof preservedFieldsHandler);
+        console.log('  preservedFields:', ['is_assigned_property']);
 
         try {
-          return await propertyService.updateCSVData(
+          const startTime = Date.now();
+          addBatchLog('🔍 DEBUG: About to call propertyService.updateCSVData...', 'info');
+
+          const result = await propertyService.updateCSVData(
             sourceFileContent,
             codeFileContent,
             job.id,
@@ -1348,18 +1352,18 @@ const handleCodeFileUpdate = async () => {
               source_file_version_id: crypto.randomUUID(),
               source_file_uploaded_at: new Date().toISOString(),
               file_version: newFileVersion,
-              preservedFieldsHandler: preservedFieldsHandler,  // ADD THIS!
+              preservedFieldsHandler: preservedFieldsHandler,
               preservedFields: [
                 'is_assigned_property'     // AdminJobManagement - from assignments
-                // REMOVED: validation_status (moved to jobs table)
-                // REMOVED: processing_notes (doesn't exist)
-                // REMOVED: project_start_date (moved to jobs table)
-                // REMOVED: location_analysis, new_vcs, asset_map_page, asset_key_page,
-                //          asset_zoning, values_norm_size, values_norm_time, sales_history
-                //          (moved to property_market_analysis table)
               ]
             }
           );
+
+          const endTime = Date.now();
+          console.log(`🔍 DEBUG: updateCSVData completed in ${endTime - startTime}ms`);
+          addBatchLog(`🔍 DEBUG: updateCSVData completed in ${endTime - startTime}ms`, 'info');
+
+          return result;
         } catch (updateError) {
           console.error('❌ updateCSVData failed:', updateError);
           // Add more specific error info to batch log
@@ -1649,7 +1653,7 @@ const handleCodeFileUpdate = async () => {
       const isRollback = error.message && (error.message.includes('rolled back') || error.message.includes('reverted'));
       
       if (isRollback) {
-        addBatchLog('❌ CRITICAL FAILURE - Update rolled back', 'error', { 
+        addBatchLog('�� CRITICAL FAILURE - Update rolled back', 'error', { 
           error: error.message,
           details: 'All database changes have been reversed'
         });
