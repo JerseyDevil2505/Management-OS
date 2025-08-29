@@ -1328,17 +1328,9 @@ const handleCodeFileUpdate = async () => {
 
       // Track batch operations
       const result = await trackBatchInserts(async () => {
-        console.log('🔍 DEBUG: FileUploadButton calling updateCSVData with:');
-        console.log('  jobId:', job.id);
-        console.log('  vendor:', detectedVendor);
-        console.log('  recordCount:', sourceFileContent.split('\n').length - 1);
-        console.log('  newFileVersion:', newFileVersion);
-        console.log('  preservedFieldsHandler type:', typeof preservedFieldsHandler);
-        console.log('  preservedFields:', ['is_assigned_property']);
-
         try {
           const startTime = Date.now();
-          addBatchLog('🔍 DEBUG: About to call propertyService.updateCSVData...', 'info');
+          addBatchLog('🔄 Processing file data...', 'info');
 
           const result = await propertyService.updateCSVData(
             sourceFileContent,
