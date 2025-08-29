@@ -6,6 +6,14 @@
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
 
+// Debug logging for backend configuration
+console.log('🔍 BACKEND DEBUG - Service configuration:', {
+  REACT_APP_BACKEND_URL: process.env.REACT_APP_BACKEND_URL,
+  BACKEND_URL: BACKEND_URL,
+  env_keys: Object.keys(process.env).filter(k => k.includes('BACKEND')),
+  timestamp: new Date().toISOString()
+});
+
 // ===== ERROR HANDLING =====
 
 class BackendError extends Error {
