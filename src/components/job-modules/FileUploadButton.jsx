@@ -49,9 +49,11 @@ const FileUploadButton = ({ job, onFileProcessed, isJobLoading = false, onDataRe
   });
 
   // Backend service integration state
-  const [useBackendService, setUseBackendService] = useState(true); // Enable backend by default
+  const [useBackendService, setUseBackendService] = useState(false); // Disable backend by default for cloud deployment
   const [backendProgress, setBackendProgress] = useState(null);
   const [backendError, setBackendError] = useState(null);
+  const [backendAvailable, setBackendAvailable] = useState(null); // null = unknown, true/false = available/unavailable
+  const [processingMethod, setProcessingMethod] = useState('checking'); // 'checking', 'backend', 'supabase'
 
   const addNotification = (message, type = 'info') => {
     const id = Date.now() + Math.random(); // Make unique with random component
@@ -97,6 +99,128 @@ const FileUploadButton = ({ job, onFileProcessed, isJobLoading = false, onDataRe
       isInserting: false,
       currentOperation: ''
     });
+  };
+
+  // Check backend availability
+  const checkBackendAvailability = async () => {
+    try {
+      const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
+      const response = await fetch(`${backendUrl}/api/health`, {
+        method: 'GET',
+        signal: AbortSignal.timeout(5000) // 5 second timeout
+      });
+      const available = response.ok;
+      setBackendAvailable(available);
+      return available;
+    } catch (error) {
+      console.log('Backend not available:', error.message);
+      setBackendAvailable(false);
+      return false;
+    }
+  };
+
+  // Backend file processing with progress
+  const handleBackendProcessing = async () => {
+    try {
+      addBatchLog('🚀 Starting backend file processing', 'batch_start', {
+        vendor: detectedVendor,
+        fileName: sourceFile.name,
+        method: 'backend'
+      });
+
+      // Upload file to backend
+      addBatchLog('📤 Uploading file to backend...', 'info');
+      setProcessingStatus('Uploading file to backend...');
+
+      const uploadResult = await uploadFile(sourceFile, job.id, 'source', {
+        onProgress: (progress) => {
+          setBackendProgress(progress);
+          if (progress.message) {
+            addBatchLog(progress.message, progress.type || 'info');
+          }
+        }
+      });
+
+      if (!uploadResult.success) {
+        throw new Error(uploadResult.error || 'Upload failed');
+      }
+
+      addBatchLog('✅ File uploaded successfully', 'success');
+
+      // Process file on backend
+      addBatchLog('⚙️ Processing file on backend...', 'info');
+      setProcessingStatus('Processing file on backend...');
+
+      const processResult = await processFile(job.id, {
+        fileType: 'source',
+        vendor: detectedVendor,
+        salesDecisions: Array.from(salesDecisions.entries()),
+        onProgress: (progress) => {
+          setBackendProgress(progress);
+          if (progress.message) {
+            addBatchLog(progress.message, progress.type || 'info');
+          }
+        }
+      });
+
+      if (!processResult.success) {
+        throw new Error(processResult.error || 'Processing failed');
+      }
+
+      addBatchLog('✅ Backend processing completed successfully', 'success', {
+        recordsProcessed: processResult.recordsProcessed,
+        method: 'backend'
+      });
+
+      // Update job metadata
+      if (processResult.recordsProcessed > 0) {
+        try {
+          const updateData = {
+            totalProperties: processResult.recordsProcessed,
+            source_file_uploaded_at: new Date().toISOString()
+          };
+          await jobService.update(job.id, updateData);
+          addBatchLog('✅ Job metadata updated successfully', 'success', updateData);
+        } catch (updateError) {
+          console.error('❌ Failed to update job:', updateError);
+          addBatchLog('⚠️ Job metadata update failed', 'warning', { error: updateError.message });
+        }
+      }
+
+      setBatchComplete(true);
+
+      addNotification(`✅ Successfully processed ${processResult.recordsProcessed} records via backend`, 'success');
+
+      // Auto-close modal after 3 seconds
+      setTimeout(() => {
+        setShowBatchModal(false);
+        setShowResultsModal(false);
+        setSourceFile(null);
+        setSourceFileContent(null);
+        setSalesDecisions(new Map());
+      }, 3000);
+
+      // Notify parent component
+      if (onFileProcessed) {
+        onFileProcessed({
+          success: true,
+          processed: processResult.recordsProcessed,
+          method: 'backend'
+        });
+      }
+
+      // Trigger data refresh in JobContainer
+      if (onDataRefresh) {
+        addBatchLog('🔄 Triggering data refresh in JobContainer...', 'info');
+        await onDataRefresh();
+        addBatchLog('✅ JobContainer data refreshed', 'success');
+      }
+
+    } catch (error) {
+      console.error('Backend processing failed:', error);
+      addBatchLog(`❌ Backend processing failed: ${error.message}`, 'error');
+      throw error; // Re-throw to trigger fallback
+    }
   };
 
   // FIXED: Use exact same date parsing method as processors
@@ -1197,13 +1321,49 @@ const handleCodeFileUpdate = async () => {
       clearBatchLogs();
       setShowBatchModal(true);
       setProcessing(true);
-      setProcessingStatus(`Processing ${detectedVendor} data via updater...`);
-      
-      addBatchLog('🚀 Starting file processing workflow', 'batch_start', {
+      setBackendError(null);
+      setBackendProgress(null);
+      setProcessingMethod('checking');
+
+      // Try backend first if enabled
+      if (useBackendService) {
+        addBatchLog('🔍 Checking backend availability...', 'info');
+        setProcessingStatus('Checking backend availability...');
+
+        const backendIsAvailable = await checkBackendAvailability();
+
+        if (backendIsAvailable) {
+          addNotification('🚀 Using enhanced backend processing', 'success');
+          try {
+            setProcessingMethod('backend');
+            await handleBackendProcessing();
+            return; // Exit early if backend processing succeeds
+          } catch (backendError) {
+            console.error('Backend processing failed, falling back to Supabase:', backendError);
+            addBatchLog('⚠️ Backend failed, falling back to direct Supabase processing', 'warning');
+            addNotification('Backend unavailable, using direct processing', 'warning');
+            setBackendError(formatBackendError(backendError));
+            setProcessingMethod('supabase');
+          }
+        } else {
+          addBatchLog('⚠️ Backend not available, using direct Supabase processing', 'warning');
+          addNotification('Backend offline, using direct processing', 'warning');
+          setProcessingMethod('supabase');
+        }
+      } else {
+        addBatchLog('📋 Backend disabled, using direct Supabase processing', 'info');
+        setProcessingMethod('supabase');
+      }
+
+      // Fallback to original Supabase processing
+      setProcessingStatus(`Processing ${detectedVendor} data via Supabase...`);
+
+      addBatchLog('🚀 Starting direct Supabase processing workflow', 'batch_start', {
         vendor: detectedVendor,
         fileName: sourceFile.name,
         changesDetected: comparisonResults.summary.missing + comparisonResults.summary.changes + comparisonResults.summary.deletions + comparisonResults.summary.salesChanges + comparisonResults.summary.classChanges,
-        salesDecisions: salesDecisions.size
+        salesDecisions: salesDecisions.size,
+        method: 'supabase'
       });
       
       
@@ -1976,7 +2136,7 @@ const handleCodeFileUpdate = async () => {
                     setProcessing(false);
                     setBatchComplete(true);
                     setIsProcessingLocked(false);
-                    addBatchLog('🛑 Operation manually stopped by user', 'warning');
+                    addBatchLog('���� Operation manually stopped by user', 'warning');
                     console.log('🛑 Emergency stop triggered - operation cancelled');
                   }}
                   className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 font-medium flex items-center space-x-2"
@@ -2675,6 +2835,13 @@ const handleCodeFileUpdate = async () => {
     }
   }, [showReportsModal]);
 
+  // Check backend availability on component mount
+  useEffect(() => {
+    if (useBackendService) {
+      checkBackendAvailability();
+    }
+  }, []);
+
   const getFileStatusWithRealVersion = (timestamp, type) => {
     if (!timestamp) return 'Never';
 
@@ -2742,6 +2909,61 @@ const handleCodeFileUpdate = async () => {
             </div>
           </div>
         ))}
+      </div>
+
+      {/* Backend Status Indicator */}
+      <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-600 bg-gray-800">
+        <Database className="w-4 h-4" />
+        <span className="text-sm font-medium text-gray-300">Processing:</span>
+        {!useBackendService ? (
+          <div className="flex items-center gap-2">
+            <span className="text-blue-400 text-xs">🔄 Direct Supabase</span>
+            <span className="text-gray-500 text-xs">(Cloud Deployment)</span>
+            <button
+              onClick={() => setUseBackendService(true)}
+              className="text-blue-400 hover:text-blue-300 text-xs"
+              title="Enable backend processing if available"
+            >
+              (enable backend)
+            </button>
+          </div>
+        ) : backendAvailable === null ? (
+          <span className="text-yellow-400 text-xs">⏳ Checking backend...</span>
+        ) : backendAvailable ? (
+          <div className="flex items-center gap-2">
+            <span className="text-green-400 text-xs">✅ Enhanced Backend</span>
+            <button
+              onClick={() => setUseBackendService(false)}
+              className="text-gray-400 hover:text-gray-300 text-xs"
+              title="Disable backend processing"
+            >
+              (disable)
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <span className="text-orange-400 text-xs">❌ Backend Offline</span>
+            <button
+              onClick={checkBackendAvailability}
+              className="text-blue-400 hover:text-blue-300 text-xs"
+              title="Retry backend connection"
+            >
+              (retry)
+            </button>
+            <button
+              onClick={() => setUseBackendService(false)}
+              className="text-gray-400 hover:text-gray-300 text-xs"
+              title="Use direct Supabase processing"
+            >
+              (use supabase)
+            </button>
+          </div>
+        )}
+        {processingMethod === 'backend' && backendProgress && (
+          <div className="text-xs text-blue-400">
+            📊 {backendProgress.message || 'Processing...'}
+          </div>
+        )}
       </div>
 
       {/* Source File Section */}
