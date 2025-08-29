@@ -49,7 +49,7 @@ const FileUploadButton = ({ job, onFileProcessed, isJobLoading = false, onDataRe
   });
 
   // Backend service integration state
-  const [useBackendService, setUseBackendService] = useState(true); // Enable backend by default
+  const [useBackendService, setUseBackendService] = useState(false); // Disable backend by default for cloud deployment
   const [backendProgress, setBackendProgress] = useState(null);
   const [backendError, setBackendError] = useState(null);
   const [backendAvailable, setBackendAvailable] = useState(null); // null = unknown, true/false = available/unavailable
