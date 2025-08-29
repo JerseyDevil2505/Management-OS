@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Upload, FileText, CheckCircle, AlertTriangle, X, Database, Settings, Download, Eye, Calendar, RefreshCw } from 'lucide-react';
 import { jobService, propertyService, supabase, preservedFieldsHandler } from '../../lib/supabaseClient';
-import { uploadFile, processFile, formatBackendError } from '../../services/backendService';
 
 const FileUploadButton = ({ job, onFileProcessed, isJobLoading = false, onDataRefresh }) => {
   const [sourceFile, setSourceFile] = useState(null);
