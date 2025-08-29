@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Upload, FileText, CheckCircle, AlertTriangle, X, Database, Settings, Download, Eye, Calendar, RefreshCw } from 'lucide-react';
 import { jobService, propertyService, supabase, preservedFieldsHandler } from '../../lib/supabaseClient';
-import { uploadFile, processFile, formatBackendError } from '../../services/backendService';
 
 const FileUploadButton = ({ job, onFileProcessed, isJobLoading = false, onDataRefresh }) => {
   const [sourceFile, setSourceFile] = useState(null);
@@ -30,7 +29,7 @@ const FileUploadButton = ({ job, onFileProcessed, isJobLoading = false, onDataRe
 
   // Pagination for reports modal
   const [currentReportPage, setCurrentReportPage] = useState(1);
-  const reportsPerPage = 5;
+  const reportsPerPage = 100;
   
   // NEW: Batch processing modal state
   const [showBatchModal, setShowBatchModal] = useState(false);
@@ -48,12 +47,6 @@ const FileUploadButton = ({ job, onFileProcessed, isJobLoading = false, onDataRe
     currentOperation: ''
   });
 
-  // Backend service integration state
-  const [useBackendService, setUseBackendService] = useState(false); // Disable backend by default for cloud deployment
-  const [backendProgress, setBackendProgress] = useState(null);
-  const [backendError, setBackendError] = useState(null);
-  const [backendAvailable, setBackendAvailable] = useState(null); // null = unknown, true/false = available/unavailable
-  const [processingMethod, setProcessingMethod] = useState('checking'); // 'checking', 'backend', 'supabase'
 
   const addNotification = (message, type = 'info') => {
     const id = Date.now() + Math.random(); // Make unique with random component
@@ -101,162 +94,6 @@ const FileUploadButton = ({ job, onFileProcessed, isJobLoading = false, onDataRe
     });
   };
 
-  // Check backend availability
-  const checkBackendAvailability = async () => {
-    const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
-    console.log('🔍 Checking backend availability at:', backendUrl);
-
-    try {
-      // Create abort controller for timeout
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => {
-        controller.abort();
-        console.log('⏰ Backend check timed out after 8 seconds');
-      }, 8000);
-
-      console.log('📡 Making request to:', `${backendUrl}/api/health`);
-
-      const response = await fetch(`${backendUrl}/api/health`, {
-        method: 'GET',
-        signal: controller.signal,
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        }
-      });
-
-      clearTimeout(timeoutId);
-
-      console.log('📥 Response received:', {
-        status: response.status,
-        statusText: response.statusText,
-        ok: response.ok
-      });
-
-      const available = response.ok;
-      setBackendAvailable(available);
-
-      if (available) {
-        console.log('✅ Backend is available and responding');
-      } else {
-        console.log('❌ Backend responded but with error status:', response.status);
-      }
-
-      return available;
-    } catch (error) {
-      console.log('❌ Backend not available - Error details:', {
-        name: error.name,
-        message: error.message,
-        url: `${backendUrl}/api/health`
-      });
-      setBackendAvailable(false);
-      return false;
-    }
-  };
-
-  // Backend file processing with progress
-  const handleBackendProcessing = async () => {
-    try {
-      addBatchLog('🚀 Starting backend file processing', 'batch_start', {
-        vendor: detectedVendor,
-        fileName: sourceFile.name,
-        method: 'backend'
-      });
-
-      // Upload file to backend
-      addBatchLog('📤 Uploading file to backend...', 'info');
-      setProcessingStatus('Uploading file to backend...');
-
-      const uploadResult = await uploadFile(sourceFile, job.id, 'source', {
-        onProgress: (progress) => {
-          setBackendProgress(progress);
-          if (progress.message) {
-            addBatchLog(progress.message, progress.type || 'info');
-          }
-        }
-      });
-
-      if (!uploadResult.success) {
-        throw new Error(uploadResult.error || 'Upload failed');
-      }
-
-      addBatchLog('✅ File uploaded successfully', 'success');
-
-      // Process file on backend
-      addBatchLog('⚙️ Processing file on backend...', 'info');
-      setProcessingStatus('Processing file on backend...');
-
-      const processResult = await processFile(job.id, {
-        fileType: 'source',
-        vendor: detectedVendor,
-        salesDecisions: Array.from(salesDecisions.entries()),
-        onProgress: (progress) => {
-          setBackendProgress(progress);
-          if (progress.message) {
-            addBatchLog(progress.message, progress.type || 'info');
-          }
-        }
-      });
-
-      if (!processResult.success) {
-        throw new Error(processResult.error || 'Processing failed');
-      }
-
-      addBatchLog('✅ Backend processing completed successfully', 'success', {
-        recordsProcessed: processResult.recordsProcessed,
-        method: 'backend'
-      });
-
-      // Update job metadata
-      if (processResult.recordsProcessed > 0) {
-        try {
-          const updateData = {
-            totalProperties: processResult.recordsProcessed,
-            source_file_uploaded_at: new Date().toISOString()
-          };
-          await jobService.update(job.id, updateData);
-          addBatchLog('✅ Job metadata updated successfully', 'success', updateData);
-        } catch (updateError) {
-          console.error('❌ Failed to update job:', updateError);
-          addBatchLog('⚠️ Job metadata update failed', 'warning', { error: updateError.message });
-        }
-      }
-
-      setBatchComplete(true);
-
-      addNotification(`✅ Successfully processed ${processResult.recordsProcessed} records via backend`, 'success');
-
-      // Auto-close modal after 3 seconds
-      setTimeout(() => {
-        setShowBatchModal(false);
-        setShowResultsModal(false);
-        setSourceFile(null);
-        setSourceFileContent(null);
-        setSalesDecisions(new Map());
-      }, 3000);
-
-      // Notify parent component
-      if (onFileProcessed) {
-        onFileProcessed({
-          success: true,
-          processed: processResult.recordsProcessed,
-          method: 'backend'
-        });
-      }
-
-      // Trigger data refresh in JobContainer
-      if (onDataRefresh) {
-        addBatchLog('🔄 Triggering data refresh in JobContainer...', 'info');
-        await onDataRefresh();
-        addBatchLog('✅ JobContainer data refreshed', 'success');
-      }
-
-    } catch (error) {
-      console.error('Backend processing failed:', error);
-      addBatchLog(`❌ Backend processing failed: ${error.message}`, 'error');
-      throw error; // Re-throw to trigger fallback
-    }
-  };
 
   // FIXED: Use exact same date parsing method as processors
   const parseDate = (dateString) => {
@@ -713,11 +550,86 @@ const handleCodeFileUpdate = async () => {
         comparison_timestamp: new Date().toISOString()
       };
 
+      // Extract property keys for the new structured fields
+      const propertiesAdded = [];
+      const propertiesRemoved = [];
+      const propertiesModified = [];
+
+      // Extract added property keys (from source file records)
+      if (comparisonResults.details.missing?.length > 0) {
+        comparisonResults.details.missing.forEach(record => {
+          // Generate composite key from source record
+          const blockField = detectedVendor === 'BRT' ? 'BLOCK' : 'Block';
+          const lotField = detectedVendor === 'BRT' ? 'LOT' : 'Lot';
+          const qualifierField = detectedVendor === 'BRT' ? 'QUALIFIER' : 'Qual';
+          const cardField = detectedVendor === 'BRT' ? 'CARD' : 'Bldg';
+          const locationField = detectedVendor === 'BRT' ? 'PROPERTY_LOCATION' : 'Location';
+
+          // Construct composite key similar to processors
+          const year = job.start_date ? new Date(job.start_date).getFullYear() : new Date().getFullYear();
+          const ccddCode = job.ccdd_code || '';
+          const block = String(record[blockField] || '').trim();
+          const lot = String(record[lotField] || '').trim();
+          const qualifier = String(record[qualifierField] || '').trim() || 'NONE';
+          const card = String(record[cardField] || '').trim() || 'NONE';
+          const location = String(record[locationField] || '').trim() || 'NONE';
+
+          const compositeKey = `${year}${ccddCode}-${block}-${lot}_${qualifier}-${card}-${location}`;
+          propertiesAdded.push(compositeKey);
+        });
+      }
+
+      // Extract removed property keys (from database records)
+      if (comparisonResults.details.deletions?.length > 0) {
+        comparisonResults.details.deletions.forEach(record => {
+          if (record.property_composite_key) {
+            propertiesRemoved.push(record.property_composite_key);
+          }
+        });
+      }
+
+      // Extract modified property keys (from various change types)
+      if (comparisonResults.details.changes?.length > 0) {
+        comparisonResults.details.changes.forEach(record => {
+          if (record.property_composite_key) {
+            propertiesModified.push(record.property_composite_key);
+          }
+        });
+      }
+
+      if (comparisonResults.details.classChanges?.length > 0) {
+        comparisonResults.details.classChanges.forEach(change => {
+          if (change.property_composite_key) {
+            propertiesModified.push(change.property_composite_key);
+          }
+        });
+      }
+
+      if (comparisonResults.details.salesChanges?.length > 0) {
+        comparisonResults.details.salesChanges.forEach(change => {
+          if (change.property_composite_key) {
+            propertiesModified.push(change.property_composite_key);
+          }
+        });
+      }
+
+      // Remove duplicates from modified properties
+      const uniquePropertiesModified = [...new Set(propertiesModified)];
+
+      console.log(`📊 Property tracking summary:`, {
+        added: propertiesAdded.length,
+        removed: propertiesRemoved.length,
+        modified: uniquePropertiesModified.length
+      });
+
       const { data, error } = await supabase
         .from('comparison_reports')
         .insert([{
           job_id: job.id,
           report_data: reportData,
+          properties_added: propertiesAdded,
+          properties_removed: propertiesRemoved,
+          properties_modified: uniquePropertiesModified,
           report_date: new Date().toISOString(),
           generated_by: 'FileUploadButton',
           status: 'generated'
@@ -1356,41 +1268,8 @@ const handleCodeFileUpdate = async () => {
       clearBatchLogs();
       setShowBatchModal(true);
       setProcessing(true);
-      setBackendError(null);
-      setBackendProgress(null);
-      setProcessingMethod('checking');
 
-      // Try backend first if enabled
-      if (useBackendService) {
-        addBatchLog('🔍 Checking backend availability...', 'info');
-        setProcessingStatus('Checking backend availability...');
-
-        const backendIsAvailable = await checkBackendAvailability();
-
-        if (backendIsAvailable) {
-          addNotification('🚀 Using enhanced backend processing', 'success');
-          try {
-            setProcessingMethod('backend');
-            await handleBackendProcessing();
-            return; // Exit early if backend processing succeeds
-          } catch (backendError) {
-            console.error('Backend processing failed, falling back to Supabase:', backendError);
-            addBatchLog('⚠️ Backend failed, falling back to direct Supabase processing', 'warning');
-            addNotification('Backend unavailable, using direct processing', 'warning');
-            setBackendError(formatBackendError(backendError));
-            setProcessingMethod('supabase');
-          }
-        } else {
-          addBatchLog('⚠️ Backend not available, using direct Supabase processing', 'warning');
-          addNotification('Backend offline, using direct processing', 'warning');
-          setProcessingMethod('supabase');
-        }
-      } else {
-        addBatchLog('📋 Backend disabled, using direct Supabase processing', 'info');
-        setProcessingMethod('supabase');
-      }
-
-      // Fallback to original Supabase processing
+      // Direct Supabase processing
       setProcessingStatus(`Processing ${detectedVendor} data via Supabase...`);
 
       addBatchLog('🚀 Starting direct Supabase processing workflow', 'batch_start', {
@@ -1449,15 +1328,11 @@ const handleCodeFileUpdate = async () => {
 
       // Track batch operations
       const result = await trackBatchInserts(async () => {
-        console.log('📤 Calling updateCSVData with:', {
-          jobId: job.id,
-          vendor: detectedVendor,
-          recordCount: sourceFileContent.split('\n').length - 1,
-          newFileVersion: newFileVersion
-        });
-
         try {
-          return await propertyService.updateCSVData(
+          const startTime = Date.now();
+          addBatchLog('🔄 Processing file data...', 'info');
+
+          const result = await propertyService.updateCSVData(
             sourceFileContent,
             codeFileContent,
             job.id,
@@ -1469,18 +1344,17 @@ const handleCodeFileUpdate = async () => {
               source_file_version_id: crypto.randomUUID(),
               source_file_uploaded_at: new Date().toISOString(),
               file_version: newFileVersion,
-              preservedFieldsHandler: preservedFieldsHandler,  // ADD THIS!
+              preservedFieldsHandler: preservedFieldsHandler,
               preservedFields: [
-                'is_assigned_property',    // AdminJobManagement - from assignments
-                'validation_status',       // ProductionTracker - validation state
-                'processing_notes'         // User notes - if added should be kept
-                // REMOVED: project_start_date (moved to jobs table)
-                // REMOVED: location_analysis, new_vcs, asset_map_page, asset_key_page,
-                //          asset_zoning, values_norm_size, values_norm_time, sales_history
-                //          (moved to property_market_analysis table)
+                'is_assigned_property'     // AdminJobManagement - from assignments
               ]
             }
           );
+
+          const endTime = Date.now();
+          addBatchLog(`✅ Processing completed in ${endTime - startTime}ms`, 'info');
+
+          return result;
         } catch (updateError) {
           console.error('❌ updateCSVData failed:', updateError);
           // Add more specific error info to batch log
@@ -1497,7 +1371,21 @@ const handleCodeFileUpdate = async () => {
         processed: result.processed,
         errors: result.errors
       });
-      
+
+      // Update validation_status on jobs table (moved from property_records)
+      addBatchLog('📝 Updating job validation status...', 'info');
+      const { error: jobUpdateError } = await supabase
+        .from('jobs')
+        .update({ validation_status: 'updated' })
+        .eq('id', job.id);
+
+      if (jobUpdateError) {
+        console.error('❌ Failed to update job validation_status:', jobUpdateError);
+        addBatchLog('⚠️ Warning: Could not update job validation status', 'warning');
+      } else {
+        addBatchLog('✅ Job validation status set to "updated"', 'success');
+      }
+
       // Save comparison report with sales decisions
       addBatchLog('💾 Saving comparison report to database...', 'info');
       await saveComparisonReport(comparisonResults, salesDecisions);
@@ -1756,7 +1644,7 @@ const handleCodeFileUpdate = async () => {
       const isRollback = error.message && (error.message.includes('rolled back') || error.message.includes('reverted'));
       
       if (isRollback) {
-        addBatchLog('❌ CRITICAL FAILURE - Update rolled back', 'error', { 
+        addBatchLog('�� CRITICAL FAILURE - Update rolled back', 'error', { 
           error: error.message,
           details: 'All database changes have been reversed'
         });
@@ -2171,7 +2059,7 @@ const handleCodeFileUpdate = async () => {
                     setProcessing(false);
                     setBatchComplete(true);
                     setIsProcessingLocked(false);
-                    addBatchLog('���� Operation manually stopped by user', 'warning');
+                    addBatchLog('����� Operation manually stopped by user', 'warning');
                     console.log('🛑 Emergency stop triggered - operation cancelled');
                   }}
                   className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 font-medium flex items-center space-x-2"
@@ -2632,6 +2520,8 @@ const handleCodeFileUpdate = async () => {
                     addBatchLog(`📊 Current DB version: ${currentFileVersion}, incrementing to: ${newFileVersion}`, 'info');
                     
                     const result = await trackBatchInserts(async () => {
+                      addBatchLog('🔄 Processing data refresh...', 'info');
+
                       return await propertyService.updateCSVData(
                         sourceFileContent,
                         codeFileContent,
@@ -2646,13 +2536,7 @@ const handleCodeFileUpdate = async () => {
                           file_version: newFileVersion,
                           preservedFieldsHandler: preservedFieldsHandler,
                           preservedFields: [
-                            'is_assigned_property',    // AdminJobManagement - from assignments
-                            'validation_status',       // ProductionTracker - validation state
-                            'processing_notes'         // User notes - if added should be kept
-                            // REMOVED: project_start_date (moved to jobs table)
-                            // REMOVED: location_analysis, new_vcs, asset_map_page, asset_key_page,
-                            //          asset_zoning, values_norm_size, values_norm_time, sales_history
-                            //          (moved to property_market_analysis table)
+                            'is_assigned_property'     // AdminJobManagement - from assignments
                           ]
                         }
                       );
@@ -2870,20 +2754,11 @@ const handleCodeFileUpdate = async () => {
     }
   }, [showReportsModal]);
 
-  // Check backend availability on component mount
-  useEffect(() => {
-    if (useBackendService) {
-      checkBackendAvailability();
-    }
-  }, []);
 
   const getFileStatusWithRealVersion = (timestamp, type) => {
     if (!timestamp) return 'Never';
 
     if (type === 'source') {
-      console.log(`🔍 Banner Debug - currentFileVersion: ${currentFileVersion}`);
-      console.log(`🔍 Banner Debug - lastUpdatedAt: ${lastUpdatedAt}`);
-
       if (currentFileVersion > 1) {
         // Use updated_at from property_records
         const uploadDate = lastUpdatedAt || timestamp;
@@ -2894,13 +2769,9 @@ const handleCodeFileUpdate = async () => {
     } else if (type === 'code') {
       // Check if code file was updated
       const codeVersion = job.code_file_version || 1;
-      console.log(`🔧 Code Banner Debug - codeVersion: ${codeVersion}`);
-      console.log(`🔧 Code Banner Debug - job.code_file_uploaded_at: ${job.code_file_uploaded_at}`);
-      console.log(`🔧 Code Banner Debug - timestamp param: ${timestamp}`);
 
       if (codeVersion > 1) {
         const uploadDate = job.code_file_uploaded_at || timestamp;
-        console.log(`🔧 Code Banner Debug - final uploadDate: ${uploadDate}`);
         return `Updated via FileUpload (${formatDate(uploadDate)})`;
       } else {
         return `Imported at Job Creation (${formatDate(timestamp)})`;
@@ -2946,60 +2817,6 @@ const handleCodeFileUpdate = async () => {
         ))}
       </div>
 
-      {/* Backend Status Indicator */}
-      <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-600 bg-gray-800">
-        <Database className="w-4 h-4" />
-        <span className="text-sm font-medium text-gray-300">Processing:</span>
-        {!useBackendService ? (
-          <div className="flex items-center gap-2">
-            <span className="text-blue-400 text-xs">🔄 Direct Supabase</span>
-            <span className="text-gray-500 text-xs">(Cloud Deployment)</span>
-            <button
-              onClick={() => setUseBackendService(true)}
-              className="text-blue-400 hover:text-blue-300 text-xs"
-              title="Enable backend processing if available"
-            >
-              (enable backend)
-            </button>
-          </div>
-        ) : backendAvailable === null ? (
-          <span className="text-yellow-400 text-xs">⏳ Checking backend...</span>
-        ) : backendAvailable ? (
-          <div className="flex items-center gap-2">
-            <span className="text-green-400 text-xs">✅ Enhanced Backend</span>
-            <button
-              onClick={() => setUseBackendService(false)}
-              className="text-gray-400 hover:text-gray-300 text-xs"
-              title="Disable backend processing"
-            >
-              (disable)
-            </button>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2">
-            <span className="text-orange-400 text-xs">❌ Backend Offline</span>
-            <button
-              onClick={checkBackendAvailability}
-              className="text-blue-400 hover:text-blue-300 text-xs"
-              title="Retry backend connection"
-            >
-              (retry)
-            </button>
-            <button
-              onClick={() => setUseBackendService(false)}
-              className="text-gray-400 hover:text-gray-300 text-xs"
-              title="Use direct Supabase processing"
-            >
-              (use supabase)
-            </button>
-          </div>
-        )}
-        {processingMethod === 'backend' && backendProgress && (
-          <div className="text-xs text-blue-400">
-            📊 {backendProgress.message || 'Processing...'}
-          </div>
-        )}
-      </div>
 
       {/* Source File Section */}
       <div className="flex items-center gap-3 text-gray-300">

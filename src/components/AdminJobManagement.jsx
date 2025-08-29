@@ -497,7 +497,7 @@ const AdminJobManagement = ({
       const QUERY_BATCH_SIZE = 100;
       for (let i = 0; i < assignmentKeys.length; i += QUERY_BATCH_SIZE) {
         const keyBatch = assignmentKeys.slice(i, i + QUERY_BATCH_SIZE);
-        
+
         const { data: batchMatches, error: matchError } = await supabase
           .from('property_records')
           .select('property_composite_key, property_m4_class')
@@ -509,9 +509,15 @@ const AdminJobManagement = ({
           addNotification('Error checking property matches: ' + matchError.message, 'error');
           return;
         }
-        
+
         if (batchMatches) {
           matchedProperties = [...matchedProperties, ...batchMatches];
+        }
+
+        // Add timing gap between batches to prevent database overload
+        if (i + QUERY_BATCH_SIZE < assignmentKeys.length) {
+          console.log(`⏳ Waiting 200ms before next batch to prevent database overload...`);
+          await new Promise(resolve => setTimeout(resolve, 200));
         }
       }
 
@@ -626,29 +632,37 @@ const AdminJobManagement = ({
       const archived = updatedJobs.filter(job => job.status === 'archived' || job.status === 'draft');
       
       // Calculate assigned property counts for jobs with assignments
-      const jobsWithAssignedCounts = await Promise.all(
-        activeJobs.map(async (job) => {
-          if (job.has_property_assignments) {
-            // Dynamically count assigned properties
-            const { count, error } = await supabase
-              .from('property_records')
-              .select('id', { count: 'exact' })
-              .eq('job_id', job.id)
-              .eq('is_assigned_property', true);
+      // Use sequential processing with timing gaps to prevent database overload
+      const jobsWithAssignedCounts = [];
 
-            if (!error) {
-              job.assignedPropertyCount = count;
-            }
+      for (let i = 0; i < activeJobs.length; i++) {
+        const job = activeJobs[i];
+
+        if (job.has_property_assignments) {
+          // Dynamically count assigned properties
+          const { count, error } = await supabase
+            .from('property_records')
+            .select('id', { count: 'exact' })
+            .eq('job_id', job.id)
+            .eq('is_assigned_property', true);
+
+          if (!error) {
+            job.assignedPropertyCount = count;
           }
-          
-          return {
-            ...job,
-            status: job.status === 'active' ? 'Active' : (job.status || 'Active'),
-            county: capitalizeCounty(job.county),
-            percentBilled: job.percent_billed || 0.00
-          };
-        })
-      );
+
+          // Add small delay between database queries to prevent overload
+          if (i < activeJobs.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 200));
+          }
+        }
+
+        jobsWithAssignedCounts.push({
+          ...job,
+          status: job.status === 'active' ? 'Active' : (job.status || 'Active'),
+          county: capitalizeCounty(job.county),
+          percentBilled: job.percent_billed || 0.00
+        });
+      }
 
       setJobs(jobsWithAssignedCounts);
       setArchivedJobs(archived.map(job => ({

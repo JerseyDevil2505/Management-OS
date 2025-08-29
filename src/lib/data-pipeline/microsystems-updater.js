@@ -640,7 +640,7 @@ export class MicrosystemsUpdater {
       console.log('✅ INITIALIZATION COMPLETE - All steps finished successfully!');
       console.log('🚀 Starting batch UPSERT processing...');
       console.log(`📊 Processing ${propertyRecords.length} property records in batches...`);
-      const batchSize = 500; // Reduced from 1000
+      const batchSize = 250; // Optimized for stability and error resilience
       let consecutiveErrors = 0;
       
       for (let i = 0; i < propertyRecords.length; i += batchSize) {

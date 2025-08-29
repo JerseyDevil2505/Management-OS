@@ -10,7 +10,6 @@ import JobContainer from './components/job-modules/JobContainer';
 import FileUploadButton from './components/job-modules/FileUploadButton';
 import LandingPage from './components/LandingPage';
 import UserManagement from './components/UserManagement';
-import { sourceFileSyncService } from './services/sourceFileSyncService';
 
 // ==========================================
 // PERSISTENT CACHE CONFIGURATION
@@ -280,7 +279,7 @@ useEffect(() => {
         if (fallback) {
           const parsed = JSON.parse(fallback);
           if (parsed.version === CACHE_VERSION) {
-            console.log('📦 Using localStorage fallback');
+            console.log('���� Using localStorage fallback');
             return {
               data: parsed,
               cacheAge: Date.now() - parsed.timestamp,
@@ -1398,22 +1397,6 @@ useEffect(() => {
     // return () => clearInterval(interval);
   }, []);
 
-  // ==========================================
-  // AUTOMATIC SOURCE FILE SYNC SERVICE
-  // ==========================================
-  useEffect(() => {
-    // Start the automatic sync service when user is authenticated and app is initialized
-    if (user && masterCache.isInitialized) {
-      console.log('🔄 Starting automatic source file sync service...');
-      sourceFileSyncService.start();
-
-      // Cleanup when component unmounts
-      return () => {
-        console.log('🛑 Stopping automatic source file sync service...');
-        sourceFileSyncService.stop();
-      };
-    }
-  }, [user, masterCache.isInitialized]);
 
   // ==========================================
   // RENDER UI

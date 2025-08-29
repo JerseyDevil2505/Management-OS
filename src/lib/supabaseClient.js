@@ -1638,9 +1638,6 @@ export const jobService = {
       if (componentFields.source_file_uploaded_at) dbFields.source_file_uploaded_at = componentFields.source_file_uploaded_at;
       if (componentFields.code_file_uploaded_at) dbFields.code_file_uploaded_at = componentFields.code_file_uploaded_at;
 
-      console.log('🔧 jobService.update - Input fields:', Object.keys(componentFields));
-      console.log('🔧 jobService.update - Mapped DB fields:', Object.keys(dbFields));
-      console.log('🔧 jobService.update - DB field values:', dbFields);
 
       const { data, error } = await supabase
        .from('jobs')
@@ -1653,7 +1650,7 @@ export const jobService = {
        .single();
       
       if (error) {
-        console.error('❌ DEBUG - Supabase update error:', error);
+        console.error('❌ Job update error:', error);
         throw error;
       }
       
@@ -2120,7 +2117,7 @@ export const checklistService = {
   },
 
   // NEW: Get inspection data with pagination for 2nd/3rd attempt mailers
-  async getInspectionData(jobId, page = 1, pageSize = 500) {
+  async getInspectionData(jobId, page = 1, pageSize = 100) {
     try {
       const from = (page - 1) * pageSize;
       const to = from + pageSize - 1;
@@ -2163,7 +2160,13 @@ export const checklistService = {
         allData = [...allData, ...result.data];
         hasMore = result.hasMore;
         page++;
-        
+
+        // Add timing gap between page loads to prevent database overload
+        if (hasMore) {
+          console.log(`⏳ Waiting 250ms before next page to prevent database overload...`);
+          await new Promise(resolve => setTimeout(resolve, 250));
+        }
+
         // Safety limit to prevent infinite loops
         if (page > 100) {
           console.warn('Reached pagination limit of 100 pages');
@@ -2382,26 +2385,30 @@ export const propertyService = {
   async createPreservedFieldsHandler(jobId, compositeKeys) {
     const preservedDataMap = new Map();
 
-    //Add a small delay to ensure component is fully mounted
-    await new Promise(resolve => setTimeout(resolve, 500));
-        
     try {
-      // Batch fetch in chunks to avoid query limits
-      const chunkSize = 500;
+      // Check if we have any preserved fields to fetch
+      if (PRESERVED_FIELDS.length === 0) {
+        return preservedDataMap;
+      }
+
+      console.log(`🔄 Preserving fields for ${compositeKeys.length} properties...`);
+
+      // OPTIMIZED: Only one field, larger chunks, no delay
+      const chunkSize = 1000;
+      const totalChunks = Math.ceil(compositeKeys.length / chunkSize);
+
       for (let i = 0; i < compositeKeys.length; i += chunkSize) {
         const chunk = compositeKeys.slice(i, i + chunkSize);
-        
+
+        // OPTIMIZED: Fetch all properties for full update processing
         const { data: existingRecords, error } = await supabase
           .from('property_records')
-          .select(`
-            property_composite_key,
-            ${PRESERVED_FIELDS.join(',')}
-          `)
+          .select('property_composite_key, is_assigned_property')
           .eq('job_id', jobId)
           .in('property_composite_key', chunk);
 
         if (error) {
-          console.error('Error fetching preserved data:', error);
+          console.error(`❌ Failed to fetch preserved fields for chunk:`, error.message);
           continue;
         }
 
@@ -2413,17 +2420,18 @@ export const propertyService = {
               preserved[field] = record[field];
             }
           });
-          
+
           // Only add to map if there's data to preserve
           if (Object.keys(preserved).length > 0) {
             preservedDataMap.set(record.property_composite_key, preserved);
           }
         });
       }
-      
-      console.log(`✅ Loaded preserved data for ${preservedDataMap.size} properties`);
+
+      console.log(`✅ Preserved ${preservedDataMap.size} property assignments`);
+
     } catch (error) {
-      console.error('Error in createPreservedFieldsHandler:', error);
+      console.error(`❌ Error in preserved fields handler:`, error.message);
     }
 
     return preservedDataMap;
