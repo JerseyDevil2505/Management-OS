@@ -119,7 +119,7 @@ const loadEmployees = () => {
     // Get ALL inspection data using pagination
     let allInspectionData = [];
     let page = 0;
-    const pageSize = 100;
+    const pageSize = 500;
     let hasMore = true;
     const maxRetries = 3;
     const retryDelay = 1000; // 1 second
@@ -2139,7 +2139,7 @@ const loadEmployees = () => {
                               employee.role === 'Owner' ? 'bg-red-100 text-red-800' :
                               'bg-gray-100 text-gray-800'
                             }`}>
-                              {employee.role === 'Residential' ? '���' : 
+                              {employee.role === 'Residential' ? '🏠' : 
                                employee.role === 'Commercial' ? '🏭' :
                                employee.role === 'Office' || employee.role === 'Clerical' ? '💼' :
                                employee.role === 'Management' ? '👔' : 
