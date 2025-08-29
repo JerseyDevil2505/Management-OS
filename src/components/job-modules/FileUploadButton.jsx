@@ -1171,7 +1171,7 @@ const handleCodeFileUpdate = async () => {
 
         // If stuck for more than 60 seconds, show warning
         if (heartbeatCount >= 6) {
-          addBatchLog('���️ Operation appears stuck. Database may be overloaded or there\'s a query issue. Consider using Emergency Stop.', 'warning');
+          addBatchLog('⚠️ Operation appears stuck. Database may be overloaded or there\'s a query issue. Consider using Emergency Stop.', 'warning');
         }
       }, 10000); // Every 10 seconds
       
@@ -2525,9 +2525,9 @@ const handleCodeFileUpdate = async () => {
                           file_version: newFileVersion,
                           preservedFieldsHandler: preservedFieldsHandler,
                           preservedFields: [
-                            'is_assigned_property',    // AdminJobManagement - from assignments
-                            'validation_status',       // ProductionTracker - validation state
-                            'processing_notes'         // User notes - if added should be kept
+                            'is_assigned_property'     // AdminJobManagement - from assignments
+                            // REMOVED: validation_status (moved to jobs table)
+                            // REMOVED: processing_notes (doesn't exist)
                             // REMOVED: project_start_date (moved to jobs table)
                             // REMOVED: location_analysis, new_vcs, asset_map_page, asset_key_page,
                             //          asset_zoning, values_norm_size, values_norm_time, sales_history
