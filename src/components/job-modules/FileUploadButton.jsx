@@ -2529,6 +2529,15 @@ const handleCodeFileUpdate = async () => {
                     addBatchLog(`📊 Current DB version: ${currentFileVersion}, incrementing to: ${newFileVersion}`, 'info');
                     
                     const result = await trackBatchInserts(async () => {
+                      console.log('🔍 DEBUG: FileUploadButton (no-changes) calling updateCSVData with:');
+                      console.log('  jobId:', job.id);
+                      console.log('  vendor:', detectedVendor);
+                      console.log('  recordCount:', sourceFileContent.split('\n').length - 1);
+                      console.log('  newFileVersion:', newFileVersion);
+                      console.log('  preservedFieldsHandler type:', typeof preservedFieldsHandler);
+
+                      addBatchLog('🔍 DEBUG: About to call propertyService.updateCSVData (no-changes path)...', 'info');
+
                       return await propertyService.updateCSVData(
                         sourceFileContent,
                         codeFileContent,
@@ -2544,12 +2553,6 @@ const handleCodeFileUpdate = async () => {
                           preservedFieldsHandler: preservedFieldsHandler,
                           preservedFields: [
                             'is_assigned_property'     // AdminJobManagement - from assignments
-                            // REMOVED: validation_status (moved to jobs table)
-                            // REMOVED: processing_notes (doesn't exist)
-                            // REMOVED: project_start_date (moved to jobs table)
-                            // REMOVED: location_analysis, new_vcs, asset_map_page, asset_key_page,
-                            //          asset_zoning, values_norm_size, values_norm_time, sales_history
-                            //          (moved to property_market_analysis table)
                           ]
                         }
                       );
