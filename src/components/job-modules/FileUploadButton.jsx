@@ -1376,7 +1376,21 @@ const handleCodeFileUpdate = async () => {
         processed: result.processed,
         errors: result.errors
       });
-      
+
+      // Update validation_status on jobs table (moved from property_records)
+      addBatchLog('📝 Updating job validation status...', 'info');
+      const { error: jobUpdateError } = await supabase
+        .from('jobs')
+        .update({ validation_status: 'updated' })
+        .eq('id', job.id);
+
+      if (jobUpdateError) {
+        console.error('❌ Failed to update job validation_status:', jobUpdateError);
+        addBatchLog('⚠️ Warning: Could not update job validation status', 'warning');
+      } else {
+        addBatchLog('✅ Job validation status set to "updated"', 'success');
+      }
+
       // Save comparison report with sales decisions
       addBatchLog('💾 Saving comparison report to database...', 'info');
       await saveComparisonReport(comparisonResults, salesDecisions);
