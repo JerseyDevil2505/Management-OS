@@ -1599,7 +1599,7 @@ const handleCodeFileUpdate = async () => {
         addBatchLog('⚠️ UPDATE FAILED - All changes have been rolled back', 'error', {
           message: 'The update encountered errors and all changes were automatically reversed'
         });
-        addNotification('��� Update failed - all changes rolled back. Check logs for details.', 'error');
+        addNotification('����� Update failed - all changes rolled back. Check logs for details.', 'error');
       }
 
       // Update local file version and date from DB
@@ -2520,14 +2520,7 @@ const handleCodeFileUpdate = async () => {
                     addBatchLog(`📊 Current DB version: ${currentFileVersion}, incrementing to: ${newFileVersion}`, 'info');
                     
                     const result = await trackBatchInserts(async () => {
-                      console.log('🔍 DEBUG: FileUploadButton (no-changes) calling updateCSVData with:');
-                      console.log('  jobId:', job.id);
-                      console.log('  vendor:', detectedVendor);
-                      console.log('  recordCount:', sourceFileContent.split('\n').length - 1);
-                      console.log('  newFileVersion:', newFileVersion);
-                      console.log('  preservedFieldsHandler type:', typeof preservedFieldsHandler);
-
-                      addBatchLog('🔍 DEBUG: About to call propertyService.updateCSVData (no-changes path)...', 'info');
+                      addBatchLog('🔄 Processing data refresh...', 'info');
 
                       return await propertyService.updateCSVData(
                         sourceFileContent,
