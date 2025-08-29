@@ -119,6 +119,110 @@ const FileUploadButton = ({ job, onFileProcessed, isJobLoading = false, onDataRe
     }
   };
 
+  // Backend file processing with progress
+  const handleBackendProcessing = async () => {
+    try {
+      addBatchLog('🚀 Starting backend file processing', 'batch_start', {
+        vendor: detectedVendor,
+        fileName: sourceFile.name,
+        method: 'backend'
+      });
+
+      // Upload file to backend
+      addBatchLog('📤 Uploading file to backend...', 'info');
+      setProcessingStatus('Uploading file to backend...');
+
+      const uploadResult = await uploadFile(sourceFile, job.id, 'source', {
+        onProgress: (progress) => {
+          setBackendProgress(progress);
+          if (progress.message) {
+            addBatchLog(progress.message, progress.type || 'info');
+          }
+        }
+      });
+
+      if (!uploadResult.success) {
+        throw new Error(uploadResult.error || 'Upload failed');
+      }
+
+      addBatchLog('✅ File uploaded successfully', 'success');
+
+      // Process file on backend
+      addBatchLog('⚙️ Processing file on backend...', 'info');
+      setProcessingStatus('Processing file on backend...');
+
+      const processResult = await processFile(job.id, {
+        fileType: 'source',
+        vendor: detectedVendor,
+        salesDecisions: Array.from(salesDecisions.entries()),
+        onProgress: (progress) => {
+          setBackendProgress(progress);
+          if (progress.message) {
+            addBatchLog(progress.message, progress.type || 'info');
+          }
+        }
+      });
+
+      if (!processResult.success) {
+        throw new Error(processResult.error || 'Processing failed');
+      }
+
+      addBatchLog('✅ Backend processing completed successfully', 'success', {
+        recordsProcessed: processResult.recordsProcessed,
+        method: 'backend'
+      });
+
+      // Update job metadata
+      if (processResult.recordsProcessed > 0) {
+        try {
+          const updateData = {
+            totalProperties: processResult.recordsProcessed,
+            source_file_uploaded_at: new Date().toISOString()
+          };
+          await jobService.update(job.id, updateData);
+          addBatchLog('✅ Job metadata updated successfully', 'success', updateData);
+        } catch (updateError) {
+          console.error('❌ Failed to update job:', updateError);
+          addBatchLog('⚠️ Job metadata update failed', 'warning', { error: updateError.message });
+        }
+      }
+
+      setBatchComplete(true);
+
+      addNotification(`✅ Successfully processed ${processResult.recordsProcessed} records via backend`, 'success');
+
+      // Auto-close modal after 3 seconds
+      setTimeout(() => {
+        setShowBatchModal(false);
+        setShowResultsModal(false);
+        setSourceFile(null);
+        setSourceFileContent(null);
+        setSalesDecisions(new Map());
+      }, 3000);
+
+      // Notify parent component
+      if (onFileProcessed) {
+        onFileProcessed({
+          success: true,
+          processed: processResult.recordsProcessed,
+          method: 'backend'
+        });
+      }
+
+      // Trigger data refresh in JobContainer
+      if (onDataRefresh) {
+        addBatchLog('🔄 Triggering data refresh in JobContainer...', 'info');
+        await onDataRefresh();
+        addBatchLog('✅ JobContainer data refreshed', 'success');
+      }
+
+    } catch (error) {
+      console.error('Backend processing failed:', error);
+      addBatchLog(`❌ Backend processing failed: ${error.message}`, 'error');
+      throw error; // Re-throw to trigger fallback
+    }
+  };
+
   // FIXED: Use exact same date parsing method as processors
   const parseDate = (dateString) => {
     if (!dateString || dateString.trim() === '') return null;
@@ -2032,7 +2136,7 @@ const handleCodeFileUpdate = async () => {
                     setProcessing(false);
                     setBatchComplete(true);
                     setIsProcessingLocked(false);
-                    addBatchLog('🛑 Operation manually stopped by user', 'warning');
+                    addBatchLog('���� Operation manually stopped by user', 'warning');
                     console.log('🛑 Emergency stop triggered - operation cancelled');
                   }}
                   className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 font-medium flex items-center space-x-2"
