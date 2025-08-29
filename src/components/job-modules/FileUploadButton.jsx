@@ -2904,6 +2904,53 @@ const handleCodeFileUpdate = async () => {
         ))}
       </div>
 
+      {/* Backend Status Indicator */}
+      <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-600 bg-gray-800">
+        <Database className="w-4 h-4" />
+        <span className="text-sm font-medium text-gray-300">Processing:</span>
+        {backendAvailable === null ? (
+          <span className="text-yellow-400 text-xs">⏳ Checking backend...</span>
+        ) : backendAvailable ? (
+          <div className="flex items-center gap-2">
+            <span className="text-green-400 text-xs">✅ Enhanced Backend</span>
+            {useBackendService && (
+              <button
+                onClick={() => setUseBackendService(false)}
+                className="text-gray-400 hover:text-gray-300 text-xs"
+                title="Disable backend processing"
+              >
+                (disable)
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <span className="text-orange-400 text-xs">⚠️ Direct Supabase</span>
+            <button
+              onClick={checkBackendAvailability}
+              className="text-blue-400 hover:text-blue-300 text-xs"
+              title="Retry backend connection"
+            >
+              (retry)
+            </button>
+          </div>
+        )}
+        {!useBackendService && (
+          <button
+            onClick={() => setUseBackendService(true)}
+            className="text-blue-400 hover:text-blue-300 text-xs ml-2"
+            title="Enable backend processing"
+          >
+            (enable backend)
+          </button>
+        )}
+        {processingMethod === 'backend' && backendProgress && (
+          <div className="text-xs text-blue-400">
+            📊 {backendProgress.message || 'Processing...'}
+          </div>
+        )}
+      </div>
+
       {/* Source File Section */}
       <div className="flex items-center gap-3 text-gray-300">
         <FileText className="w-4 h-4 text-blue-400" />
