@@ -47,12 +47,6 @@ const FileUploadButton = ({ job, onFileProcessed, isJobLoading = false, onDataRe
     currentOperation: ''
   });
 
-  // Backend service integration state
-  const [useBackendService, setUseBackendService] = useState(false); // Disable backend by default for cloud deployment
-  const [backendProgress, setBackendProgress] = useState(null);
-  const [backendError, setBackendError] = useState(null);
-  const [backendAvailable, setBackendAvailable] = useState(null); // null = unknown, true/false = available/unavailable
-  const [processingMethod, setProcessingMethod] = useState('checking'); // 'checking', 'backend', 'supabase'
 
   const addNotification = (message, type = 'info') => {
     const id = Date.now() + Math.random(); // Make unique with random component
