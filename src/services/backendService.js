@@ -172,6 +172,43 @@ function getAuthHeaders() {
 export async function initializeJob(jobId, options = {}) {
   const { onProgress, skipCache = false, userId } = options;
 
+  console.log('🔍 BACKEND DEBUG - Job initialization starting:', {
+    jobId,
+    userId,
+    skipCache,
+    BACKEND_URL,
+    timestamp: new Date().toISOString()
+  });
+
+  // First check if backend is reachable
+  console.log('🔍 BACKEND DEBUG - Checking backend health...');
+  try {
+    const healthResponse = await fetch(`${BACKEND_URL}/api/health`, {
+      method: 'GET',
+      timeout: 5000
+    });
+    console.log('🔍 BACKEND DEBUG - Health check response:', {
+      status: healthResponse.status,
+      ok: healthResponse.ok
+    });
+  } catch (healthError) {
+    console.error('🔍 BACKEND DEBUG - Health check failed:', {
+      error: healthError.message,
+      name: healthError.name,
+      url: `${BACKEND_URL}/api/health`
+    });
+    throw new BackendError(
+      `Backend service unreachable at ${BACKEND_URL}. Health check failed: ${healthError.message}`,
+      503,
+      'health_check',
+      {
+        healthError: healthError.message,
+        backendUrl: BACKEND_URL,
+        suggestion: 'Check if backend service is running'
+      }
+    );
+  }
+
   try {
     const response = await makeRequest(`/api/jobs/initialize/${jobId}`, {
       method: 'POST',
