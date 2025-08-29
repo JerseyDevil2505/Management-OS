@@ -2388,15 +2388,12 @@ export const propertyService = {
   async createPreservedFieldsHandler(jobId, compositeKeys) {
     const preservedDataMap = new Map();
 
-    //Add a small delay to ensure component is fully mounted
-    await new Promise(resolve => setTimeout(resolve, 500));
-        
     try {
-      // Batch fetch in chunks to avoid query limits
-      const chunkSize = 500;
+      // OPTIMIZED: Only one field, larger chunks, no delay
+      const chunkSize = 1000;
       for (let i = 0; i < compositeKeys.length; i += chunkSize) {
         const chunk = compositeKeys.slice(i, i + chunkSize);
-        
+
         const { data: existingRecords, error } = await supabase
           .from('property_records')
           .select(`
