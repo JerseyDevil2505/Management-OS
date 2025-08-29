@@ -121,6 +121,16 @@ function getAuthHeaders() {
 export async function initializeJob(jobId, options = {}) {
   const { onProgress, skipCache = false, userId } = options;
 
+  // In cloud dev environments, backend service may not be available
+  if (!process.env.REACT_APP_BACKEND_URL) {
+    throw new BackendError(
+      'Backend service not configured for this environment',
+      503,
+      'job_initialization',
+      { fallback: 'Use direct Supabase calls' }
+    );
+  }
+
   try {
     const response = await makeRequest(`/api/jobs/initialize/${jobId}`, {
       method: 'POST',
