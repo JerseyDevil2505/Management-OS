@@ -103,17 +103,52 @@ const FileUploadButton = ({ job, onFileProcessed, isJobLoading = false, onDataRe
 
   // Check backend availability
   const checkBackendAvailability = async () => {
+    const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
+    console.log('🔍 Checking backend availability at:', backendUrl);
+
     try {
-      const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
+      // Create abort controller for timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+        console.log('⏰ Backend check timed out after 8 seconds');
+      }, 8000);
+
+      console.log('📡 Making request to:', `${backendUrl}/api/health`);
+
       const response = await fetch(`${backendUrl}/api/health`, {
         method: 'GET',
-        signal: AbortSignal.timeout(5000) // 5 second timeout
+        signal: controller.signal,
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
       });
+
+      clearTimeout(timeoutId);
+
+      console.log('📥 Response received:', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok
+      });
+
       const available = response.ok;
       setBackendAvailable(available);
+
+      if (available) {
+        console.log('✅ Backend is available and responding');
+      } else {
+        console.log('❌ Backend responded but with error status:', response.status);
+      }
+
       return available;
     } catch (error) {
-      console.log('Backend not available:', error.message);
+      console.log('❌ Backend not available - Error details:', {
+        name: error.name,
+        message: error.message,
+        url: `${backendUrl}/api/health`
+      });
       setBackendAvailable(false);
       return false;
     }
