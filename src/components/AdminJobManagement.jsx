@@ -497,7 +497,7 @@ const AdminJobManagement = ({
       const QUERY_BATCH_SIZE = 100;
       for (let i = 0; i < assignmentKeys.length; i += QUERY_BATCH_SIZE) {
         const keyBatch = assignmentKeys.slice(i, i + QUERY_BATCH_SIZE);
-        
+
         const { data: batchMatches, error: matchError } = await supabase
           .from('property_records')
           .select('property_composite_key, property_m4_class')
@@ -509,9 +509,15 @@ const AdminJobManagement = ({
           addNotification('Error checking property matches: ' + matchError.message, 'error');
           return;
         }
-        
+
         if (batchMatches) {
           matchedProperties = [...matchedProperties, ...batchMatches];
+        }
+
+        // Add timing gap between batches to prevent database overload
+        if (i + QUERY_BATCH_SIZE < assignmentKeys.length) {
+          console.log(`⏳ Waiting 200ms before next batch to prevent database overload...`);
+          await new Promise(resolve => setTimeout(resolve, 200));
         }
       }
 
@@ -2650,7 +2656,7 @@ const AdminJobManagement = ({
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {getUniqueCounties().length === 0 ? (
                 <div className="col-span-full text-center text-gray-500 py-12">
-                  <div className="text-4xl mb-4">���</div>
+                  <div className="text-4xl mb-4">📈</div>
                   <h4 className="text-lg font-medium mb-2">No County Data</h4>
                   <p className="text-sm">Create jobs to see available counties for HPI data import</p>
                 </div>
