@@ -626,29 +626,37 @@ const AdminJobManagement = ({
       const archived = updatedJobs.filter(job => job.status === 'archived' || job.status === 'draft');
       
       // Calculate assigned property counts for jobs with assignments
-      const jobsWithAssignedCounts = await Promise.all(
-        activeJobs.map(async (job) => {
-          if (job.has_property_assignments) {
-            // Dynamically count assigned properties
-            const { count, error } = await supabase
-              .from('property_records')
-              .select('id', { count: 'exact' })
-              .eq('job_id', job.id)
-              .eq('is_assigned_property', true);
+      // Use sequential processing with timing gaps to prevent database overload
+      const jobsWithAssignedCounts = [];
 
-            if (!error) {
-              job.assignedPropertyCount = count;
-            }
+      for (let i = 0; i < activeJobs.length; i++) {
+        const job = activeJobs[i];
+
+        if (job.has_property_assignments) {
+          // Dynamically count assigned properties
+          const { count, error } = await supabase
+            .from('property_records')
+            .select('id', { count: 'exact' })
+            .eq('job_id', job.id)
+            .eq('is_assigned_property', true);
+
+          if (!error) {
+            job.assignedPropertyCount = count;
           }
-          
-          return {
-            ...job,
-            status: job.status === 'active' ? 'Active' : (job.status || 'Active'),
-            county: capitalizeCounty(job.county),
-            percentBilled: job.percent_billed || 0.00
-          };
-        })
-      );
+
+          // Add small delay between database queries to prevent overload
+          if (i < activeJobs.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 200));
+          }
+        }
+
+        jobsWithAssignedCounts.push({
+          ...job,
+          status: job.status === 'active' ? 'Active' : (job.status || 'Active'),
+          county: capitalizeCounty(job.county),
+          percentBilled: job.percent_billed || 0.00
+        });
+      }
 
       setJobs(jobsWithAssignedCounts);
       setArchivedJobs(archived.map(job => ({
@@ -2642,7 +2650,7 @@ const AdminJobManagement = ({
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {getUniqueCounties().length === 0 ? (
                 <div className="col-span-full text-center text-gray-500 py-12">
-                  <div className="text-4xl mb-4">📈</div>
+                  <div className="text-4xl mb-4">���</div>
                   <h4 className="text-lg font-medium mb-2">No County Data</h4>
                   <p className="text-sm">Create jobs to see available counties for HPI data import</p>
                 </div>
