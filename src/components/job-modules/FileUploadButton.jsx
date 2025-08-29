@@ -2674,12 +2674,6 @@ const handleCodeFileUpdate = async () => {
     }
   }, [showReportsModal]);
 
-  // Check backend availability on component mount
-  useEffect(() => {
-    if (useBackendService) {
-      checkBackendAvailability();
-    }
-  }, []);
 
   const getFileStatusWithRealVersion = (timestamp, type) => {
     if (!timestamp) return 'Never';
