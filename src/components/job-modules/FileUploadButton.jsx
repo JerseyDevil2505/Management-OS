@@ -339,7 +339,7 @@ const handleCodeFileUpdate = async () => {
       // Wait a bit and check again - sometimes React needs a moment to update props
       setTimeout(() => {
         console.log(`🔧 Code Update - DELAYED check - job.code_file_uploaded_at: ${job.code_file_uploaded_at}`);
-        console.log(`🔧 Code Update - DELAYED check - job.code_file_version: ${job.code_file_version}`);
+        console.log(`���� Code Update - DELAYED check - job.code_file_version: ${job.code_file_version}`);
       }, 1000);
     }
 
@@ -797,7 +797,7 @@ const handleCodeFileUpdate = async () => {
       const sourceKeyMap = new Map();
       
       sourceRecords.forEach(record => {
-        const compositeKey = generateCompositeKey(record, detectedVendor, yearCreated, ccddCode);
+        const compositeKey = generateCompositeKey(record, vendorToUse, yearCreated, ccddCode);
         if (compositeKey) {
           sourceKeys.add(compositeKey);
           sourceKeyMap.set(compositeKey, record);
@@ -2449,7 +2449,7 @@ const handleCodeFileUpdate = async () => {
                     {details.missing.slice(0, 3).map((record, idx) => {
                       const yearCreated = job.year_created || new Date().getFullYear();
                       const ccddCode = job.ccdd_code || job.ccddCode;
-                      const generatedKey = generateCompositeKey(record, detectedVendor, yearCreated, ccddCode);
+                      const generatedKey = generateCompositeKey(record, vendorToUse, yearCreated, ccddCode);
                       
                       return (
                         <div key={idx} className="text-xs text-yellow-700 font-mono">
