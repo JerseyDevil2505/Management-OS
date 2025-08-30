@@ -1686,9 +1686,7 @@ const handleCodeFileUpdate = async () => {
       const vendor = detectedVendor; // Use the vendor from props
       
       if (vendor) {
-        addNotification(`✅ Detected ${vendor} file format`, 'success');
-      } else {
-        addNotification('��️ Could not detect vendor type', 'warning');
+        addNotification(`✅ Using ${vendor} file format`, 'success');
       }
     } catch (error) {
       console.error('Error reading file:', error);
