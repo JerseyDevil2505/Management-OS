@@ -831,19 +831,19 @@ const handleCodeFileUpdate = async () => {
         const dbRecord = dbKeyMap.get(key);
         
         // FIXED: Check for sales changes with proper number and date comparison
-        const sourceSalesPrice = parseFloat(String(sourceRecord[detectedVendor === 'BRT' ? 'CURRENTSALE_PRICE' : 'Sale Price'] || 0).replace(/[,$]/g, '')) || 0;
+        const sourceSalesPrice = parseFloat(String(sourceRecord[vendorToUse === 'BRT' ? 'CURRENTSALE_PRICE' : 'Sale Price'] || 0).replace(/[,$]/g, '')) || 0;
         const dbSalesPrice = parseFloat(dbRecord.sales_price || 0);
 
         // ADD: Get sales_nu values
-        const sourceSalesNu = sourceRecord[detectedVendor === 'BRT' ? 'CURRENTSALE_NU' : 'Sale Nu'] || '';
+        const sourceSalesNu = sourceRecord[vendorToUse === 'BRT' ? 'CURRENTSALE_NU' : 'Sale Nu'] || '';
         const dbSalesNu = dbRecord.sales_nu || '';
-        const sourceSalesBook = sourceRecord[detectedVendor === 'BRT' ? 'CURRENTSALE_DEEDBOOK' : 'Sale Book'] || '';
+        const sourceSalesBook = sourceRecord[vendorToUse === 'BRT' ? 'CURRENTSALE_DEEDBOOK' : 'Sale Book'] || '';
         const dbSalesBook = dbRecord.sales_book || '';
-        const sourceSalesPage = sourceRecord[detectedVendor === 'BRT' ? 'CURRENTSALE_DEEDPAGE' : 'Sale Page'] || '';
+        const sourceSalesPage = sourceRecord[vendorToUse === 'BRT' ? 'CURRENTSALE_DEEDPAGE' : 'Sale Page'] || '';
         const dbSalesPage = dbRecord.sales_page || '';
           
         // FIXED: Normalize both dates for accurate comparison using processor method
-        const sourceSalesDate = parseDate(sourceRecord[detectedVendor === 'BRT' ? 'CURRENTSALE_DATE' : 'Sale Date']);
+        const sourceSalesDate = parseDate(sourceRecord[vendorToUse === 'BRT' ? 'CURRENTSALE_DATE' : 'Sale Date']);
         const dbSalesDate = parseDate(dbRecord.sales_date);
         
         // FIXED: Use proper number comparison with reasonable tolerance AND normalized date comparison
@@ -2532,7 +2532,7 @@ const handleCodeFileUpdate = async () => {
                     
                     
                     // Call the updater to UPSERT the database with latest data
-                    addBatchLog(`📊 Calling ${detectedVendor} updater for version refresh...`, 'info');
+                    addBatchLog(`�� Calling ${detectedVendor} updater for version refresh...`, 'info');
 
                     // FIX 1: Calculate new file_version for property_records - fetch current from DB
                     addBatchLog('🔍 Fetching current file version from database...', 'info');
