@@ -2833,6 +2833,16 @@ const handleCodeFileUpdate = async () => {
         ))}
       </div>
 
+      {/* NEW: Loading state while JobContainer loads job data */}
+      {isJobContainerLoading && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
+          <div className="flex items-center justify-center space-x-2 text-blue-600">
+            <RefreshCw className="w-4 h-4 animate-spin" />
+            <span className="text-sm font-medium">Loading job data...</span>
+          </div>
+          <p className="text-xs text-blue-500 mt-1">File uploads disabled until job data loads</p>
+        </div>
+      )}
 
       {/* Source File Section */}
       <div className="flex items-center gap-3 text-gray-300">
