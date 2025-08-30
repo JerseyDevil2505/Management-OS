@@ -58,6 +58,7 @@ const FileUploadButton = ({
 
   // NEW: Sync detectedVendor with passed vendorType prop
   useEffect(() => {
+    console.log(`🔧 Vendor sync check - vendorType: "${vendorType}", detectedVendor: "${detectedVendor}"`);
     if (vendorType && vendorType !== detectedVendor) {
       console.log(`🔧 Using vendor type from JobContainer: ${vendorType}`);
       setDetectedVendor(vendorType);
@@ -370,7 +371,7 @@ const handleCodeFileUpdate = async () => {
 
     // Defensive check for undefined vendor
     if (!vendor) {
-      console.error('❌ parseSourceFile: vendor is undefined/null');
+      console.error('�� parseSourceFile: vendor is undefined/null');
       throw new Error('Vendor type is required but not provided');
     }
 
@@ -2086,7 +2087,7 @@ const handleCodeFileUpdate = async () => {
                     setProcessing(false);
                     setBatchComplete(true);
                     setIsProcessingLocked(false);
-                    addBatchLog('������� Operation manually stopped by user', 'warning');
+                    addBatchLog('����� Operation manually stopped by user', 'warning');
                     console.log('🛑 Emergency stop triggered - operation cancelled');
                   }}
                   className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 font-medium flex items-center space-x-2"
