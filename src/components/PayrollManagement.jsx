@@ -400,9 +400,7 @@ const loadInitialData = async () => {
           setIsProcessing(false);
           return;
         }
-        
-        console.log(`Processing employees from row ${rowsStartIndex} to ${rawData.length}`);
-        
+
         for (let i = rowsStartIndex; i < rawData.length; i++) {
           const row = rawData[i];
           if (row[0] && typeof row[0] === 'string' && !row[0].includes('TOTAL HOURS')) {
