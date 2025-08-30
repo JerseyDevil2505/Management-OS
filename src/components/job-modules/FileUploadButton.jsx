@@ -2861,9 +2861,9 @@ const handleCodeFileUpdate = async () => {
         
         <button
           onClick={() => document.getElementById('source-file-upload').click()}
-          disabled={comparing || processing || isJobLoading}
+          disabled={comparing || processing || isJobLoading || isJobContainerLoading}
           className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:bg-gray-500 flex items-center gap-1"
-          title={isJobLoading ? 'Job data is loading...' : ''}
+          title={isJobLoading || isJobContainerLoading ? 'Job data is loading...' : ''}
         >
           <Upload className="w-3 h-3" />
           {sourceFile ? sourceFile.name.substring(0, 10) + '...' : 'Select File'}
