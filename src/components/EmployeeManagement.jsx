@@ -665,7 +665,6 @@ const loadEmployees = () => {
   // When filters change, reprocess cached data without reloading
   useEffect(() => {
     if (analyticsCache && analyticsCache.rawData && !isLoadingAnalytics) {
-      console.log('🔄 Filter changed, reprocessing cached data...');
       const reprocessed = processGlobalInspectionData(
         analyticsCache.rawData,
         analyticsFilter,
