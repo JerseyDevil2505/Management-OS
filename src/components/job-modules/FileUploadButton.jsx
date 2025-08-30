@@ -2918,7 +2918,7 @@ const handleCodeFileUpdate = async () => {
         
         <button
           onClick={() => document.getElementById('code-file-upload').click()}
-          disabled={comparing || processing}
+          disabled={comparing || processing || isJobContainerLoading}
           className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 disabled:bg-gray-500 flex items-center gap-1"
         >
           <Upload className="w-3 h-3" />
