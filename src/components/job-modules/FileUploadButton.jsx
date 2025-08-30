@@ -1215,7 +1215,7 @@ const handleCodeFileUpdate = async () => {
           }))
         }));
         
-        addBatchLog(`✅ All batches complete - Total records: ${totalRecords}`, 'success');
+        addBatchLog(`�� All batches complete - Total records: ${totalRecords}`, 'success');
         
         resolve(result);
       }).catch(error => {
@@ -1685,8 +1685,8 @@ const handleCodeFileUpdate = async () => {
       const content = await file.text();
       setSourceFileContent(content);
       
-      const vendor = detectVendorType(content, file.name);
-      setDetectedVendor(vendor);
+      // REMOVED: Vendor detection - now using vendor type from JobContainer props
+      const vendor = detectedVendor; // Use the vendor from props
       
       if (vendor) {
         addNotification(`✅ Detected ${vendor} file format`, 'success');
