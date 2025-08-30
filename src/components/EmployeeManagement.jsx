@@ -82,7 +82,6 @@ const loadEmployees = () => {
     const now = Date.now();
     
     if (analyticsCache && cacheTimestamp && (now - cacheTimestamp) < CACHE_DURATION) {
-      console.log('📦 Using cached data, reprocessing with current filters...');
       // Reprocess the cached raw data with current filters
       const reprocessed = processGlobalInspectionData(
         analyticsCache.rawData || [], 
