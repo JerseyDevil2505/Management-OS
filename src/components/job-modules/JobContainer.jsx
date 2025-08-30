@@ -773,16 +773,7 @@ const JobContainer = ({
         setModuleHasChanges(true);
       },
       // NEW: Pass vendor type from jobs table to eliminate detection
-      vendorType: (() => {
-        const vendorType = jobData?.vendor_type || jobData?.vendor_source;
-        console.log(`🔍 JobContainer vendor debug:`, {
-          vendor_type: jobData?.vendor_type,
-          vendor_source: jobData?.vendor_source,
-          final_vendorType: vendorType,
-          jobData_keys: jobData ? Object.keys(jobData) : 'jobData is null'
-        });
-        return vendorType;
-      })(),
+      vendorType: jobData?.vendor_type || jobData?.vendor_source,
       // NEW: Pass loading state to disable FileUploadButton while loading
       isJobContainerLoading: isLoadingVersion || isLoadingProperties
     };
