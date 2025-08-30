@@ -469,10 +469,7 @@ const loadInitialData = async () => {
             parsedData.push(empData);
           }
         }
-        
-        console.log(`Final totalHoursSum: ${totalHoursSum}`);
-        console.log(`Final apptOTSum: ${apptOTSum}`);
-        
+
         const totalsRowIndex = rawData.findIndex(row => 
           row[0] && row[0].toString().includes('TOTAL HOURS')
         );
