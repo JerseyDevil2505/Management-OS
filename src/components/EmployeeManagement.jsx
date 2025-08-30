@@ -800,9 +800,7 @@ const loadEmployees = () => {
           created_by: '5df85ca3-7a54-4798-a665-c31da8d9caad'
         };
       });
-      
-      console.log('Processed employees sample:', processedEmployees[0]);
-      
+
       // Mark employees not in new import as inactive
       const newEmployeeEmails = new Set(processedEmployees.map(emp => emp.email));
       const inactiveUpdates = existingEmployees
@@ -846,7 +844,7 @@ const loadEmployees = () => {
       
     } catch (error) {
       console.error('Error importing employee data:', error);
-      alert(`❌ Error importing file: ${error.message}`);
+      alert(`�� Error importing file: ${error.message}`);
     } finally {
       setIsImporting(false);
     }
