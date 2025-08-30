@@ -363,14 +363,11 @@ const handleCodeFileUpdate = async () => {
 
   // FIXED: Parse files with exact processor logic
   const parseSourceFile = (fileContent, vendor) => {
-    console.log(`🔧 parseSourceFile called with vendor: "${vendor}"`);
-
     const lines = fileContent.split('\n').filter(line => line.trim());
     if (lines.length < 2) return [];
 
     // Defensive check for undefined vendor
     if (!vendor) {
-      console.error('❌ parseSourceFile: vendor is undefined/null');
       throw new Error('Vendor type is required but not provided');
     }
 
