@@ -363,19 +363,27 @@ const handleCodeFileUpdate = async () => {
 
   // FIXED: Parse files with exact processor logic
   const parseSourceFile = (fileContent, vendor) => {
+    console.log(`🔧 parseSourceFile called with vendor: "${vendor}"`);
+
     const lines = fileContent.split('\n').filter(line => line.trim());
     if (lines.length < 2) return [];
-    
+
+    // Defensive check for undefined vendor
+    if (!vendor) {
+      console.error('❌ parseSourceFile: vendor is undefined/null');
+      throw new Error('Vendor type is required but not provided');
+    }
+
     let headers, separator;
-    
+
     if (vendor === 'BRT') {
       // Auto-detect BRT separator (comma vs tab)
       const firstLine = lines[0];
       const commaCount = (firstLine.match(/,/g) || []).length;
       const tabCount = (firstLine.match(/\t/g) || []).length;
-      
+
       separator = (tabCount > 10 && tabCount > commaCount * 2) ? '\t' : ',';
-      
+
       if (separator === ',') {
         headers = parseCSVLine(lines[0]);
       } else {
@@ -385,6 +393,15 @@ const handleCodeFileUpdate = async () => {
       separator = '|';
       const originalHeaders = lines[0].split('|');
       headers = renameDuplicateHeaders(originalHeaders);
+    } else {
+      console.error(`❌ parseSourceFile: Unsupported vendor type: "${vendor}"`);
+      throw new Error(`Unsupported vendor type: "${vendor}". Expected 'BRT' or 'Microsystems'`);
+    }
+
+    // Additional safety check
+    if (!headers) {
+      console.error('❌ parseSourceFile: headers is still undefined after vendor processing');
+      throw new Error('Failed to parse file headers');
     }
     
     const records = [];
@@ -2069,7 +2086,7 @@ const handleCodeFileUpdate = async () => {
                     setProcessing(false);
                     setBatchComplete(true);
                     setIsProcessingLocked(false);
-                    addBatchLog('����� Operation manually stopped by user', 'warning');
+                    addBatchLog('������� Operation manually stopped by user', 'warning');
                     console.log('🛑 Emergency stop triggered - operation cancelled');
                   }}
                   className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 font-medium flex items-center space-x-2"
