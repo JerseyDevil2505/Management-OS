@@ -371,7 +371,7 @@ const handleCodeFileUpdate = async () => {
 
     // Defensive check for undefined vendor
     if (!vendor) {
-      console.error('�� parseSourceFile: vendor is undefined/null');
+      console.error('❌ parseSourceFile: vendor is undefined/null');
       throw new Error('Vendor type is required but not provided');
     }
 
@@ -737,6 +737,7 @@ const handleCodeFileUpdate = async () => {
       setProcessingStatus('Analyzing files...');
       
       // Parse source file
+      console.log(`🔍 About to parse source file with detectedVendor: "${detectedVendor}"`);
       const sourceRecords = parseSourceFile(sourceFileContent, detectedVendor);
       
       // FIXED: Get ALL database records from property_records table directly
@@ -1354,7 +1355,7 @@ const handleCodeFileUpdate = async () => {
         // Fallback: get a reasonable version number
         currentFileVersion = Date.now() % 100; // Use timestamp as version
         newFileVersion = currentFileVersion + 1;
-        addBatchLog(`📊 Using fallback version: ${newFileVersion}`, 'info');
+        addBatchLog(`��� Using fallback version: ${newFileVersion}`, 'info');
       }
 
       // Track batch operations
@@ -1424,7 +1425,7 @@ const handleCodeFileUpdate = async () => {
       // Refresh report count
       await loadReportCount();
       
-      addBatchLog('✅ Comparison report saved successfully', 'success');
+      addBatchLog('��� Comparison report saved successfully', 'success');
           
       // Store sales decisions as JSON in property records
       if (salesDecisions.size > 0) {
