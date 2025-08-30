@@ -359,8 +359,6 @@ const loadInitialData = async () => {
   const processUploadedFile = async (file) => {
     if (!file) return;
     
-    console.log('Starting file processing...', file.name);
-    
     setIsProcessing(true);
     setError(null);
     setWorksheetIssues([]);
