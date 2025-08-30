@@ -366,19 +366,15 @@ const loadInitialData = async () => {
     try {
       const reader = new FileReader();
       reader.onload = async (e) => {
-        console.log('FileReader loaded, starting to parse Excel...');
-        
         const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, { 
-          type: 'array', 
+        const workbook = XLSX.read(data, {
+          type: 'array',
           cellDates: true,
-          cellFormulas: true 
+          cellFormulas: true
         });
-        
+
         const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
         const rawData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
-        
-        console.log('Excel parsed, total rows:', rawData.length);
         
         const issues = [];
         const parsedData = [];
