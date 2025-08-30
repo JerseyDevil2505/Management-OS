@@ -918,7 +918,7 @@ const handleCodeFileUpdate = async () => {
             });
           }
           
-        } else if (detectedVendor === 'Microsystems') {
+        } else if (vendorToUse === 'Microsystems') {
           // Microsystems: Check only property_m4_class
           const sourceM4Class = sourceRecord['Class'];
           
