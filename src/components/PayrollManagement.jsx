@@ -478,14 +478,7 @@ const loadInitialData = async () => {
           const totalsRow = rawData[totalsRowIndex];
           const sheetTotalHours = totalsRow[2] || 0;
           const sheetApptOT = totalsRow[4] || 0;
-          
-          console.log('Totals validation:', {
-            sheetTotalHours,
-            totalHoursSum,
-            sheetApptOT,
-            apptOTSum
-          });
-          
+
           if (totalHoursSum > 0 && Math.abs(sheetTotalHours - totalHoursSum) > 0.01) {
             issues.push({
               type: 'warning',
