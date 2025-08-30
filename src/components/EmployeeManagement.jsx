@@ -280,7 +280,6 @@ const loadEmployees = () => {
         totalCount: allInspectionData.length
       });
       setCacheTimestamp(Date.now());
-      console.log(`💾 Cached ${enrichedData.length} records for instant filtering`);
 
     } catch (error) {
       console.error('Error loading global analytics:', error);
