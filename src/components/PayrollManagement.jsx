@@ -290,9 +290,6 @@ const loadInitialData = async () => {
       const startDate = payrollPeriod.startDate;
       const endDate = payrollPeriod.endDate;
       
-      console.log(`Calculating bonuses from ${startDate} to ${endDate}`);
-      console.log('Fetching inspections from database...');
-      
       let query = supabase
         .from('inspection_data')
         .select('id, measure_by, measure_date, property_class, property_composite_key, property_location, job_id')
