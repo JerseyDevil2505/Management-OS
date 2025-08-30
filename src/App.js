@@ -498,7 +498,6 @@ useEffect(() => {
 
       // If this is a background refresh and database is busy, defer it
       if (background && isBusy && timeSinceLastOp < 5000) {
-        console.log('🔄 Database busy, deferring background refresh');
         setTimeout(() => loadMasterData(true), 10000); // Retry in 10 seconds
         return masterCache;
       }
