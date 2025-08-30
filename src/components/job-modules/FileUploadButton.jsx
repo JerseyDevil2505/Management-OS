@@ -2934,7 +2934,7 @@ const handleCodeFileUpdate = async () => {
                 document.getElementById('code-file-upload').value = '';
                 addNotification('Code file cleared', 'info');
               }}
-              disabled={comparing || processing}
+              disabled={comparing || processing || isJobContainerLoading}
               className="px-2 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600 disabled:bg-gray-500 flex items-center"
             >
               <X className="w-3 h-3" />
