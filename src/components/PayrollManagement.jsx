@@ -437,7 +437,6 @@ const loadInitialData = async () => {
               empData.issues.push(`Negative hours (${hours}) - please check`);
             } else if (typeof hours === 'number' && !isNaN(hours)) {
               totalHoursSum += hours;
-              console.log(`  Added ${hours} to total, new sum: ${totalHoursSum}`);
               
               // Look up the employee in our employees data to check their actual status
               const employee = employees.find(emp => {
