@@ -726,13 +726,20 @@ const handleCodeFileUpdate = async () => {
   // FIXED: Comparison logic using property_records directly instead of current_properties view
   const performComparison = async () => {
     if (!sourceFileContent || !job) return null;
-    
+
     try {
       setProcessingStatus('Analyzing files...');
-      
+
+      // Safety check for vendor type
+      const vendorToUse = detectedVendor || vendorType;
+      console.log(`🚨 CRITICAL: detectedVendor="${detectedVendor}", vendorType prop="${vendorType}", using="${vendorToUse}"`);
+
+      if (!vendorToUse) {
+        throw new Error('Vendor type not available. Please wait for job data to load completely.');
+      }
+
       // Parse source file
-      console.log(`🚨 CRITICAL: detectedVendor="${detectedVendor}", vendorType prop="${vendorType}"`);
-      const sourceRecords = parseSourceFile(sourceFileContent, detectedVendor);
+      const sourceRecords = parseSourceFile(sourceFileContent, vendorToUse);
       
       // FIXED: Get ALL database records from property_records table directly
       setProcessingStatus('Fetching current database records...');
