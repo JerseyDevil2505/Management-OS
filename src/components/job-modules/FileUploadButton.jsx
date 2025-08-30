@@ -281,10 +281,7 @@ const handleCodeFileUpdate = async () => {
     return;
   }
 
-  if (!detectedVendor) {
-    addNotification('Could not detect vendor type for code file', 'error');
-    return;
-  }
+  // Vendor type is now guaranteed from JobContainer props
 
   try {
     setProcessing(true);
