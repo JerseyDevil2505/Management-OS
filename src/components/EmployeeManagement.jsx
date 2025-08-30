@@ -193,9 +193,6 @@ const loadEmployees = () => {
       }
     }
 
-    console.log('🔍 INSPECTION DATA:', allInspectionData.length, 'total records loaded');
-      console.log('🔍 Sample inspection record:', allInspectionData[0]);
-
       // Get ONLY inspector employees (Residential and Commercial - exclude Management)
       let employeesQuery = supabase
         .from('employees')
