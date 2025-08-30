@@ -1607,7 +1607,7 @@ const handleCodeFileUpdate = async () => {
         addNotification(`✅ Successfully processed ${totalProcessed} records via ${detectedVendor} updater`, 'success');
         
         if (salesDecisions.size > 0) {
-          addNotification(`��� Saved ${salesDecisions.size} sales decisions`, 'success');
+          addNotification(`💾 Saved ${salesDecisions.size} sales decisions`, 'success');
         }
       }
       // Check if rollback occurred
@@ -2874,7 +2874,7 @@ const handleCodeFileUpdate = async () => {
               onClick={() => {
                 setSourceFile(null);
                 setSourceFileContent(null);
-                setDetectedVendor(null);
+                // REMOVED: Don't reset vendor - keep using prop from JobContainer
                 document.getElementById('source-file-upload').value = '';
                 addNotification('Source file cleared', 'info');
               }}
