@@ -241,16 +241,16 @@ useEffect(() => {
         let shouldBackgroundRefresh = false;
         
         if (cacheAge < CACHE_EXPIRY.hot) {
-          console.log('🔥 HOT cache - using without refresh');
+          // HOT cache - using without refresh
         } else if (cacheAge < CACHE_EXPIRY.warm) {
-          console.log('♨️ WARM cache - using with background refresh');
+          // WARM cache - using with background refresh
           shouldBackgroundRefresh = true;
         } else if (cacheAge < CACHE_EXPIRY.cold) {
-          console.log('❄️ COLD cache - showing stale warning');
+          // COLD cache - showing stale warning
           loadSource = 'cache-stale';
           shouldBackgroundRefresh = true;
         } else {
-          console.log('💀 EXPIRED cache - will refresh');
+          // EXPIRED cache - will refresh
           return null;
         }
         
