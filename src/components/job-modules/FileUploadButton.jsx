@@ -732,7 +732,6 @@ const handleCodeFileUpdate = async () => {
 
       // Safety check for vendor type
       const vendorToUse = detectedVendor || vendorType;
-      console.log(`🚨 CRITICAL: detectedVendor="${detectedVendor}", vendorType prop="${vendorType}", using="${vendorToUse}"`);
 
       if (!vendorToUse) {
         throw new Error('Vendor type not available. Please wait for job data to load completely.');
@@ -1632,7 +1631,7 @@ const handleCodeFileUpdate = async () => {
         addBatchLog('⚠️ UPDATE FAILED - All changes have been rolled back', 'error', {
           message: 'The update encountered errors and all changes were automatically reversed'
         });
-        addNotification('��� Update failed - all changes rolled back. Check logs for details.', 'error');
+        addNotification('���� Update failed - all changes rolled back. Check logs for details.', 'error');
       }
 
       // Update local file version and date from DB
