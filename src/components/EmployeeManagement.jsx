@@ -388,18 +388,9 @@ const loadEmployees = () => {
 
           // DEBUG: Check if info_by codes are being read correctly
           if (initials === 'SO') {
-            const alRecords = residentialRecords.filter(r => 
+            const alRecords = residentialRecords.filter(r =>
               r.measure_by === 'SO' && r.list_by === 'SO'
             );
-            console.log('🔍 AL DEBUG:');
-            console.log('Total AL measured & listed:', alRecords.length);
-            console.log('SO entries with info_by check:', myEntries);
-            console.log('Sample AL records:', alRecords.slice(0, 3).map(r => ({
-              info_by_code: r.info_by_code,
-              jobConfig: r.jobInfoByConfig,
-              hasEntryArray: r.jobInfoByConfig?.entry,
-              isInEntryArray: r.jobInfoByConfig?.entry?.includes(r.info_by_code?.toString())
-            })));
           }          
           
           // Refusal: my records with refusal codes
