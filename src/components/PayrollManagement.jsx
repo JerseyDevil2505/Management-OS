@@ -386,7 +386,6 @@ const loadInitialData = async () => {
         for (let i = 0; i < Math.min(10, rawData.length); i++) {
           if (rawData[i] && rawData[i][0] === 'EMPLOYEE') {
             rowsStartIndex = i + 2;
-            console.log(`Found EMPLOYEE header at row ${i}, data will start at row ${rowsStartIndex}`);
             break;
           }
         }
