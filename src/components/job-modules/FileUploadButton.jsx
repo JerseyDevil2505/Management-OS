@@ -56,6 +56,14 @@ const FileUploadButton = ({
   });
 
 
+  // NEW: Sync detectedVendor with passed vendorType prop
+  useEffect(() => {
+    if (vendorType && vendorType !== detectedVendor) {
+      console.log(`🔧 Using vendor type from JobContainer: ${vendorType}`);
+      setDetectedVendor(vendorType);
+    }
+  }, [vendorType, detectedVendor]);
+
   const addNotification = (message, type = 'info') => {
     const id = Date.now() + Math.random(); // Make unique with random component
     const notification = { id, message, type, timestamp: new Date() };
