@@ -91,8 +91,7 @@ const loadEmployees = () => {
       setGlobalAnalytics(reprocessed);
       return; // Use cached data instead of reloading
     }
-    
-    console.log('🔄 Loading fresh analytics data...');
+
     setIsLoadingAnalytics(true);
     try {
       // First, get all jobs to get their InfoBy category configs and vendor type
