@@ -391,13 +391,11 @@ const handleCodeFileUpdate = async () => {
       const originalHeaders = lines[0].split('|');
       headers = renameDuplicateHeaders(originalHeaders);
     } else {
-      console.error(`❌ parseSourceFile: Unsupported vendor type: "${vendor}"`);
       throw new Error(`Unsupported vendor type: "${vendor}". Expected 'BRT' or 'Microsystems'`);
     }
 
     // Additional safety check
     if (!headers) {
-      console.error('❌ parseSourceFile: headers is still undefined after vendor processing');
       throw new Error('Failed to parse file headers');
     }
     
