@@ -204,7 +204,6 @@ useEffect(() => {
           timestamp: Date.now()
         };
         localStorage.setItem('lojikCacheFallback', JSON.stringify(minimalCache));
-        console.log('💾 Minimal cache saved to localStorage');
       } catch (e) {
         console.error('All storage methods failed:', e);
       }
