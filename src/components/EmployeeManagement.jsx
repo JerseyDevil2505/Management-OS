@@ -211,9 +211,6 @@ const loadEmployees = () => {
 
       if (employeesError) throw employeesError;
 
-      console.log('🔍 EMPLOYEES DATA:', employeesData?.length, 'inspector employees found');
-      console.log('🔍 Employee initials:', employeesData?.map(e => e.initials).filter(Boolean));
-
       if (!allInspectionData || allInspectionData.length === 0) {
         setGlobalAnalytics({
           summary: { totalInspections: 0, overallEntryRate: 0, overallRefusalRate: 0, avgInspectionsPerDay: 0 },
