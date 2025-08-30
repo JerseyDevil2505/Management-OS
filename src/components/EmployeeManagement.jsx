@@ -125,7 +125,6 @@ const loadEmployees = () => {
       .from('inspection_data')
       .select('*', { count: 'exact', head: true });
 
-    console.log(`🔍 Total inspection records in database: ${totalCount}`);
     setAnalyticsLoadProgress({ loaded: 0, total: totalCount || 0, retries: 0 });
 
     while (hasMore) {
