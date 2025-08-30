@@ -345,14 +345,7 @@ const loadInitialData = async () => {
           details: data.details
         };
       });
-      
-      console.log('\nTotal inspections by initials:');
-      Object.entries(bonusResults)
-        .sort((a, b) => b[1].inspections - a[1].inspections)
-        .forEach(([initials, data]) => {
-          console.log(`  ${initials}: ${data.inspections} inspections = ${data.bonus.toFixed(2)}`);
-        });
-      
+
       setInspectionBonuses(bonusResults);
       setSuccessMessage(`Successfully calculated bonuses for ${Object.keys(bonusResults).length} inspectors (${allInspections.length} total inspections)`);
     } catch (error) {
