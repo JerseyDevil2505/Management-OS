@@ -234,10 +234,7 @@ useEffect(() => {
           }
         }
         
-        console.log('📦 Loaded from storage - no caching');
-        
         const loadTime = Date.now() - startTime;
-        console.log(`⚡ Cache loaded from IndexedDB in ${loadTime}ms (age: ${Math.floor(cacheAge / 60000)} minutes)`);
         
         // Determine cache freshness
         let loadSource = 'cache';
