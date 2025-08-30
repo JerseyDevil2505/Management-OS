@@ -148,8 +148,7 @@ const loadEmployees = () => {
           }
           
           retries++;
-          console.log(`⚠️ Retry ${retries}/${maxRetries} for page ${page + 1} after error:`, error);
-          
+
           if (retries < maxRetries) {
             // Wait before retrying
             await new Promise(resolve => setTimeout(resolve, retryDelay * retries));
