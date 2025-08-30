@@ -528,15 +528,12 @@ useEffect(() => {
             return results;
 
           } catch (error) {
-            console.log(`🔄 Database operation attempt ${attempt}/${maxRetries} failed:`, error.message);
-
             if (attempt === maxRetries) {
               throw error;
             }
 
             // Exponential backoff: 2s, 4s, 8s
             const backoffTime = Math.min(2000 * Math.pow(2, attempt - 1), 8000);
-            console.log(`⏱️ Retrying in ${backoffTime}ms...`);
             await new Promise(resolve => setTimeout(resolve, backoffTime));
           }
         }
