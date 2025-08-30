@@ -412,9 +412,7 @@ const loadInitialData = async () => {
             const fieldOT = row[5] || 0;
             const total = row[6] || 0;
             const comments = row[7] || '';
-            
-            console.log(`Processing ${employeeName}: hours=${hours} (type: ${typeof hours})`);
-            
+
             const empData = {
               worksheetName: employeeName,
               initials: initials,
