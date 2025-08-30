@@ -475,12 +475,9 @@ export class MicrosystemsUpdater {
       
     };
 
-    // ENHANCED: Merge with preserved data - preserved fields take precedence
-    // This ensures component-defined fields are not overwritten during updates
-    return {
-      ...baseRecord,
-      ...preservedData
-    };
+    // SIMPLIFIED: Return baseRecord only - no field preservation needed
+    // is_assigned_property will remain untouched since it's not in baseRecord
+    return baseRecord;
   }
 
   /**
