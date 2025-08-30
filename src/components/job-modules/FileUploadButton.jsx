@@ -1607,7 +1607,7 @@ const handleCodeFileUpdate = async () => {
         addNotification(`✅ Successfully processed ${totalProcessed} records via ${detectedVendor} updater`, 'success');
         
         if (salesDecisions.size > 0) {
-          addNotification(`💾 Saved ${salesDecisions.size} sales decisions`, 'success');
+          addNotification(`��� Saved ${salesDecisions.size} sales decisions`, 'success');
         }
       }
       // Check if rollback occurred
@@ -1709,10 +1709,9 @@ const handleCodeFileUpdate = async () => {
       const content = await file.text();
       setCodeFileContent(content);
       
-      const vendor = detectVendorType(content, file.name);
-      if (vendor) {
-        setDetectedVendor(vendor); 
-        addNotification(`✅ Detected ${vendor} code file`, 'success');
+      // REMOVED: Vendor detection - now using vendor type from JobContainer props
+      if (detectedVendor) {
+        addNotification(`✅ Detected ${detectedVendor} code file`, 'success');
       }
     } catch (error) {
       console.error('Error reading code file:', error);
