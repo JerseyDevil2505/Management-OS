@@ -188,7 +188,6 @@ useEffect(() => {
         }
         
         await dbRef.current.put('masterCache', coreData, 'main');
-        console.log('💾 Cache saved to IndexedDB');
         return true;
       }
     } catch (error) {
