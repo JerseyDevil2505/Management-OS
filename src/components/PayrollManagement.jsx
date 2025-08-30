@@ -299,7 +299,6 @@ const loadInitialData = async () => {
         .limit(5000);
 
       if (selectedJob !== 'all') {
-        console.log(`Filtering by job: ${selectedJob}`);
         query = query.eq('job_id', selectedJob);
       }
 
