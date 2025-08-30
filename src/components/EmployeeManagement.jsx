@@ -699,8 +699,7 @@ const loadEmployees = () => {
       });
       
       const mainSheetData = XLSX.utils.sheet_to_json(workbook.Sheets['Sheet1']);
-      console.log('File columns detected:', Object.keys(mainSheetData[0] || {}));
-      
+
       const existingEmployees = await employeeService.getAll();
       const existingEmailMap = new Map(existingEmployees.map(emp => [emp.email, emp]));
       
