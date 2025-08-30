@@ -347,7 +347,6 @@ useEffect(() => {
 
     // Don't interrupt if already loading (unless forced)
     if (masterCache.isLoading && !force) {
-      console.log('⏳ Load already in progress, skipping...');
       return masterCache;
     }
 
