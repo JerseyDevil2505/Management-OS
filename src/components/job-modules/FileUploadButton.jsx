@@ -736,7 +736,6 @@ const handleCodeFileUpdate = async () => {
       setProcessingStatus('Analyzing files...');
       
       // Parse source file
-      console.log(`🔍 About to parse source file with detectedVendor: "${detectedVendor}"`);
       const sourceRecords = parseSourceFile(sourceFileContent, detectedVendor);
       
       // FIXED: Get ALL database records from property_records table directly
@@ -1622,7 +1621,7 @@ const handleCodeFileUpdate = async () => {
         addNotification(`✅ Successfully processed ${totalProcessed} records via ${detectedVendor} updater`, 'success');
         
         if (salesDecisions.size > 0) {
-          addNotification(`���� Saved ${salesDecisions.size} sales decisions`, 'success');
+          addNotification(`💾 Saved ${salesDecisions.size} sales decisions`, 'success');
         }
       }
       // Check if rollback occurred
