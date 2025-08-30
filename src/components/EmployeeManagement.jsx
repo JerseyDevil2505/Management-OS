@@ -258,21 +258,14 @@ const loadEmployees = () => {
         }
       });
 
-      console.log('🔍 ENRICHED DATA:', enrichedData.length, 'matched records');
-      
       // Add debug to see what's happening
       if (enrichedData.length === 0) {
-        console.log('⚠️ No enriched data! Checking why...');
-        console.log('Sample inspection record:', allInspectionData[0]);
-        console.log('Employee initials available:', Object.keys(employeeMap));
-        
         // Check a few records to see what initials they have
         const sampleInitials = allInspectionData.slice(0, 5).map(r => ({
           list_by: r.list_by,
           measure_by: r.measure_by,
           price_by: r.price_by
         }));
-        console.log('Sample initials from inspection data:', sampleInitials);
       }
 
       // Process the enriched data similar to ProductionTracker
