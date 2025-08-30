@@ -302,18 +302,14 @@ const loadInitialData = async () => {
         query = query.eq('job_id', selectedJob);
       }
 
-      console.log('Executing query...');
       const startTime = Date.now();
       const { data: allInspections, error: queryError } = await query;
       const queryTime = Date.now() - startTime;
-      
+
       if (queryError) {
         console.error('Query error:', queryError);
         throw new Error(`Database error: ${queryError.message}`);
       }
-      
-      console.log(`Query completed in ${queryTime}ms`);
-      console.log(`Total inspections fetched: ${allInspections?.length || 0}`);
 
       const inspectorCounts = {};
       
