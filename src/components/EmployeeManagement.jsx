@@ -102,8 +102,6 @@ const loadEmployees = () => {
 
       if (jobsError) throw jobsError;
 
-      console.log('🔍 Jobs with InfoBy configs:', jobsData?.length);
-
       // Create a map of job IDs to their InfoBy configs and vendor type
       const jobInfoByConfigs = {};
       const jobVendorTypes = {};
