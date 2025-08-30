@@ -183,15 +183,9 @@ const loadEmployees = () => {
           retries: prev.retries + retries
         }));
 
-        // Log progress every 5 pages or on first/last page
-        if (page === 1 || page % 5 === 0 || !hasMore) {
-          console.log(`🔍 Progress: ${allInspectionData.length} / ${totalCount} records loaded (${Math.round((allInspectionData.length / totalCount) * 100)}%)`);
-        }
-
         // Add timing gap between successful page loads to prevent database overload
         if (hasMore) {
           const delay = 300; // 300ms delay between page loads
-          console.log(`⏳ Waiting ${delay}ms before next page to prevent database overload...`);
           await new Promise(resolve => setTimeout(resolve, delay));
         }
       } else {
