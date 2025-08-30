@@ -731,6 +731,7 @@ const handleCodeFileUpdate = async () => {
       setProcessingStatus('Analyzing files...');
       
       // Parse source file
+      console.log(`🚨 CRITICAL: detectedVendor="${detectedVendor}", vendorType prop="${vendorType}"`);
       const sourceRecords = parseSourceFile(sourceFileContent, detectedVendor);
       
       // FIXED: Get ALL database records from property_records table directly
