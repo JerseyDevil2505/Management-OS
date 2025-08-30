@@ -2,10 +2,18 @@ import React, { useState, useEffect } from 'react';
 import { Upload, FileText, CheckCircle, AlertTriangle, X, Database, Settings, Download, Eye, Calendar, RefreshCw } from 'lucide-react';
 import { jobService, propertyService, supabase, preservedFieldsHandler } from '../../lib/supabaseClient';
 
-const FileUploadButton = ({ job, onFileProcessed, isJobLoading = false, onDataRefresh }) => {
+const FileUploadButton = ({
+  job,
+  onFileProcessed,
+  isJobLoading = false,
+  onDataRefresh,
+  vendorType,  // NEW: Accept vendor type from JobContainer
+  isJobContainerLoading = false  // NEW: Accept loading state from JobContainer
+}) => {
   const [sourceFile, setSourceFile] = useState(null);
   const [codeFile, setCodeFile] = useState(null);
-  const [detectedVendor, setDetectedVendor] = useState(null);
+  // CHANGED: Use passed vendor type instead of detecting
+  const [detectedVendor, setDetectedVendor] = useState(vendorType);
   const [sourceFileContent, setSourceFileContent] = useState(null);
   const [codeFileContent, setCodeFileContent] = useState(null);
   const [comparing, setComparing] = useState(false);
