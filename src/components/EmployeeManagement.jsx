@@ -228,8 +228,6 @@ const loadEmployees = () => {
         }
       });
 
-      console.log('🔍 EMPLOYEE MAP:', Object.keys(employeeMap));
-
       // Process inspection data and match with employees
       const enrichedData = [];
       allInspectionData.forEach(record => {
