@@ -500,12 +500,7 @@ const loadInitialData = async () => {
         setPayrollData(parsedData);
         
         const employeesWithIssues = parsedData.filter(emp => emp.issues.length > 0).length;
-        console.log(`Validation complete: ${parsedData.length} employees processed, ${employeesWithIssues} have issues`);
-        console.log('Employees with issues:', parsedData.filter(emp => emp.issues.length > 0).map(emp => ({
-          name: emp.worksheetName,
-          issues: emp.issues
-        })));
-        
+
         if (issues.length === 0 && employeesWithIssues === 0) {
           setSuccessMessage(`Processed ${parsedData.length} employees successfully - worksheet looks good!`);
         } else {
