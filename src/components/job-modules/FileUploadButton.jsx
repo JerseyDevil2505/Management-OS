@@ -58,7 +58,6 @@ const FileUploadButton = ({
 
   // NEW: Sync detectedVendor with passed vendorType prop
   useEffect(() => {
-    console.log(`🔧 Vendor sync check - vendorType: "${vendorType}", detectedVendor: "${detectedVendor}"`);
     if (vendorType && vendorType !== detectedVendor) {
       console.log(`🔧 Using vendor type from JobContainer: ${vendorType}`);
       setDetectedVendor(vendorType);
@@ -1355,7 +1354,7 @@ const handleCodeFileUpdate = async () => {
         // Fallback: get a reasonable version number
         currentFileVersion = Date.now() % 100; // Use timestamp as version
         newFileVersion = currentFileVersion + 1;
-        addBatchLog(`��� Using fallback version: ${newFileVersion}`, 'info');
+        addBatchLog(`📊 Using fallback version: ${newFileVersion}`, 'info');
       }
 
       // Track batch operations
@@ -1425,7 +1424,7 @@ const handleCodeFileUpdate = async () => {
       // Refresh report count
       await loadReportCount();
       
-      addBatchLog('��� Comparison report saved successfully', 'success');
+      addBatchLog('✅ Comparison report saved successfully', 'success');
           
       // Store sales decisions as JSON in property records
       if (salesDecisions.size > 0) {
@@ -1623,7 +1622,7 @@ const handleCodeFileUpdate = async () => {
         addNotification(`✅ Successfully processed ${totalProcessed} records via ${detectedVendor} updater`, 'success');
         
         if (salesDecisions.size > 0) {
-          addNotification(`💾 Saved ${salesDecisions.size} sales decisions`, 'success');
+          addNotification(`���� Saved ${salesDecisions.size} sales decisions`, 'success');
         }
       }
       // Check if rollback occurred
