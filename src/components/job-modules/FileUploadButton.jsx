@@ -1363,7 +1363,7 @@ const handleCodeFileUpdate = async () => {
             job.id,
             job.year_created || new Date().getFullYear(),
             job.ccdd_code || job.ccddCode,
-            detectedVendor,
+            job.vendor_type,
             {
               source_file_name: sourceFile?.name,
               source_file_version_id: crypto.randomUUID(),
