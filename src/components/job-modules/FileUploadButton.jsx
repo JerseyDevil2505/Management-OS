@@ -1925,11 +1925,25 @@ const handleCodeFileUpdate = async () => {
               {batchComplete && (
                 <button
                   onClick={() => {
+                    // Close modal immediately
                     setShowBatchModal(false);
                     setShowResultsModal(false);
                     setSourceFile(null);
                     setSourceFileContent(null);
                     setSalesDecisions(new Map());
+
+                    // FIXED: Trigger JobContainer data refresh with timeout to prevent 500 errors
+                    if (onDataRefresh) {
+                      console.log('🔄 User closed modal - triggering data refresh after 2 second timeout...');
+                      setTimeout(async () => {
+                        try {
+                          await onDataRefresh();
+                          console.log('✅ JobContainer data refreshed successfully after modal close');
+                        } catch (refreshError) {
+                          console.error('❌ Data refresh failed after modal close:', refreshError);
+                        }
+                      }, 2000);  // 2 second timeout as suggested by Supabase AI
+                    }
                   }}
                   className="text-gray-400 hover:text-gray-600 p-1"
                 >
