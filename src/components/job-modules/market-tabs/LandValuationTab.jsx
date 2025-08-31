@@ -627,13 +627,29 @@ const getPricePerUnit = useCallback((price, size) => {
       if (!validNu) return;
 
       // Apply type/use filter using raw codes (not converted text)
-      const rawTypeUse = prop.asset_type_use?.toString().trim();
+      const rawTypeUse = prop.asset_type_use?.toString().trim().toUpperCase();
 
       // Default to single family code if no type specified
       const defaultCode = vendorType === 'Microsystems' ? '1' : '10';
       const actualTypeCode = rawTypeUse || defaultCode;
 
-      if (actualTypeCode !== method2TypeFilter) return;
+      // Handle grouped codes for filtering
+      const typeUseGroups = {
+        '3': ['30', '31', '3E', '3I'],
+        '4': ['42', '43', '44'],
+        '5': ['51', '52', '53']
+      };
+
+      let passesFilter = false;
+      if (typeUseGroups[method2TypeFilter]) {
+        // Filter is a group code, check if property's code is in the group
+        passesFilter = typeUseGroups[method2TypeFilter].includes(actualTypeCode);
+      } else {
+        // Filter is individual code, direct match
+        passesFilter = actualTypeCode === method2TypeFilter;
+      }
+
+      if (!passesFilter) return;
 
       const vcs = prop.new_vcs;
       if (!vcsSales[vcs]) {
