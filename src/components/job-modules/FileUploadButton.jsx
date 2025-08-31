@@ -304,7 +304,7 @@ const handleCodeFileUpdate = async () => {
       // Wait a bit and check again - sometimes React needs a moment to update props
       setTimeout(() => {
         console.log(`🔧 Code Update - DELAYED check - job.code_file_uploaded_at: ${job.code_file_uploaded_at}`);
-        console.log(`������ Code Update - DELAYED check - job.code_file_version: ${job.code_file_version}`);
+        console.log(`���� Code Update - DELAYED check - job.code_file_version: ${job.code_file_version}`);
       }, 1000);
     }
 
@@ -793,19 +793,19 @@ const handleCodeFileUpdate = async () => {
         const dbRecord = dbKeyMap.get(key);
         
         // FIXED: Check for sales changes with proper number and date comparison
-        const sourceSalesPrice = parseFloat(String(sourceRecord[vendorToUse === 'BRT' ? 'CURRENTSALE_PRICE' : 'Sale Price'] || 0).replace(/[,$]/g, '')) || 0;
+        const sourceSalesPrice = parseFloat(String(sourceRecord[job.vendor_type === 'BRT' ? 'CURRENTSALE_PRICE' : 'Sale Price'] || 0).replace(/[,$]/g, '')) || 0;
         const dbSalesPrice = parseFloat(dbRecord.sales_price || 0);
 
         // ADD: Get sales_nu values
-        const sourceSalesNu = sourceRecord[vendorToUse === 'BRT' ? 'CURRENTSALE_NU' : 'Sale Nu'] || '';
+        const sourceSalesNu = sourceRecord[job.vendor_type === 'BRT' ? 'CURRENTSALE_NU' : 'Sale Nu'] || '';
         const dbSalesNu = dbRecord.sales_nu || '';
-        const sourceSalesBook = sourceRecord[vendorToUse === 'BRT' ? 'CURRENTSALE_DEEDBOOK' : 'Sale Book'] || '';
+        const sourceSalesBook = sourceRecord[job.vendor_type === 'BRT' ? 'CURRENTSALE_DEEDBOOK' : 'Sale Book'] || '';
         const dbSalesBook = dbRecord.sales_book || '';
-        const sourceSalesPage = sourceRecord[vendorToUse === 'BRT' ? 'CURRENTSALE_DEEDPAGE' : 'Sale Page'] || '';
+        const sourceSalesPage = sourceRecord[job.vendor_type === 'BRT' ? 'CURRENTSALE_DEEDPAGE' : 'Sale Page'] || '';
         const dbSalesPage = dbRecord.sales_page || '';
           
         // FIXED: Normalize both dates for accurate comparison using processor method
-        const sourceSalesDate = parseDate(sourceRecord[vendorToUse === 'BRT' ? 'CURRENTSALE_DATE' : 'Sale Date']);
+        const sourceSalesDate = parseDate(sourceRecord[job.vendor_type === 'BRT' ? 'CURRENTSALE_DATE' : 'Sale Date']);
         const dbSalesDate = parseDate(dbRecord.sales_date);
         
         // FIXED: Use proper number comparison with reasonable tolerance AND normalized date comparison
