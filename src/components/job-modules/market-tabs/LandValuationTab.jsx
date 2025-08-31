@@ -85,8 +85,8 @@ const LandValuationTab = ({
   const [bracketAnalysis, setBracketAnalysis] = useState({});
   const [method2Summary, setMethod2Summary] = useState({});
 
-  // Enhanced Method 2 UI State - Use vendor-specific default codes
-  const [method2TypeFilter, setMethod2TypeFilter] = useState(vendorType === 'Microsystems' ? '1' : '10');
+  // Enhanced Method 2 UI State - Use Single Family as default
+  const [method2TypeFilter, setMethod2TypeFilter] = useState('1');
   const [expandedVCS, setExpandedVCS] = useState(new Set());
   const [vcsColors, setVcsColors] = useState({});
 
