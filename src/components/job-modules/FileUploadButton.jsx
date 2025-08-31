@@ -1225,7 +1225,7 @@ const handleCodeFileUpdate = async () => {
         }));
 
         if (isTimeout) {
-          addBatchLog('⏰ Operation timed out after 2 minutes. The database may be overloaded or there\'s a query issue. Try refreshing the page and uploading again.', 'error');
+          addBatchLog('��� Operation timed out after 2 minutes. The database may be overloaded or there\'s a query issue. Try refreshing the page and uploading again.', 'error');
         }
         
         addBatchLog(`❌ Batch processing failed: ${error.message}`, 'error');
@@ -1636,7 +1636,7 @@ const handleCodeFileUpdate = async () => {
           // This will show in console - user should check JobContainer UI
         }, 2000);
       } else {
-        addBatchLog('��️ No onDataRefresh callback provided!', 'warning');
+        addBatchLog('⚠️ No onDataRefresh callback provided!', 'warning');
       }
     } catch (error) {
       console.error('❌ Processing failed:', error);
@@ -1874,53 +1874,89 @@ const handleCodeFileUpdate = async () => {
             )}
           </div>
 
-          {/* Footer with Pagination */}
-          <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-between items-center shrink-0">
-            <div className="text-sm text-gray-600">
-              Showing {startIndex + 1}-{Math.min(endIndex, reportsList.length)} of {reportsList.length} reports
+          {/* Enhanced Footer with Pagination */}
+          <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 shrink-0">
+            {/* First row - Page info and navigation */}
+            <div className="flex justify-between items-center mb-3">
+              <div className="text-sm text-gray-600">
+                Showing {startIndex + 1}-{Math.min(endIndex, reportsList.length)} of {reportsList.length} reports
+              </div>
+
+              {/* Enhanced Pagination Controls */}
+              {totalPages > 1 && (
+                <div className="flex items-center space-x-1">
+                  {/* First page */}
+                  <button
+                    onClick={() => setCurrentReportPage(1)}
+                    disabled={currentReportPage === 1}
+                    className="px-2 py-1 text-sm rounded bg-gray-200 text-gray-700 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="First page"
+                  >
+                    ««
+                  </button>
+
+                  {/* Previous page */}
+                  <button
+                    onClick={() => setCurrentReportPage(Math.max(1, currentReportPage - 1))}
+                    disabled={currentReportPage === 1}
+                    className="px-2 py-1 text-sm rounded bg-gray-200 text-gray-700 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Previous page"
+                  >
+                    ‹
+                  </button>
+
+                  {/* Page input */}
+                  <div className="flex items-center space-x-1">
+                    <input
+                      type="number"
+                      min="1"
+                      max={totalPages}
+                      value={currentReportPage}
+                      onChange={(e) => {
+                        const page = parseInt(e.target.value);
+                        if (page >= 1 && page <= totalPages) {
+                          setCurrentReportPage(page);
+                        }
+                      }}
+                      className="w-16 px-2 py-1 text-sm text-center border border-gray-300 rounded"
+                    />
+                    <span className="text-sm text-gray-600">of {totalPages}</span>
+                  </div>
+
+                  {/* Next page */}
+                  <button
+                    onClick={() => setCurrentReportPage(Math.min(totalPages, currentReportPage + 1))}
+                    disabled={currentReportPage === totalPages}
+                    className="px-2 py-1 text-sm rounded bg-gray-200 text-gray-700 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Next page"
+                  >
+                    ›
+                  </button>
+
+                  {/* Last page */}
+                  <button
+                    onClick={() => setCurrentReportPage(totalPages)}
+                    disabled={currentReportPage === totalPages}
+                    className="px-2 py-1 text-sm rounded bg-gray-200 text-gray-700 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Last page"
+                  >
+                    »»
+                  </button>
+                </div>
+              )}
             </div>
 
-            {/* Pagination Controls */}
-            {totalPages > 1 && (
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={() => setCurrentReportPage(Math.max(1, currentReportPage - 1))}
-                  disabled={currentReportPage === 1}
-                  className="p-2 rounded bg-gray-700 text-white hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="Previous page"
-                >
-                  <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
-                  </svg>
-                </button>
-
-                <span className="text-sm font-medium text-gray-700">
-                  {currentReportPage} / {totalPages}
-                </span>
-
-                <button
-                  onClick={() => setCurrentReportPage(Math.min(totalPages, currentReportPage + 1))}
-                  disabled={currentReportPage === totalPages}
-                  className="p-2 rounded bg-gray-700 text-white hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="Next page"
-                >
-                  <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
-                  </svg>
-                </button>
-              </div>
-            )}
-
-            <div className="flex space-x-3">
+            {/* Second row - Action buttons */}
+            <div className="flex justify-end space-x-3">
               <button
                 onClick={viewAllReports}
-                className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 font-medium"
+                className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 font-medium transition-colors"
               >
                 Export All Reports
               </button>
               <button
                 onClick={() => setShowReportsModal(false)}
-                className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 font-medium"
+                className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 font-medium transition-colors"
               >
                 Close
               </button>
