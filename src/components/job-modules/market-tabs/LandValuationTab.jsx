@@ -609,24 +609,18 @@ const getPricePerUnit = useCallback((price, size) => {
     if (!properties || !jobData?.id) return;
 
     try {
-      // Get properties with time normalization data from the correct tables
-      const { data: timeNormalizedData, error } = await supabase
-        .from('property_market_analysis')
-        .select(`
-          property_composite_key,
-          new_vcs,
-          values_norm_time
-        `)
-        .inner('property_records', 'property_composite_key', 'property_composite_key')
-        .eq('property_records.job_id', jobData.id)
-        .eq('property_records.property_m4_class', '2')
-        .not('values_norm_time', 'is', null)
-        .gt('values_norm_time', 0);
-
-      if (error) {
-        console.error('Error fetching time normalized data:', error);
-        return;
-      }
+      // Build time-normalized dataset from already-loaded properties (avoids extra DB joins)
+      const timeNormalizedData = properties
+        .filter(p =>
+          (p.property_m4_class === '2' || p.property_m4_class === '3A') &&
+          p.values_norm_time != null &&
+          p.values_norm_time > 0
+        )
+        .map(p => ({
+          property_composite_key: p.property_composite_key,
+          new_vcs: p.new_vcs,
+          values_norm_time: p.values_norm_time
+        }));
 
       if (!timeNormalizedData || timeNormalizedData.length === 0) {
         setBracketAnalysis({});
