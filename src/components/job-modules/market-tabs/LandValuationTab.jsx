@@ -628,18 +628,19 @@ const getPricePerUnit = useCallback((price, size) => {
       const actualTypeCode = rawTypeUse || defaultCode;
 
       // Handle grouped codes for filtering
-      const typeUseGroups = {
-        '3': ['30', '31', '3E', '3I'],
-        '4': ['42', '43', '44'],
-        '5': ['51', '52', '53']
-      };
-
       let passesFilter = false;
-      if (typeUseGroups[method2TypeFilter]) {
-        // Filter is a group code, check if property's code is in the group
-        passesFilter = typeUseGroups[method2TypeFilter].includes(actualTypeCode);
+
+      if (method2TypeFilter === '3-GROUP') {
+        // Row/Townhouses group
+        passesFilter = ['30', '31', '3E', '3I'].includes(actualTypeCode);
+      } else if (method2TypeFilter === '4-GROUP') {
+        // MultiFamily group
+        passesFilter = ['42', '43', '44'].includes(actualTypeCode);
+      } else if (method2TypeFilter === '5-GROUP') {
+        // Conversions group
+        passesFilter = ['51', '52', '53'].includes(actualTypeCode);
       } else {
-        // Filter is individual code, direct match
+        // Individual code, direct match
         passesFilter = actualTypeCode === method2TypeFilter;
       }
 
