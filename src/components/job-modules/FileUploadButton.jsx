@@ -1548,7 +1548,7 @@ const handleCodeFileUpdate = async () => {
         });
         
         if (salesReverted > 0) {
-          addNotification(`���️ Reverted ${salesReverted} sales to old values`, 'info');
+          addNotification(`↩️ Reverted ${salesReverted} sales to old values`, 'info');
         }
       }
       
@@ -2341,7 +2341,7 @@ const handleCodeFileUpdate = async () => {
                               <div className="text-xs text-gray-600">{classChange.field}</div>
                               <div className="text-sm">
                                 <span className="font-medium text-red-600">{classChange.old || 'None'}</span>
-                                <span className="mx-1">→</span>
+                                <span className="mx-1">���</span>
                                 <span className="font-medium text-green-600">{classChange.new || 'None'}</span>
                               </div>
                             </div>
@@ -2549,7 +2549,7 @@ const handleCodeFileUpdate = async () => {
                         job.id,
                         job.year_created || new Date().getFullYear(),
                         job.ccdd_code || job.ccddCode,
-                        detectedVendor,
+                        job.vendor_type,
                         {
                           source_file_name: sourceFile?.name,
                           source_file_version_id: crypto.randomUUID(),
