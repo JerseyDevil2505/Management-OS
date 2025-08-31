@@ -1320,7 +1320,7 @@ const handleCodeFileUpdate = async () => {
         addBatchLog(`📊 Current DB version: ${currentFileVersion}, incrementing to: ${newFileVersion}`, 'info');
 
       } catch (error) {
-        addBatchLog(`⚠️ Version fetch failed: ${error.message}, using default version increment`, 'warning');
+        addBatchLog(`⚠��� Version fetch failed: ${error.message}, using default version increment`, 'warning');
         // Fallback: get a reasonable version number
         currentFileVersion = Date.now() % 100; // Use timestamp as version
         newFileVersion = currentFileVersion + 1;
@@ -1871,7 +1871,7 @@ const handleCodeFileUpdate = async () => {
                           setCurrentReportPage(page);
                         }
                       }}
-                      className="w-16 px-2 py-1 text-sm text-center border border-gray-300 rounded"
+                      className="w-16 px-2 py-1 text-sm text-center border border-gray-300 rounded text-gray-900 bg-white"
                     />
                     <span className="text-sm text-gray-700">of {totalPages}</span>
                   </div>
