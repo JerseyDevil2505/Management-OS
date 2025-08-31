@@ -1307,7 +1307,7 @@ const handleCodeFileUpdate = async () => {
       
       
       // Call the updater to UPSERT the database
-      addBatchLog(`📊 Calling ${detectedVendor} updater (UPSERT mode)...`, 'info');
+      addBatchLog(`📊 Calling ${job.vendor_type} updater (UPSERT mode)...`, 'info');
 
       // FIX: Calculate new file_version for property_records - fetch current from DB with timeout
       addBatchLog('🔍 Fetching current file version from database...', 'info');
