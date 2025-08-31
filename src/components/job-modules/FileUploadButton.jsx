@@ -35,7 +35,13 @@ const FileUploadButton = ({
 
   // Pagination for reports modal
   const [currentReportPage, setCurrentReportPage] = useState(1);
-  const reportsPerPage = 100;
+  const [reportsPerPage, setReportsPerPage] = useState(5);
+
+  // Modal resize functionality
+  const [modalSize, setModalSize] = useState({
+    width: 800,
+    height: 600
+  });
   
   // NEW: Batch processing modal state
   const [showBatchModal, setShowBatchModal] = useState(false);
