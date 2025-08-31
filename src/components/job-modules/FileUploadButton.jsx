@@ -1609,7 +1609,7 @@ const handleCodeFileUpdate = async () => {
       } else {
         addBatchLog('🎉 All processing completed successfully!', 'success', {
           totalProcessed,
-          vendor: detectedVendor,
+          vendor: job.vendor_type,
           salesDecisions: salesDecisions.size
         });
         addNotification(`✅ Successfully processed ${totalProcessed} records via ${job.vendor_type} updater`, 'success');
