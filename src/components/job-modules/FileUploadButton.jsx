@@ -1873,7 +1873,7 @@ const handleCodeFileUpdate = async () => {
                       }}
                       className="w-16 px-2 py-1 text-sm text-center border border-gray-300 rounded"
                     />
-                    <span className="text-sm text-gray-600">of {totalPages}</span>
+                    <span className="text-sm text-gray-300">of {totalPages}</span>
                   </div>
 
                   {/* Next page */}
