@@ -1613,7 +1613,7 @@ const handleCodeFileUpdate = async () => {
           vendor: detectedVendor,
           salesDecisions: salesDecisions.size
         });
-        addNotification(`✅ Successfully processed ${totalProcessed} records via ${detectedVendor} updater`, 'success');
+        addNotification(`✅ Successfully processed ${totalProcessed} records via ${job.vendor_type} updater`, 'success');
         
         if (salesDecisions.size > 0) {
           addNotification(`💾 Saved ${salesDecisions.size} sales decisions`, 'success');
