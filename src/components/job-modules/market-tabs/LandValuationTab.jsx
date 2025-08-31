@@ -2575,26 +2575,50 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
             })}
         </div>
         
-        {/* Method 2 Summary - AT BOTTOM */}
+        {/* Method 2 Summary - Enhanced Layout */}
         {method2Summary.average && (
-          <div style={{ padding: '15px', backgroundColor: '#F9FAFB', borderTop: '1px solid #E5E7EB' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px' }}>
-              <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
-                <div style={{ fontSize: '12px', color: '#6B7280' }}>Average Implied Rate</div>
-                <div style={{ fontSize: '20px', fontWeight: 'bold' }}>${method2Summary.average?.toLocaleString()}</div>
-              </div>
-              <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
-                <div style={{ fontSize: '12px', color: '#6B7280' }}>Median Implied Rate</div>
-                <div style={{ fontSize: '20px', fontWeight: 'bold' }}>${method2Summary.median?.toLocaleString()}</div>
-              </div>
-              <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
-                <div style={{ fontSize: '12px', color: '#6B7280' }}>VCS Coverage</div>
-                <div style={{ fontSize: '16px', fontWeight: 'bold' }}>{method2Summary.coverage}</div>
-              </div>
-              <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
-                <div style={{ fontSize: '12px', color: '#6B7280' }}>Range</div>
-                <div style={{ fontSize: '16px', fontWeight: 'bold' }}>
-                  ${method2Summary.min?.toLocaleString()} - ${method2Summary.max?.toLocaleString()}
+          <div style={{ borderTop: '2px solid #E5E7EB', backgroundColor: '#F8FAFC' }}>
+            <div style={{ padding: '20px' }}>
+              <h4 style={{ margin: '0 0 15px 0', fontSize: '16px', fontWeight: 'bold', color: '#1F2937' }}>
+                Method 2 Summary - Implied {getUnitLabel()} Rates
+              </h4>
+
+              <div style={{ display: 'flex', gap: '30px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '14px', color: '#6B7280', marginBottom: '4px' }}>Average</div>
+                    <div style={{ fontSize: '32px', fontWeight: 'bold', color: '#059669' }}>
+                      ${method2Summary.average?.toLocaleString()}
+                    </div>
+                  </div>
+
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '14px', color: '#6B7280', marginBottom: '4px' }}>Median</div>
+                    <div style={{ fontSize: '32px', fontWeight: 'bold', color: '#0D9488' }}>
+                      ${method2Summary.median?.toLocaleString()}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ width: '1px', height: '60px', backgroundColor: '#D1D5DB' }}></div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', minWidth: '200px' }}>
+                    <span style={{ fontSize: '14px', color: '#6B7280' }}>VCS Coverage:</span>
+                    <span style={{ fontSize: '14px', fontWeight: '600', color: '#1F2937' }}>{method2Summary.coverage}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', minWidth: '200px' }}>
+                    <span style={{ fontSize: '14px', color: '#6B7280' }}>Range:</span>
+                    <span style={{ fontSize: '14px', fontWeight: '600', color: '#1F2937' }}>
+                      ${method2Summary.min?.toLocaleString()} - ${method2Summary.max?.toLocaleString()}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', minWidth: '200px' }}>
+                    <span style={{ fontSize: '14px', color: '#6B7280' }}>Total Sales:</span>
+                    <span style={{ fontSize: '14px', fontWeight: '600', color: '#1F2937' }}>
+                      {Object.values(bracketAnalysis).reduce((sum, data) => sum + data.totalSales, 0)}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
