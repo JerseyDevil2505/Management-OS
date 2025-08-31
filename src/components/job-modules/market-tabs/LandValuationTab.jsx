@@ -326,47 +326,41 @@ const getPricePerUnit = useCallback((price, size) => {
     const defaultCode = vendorType === 'Microsystems' ? '1' : '10';
     if (!properties) return [{ code: defaultCode, description: 'Single Family' }];
 
-    // Define grouping mappings
-    const typeUseGroups = {
-      '30': '3', '31': '3', '3E': '3', '3I': '3', // Row/Townhouses
-      '42': '4', '43': '4', '44': '4',             // MultiFamily
-      '51': '5', '52': '5', '53': '5'             // Conversions
-    };
-
-    const groupDescriptions = {
-      '3': '3 - Row/Townhouses',
-      '4': '4 - MultiFamily',
-      '5': '5 - Conversions'
-    };
-
     const typeCodeMap = new Map();
     typeCodeMap.set(defaultCode, 'Single Family'); // Always include default
 
+    // Get all unique asset_type_use codes from properties
+    const uniqueCodes = new Set();
     properties.forEach(prop => {
       if (prop.asset_type_use && prop.property_m4_class === '2') {
         const rawCode = prop.asset_type_use.toString().trim().toUpperCase();
-
         if (rawCode && rawCode !== '' && rawCode !== 'null' && rawCode !== 'undefined') {
-          // Check if code should be grouped
-          const groupCode = typeUseGroups[rawCode];
-          const codeToUse = groupCode || rawCode;
-
-          if (!typeCodeMap.has(codeToUse)) {
-            let description;
-
-            if (groupCode) {
-              // Use predefined group description
-              description = groupDescriptions[groupCode];
-            } else {
-              // Get individual description
-              description = vendorType === 'Microsystems' && jobData?.parsed_code_definitions
-                ? interpretCodes.getMicrosystemsValue?.(prop, jobData.parsed_code_definitions, 'asset_type_use') || rawCode
-                : rawCode;
-            }
-
-            typeCodeMap.set(codeToUse, description);
-          }
+          uniqueCodes.add(rawCode);
         }
+      }
+    });
+
+    // Add individual codes that exist in the data
+    uniqueCodes.forEach(rawCode => {
+      if (!typeCodeMap.has(rawCode)) {
+        const description = vendorType === 'Microsystems' && jobData?.parsed_code_definitions
+          ? interpretCodes.getMicrosystemsValue?.({ asset_type_use: rawCode }, jobData.parsed_code_definitions, 'asset_type_use') || rawCode
+          : rawCode;
+        typeCodeMap.set(rawCode, description);
+      }
+    });
+
+    // Add group options only if we have matching codes
+    const groupMappings = [
+      { codes: ['30', '31', '3E', '3I'], groupCode: '3-GROUP', description: '3 - Row/Townhouses' },
+      { codes: ['42', '43', '44'], groupCode: '4-GROUP', description: '4 - MultiFamily' },
+      { codes: ['51', '52', '53'], groupCode: '5-GROUP', description: '5 - Conversions' }
+    ];
+
+    groupMappings.forEach(group => {
+      const hasMatchingCodes = group.codes.some(code => uniqueCodes.has(code));
+      if (hasMatchingCodes) {
+        typeCodeMap.set(group.groupCode, group.description);
       }
     });
 
