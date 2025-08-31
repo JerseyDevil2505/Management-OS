@@ -1623,7 +1623,7 @@ const handleCodeFileUpdate = async () => {
         addBatchLog('⚠️ UPDATE FAILED - All changes have been rolled back', 'error', {
           message: 'The update encountered errors and all changes were automatically reversed'
         });
-        addNotification('������ Update failed - all changes rolled back. Check logs for details.', 'error');
+        addNotification('���� Update failed - all changes rolled back. Check logs for details.', 'error');
       }
 
       // Update local file version and date from DB
@@ -2427,7 +2427,7 @@ const handleCodeFileUpdate = async () => {
             <div className="mt-6 p-4 bg-gray-100 rounded-lg">
               <h3 className="font-bold text-gray-900 mb-2">🔍 Debug Info:</h3>
               <div className="text-sm text-gray-700 space-y-1">
-                <div>Vendor: {detectedVendor}</div>
+                <div>Vendor: {job.vendor_type}</div>
                 <div>Job ID: {job.id}</div>
                 <div>Source File: {sourceFile?.name}</div>
                 <div>Total Changes: {summary.missing + summary.changes + summary.deletions + summary.salesChanges + summary.classChanges}</div>
