@@ -2497,7 +2497,6 @@ const handleCodeFileUpdate = async () => {
               <button
                 onClick={viewAllReports}
                 className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 flex items-center space-x-2 transition-colors"
-                style={{color: 'white' }}
               >
                 <Eye className="w-4 h-4" />
                 <span>View All Reports</span>
@@ -2506,7 +2505,6 @@ const handleCodeFileUpdate = async () => {
               <button
                 onClick={exportComparisonReport}
                 className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 flex items-center space-x-2 transition-colors"
-                style={{ color: 'white'}}
               >
                 <Download className="w-4 h-4" />
                 <span>Export This Report</span>
@@ -2669,7 +2667,6 @@ const handleCodeFileUpdate = async () => {
                 }}
                 disabled={processing}
                 className="px-6 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 disabled:opacity-50 font-medium transition-colors"
-                style={{ color: 'white'}}
               >
                 {processing ? 'Processing...' : 'Acknowledge & Close'}
               </button>
