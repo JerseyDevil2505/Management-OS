@@ -86,7 +86,7 @@ const LandValuationTab = ({
   const [method2Summary, setMethod2Summary] = useState({});
 
   // Enhanced Method 2 UI State
-  const [method2TypeFilter, setMethod2TypeFilter] = useState('all');
+  const [method2TypeFilter, setMethod2TypeFilter] = useState('One Family');
   const [expandedVCS, setExpandedVCS] = useState(new Set());
   const [vcsColors, setVcsColors] = useState({});
 
