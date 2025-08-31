@@ -2431,6 +2431,42 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
           </div>
         </div>
 
+        <div style={{ padding: '10px 15px 5px 15px', borderBottom: '1px solid #E5E7EB', backgroundColor: '#F9FAFB', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ fontSize: '12px', color: '#6B7280' }}>
+            {Object.keys(bracketAnalysis).length} VCS areas • {typeUseFilter !== 'all' ? `Filtered by: ${typeUseFilter}` : 'All property types'}
+          </div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              onClick={() => setExpandedVCS(new Set(Object.keys(bracketAnalysis)))}
+              style={{
+                padding: '4px 8px',
+                fontSize: '11px',
+                backgroundColor: '#3B82F6',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer'
+              }}
+            >
+              Expand All
+            </button>
+            <button
+              onClick={() => setExpandedVCS(new Set())}
+              style={{
+                padding: '4px 8px',
+                fontSize: '11px',
+                backgroundColor: '#6B7280',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer'
+              }}
+            >
+              Collapse All
+            </button>
+          </div>
+        </div>
+
         <div style={{ padding: '10px' }}>
           {Object.entries(bracketAnalysis)
             .filter(([vcs]) => !vcsFilter || vcs.includes(vcsFilter))
