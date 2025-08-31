@@ -1694,8 +1694,8 @@ const handleCodeFileUpdate = async () => {
       const content = await file.text();
       setSourceFileContent(content);
       
-      // REMOVED: Vendor detection - now using vendor type from JobContainer props
-      const vendor = detectedVendor; // Use the vendor from props
+      // Use vendor type from job data
+      const vendor = job.vendor_type;
       
       if (vendor) {
         addNotification(`✅ Using ${vendor} file format`, 'success');
