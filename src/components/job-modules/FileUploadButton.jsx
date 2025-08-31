@@ -820,7 +820,7 @@ const handleCodeFileUpdate = async () => {
             sourcePrice: sourceSalesPrice,
             dbPrice: dbSalesPrice, 
             pricesDifferent,
-            sourceDateRaw: sourceRecord[vendorToUse === 'BRT' ? 'CURRENTSALE_DATE' : 'Sale Date'],
+            sourceDateRaw: sourceRecord[job.vendor_type === 'BRT' ? 'CURRENTSALE_DATE' : 'Sale Date'],
             sourceDateNormalized: sourceSalesDate,
             dbDateRaw: dbRecord.sales_date,
             dbDateNormalized: dbSalesDate,
