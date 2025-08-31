@@ -1716,9 +1716,9 @@ const handleCodeFileUpdate = async () => {
       const content = await file.text();
       setCodeFileContent(content);
       
-      // REMOVED: Vendor detection - now using vendor type from JobContainer props
-      if (detectedVendor) {
-        addNotification(`✅ Detected ${detectedVendor} code file`, 'success');
+      // Use vendor type from job data
+      if (job.vendor_type) {
+        addNotification(`✅ Detected ${job.vendor_type} code file`, 'success');
       }
     } catch (error) {
       console.error('Error reading code file:', error);
