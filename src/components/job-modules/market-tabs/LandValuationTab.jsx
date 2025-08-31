@@ -385,6 +385,12 @@ const getPricePerUnit = useCallback((price, size) => {
   }, [jobData, vendorType, vcsDescriptions]);
 
   // ========== LOAD DATA EFFECTS ==========
+  // Update filter when vendor type changes
+  useEffect(() => {
+    const defaultCode = vendorType === 'Microsystems' ? '1' : '10';
+    setMethod2TypeFilter(defaultCode);
+  }, [vendorType]);
+
   useEffect(() => {
     if (properties && properties.length > 0) {
       filterVacantSales();
