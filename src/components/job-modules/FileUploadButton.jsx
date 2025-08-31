@@ -846,7 +846,7 @@ const handleCodeFileUpdate = async () => {
         }
         
         // Check for class changes
-        if (vendorToUse === 'BRT') {
+        if (job.vendor_type === 'BRT') {
           // BRT: Check both property_m4_class and property_cama_class
           const sourceM4Class = sourceRecord['PROPERTY_CLASS'];
           const sourceCamaClass = sourceRecord['PROPCLASS'];
