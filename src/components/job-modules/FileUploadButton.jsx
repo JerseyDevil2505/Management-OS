@@ -1548,7 +1548,7 @@ const handleCodeFileUpdate = async () => {
         });
         
         if (salesReverted > 0) {
-          addNotification(`↩️ Reverted ${salesReverted} sales to old values`, 'info');
+          addNotification(`���️ Reverted ${salesReverted} sales to old values`, 'info');
         }
       }
       
@@ -2523,7 +2523,7 @@ const handleCodeFileUpdate = async () => {
                     
                     
                     // Call the updater to UPSERT the database with latest data
-                    addBatchLog(`�� Calling ${detectedVendor} updater for version refresh...`, 'info');
+                    addBatchLog(`�� Calling ${job.vendor_type} updater for version refresh...`, 'info');
 
                     // FIX 1: Calculate new file_version for property_records - fetch current from DB
                     addBatchLog('🔍 Fetching current file version from database...', 'info');
@@ -2585,7 +2585,7 @@ const handleCodeFileUpdate = async () => {
                     const errorCount = result.errors || 0;
                     
                     if (errorCount > 0) {
-                      addBatchLog(`⚠��� Refresh completed with ${errorCount} errors`, 'warning');
+                      addBatchLog(`⚠️ Refresh completed with ${errorCount} errors`, 'warning');
                       addNotification(`⚠️ Processing completed with ${errorCount} errors. ${totalProcessed} records updated.`, 'warning');
                     } else {
                       addBatchLog('🎉 File version refresh completed successfully!', 'success');
