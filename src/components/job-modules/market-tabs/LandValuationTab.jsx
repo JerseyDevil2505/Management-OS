@@ -691,7 +691,12 @@ const getPricePerUnit = useCallback((price, size) => {
         xlarge: sales.filter(s => s.acres >= 10)
       };
 
-      // Enhanced statistics calculation
+      // Calculate overall VCS average SFLA for size adjustment
+      const allValidSFLA = sales.filter(s => s.sfla > 0);
+      const overallAvgSFLA = allValidSFLA.length > 0 ?
+        allValidSFLA.reduce((sum, s) => sum + s.sfla, 0) / allValidSFLA.length : null;
+
+      // Enhanced statistics calculation with size adjustment
       const calcBracketStats = (arr) => {
         if (arr.length === 0) return {
           count: 0,
@@ -702,14 +707,27 @@ const getPricePerUnit = useCallback((price, size) => {
           avgAdjusted: null
         };
 
+        const avgSalePrice = arr.reduce((sum, s) => sum + s.salesPrice, 0) / arr.length;
+        const validSFLA = arr.filter(s => s.sfla > 0);
+        const avgSFLA = validSFLA.length > 0 ?
+          validSFLA.reduce((sum, s) => sum + s.sfla, 0) / validSFLA.length : null;
+
+        // Calculate size-adjusted price using the formula:
+        // (avgSFLA - bracketSFLA) * ((avgSalePrice / avgSFLA) * 0.50) + avgSalePrice
+        let avgAdjusted = avgSalePrice; // Default to raw price if no SFLA data
+
+        if (overallAvgSFLA && avgSFLA && avgSFLA > 0) {
+          const sizeAdjustment = (overallAvgSFLA - avgSFLA) * ((avgSalePrice / avgSFLA) * 0.50);
+          avgAdjusted = avgSalePrice + sizeAdjustment;
+        }
+
         return {
           count: arr.length,
           avgAcres: arr.reduce((sum, s) => sum + s.acres, 0) / arr.length,
-          avgSalePrice: arr.reduce((sum, s) => sum + s.salesPrice, 0) / arr.length,
+          avgSalePrice,
           avgNormTime: arr.reduce((sum, s) => sum + s.normalizedTime, 0) / arr.length,
-          avgSFLA: arr.filter(s => s.sfla > 0).length > 0 ?
-            arr.filter(s => s.sfla > 0).reduce((sum, s) => sum + s.sfla, 0) / arr.filter(s => s.sfla > 0).length : null,
-          avgAdjusted: arr.reduce((sum, s) => sum + s.salesPrice, 0) / arr.length // TODO: Use actual normalized values
+          avgSFLA,
+          avgAdjusted: Math.round(avgAdjusted)
         };
       };
 
