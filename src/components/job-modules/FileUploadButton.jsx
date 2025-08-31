@@ -1747,12 +1747,12 @@ const handleCodeFileUpdate = async () => {
           <div className="flex-1 overflow-y-auto p-6">
             {loadingReports ? (
               <div className="flex justify-center items-center py-12">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-400"></div>
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
               </div>
             ) : reportsList.length === 0 ? (
               <div className="text-center py-12">
-                <Database className="w-12 h-12 mx-auto mb-4 text-gray-500" />
-                <p className="text-gray-300">No comparison reports found for this job</p>
+                <Database className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+                <p className="text-gray-600">No comparison reports found for this job</p>
               </div>
             ) : (
               <div className="space-y-4">
@@ -1766,13 +1766,13 @@ const handleCodeFileUpdate = async () => {
                     <div key={report.id || idx} className="border border-gray-300 rounded-lg p-4 hover:bg-gray-50 bg-white">
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
-                          <div className="font-semibold text-white">
+                          <div className="font-semibold text-gray-900">
                             {formatDate(report.report_date)}
                           </div>
-                          <div className="text-sm text-gray-300 mt-1">
+                          <div className="text-sm text-gray-700 mt-1">
                             File: {reportData.source_file_name || 'Unknown'}
                           </div>
-                          <div className="text-sm text-gray-300">
+                          <div className="text-sm text-gray-700">
                             Vendor: {reportData.vendor_detected || 'Unknown'}
                           </div>
                           <div className="flex gap-4 mt-2 text-xs">
@@ -1828,10 +1828,10 @@ const handleCodeFileUpdate = async () => {
           </div>
 
           {/* Enhanced Footer with Pagination */}
-          <div className="px-6 py-4 border-t border-gray-700 bg-gray-800 shrink-0">
+          <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 shrink-0">
             {/* First row - Page info and navigation */}
             <div className="flex justify-between items-center mb-3">
-              <div className="text-sm text-gray-300">
+              <div className="text-sm text-gray-700">
                 Showing {startIndex + 1}-{Math.min(endIndex, reportsList.length)} of {reportsList.length} reports
               </div>
 
@@ -1873,7 +1873,7 @@ const handleCodeFileUpdate = async () => {
                       }}
                       className="w-16 px-2 py-1 text-sm text-center border border-gray-300 rounded"
                     />
-                    <span className="text-sm text-gray-300">of {totalPages}</span>
+                    <span className="text-sm text-gray-700">of {totalPages}</span>
                   </div>
 
                   {/* Next page */}
