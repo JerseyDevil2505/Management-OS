@@ -556,6 +556,17 @@ const getPricePerUnit = useCallback((price, size) => {
       // Only residential for bracket analysis
       if (prop.property_m4_class !== '2' && prop.property_m4_class !== '3A') return;
 
+      // Must have a valid sale date in our date range
+      if (!prop.sales_date) return;
+      const saleDate = new Date(prop.sales_date);
+      if (saleDate < dateRange.start || saleDate > dateRange.end) return;
+
+      // Valid NU codes for actual sales (not transfer codes)
+      const nu = prop.sales_nu || '';
+      const validNu = !nu || nu === '' || nu === ' ' || nu === '00' || nu === '07' ||
+                      nu === '7' || nu.charCodeAt(0) === 32;
+      if (!validNu) return;
+
       // Apply type/use filter
       if (method2TypeFilter !== 'all') {
         const typeName = vendorType === 'Microsystems' && jobData?.parsed_code_definitions
@@ -570,11 +581,17 @@ const getPricePerUnit = useCallback((price, size) => {
       }
 
       const acres = parseFloat(calculateAcreage(prop));
+      const sfla = prop.asset_sqft_living_adj || prop.asset_sqft_living || 0;
 
       vcsSales[vcs].push({
         acres,
-        normalizedPrice: prop.values_norm_size || prop.sales_price,
+        salesPrice: prop.sales_price,
+        normalizedTime: prop.values_norm_time || prop.sales_price,
+        normalizedSize: prop.values_norm_size || prop.sales_price,
         address: prop.property_location,
+        sfla: parseFloat(sfla),
+        yearBuilt: prop.asset_year_built,
+        saleDate: prop.sales_date,
         typeUse: vendorType === 'Microsystems' && jobData?.parsed_code_definitions
           ? interpretCodes.getMicrosystemsValue?.(prop, jobData.parsed_code_definitions, 'asset_type_use') || prop.asset_type_use
           : prop.asset_type_use
