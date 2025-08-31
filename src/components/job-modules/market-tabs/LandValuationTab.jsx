@@ -579,19 +579,24 @@ const getPricePerUnit = useCallback((price, size) => {
       const saleDate = new Date(prop.sales_date);
       if (saleDate < dateRange.start || saleDate > dateRange.end) return;
 
+      // CRITICAL: Must have values_norm_time (no fallback to sales_price)
+      if (!prop.values_norm_time || prop.values_norm_time <= 0) return;
+
       // Valid NU codes for actual sales (not transfer codes)
       const nu = prop.sales_nu || '';
       const validNu = !nu || nu === '' || nu === ' ' || nu === '00' || nu === '07' ||
                       nu === '7' || nu.charCodeAt(0) === 32;
       if (!validNu) return;
 
-      // Apply type/use filter
-      if (method2TypeFilter !== 'all') {
-        const typeName = vendorType === 'Microsystems' && jobData?.parsed_code_definitions
-          ? interpretCodes.getMicrosystemsValue?.(prop, jobData.parsed_code_definitions, 'asset_type_use') || prop.asset_type_use
-          : prop.asset_type_use;
-        if (typeName !== method2TypeFilter) return;
-      }
+      // Apply type/use filter with One Family as default
+      const typeName = vendorType === 'Microsystems' && jobData?.parsed_code_definitions
+        ? interpretCodes.getMicrosystemsValue?.(prop, jobData.parsed_code_definitions, 'asset_type_use') || prop.asset_type_use
+        : prop.asset_type_use;
+
+      // Default to "One Family" if no type specified
+      const actualTypeName = (typeName && typeName.trim() !== '') ? typeName : 'One Family';
+
+      if (actualTypeName !== method2TypeFilter) return;
 
       const vcs = prop.new_vcs;
       if (!vcsSales[vcs]) {
