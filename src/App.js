@@ -167,7 +167,6 @@ useEffect(() => {
   // PERSISTENT STORAGE HELPERS
   // ==========================================
   const saveToStorage = useCallback(async (data) => {
-    console.log('💾 Saving to storage - no caching');
     try {
       // Try IndexedDB first (no size limits)
       if (dbRef.current) {
@@ -189,7 +188,6 @@ useEffect(() => {
         }
         
         await dbRef.current.put('masterCache', coreData, 'main');
-        console.log('💾 Cache saved to IndexedDB');
         return true;
       }
     } catch (error) {
@@ -206,7 +204,6 @@ useEffect(() => {
           timestamp: Date.now()
         };
         localStorage.setItem('lojikCacheFallback', JSON.stringify(minimalCache));
-        console.log('💾 Minimal cache saved to localStorage');
       } catch (e) {
         console.error('All storage methods failed:', e);
       }
@@ -237,26 +234,23 @@ useEffect(() => {
           }
         }
         
-        console.log('📦 Loaded from storage - no caching');
-        
         const loadTime = Date.now() - startTime;
-        console.log(`⚡ Cache loaded from IndexedDB in ${loadTime}ms (age: ${Math.floor(cacheAge / 60000)} minutes)`);
         
         // Determine cache freshness
         let loadSource = 'cache';
         let shouldBackgroundRefresh = false;
         
         if (cacheAge < CACHE_EXPIRY.hot) {
-          console.log('🔥 HOT cache - using without refresh');
+          // HOT cache - using without refresh
         } else if (cacheAge < CACHE_EXPIRY.warm) {
-          console.log('♨️ WARM cache - using with background refresh');
+          // WARM cache - using with background refresh
           shouldBackgroundRefresh = true;
         } else if (cacheAge < CACHE_EXPIRY.cold) {
-          console.log('❄️ COLD cache - showing stale warning');
+          // COLD cache - showing stale warning
           loadSource = 'cache-stale';
           shouldBackgroundRefresh = true;
         } else {
-          console.log('💀 EXPIRED cache - will refresh');
+          // EXPIRED cache - will refresh
           return null;
         }
         
@@ -353,7 +347,6 @@ useEffect(() => {
 
     // Don't interrupt if already loading (unless forced)
     if (masterCache.isLoading && !force) {
-      console.log('⏳ Load already in progress, skipping...');
       return masterCache;
     }
 
@@ -505,7 +498,6 @@ useEffect(() => {
 
       // If this is a background refresh and database is busy, defer it
       if (background && isBusy && timeSinceLastOp < 5000) {
-        console.log('🔄 Database busy, deferring background refresh');
         setTimeout(() => loadMasterData(true), 10000); // Retry in 10 seconds
         return masterCache;
       }
@@ -536,15 +528,12 @@ useEffect(() => {
             return results;
 
           } catch (error) {
-            console.log(`🔄 Database operation attempt ${attempt}/${maxRetries} failed:`, error.message);
-
             if (attempt === maxRetries) {
               throw error;
             }
 
             // Exponential backoff: 2s, 4s, 8s
             const backoffTime = Math.min(2000 * Math.pow(2, attempt - 1), 8000);
-            console.log(`⏱️ Retrying in ${backoffTime}ms...`);
             await new Promise(resolve => setTimeout(resolve, backoffTime));
           }
         }

@@ -595,12 +595,9 @@ export class BRTUpdater {
       
     };
 
-    // ENHANCED: Merge with preserved data - preserved fields take precedence
-    // This ensures component-defined fields are not overwritten during updates
-    return {
-      ...baseRecord,
-      ...preservedData
-    };
+    // SIMPLIFIED: Return baseRecord only - no field preservation needed
+    // is_assigned_property will remain untouched since it's not in baseRecord
+    return baseRecord;
   }
 
   /**
@@ -709,28 +706,9 @@ export class BRTUpdater {
         // Continue with UPSERT even if deletion fails
       }
 
-      // ENHANCED: Check if field preservation is enabled and get preserved data
+      // DISABLED: Field preservation no longer needed since is_assigned_property won't be overwritten
       let preservedDataMap = new Map();
-      if (versionInfo.preservedFieldsHandler && typeof versionInfo.preservedFieldsHandler === 'function') {
-        console.log('📝 Step 5: Field preservation enabled, fetching existing data...');
-
-        // Generate composite keys for all records
-        console.log('🔑 Generating composite keys for field preservation...');
-        const compositeKeys = records.map(rawRecord => {
-          const blockValue = this.preserveStringValue(rawRecord.BLOCK);
-          const lotValue = this.preserveStringValue(rawRecord.LOT);
-          const qualifierValue = this.preserveStringValue(rawRecord.QUALIFIER) || 'NONE';
-          const cardValue = this.preserveStringValue(rawRecord.CARD) || 'NONE';
-          const locationValue = this.preserveStringValue(rawRecord.PROPERTY_LOCATION) || 'NONE';
-
-          return `${yearCreated}${ccddCode}-${blockValue}-${lotValue}_${qualifierValue}-${cardValue}-${locationValue}`;
-        });
-
-        // Fetch preserved data using the handler from supabaseClient
-        console.log(`🔍 Fetching preserved field data for ${compositeKeys.length} properties...`);
-        preservedDataMap = await versionInfo.preservedFieldsHandler(jobId, compositeKeys);
-        console.log(`✅ Step 5 completed: Fetched preserved data for ${preservedDataMap.size} properties`);
-      }
+      console.log('📝 Step 5: Field preservation disabled - no fields need preservation');
       
       const propertyRecords = [];
       

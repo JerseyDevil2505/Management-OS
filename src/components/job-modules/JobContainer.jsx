@@ -771,7 +771,10 @@ const JobContainer = ({
       onDataChange: () => {
         // Mark that this module made changes
         setModuleHasChanges(true);
-      }
+      },
+      // REMOVED: No longer needed - FileUploadButton uses job.vendor_type directly
+      // NEW: Pass loading state to disable FileUploadButton while loading
+      isJobContainerLoading: isLoadingVersion || isLoadingProperties
     };
 
     // 🔧 CRITICAL: Pass App.js state management to ProductionTracker
