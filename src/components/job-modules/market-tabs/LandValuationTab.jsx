@@ -579,8 +579,8 @@ const getPricePerUnit = useCallback((price, size) => {
       const saleDate = new Date(prop.sales_date);
       if (saleDate < dateRange.start || saleDate > dateRange.end) return;
 
-      // CRITICAL: Must have values_norm_time (no fallback to sales_price)
-      if (!prop.values_norm_time || prop.values_norm_time <= 0) return;
+      // TODO: Need to join with property_market_analysis to filter by values_norm_time
+      // Temporarily removed filter since values_norm_time is in different table
 
       // Valid NU codes for actual sales (not transfer codes)
       const nu = prop.sales_nu || '';
