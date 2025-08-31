@@ -117,6 +117,7 @@ textarea,
 select {
   border: 2px solid #e2e8f0 !important;
   background-color: #f8fafc !important;
+  color: #1f2937 !important;
   transition: all 0.2s ease;
 }
 
