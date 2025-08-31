@@ -772,8 +772,7 @@ const JobContainer = ({
         // Mark that this module made changes
         setModuleHasChanges(true);
       },
-      // NEW: Pass vendor type from jobs table to eliminate detection
-      vendorType: jobData?.vendor_type || jobData?.vendor_source,
+      // REMOVED: No longer needed - FileUploadButton uses job.vendor_type directly
       // NEW: Pass loading state to disable FileUploadButton while loading
       isJobContainerLoading: isLoadingVersion || isLoadingProperties
     };
