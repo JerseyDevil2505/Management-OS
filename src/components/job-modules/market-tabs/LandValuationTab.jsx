@@ -85,8 +85,13 @@ const LandValuationTab = ({
   const [bracketAnalysis, setBracketAnalysis] = useState({});
   const [method2Summary, setMethod2Summary] = useState({});
 
-  // Enhanced Method 2 UI State
-  const [method2TypeFilter, setMethod2TypeFilter] = useState('One Family');
+  // Enhanced Method 2 UI State - Use vendor-specific default codes
+  const getDefaultTypeCode = useCallback(() => {
+    if (vendorType === 'Microsystems') return '1'; // Single family code for Microsystems
+    return '10'; // Single family code for BRT
+  }, [vendorType]);
+
+  const [method2TypeFilter, setMethod2TypeFilter] = useState(() => getDefaultTypeCode());
   const [expandedVCS, setExpandedVCS] = useState(new Set());
   const [vcsColors, setVcsColors] = useState({});
 
