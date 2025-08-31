@@ -1612,37 +1612,18 @@ const handleCodeFileUpdate = async () => {
       await fetchCurrentFileVersion(); // Refresh file version and updated_at from DB
 
       setBatchComplete(true);
-      
-      // Auto-close modal after 3 seconds if successful
-      if (errorCount === 0) {
-        setTimeout(() => {
-          setShowBatchModal(false);
-          setShowResultsModal(false);
-          setSourceFile(null);
-          setSourceFileContent(null);
-          setSalesDecisions(new Map());
-        }, 3000);
-      }
-        
-      // Notify parent component
+
+      // REMOVED: Auto-close modal - let user close manually to prevent timing conflicts
+      // The modal will now stay open until user manually closes it
+      addBatchLog('✅ Processing complete! Please review results and close this modal manually.', 'success');
+
+      // Notify parent component (but don't trigger immediate refresh)
       if (onFileProcessed) {
         onFileProcessed(result);
       }
-      
-      // Trigger data refresh in JobContainer
-      if (onDataRefresh) {
-        addBatchLog('🔄 Triggering data refresh in JobContainer...', 'info');
-        await onDataRefresh();
-        addBatchLog('✅ JobContainer data refreshed', 'success');
 
-        // DEBUG: Small delay then check if JobContainer shows the new version
-        setTimeout(() => {
-          addBatchLog('⏰ Checking if JobContainer updated (after 2 second delay)...', 'info');
-          // This will show in console - user should check JobContainer UI
-        }, 2000);
-      } else {
-        addBatchLog('⚠️ No onDataRefresh callback provided!', 'warning');
-      }
+      // REMOVED: Immediate data refresh - this will now happen only when user closes modal
+      // This prevents timing conflicts and 500 errors
     } catch (error) {
       console.error('❌ Processing failed:', error);
       
