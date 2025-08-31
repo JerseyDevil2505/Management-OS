@@ -583,20 +583,9 @@ export class MicrosystemsUpdater {
         // Continue with UPSERT even if deletion fails
       }
 
-      // ENHANCED: Check if field preservation is enabled and get preserved data
+      // DISABLED: Field preservation no longer needed since is_assigned_property won't be overwritten
       let preservedDataMap = new Map();
-      if (versionInfo.preservedFieldsHandler && typeof versionInfo.preservedFieldsHandler === 'function') {
-        console.log('���� Field preservation enabled, fetching existing data...');
-        
-        // Generate composite keys for all records
-        const compositeKeys = records.map(rawRecord => 
-          `${yearCreated}${ccddCode}-${rawRecord['Block']}-${rawRecord['Lot']}_${(rawRecord['Qual'] || '').trim() || 'NONE'}-${(rawRecord['Bldg'] || '').trim() || 'NONE'}-${(rawRecord['Location'] || '').trim() || 'NONE'}`
-        );
-        
-        // Fetch preserved data using the handler from supabaseClient
-        preservedDataMap = await versionInfo.preservedFieldsHandler(jobId, compositeKeys);
-        console.log(`✅ Fetched preserved data for ${preservedDataMap.size} properties`);
-      }
+      console.log('📝 Step 5: Field preservation disabled - no fields need preservation');
       
       // Prepare all property records for batch upsert
       const propertyRecords = [];
