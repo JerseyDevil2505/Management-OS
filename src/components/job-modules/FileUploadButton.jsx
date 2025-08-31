@@ -2413,7 +2413,7 @@ const handleCodeFileUpdate = async () => {
                     {details.missing.slice(0, 3).map((record, idx) => {
                       const yearCreated = job.year_created || new Date().getFullYear();
                       const ccddCode = job.ccdd_code || job.ccddCode;
-                      const generatedKey = generateCompositeKey(record, vendorToUse, yearCreated, ccddCode);
+                      const generatedKey = generateCompositeKey(record, job.vendor_type, yearCreated, ccddCode);
                       
                       return (
                         <div key={idx} className="text-xs text-yellow-700 font-mono">
