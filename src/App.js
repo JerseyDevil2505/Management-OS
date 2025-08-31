@@ -931,12 +931,12 @@ useEffect(() => {
   }, [loadMasterData]);
 
   const handleFileProcessed = useCallback(() => {
-    // File processed - trigger fresh data reload
-    if (selectedJob) {
-      console.log('📁 File processed - will reload fresh data');
-      loadMasterData({ force: true, components: ['jobs'] });
-    }
-  }, [selectedJob, loadMasterData]);
+    // REMOVED: Immediate data reload during job viewing to prevent 500 errors
+    // App.js should only refresh when going back to jobs list, not during job viewing
+    console.log('📁 File processed acknowledged - jobs list will refresh when user returns to jobs');
+
+    // JobContainer will handle its own data refresh timing when modal closes
+  }, []);
 
   const handleWorkflowStatsUpdate = useCallback(() => {
     // Refresh jobs data when workflow stats change (from ProductionTracker)
