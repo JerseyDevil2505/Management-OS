@@ -1726,17 +1726,17 @@ const handleCodeFileUpdate = async () => {
           }}
         >
           {/* Header */}
-          <div className="p-4 border-b border-gray-700 bg-gray-800 shrink-0">
+          <div className="p-4 border-b border-gray-200 bg-gray-50 shrink-0">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
-                <FileText className="w-5 h-5 text-purple-400" />
-                <h2 className="text-lg font-bold text-white">
+                <FileText className="w-5 h-5 text-purple-600" />
+                <h2 className="text-lg font-bold text-gray-900">
                   Comparison Reports History ({reportsList.length})
                 </h2>
               </div>
               <button
                 onClick={() => setShowReportsModal(false)}
-                className="text-gray-400 hover:text-gray-300 p-1"
+                className="text-gray-400 hover:text-gray-600 p-1"
               >
                 <X className="w-6 h-6" />
               </button>
