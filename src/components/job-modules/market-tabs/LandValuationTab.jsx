@@ -557,11 +557,11 @@ const getPricePerUnit = useCallback((price, size) => {
       if (prop.property_m4_class !== '2' && prop.property_m4_class !== '3A') return;
 
       // Apply type/use filter
-      if (typeUseFilter !== 'all') {
+      if (method2TypeFilter !== 'all') {
         const typeName = vendorType === 'Microsystems' && jobData?.parsed_code_definitions
           ? interpretCodes.getMicrosystemsValue?.(prop, jobData.parsed_code_definitions, 'asset_type_use') || prop.asset_type_use
           : prop.asset_type_use;
-        if (typeName !== typeUseFilter) return;
+        if (typeName !== method2TypeFilter) return;
       }
 
       const vcs = prop.new_vcs;
