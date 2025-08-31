@@ -1763,7 +1763,7 @@ const handleCodeFileUpdate = async () => {
                                      (summary.salesChanges || 0) + (summary.classChanges || 0);
                   
                   return (
-                    <div key={report.id || idx} className="border border-gray-700 rounded-lg p-4 hover:bg-gray-800 bg-gray-850">
+                    <div key={report.id || idx} className="border border-gray-300 rounded-lg p-4 hover:bg-gray-50 bg-white">
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
                           <div className="font-semibold text-white">
