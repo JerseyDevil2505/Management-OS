@@ -323,52 +323,37 @@ const getPricePerUnit = useCallback((price, size) => {
 
   // ========== GET TYPE USE OPTIONS ==========
   const getTypeUseOptions = useCallback(() => {
-    const defaultCode = vendorType === 'Microsystems' ? '1' : '10';
-    if (!properties) return [{ code: defaultCode, description: 'Single Family' }];
+    if (!properties) return [{ code: '1', description: '1 - Single Family' }];
 
-    const typeCodeMap = new Map();
-    typeCodeMap.set(defaultCode, 'Single Family'); // Always include default
-
-    // Get all unique asset_type_use codes from properties
+    // Get unique asset_type_use codes from properties that have time normalization
     const uniqueCodes = new Set();
     properties.forEach(prop => {
       if (prop.asset_type_use && prop.property_m4_class === '2') {
-        const rawCode = prop.asset_type_use.toString().trim().toUpperCase();
+        const rawCode = prop.asset_type_use.toString().trim();
         if (rawCode && rawCode !== '' && rawCode !== 'null' && rawCode !== 'undefined') {
           uniqueCodes.add(rawCode);
         }
       }
     });
 
-    // Add individual codes that exist in the data
-    uniqueCodes.forEach(rawCode => {
-      if (!typeCodeMap.has(rawCode)) {
-        const description = vendorType === 'Microsystems' && jobData?.parsed_code_definitions
-          ? interpretCodes.getMicrosystemsValue?.({ asset_type_use: rawCode }, jobData.parsed_code_definitions, 'asset_type_use') || rawCode
-          : rawCode;
-        typeCodeMap.set(rawCode, description);
-      }
+    const options = [];
+
+    // Simple mapping for known codes
+    const codeDescriptions = {
+      '1': '1 - Single Family',
+      '42': '42 - MultiFamily',
+      '43': '43 - MultiFamily',
+      '44': '44 - MultiFamily'
+    };
+
+    // Add options for codes that actually exist in the data
+    Array.from(uniqueCodes).sort().forEach(code => {
+      const description = codeDescriptions[code] || `${code} - Unknown`;
+      options.push({ code, description });
     });
 
-    // Add group options only if we have matching codes
-    const groupMappings = [
-      { codes: ['30', '31', '3E', '3I'], groupCode: '3-GROUP', description: '3 - Row/Townhouses' },
-      { codes: ['42', '43', '44'], groupCode: '4-GROUP', description: '4 - MultiFamily' },
-      { codes: ['51', '52', '53'], groupCode: '5-GROUP', description: '5 - Conversions' }
-    ];
-
-    groupMappings.forEach(group => {
-      const hasMatchingCodes = group.codes.some(code => uniqueCodes.has(code));
-      if (hasMatchingCodes) {
-        typeCodeMap.set(group.groupCode, group.description);
-      }
-    });
-
-    // Convert to array of objects and sort by code
-    return Array.from(typeCodeMap.entries())
-      .map(([code, description]) => ({ code, description }))
-      .sort((a, b) => a.code.localeCompare(b.code));
-  }, [properties, vendorType, jobData]);
+    return options;
+  }, [properties]);
 
   // ========== GET VCS DESCRIPTION HELPER ==========
   const getVCSDescription = useCallback((vcsCode) => {
