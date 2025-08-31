@@ -1295,10 +1295,10 @@ const handleCodeFileUpdate = async () => {
       setProcessing(true);
 
       // Direct Supabase processing
-      setProcessingStatus(`Processing ${detectedVendor} data via Supabase...`);
+      setProcessingStatus(`Processing ${job.vendor_type} data via Supabase...`);
 
       addBatchLog('🚀 Starting direct Supabase processing workflow', 'batch_start', {
-        vendor: detectedVendor,
+        vendor: job.vendor_type,
         fileName: sourceFile.name,
         changesDetected: comparisonResults.summary.missing + comparisonResults.summary.changes + comparisonResults.summary.deletions + comparisonResults.summary.salesChanges + comparisonResults.summary.classChanges,
         salesDecisions: salesDecisions.size,
