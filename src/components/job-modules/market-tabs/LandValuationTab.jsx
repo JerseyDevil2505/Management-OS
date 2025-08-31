@@ -365,7 +365,7 @@ const getPricePerUnit = useCallback((price, size) => {
       performBracketAnalysis();
       loadVCSPropertyCounts();
     }
-  }, [properties, dateRange, valuationMode, typeUseFilter]);
+  }, [properties, dateRange, valuationMode, method2TypeFilter]);
 
   useEffect(() => {
     if (activeSubTab === 'allocation' && cascadeConfig.normal.prime) {
