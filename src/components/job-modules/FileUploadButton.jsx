@@ -696,14 +696,12 @@ const handleCodeFileUpdate = async () => {
       setProcessingStatus('Analyzing files...');
 
       // Get vendor type directly from job data
-      const vendorToUse = job.vendor_type;
-
-      if (!vendorToUse) {
+      if (!job.vendor_type) {
         throw new Error('Vendor type not found in job data. Please check job configuration.');
       }
 
       // Parse source file
-      const sourceRecords = parseSourceFile(sourceFileContent, vendorToUse);
+      const sourceRecords = parseSourceFile(sourceFileContent, job.vendor_type);
       
       // FIXED: Get ALL database records from property_records table directly
       setProcessingStatus('Fetching current database records...');
