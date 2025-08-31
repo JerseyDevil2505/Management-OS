@@ -7,8 +7,7 @@ const FileUploadButton = ({
   onFileProcessed,
   isJobLoading = false,
   onDataRefresh,
-  vendorType,  // NEW: Accept vendor type from JobContainer
-  isJobContainerLoading = false  // NEW: Accept loading state from JobContainer
+  isJobContainerLoading = false  // Accept loading state from JobContainer
 }) => {
   const [sourceFile, setSourceFile] = useState(null);
   const [codeFile, setCodeFile] = useState(null);
