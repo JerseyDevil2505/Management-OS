@@ -1386,7 +1386,7 @@ const handleCodeFileUpdate = async () => {
           addBatchLog(`�� Update failed: ${updateError.message}`, 'error', {
             error: updateError.message,
             stack: updateError.stack,
-            vendor: detectedVendor
+            vendor: job.vendor_type
           });
           throw updateError;
         }
