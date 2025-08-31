@@ -340,7 +340,7 @@ const handleCodeFileUpdate = async () => {
     if (onFileProcessed) {
       onFileProcessed({
         type: 'code_update',
-        vendor: detectedVendor
+        vendor: job.vendor_type
       });
     }
 
