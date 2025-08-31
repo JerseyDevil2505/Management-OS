@@ -2412,8 +2412,8 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
             <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
               <label style={{ fontSize: '12px', color: '#6B7280' }}>Type and Use:</label>
               <select
-                value={typeUseFilter}
-                onChange={(e) => setTypeUseFilter(e.target.value)}
+                value={method2TypeFilter}
+                onChange={(e) => setMethod2TypeFilter(e.target.value)}
                 style={{
                   padding: '6px 10px',
                   border: '1px solid #D1D5DB',
