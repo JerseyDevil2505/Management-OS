@@ -609,7 +609,7 @@ const getPricePerUnit = useCallback((price, size) => {
       vcsSales[vcs].push({
         acres,
         salesPrice: prop.sales_price,
-        normalizedTime: prop.values_norm_time || prop.sales_price,
+        normalizedTime: prop.values_norm_time,
         normalizedSize: prop.values_norm_size || prop.sales_price,
         address: prop.property_location,
         sfla: parseFloat(sfla),
