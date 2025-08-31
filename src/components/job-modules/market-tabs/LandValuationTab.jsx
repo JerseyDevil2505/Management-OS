@@ -588,15 +588,14 @@ const getPricePerUnit = useCallback((price, size) => {
                       nu === '7' || nu.charCodeAt(0) === 32;
       if (!validNu) return;
 
-      // Apply type/use filter with One Family as default
-      const typeName = vendorType === 'Microsystems' && jobData?.parsed_code_definitions
-        ? interpretCodes.getMicrosystemsValue?.(prop, jobData.parsed_code_definitions, 'asset_type_use') || prop.asset_type_use
-        : prop.asset_type_use;
+      // Apply type/use filter using raw codes (not converted text)
+      const rawTypeUse = prop.asset_type_use?.toString().trim();
 
-      // Default to "One Family" if no type specified
-      const actualTypeName = (typeName && typeName.trim() !== '') ? typeName : 'One Family';
+      // Default to single family code if no type specified
+      const defaultCode = vendorType === 'Microsystems' ? '1' : '10';
+      const actualTypeCode = rawTypeUse || defaultCode;
 
-      if (actualTypeName !== method2TypeFilter) return;
+      if (actualTypeCode !== method2TypeFilter) return;
 
       const vcs = prop.new_vcs;
       if (!vcsSales[vcs]) {
