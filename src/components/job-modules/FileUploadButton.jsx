@@ -563,7 +563,7 @@ const handleCodeFileUpdate = async () => {
         summary: comparisonResults.summary,
         changes: reportChanges,
         sales_decisions: Object.fromEntries(salesDecisions),
-        vendor_detected: detectedVendor,
+        vendor_detected: job.vendor_type,
         source_file_name: sourceFile?.name,
         comparison_timestamp: new Date().toISOString()
       };
@@ -1624,7 +1624,7 @@ const handleCodeFileUpdate = async () => {
         addBatchLog('⚠️ UPDATE FAILED - All changes have been rolled back', 'error', {
           message: 'The update encountered errors and all changes were automatically reversed'
         });
-        addNotification('����� Update failed - all changes rolled back. Check logs for details.', 'error');
+        addNotification('���� Update failed - all changes rolled back. Check logs for details.', 'error');
       }
 
       // Update local file version and date from DB
