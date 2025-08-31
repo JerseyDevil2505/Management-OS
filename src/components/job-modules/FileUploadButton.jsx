@@ -136,34 +136,7 @@ const FileUploadButton = ({
     return null;
   };
 
-  // FIXED: Enhanced vendor detection with BRT code file support
-  const detectVendorType = (fileContent, fileName) => {
-    if (!fileName) return null;
-    
-    // BRT source files: .csv extension
-    if (fileName.endsWith('.csv')) {
-      return 'BRT';
-    }
-    
-    // Text files - distinguish by content
-    if (fileName.endsWith('.txt')) {
-      // BRT code files: contain JSON braces
-      if (fileContent.includes('{')) {
-        return 'BRT';
-      }
-      // Microsystems files: contain pipe delimiters
-      else if (fileContent.includes('|')) {
-        return 'Microsystems';
-      }
-    }
-    
-    // JSON files are BRT
-    if (fileName.endsWith('.json')) {
-      return 'BRT';
-    }
-    
-    return null;
-  };
+  // REMOVED: No longer needed - vendor type comes from job data
 
   // NEW: Parse BRT mixed format code files (headers + JSON sections)
   const parseBRTMixedFormat = (fileContent) => {
