@@ -298,7 +298,7 @@ const handleCodeFileUpdate = async () => {
 
     // Refresh job data in parent component
     if (onDataRefresh) {
-      console.log(`🔧 Code Update - Calling onDataRefresh to update job data`);
+      console.log(`���� Code Update - Calling onDataRefresh to update job data`);
       console.log(`🔧 Code Update - BEFORE refresh - job.code_file_uploaded_at: ${job.code_file_uploaded_at}`);
       console.log(`🔧 Code Update - BEFORE refresh - job.code_file_version: ${job.code_file_version}`);
 
@@ -1725,68 +1725,21 @@ const handleCodeFileUpdate = async () => {
             maxHeight: '90vh'
           }}
         >
-          {/* Header with resize controls */}
-          <div className="p-4 border-b border-gray-200 bg-gray-50 shrink-0">
-            <div className="flex items-center justify-between mb-3">
+          {/* Header */}
+          <div className="p-4 border-b border-gray-700 bg-gray-800 shrink-0">
+            <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
-                <FileText className="w-5 h-5 text-purple-600" />
-                <h2 className="text-lg font-bold text-gray-900">
+                <FileText className="w-5 h-5 text-purple-400" />
+                <h2 className="text-lg font-bold text-white">
                   Comparison Reports History ({reportsList.length})
                 </h2>
               </div>
               <button
                 onClick={() => setShowReportsModal(false)}
-                className="text-gray-400 hover:text-gray-600 p-1"
+                className="text-gray-400 hover:text-gray-300 p-1"
               >
                 <X className="w-6 h-6" />
               </button>
-            </div>
-
-            {/* Resize Controls */}
-            <div className="flex items-center space-x-6 text-sm">
-              <div className="flex items-center space-x-2">
-                <label className="font-medium text-gray-700">Width:</label>
-                <input
-                  type="range"
-                  min="600"
-                  max="1400"
-                  value={modalSize.width}
-                  onChange={(e) => setModalSize(prev => ({...prev, width: parseInt(e.target.value)}))}
-                  className="w-24 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-purple-600"
-                />
-                <span className="text-gray-600 w-12 text-center">{modalSize.width}px</span>
-              </div>
-
-              <div className="flex items-center space-x-2">
-                <label className="font-medium text-gray-700">Height:</label>
-                <input
-                  type="range"
-                  min="400"
-                  max="800"
-                  value={modalSize.height}
-                  onChange={(e) => setModalSize(prev => ({...prev, height: parseInt(e.target.value)}))}
-                  className="w-24 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-purple-600"
-                />
-                <span className="text-gray-600 w-12 text-center">{modalSize.height}px</span>
-              </div>
-
-              <div className="flex items-center space-x-2">
-                <label className="font-medium text-gray-700">Per Page:</label>
-                <select
-                  value={reportsPerPage}
-                  onChange={(e) => {
-                    setReportsPerPage(parseInt(e.target.value));
-                    setCurrentReportPage(1);
-                  }}
-                  className="px-2 py-1 border border-gray-300 rounded text-sm"
-                >
-                  <option value={5}>5</option>
-                  <option value={10}>10</option>
-                  <option value={25}>25</option>
-                  <option value={50}>50</option>
-                  <option value={100}>100</option>
-                </select>
-              </div>
             </div>
           </div>
 
@@ -2658,7 +2611,7 @@ const handleCodeFileUpdate = async () => {
                       addBatchLog(`⚠️ Refresh completed with ${errorCount} errors`, 'warning');
                       addNotification(`⚠️ Processing completed with ${errorCount} errors. ${totalProcessed} records updated.`, 'warning');
                     } else {
-                      addBatchLog('🎉 File version refresh completed successfully!', 'success');
+                      addBatchLog('���� File version refresh completed successfully!', 'success');
                       addNotification(`✅ Successfully updated ${totalProcessed} records with latest data via ${job.vendor_type} updater`, 'success');
                     }
                     // Check if rollback occurred during refresh
