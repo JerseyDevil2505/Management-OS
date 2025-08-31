@@ -577,11 +577,11 @@ const handleCodeFileUpdate = async () => {
       if (comparisonResults.details.missing?.length > 0) {
         comparisonResults.details.missing.forEach(record => {
           // Generate composite key from source record
-          const blockField = detectedVendor === 'BRT' ? 'BLOCK' : 'Block';
-          const lotField = detectedVendor === 'BRT' ? 'LOT' : 'Lot';
-          const qualifierField = detectedVendor === 'BRT' ? 'QUALIFIER' : 'Qual';
-          const cardField = detectedVendor === 'BRT' ? 'CARD' : 'Bldg';
-          const locationField = detectedVendor === 'BRT' ? 'PROPERTY_LOCATION' : 'Location';
+          const blockField = job.vendor_type === 'BRT' ? 'BLOCK' : 'Block';
+          const lotField = job.vendor_type === 'BRT' ? 'LOT' : 'Lot';
+          const qualifierField = job.vendor_type === 'BRT' ? 'QUALIFIER' : 'Qual';
+          const cardField = job.vendor_type === 'BRT' ? 'CARD' : 'Bldg';
+          const locationField = job.vendor_type === 'BRT' ? 'PROPERTY_LOCATION' : 'Location';
 
           // Construct composite key similar to processors
           const year = job.start_date ? new Date(job.start_date).getFullYear() : new Date().getFullYear();
