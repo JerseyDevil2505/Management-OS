@@ -323,25 +323,33 @@ const getPricePerUnit = useCallback((price, size) => {
 
   // ========== GET TYPE USE OPTIONS ==========
   const getTypeUseOptions = useCallback(() => {
-    if (!properties) return ['One Family'];
+    const defaultCode = vendorType === 'Microsystems' ? '1' : '10';
+    if (!properties) return [{ code: defaultCode, description: 'Single Family' }];
 
-    const typeUses = new Set(['One Family']); // Always include One Family as default
+    const typeCodeMap = new Map();
+    typeCodeMap.set(defaultCode, 'Single Family'); // Always include default
 
     properties.forEach(prop => {
       if (prop.asset_type_use && prop.property_m4_class === '2') {
-        // Use human-readable names when available
-        const typeName = vendorType === 'Microsystems' && jobData?.parsed_code_definitions
-          ? interpretCodes.getMicrosystemsValue?.(prop, jobData.parsed_code_definitions, 'asset_type_use') || prop.asset_type_use
-          : prop.asset_type_use;
+        const rawCode = prop.asset_type_use.toString().trim();
 
-        // Only add non-blank, meaningful type names
-        if (typeName && typeName.trim() !== '' && typeName !== 'null' && typeName !== 'undefined') {
-          typeUses.add(typeName);
+        if (rawCode && rawCode !== '' && rawCode !== 'null' && rawCode !== 'undefined') {
+          if (!typeCodeMap.has(rawCode)) {
+            // Get human-readable description
+            const description = vendorType === 'Microsystems' && jobData?.parsed_code_definitions
+              ? interpretCodes.getMicrosystemsValue?.(prop, jobData.parsed_code_definitions, 'asset_type_use') || rawCode
+              : rawCode;
+
+            typeCodeMap.set(rawCode, description);
+          }
         }
       }
     });
 
-    return Array.from(typeUses).sort();
+    // Convert to array of objects and sort by code
+    return Array.from(typeCodeMap.entries())
+      .map(([code, description]) => ({ code, description }))
+      .sort((a, b) => a.code.localeCompare(b.code));
   }, [properties, vendorType, jobData]);
 
   // ========== GET VCS DESCRIPTION HELPER ==========
