@@ -85,6 +85,11 @@ const LandValuationTab = ({
   const [bracketAnalysis, setBracketAnalysis] = useState({});
   const [method2Summary, setMethod2Summary] = useState({});
 
+  // Enhanced Method 2 UI State - Use vendor-specific default codes
+  const [method2TypeFilter, setMethod2TypeFilter] = useState(vendorType === 'Microsystems' ? '1' : '10');
+  const [expandedVCS, setExpandedVCS] = useState(new Set());
+  const [vcsColors, setVcsColors] = useState({});
+
   // ========== ALLOCATION STUDY STATE ==========
   const [vacantTestSales, setVacantTestSales] = useState([]);
   const [improvedTestSales, setImprovedTestSales] = useState([]);
@@ -292,6 +297,85 @@ const getPricePerUnit = useCallback((price, size) => {
     return '$/Unit';
   }, [valuationMode]);
 
+  // ========== GENERATE VCS COLORS ==========
+  const generateVCSColor = useCallback((vcs, index) => {
+    // Light, distinct backgrounds - NO REDS/PINKS
+    const lightColors = [
+      '#E0F2FE', '#DBEAFE', '#E0E7FF', '#EDE9FE', '#F0FDF4',
+      '#ECFDF5', '#FEF3C7', '#FFFBEB', '#F7FEE7', '#EFF6FF',
+      '#F0F9FF', '#F1F5F9', '#F8FAFC', '#FAFAF9', '#F3F4F6',
+      '#E5E7EB', '#D1FAE5', '#DCFCE7', '#FEF9C3', '#FDF4FF'
+    ];
+
+    // Dark, readable text colors - NO REDS
+    const darkColors = [
+      '#0E7490', '#1D4ED8', '#4338CA', '#6D28D9', '#166534',
+      '#047857', '#A16207', '#D97706', '#65A30D', '#0284C7',
+      '#475569', '#64748B', '#374151', '#1F2937', '#111827',
+      '#0F172A', '#15803D', '#16A34A', '#CA8A04', '#7C3AED'
+    ];
+
+    return {
+      background: lightColors[index % lightColors.length],
+      text: darkColors[index % darkColors.length]
+    };
+  }, []);
+
+  // ========== GET TYPE USE OPTIONS ==========
+  const getTypeUseOptions = useCallback(() => {
+    const defaultCode = vendorType === 'Microsystems' ? '1' : '10';
+    if (!properties) return [{ code: defaultCode, description: 'Single Family' }];
+
+    // Define grouping mappings
+    const typeUseGroups = {
+      '30': '3', '31': '3', '3E': '3', '3I': '3', // Row/Townhouses
+      '42': '4', '43': '4', '44': '4',             // MultiFamily
+      '51': '5', '52': '5', '53': '5'             // Conversions
+    };
+
+    const groupDescriptions = {
+      '3': '3 - Row/Townhouses',
+      '4': '4 - MultiFamily',
+      '5': '5 - Conversions'
+    };
+
+    const typeCodeMap = new Map();
+    typeCodeMap.set(defaultCode, 'Single Family'); // Always include default
+
+    properties.forEach(prop => {
+      if (prop.asset_type_use && prop.property_m4_class === '2') {
+        const rawCode = prop.asset_type_use.toString().trim().toUpperCase();
+
+        if (rawCode && rawCode !== '' && rawCode !== 'null' && rawCode !== 'undefined') {
+          // Check if code should be grouped
+          const groupCode = typeUseGroups[rawCode];
+          const codeToUse = groupCode || rawCode;
+
+          if (!typeCodeMap.has(codeToUse)) {
+            let description;
+
+            if (groupCode) {
+              // Use predefined group description
+              description = groupDescriptions[groupCode];
+            } else {
+              // Get individual description
+              description = vendorType === 'Microsystems' && jobData?.parsed_code_definitions
+                ? interpretCodes.getMicrosystemsValue?.(prop, jobData.parsed_code_definitions, 'asset_type_use') || rawCode
+                : rawCode;
+            }
+
+            typeCodeMap.set(codeToUse, description);
+          }
+        }
+      }
+    });
+
+    // Convert to array of objects and sort by code
+    return Array.from(typeCodeMap.entries())
+      .map(([code, description]) => ({ code, description }))
+      .sort((a, b) => a.code.localeCompare(b.code));
+  }, [properties, vendorType, jobData]);
+
   // ========== GET VCS DESCRIPTION HELPER ==========
   const getVCSDescription = useCallback((vcsCode) => {
     // First check manual descriptions
@@ -325,13 +409,19 @@ const getPricePerUnit = useCallback((price, size) => {
   }, [jobData, vendorType, vcsDescriptions]);
 
   // ========== LOAD DATA EFFECTS ==========
+  // Update filter when vendor type changes
+  useEffect(() => {
+    const defaultCode = vendorType === 'Microsystems' ? '1' : '10';
+    setMethod2TypeFilter(defaultCode);
+  }, [vendorType]);
+
   useEffect(() => {
     if (properties && properties.length > 0) {
       filterVacantSales();
       performBracketAnalysis();
       loadVCSPropertyCounts();
     }
-  }, [properties, dateRange, valuationMode]);
+  }, [properties, dateRange, valuationMode, method2TypeFilter]);
 
   useEffect(() => {
     if (activeSubTab === 'allocation' && cascadeConfig.normal.prime) {
@@ -521,18 +611,66 @@ const getPricePerUnit = useCallback((price, size) => {
       if (!prop.new_vcs || !prop.sales_price || prop.sales_price <= 0) return;
       // Only residential for bracket analysis
       if (prop.property_m4_class !== '2' && prop.property_m4_class !== '3A') return;
-      
+
+      // Must have a valid sale date in our date range
+      if (!prop.sales_date) return;
+      const saleDate = new Date(prop.sales_date);
+      if (saleDate < dateRange.start || saleDate > dateRange.end) return;
+
+      // TODO: Need to join with property_market_analysis to filter by values_norm_time
+      // Temporarily removed filter since values_norm_time is in different table
+
+      // Valid NU codes for actual sales (not transfer codes)
+      const nu = prop.sales_nu || '';
+      const validNu = !nu || nu === '' || nu === ' ' || nu === '00' || nu === '07' ||
+                      nu === '7' || nu.charCodeAt(0) === 32;
+      if (!validNu) return;
+
+      // Apply type/use filter using raw codes (not converted text)
+      const rawTypeUse = prop.asset_type_use?.toString().trim().toUpperCase();
+
+      // Default to single family code if no type specified
+      const defaultCode = vendorType === 'Microsystems' ? '1' : '10';
+      const actualTypeCode = rawTypeUse || defaultCode;
+
+      // Handle grouped codes for filtering
+      const typeUseGroups = {
+        '3': ['30', '31', '3E', '3I'],
+        '4': ['42', '43', '44'],
+        '5': ['51', '52', '53']
+      };
+
+      let passesFilter = false;
+      if (typeUseGroups[method2TypeFilter]) {
+        // Filter is a group code, check if property's code is in the group
+        passesFilter = typeUseGroups[method2TypeFilter].includes(actualTypeCode);
+      } else {
+        // Filter is individual code, direct match
+        passesFilter = actualTypeCode === method2TypeFilter;
+      }
+
+      if (!passesFilter) return;
+
       const vcs = prop.new_vcs;
       if (!vcsSales[vcs]) {
         vcsSales[vcs] = [];
       }
-      
+
       const acres = parseFloat(calculateAcreage(prop));
-      
+      const sfla = prop.asset_sfla || 0;
+
       vcsSales[vcs].push({
         acres,
-        normalizedPrice: prop.values_norm_size || prop.sales_price,
-        address: prop.property_location
+        salesPrice: prop.sales_price,
+        normalizedTime: prop.sales_price, // TODO: Get from property_market_analysis
+        normalizedSize: prop.sales_price, // TODO: Get from property_market_analysis
+        address: prop.property_location,
+        sfla: parseFloat(sfla),
+        yearBuilt: prop.asset_year_built,
+        saleDate: prop.sales_date,
+        typeUse: vendorType === 'Microsystems' && jobData?.parsed_code_definitions
+          ? interpretCodes.getMicrosystemsValue?.(prop, jobData.parsed_code_definitions, 'asset_type_use') || prop.asset_type_use
+          : prop.asset_type_use
       });
     });
 
@@ -541,64 +679,94 @@ const getPricePerUnit = useCallback((price, size) => {
 
     Object.keys(vcsSales).forEach(vcs => {
       const sales = vcsSales[vcs];
-      if (sales.length < 5) return; // Need minimum sales for analysis
-      
+      if (sales.length < 3) return; // Need minimum sales for analysis
+
       // Sort by acreage for bracketing
       sales.sort((a, b) => a.acres - b.acres);
-      
+
       const brackets = {
         small: sales.filter(s => s.acres < 1),
         medium: sales.filter(s => s.acres >= 1 && s.acres < 5),
         large: sales.filter(s => s.acres >= 5 && s.acres < 10),
         xlarge: sales.filter(s => s.acres >= 10)
       };
-      
-      const avgPrice = (arr) => arr.length > 0 ? 
-        arr.reduce((sum, s) => sum + s.normalizedPrice, 0) / arr.length : null;
-      const avgAcres = (arr) => arr.length > 0 ? 
-        arr.reduce((sum, s) => sum + s.acres, 0) / arr.length : null;
-      
-      let impliedRate = null;
-      
+
+      // Calculate overall VCS average SFLA for size adjustment
+      const allValidSFLA = sales.filter(s => s.sfla > 0);
+      const overallAvgSFLA = allValidSFLA.length > 0 ?
+        allValidSFLA.reduce((sum, s) => sum + s.sfla, 0) / allValidSFLA.length : null;
+
+      // Enhanced statistics calculation with size adjustment
+      const calcBracketStats = (arr) => {
+        if (arr.length === 0) return {
+          count: 0,
+          avgAcres: null,
+          avgSalePrice: null,
+          avgNormTime: null,
+          avgSFLA: null,
+          avgAdjusted: null
+        };
+
+        const avgSalePrice = arr.reduce((sum, s) => sum + s.salesPrice, 0) / arr.length;
+        const validSFLA = arr.filter(s => s.sfla > 0);
+        const avgSFLA = validSFLA.length > 0 ?
+          validSFLA.reduce((sum, s) => sum + s.sfla, 0) / validSFLA.length : null;
+
+        // Calculate size-adjusted price using the formula:
+        // (avgSFLA - bracketSFLA) * ((avgSalePrice / avgSFLA) * 0.50) + avgSalePrice
+        let avgAdjusted = avgSalePrice; // Default to raw price if no SFLA data
+
+        if (overallAvgSFLA && avgSFLA && avgSFLA > 0) {
+          const sflaDiff = overallAvgSFLA - avgSFLA;
+          const pricePerSqFt = avgSalePrice / avgSFLA;
+          const sizeAdjustment = sflaDiff * (pricePerSqFt * 0.50);
+          avgAdjusted = avgSalePrice + sizeAdjustment;
+        }
+
+        return {
+          count: arr.length,
+          avgAcres: arr.reduce((sum, s) => sum + s.acres, 0) / arr.length,
+          avgSalePrice,
+          avgNormTime: arr.reduce((sum, s) => sum + s.normalizedTime, 0) / arr.length,
+          avgSFLA,
+          avgAdjusted: Math.round(avgAdjusted)
+        };
+      };
+
+      const bracketStats = {
+        small: calcBracketStats(brackets.small),
+        medium: calcBracketStats(brackets.medium),
+        large: calcBracketStats(brackets.large),
+        xlarge: calcBracketStats(brackets.xlarge)
+      };
+
       // Calculate implied rate from bracket differences
-      if (brackets.small.length > 0 && brackets.medium.length > 0) {
-        const priceDiff = avgPrice(brackets.medium) - avgPrice(brackets.small);
-        const acresDiff = avgAcres(brackets.medium) - avgAcres(brackets.small);
+      let impliedRate = null;
+      if (bracketStats.small.count > 0 && bracketStats.medium.count > 0) {
+        const priceDiff = bracketStats.medium.avgAdjusted - bracketStats.small.avgAdjusted;
+        const acresDiff = bracketStats.medium.avgAcres - bracketStats.small.avgAcres;
         if (acresDiff > 0 && priceDiff > 0) {
           impliedRate = Math.round(priceDiff / acresDiff);
           validRates.push(impliedRate);
         }
       }
-      
-      // NULL for negative rates (don't include in averages)
+
+      // NULL for negative rates
       if (impliedRate && impliedRate < 0) {
         impliedRate = null;
       }
-      
+
+      // VCS summary statistics
+      const vcsAvgPrice = sales.reduce((sum, s) => sum + s.salesPrice, 0) / sales.length;
+      const vcsAvgAcres = sales.reduce((sum, s) => sum + s.acres, 0) / sales.length;
+      const vcsAvgAdjusted = sales.reduce((sum, s) => sum + (s.normalizedTime + s.normalizedSize) / 2, 0) / sales.length;
+
       analysis[vcs] = {
         totalSales: sales.length,
-        brackets: {
-          small: { 
-            count: brackets.small.length, 
-            avgAcres: avgAcres(brackets.small), 
-            avgPrice: avgPrice(brackets.small) 
-          },
-          medium: { 
-            count: brackets.medium.length, 
-            avgAcres: avgAcres(brackets.medium), 
-            avgPrice: avgPrice(brackets.medium) 
-          },
-          large: { 
-            count: brackets.large.length, 
-            avgAcres: avgAcres(brackets.large), 
-            avgPrice: avgPrice(brackets.large) 
-          },
-          xlarge: { 
-            count: brackets.xlarge.length, 
-            avgAcres: avgAcres(brackets.xlarge), 
-            avgPrice: avgPrice(brackets.xlarge) 
-          }
-        },
+        avgPrice: vcsAvgPrice,
+        avgAcres: vcsAvgAcres,
+        avgAdjusted: vcsAvgAdjusted,
+        brackets: bracketStats,
         impliedRate
       };
     });
@@ -2362,63 +2530,238 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
       {/* Method 2: Improved Sale Lot Size Analysis */}
       <div style={{ marginBottom: '30px', backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden', border: '1px solid #E5E7EB' }}>
         <div style={{ padding: '15px', borderBottom: '1px solid #E5E7EB', backgroundColor: '#F9FAFB' }}>
-          <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 'bold' }}>Method 2: Improved Sale Lot Size Analysis</h3>
-        </div>
-        
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', fontSize: '14px' }}>
-            <thead>
-              <tr style={{ backgroundColor: '#F9FAFB' }}>
-                <th style={{ padding: '8px', textAlign: 'left' }}>VCS</th>
-                <th style={{ padding: '8px', textAlign: 'center' }}>Total Sales</th>
-                <th style={{ padding: '8px', textAlign: 'center' }}>&lt;1 Acre</th>
-                <th style={{ padding: '8px', textAlign: 'center' }}>1-5 Acres</th>
-                <th style={{ padding: '8px', textAlign: 'center' }}>5-10 Acres</th>
-                <th style={{ padding: '8px', textAlign: 'center' }}>&gt;10 Acres</th>
-                <th style={{ padding: '8px', textAlign: 'right' }}>Implied {getUnitLabel()}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {Object.entries(bracketAnalysis)
-                .filter(([vcs]) => !vcsFilter || vcs.includes(vcsFilter))
-                .sort(([a], [b]) => a.localeCompare(b))
-                .map(([vcs, data], index) => (
-                  <tr key={vcs} style={{ backgroundColor: index % 2 === 0 ? 'white' : '#F9FAFB' }}>
-                    <td style={{ padding: '8px', fontWeight: 'bold' }}>{vcs}</td>
-                    <td style={{ padding: '8px', textAlign: 'center' }}>{data.totalSales}</td>
-                    <td style={{ padding: '8px', textAlign: 'center' }}>{data.brackets.small.count}</td>
-                    <td style={{ padding: '8px', textAlign: 'center' }}>{data.brackets.medium.count}</td>
-                    <td style={{ padding: '8px', textAlign: 'center' }}>{data.brackets.large.count}</td>
-                    <td style={{ padding: '8px', textAlign: 'center' }}>{data.brackets.xlarge.count}</td>
-                    <td style={{ padding: '8px', textAlign: 'right', fontWeight: 'bold' }}>
-                      {data.impliedRate !== null ? `$${data.impliedRate.toLocaleString()}` : 'NULL'}
-                    </td>
-                  </tr>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 'bold' }}>Method 2: Improved Sale Lot Size Analysis</h3>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+              <label style={{ fontSize: '12px', color: '#6B7280' }}>Type and Use:</label>
+              <select
+                value={method2TypeFilter}
+                onChange={(e) => setMethod2TypeFilter(e.target.value)}
+                style={{
+                  padding: '6px 10px',
+                  border: '1px solid #D1D5DB',
+                  borderRadius: '4px',
+                  fontSize: '14px',
+                  backgroundColor: 'white'
+                }}
+              >
+                {getTypeUseOptions().map(option => (
+                  <option key={option.code} value={option.code}>
+                    {option.code} - {option.description}
+                  </option>
                 ))}
-            </tbody>
-          </table>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ padding: '10px 15px 5px 15px', borderBottom: '1px solid #E5E7EB', backgroundColor: '#F9FAFB', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ fontSize: '12px', color: '#6B7280' }}>
+            {Object.keys(bracketAnalysis).length} VCS areas • Filtered by: {method2TypeFilter} ({getTypeUseOptions().find(opt => opt.code === method2TypeFilter)?.description || 'Unknown'})
+          </div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              onClick={() => setExpandedVCS(new Set(Object.keys(bracketAnalysis)))}
+              style={{
+                padding: '4px 8px',
+                fontSize: '11px',
+                backgroundColor: '#3B82F6',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer'
+              }}
+            >
+              Expand All
+            </button>
+            <button
+              onClick={() => setExpandedVCS(new Set())}
+              style={{
+                padding: '4px 8px',
+                fontSize: '11px',
+                backgroundColor: '#6B7280',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer'
+              }}
+            >
+              Collapse All
+            </button>
+          </div>
+        </div>
+
+        <div style={{ padding: '10px' }}>
+          {Object.entries(bracketAnalysis)
+            .filter(([vcs]) => !vcsFilter || vcs.includes(vcsFilter))
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([vcs, data], index) => {
+              const isExpanded = expandedVCS.has(vcs);
+              const vcsColors = generateVCSColor(vcs, index);
+
+              // Format VCS summary line exactly like screenshot
+              const summaryLine = `${data.totalSales} sales • Avg $${Math.round(data.avgPrice).toLocaleString()} • ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} • $${data.impliedRate || 0}`;
+
+              return (
+                <div key={vcs} style={{ marginBottom: '8px', border: '1px solid #E5E7EB', borderRadius: '6px', overflow: 'hidden' }}>
+                  {/* VCS Header */}
+                  <div
+                    onClick={() => {
+                      const newExpanded = new Set(expandedVCS);
+                      if (isExpanded) {
+                        newExpanded.delete(vcs);
+                      } else {
+                        newExpanded.add(vcs);
+                      }
+                      setExpandedVCS(newExpanded);
+                    }}
+                    style={{
+                      backgroundColor: vcsColors.background,
+                      color: vcsColors.text,
+                      padding: '10px 15px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      fontWeight: 'bold',
+                      fontSize: '14px',
+                      border: 'none'
+                    }}
+                  >
+                    <div>
+                      <span style={{ fontSize: '16px', fontWeight: 'bold' }}>{vcs}:</span>
+                      <span style={{ fontSize: '12px', marginLeft: '8px', fontWeight: 'normal' }}>
+                        {summaryLine}
+                      </span>
+                    </div>
+                    <span style={{ fontSize: '16px', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
+                      ▼
+                    </span>
+                  </div>
+
+                  {/* VCS Details */}
+                  {isExpanded && (
+                    <div style={{ backgroundColor: '#FFFFFF', padding: '0', border: '1px solid #E5E7EB', borderTop: 'none' }}>
+                      <table style={{ width: '100%', fontSize: '12px', borderCollapse: 'collapse' }}>
+                        <thead>
+                          <tr style={{ backgroundColor: '#F8F9FA' }}>
+                            <th style={{ padding: '8px', textAlign: 'left', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>Bracket</th>
+                            <th style={{ padding: '8px', textAlign: 'center', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>Count</th>
+                            <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>Avg Lot Size</th>
+                            <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>Avg Sale Price</th>
+                            <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>Avg SFLA</th>
+                            <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>ADJUSTED</th>
+                            <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>DELTA</th>
+                            <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>LOT DELTA</th>
+                            <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>PER ACRE</th>
+                            <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>PER SQ FT</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {[
+                            { key: 'small', label: '<1.00', bracket: data.brackets.small },
+                            { key: 'medium', label: '1.00-5.00', bracket: data.brackets.medium },
+                            { key: 'large', label: '5.00-10.00', bracket: data.brackets.large },
+                            { key: 'xlarge', label: '>10.00', bracket: data.brackets.xlarge }
+                          ].map((row, rowIndex) => {
+                            if (row.bracket.count === 0) return null;
+
+                            // Calculate deltas from previous bracket
+                            const prevBracket = rowIndex > 0 ?
+                              [data.brackets.small, data.brackets.medium, data.brackets.large, data.brackets.xlarge][rowIndex - 1]
+                              : null;
+
+                            const adjustedDelta = prevBracket && prevBracket.avgAdjusted && row.bracket.avgAdjusted ?
+                              row.bracket.avgAdjusted - prevBracket.avgAdjusted : null;
+                            const lotDelta = prevBracket && prevBracket.avgAcres && row.bracket.avgAcres ?
+                              row.bracket.avgAcres - prevBracket.avgAcres : null;
+                            const perAcre = adjustedDelta && lotDelta && lotDelta > 0 ? adjustedDelta / lotDelta : null;
+                            const perSqFt = perAcre ? perAcre / 43560 : null;
+
+                            return (
+                              <tr key={row.key} style={{ backgroundColor: '#FFFFFF' }}>
+                                <td style={{ padding: '6px 8px', fontWeight: '500', borderBottom: '1px solid #F1F3F4' }}>{row.label}</td>
+                                <td style={{ padding: '6px 8px', textAlign: 'center', borderBottom: '1px solid #F1F3F4' }}>{row.bracket.count}</td>
+                                <td style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '1px solid #F1F3F4' }}>
+                                  {row.bracket.avgAcres ? row.bracket.avgAcres.toFixed(2) : '-'}
+                                </td>
+                                <td style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '1px solid #F1F3F4' }}>
+                                  {row.bracket.avgSalePrice ? `$${Math.round(row.bracket.avgSalePrice).toLocaleString()}` : '-'}
+                                </td>
+                                <td style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '1px solid #F1F3F4' }}>
+                                  {row.bracket.avgSFLA ? Math.round(row.bracket.avgSFLA).toLocaleString() : '-'}
+                                </td>
+                                <td style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '1px solid #F1F3F4' }}>
+                                  {row.bracket.avgAdjusted ? `$${Math.round(row.bracket.avgAdjusted).toLocaleString()}` : '-'}
+                                </td>
+                                <td style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '1px solid #F1F3F4' }}>
+                                  {adjustedDelta ? `$${Math.round(adjustedDelta).toLocaleString()}` : '-'}
+                                </td>
+                                <td style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '1px solid #F1F3F4' }}>
+                                  {lotDelta ? lotDelta.toFixed(2) : '-'}
+                                </td>
+                                <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', borderBottom: '1px solid #F1F3F4' }}>
+                                  {perAcre ? `$${Math.round(perAcre).toLocaleString()}` : '-'}
+                                </td>
+                                <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', borderBottom: '1px solid #F1F3F4' }}>
+                                  {perSqFt ? `$${perSqFt.toFixed(2)}` : '-'}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
         </div>
         
-        {/* Method 2 Summary - AT BOTTOM */}
+        {/* Method 2 Summary - Enhanced Layout */}
         {method2Summary.average && (
-          <div style={{ padding: '15px', backgroundColor: '#F9FAFB', borderTop: '1px solid #E5E7EB' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px' }}>
-              <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
-                <div style={{ fontSize: '12px', color: '#6B7280' }}>Average Implied Rate</div>
-                <div style={{ fontSize: '20px', fontWeight: 'bold' }}>${method2Summary.average?.toLocaleString()}</div>
-              </div>
-              <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
-                <div style={{ fontSize: '12px', color: '#6B7280' }}>Median Implied Rate</div>
-                <div style={{ fontSize: '20px', fontWeight: 'bold' }}>${method2Summary.median?.toLocaleString()}</div>
-              </div>
-              <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
-                <div style={{ fontSize: '12px', color: '#6B7280' }}>VCS Coverage</div>
-                <div style={{ fontSize: '16px', fontWeight: 'bold' }}>{method2Summary.coverage}</div>
-              </div>
-              <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
-                <div style={{ fontSize: '12px', color: '#6B7280' }}>Range</div>
-                <div style={{ fontSize: '16px', fontWeight: 'bold' }}>
-                  ${method2Summary.min?.toLocaleString()} - ${method2Summary.max?.toLocaleString()}
+          <div style={{ borderTop: '2px solid #E5E7EB', backgroundColor: '#F8FAFC' }}>
+            <div style={{ padding: '20px' }}>
+              <h4 style={{ margin: '0 0 15px 0', fontSize: '16px', fontWeight: 'bold', color: '#1F2937' }}>
+                Method 2 Summary - Implied {getUnitLabel()} Rates
+              </h4>
+
+              <div style={{ display: 'flex', gap: '30px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '14px', color: '#6B7280', marginBottom: '4px' }}>Average</div>
+                    <div style={{ fontSize: '32px', fontWeight: 'bold', color: '#059669' }}>
+                      ${method2Summary.average?.toLocaleString()}
+                    </div>
+                  </div>
+
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '14px', color: '#6B7280', marginBottom: '4px' }}>Median</div>
+                    <div style={{ fontSize: '32px', fontWeight: 'bold', color: '#0D9488' }}>
+                      ${method2Summary.median?.toLocaleString()}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ width: '1px', height: '60px', backgroundColor: '#D1D5DB' }}></div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', minWidth: '200px' }}>
+                    <span style={{ fontSize: '14px', color: '#6B7280' }}>VCS Coverage:</span>
+                    <span style={{ fontSize: '14px', fontWeight: '600', color: '#1F2937' }}>{method2Summary.coverage}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', minWidth: '200px' }}>
+                    <span style={{ fontSize: '14px', color: '#6B7280' }}>Range:</span>
+                    <span style={{ fontSize: '14px', fontWeight: '600', color: '#1F2937' }}>
+                      ${method2Summary.min?.toLocaleString()} - ${method2Summary.max?.toLocaleString()}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', minWidth: '200px' }}>
+                    <span style={{ fontSize: '14px', color: '#6B7280' }}>Total Sales:</span>
+                    <span style={{ fontSize: '14px', fontWeight: '600', color: '#1F2937' }}>
+                      {Object.values(bracketAnalysis).reduce((sum, data) => sum + data.totalSales, 0)}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
