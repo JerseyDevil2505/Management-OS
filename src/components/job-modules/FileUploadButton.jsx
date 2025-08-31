@@ -1828,7 +1828,7 @@ const handleCodeFileUpdate = async () => {
           </div>
 
           {/* Enhanced Footer with Pagination */}
-          <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 shrink-0">
+          <div className="px-6 py-4 border-t border-gray-700 bg-gray-800 shrink-0">
             {/* First row - Page info and navigation */}
             <div className="flex justify-between items-center mb-3">
               <div className="text-sm text-gray-600">
