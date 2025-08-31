@@ -1333,6 +1333,10 @@ const handleCodeFileUpdate = async () => {
           const startTime = Date.now();
           addBatchLog('🔄 Processing file data...', 'info');
 
+          // OPTIMIZED: Extract deletion list from comparison results to avoid expensive .not.in() queries
+          const deletionsList = comparisonResults?.details?.deletions || [];
+          addBatchLog(`🎯 DELETION OPTIMIZATION: Passing ${deletionsList.length} properties for targeted deletion`, 'info');
+
           const result = await propertyService.updateCSVData(
             sourceFileContent,
             codeFileContent,
@@ -1348,7 +1352,8 @@ const handleCodeFileUpdate = async () => {
               preservedFieldsHandler: preservedFieldsHandler,
               preservedFields: [
                 'is_assigned_property'     // AdminJobManagement - from assignments
-              ]
+              ],
+              deletionsList: deletionsList  // OPTIMIZED: Pass pre-computed deletion list
             }
           );
 
