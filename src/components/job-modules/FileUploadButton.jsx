@@ -55,13 +55,7 @@ const FileUploadButton = ({
   });
 
 
-  // NEW: Sync detectedVendor with passed vendorType prop
-  useEffect(() => {
-    if (vendorType) {
-      console.log(`🔧 Syncing vendor type from JobContainer: ${vendorType}`);
-      setDetectedVendor(vendorType);
-    }
-  }, [vendorType]); // Remove detectedVendor from dependency to avoid loops
+  // REMOVED: No syncing needed - use job.vendor_type directly
 
   const addNotification = (message, type = 'info') => {
     const id = Date.now() + Math.random(); // Make unique with random component
@@ -326,7 +320,7 @@ const handleCodeFileUpdate = async () => {
 
     // Refresh job data in parent component
     if (onDataRefresh) {
-      console.log(`🔧 Code Update - Calling onDataRefresh to update job data`);
+      console.log(`���� Code Update - Calling onDataRefresh to update job data`);
       console.log(`🔧 Code Update - BEFORE refresh - job.code_file_uploaded_at: ${job.code_file_uploaded_at}`);
       console.log(`🔧 Code Update - BEFORE refresh - job.code_file_version: ${job.code_file_version}`);
 
