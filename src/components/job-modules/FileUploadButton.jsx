@@ -1715,7 +1715,7 @@ const handleCodeFileUpdate = async () => {
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
         <div
-          className="bg-gray-900 rounded-lg overflow-hidden shadow-2xl flex flex-col resize-none"
+          className="bg-white rounded-lg overflow-hidden shadow-2xl flex flex-col resize-none"
           style={{
             width: `${modalSize.width}px`,
             height: `${modalSize.height}px`,
