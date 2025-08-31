@@ -2511,7 +2511,10 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
             .sort(([a], [b]) => a.localeCompare(b))
             .map(([vcs, data], index) => {
               const isExpanded = expandedVCS.has(vcs);
-              const vcsColor = generateVCSColor(vcs, index);
+              const vcsColors = generateVCSColor(vcs, index);
+
+              // Format VCS summary line exactly like screenshot
+              const summaryLine = `${data.totalSales} sales • Avg $${Math.round(data.avgPrice).toLocaleString()} • ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} • $${data.impliedRate || 0}`;
 
               return (
                 <div key={vcs} style={{ marginBottom: '8px', border: '1px solid #E5E7EB', borderRadius: '6px', overflow: 'hidden' }}>
@@ -2527,79 +2530,91 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
                       setExpandedVCS(newExpanded);
                     }}
                     style={{
-                      backgroundColor: vcsColor,
-                      color: 'white',
-                      padding: '12px 15px',
+                      backgroundColor: vcsColors.background,
+                      color: vcsColors.text,
+                      padding: '10px 15px',
                       cursor: 'pointer',
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'center',
                       fontWeight: 'bold',
-                      fontSize: '14px'
+                      fontSize: '14px',
+                      border: 'none'
                     }}
                   >
-                    <span>{vcs}</span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                      <span style={{ fontSize: '12px', opacity: 0.9 }}>
-                        {data.totalSales} sales • {data.impliedRate !== null ? `$${data.impliedRate.toLocaleString()}` : 'NULL'} implied
-                      </span>
-                      <span style={{ fontSize: '18px', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
-                        ▼
+                    <div>
+                      <span style={{ fontSize: '16px', fontWeight: 'bold' }}>{vcs}:</span>
+                      <span style={{ fontSize: '12px', marginLeft: '8px', fontWeight: 'normal' }}>
+                        {summaryLine}
                       </span>
                     </div>
+                    <span style={{ fontSize: '16px', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
+                      ▼
+                    </span>
                   </div>
 
                   {/* VCS Details */}
                   {isExpanded && (
-                    <div style={{ backgroundColor: '#F9FAFB', padding: '0' }}>
-                      <table style={{ width: '100%', fontSize: '13px' }}>
+                    <div style={{ backgroundColor: '#FFFFFF', padding: '0', border: '1px solid #E5E7EB', borderTop: 'none' }}>
+                      <table style={{ width: '100%', fontSize: '12px', borderCollapse: 'collapse' }}>
                         <thead>
-                          <tr style={{ backgroundColor: '#F3F4F6' }}>
-                            <th style={{ padding: '8px', textAlign: 'left', fontWeight: '600' }}>Bracket</th>
-                            <th style={{ padding: '8px', textAlign: 'center', fontWeight: '600' }}>Count</th>
-                            <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600' }}>Avg Size</th>
-                            <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600' }}>Avg Price</th>
-                            <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600' }}>Price Delta</th>
-                            <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600' }}>Size Delta</th>
-                            <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600' }}>Per Acre</th>
+                          <tr style={{ backgroundColor: '#F8F9FA' }}>
+                            <th style={{ padding: '8px', textAlign: 'left', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>Bracket</th>
+                            <th style={{ padding: '8px', textAlign: 'center', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>Count</th>
+                            <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>Avg Lot Size</th>
+                            <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>Avg Sale Price</th>
+                            <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>ADJUSTED</th>
+                            <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>DELTA</th>
+                            <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>LOT DELTA</th>
+                            <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>PER ACRE</th>
+                            <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>PER SQ FT</th>
                           </tr>
                         </thead>
                         <tbody>
                           {[
-                            { key: 'small', label: '<1', bracket: data.brackets.small },
-                            { key: 'medium', label: '1-5', bracket: data.brackets.medium },
-                            { key: 'large', label: '5-10', bracket: data.brackets.large },
-                            { key: 'xlarge', label: '>10', bracket: data.brackets.xlarge }
+                            { key: 'small', label: '<1.00', bracket: data.brackets.small },
+                            { key: 'medium', label: '1.00-5.00', bracket: data.brackets.medium },
+                            { key: 'large', label: '5.00-10.00', bracket: data.brackets.large },
+                            { key: 'xlarge', label: '>10.00', bracket: data.brackets.xlarge }
                           ].map((row, rowIndex) => {
-                            // Calculate deltas for implied rate calculation
+                            if (row.bracket.count === 0) return null;
+
+                            // Calculate deltas from previous bracket
                             const prevBracket = rowIndex > 0 ?
                               [data.brackets.small, data.brackets.medium, data.brackets.large, data.brackets.xlarge][rowIndex - 1]
                               : null;
 
-                            const priceDelta = prevBracket && row.bracket.avgPrice && prevBracket.avgPrice ?
-                              row.bracket.avgPrice - prevBracket.avgPrice : null;
-                            const sizeDelta = prevBracket && row.bracket.avgAcres && prevBracket.avgAcres ?
+                            const adjustedDelta = prevBracket && prevBracket.avgAdjusted && row.bracket.avgAdjusted ?
+                              row.bracket.avgAdjusted - prevBracket.avgAdjusted : null;
+                            const lotDelta = prevBracket && prevBracket.avgAcres && row.bracket.avgAcres ?
                               row.bracket.avgAcres - prevBracket.avgAcres : null;
-                            const perAcre = priceDelta && sizeDelta && sizeDelta > 0 ? priceDelta / sizeDelta : null;
+                            const perAcre = adjustedDelta && lotDelta && lotDelta > 0 ? adjustedDelta / lotDelta : null;
+                            const perSqFt = perAcre ? perAcre / 43560 : null;
 
                             return (
-                              <tr key={row.key} style={{ backgroundColor: rowIndex % 2 === 0 ? 'white' : '#F9FAFB' }}>
-                                <td style={{ padding: '8px', fontWeight: '500' }}>{row.label}</td>
-                                <td style={{ padding: '8px', textAlign: 'center' }}>{row.bracket.count}</td>
-                                <td style={{ padding: '8px', textAlign: 'right' }}>
+                              <tr key={row.key} style={{ backgroundColor: '#FFFFFF' }}>
+                                <td style={{ padding: '6px 8px', fontWeight: '500', borderBottom: '1px solid #F1F3F4' }}>{row.label}</td>
+                                <td style={{ padding: '6px 8px', textAlign: 'center', borderBottom: '1px solid #F1F3F4' }}>{row.bracket.count}</td>
+                                <td style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '1px solid #F1F3F4' }}>
                                   {row.bracket.avgAcres ? row.bracket.avgAcres.toFixed(2) : '-'}
                                 </td>
-                                <td style={{ padding: '8px', textAlign: 'right' }}>
-                                  {row.bracket.avgPrice ? `$${Math.round(row.bracket.avgPrice).toLocaleString()}` : '-'}
+                                <td style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '1px solid #F1F3F4' }}>
+                                  {row.bracket.avgSalePrice ? `$${Math.round(row.bracket.avgSalePrice).toLocaleString()}` : '-'}
                                 </td>
-                                <td style={{ padding: '8px', textAlign: 'right', color: priceDelta > 0 ? '#10B981' : priceDelta < 0 ? '#EF4444' : '#6B7280' }}>
-                                  {priceDelta ? `$${Math.round(priceDelta).toLocaleString()}` : '-'}
+                                <td style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '1px solid #F1F3F4' }}>
+                                  {row.bracket.avgAdjusted ? `$${Math.round(row.bracket.avgAdjusted).toLocaleString()}` : '-'}
                                 </td>
-                                <td style={{ padding: '8px', textAlign: 'right', color: sizeDelta > 0 ? '#10B981' : sizeDelta < 0 ? '#EF4444' : '#6B7280' }}>
-                                  {sizeDelta ? sizeDelta.toFixed(2) : '-'}
+                                <td style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '1px solid #F1F3F4' }}>
+                                  {adjustedDelta ? `$${Math.round(adjustedDelta).toLocaleString()}` : '-'}
                                 </td>
-                                <td style={{ padding: '8px', textAlign: 'right', fontWeight: 'bold', color: perAcre > 0 ? '#10B981' : perAcre < 0 ? '#EF4444' : '#6B7280' }}>
+                                <td style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '1px solid #F1F3F4' }}>
+                                  {lotDelta ? lotDelta.toFixed(2) : '-'}
+                                </td>
+                                <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', borderBottom: '1px solid #F1F3F4' }}>
                                   {perAcre ? `$${Math.round(perAcre).toLocaleString()}` : '-'}
+                                </td>
+                                <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', borderBottom: '1px solid #F1F3F4' }}>
+                                  {perSqFt ? `$${perSqFt.toFixed(2)}` : '-'}
                                 </td>
                               </tr>
                             );
