@@ -2605,6 +2605,9 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
                                   {row.bracket.avgSalePrice ? `$${Math.round(row.bracket.avgSalePrice).toLocaleString()}` : '-'}
                                 </td>
                                 <td style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '1px solid #F1F3F4' }}>
+                                  {row.bracket.avgSFLA ? Math.round(row.bracket.avgSFLA).toLocaleString() : '-'}
+                                </td>
+                                <td style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '1px solid #F1F3F4' }}>
                                   {row.bracket.avgAdjusted ? `$${Math.round(row.bracket.avgAdjusted).toLocaleString()}` : '-'}
                                 </td>
                                 <td style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '1px solid #F1F3F4' }}>
