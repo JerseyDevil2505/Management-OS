@@ -2341,7 +2341,7 @@ const handleCodeFileUpdate = async () => {
                               <div className="text-xs text-gray-600">{classChange.field}</div>
                               <div className="text-sm">
                                 <span className="font-medium text-red-600">{classChange.old || 'None'}</span>
-                                <span className="mx-1">���</span>
+                                <span className="mx-1">→</span>
                                 <span className="font-medium text-green-600">{classChange.new || 'None'}</span>
                               </div>
                             </div>
@@ -2589,7 +2589,7 @@ const handleCodeFileUpdate = async () => {
                       addNotification(`⚠️ Processing completed with ${errorCount} errors. ${totalProcessed} records updated.`, 'warning');
                     } else {
                       addBatchLog('🎉 File version refresh completed successfully!', 'success');
-                      addNotification(`✅ Successfully updated ${totalProcessed} records with latest data via ${detectedVendor} updater`, 'success');
+                      addNotification(`✅ Successfully updated ${totalProcessed} records with latest data via ${job.vendor_type} updater`, 'success');
                     }
                     // Check if rollback occurred during refresh
                     if (result.warnings && result.warnings.some(w => w.includes('rolled back'))) {
