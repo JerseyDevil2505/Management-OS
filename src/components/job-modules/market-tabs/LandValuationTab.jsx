@@ -717,8 +717,24 @@ const getPricePerUnit = useCallback((price, size) => {
         let avgAdjusted = avgSalePrice; // Default to raw price if no SFLA data
 
         if (overallAvgSFLA && avgSFLA && avgSFLA > 0) {
-          const sizeAdjustment = (overallAvgSFLA - avgSFLA) * ((avgSalePrice / avgSFLA) * 0.50);
+          const sflaDiff = overallAvgSFLA - avgSFLA;
+          const pricePerSqFt = avgSalePrice / avgSFLA;
+          const halfRate = pricePerSqFt * 0.50;
+          const sizeAdjustment = sflaDiff * halfRate;
           avgAdjusted = avgSalePrice + sizeAdjustment;
+
+          // Debug logging for first bracket
+          if (arr.length > 10) { // Likely the "small" bracket with 13 sales
+            console.log('Size Adjustment Debug:');
+            console.log('Overall Avg SFLA:', overallAvgSFLA);
+            console.log('Bracket Avg SFLA:', avgSFLA);
+            console.log('Bracket Avg Price:', avgSalePrice);
+            console.log('SFLA Difference:', sflaDiff);
+            console.log('Price per sq ft:', pricePerSqFt);
+            console.log('Half rate:', halfRate);
+            console.log('Size adjustment:', sizeAdjustment);
+            console.log('Final adjusted:', avgAdjusted);
+          }
         }
 
         return {
