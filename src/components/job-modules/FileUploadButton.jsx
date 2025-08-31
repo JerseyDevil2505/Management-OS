@@ -1831,7 +1831,7 @@ const handleCodeFileUpdate = async () => {
           <div className="px-6 py-4 border-t border-gray-700 bg-gray-800 shrink-0">
             {/* First row - Page info and navigation */}
             <div className="flex justify-between items-center mb-3">
-              <div className="text-sm text-gray-600">
+              <div className="text-sm text-gray-300">
                 Showing {startIndex + 1}-{Math.min(endIndex, reportsList.length)} of {reportsList.length} reports
               </div>
 
