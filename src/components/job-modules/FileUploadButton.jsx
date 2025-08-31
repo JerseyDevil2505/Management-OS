@@ -2512,10 +2512,10 @@ const handleCodeFileUpdate = async () => {
                     clearBatchLogs();
                     setShowBatchModal(true);
                     setProcessing(true);
-                    setProcessingStatus(`Processing ${detectedVendor} data via updater...`);
-                    
+                    setProcessingStatus(`Processing ${job.vendor_type} data via updater...`);
+
                     addBatchLog('🚀 Processing file with no changes detected', 'batch_start', {
-                      vendor: detectedVendor,
+                      vendor: job.vendor_type,
                       fileName: sourceFile.name,
                       changesDetected: 0,
                       salesDecisions: 0
@@ -2585,7 +2585,7 @@ const handleCodeFileUpdate = async () => {
                     const errorCount = result.errors || 0;
                     
                     if (errorCount > 0) {
-                      addBatchLog(`⚠️ Refresh completed with ${errorCount} errors`, 'warning');
+                      addBatchLog(`⚠��� Refresh completed with ${errorCount} errors`, 'warning');
                       addNotification(`⚠️ Processing completed with ${errorCount} errors. ${totalProcessed} records updated.`, 'warning');
                     } else {
                       addBatchLog('🎉 File version refresh completed successfully!', 'success');
