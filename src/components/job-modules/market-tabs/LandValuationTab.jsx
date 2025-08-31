@@ -2479,8 +2479,10 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
                   backgroundColor: 'white'
                 }}
               >
-                {getTypeUseOptions().map(typeUse => (
-                  <option key={typeUse} value={typeUse}>{typeUse}</option>
+                {getTypeUseOptions().map(option => (
+                  <option key={option.code} value={option.code}>
+                    {option.code} - {option.description}
+                  </option>
                 ))}
               </select>
             </div>
