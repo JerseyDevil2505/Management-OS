@@ -658,9 +658,28 @@ const getPricePerUnit = useCallback((price, size) => {
                         nu === '7' || nu.charCodeAt(0) === 32;
         if (!validNu) return;
 
-        // Apply type/use filter - SIMPLIFIED
-        const rawTypeUse = prop.asset_type_use?.toString().trim();
-        if (rawTypeUse !== method2TypeFilter) return;
+        // Apply type/use filter with umbrella group support
+        const rawTypeUse = prop.asset_type_use?.toString().trim().toUpperCase();
+
+        let passesFilter = false;
+        if (method2TypeFilter === '1') {
+          // Single Family - include both 1 and 10
+          passesFilter = rawTypeUse === '1' || rawTypeUse === '10';
+        } else if (method2TypeFilter === '3') {
+          // Row/Townhouses umbrella
+          passesFilter = ['30', '31', '3E', '3I'].includes(rawTypeUse);
+        } else if (method2TypeFilter === '4') {
+          // MultiFamily umbrella
+          passesFilter = ['42', '43', '44'].includes(rawTypeUse);
+        } else if (method2TypeFilter === '5') {
+          // Conversions umbrella
+          passesFilter = ['51', '52', '53'].includes(rawTypeUse);
+        } else {
+          // Direct match for other codes
+          passesFilter = rawTypeUse === method2TypeFilter;
+        }
+
+        if (!passesFilter) return;
 
         const vcs = timeNormData.new_vcs;
         if (!vcs) return;
