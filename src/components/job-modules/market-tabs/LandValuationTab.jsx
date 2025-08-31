@@ -297,6 +297,35 @@ const getPricePerUnit = useCallback((price, size) => {
     return '$/Unit';
   }, [valuationMode]);
 
+  // ========== GENERATE VCS COLORS ==========
+  const generateVCSColor = useCallback((vcs, index) => {
+    const colors = [
+      '#EF4444', '#F97316', '#F59E0B', '#EAB308', '#84CC16',
+      '#22C55E', '#10B981', '#14B8A6', '#06B6D4', '#0EA5E9',
+      '#3B82F6', '#6366F1', '#8B5CF6', '#A855F7', '#D946EF',
+      '#EC4899', '#F43F5E', '#EF4444'
+    ];
+    return colors[index % colors.length];
+  }, []);
+
+  // ========== GET TYPE USE OPTIONS ==========
+  const getTypeUseOptions = useCallback(() => {
+    if (!properties) return [];
+
+    const typeUses = new Set();
+    properties.forEach(prop => {
+      if (prop.asset_type_use && prop.property_m4_class === '2') {
+        // Use human-readable names when available
+        const typeName = vendorType === 'Microsystems' && jobData?.parsed_code_definitions
+          ? interpretCodes.getMicrosystemsValue?.(prop, jobData.parsed_code_definitions, 'asset_type_use') || prop.asset_type_use
+          : prop.asset_type_use;
+        typeUses.add(typeName);
+      }
+    });
+
+    return Array.from(typeUses).sort();
+  }, [properties, vendorType, jobData]);
+
   // ========== GET VCS DESCRIPTION HELPER ==========
   const getVCSDescription = useCallback((vcsCode) => {
     // First check manual descriptions
