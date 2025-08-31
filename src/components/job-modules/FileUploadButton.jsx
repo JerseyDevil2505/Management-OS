@@ -320,7 +320,7 @@ const handleCodeFileUpdate = async () => {
 
     // Refresh job data in parent component
     if (onDataRefresh) {
-      console.log(`���� Code Update - Calling onDataRefresh to update job data`);
+      console.log(`🔧 Code Update - Calling onDataRefresh to update job data`);
       console.log(`🔧 Code Update - BEFORE refresh - job.code_file_uploaded_at: ${job.code_file_uploaded_at}`);
       console.log(`🔧 Code Update - BEFORE refresh - job.code_file_version: ${job.code_file_version}`);
 
@@ -723,11 +723,11 @@ const handleCodeFileUpdate = async () => {
     try {
       setProcessingStatus('Analyzing files...');
 
-      // Safety check for vendor type
-      const vendorToUse = detectedVendor || vendorType;
+      // Get vendor type directly from job data
+      const vendorToUse = job.vendor_type;
 
       if (!vendorToUse) {
-        throw new Error('Vendor type not available. Please wait for job data to load completely.');
+        throw new Error('Vendor type not found in job data. Please check job configuration.');
       }
 
       // Parse source file
