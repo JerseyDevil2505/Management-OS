@@ -596,6 +596,7 @@ export class MicrosystemsUpdater {
       };
 
       console.log('✅ INITIALIZATION COMPLETE - All steps finished successfully!');
+      console.log(`🎯 DELETION OPTIMIZATION: Used ${deletionsList ? 'targeted .in() queries' : 'legacy deletion logic'}`);
       console.log('🚀 Starting batch UPSERT processing...');
       console.log(`📊 Processing ${propertyRecords.length} property records in batches...`);
       const batchSize = 250; // Optimized for stability and error resilience
