@@ -656,7 +656,7 @@ const getPricePerUnit = useCallback((price, size) => {
           avgNormTime: arr.reduce((sum, s) => sum + s.normalizedTime, 0) / arr.length,
           avgSFLA: arr.filter(s => s.sfla > 0).length > 0 ?
             arr.filter(s => s.sfla > 0).reduce((sum, s) => sum + s.sfla, 0) / arr.filter(s => s.sfla > 0).length : null,
-          avgAdjusted: arr.reduce((sum, s) => sum + (s.normalizedTime + s.normalizedSize) / 2, 0) / arr.length
+          avgAdjusted: arr.reduce((sum, s) => sum + s.salesPrice, 0) / arr.length // TODO: Use actual normalized values
         };
       };
 
