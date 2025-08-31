@@ -326,21 +326,45 @@ const getPricePerUnit = useCallback((price, size) => {
     const defaultCode = vendorType === 'Microsystems' ? '1' : '10';
     if (!properties) return [{ code: defaultCode, description: 'Single Family' }];
 
+    // Define grouping mappings
+    const typeUseGroups = {
+      '30': '3', '31': '3', '3E': '3', '3I': '3', // Row/Townhouses
+      '42': '4', '43': '4', '44': '4',             // MultiFamily
+      '51': '5', '52': '5', '53': '5'             // Conversions
+    };
+
+    const groupDescriptions = {
+      '3': '3 - Row/Townhouses',
+      '4': '4 - MultiFamily',
+      '5': '5 - Conversions'
+    };
+
     const typeCodeMap = new Map();
     typeCodeMap.set(defaultCode, 'Single Family'); // Always include default
 
     properties.forEach(prop => {
       if (prop.asset_type_use && prop.property_m4_class === '2') {
-        const rawCode = prop.asset_type_use.toString().trim();
+        const rawCode = prop.asset_type_use.toString().trim().toUpperCase();
 
         if (rawCode && rawCode !== '' && rawCode !== 'null' && rawCode !== 'undefined') {
-          if (!typeCodeMap.has(rawCode)) {
-            // Get human-readable description
-            const description = vendorType === 'Microsystems' && jobData?.parsed_code_definitions
-              ? interpretCodes.getMicrosystemsValue?.(prop, jobData.parsed_code_definitions, 'asset_type_use') || rawCode
-              : rawCode;
+          // Check if code should be grouped
+          const groupCode = typeUseGroups[rawCode];
+          const codeToUse = groupCode || rawCode;
 
-            typeCodeMap.set(rawCode, description);
+          if (!typeCodeMap.has(codeToUse)) {
+            let description;
+
+            if (groupCode) {
+              // Use predefined group description
+              description = groupDescriptions[groupCode];
+            } else {
+              // Get individual description
+              description = vendorType === 'Microsystems' && jobData?.parsed_code_definitions
+                ? interpretCodes.getMicrosystemsValue?.(prop, jobData.parsed_code_definitions, 'asset_type_use') || rawCode
+                : rawCode;
+            }
+
+            typeCodeMap.set(codeToUse, description);
           }
         }
       }
