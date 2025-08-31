@@ -311,7 +311,7 @@ const handleCodeFileUpdate = async () => {
 
     console.log(`🔧 Code Update - jobService.update result:`, updateResult);
 
-    addNotification(`✅ Successfully updated code definitions for ${detectedVendor}`, 'success');
+    addNotification(`✅ Successfully updated code definitions for ${job.vendor_type}`, 'success');
 
     // Clear code file selection
     setCodeFile(null);
