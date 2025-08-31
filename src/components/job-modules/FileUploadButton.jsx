@@ -1747,7 +1747,7 @@ const handleCodeFileUpdate = async () => {
           <div className="flex-1 overflow-y-auto p-6">
             {loadingReports ? (
               <div className="flex justify-center items-center py-12">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-400"></div>
               </div>
             ) : reportsList.length === 0 ? (
               <div className="text-center py-12">
