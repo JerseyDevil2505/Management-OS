@@ -555,18 +555,29 @@ const getPricePerUnit = useCallback((price, size) => {
       if (!prop.new_vcs || !prop.sales_price || prop.sales_price <= 0) return;
       // Only residential for bracket analysis
       if (prop.property_m4_class !== '2' && prop.property_m4_class !== '3A') return;
-      
+
+      // Apply type/use filter
+      if (typeUseFilter !== 'all') {
+        const typeName = vendorType === 'Microsystems' && jobData?.parsed_code_definitions
+          ? interpretCodes.getMicrosystemsValue?.(prop, jobData.parsed_code_definitions, 'asset_type_use') || prop.asset_type_use
+          : prop.asset_type_use;
+        if (typeName !== typeUseFilter) return;
+      }
+
       const vcs = prop.new_vcs;
       if (!vcsSales[vcs]) {
         vcsSales[vcs] = [];
       }
-      
+
       const acres = parseFloat(calculateAcreage(prop));
-      
+
       vcsSales[vcs].push({
         acres,
         normalizedPrice: prop.values_norm_size || prop.sales_price,
-        address: prop.property_location
+        address: prop.property_location,
+        typeUse: vendorType === 'Microsystems' && jobData?.parsed_code_definitions
+          ? interpretCodes.getMicrosystemsValue?.(prop, jobData.parsed_code_definitions, 'asset_type_use') || prop.asset_type_use
+          : prop.asset_type_use
       });
     });
 
