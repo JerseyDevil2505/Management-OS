@@ -612,7 +612,6 @@ const getPricePerUnit = useCallback((price, size) => {
       // Build time-normalized dataset from already-loaded properties (avoids extra DB joins)
       const timeNormalizedData = properties
         .filter(p =>
-          (p.property_m4_class === '2' || p.property_m4_class === '3A') &&
           p.values_norm_time != null &&
           p.values_norm_time > 0
         )
