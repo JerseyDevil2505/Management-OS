@@ -281,10 +281,10 @@ const handleCodeFileUpdate = async () => {
     setProcessingStatus('Processing code file...');
 
     // Call the actual processor to handle the code file properly
-    if (detectedVendor === 'BRT') {
+    if (job.vendor_type === 'BRT') {
       const { brtProcessor } = await import('../../lib/data-pipeline/brt-processor.js');
       await brtProcessor.processCodeFile(codeFileContent, job.id);
-    } else if (detectedVendor === 'Microsystems') {
+    } else if (job.vendor_type === 'Microsystems') {
       const { microsystemsProcessor } = await import('../../lib/data-pipeline/microsystems-processor.js');
       await microsystemsProcessor.processCodeFile(codeFileContent, job.id);
     } else {
