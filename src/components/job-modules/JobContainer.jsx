@@ -743,6 +743,7 @@ const JobContainer = ({
       latestCodeVersion,
       propertyRecordsCount,
       onFileProcessed: handleFileProcessed,
+      onDataRefresh: loadLatestFileVersions,  // FIXED: Pass data refresh function for modal close timing
       dataUpdateNotification,  // Pass notification to all components
       clearDataNotification: () => setDataUpdateNotification({  // Way to clear it
         hasNewData: false,
