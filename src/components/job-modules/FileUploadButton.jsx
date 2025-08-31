@@ -2444,7 +2444,7 @@ const handleCodeFileUpdate = async () => {
                       
                       return (
                         <div key={idx} className="text-xs text-yellow-700 font-mono">
-                          {detectedVendor === 'BRT' ? 
+                          {job.vendor_type === 'BRT' ?
                             `${record.BLOCK}-${record.LOT} → ${generatedKey}` :
                             `${record.Block}-${record.Lot} → ${generatedKey}`
                           }
