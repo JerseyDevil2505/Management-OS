@@ -390,8 +390,7 @@ const getPricePerUnit = useCallback((price, size) => {
   // ========== LOAD DATA EFFECTS ==========
   // Update filter when vendor type changes
   useEffect(() => {
-    const defaultCode = vendorType === 'Microsystems' ? '1' : '10';
-    setMethod2TypeFilter(defaultCode);
+    setMethod2TypeFilter('1'); // Always default to Single Family
   }, [vendorType]);
 
   useEffect(() => {
