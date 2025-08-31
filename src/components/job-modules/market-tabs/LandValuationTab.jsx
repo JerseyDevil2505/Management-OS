@@ -603,64 +603,74 @@ const getPricePerUnit = useCallback((price, size) => {
 
     Object.keys(vcsSales).forEach(vcs => {
       const sales = vcsSales[vcs];
-      if (sales.length < 5) return; // Need minimum sales for analysis
-      
+      if (sales.length < 3) return; // Need minimum sales for analysis
+
       // Sort by acreage for bracketing
       sales.sort((a, b) => a.acres - b.acres);
-      
+
       const brackets = {
         small: sales.filter(s => s.acres < 1),
         medium: sales.filter(s => s.acres >= 1 && s.acres < 5),
         large: sales.filter(s => s.acres >= 5 && s.acres < 10),
         xlarge: sales.filter(s => s.acres >= 10)
       };
-      
-      const avgPrice = (arr) => arr.length > 0 ? 
-        arr.reduce((sum, s) => sum + s.normalizedPrice, 0) / arr.length : null;
-      const avgAcres = (arr) => arr.length > 0 ? 
-        arr.reduce((sum, s) => sum + s.acres, 0) / arr.length : null;
-      
-      let impliedRate = null;
-      
+
+      // Enhanced statistics calculation
+      const calcBracketStats = (arr) => {
+        if (arr.length === 0) return {
+          count: 0,
+          avgAcres: null,
+          avgSalePrice: null,
+          avgNormTime: null,
+          avgSFLA: null,
+          avgAdjusted: null
+        };
+
+        return {
+          count: arr.length,
+          avgAcres: arr.reduce((sum, s) => sum + s.acres, 0) / arr.length,
+          avgSalePrice: arr.reduce((sum, s) => sum + s.salesPrice, 0) / arr.length,
+          avgNormTime: arr.reduce((sum, s) => sum + s.normalizedTime, 0) / arr.length,
+          avgSFLA: arr.filter(s => s.sfla > 0).length > 0 ?
+            arr.filter(s => s.sfla > 0).reduce((sum, s) => sum + s.sfla, 0) / arr.filter(s => s.sfla > 0).length : null,
+          avgAdjusted: arr.reduce((sum, s) => sum + (s.normalizedTime + s.normalizedSize) / 2, 0) / arr.length
+        };
+      };
+
+      const bracketStats = {
+        small: calcBracketStats(brackets.small),
+        medium: calcBracketStats(brackets.medium),
+        large: calcBracketStats(brackets.large),
+        xlarge: calcBracketStats(brackets.xlarge)
+      };
+
       // Calculate implied rate from bracket differences
-      if (brackets.small.length > 0 && brackets.medium.length > 0) {
-        const priceDiff = avgPrice(brackets.medium) - avgPrice(brackets.small);
-        const acresDiff = avgAcres(brackets.medium) - avgAcres(brackets.small);
+      let impliedRate = null;
+      if (bracketStats.small.count > 0 && bracketStats.medium.count > 0) {
+        const priceDiff = bracketStats.medium.avgAdjusted - bracketStats.small.avgAdjusted;
+        const acresDiff = bracketStats.medium.avgAcres - bracketStats.small.avgAcres;
         if (acresDiff > 0 && priceDiff > 0) {
           impliedRate = Math.round(priceDiff / acresDiff);
           validRates.push(impliedRate);
         }
       }
-      
-      // NULL for negative rates (don't include in averages)
+
+      // NULL for negative rates
       if (impliedRate && impliedRate < 0) {
         impliedRate = null;
       }
-      
+
+      // VCS summary statistics
+      const vcsAvgPrice = sales.reduce((sum, s) => sum + s.salesPrice, 0) / sales.length;
+      const vcsAvgAcres = sales.reduce((sum, s) => sum + s.acres, 0) / sales.length;
+      const vcsAvgAdjusted = sales.reduce((sum, s) => sum + (s.normalizedTime + s.normalizedSize) / 2, 0) / sales.length;
+
       analysis[vcs] = {
         totalSales: sales.length,
-        brackets: {
-          small: { 
-            count: brackets.small.length, 
-            avgAcres: avgAcres(brackets.small), 
-            avgPrice: avgPrice(brackets.small) 
-          },
-          medium: { 
-            count: brackets.medium.length, 
-            avgAcres: avgAcres(brackets.medium), 
-            avgPrice: avgPrice(brackets.medium) 
-          },
-          large: { 
-            count: brackets.large.length, 
-            avgAcres: avgAcres(brackets.large), 
-            avgPrice: avgPrice(brackets.large) 
-          },
-          xlarge: { 
-            count: brackets.xlarge.length, 
-            avgAcres: avgAcres(brackets.xlarge), 
-            avgPrice: avgPrice(brackets.xlarge) 
-          }
-        },
+        avgPrice: vcsAvgPrice,
+        avgAcres: vcsAvgAcres,
+        avgAdjusted: vcsAvgAdjusted,
+        brackets: bracketStats,
         impliedRate
       };
     });
