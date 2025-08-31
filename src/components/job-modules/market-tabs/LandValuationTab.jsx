@@ -722,10 +722,10 @@ const getPricePerUnit = useCallback((price, size) => {
         sales.sort((a, b) => a.acres - b.acres);
 
         const brackets = {
-          small: sales.filter(s => s.acres < 1),
-          medium: sales.filter(s => s.acres >= 1 && s.acres < 5),
-          large: sales.filter(s => s.acres >= 5 && s.acres < 10),
-          xlarge: sales.filter(s => s.acres >= 10)
+          small: sales.filter(s => s.acres < 1),              // 0 to 0.99
+          medium: sales.filter(s => s.acres >= 1 && s.acres < 5),  // 1.00-4.99
+          large: sales.filter(s => s.acres >= 5 && s.acres < 10),  // 5.00-9.99
+          xlarge: sales.filter(s => s.acres >= 10)            // 10.00 and greater
         };
 
         // Calculate overall VCS average SFLA for size adjustment
