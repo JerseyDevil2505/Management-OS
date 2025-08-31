@@ -325,11 +325,11 @@ const getPricePerUnit = useCallback((price, size) => {
   const getTypeUseOptions = useCallback(() => {
     if (!properties) return [{ code: '1', description: '1 - Single Family' }];
 
-    // Get unique asset_type_use codes from properties that have time normalization
+    // Get unique asset_type_use codes from properties
     const uniqueCodes = new Set();
     properties.forEach(prop => {
       if (prop.asset_type_use && prop.property_m4_class === '2') {
-        const rawCode = prop.asset_type_use.toString().trim();
+        const rawCode = prop.asset_type_use.toString().trim().toUpperCase();
         if (rawCode && rawCode !== '' && rawCode !== 'null' && rawCode !== 'undefined') {
           uniqueCodes.add(rawCode);
         }
@@ -338,21 +338,46 @@ const getPricePerUnit = useCallback((price, size) => {
 
     const options = [];
 
-    // Simple mapping for known codes
-    const codeDescriptions = {
-      '1': '1 - Single Family',
-      '42': '42 - MultiFamily',
-      '43': '43 - MultiFamily',
-      '44': '44 - MultiFamily'
-    };
+    // Always include Single Family
+    if (uniqueCodes.has('1') || uniqueCodes.has('10')) {
+      options.push({ code: '1', description: '1 - Single Family' });
+    }
 
-    // Add options for codes that actually exist in the data
-    Array.from(uniqueCodes).sort().forEach(code => {
-      const description = codeDescriptions[code] || `${code} - Unknown`;
-      options.push({ code, description });
+    // Add umbrella groups only if we have matching codes
+    const umbrellaGroups = [
+      {
+        codes: ['30', '31', '3E', '3I'],
+        groupCode: '3',
+        description: '3 - Row/Townhouses'
+      },
+      {
+        codes: ['42', '43', '44'],
+        groupCode: '4',
+        description: '4 - MultiFamily'
+      },
+      {
+        codes: ['51', '52', '53'],
+        groupCode: '5',
+        description: '5 - Conversions'
+      }
+    ];
+
+    umbrellaGroups.forEach(group => {
+      const hasMatchingCodes = group.codes.some(code => uniqueCodes.has(code));
+      if (hasMatchingCodes) {
+        options.push({ code: group.groupCode, description: group.description });
+      }
     });
 
-    return options;
+    // Add any other individual codes that don't fit the umbrella groups
+    const allUmbrellaCodes = ['1', '10', '30', '31', '3E', '3I', '42', '43', '44', '51', '52', '53'];
+    uniqueCodes.forEach(code => {
+      if (!allUmbrellaCodes.includes(code)) {
+        options.push({ code, description: `${code} - Other` });
+      }
+    });
+
+    return options.sort((a, b) => a.code.localeCompare(b.code));
   }, [properties]);
 
   // ========== GET VCS DESCRIPTION HELPER ==========
