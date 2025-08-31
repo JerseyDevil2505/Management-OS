@@ -1751,8 +1751,8 @@ const handleCodeFileUpdate = async () => {
               </div>
             ) : reportsList.length === 0 ? (
               <div className="text-center py-12">
-                <Database className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-                <p className="text-gray-600">No comparison reports found for this job</p>
+                <Database className="w-12 h-12 mx-auto mb-4 text-gray-500" />
+                <p className="text-gray-300">No comparison reports found for this job</p>
               </div>
             ) : (
               <div className="space-y-4">
