@@ -299,13 +299,24 @@ const getPricePerUnit = useCallback((price, size) => {
 
   // ========== GENERATE VCS COLORS ==========
   const generateVCSColor = useCallback((vcs, index) => {
-    const colors = [
-      '#EF4444', '#F97316', '#F59E0B', '#EAB308', '#84CC16',
-      '#22C55E', '#10B981', '#14B8A6', '#06B6D4', '#0EA5E9',
-      '#3B82F6', '#6366F1', '#8B5CF6', '#A855F7', '#D946EF',
-      '#EC4899', '#F43F5E', '#EF4444'
+    const lightColors = [
+      '#FCE7F3', '#FDF2F8', '#FEF3C7', '#F0FDF4', '#ECFDF5',
+      '#E0F2FE', '#DBEAFE', '#E0E7FF', '#EDE9FE', '#FAE8FF',
+      '#FDF4FF', '#FEF2F2', '#FFF7ED', '#FFFBEB', '#F7FEE7',
+      '#F0F9FF', '#F1F5F9', '#F8FAFC'
     ];
-    return colors[index % colors.length];
+
+    const darkColors = [
+      '#BE185D', '#BE123C', '#A16207', '#166534', '#047857',
+      '#0E7490', '#1D4ED8', '#4338CA', '#6D28D9', '#A21CAF',
+      '#C026D3', '#DC2626', '#EA580C', '#D97706', '#65A30D',
+      '#0284C7', '#475569', '#64748B'
+    ];
+
+    return {
+      background: lightColors[index % lightColors.length],
+      text: darkColors[index % darkColors.length]
+    };
   }, []);
 
   // ========== GET TYPE USE OPTIONS ==========
