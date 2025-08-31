@@ -678,10 +678,10 @@ const handleCodeFileUpdate = async () => {
     // Add new records
     if (comparisonResults.details.missing?.length > 0) {
       comparisonResults.details.missing.forEach(record => {
-        const blockField = detectedVendor === 'BRT' ? 'BLOCK' : 'Block';
-        const lotField = detectedVendor === 'BRT' ? 'LOT' : 'Lot';
-        const qualifierField = detectedVendor === 'BRT' ? 'QUALIFIER' : 'Qual';
-        const locationField = detectedVendor === 'BRT' ? 'PROPERTY_LOCATION' : 'Location';
+        const blockField = job.vendor_type === 'BRT' ? 'BLOCK' : 'Block';
+        const lotField = job.vendor_type === 'BRT' ? 'LOT' : 'Lot';
+        const qualifierField = job.vendor_type === 'BRT' ? 'QUALIFIER' : 'Qual';
+        const locationField = job.vendor_type === 'BRT' ? 'PROPERTY_LOCATION' : 'Location';
         
         csvContent += `"${reportDate}","Property_Added","${record[blockField]}","${record[lotField]}","${record[qualifierField] || ''}","${record[locationField] || ''}","Property_Not_Existed","Property_Added","pending_review","",""\n`;
       });
