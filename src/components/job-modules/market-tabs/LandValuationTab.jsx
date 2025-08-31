@@ -323,16 +323,21 @@ const getPricePerUnit = useCallback((price, size) => {
 
   // ========== GET TYPE USE OPTIONS ==========
   const getTypeUseOptions = useCallback(() => {
-    if (!properties) return [];
+    if (!properties) return ['One Family'];
 
-    const typeUses = new Set();
+    const typeUses = new Set(['One Family']); // Always include One Family as default
+
     properties.forEach(prop => {
       if (prop.asset_type_use && prop.property_m4_class === '2') {
         // Use human-readable names when available
         const typeName = vendorType === 'Microsystems' && jobData?.parsed_code_definitions
           ? interpretCodes.getMicrosystemsValue?.(prop, jobData.parsed_code_definitions, 'asset_type_use') || prop.asset_type_use
           : prop.asset_type_use;
-        typeUses.add(typeName);
+
+        // Only add non-blank, meaningful type names
+        if (typeName && typeName.trim() !== '' && typeName !== 'null' && typeName !== 'undefined') {
+          typeUses.add(typeName);
+        }
       }
     });
 
