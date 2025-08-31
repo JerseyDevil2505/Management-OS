@@ -488,8 +488,9 @@ export class MicrosystemsUpdater {
    * CLEANED: Removed redundant surgical fix (total_properties handled by AdminJobManagement/FileUploadButton)
    * ENHANCED: Added field preservation support
    * CRITICAL: Added automatic rollback for failed batches
+   * OPTIMIZED: Now accepts optional deletion list to avoid expensive .not.in() queries
    */
-  async processFile(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, versionInfo = {}) {
+  async processFile(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, versionInfo = {}, deletionsList = null) {
     // Track successful batches for rollback
     const successfulBatches = [];
     const processingVersion = versionInfo.file_version || 1;
@@ -516,71 +517,42 @@ export class MicrosystemsUpdater {
       const records = this.parseSourceFile(sourceFileContent);
       console.log(`✅ Step 3 completed: Parsed ${records.length} records from source file`);
 
-      // NEW: Delete properties that exist in DB but are NOT in the source file (fixes recurring deletion modal)
-      console.log('📝 Step 4: Checking for properties to delete (not in source file)...');
-      console.log('⚠️ WARNING: This step can be slow with large datasets!');
-      try {
-        // Generate composite keys for all records in the source file
-        const sourceFileKeys = records.map(rawRecord =>
-          `${yearCreated}${ccddCode}-${rawRecord['Block']}-${rawRecord['Lot']}_${(rawRecord['Qual'] || '').trim() || 'NONE'}-${(rawRecord['Bldg'] || '').trim() || 'NONE'}-${(rawRecord['Location'] || '').trim() || 'NONE'}`
-        );
+      // OPTIMIZED: Delete properties using pre-computed deletion list from comparison reports
+      console.log('📝 Step 4: Processing property deletions...');
 
-        console.log(`📊 Source file contains ${sourceFileKeys.length} properties`);
+      if (deletionsList && deletionsList.length > 0) {
+        console.log(`🗑️ Using pre-computed deletion list: ${deletionsList.length} properties to delete`);
 
-        // Find properties in DB that are NOT in source file
-        console.log('🗂️ Querying database for existing properties to check for deletions...');
-        console.log(`🔍 Searching for properties NOT in ${sourceFileKeys.length} source file keys...`);
+        // Extract composite keys from deletion list
+        const keysToDelete = deletionsList.map(deletion => {
+          // Handle both object format and string format
+          return typeof deletion === 'string' ? deletion : deletion.property_composite_key;
+        }).filter(key => key); // Remove any null/undefined keys
 
-        // OPTIMIZATION: Add timeout to prevent infinite hanging
-        const deletionCheckPromise = supabase
-          .from('property_records')
-          .select('id, property_composite_key, property_location')
-          .eq('job_id', jobId)
-          .not('property_composite_key', 'in', `(${sourceFileKeys.map(k => `"${k}"`).join(',')})`);
+        if (keysToDelete.length > 0) {
+          console.log(`🔍 Deleting specific properties: ${keysToDelete.slice(0, 3).join(', ')}${keysToDelete.length > 3 ? '...' : ''}`);
 
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Deletion check timeout after 30 seconds - database may be overloaded')), 30000)
-        );
+          try {
+            // Use targeted .in() query instead of massive .not.in() query
+            const { error: deleteError, count: deletedCount } = await supabase
+              .from('property_records')
+              .delete({ count: 'exact' })
+              .eq('job_id', jobId)
+              .in('property_composite_key', keysToDelete);
 
-        let existingProperties = null;
-        let fetchError = null;
-
-        try {
-          const result = await Promise.race([deletionCheckPromise, timeoutPromise]);
-          existingProperties = result.data;
-          fetchError = result.error;
-          console.log('✅ Deletion check query completed successfully');
-        } catch (timeoutError) {
-          console.error('❌ DELETION CHECK TIMED OUT:', timeoutError.message);
-          fetchError = timeoutError;
-        }
-
-        if (fetchError) {
-          console.warn('⚠️ Could not fetch existing properties for deletion check:', fetchError);
-        } else if (existingProperties && existingProperties.length > 0) {
-          console.log(`🗑️ Found ${existingProperties.length} properties to delete:`);
-          existingProperties.slice(0, 5).forEach(prop => {
-            console.log(`   - ${prop.property_location || 'No location'} (${prop.property_composite_key})`);
-          });
-
-          // Delete properties not in source file
-          const { error: deleteError } = await supabase
-            .from('property_records')
-            .delete()
-            .eq('job_id', jobId)
-            .not('property_composite_key', 'in', `(${sourceFileKeys.map(k => `"${k}"`).join(',')})`);
-
-          if (deleteError) {
-            console.warn('⚠️ Could not delete obsolete properties:', deleteError);
-          } else {
-            console.log(`✅ Successfully deleted ${existingProperties.length} obsolete properties`);
+            if (deleteError) {
+              console.warn('⚠️ Could not delete obsolete properties:', deleteError);
+            } else {
+              console.log(`✅ Successfully deleted ${deletedCount || keysToDelete.length} obsolete properties using optimized deletion`);
+            }
+          } catch (deleteError) {
+            console.warn('⚠️ Error during optimized deletion process:', deleteError);
           }
         } else {
-          console.log('✅ No obsolete properties found');
+          console.log('✅ No valid property keys found in deletion list');
         }
-      } catch (deleteProcessError) {
-        console.warn('⚠️ Error during deletion process:', deleteProcessError);
-        // Continue with UPSERT even if deletion fails
+      } else {
+        console.log('⏭️ Step 4 skipped: No deletion list provided (using FileUploadButton comparison workflow)');
       }
 
       // DISABLED: Field preservation no longer needed since is_assigned_property won't be overwritten
@@ -624,6 +596,7 @@ export class MicrosystemsUpdater {
       };
 
       console.log('✅ INITIALIZATION COMPLETE - All steps finished successfully!');
+      console.log(`🎯 DELETION OPTIMIZATION: Used ${deletionsList ? 'targeted .in() queries' : 'legacy deletion logic'}`);
       console.log('🚀 Starting batch UPSERT processing...');
       console.log(`📊 Processing ${propertyRecords.length} property records in batches...`);
       const batchSize = 250; // Optimized for stability and error resilience

@@ -1333,6 +1333,10 @@ const handleCodeFileUpdate = async () => {
           const startTime = Date.now();
           addBatchLog('🔄 Processing file data...', 'info');
 
+          // OPTIMIZED: Extract deletion list from comparison results to avoid expensive .not.in() queries
+          const deletionsList = comparisonResults?.details?.deletions || [];
+          addBatchLog(`🎯 DELETION OPTIMIZATION: Passing ${deletionsList.length} properties for targeted deletion`, 'info');
+
           const result = await propertyService.updateCSVData(
             sourceFileContent,
             codeFileContent,
@@ -1348,7 +1352,8 @@ const handleCodeFileUpdate = async () => {
               preservedFieldsHandler: preservedFieldsHandler,
               preservedFields: [
                 'is_assigned_property'     // AdminJobManagement - from assignments
-              ]
+              ],
+              deletionsList: deletionsList  // OPTIMIZED: Pass pre-computed deletion list
             }
           );
 
@@ -1607,37 +1612,18 @@ const handleCodeFileUpdate = async () => {
       await fetchCurrentFileVersion(); // Refresh file version and updated_at from DB
 
       setBatchComplete(true);
-      
-      // Auto-close modal after 3 seconds if successful
-      if (errorCount === 0) {
-        setTimeout(() => {
-          setShowBatchModal(false);
-          setShowResultsModal(false);
-          setSourceFile(null);
-          setSourceFileContent(null);
-          setSalesDecisions(new Map());
-        }, 3000);
-      }
-        
-      // Notify parent component
+
+      // REMOVED: Auto-close modal - let user close manually to prevent timing conflicts
+      // The modal will now stay open until user manually closes it
+      addBatchLog('✅ Processing complete! Please review results and close this modal manually.', 'success');
+
+      // Notify parent component (but don't trigger immediate refresh)
       if (onFileProcessed) {
         onFileProcessed(result);
       }
-      
-      // Trigger data refresh in JobContainer
-      if (onDataRefresh) {
-        addBatchLog('🔄 Triggering data refresh in JobContainer...', 'info');
-        await onDataRefresh();
-        addBatchLog('✅ JobContainer data refreshed', 'success');
 
-        // DEBUG: Small delay then check if JobContainer shows the new version
-        setTimeout(() => {
-          addBatchLog('⏰ Checking if JobContainer updated (after 2 second delay)...', 'info');
-          // This will show in console - user should check JobContainer UI
-        }, 2000);
-      } else {
-        addBatchLog('⚠️ No onDataRefresh callback provided!', 'warning');
-      }
+      // REMOVED: Immediate data refresh - this will now happen only when user closes modal
+      // This prevents timing conflicts and 500 errors
     } catch (error) {
       console.error('❌ Processing failed:', error);
       
@@ -1939,11 +1925,25 @@ const handleCodeFileUpdate = async () => {
               {batchComplete && (
                 <button
                   onClick={() => {
+                    // Close modal immediately
                     setShowBatchModal(false);
                     setShowResultsModal(false);
                     setSourceFile(null);
                     setSourceFileContent(null);
                     setSalesDecisions(new Map());
+
+                    // FIXED: Trigger JobContainer data refresh with timeout to prevent 500 errors
+                    if (onDataRefresh) {
+                      console.log('🔄 User closed modal - triggering data refresh after 2 second timeout...');
+                      setTimeout(async () => {
+                        try {
+                          await onDataRefresh();
+                          console.log('✅ JobContainer data refreshed successfully after modal close');
+                        } catch (refreshError) {
+                          console.error('❌ Data refresh failed after modal close:', refreshError);
+                        }
+                      }, 2000);  // 2 second timeout as suggested by Supabase AI
+                    }
                   }}
                   className="text-gray-400 hover:text-gray-600 p-1"
                 >
@@ -2497,7 +2497,6 @@ const handleCodeFileUpdate = async () => {
               <button
                 onClick={viewAllReports}
                 className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 flex items-center space-x-2 transition-colors"
-                style={{color: 'white' }}
               >
                 <Eye className="w-4 h-4" />
                 <span>View All Reports</span>
@@ -2506,7 +2505,6 @@ const handleCodeFileUpdate = async () => {
               <button
                 onClick={exportComparisonReport}
                 className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 flex items-center space-x-2 transition-colors"
-                style={{ color: 'white'}}
               >
                 <Download className="w-4 h-4" />
                 <span>Export This Report</span>
@@ -2669,7 +2667,6 @@ const handleCodeFileUpdate = async () => {
                 }}
                 disabled={processing}
                 className="px-6 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 disabled:opacity-50 font-medium transition-colors"
-                style={{ color: 'white'}}
               >
                 {processing ? 'Processing...' : 'Acknowledge & Close'}
               </button>

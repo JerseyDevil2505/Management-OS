@@ -678,36 +678,19 @@ const JobContainer = ({
     }
   };
 
-  // Handle file upload completion - refresh version data
+  // Handle file upload completion - REMOVED immediate refresh to prevent 500 errors
   const handleFileProcessed = async (fileType, fileName) => {
-    console.log(`���� File processed: ${fileType} - ${fileName}`);
-    
-    console.log(`📝 File processed - will reload fresh data`);
-    
-    // Refresh file version data when new files are uploaded
-    await loadLatestFileVersions();
-    
-    // NOTIFY child components that new data is available (ONLY after successful file upload)
-    setDataUpdateNotification({
-      hasNewData: true,
-      timestamp: Date.now(),
-      source: 'file_upload'
-    });
-    console.log('📢 Notifying components: New data available from file upload');
-    
-    // 🔧 ENHANCED: Invalidate ProductionTracker analytics when files change
-    if (onUpdateWorkflowStats && selectedJob?.id) {
-      onUpdateWorkflowStats({
-        totalRecords: 0,
-        validInspections: 0,
-        jobEntryRate: 0,
-        jobRefusalRate: 0,
-        commercialCompletePercent: 0,
-        pricingCompletePercent: 0,
-        isProcessed: false,
-        lastProcessed: null
-      }, true);
-    }
+    console.log(`🔄 File processed: ${fileType} - ${fileName}`);
+
+    // REMOVED: Immediate refresh - now handled by FileUploadButton after user closes modal
+    console.log(`⏸️ Deferring data refresh until user closes modal to prevent timing conflicts`);
+
+    // REMOVED: Immediate loadLatestFileVersions() call - causes 500 errors
+    // REMOVED: Immediate setDataUpdateNotification - causes timing conflicts
+    // REMOVED: Immediate onUpdateWorkflowStats - causes refresh conflicts
+
+    // FileUploadButton will now handle refresh timing when user manually closes modal
+    console.log('✅ File processing acknowledged - refresh will happen after modal close');
   };
 
   // 🔧 ENHANCED: Handle ProductionTracker analytics completion with App.js notification
@@ -760,6 +743,7 @@ const JobContainer = ({
       latestCodeVersion,
       propertyRecordsCount,
       onFileProcessed: handleFileProcessed,
+      onDataRefresh: loadLatestFileVersions,  // FIXED: Pass data refresh function for modal close timing
       dataUpdateNotification,  // Pass notification to all components
       clearDataNotification: () => setDataUpdateNotification({  // Way to clear it
         hasNewData: false,
