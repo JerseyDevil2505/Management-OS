@@ -85,6 +85,11 @@ const LandValuationTab = ({
   const [bracketAnalysis, setBracketAnalysis] = useState({});
   const [method2Summary, setMethod2Summary] = useState({});
 
+  // Enhanced Method 2 UI State
+  const [typeUseFilter, setTypeUseFilter] = useState('all');
+  const [expandedVCS, setExpandedVCS] = useState(new Set());
+  const [vcsColors, setVcsColors] = useState({});
+
   // ========== ALLOCATION STUDY STATE ==========
   const [vacantTestSales, setVacantTestSales] = useState([]);
   const [improvedTestSales, setImprovedTestSales] = useState([]);
