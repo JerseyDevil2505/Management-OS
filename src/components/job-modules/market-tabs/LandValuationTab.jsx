@@ -594,7 +594,7 @@ const getPricePerUnit = useCallback((price, size) => {
       }
 
       const acres = parseFloat(calculateAcreage(prop));
-      const sfla = prop.asset_sqft_living_adj || prop.asset_sqft_living || 0;
+      const sfla = prop.asset_sfla || 0;
 
       vcsSales[vcs].push({
         acres,
