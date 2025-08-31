@@ -12,8 +12,7 @@ const FileUploadButton = ({
 }) => {
   const [sourceFile, setSourceFile] = useState(null);
   const [codeFile, setCodeFile] = useState(null);
-  // CHANGED: Use passed vendor type instead of detecting
-  const [detectedVendor, setDetectedVendor] = useState(vendorType || null);
+  // REMOVED: No need for detectedVendor state - use job.vendor_type directly
   const [sourceFileContent, setSourceFileContent] = useState(null);
   const [codeFileContent, setCodeFileContent] = useState(null);
   const [comparing, setComparing] = useState(false);
