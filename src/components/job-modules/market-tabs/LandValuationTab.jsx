@@ -2491,7 +2491,7 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
 
         <div style={{ padding: '10px 15px 5px 15px', borderBottom: '1px solid #E5E7EB', backgroundColor: '#F9FAFB', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ fontSize: '12px', color: '#6B7280' }}>
-            {Object.keys(bracketAnalysis).length} VCS areas • Filtered by: {method2TypeFilter}
+            {Object.keys(bracketAnalysis).length} VCS areas • Filtered by: {method2TypeFilter} ({getTypeUseOptions().find(opt => opt.code === method2TypeFilter)?.description || 'Unknown'})
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
             <button
