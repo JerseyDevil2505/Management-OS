@@ -640,18 +640,6 @@ const getPricePerUnit = useCallback((price, size) => {
         const timeNormData = timeNormLookup.get(prop.property_composite_key);
         if (!timeNormData) return;
 
-        // Only residential for bracket analysis
-        if (prop.property_m4_class !== '2' && prop.property_m4_class !== '3A') return;
-
-        // Must have valid sales data
-        if (!prop.sales_price || prop.sales_price <= 0) return;
-
-        // Valid NU codes for actual sales (not transfer codes)
-        const nu = prop.sales_nu || '';
-        const validNu = !nu || nu === '' || nu === ' ' || nu === '00' || nu === '07' ||
-                        nu === '7' || nu.charCodeAt(0) === 32;
-        if (!validNu) return;
-
         // Apply type/use filter with umbrella group support
         const rawTypeUse = prop.asset_type_use?.toString().trim().toUpperCase();
 
