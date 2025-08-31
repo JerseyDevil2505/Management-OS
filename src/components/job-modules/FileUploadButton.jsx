@@ -471,10 +471,10 @@ const handleCodeFileUpdate = async () => {
       // Add removed properties
       if (comparisonResults.details.missing?.length > 0) {
         comparisonResults.details.missing.forEach(record => {
-          const blockField = detectedVendor === 'BRT' ? 'BLOCK' : 'Block';
-          const lotField = detectedVendor === 'BRT' ? 'LOT' : 'Lot';
-          const qualifierField = detectedVendor === 'BRT' ? 'QUALIFIER' : 'Qual';
-          const locationField = detectedVendor === 'BRT' ? 'PROPERTY_LOCATION' : 'Location';
+          const blockField = job.vendor_type === 'BRT' ? 'BLOCK' : 'Block';
+          const lotField = job.vendor_type === 'BRT' ? 'LOT' : 'Lot';
+          const qualifierField = job.vendor_type === 'BRT' ? 'QUALIFIER' : 'Qual';
+          const locationField = job.vendor_type === 'BRT' ? 'PROPERTY_LOCATION' : 'Location';
           
           reportChanges.push({
             Report_Date: reportDate,
@@ -1624,7 +1624,7 @@ const handleCodeFileUpdate = async () => {
         addBatchLog('⚠️ UPDATE FAILED - All changes have been rolled back', 'error', {
           message: 'The update encountered errors and all changes were automatically reversed'
         });
-        addNotification('���� Update failed - all changes rolled back. Check logs for details.', 'error');
+        addNotification('����� Update failed - all changes rolled back. Check logs for details.', 'error');
       }
 
       // Update local file version and date from DB
