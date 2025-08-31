@@ -1766,13 +1766,13 @@ const handleCodeFileUpdate = async () => {
                     <div key={report.id || idx} className="border border-gray-700 rounded-lg p-4 hover:bg-gray-800 bg-gray-850">
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
-                          <div className="font-semibold text-gray-900">
+                          <div className="font-semibold text-white">
                             {formatDate(report.report_date)}
                           </div>
-                          <div className="text-sm text-gray-600 mt-1">
+                          <div className="text-sm text-gray-300 mt-1">
                             File: {reportData.source_file_name || 'Unknown'}
                           </div>
-                          <div className="text-sm text-gray-600">
+                          <div className="text-sm text-gray-300">
                             Vendor: {reportData.vendor_detected || 'Unknown'}
                           </div>
                           <div className="flex gap-4 mt-2 text-xs">
