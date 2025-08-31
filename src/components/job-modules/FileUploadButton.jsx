@@ -1623,7 +1623,7 @@ const handleCodeFileUpdate = async () => {
         addBatchLog('⚠️ UPDATE FAILED - All changes have been rolled back', 'error', {
           message: 'The update encountered errors and all changes were automatically reversed'
         });
-        addNotification('���� Update failed - all changes rolled back. Check logs for details.', 'error');
+        addNotification('������ Update failed - all changes rolled back. Check logs for details.', 'error');
       }
 
       // Update local file version and date from DB
@@ -2363,13 +2363,13 @@ const handleCodeFileUpdate = async () => {
                 </div>
                 <div className="space-y-2" style={{ maxHeight: '300px', overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '1rem' }}>
                   {details.missing.slice(0, 10).map((record, idx) => {
-                    const blockField = detectedVendor === 'BRT' ? 'BLOCK' : 'Block';
-                    const lotField = detectedVendor === 'BRT' ? 'LOT' : 'Lot';
-                    const qualifierField = detectedVendor === 'BRT' ? 'QUALIFIER' : 'Qual';
-                    const locationField = detectedVendor === 'BRT' ? 'PROPERTY_LOCATION' : 'Location';
-                    const classField = detectedVendor === 'BRT' ? 'PROPERTY_CLASS' : 'Class';
-                    const priceField = detectedVendor === 'BRT' ? 'CURRENTSALE_PRICE' : 'Sale Price';
-                    const dateField = detectedVendor === 'BRT' ? 'CURRENTSALE_DATE' : 'Sale Date';
+                    const blockField = job.vendor_type === 'BRT' ? 'BLOCK' : 'Block';
+                    const lotField = job.vendor_type === 'BRT' ? 'LOT' : 'Lot';
+                    const qualifierField = job.vendor_type === 'BRT' ? 'QUALIFIER' : 'Qual';
+                    const locationField = job.vendor_type === 'BRT' ? 'PROPERTY_LOCATION' : 'Location';
+                    const classField = job.vendor_type === 'BRT' ? 'PROPERTY_CLASS' : 'Class';
+                    const priceField = job.vendor_type === 'BRT' ? 'CURRENTSALE_PRICE' : 'Sale Price';
+                    const dateField = job.vendor_type === 'BRT' ? 'CURRENTSALE_DATE' : 'Sale Date';
                     
                     const salePrice = parseFloat(String(record[priceField] || 0).replace(/[,$]/g, '')) || 0;
                     
