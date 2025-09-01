@@ -3649,7 +3649,329 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             )}
           </div>
         </div>
-        
+
+        {/* Special Region Cascades */}
+        {Object.keys(cascadeConfig.special || {}).map(region => (
+          <div key={region} style={{ marginBottom: '15px', backgroundColor: '#EFF6FF', padding: '12px', borderRadius: '6px', border: '1px solid #BFDBFE' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+              <h4 style={{ fontSize: '14px', fontWeight: '600', color: '#1E40AF' }}>{region} Properties</h4>
+              <button
+                onClick={() => {
+                  setCascadeConfig(prev => {
+                    const newSpecial = { ...prev.special };
+                    delete newSpecial[region];
+                    return { ...prev, special: newSpecial };
+                  });
+                }}
+                style={{
+                  backgroundColor: '#EF4444',
+                  color: 'white',
+                  padding: '4px 8px',
+                  borderRadius: '4px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: '11px'
+                }}
+              >
+                Remove
+              </button>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns:
+              valuationMode === 'ff' ? 'repeat(2, 1fr)' :
+              valuationMode === 'sf' ? 'repeat(2, 1fr)' :
+              'repeat(4, 1fr)', gap: '15px' }}>
+
+              {valuationMode === 'ff' ? (
+                // Front Foot for Special Region
+                <>
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#1E40AF', display: 'block', marginBottom: '4px' }}>
+                      Standard (0-{cascadeConfig.special[region]?.standard?.max || 100} ft)
+                    </label>
+                    <div style={{ display: 'flex', gap: '5px' }}>
+                      <input
+                        type="number"
+                        value={cascadeConfig.special[region]?.standard?.max || ''}
+                        onChange={(e) => updateSpecialRegionCascade(region, 'standard', 'max', e.target.value)}
+                        placeholder="Max"
+                        style={{ width: '80px', padding: '6px', border: '1px solid #BFDBFE', borderRadius: '4px' }}
+                      />
+                      <input
+                        type="number"
+                        value={cascadeConfig.special[region]?.standard?.rate || ''}
+                        onChange={(e) => updateSpecialRegionCascade(region, 'standard', 'rate', e.target.value)}
+                        placeholder="Rate"
+                        style={{ flex: 1, padding: '6px', border: '1px solid #BFDBFE', borderRadius: '4px' }}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#1E40AF', display: 'block', marginBottom: '4px' }}>
+                      Excess ({cascadeConfig.special[region]?.standard?.max || 100}+ ft)
+                    </label>
+                    <input
+                      type="number"
+                      value={cascadeConfig.special[region]?.excess?.rate || ''}
+                      onChange={(e) => updateSpecialRegionCascade(region, 'excess', 'rate', e.target.value)}
+                      placeholder="Rate"
+                      style={{ width: '100%', padding: '6px', border: '1px solid #BFDBFE', borderRadius: '4px' }}
+                    />
+                  </div>
+                </>
+              ) : valuationMode === 'sf' ? (
+                // Square Foot for Special Region
+                <>
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#1E40AF', display: 'block', marginBottom: '4px' }}>
+                      Primary (0-{cascadeConfig.special[region]?.prime?.max || 5000} sq ft)
+                    </label>
+                    <div style={{ display: 'flex', gap: '5px' }}>
+                      <input
+                        type="number"
+                        value={cascadeConfig.special[region]?.prime?.max || ''}
+                        onChange={(e) => updateSpecialRegionCascade(region, 'prime', 'max', e.target.value)}
+                        placeholder="Max"
+                        style={{ width: '80px', padding: '6px', border: '1px solid #BFDBFE', borderRadius: '4px' }}
+                      />
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={cascadeConfig.special[region]?.prime?.rate || ''}
+                        onChange={(e) => updateSpecialRegionCascade(region, 'prime', 'rate', e.target.value)}
+                        placeholder="Rate"
+                        style={{ flex: 1, padding: '6px', border: '1px solid #BFDBFE', borderRadius: '4px' }}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#1E40AF', display: 'block', marginBottom: '4px' }}>
+                      Secondary ({cascadeConfig.special[region]?.prime?.max || 5000}+ sq ft)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={cascadeConfig.special[region]?.secondary?.rate || ''}
+                      onChange={(e) => updateSpecialRegionCascade(region, 'secondary', 'rate', e.target.value)}
+                      placeholder="Rate"
+                      style={{ width: '100%', padding: '6px', border: '1px solid #BFDBFE', borderRadius: '4px' }}
+                    />
+                  </div>
+                </>
+              ) : (
+                // Acre for Special Region
+                <>
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#1E40AF', display: 'block', marginBottom: '4px' }}>
+                      Prime (0-{cascadeConfig.special[region]?.prime?.max || 1} acres)
+                    </label>
+                    <div style={{ display: 'flex', gap: '5px' }}>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={cascadeConfig.special[region]?.prime?.max || ''}
+                        onChange={(e) => updateSpecialRegionCascade(region, 'prime', 'max', e.target.value)}
+                        placeholder="Max"
+                        style={{ width: '60px', padding: '6px', border: '1px solid #BFDBFE', borderRadius: '4px' }}
+                      />
+                      <input
+                        type="number"
+                        value={cascadeConfig.special[region]?.prime?.rate || ''}
+                        onChange={(e) => updateSpecialRegionCascade(region, 'prime', 'rate', e.target.value)}
+                        placeholder="Rate"
+                        style={{ flex: 1, padding: '6px', border: '1px solid #BFDBFE', borderRadius: '4px' }}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#1E40AF', display: 'block', marginBottom: '4px' }}>
+                      Secondary ({cascadeConfig.special[region]?.prime?.max || 1}-{cascadeConfig.special[region]?.secondary?.max || 5} acres)
+                    </label>
+                    <div style={{ display: 'flex', gap: '5px' }}>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={cascadeConfig.special[region]?.secondary?.max || ''}
+                        onChange={(e) => updateSpecialRegionCascade(region, 'secondary', 'max', e.target.value)}
+                        placeholder="Max"
+                        style={{ width: '60px', padding: '6px', border: '1px solid #BFDBFE', borderRadius: '4px' }}
+                      />
+                      <input
+                        type="number"
+                        value={cascadeConfig.special[region]?.secondary?.rate || ''}
+                        onChange={(e) => updateSpecialRegionCascade(region, 'secondary', 'rate', e.target.value)}
+                        placeholder="Rate"
+                        style={{ flex: 1, padding: '6px', border: '1px solid #BFDBFE', borderRadius: '4px' }}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#1E40AF', display: 'block', marginBottom: '4px' }}>
+                      Excess ({cascadeConfig.special[region]?.secondary?.max || 5}-{cascadeConfig.special[region]?.excess?.max || 10} acres)
+                    </label>
+                    <div style={{ display: 'flex', gap: '5px' }}>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={cascadeConfig.special[region]?.excess?.max || ''}
+                        onChange={(e) => updateSpecialRegionCascade(region, 'excess', 'max', e.target.value)}
+                        placeholder="Max"
+                        style={{ width: '60px', padding: '6px', border: '1px solid #BFDBFE', borderRadius: '4px' }}
+                      />
+                      <input
+                        type="number"
+                        value={cascadeConfig.special[region]?.excess?.rate || ''}
+                        onChange={(e) => updateSpecialRegionCascade(region, 'excess', 'rate', e.target.value)}
+                        placeholder="Rate"
+                        style={{ flex: 1, padding: '6px', border: '1px solid #BFDBFE', borderRadius: '4px' }}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#1E40AF', display: 'block', marginBottom: '4px' }}>
+                      Residual ({cascadeConfig.special[region]?.excess?.max || 10}+ acres)
+                    </label>
+                    <input
+                      type="number"
+                      value={cascadeConfig.special[region]?.residual?.rate || ''}
+                      onChange={(e) => updateSpecialRegionCascade(region, 'residual', 'rate', e.target.value)}
+                      placeholder="Rate"
+                      style={{ width: '100%', padding: '6px', border: '1px solid #BFDBFE', borderRadius: '4px' }}
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        ))}
+
+        {/* Add Special Region Button */}
+        {getUniqueRegions().filter(r => r !== 'Normal' && !cascadeConfig.special?.[r]).length > 0 && (
+          <div style={{ marginBottom: '15px' }}>
+            <button
+              onClick={() => {
+                const availableRegions = getUniqueRegions().filter(r => r !== 'Normal' && !cascadeConfig.special?.[r]);
+                if (availableRegions.length === 1) {
+                  // Auto-add if only one region available
+                  const region = availableRegions[0];
+                  setCascadeConfig(prev => ({
+                    ...prev,
+                    special: {
+                      ...prev.special,
+                      [region]: {}
+                    }
+                  }));
+                } else {
+                  // Show selection if multiple regions
+                  const region = prompt(`Select special region to add:\\n${availableRegions.map((r, i) => `${i + 1}. ${r}`).join('\\n')}`);
+                  if (region && availableRegions.includes(region)) {
+                    setCascadeConfig(prev => ({
+                      ...prev,
+                      special: {
+                        ...prev.special,
+                        [region]: {}
+                      }
+                    }));
+                  }
+                }
+              }}
+              style={{
+                backgroundColor: '#3B82F6',
+                color: 'white',
+                padding: '8px 16px',
+                borderRadius: '4px',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}
+            >
+              <Plus size={16} /> Add Special Region Configuration
+            </button>
+          </div>
+        )}
+
+        {/* VCS-Specific Configurations */}
+        {Object.keys(cascadeConfig.vcsSpecific || {}).map(vcsKey => (
+          <div key={vcsKey} style={{ marginBottom: '15px', backgroundColor: '#F0FDF4', padding: '12px', borderRadius: '6px', border: '1px solid #BBF7D0' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+              <h4 style={{ fontSize: '14px', fontWeight: '600', color: '#059669' }}>
+                VCS {cascadeConfig.vcsSpecific[vcsKey].vcsList?.join(', ')} - {cascadeConfig.vcsSpecific[vcsKey].method?.toUpperCase()} Method
+              </h4>
+              <button
+                onClick={() => {
+                  setCascadeConfig(prev => {
+                    const newVcsSpecific = { ...prev.vcsSpecific };
+                    delete newVcsSpecific[vcsKey];
+                    return { ...prev, vcsSpecific: newVcsSpecific };
+                  });
+                }}
+                style={{
+                  backgroundColor: '#EF4444',
+                  color: 'white',
+                  padding: '4px 8px',
+                  borderRadius: '4px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: '11px'
+                }}
+              >
+                Remove
+              </button>
+            </div>
+            <div style={{ fontSize: '11px', color: '#059669', marginBottom: '8px' }}>
+              {cascadeConfig.vcsSpecific[vcsKey].description}
+            </div>
+            {/* VCS-specific cascade configuration would go here - similar structure to above */}
+          </div>
+        ))}
+
+        {/* Add VCS-Specific Configuration Button */}
+        <div style={{ marginBottom: '15px' }}>
+          <button
+            onClick={() => {
+              // This will open a modal to select VCS and method
+              const vcsInput = prompt('Enter VCS codes (comma-separated for multiple):');
+              if (!vcsInput) return;
+
+              const vcsList = vcsInput.split(',').map(v => v.trim()).filter(v => v);
+              const method = prompt('Select method for these VCS:\\n1. acre\\n2. sf\\n3. ff');
+
+              const methodMap = { '1': 'acre', '2': 'sf', '3': 'ff' };
+              const selectedMethod = methodMap[method] || 'acre';
+
+              const description = prompt('Enter description (e.g., "Rural areas", "Subdivision lots"):') || 'Custom configuration';
+
+              const vcsKey = `vcs_${Date.now()}`;
+              setCascadeConfig(prev => ({
+                ...prev,
+                vcsSpecific: {
+                  ...prev.vcsSpecific,
+                  [vcsKey]: {
+                    vcsList,
+                    method: selectedMethod,
+                    description,
+                    rates: {}
+                  }
+                }
+              }));
+            }}
+            style={{
+              backgroundColor: '#10B981',
+              color: 'white',
+              padding: '8px 16px',
+              borderRadius: '4px',
+              border: 'none',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px'
+            }}
+          >
+            <Plus size={16} /> Add VCS-Specific Configuration
+          </button>
+        </div>
+
         {/* Special Categories */}
         <div style={{ marginBottom: '15px' }}>
           <h4 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '10px' }}>Special Category Land Rates</h4>
