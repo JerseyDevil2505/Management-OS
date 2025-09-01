@@ -2873,6 +2873,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const landlocked = getCategoryAverage(s => saleCategories[s.id] === 'landlocked', 'constrained');
     const conservation = getCategoryAverage(s => saleCategories[s.id] === 'conservation', 'constrained');
 
+    console.log('🏗️ Building Lot Analysis Result:', {
+      avg: buildingLot.avg,
+      count: buildingLot.count,
+      method: buildingLot.method,
+      hasPairedAnalysis: !!buildingLot.pairedAnalysis
+    });
+
     return { rawLand, buildingLot, wetlands, landlocked, conservation };
   }, [vacantSales, includedSales, saleCategories, valuationMode]);
 
