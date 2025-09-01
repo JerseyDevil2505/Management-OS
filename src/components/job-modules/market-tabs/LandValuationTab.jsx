@@ -1929,16 +1929,16 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           actual_allocations: actualAllocations,
           target_allocation: targetAllocation,
           current_overall_allocation: currentOverallAllocation,
-          stats: calculateAllocationStats()
-        },
-        vcs_sheet_data: {
-          property_counts: vcsPropertyCounts,
-          zoning_data: vcsZoningData,
-          manual_site_values: vcsManualSiteValues,
-          recommended_sites: vcsRecommendedSites,
-          descriptions: vcsDescriptions,
-          types: vcsTypes,
-          sheet_data: vcsSheetData
+          stats: calculateAllocationStats(),
+          vcs_sheet_data: {
+            property_counts: vcsPropertyCounts,
+            zoning_data: vcsZoningData,
+            manual_site_values: vcsManualSiteValues,
+            recommended_sites: vcsRecommendedSites,
+            descriptions: vcsDescriptions,
+            types: vcsTypes,
+            sheet_data: vcsSheetData
+          }
         },
         economic_obsolescence: {
           factors: ecoObsFactors,
