@@ -454,8 +454,8 @@ const getPricePerUnit = useCallback((price, size) => {
       saveAnalysis();
     }, 30000);
     return () => clearInterval(interval);
-  }, [cascadeConfig, landNotes, saleCategories, specialRegions, actualAllocations, 
-      vcsManualSiteValues, actualAdjustments, targetAllocation, locationCodes, vcsTypes]);
+  }, [cascadeConfig, landNotes, saleCategories, specialRegions, actualAllocations,
+      vcsManualSiteValues, actualAdjustments, targetAllocation, locationCodes, vcsTypes, method2ExcludedSales]);
   // ========== LAND RATES FUNCTIONS WITH ENHANCED FILTERS ==========
   const filterVacantSales = useCallback(() => {
     if (!properties) return;
