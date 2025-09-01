@@ -1,10 +1,10 @@
 // LandValuationTab.jsx - SECTION 1: Imports and State Setup
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { 
-  Check, X, Plus, Search, TrendingUp, AlertCircle, 
-  Calculator, Download, Trash2, RefreshCw, Filter, 
-  Save, FileDown, ChevronDown, ChevronUp, MapPin, 
-  Home, DollarSign 
+import {
+  X, Plus, Search, TrendingUp,
+  Calculator, Download, Trash2,
+  Save, FileDown, MapPin,
+  Home
 } from 'lucide-react';
 import { supabase, interpretCodes } from '../../../lib/supabaseClient';
 
@@ -4872,7 +4872,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'yearBuilt' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Year Built {modalSortField === 'yearBuilt' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
+                      Year Built {modalSortField === 'yearBuilt' ? (modalSortDirection === 'asc' ? '↑' : '��') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('typeUse')}
