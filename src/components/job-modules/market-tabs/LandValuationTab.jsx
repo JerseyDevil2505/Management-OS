@@ -2053,13 +2053,18 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         totalSales: analysisData.vacant_sales_analysis.sales.length
       });
 
-      // Check if record exists
-      const { data: existing } = await supabase
+      // Check if record exists - don't use .single() to avoid errors
+      const { data: existing, error: checkError } = await supabase
         .from('market_land_valuation')
         .select('id')
         .eq('job_id', jobData.id)
-        .single();
-      
+        .maybeSingle();
+
+      // If there was an error checking, log it but try to proceed with upsert
+      if (checkError && checkError.code !== 'PGRST116') {
+        console.warn('⚠️ Error checking for existing record:', checkError);
+      }
+
       if (existing) {
         console.log('📝 Updating existing record...');
         const { error } = await supabase
@@ -2069,9 +2074,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         if (error) throw error;
       } else {
         console.log('➕ Creating new record...');
+        // Use upsert to handle race conditions
         const { error } = await supabase
           .from('market_land_valuation')
-          .insert(analysisData);
+          .upsert(analysisData, {
+            onConflict: 'job_id',
+            ignoreDuplicates: false
+          });
         if (error) throw error;
       }
 
