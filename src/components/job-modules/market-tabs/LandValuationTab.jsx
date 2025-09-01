@@ -107,10 +107,6 @@ const LandValuationTab = ({
   // ========== ALLOCATION STUDY STATE ==========
   const [vacantTestSales, setVacantTestSales] = useState([]);
   const [improvedTestSales, setImprovedTestSales] = useState([]);
-  const [categoryFilter, setCategoryFilter] = useState('all');
-  const [regionFilter, setRegionFilter] = useState('all');
-  const [allocationVcsFilter, setAllocationVcsFilter] = useState('all');
-  const [yearFilter, setYearFilter] = useState('all');
   const [actualAllocations, setActualAllocations] = useState({});
   const [vcsSiteValues, setVcsSiteValues] = useState({});
   const [targetAllocation, setTargetAllocation] = useState(null);
@@ -2089,7 +2085,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         onAnalysisUpdate(analysisData);
       }
     } catch (error) {
-      console.error('��� Save failed:', error);
+      console.error('����� Save failed:', error);
       console.error('Error details:', {
         message: error.message,
         code: error.code,
