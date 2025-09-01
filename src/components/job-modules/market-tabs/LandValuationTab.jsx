@@ -5031,8 +5031,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Act Site</th>
                   {valuationMode === 'ff' ? (
                     <>
-                      <th style={{ padding: '8px' }}>Std FF</th>
-                      <th style={{ padding: '8px' }}>Exc FF</th>
+                      <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Std FF</th>
+                      <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Exc FF</th>
                     </>
                   ) : (
                     <>
