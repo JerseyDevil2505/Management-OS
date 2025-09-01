@@ -2268,9 +2268,22 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       csv += 'Prime,Secondary,Excess,Residual,';
     }
 
+    // Dynamic headers based on configuration
+    let cascadeHeaders = '';
+    if (valuationMode === 'ff') {
+      cascadeHeaders = 'Std FF,Exc FF,';
+    } else {
+      cascadeHeaders = 'Prime,Sec,Exc,';
+      if (shouldShowResidualColumn) {
+        cascadeHeaders += 'Res,';
+      }
+    }
+
     // Add special category columns to match UI
-    csv += 'Wetlands,Landlocked,Conservation,';
-    csv += 'Avg NT,Avg $,CME,Zoning,Key Pages,Map Pages\n';
+    csv += cascadeHeaders + 'Wet,LLocked,Consv,Avg Price (t),Avg Price,CME,Zoning';
+    if (shouldShowKeyColumn) csv += ',Key';
+    if (shouldShowMapColumn) csv += ',Map';
+    csv += '\n';
     
     Object.keys(vcsSheetData).sort().forEach(vcs => {
       const data = vcsSheetData[vcs];
