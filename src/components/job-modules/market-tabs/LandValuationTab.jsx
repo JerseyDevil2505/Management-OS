@@ -1974,7 +1974,12 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         onAnalysisUpdate(analysisData);
       }
     } catch (error) {
-      console.error('Error saving:', error);
+      console.error('❌ Save failed:', error);
+      console.error('Error details:', {
+        message: error.message,
+        code: error.code,
+        details: error.details
+      });
       alert('Failed to save analysis. Please try again.');
     } finally {
       setIsSaving(false);
