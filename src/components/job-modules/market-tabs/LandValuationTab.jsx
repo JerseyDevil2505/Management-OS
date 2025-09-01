@@ -528,8 +528,13 @@ const getPricePerUnit = useCallback((price, size) => {
     }
   }, [activeSubTab, properties]);
 
-  // Auto-save every 30 seconds
+  // Auto-save every 30 seconds - but only after initial load is complete
   useEffect(() => {
+    if (!isInitialLoadComplete) {
+      console.log('⏸️ Auto-save waiting for initial load to complete');
+      return;
+    }
+
     console.log('🔄 Auto-save effect triggered, setting up interval');
     const interval = setInterval(() => {
       console.log('⏰ Auto-save interval triggered');
@@ -539,7 +544,7 @@ const getPricePerUnit = useCallback((price, size) => {
       console.log('🛑 Clearing auto-save interval');
       clearInterval(interval);
     }
-  }, [cascadeConfig, landNotes, saleCategories, specialRegions, includedSales, actualAllocations,
+  }, [isInitialLoadComplete, cascadeConfig, landNotes, saleCategories, specialRegions, includedSales, actualAllocations,
       vcsManualSiteValues, actualAdjustments, targetAllocation, locationCodes, vcsTypes, method2ExcludedSales, vacantSales]);
   // ========== LAND RATES FUNCTIONS WITH ENHANCED FILTERS ==========
   const filterVacantSales = useCallback(() => {
