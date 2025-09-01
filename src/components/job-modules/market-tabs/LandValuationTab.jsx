@@ -571,7 +571,7 @@ const getPricePerUnit = useCallback((price, size) => {
     });
 
     // If we already have restored sales, preserve them and only add new ones
-    if (vacantSales.length > 0 && window._savedSalesMap) {
+    if (false) { // Disable complex caching logic
       console.log('���� Preserving existing restored sales, checking for new ones only');
 
       // Find any new sales that match criteria but aren't already in vacantSales
@@ -781,7 +781,7 @@ const getPricePerUnit = useCallback((price, size) => {
       const enriched = enrichProperty(prop);
       finalSales.push(enriched);
       if (enriched.autoCategory) {
-        console.log(`🏗️ Auto-categorizing ${prop.property_block}/${prop.property_lot} as ${enriched.autoCategory}`);
+        console.log(`��️ Auto-categorizing ${prop.property_block}/${prop.property_lot} as ${enriched.autoCategory}`);
         setSaleCategories(prev => ({...prev, [prop.id]: enriched.autoCategory}));
       }
     });
