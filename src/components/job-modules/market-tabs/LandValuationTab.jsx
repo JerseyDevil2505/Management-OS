@@ -726,7 +726,7 @@ const getPricePerUnit = useCallback((price, size) => {
         }
       });
 
-      console.log('🔄 Checkbox state management:', {
+      console.log('��� Checkbox state management:', {
         isInitialLoadComplete,
         previousCount: prev.size,
         currentSalesCount: finalSales.length,
@@ -2376,7 +2376,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const cmeBracket = data.avgPrice ? getCMEBracket(data.avgPrice) : null;
       const cmeLabel = cmeBracket ? cmeBracket.label : '';
 
-      csv += `${data.avgNormTime || ''},${data.avgPrice || ''},"${cmeLabel}","${cleanZoning}","${data.keyPages || ''}","${data.mapPages || ''}"\n`;
+      csv += `${data.avgNormTime || ''},${data.avgPrice || ''},"${cmeLabel}","${cleanZoning}"`;
+      if (shouldShowKeyColumn) csv += `,"${data.keyPages || ''}"`;
+      if (shouldShowMapColumn) csv += `,"${data.mapPages || ''}"`;
+      csv += '\n';
     });
     
     // Special Category Rates
