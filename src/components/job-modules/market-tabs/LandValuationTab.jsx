@@ -5042,15 +5042,15 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Res</th>
                     </>
                   )}
-                  <th style={{ padding: '8px' }}>Wetlands</th>
-                  <th style={{ padding: '8px' }}>Landlocked</th>
-                  <th style={{ padding: '8px' }}>Conservation</th>
-                  <th style={{ padding: '8px' }}>Avg NT</th>
-                  <th style={{ padding: '8px' }}>Avg $</th>
-                  <th style={{ padding: '8px' }}>CME</th>
-                  <th style={{ padding: '8px' }}>Zoning</th>
-                  <th style={{ padding: '8px' }}>Key</th>
-                  <th style={{ padding: '8px' }}>Map</th>
+                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Wetlands</th>
+                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Landlocked</th>
+                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Conservation</th>
+                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Avg NT</th>
+                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Avg $</th>
+                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>CME</th>
+                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Zoning</th>
+                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Key</th>
+                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Map</th>
                 </tr>
               </thead>
               <tbody>
