@@ -277,6 +277,9 @@ useEffect(() => {
 
   setLastSaved(marketLandData.updated_at ? new Date(marketLandData.updated_at) : null);
   setIsLoading(false);
+  setIsInitialLoadComplete(true);
+
+  console.log('✅ Initial load complete');
 }, [marketLandData]);
 
   // ========== CHECK FRONT FOOT AVAILABILITY ==========
