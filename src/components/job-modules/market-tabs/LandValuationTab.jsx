@@ -2732,20 +2732,35 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               // Helper function to calculate average for a category
               const getCategoryAverage = (filterFn) => {
                 const filtered = checkedSales.filter(filterFn);
-                if (filtered.length === 0) return { avg: 0, count: 0 };
+                if (filtered.length === 0) return { avg: 0, count: 0, avgLotSize: 0 };
+
+                // Calculate average lot size
+                const totalAcres = filtered.reduce((sum, s) => sum + s.totalAcres, 0);
+                const avgLotSizeAcres = totalAcres / filtered.length;
+
+                let avgLotSize;
+                if (valuationMode === 'acre') {
+                  avgLotSize = avgLotSizeAcres.toFixed(2) + ' acres';
+                } else if (valuationMode === 'sf') {
+                  avgLotSize = Math.round(avgLotSizeAcres * 43560).toLocaleString() + ' sq ft';
+                } else if (valuationMode === 'ff') {
+                  avgLotSize = 'N/A ff'; // Front foot needs frontage data
+                }
 
                 if (valuationMode === 'sf') {
                   const totalPrice = filtered.reduce((sum, s) => sum + s.sales_price, 0);
                   const totalSF = filtered.reduce((sum, s) => sum + (s.totalAcres * 43560), 0);
                   return {
                     avg: totalSF > 0 ? (totalPrice / totalSF).toFixed(2) : 0,
-                    count: filtered.length
+                    count: filtered.length,
+                    avgLotSize
                   };
                 } else {
                   const avgRate = filtered.reduce((sum, s) => sum + s.pricePerAcre, 0) / filtered.length;
                   return {
                     avg: Math.round(avgRate),
-                    count: filtered.length
+                    count: filtered.length,
+                    avgLotSize
                   };
                 }
               };
