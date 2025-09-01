@@ -5105,6 +5105,28 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             </table>
           </div>
         </div>
+
+        {/* Rate Source Legend */}
+        <div style={{ marginTop: '10px', padding: '12px', backgroundColor: '#F9FAFB', borderRadius: '6px', fontSize: '11px' }}>
+          <div style={{ fontWeight: 'bold', marginBottom: '6px', color: '#374151' }}>Cascade Rate Sources:</div>
+          <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <div style={{ width: '12px', height: '12px', backgroundColor: 'white', border: '1px solid #D1D5DB' }}></div>
+              <span>Normal rates (default for all residential VCS)</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <div style={{ width: '12px', height: '12px', backgroundColor: '#FEF3C7', border: '1px solid #D1D5DB' }}></div>
+              <span>Special region or VCS-specific rates (*)</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <div style={{ width: '12px', height: '12px', backgroundColor: '#F3F4F6', border: '1px solid #D1D5DB' }}></div>
+              <span>Non-residential (rates not applicable)</span>
+            </div>
+          </div>
+          <div style={{ marginTop: '6px', color: '#6B7280', fontStyle: 'italic' }}>
+            * Hover over highlighted rates to see the specific source (Special Region or VCS-Specific configuration)
+          </div>
+        </div>
       </div>
     );
   };
