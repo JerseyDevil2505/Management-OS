@@ -915,6 +915,56 @@ const getPricePerUnit = useCallback((price, size) => {
 
     setSearchResults(results);
   };
+  // Method 2 Modal Functions
+  const openMethod2SalesModal = (vcs) => {
+    setMethod2ModalVCS(vcs);
+    setShowMethod2Modal(true);
+  };
+
+  const getMethod2SalesForVCS = (vcs) => {
+    if (!properties || !vcs) return [];
+
+    // Get time normalized data lookup
+    const timeNormalizedData = properties
+      .filter(p => p.values_norm_time != null && p.values_norm_time > 0)
+      .map(p => ({
+        property_composite_key: p.property_composite_key,
+        new_vcs: p.new_vcs,
+        values_norm_time: p.values_norm_time
+      }));
+
+    const timeNormLookup = new Map();
+    timeNormalizedData.forEach(item => {
+      timeNormLookup.set(item.property_composite_key, item);
+    });
+
+    // Filter properties for this VCS
+    return properties.filter(prop => {
+      const timeNormData = timeNormLookup.get(prop.property_composite_key);
+      if (!timeNormData || timeNormData.new_vcs !== vcs) return false;
+
+      // Apply type/use filter
+      const rawTypeUse = prop.asset_type_use?.toString().trim().toUpperCase();
+      let passesFilter = false;
+      if (method2TypeFilter === '1') {
+        passesFilter = rawTypeUse === '1' || rawTypeUse === '10';
+      } else if (method2TypeFilter === '3') {
+        passesFilter = ['30', '31', '3E', '3I'].includes(rawTypeUse);
+      } else if (method2TypeFilter === '4') {
+        passesFilter = ['42', '43', '44'].includes(rawTypeUse);
+      } else if (method2TypeFilter === '5') {
+        passesFilter = ['51', '52', '53'].includes(rawTypeUse);
+      } else {
+        passesFilter = rawTypeUse === method2TypeFilter;
+      }
+
+      return passesFilter;
+    }).map(prop => ({
+      ...prop,
+      normalizedTime: timeNormLookup.get(prop.property_composite_key).values_norm_time
+    }));
+  };
+
   const addSelectedProperties = () => {
     const toAdd = properties.filter(p => selectedToAdd.has(p.id));
 
