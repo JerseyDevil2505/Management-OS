@@ -1919,8 +1919,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           }))
         },
         bracket_analysis: bracketAnalysis,
-        method2_summary: method2Summary,
-        method2_excluded_sales: Array.from(method2ExcludedSales),
+        method2_summary: {
+          ...method2Summary,
+          excluded_sales: Array.from(method2ExcludedSales)
+        },
         cascade_rates: cascadeConfig,
         allocation_study: {
           vcs_site_values: vcsSiteValues,
