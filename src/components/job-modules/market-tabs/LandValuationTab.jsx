@@ -2413,8 +2413,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             const acreageDiff = larger.totalAcres - smaller.totalAcres;
             const priceDiff = larger.sales_price - smaller.sales_price;
 
+            // Use different thresholds for building lots vs raw land
+            const minAcreageDiff = categoryType === 'developable' &&
+              filtered.some(s => saleCategories[s.id] === 'building_lot' || saleCategories[s.id] === 'teardown')
+              ? 0.10 : 0.25; // Lower threshold for building lots
+
             // Only include if meaningful acreage difference and positive price difference
-            if (acreageDiff >= 0.25 && priceDiff > 0) {
+            if (acreageDiff >= minAcreageDiff && priceDiff > 0) {
               const incrementalRate = priceDiff / acreageDiff;
               pairedRates.push({
                 rate: incrementalRate,
@@ -2436,10 +2441,14 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             rates[Math.floor(rates.length / 2)];
 
           console.log(`💰 ${categoryType} paired analysis:`, {
-            pairs: pairedRates.length,
+            totalProperties: filtered.length,
+            possiblePairs: (filtered.length * (filtered.length - 1)) / 2,
+            validPairs: pairedRates.length,
+            filteredOut: (filtered.length * (filtered.length - 1)) / 2 - pairedRates.length,
             rates: rates.map(r => Math.round(r)),
             medianRate: Math.round(medianRate),
-            properties: pairedRates.map(p => p.properties)
+            properties: pairedRates.map(p => p.properties),
+            acreageRanges: pairedRates.map(p => `${p.acreageDiff.toFixed(2)} acres`)
           });
 
           if (valuationMode === 'sf') {
