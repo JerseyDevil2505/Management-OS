@@ -5062,9 +5062,42 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Avg NT</th>
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Avg $</th>
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>CME</th>
-                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Zoning</th>
-                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Key</th>
-                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Map</th>
+                  <th
+                    style={{
+                      padding: '8px',
+                      border: '1px solid #E5E7EB',
+                      cursor: 'pointer',
+                      userSelect: 'none'
+                    }}
+                    onClick={() => toggleFieldCollapse('zoning')}
+                    title="Click to expand/collapse"
+                  >
+                    Zoning {collapsedFields.zoning ? '▶' : '▼'}
+                  </th>
+                  <th
+                    style={{
+                      padding: '8px',
+                      border: '1px solid #E5E7EB',
+                      cursor: 'pointer',
+                      userSelect: 'none'
+                    }}
+                    onClick={() => toggleFieldCollapse('key')}
+                    title="Click to expand/collapse"
+                  >
+                    Key {collapsedFields.key ? '▶' : '▼'}
+                  </th>
+                  <th
+                    style={{
+                      padding: '8px',
+                      border: '1px solid #E5E7EB',
+                      cursor: 'pointer',
+                      userSelect: 'none'
+                    }}
+                    onClick={() => toggleFieldCollapse('map')}
+                    title="Click to expand/collapse"
+                  >
+                    Map {collapsedFields.map ? '▶' : '▼'}
+                  </th>
                 </tr>
               </thead>
               <tbody>
