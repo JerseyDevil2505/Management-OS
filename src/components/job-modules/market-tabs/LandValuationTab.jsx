@@ -2876,7 +2876,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               return (
                 <>
                   <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
-                    <div style={{ fontSize: '12px', color: '#6B7280' }}>Raw Land</div>
+                    <div style={{ fontSize: '12px', color: '#6B7280' }}>
+                      Raw Land {rawLand.method === 'paired' && <span style={{ color: '#10B981' }}>✓ Paired</span>}
+                    </div>
                     <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#10B981' }}>
                       {valuationMode === 'sf' ? `$${rawLand.avg}` : `$${rawLand.avg.toLocaleString()}`}
                     </div>
@@ -2886,9 +2888,16 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         Avg: {rawLand.avgLotSize}
                       </div>
                     )}
+                    {rawLand.method === 'paired' && rawLand.pairedAnalysis && (
+                      <div style={{ fontSize: '9px', color: '#059669', marginTop: '2px' }}>
+                        {rawLand.pairedAnalysis.pairs} pairs analyzed
+                      </div>
+                    )}
                   </div>
                   <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
-                    <div style={{ fontSize: '12px', color: '#6B7280' }}>Building Lot</div>
+                    <div style={{ fontSize: '12px', color: '#6B7280' }}>
+                      Building Lot {buildingLot.method === 'paired' && <span style={{ color: '#3B82F6' }}>✓ Paired</span>}
+                    </div>
                     <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#3B82F6' }}>
                       {valuationMode === 'sf' ? `$${buildingLot.avg}` : `$${buildingLot.avg.toLocaleString()}`}
                     </div>
@@ -2896,6 +2905,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     {buildingLot.count > 0 && (
                       <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '2px' }}>
                         Avg: {buildingLot.avgLotSize}
+                      </div>
+                    )}
+                    {buildingLot.method === 'paired' && buildingLot.pairedAnalysis && (
+                      <div style={{ fontSize: '9px', color: '#2563EB', marginTop: '2px' }}>
+                        {buildingLot.pairedAnalysis.pairs} pairs analyzed
                       </div>
                     )}
                   </div>
