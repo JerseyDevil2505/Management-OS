@@ -5156,6 +5156,23 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     return Object.values(vcsSheetData).some(data => data.mapPages && data.mapPages.trim() !== '');
   }, [vcsSheetData]);
 
+  // ========== METHOD FORMATTING HELPER ==========
+  const getMethodDisplay = useCallback((type, description) => {
+    // Check if it's a residential description that includes "condo"
+    if (type && type.startsWith('Residential') &&
+        description && description.toLowerCase().includes('condo')) {
+      return 'SITE';
+    }
+
+    // Otherwise use the valuation mode mapping
+    switch (valuationMode) {
+      case 'acre': return 'AC';
+      case 'sf': return 'SF';
+      case 'ff': return 'FF';
+      default: return valuationMode.toUpperCase();
+    }
+  }, [valuationMode]);
+
   // ========== SALES DATE FILTERING FOR CME ==========
   const getOctoberFirstTwoYearsPrior = () => {
     const now = new Date();
