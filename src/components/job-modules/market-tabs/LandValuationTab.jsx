@@ -490,10 +490,15 @@ const getPricePerUnit = useCallback((price, size) => {
 
   // Auto-save every 30 seconds
   useEffect(() => {
+    console.log('🔄 Auto-save effect triggered, setting up interval');
     const interval = setInterval(() => {
+      console.log('⏰ Auto-save interval triggered');
       saveAnalysis();
     }, 30000);
-    return () => clearInterval(interval);
+    return () => {
+      console.log('🛑 Clearing auto-save interval');
+      clearInterval(interval);
+    }
   }, [cascadeConfig, landNotes, saleCategories, specialRegions, actualAllocations,
       vcsManualSiteValues, actualAdjustments, targetAllocation, locationCodes, vcsTypes, method2ExcludedSales, vacantSales]);
   // ========== LAND RATES FUNCTIONS WITH ENHANCED FILTERS ==========
