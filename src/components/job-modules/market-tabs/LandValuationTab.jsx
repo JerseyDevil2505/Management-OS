@@ -190,14 +190,14 @@ useEffect(() => {
   //   setCascadeConfig(marketLandData.cascade_rates);
   // }
 
+  // Restore Method 1 state persistence (like Method 2)
   if (marketLandData.vacant_sales_analysis?.sales) {
     const savedCategories = {};
     const savedNotes = {};
     const savedRegions = {};
-    const savedIncluded = new Set();
-    const savedSalesMap = new Map();
+    const savedExcluded = new Set();
 
-    console.log('🔄 Loading saved sales data:', {
+    console.log('🔄 Loading saved Method 1 sales data:', {
       totalSales: marketLandData.vacant_sales_analysis.sales.length,
       salesWithCategories: marketLandData.vacant_sales_analysis.sales.filter(s => s.category).length,
       salesIncluded: marketLandData.vacant_sales_analysis.sales.filter(s => s.included).length,
@@ -207,38 +207,24 @@ useEffect(() => {
     marketLandData.vacant_sales_analysis.sales.forEach(s => {
       if (s.category) savedCategories[s.id] = s.category;
       if (s.notes) savedNotes[s.id] = s.notes;
-      if (s.special_region) savedRegions[s.id] = s.special_region;
-      if (s.included) savedIncluded.add(s.id);
-
-      // Store the saved sale ID for restoration
-      savedSalesMap.set(s.id, {
-        included: s.included,
-        category: s.category,
-        special_region: s.special_region,
-        notes: s.notes,
-        manually_added: s.manually_added,
-        is_package: s.is_package,
-        package_properties: s.package_properties
-      });
+      if (s.special_region && s.special_region !== 'Normal') savedRegions[s.id] = s.special_region;
+      if (!s.included) savedExcluded.add(s.id); // Track excluded instead of included
     });
 
-    console.log('🔄 Restored checkbox states:', {
-      includedCount: savedIncluded.size,
+    console.log('🔄 Restored Method 1 states:', {
+      excludedCount: savedExcluded.size,
       categoriesCount: Object.keys(savedCategories).length,
       regionsCount: Object.keys(savedRegions).length,
-      includedIds: Array.from(savedIncluded),
-      categories: savedCategories,
-      savedSalesCount: savedSalesMap.size,
-      sampleSalesData: marketLandData.vacant_sales_analysis.sales.slice(0, 3)
+      excludedIds: Array.from(savedExcluded),
+      categories: savedCategories
     });
 
     setSaleCategories(savedCategories);
     setLandNotes(savedNotes);
     setSpecialRegions(savedRegions);
-    setIncludedSales(savedIncluded);
 
-    // Store the saved sales map for use in filterVacantSales
-    window._savedSalesMap = savedSalesMap;
+    // Store excluded sales for application after filtering
+    window._method1ExcludedSales = savedExcluded;
   }
 
   // Restore Method 2 excluded sales
@@ -477,50 +463,7 @@ const getPricePerUnit = useCallback((price, size) => {
     return vcsCode; // Return code if no description found
   }, [jobData, vendorType, vcsDescriptions]);
 
-  // ========== RESTORE ALL SAVED SALES (NOT JUST MANUALLY ADDED) ==========
-  useEffect(() => {
-    if (!marketLandData?.vacant_sales_analysis?.sales || !properties || vacantSales.length > 0) return;
-
-    // Find all previously saved property IDs
-    const savedSalesIds = marketLandData.vacant_sales_analysis.sales.map(s => s.id);
-
-    console.log('🔄 Restoring saved sales:', {
-      totalSaved: savedSalesIds.length,
-      manuallyAdded: marketLandData.vacant_sales_analysis.sales.filter(s => s.manually_added).length,
-      included: marketLandData.vacant_sales_analysis.sales.filter(s => s.included).length
-    });
-
-    if (savedSalesIds.length > 0) {
-      const savedProps = properties.filter(p => savedSalesIds.includes(p.id));
-
-      if (savedProps.length > 0) {
-        const enrichedSavedProps = savedProps.map(prop => {
-          const acres = calculateAcreage(prop);
-          const pricePerUnit = getPricePerUnit(prop.sales_price, acres);
-          const savedData = marketLandData.vacant_sales_analysis.sales.find(s => s.id === prop.id);
-
-          return {
-            ...prop,
-            totalAcres: acres,
-            pricePerAcre: pricePerUnit,
-            manuallyAdded: savedData?.manually_added || false,
-            packageData: savedData?.is_package ? {
-              is_package: true,
-              package_properties: savedData.package_properties || []
-            } : undefined
-          };
-        });
-
-        console.log('🔄 Restored sales details:', {
-          restoredCount: enrichedSavedProps.length,
-          manuallyAddedCount: enrichedSavedProps.filter(p => p.manuallyAdded).length,
-          packageCount: enrichedSavedProps.filter(p => p.packageData).length
-        });
-
-        setVacantSales(enrichedSavedProps);
-      }
-    }
-  }, [marketLandData, properties, calculateAcreage, getPricePerUnit]);
+  // Let filterVacantSales handle all sales filtering and restoration
 
   // ========== LOAD DATA EFFECTS ==========
   // Update filter when vendor type changes
@@ -567,25 +510,25 @@ const getPricePerUnit = useCallback((price, size) => {
   }, [isInitialLoadComplete, cascadeConfig, landNotes, saleCategories, specialRegions, includedSales, actualAllocations,
       vcsManualSiteValues, actualAdjustments, targetAllocation, locationCodes, vcsTypes, method2ExcludedSales, vacantSales]);
 
-  // Clear saved sales map after initial restoration is complete
+  // Clear Method 1 excluded sales after filtering is complete
   useEffect(() => {
-    if (isInitialLoadComplete && window._savedSalesMap) {
-      console.log('🧹 Clearing saved sales map after successful restoration');
-      delete window._savedSalesMap;
+    if (isInitialLoadComplete && window._method1ExcludedSales) {
+      console.log('🧹 Clearing Method 1 excluded sales after successful application');
+      delete window._method1ExcludedSales;
     }
   }, [isInitialLoadComplete]);
   // ========== LAND RATES FUNCTIONS WITH ENHANCED FILTERS ==========
   const filterVacantSales = useCallback(() => {
     if (!properties) return;
 
-    console.log('🔄 FilterVacantSales called - checking for existing sales:', {
+    console.log('🔄 FilterVacantSales called:', {
       currentVacantSalesCount: vacantSales.length,
-      hasSavedSalesMap: !!window._savedSalesMap,
-      savedSalesMapSize: window._savedSalesMap?.size || 0
+      hasMethod1Excluded: !!window._method1ExcludedSales,
+      method1ExcludedSize: window._method1ExcludedSales?.size || 0
     });
 
     // If we already have restored sales, preserve them and only add new ones
-    if (vacantSales.length > 0 && window._savedSalesMap) {
+    if (false) { // Disable complex caching logic
       console.log('���� Preserving existing restored sales, checking for new ones only');
 
       // Find any new sales that match criteria but aren't already in vacantSales
@@ -775,6 +718,11 @@ const getPricePerUnit = useCallback((price, size) => {
         
         // Auto-include package in analysis
         setIncludedSales(prev => new Set([...prev, packageSale.id]));
+
+        // Set package category
+        if (packageSale.autoCategory) {
+          setSaleCategories(prev => ({...prev, [packageSale.id]: packageSale.autoCategory}));
+        }
       } else {
         // Single property with book/page
         const enriched = enrichProperty(group[0]);
@@ -784,12 +732,13 @@ const getPricePerUnit = useCallback((price, size) => {
         }
       }
     });
-    
+
     // Add standalone properties
     standalone.forEach(prop => {
       const enriched = enrichProperty(prop);
       finalSales.push(enriched);
       if (enriched.autoCategory) {
+        console.log(`��️ Auto-categorizing ${prop.property_block}/${prop.property_lot} as ${enriched.autoCategory}`);
         setSaleCategories(prev => ({...prev, [prop.id]: enriched.autoCategory}));
       }
     });
@@ -1296,10 +1245,36 @@ const getPricePerUnit = useCallback((price, size) => {
     setVacantSales([...vacantSales, ...enriched]);
     setIncludedSales(new Set([...includedSales, ...toAdd.map(p => p.id)]));
     
-    // Check if any are teardowns (Class 2)
+    // Auto-categorize teardowns and pre-construction (match filterVacantSales logic)
     toAdd.forEach(p => {
-      if (p.property_m4_class === '2') {
-        setSaleCategories(prev => ({...prev, [p.id]: 'teardown'}));
+      let autoCategory = null;
+
+      // Teardown detection (Class 2 with minimal improvement)
+      if (p.property_m4_class === '2' &&
+          p.asset_building_class && parseInt(p.asset_building_class) > 10 &&
+          p.asset_design_style &&
+          p.asset_type_use &&
+          p.values_mod_improvement < 10000) {
+        autoCategory = 'teardown';
+      }
+      // Pre-construction detection (sold before house was built)
+      else if (p.property_m4_class === '2' &&
+               p.asset_building_class && parseInt(p.asset_building_class) > 10 &&
+               p.asset_design_style &&
+               p.asset_type_use &&
+               p.asset_year_built &&
+               p.sales_date &&
+               new Date(p.sales_date).getFullYear() < p.asset_year_built) {
+        autoCategory = 'pre-construction';
+      }
+      // General Class 2 fallback to building lot
+      else if (p.property_m4_class === '2') {
+        autoCategory = 'building_lot';
+      }
+
+      if (autoCategory) {
+        console.log(`🏗️ Auto-categorizing manually added ${p.property_block}/${p.property_lot} as ${autoCategory}`);
+        setSaleCategories(prev => ({...prev, [p.id]: autoCategory}));
       }
     });
     
@@ -2653,8 +2628,12 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const checkedSales = vacantSales.filter(s => includedSales.has(s.id));
 
     console.log('🔄 Recalculating category analysis');
+    console.log('📊 Total vacant sales:', vacantSales.length);
     console.log('📊 Checked sales count:', checkedSales.length);
     console.log('📋 Included sales IDs:', Array.from(includedSales));
+    console.log('📋 Sale categories state:', saleCategories);
+    console.log('📋 Teardown sales in checked:', checkedSales.filter(s => saleCategories[s.id] === 'teardown').map(s => `${s.property_block}/${s.property_lot}`));
+    console.log('📋 Building lot sales in checked:', checkedSales.filter(s => saleCategories[s.id] === 'building_lot').map(s => `${s.property_block}/${s.property_lot}`));
 
     // Helper function to calculate average for a category
     const getCategoryAverage = (filterFn, categoryType) => {
@@ -2794,16 +2773,50 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       }
     };
 
-    const rawLand = getCategoryAverage(s =>
-      saleCategories[s.id] === 'raw_land' ||
-      (!saleCategories[s.id] && s.property_m4_class === '1'),
-      'developable'
-    );
+    const rawLand = getCategoryAverage(s => {
+      const isRawLandCategory = saleCategories[s.id] === 'raw_land';
+      const isUncategorizedVacant = !saleCategories[s.id] && s.property_m4_class === '1';
+      const isInRawLand = isRawLandCategory || isUncategorizedVacant;
+
+      // Debug teardown sales to see if they're incorrectly going to raw land
+      if (saleCategories[s.id] === 'teardown' || (s.property_block === '5' && s.property_lot === '12.12')) {
+        console.log('🌱 Raw Land check for teardown/5.12.12:', {
+          block: s.property_block,
+          lot: s.property_lot,
+          id: s.id,
+          category: saleCategories[s.id],
+          hasCategory: !!saleCategories[s.id],
+          class: s.property_m4_class,
+          isRawLandCategory,
+          isUncategorizedVacant,
+          isInRawLand
+        });
+      }
+
+      return isInRawLand;
+    }, 'developable');
 
     const buildingLot = getCategoryAverage(s => {
       const isInCategory = saleCategories[s.id] === 'building_lot' ||
                           saleCategories[s.id] === 'teardown' ||
                           saleCategories[s.id] === 'pre-construction';
+
+      // Debug all teardown sales
+      if (saleCategories[s.id] === 'teardown') {
+        console.log('🏗️ Teardown sale details:', {
+          block: s.property_block,
+          lot: s.property_lot,
+          id: s.id,
+          category: saleCategories[s.id],
+          isIncluded: includedSales.has(s.id),
+          isInBuildingLot: isInCategory,
+          price: s.sales_price,
+          acres: s.totalAcres,
+          pricePerAcre: s.pricePerAcre
+        });
+      }
+
+      // Keep the 47/2 debug for reference
       if (s.property_block === '47' && s.property_lot === '2') {
         console.log('🏠 Property 47/2 details:', {
           id: s.id,
@@ -2819,6 +2832,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const wetlands = getCategoryAverage(s => saleCategories[s.id] === 'wetlands', 'constrained');
     const landlocked = getCategoryAverage(s => saleCategories[s.id] === 'landlocked', 'constrained');
     const conservation = getCategoryAverage(s => saleCategories[s.id] === 'conservation', 'constrained');
+
+    console.log('🏗️ Building Lot Analysis Result:', {
+      avg: buildingLot.avg,
+      count: buildingLot.count,
+      method: buildingLot.method,
+      hasPairedAnalysis: !!buildingLot.pairedAnalysis
+    });
 
     return { rawLand, buildingLot, wetlands, landlocked, conservation };
   }, [vacantSales, includedSales, saleCategories, valuationMode]);
