@@ -1131,7 +1131,7 @@ const getPricePerUnit = useCallback((price, size) => {
   };
 
   const handlePropertyResearch = async (property) => {
-    const prompt = `Analyze this land sale in ${jobData?.municipality || 'Unknown'}, ${jobData?.county || 'Unknown'} County, NJ:
+    const prompt = `Research and analyze this land sale in ${jobData?.municipality || 'Unknown'}, ${jobData?.county || 'Unknown'} County, NJ:
 
 Block ${property.property_block} Lot ${property.property_lot}
 Address: ${property.property_location}
@@ -1141,7 +1141,15 @@ Acres: ${property.totalAcres?.toFixed(2)}
 Price/Acre: $${property.pricePerAcre?.toLocaleString()}
 Class: ${property.property_m4_class === '2' ? 'Residential (possible teardown)' : property.property_m4_class}
 
-Identify likely factors affecting this sale price (wetlands, access, zoning, teardown value, etc.). Be specific and actionable for valuation purposes. 2-3 sentences.`;
+Find specific information about this property and sale. Include:
+
+• Property ownership/seller details
+• Tax assessment and classification details
+• Documented environmental constraints (wetlands, floodplains)
+• Municipality-specific land use characteristics
+• Any circumstances of the sale (estate, distressed, etc.)
+
+Provide only verifiable facts with sources. Be specific and actionable for valuation purposes. 2-3 sentences.`;
 
     try {
       await navigator.clipboard.writeText(prompt);
