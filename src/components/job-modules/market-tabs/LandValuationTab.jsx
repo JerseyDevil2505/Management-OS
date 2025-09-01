@@ -197,6 +197,11 @@ useEffect(() => {
     setIncludedSales(savedIncluded);
   }
 
+  // Restore Method 2 excluded sales
+  if (marketLandData.method2_excluded_sales) {
+    setMethod2ExcludedSales(new Set(marketLandData.method2_excluded_sales));
+  }
+
   if (marketLandData.allocation_study) {
     if (marketLandData.allocation_study.actual_allocations) {
       setActualAllocations(marketLandData.allocation_study.actual_allocations);
