@@ -4957,6 +4957,24 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     </div>
   );
 
+  // ========== CME BRACKET DEFINITIONS ==========
+  const CME_BRACKETS = [
+    { min: 0, max: 99999, label: 'up to $99,999', color: '#FF9999', textColor: 'black' },
+    { min: 100000, max: 199999, label: '$100,000-$199,999', color: '#FFB366', textColor: 'black' },
+    { min: 200000, max: 299999, label: '$200,000-$299,999', color: '#FFCC99', textColor: 'black' },
+    { min: 300000, max: 399999, label: '$300,000-$399,999', color: '#FFFF99', textColor: 'black' },
+    { min: 400000, max: 499999, label: '$400,000-$499,999', color: '#CCFF99', textColor: 'black' },
+    { min: 500000, max: 749999, label: '$500,000-$749,999', color: '#99FF99', textColor: 'black' },
+    { min: 750000, max: 999999, label: '$750,000-$999,999', color: '#99CCFF', textColor: 'black' },
+    { min: 1000000, max: 1499999, label: '$1,000,000-$1,499,999', color: '#9999FF', textColor: 'black' },
+    { min: 1500000, max: 1999999, label: '$1,500,000-$1,999,999', color: '#CC99FF', textColor: 'black' },
+    { min: 2000000, max: 99999999, label: 'Over $2,000,000', color: '#FF99FF', textColor: 'black' }
+  ];
+
+  const getCMEBracket = (price) => {
+    return CME_BRACKETS.find(bracket => price >= bracket.min && price <= bracket.max) || CME_BRACKETS[0];
+  };
+
   // ========== RENDER VCS SHEET TAB ==========
   const renderVCSSheetTab = () => {
     const VCS_TYPES = [
