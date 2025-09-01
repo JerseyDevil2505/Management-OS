@@ -5520,28 +5520,31 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                               </span>
                             ) : ''}
                           </td>
-                          <td style={{
-                            padding: '8px',
-                            textAlign: 'right',
-                            backgroundColor: isGrayedOut ? '#F3F4F6' : (rateSource !== 'Normal' ? '#FEF3C7' : 'inherit'),
-                            position: 'relative'
-                          }}>
-                            {!isGrayedOut ? (
-                              <span title={`Rate Source: ${rateSource}`}>
-                                {cascadeRates.residual?.rate ? `$${cascadeRates.residual.rate.toLocaleString()}` : ''}
-                                {rateSource !== 'Normal' && (
-                                  <span style={{
-                                    position: 'absolute',
-                                    top: '2px',
-                                    right: '2px',
-                                    fontSize: '8px',
-                                    color: '#92400E',
-                                    fontWeight: 'bold'
-                                  }}>*</span>
-                                )}
-                              </span>
-                            ) : ''}
-                          </td>
+                          {shouldShowResidualColumn && (
+                            <td style={{
+                              padding: '8px',
+                              textAlign: 'right',
+                              backgroundColor: isGrayedOut ? '#F3F4F6' : (rateSource !== 'Normal' ? '#FEF3C7' : 'inherit'),
+                              position: 'relative',
+                              border: '1px solid #E5E7EB'
+                            }}>
+                              {!isGrayedOut ? (
+                                <span title={`Rate Source: ${rateSource}`}>
+                                  {cascadeRates.residual?.rate ? `$${cascadeRates.residual.rate.toLocaleString()}` : ''}
+                                  {rateSource !== 'Normal' && (
+                                    <span style={{
+                                      position: 'absolute',
+                                      top: '2px',
+                                      right: '2px',
+                                      fontSize: '8px',
+                                      color: '#92400E',
+                                      fontWeight: 'bold'
+                                    }}>*</span>
+                                  )}
+                                </span>
+                              ) : ''}
+                            </td>
+                          )}
                         </>
                       )}
                       {/* Special Category Rates */}
