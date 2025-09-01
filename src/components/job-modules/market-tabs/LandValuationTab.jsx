@@ -5021,14 +5021,14 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             <table style={{ width: '100%', fontSize: '12px', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ backgroundColor: '#1E40AF', color: 'white' }}>
-                  <th style={{ padding: '8px' }}>VCS</th>
-                  <th style={{ padding: '8px' }}>Total</th>
-                  <th style={{ padding: '8px' }}>Type</th>
-                  <th style={{ padding: '8px' }}>Description</th>
-                  <th style={{ padding: '8px' }}>Method</th>
-                  <th style={{ padding: '8px' }}>Typ Lot</th>
-                  <th style={{ padding: '8px' }}>Rec Site</th>
-                  <th style={{ padding: '8px' }}>Act Site</th>
+                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>VCS</th>
+                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Total</th>
+                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Type</th>
+                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Description</th>
+                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Method</th>
+                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Typ Lot</th>
+                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Rec Site</th>
+                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Act Site</th>
                   {valuationMode === 'ff' ? (
                     <>
                       <th style={{ padding: '8px' }}>Std FF</th>
