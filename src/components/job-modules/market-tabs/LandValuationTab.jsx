@@ -365,7 +365,7 @@ const getPricePerUnit = useCallback((price, size) => {
 
   // ========== GET TYPE USE OPTIONS ==========
   const getTypeUseOptions = useCallback(() => {
-    if (!properties) return [{ code: '1', description: '1 - Single Family' }];
+    if (!properties) return [{ code: '1', description: '1-Single Family' }];
 
     // Get unique asset_type_use codes ONLY from properties with time-normalized data
     const uniqueCodes = new Set();
