@@ -2828,6 +2828,41 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
                   </div>
                 </div>
 
+                {/* Average Across All Positive Deltas */}
+                <div style={{ textAlign: 'center', minWidth: '150px' }}>
+                  <div style={{ fontSize: '14px', color: '#6B7280', marginBottom: '4px' }}>All Positive Deltas</div>
+                  <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#059669' }}>
+                    {(() => {
+                      const allRates = [];
+                      if (method2Summary.mediumRange?.perAcre !== 'N/A') allRates.push(method2Summary.mediumRange.perAcre);
+                      if (method2Summary.largeRange?.perAcre !== 'N/A') allRates.push(method2Summary.largeRange.perAcre);
+                      if (method2Summary.xlargeRange?.perAcre !== 'N/A') allRates.push(method2Summary.xlargeRange.perAcre);
+
+                      if (allRates.length === 0) return 'N/A';
+
+                      const avgRate = Math.round(allRates.reduce((sum, rate) => sum + rate, 0) / allRates.length);
+                      return `$${avgRate.toLocaleString()}`;
+                    })()}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#6B7280' }}>
+                    {(() => {
+                      const allRates = [];
+                      if (method2Summary.mediumRange?.perAcre !== 'N/A') allRates.push(method2Summary.mediumRange.perAcre);
+                      if (method2Summary.largeRange?.perAcre !== 'N/A') allRates.push(method2Summary.largeRange.perAcre);
+                      if (method2Summary.xlargeRange?.perAcre !== 'N/A') allRates.push(method2Summary.xlargeRange.perAcre);
+
+                      if (allRates.length === 0) return 'N/A';
+
+                      const avgRate = Math.round(allRates.reduce((sum, rate) => sum + rate, 0) / allRates.length);
+                      const perSqFt = (avgRate / 43560).toFixed(2);
+                      return `$${perSqFt}/SF`;
+                    })()}
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#9CA3AF' }}>
+                    ({(method2Summary.mediumRange?.count || 0) + (method2Summary.largeRange?.count || 0) + (method2Summary.xlargeRange?.count || 0)} Total)
+                  </div>
+                </div>
+
                 <div style={{ width: '1px', height: '80px', backgroundColor: '#D1D5DB' }}></div>
 
                 {/* Stats */}
