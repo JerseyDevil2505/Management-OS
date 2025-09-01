@@ -197,6 +197,7 @@ useEffect(() => {
     setLandNotes(savedNotes);
     setSpecialRegions(savedRegions);
     setIncludedSales(savedIncluded);
+
   }
 
   // Restore Method 2 excluded sales
@@ -240,6 +241,35 @@ useEffect(() => {
   setLastSaved(marketLandData.updated_at ? new Date(marketLandData.updated_at) : null);
   setIsLoading(false);
 }, [marketLandData]);
+
+  // ========== RESTORE MANUALLY ADDED PROPERTIES ==========
+  useEffect(() => {
+    if (!marketLandData?.vacant_sales_analysis?.sales || !properties || vacantSales.length > 0) return;
+
+    // Find manually added property IDs
+    const manuallyAddedIds = marketLandData.vacant_sales_analysis.sales
+      .filter(s => s.manually_added)
+      .map(s => s.id);
+
+    if (manuallyAddedIds.length > 0) {
+      const manuallyAddedProps = properties.filter(p => manuallyAddedIds.includes(p.id));
+
+      if (manuallyAddedProps.length > 0) {
+        const enrichedManualProps = manuallyAddedProps.map(prop => {
+          const acres = calculateAcreage(prop);
+          const pricePerUnit = getPricePerUnit(prop.sales_price, acres);
+          return {
+            ...prop,
+            totalAcres: acres,
+            pricePerAcre: pricePerUnit,
+            manuallyAdded: true
+          };
+        });
+
+        setVacantSales(prev => [...prev, ...enrichedManualProps]);
+      }
+    }
+  }, [marketLandData, properties, calculateAcreage, getPricePerUnit]);
 
   // ========== CHECK FRONT FOOT AVAILABILITY ==========
   useEffect(() => {
@@ -335,12 +365,15 @@ const getPricePerUnit = useCallback((price, size) => {
 
   // ========== GET TYPE USE OPTIONS ==========
   const getTypeUseOptions = useCallback(() => {
-    if (!properties) return [{ code: '1', description: '1 - Single Family' }];
+    if (!properties) return [{ code: '1', description: '1-Single Family' }];
 
-    // Get unique asset_type_use codes from properties
+    // Get unique asset_type_use codes ONLY from properties with time-normalized data
     const uniqueCodes = new Set();
     properties.forEach(prop => {
-      if (prop.asset_type_use && prop.property_m4_class === '2') {
+      if (prop.asset_type_use &&
+          prop.property_m4_class === '2' &&
+          prop.values_norm_time != null &&
+          prop.values_norm_time > 0) {
         const rawCode = prop.asset_type_use.toString().trim().toUpperCase();
         if (rawCode && rawCode !== '' && rawCode !== 'null' && rawCode !== 'undefined') {
           uniqueCodes.add(rawCode);
@@ -352,7 +385,7 @@ const getPricePerUnit = useCallback((price, size) => {
 
     // Always include Single Family
     if (uniqueCodes.has('1') || uniqueCodes.has('10')) {
-      options.push({ code: '1', description: '1 - Single Family' });
+      options.push({ code: '1', description: '1-Single Family' });
     }
 
     // Add umbrella groups only if we have matching codes
@@ -360,17 +393,17 @@ const getPricePerUnit = useCallback((price, size) => {
       {
         codes: ['30', '31', '3E', '3I'],
         groupCode: '3',
-        description: '3 - Row/Townhouses'
+        description: '3-Row/Townhouses'
       },
       {
         codes: ['42', '43', '44'],
         groupCode: '4',
-        description: '4 - MultiFamily'
+        description: '4-MultiFamily'
       },
       {
         codes: ['51', '52', '53'],
         groupCode: '5',
-        description: '5 - Conversions'
+        description: '5-Conversions'
       }
     ];
 
@@ -385,7 +418,12 @@ const getPricePerUnit = useCallback((price, size) => {
     const allUmbrellaCodes = ['1', '10', '30', '31', '3E', '3I', '42', '43', '44', '51', '52', '53'];
     uniqueCodes.forEach(code => {
       if (!allUmbrellaCodes.includes(code)) {
-        options.push({ code, description: `${code} - Other` });
+        // Special case for code '2' - Semi Det
+        if (code === '2') {
+          options.push({ code, description: `2-Semi Det` });
+        } else {
+          options.push({ code, description: `${code}-Other` });
+        }
       }
     });
 
@@ -457,7 +495,7 @@ const getPricePerUnit = useCallback((price, size) => {
     }, 30000);
     return () => clearInterval(interval);
   }, [cascadeConfig, landNotes, saleCategories, specialRegions, actualAllocations,
-      vcsManualSiteValues, actualAdjustments, targetAllocation, locationCodes, vcsTypes, method2ExcludedSales]);
+      vcsManualSiteValues, actualAdjustments, targetAllocation, locationCodes, vcsTypes, method2ExcludedSales, vacantSales]);
   // ========== LAND RATES FUNCTIONS WITH ENHANCED FILTERS ==========
   const filterVacantSales = useCallback(() => {
     if (!properties) return;
@@ -920,6 +958,21 @@ const getPricePerUnit = useCallback((price, size) => {
     const existingIds = new Set(vacantSales.map(s => s.id));
     results = results.filter(p => !existingIds.has(p.id));
 
+    // Sort results numerically by block, then lot
+    results.sort((a, b) => {
+      const blockA = parseInt(a.property_block) || 0;
+      const blockB = parseInt(b.property_block) || 0;
+
+      if (blockA !== blockB) {
+        return blockA - blockB;
+      }
+
+      // If blocks are the same, sort by lot
+      const lotA = parseInt(a.property_lot) || 0;
+      const lotB = parseInt(b.property_lot) || 0;
+      return lotA - lotB;
+    });
+
     setSearchResults(results);
   };
   // Method 2 Modal Functions
@@ -1078,7 +1131,7 @@ const getPricePerUnit = useCallback((price, size) => {
   };
 
   const handlePropertyResearch = async (property) => {
-    const prompt = `Analyze this land sale in ${jobData?.municipality || 'Unknown'}, ${jobData?.county || 'Unknown'} County, NJ:
+    const prompt = `Research and analyze this land sale in ${jobData?.municipality || 'Unknown'}, ${jobData?.county || 'Unknown'} County, NJ:
 
 Block ${property.property_block} Lot ${property.property_lot}
 Address: ${property.property_location}
@@ -1088,7 +1141,15 @@ Acres: ${property.totalAcres?.toFixed(2)}
 Price/Acre: $${property.pricePerAcre?.toLocaleString()}
 Class: ${property.property_m4_class === '2' ? 'Residential (possible teardown)' : property.property_m4_class}
 
-Identify likely factors affecting this sale price (wetlands, access, zoning, teardown value, etc.). Be specific and actionable for valuation purposes. 2-3 sentences.`;
+Find specific information about this property and sale. Include:
+
+• Property ownership/seller details
+• Tax assessment and classification details
+• Documented environmental constraints (wetlands, floodplains)
+• Municipality-specific land use characteristics
+• Any circumstances of the sale (estate, distressed, etc.)
+
+Provide only verifiable facts with sources. Be specific and actionable for valuation purposes. 2-3 sentences.`;
 
     try {
       await navigator.clipboard.writeText(prompt);
