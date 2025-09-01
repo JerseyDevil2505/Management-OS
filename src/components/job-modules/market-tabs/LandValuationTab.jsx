@@ -2413,13 +2413,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             const acreageDiff = larger.totalAcres - smaller.totalAcres;
             const priceDiff = larger.sales_price - smaller.sales_price;
 
-            // Use different thresholds for building lots vs raw land
-            const minAcreageDiff = categoryType === 'developable' &&
-              filtered.some(s => saleCategories[s.id] === 'building_lot' || saleCategories[s.id] === 'teardown')
-              ? 0.10 : 0.25; // Lower threshold for building lots
-
-            // Only include if meaningful acreage difference and positive price difference
-            if (acreageDiff >= minAcreageDiff && priceDiff > 0) {
+            // Only exclude negative price differences - include all acreage differences
+            if (priceDiff > 0) {
               const incrementalRate = priceDiff / acreageDiff;
               pairedRates.push({
                 rate: incrementalRate,
@@ -3057,8 +3052,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   * Paired analysis extracts incremental raw land value between similar sales with different acreages.
                   This isolates the pure land component from site value and improvements.
                   <br />
-                  * Building lots require 0.10+ acre difference; Raw land requires 0.25+ acre difference.
-                  Properties too similar in size are excluded from paired analysis.
+                  * All properties are included regardless of acreage similarity.
+                  Only sales with negative price differences are excluded.
                 </div>
               </div>
             )}
