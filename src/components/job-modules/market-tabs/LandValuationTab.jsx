@@ -732,7 +732,10 @@ const getPricePerUnit = useCallback((price, size) => {
         currentSalesCount: finalSales.length,
         preservedCount: preservedIncluded.size,
         newlyAdded: preservedIncluded.size - [...prev].filter(id => currentSaleIds.has(id)).length,
-        excludedCount: finalSales.length - preservedIncluded.size
+        excludedCount: finalSales.length - preservedIncluded.size,
+        preservedIds: Array.from(preservedIncluded),
+        finalSalesIds: finalSales.map(s => s.id),
+        salesMismatch: finalSales.filter(s => !preservedIncluded.has(s.id)).map(s => ({id: s.id, block: s.property_block, lot: s.property_lot}))
       });
 
       return preservedIncluded;
