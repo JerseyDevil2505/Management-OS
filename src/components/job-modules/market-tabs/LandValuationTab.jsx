@@ -5232,7 +5232,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 {Object.keys(vcsSheetData).sort().map((vcs, index) => {
                   const data = vcsSheetData[vcs];
                   const type = vcsTypes[vcs] || 'Residential-Typical';
-                  const isGrayedOut = ['Commercial', 'Industrial', 'Apartment', 'Special'].includes(type);
+                  const isGrayedOut = !type.startsWith('Residential');
                   const description = vcsDescriptions[vcs] || getVCSDescription(vcs);
                   const recSite = vcsRecommendedSites[vcs] || 0;
                   const actSite = vcsManualSiteValues[vcs] || recSite;
