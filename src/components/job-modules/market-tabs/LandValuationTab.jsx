@@ -5221,7 +5221,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                             padding: '8px',
                             textAlign: 'right',
                             backgroundColor: isGrayedOut ? '#F3F4F6' : (rateSource !== 'Normal' ? '#FEF3C7' : 'inherit'),
-                            position: 'relative'
+                            position: 'relative',
+                            border: '1px solid #E5E7EB'
                           }}>
                             {!isGrayedOut ? (
                               <span title={`Rate Source: ${rateSource}`}>
