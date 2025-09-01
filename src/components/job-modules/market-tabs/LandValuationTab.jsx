@@ -2730,9 +2730,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               const checkedSales = vacantSales.filter(s => includedSales.has(s.id));
 
               // Helper function to calculate average for a category
-              const getCategoryAverage = (filterFn) => {
+              const getCategoryAverage = (filterFn, categoryType) => {
                 const filtered = checkedSales.filter(filterFn);
-                if (filtered.length === 0) return { avg: 0, count: 0, avgLotSize: 0 };
+                if (filtered.length === 0) return { avg: 0, count: 0, avgLotSize: 0, method: 'none' };
 
                 // Calculate average lot size
                 const totalAcres = filtered.reduce((sum, s) => sum + s.totalAcres, 0);
@@ -2747,20 +2747,111 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   avgLotSize = 'N/A ff'; // Front foot needs frontage data
                 }
 
+                // For constrained land types (wetlands, landlocked, conservation), use simple $/acre
+                if (categoryType === 'constrained') {
+                  if (valuationMode === 'sf') {
+                    const totalPrice = filtered.reduce((sum, s) => sum + s.sales_price, 0);
+                    const totalSF = filtered.reduce((sum, s) => sum + (s.totalAcres * 43560), 0);
+                    return {
+                      avg: totalSF > 0 ? (totalPrice / totalSF).toFixed(2) : 0,
+                      count: filtered.length,
+                      avgLotSize,
+                      method: 'simple'
+                    };
+                  } else {
+                    const avgRate = filtered.reduce((sum, s) => sum + s.pricePerAcre, 0) / filtered.length;
+                    return {
+                      avg: Math.round(avgRate),
+                      count: filtered.length,
+                      avgLotSize,
+                      method: 'simple'
+                    };
+                  }
+                }
+
+                // For developable land (raw land, building lot), use paired sales analysis
+                if (categoryType === 'developable' && filtered.length >= 2) {
+                  // Sort by acreage for paired analysis
+                  const sortedSales = [...filtered].sort((a, b) => a.totalAcres - b.totalAcres);
+
+                  const pairedRates = [];
+
+                  // Calculate incremental rates between pairs
+                  for (let i = 0; i < sortedSales.length - 1; i++) {
+                    for (let j = i + 1; j < sortedSales.length; j++) {
+                      const smaller = sortedSales[i];
+                      const larger = sortedSales[j];
+
+                      const acreageDiff = larger.totalAcres - smaller.totalAcres;
+                      const priceDiff = larger.sales_price - smaller.sales_price;
+
+                      // Only include if meaningful acreage difference and positive price difference
+                      if (acreageDiff >= 0.25 && priceDiff > 0) {
+                        const incrementalRate = priceDiff / acreageDiff;
+                        pairedRates.push({
+                          rate: incrementalRate,
+                          smallerAcres: smaller.totalAcres,
+                          largerAcres: larger.totalAcres,
+                          priceDiff: priceDiff,
+                          acreageDiff: acreageDiff,
+                          properties: `${smaller.property_block}/${smaller.property_lot} vs ${larger.property_block}/${larger.property_lot}`
+                        });
+                      }
+                    }
+                  }
+
+                  if (pairedRates.length > 0) {
+                    // Use median to reduce outlier influence
+                    const rates = pairedRates.map(p => p.rate).sort((a, b) => a - b);
+                    const medianRate = rates.length % 2 === 0 ?
+                      (rates[rates.length / 2 - 1] + rates[rates.length / 2]) / 2 :
+                      rates[Math.floor(rates.length / 2)];
+
+                    if (valuationMode === 'sf') {
+                      return {
+                        avg: (medianRate / 43560).toFixed(2),
+                        count: filtered.length,
+                        avgLotSize,
+                        method: 'paired',
+                        pairedAnalysis: {
+                          pairs: pairedRates.length,
+                          medianRate: Math.round(medianRate),
+                          bestPair: pairedRates.sort((a, b) => Math.abs(a.acreageDiff - 1) - Math.abs(b.acreageDiff - 1))[0]
+                        }
+                      };
+                    } else {
+                      return {
+                        avg: Math.round(medianRate),
+                        count: filtered.length,
+                        avgLotSize,
+                        method: 'paired',
+                        pairedAnalysis: {
+                          pairs: pairedRates.length,
+                          medianRate: Math.round(medianRate),
+                          bestPair: pairedRates.sort((a, b) => Math.abs(a.acreageDiff - 1) - Math.abs(b.acreageDiff - 1))[0]
+                        }
+                      };
+                    }
+                  }
+                }
+
+                // Fallback to simple calculation if paired analysis fails
                 if (valuationMode === 'sf') {
                   const totalPrice = filtered.reduce((sum, s) => sum + s.sales_price, 0);
                   const totalSF = filtered.reduce((sum, s) => sum + (s.totalAcres * 43560), 0);
                   return {
                     avg: totalSF > 0 ? (totalPrice / totalSF).toFixed(2) : 0,
                     count: filtered.length,
-                    avgLotSize
+                    avgLotSize,
+                    method: 'fallback'
                   };
                 } else {
                   const avgRate = filtered.reduce((sum, s) => sum + s.pricePerAcre, 0) / filtered.length;
                   return {
                     avg: Math.round(avgRate),
                     count: filtered.length,
-                    avgLotSize
+                    avgLotSize,
+                    method: 'fallback'
                   };
                 }
               };
