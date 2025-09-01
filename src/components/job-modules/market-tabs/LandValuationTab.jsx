@@ -2586,7 +2586,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold' }}>Land Valuation Analysis</h3>
         <div style={{ display: 'flex', gap: '10px' }}>
           <button
-            onClick={() => setValuationMode('acre')}
+            onClick={() => {
+              setValuationMode('acre');
+              setCascadeConfig(prev => ({ ...prev, mode: 'acre' }));
+            }}
             style={{
               padding: '8px 16px',
               backgroundColor: valuationMode === 'acre' ? '#3B82F6' : 'white',
@@ -2600,7 +2603,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             Acre
           </button>
           <button
-            onClick={() => setValuationMode('sf')}
+            onClick={() => {
+              setValuationMode('sf');
+              setCascadeConfig(prev => ({ ...prev, mode: 'sf' }));
+            }}
             style={{
               padding: '8px 16px',
               backgroundColor: valuationMode === 'sf' ? '#3B82F6' : 'white',
@@ -2614,7 +2620,12 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             Square Foot
           </button>
           <button
-            onClick={() => canUseFrontFoot && setValuationMode('ff')}
+            onClick={() => {
+              if (canUseFrontFoot) {
+                setValuationMode('ff');
+                setCascadeConfig(prev => ({ ...prev, mode: 'ff' }));
+              }
+            }}
             disabled={!canUseFrontFoot}
             style={{
               padding: '8px 16px',
