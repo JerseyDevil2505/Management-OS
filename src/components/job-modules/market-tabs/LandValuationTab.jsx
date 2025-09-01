@@ -5018,7 +5018,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
         <div style={{ backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden', border: '1px solid #E5E7EB' }}>
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', fontSize: '12px' }}>
+            <table style={{ width: '100%', fontSize: '12px', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ backgroundColor: '#1E40AF', color: 'white' }}>
                   <th style={{ padding: '8px' }}>VCS</th>
