@@ -3056,6 +3056,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '8px', fontStyle: 'italic' }}>
                   * Paired analysis extracts incremental raw land value between similar sales with different acreages.
                   This isolates the pure land component from site value and improvements.
+                  <br />
+                  * Building lots require 0.10+ acre difference; Raw land requires 0.25+ acre difference.
+                  Properties too similar in size are excluded from paired analysis.
                 </div>
               </div>
             )}
