@@ -2728,43 +2728,43 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             {(() => {
               // Calculate average rate for checked items by category
               const checkedSales = vacantSales.filter(s => includedSales.has(s.id));
-              
+
               // Helper function to calculate average for a category
               const getCategoryAverage = (filterFn) => {
                 const filtered = checkedSales.filter(filterFn);
                 if (filtered.length === 0) return { avg: 0, count: 0 };
-                
+
                 if (valuationMode === 'sf') {
                   const totalPrice = filtered.reduce((sum, s) => sum + s.sales_price, 0);
                   const totalSF = filtered.reduce((sum, s) => sum + (s.totalAcres * 43560), 0);
-                  return { 
-                    avg: totalSF > 0 ? (totalPrice / totalSF).toFixed(2) : 0, 
-                    count: filtered.length 
+                  return {
+                    avg: totalSF > 0 ? (totalPrice / totalSF).toFixed(2) : 0,
+                    count: filtered.length
                   };
                 } else {
                   const avgRate = filtered.reduce((sum, s) => sum + s.pricePerAcre, 0) / filtered.length;
-                  return { 
-                    avg: Math.round(avgRate), 
-                    count: filtered.length 
+                  return {
+                    avg: Math.round(avgRate),
+                    count: filtered.length
                   };
                 }
               };
-              
-              const rawLand = getCategoryAverage(s => 
-                saleCategories[s.id] === 'raw_land' || 
+
+              const rawLand = getCategoryAverage(s =>
+                saleCategories[s.id] === 'raw_land' ||
                 (!saleCategories[s.id] && s.property_m4_class === '1')
               );
-              
-              const buildingLot = getCategoryAverage(s => 
+
+              const buildingLot = getCategoryAverage(s =>
                 saleCategories[s.id] === 'building_lot' ||
                 saleCategories[s.id] === 'teardown' ||
                 saleCategories[s.id] === 'pre-construction'
               );
-              
+
               const wetlands = getCategoryAverage(s => saleCategories[s.id] === 'wetlands');
               const landlocked = getCategoryAverage(s => saleCategories[s.id] === 'landlocked');
               const conservation = getCategoryAverage(s => saleCategories[s.id] === 'conservation');
-              
+
               return (
                 <>
                   <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
@@ -2803,6 +2803,77 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{conservation.count} sales</div>
                   </div>
                 </>
+              );
+            })()}
+          </div>
+
+          {/* Average Lot Size Section */}
+          <div style={{ marginTop: '15px', paddingTop: '15px', borderTop: '1px solid #E5E7EB' }}>
+            {(() => {
+              // Calculate average lot size and rate for included sales
+              const includedSalesForAvg = vacantSales.filter(s => includedSales.has(s.id));
+
+              if (includedSalesForAvg.length === 0) {
+                return (
+                  <div style={{ backgroundColor: 'white', padding: '15px', borderRadius: '4px', textAlign: 'center' }}>
+                    <div style={{ fontSize: '14px', color: '#6B7280' }}>No sales included for average calculation</div>
+                  </div>
+                );
+              }
+
+              // Calculate average lot size
+              const totalAcres = includedSalesForAvg.reduce((sum, s) => sum + s.totalAcres, 0);
+              const avgLotSizeAcres = totalAcres / includedSalesForAvg.length;
+
+              // Calculate average rate
+              const totalPrice = includedSalesForAvg.reduce((sum, s) => sum + s.sales_price, 0);
+              const avgPrice = totalPrice / includedSalesForAvg.length;
+
+              let displaySize, displayUnit, avgRate;
+
+              if (valuationMode === 'acre') {
+                displaySize = avgLotSizeAcres.toFixed(2);
+                displayUnit = 'Acres';
+                avgRate = Math.round(avgPrice / avgLotSizeAcres);
+              } else if (valuationMode === 'sf') {
+                const avgLotSizeSF = avgLotSizeAcres * 43560;
+                displaySize = Math.round(avgLotSizeSF).toLocaleString();
+                displayUnit = 'Sq Ft';
+                avgRate = (avgPrice / avgLotSizeSF).toFixed(2);
+              } else if (valuationMode === 'ff') {
+                // For front foot, we'd need frontage data - placeholder for now
+                displaySize = 'N/A';
+                displayUnit = 'Front Feet';
+                avgRate = 'N/A';
+              }
+
+              return (
+                <div style={{ backgroundColor: 'white', padding: '15px', borderRadius: '4px', border: '2px solid #3B82F6' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ fontSize: '14px', color: '#6B7280', marginBottom: '4px' }}>
+                        Average Lot Size ({displayUnit})
+                      </div>
+                      <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#1F2937' }}>
+                        {displaySize} {displayUnit.toLowerCase()}
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#9CA3AF' }}>
+                        {includedSalesForAvg.length} sales included
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: '14px', color: '#6B7280', marginBottom: '4px' }}>
+                        Average Rate
+                      </div>
+                      <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#3B82F6' }}>
+                        {valuationMode === 'sf' ? `$${avgRate}` : `$${typeof avgRate === 'number' ? avgRate.toLocaleString() : avgRate}`}
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#9CA3AF' }}>
+                        {getUnitLabel()}
+                      </div>
+                    </div>
+                  </div>
+                </div>
               );
             })()}
           </div>
