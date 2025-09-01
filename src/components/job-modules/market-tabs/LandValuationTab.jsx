@@ -2918,7 +2918,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 )}
                 {categoryAnalysis.rawLand.method === 'paired' && categoryAnalysis.rawLand.pairedAnalysis && (
                   <div style={{ fontSize: '9px', color: '#059669', marginTop: '2px' }}>
-                    {categoryAnalysis.rawLand.pairedAnalysis.pairs} pairs analyzed
+                    {categoryAnalysis.rawLand.count} properties • {categoryAnalysis.rawLand.pairedAnalysis.pairs} comparisons
                   </div>
                 )}
               </div>
@@ -2937,7 +2937,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 )}
                 {categoryAnalysis.buildingLot.method === 'paired' && categoryAnalysis.buildingLot.pairedAnalysis && (
                   <div style={{ fontSize: '9px', color: '#2563EB', marginTop: '2px' }}>
-                    {categoryAnalysis.buildingLot.pairedAnalysis.pairs} pairs analyzed
+                    {categoryAnalysis.buildingLot.count} properties • {categoryAnalysis.buildingLot.pairedAnalysis.pairs} comparisons
                   </div>
                 )}
               </div>
@@ -3008,7 +3008,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                             <strong>Raw Land Rate:</strong> ${Math.round(categoryAnalysis.rawLand.pairedAnalysis.bestPair.rate).toLocaleString()}/acre
                           </div>
                           <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '6px' }}>
-                            Median of {categoryAnalysis.rawLand.pairedAnalysis.pairs} paired comparisons
+                            Median of {categoryAnalysis.rawLand.pairedAnalysis.pairs} paired comparisons from {categoryAnalysis.rawLand.count} properties
                           </div>
                         </div>
                       )}
@@ -3035,7 +3035,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                             <strong>Raw Land Rate:</strong> ${Math.round(categoryAnalysis.buildingLot.pairedAnalysis.bestPair.rate).toLocaleString()}/acre
                           </div>
                           <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '6px' }}>
-                            Median of {categoryAnalysis.buildingLot.pairedAnalysis.pairs} paired comparisons
+                            Median of {categoryAnalysis.buildingLot.pairedAnalysis.pairs} paired comparisons from {categoryAnalysis.buildingLot.count} properties
                           </div>
                         </div>
                       )}
