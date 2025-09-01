@@ -5336,9 +5336,25 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       <td style={{ padding: '8px', textAlign: 'right', fontWeight: 'bold' }}>
                         {data.avgPrice ? `$${data.avgPrice.toLocaleString()}` : ''}
                       </td>
-                      <td style={{ padding: '8px', textAlign: 'center' }}>-</td>
+                      <td style={{ padding: '8px', textAlign: 'center' }}>
+                        {cmeBracket ? (
+                          <span
+                            style={{
+                              padding: '2px 6px',
+                              borderRadius: '3px',
+                              fontSize: '10px',
+                              fontWeight: 'bold',
+                              backgroundColor: cmeBracket.color,
+                              color: cmeBracket.textColor
+                            }}
+                            title={cmeBracket.label}
+                          >
+                            {cmeBracket.label}
+                          </span>
+                        ) : '-'}
+                      </td>
                       <td style={{ padding: '8px', fontSize: '10px', backgroundColor: isGrayedOut ? '#F3F4F6' : 'inherit' }}>
-                        {!isGrayedOut ? data.zoning || '' : ''}
+                        {!isGrayedOut ? cleanZoning : ''}
                       </td>
                       <td style={{ padding: '8px', fontSize: '10px', backgroundColor: isGrayedOut ? '#F3F4F6' : 'inherit' }}>
                         {!isGrayedOut ? data.keyPages || '' : ''}
