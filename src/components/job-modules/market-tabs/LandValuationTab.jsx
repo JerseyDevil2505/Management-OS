@@ -2754,7 +2754,7 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
                               row.bracket.avgAdjusted - prevBracket.avgAdjusted : null;
                             const lotDelta = prevBracket && prevBracket.avgAcres && row.bracket.avgAcres ?
                               row.bracket.avgAcres - prevBracket.avgAcres : null;
-                            const perAcre = adjustedDelta && lotDelta && lotDelta > 0 ? adjustedDelta / lotDelta : null;
+                            const perAcre = adjustedDelta && lotDelta && lotDelta > 0 && adjustedDelta > 0 ? adjustedDelta / lotDelta : null;
                             const perSqFt = perAcre ? perAcre / 43560 : null;
 
                             return (
@@ -2780,10 +2780,10 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
                                   {lotDelta ? lotDelta.toFixed(2) : '-'}
                                 </td>
                                 <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', borderBottom: '1px solid #F1F3F4' }}>
-                                  {perAcre ? `$${Math.round(perAcre).toLocaleString()}` : '-'}
+                                  {perAcre ? `$${Math.round(perAcre).toLocaleString()}` : (adjustedDelta !== null && adjustedDelta <= 0 ? 'N/A' : '-')}
                                 </td>
                                 <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', borderBottom: '1px solid #F1F3F4' }}>
-                                  {perSqFt ? `$${perSqFt.toFixed(2)}` : '-'}
+                                  {perSqFt ? `$${perSqFt.toFixed(2)}` : (adjustedDelta !== null && adjustedDelta <= 0 ? 'N/A' : '-')}
                                 </td>
                               </tr>
                             );
@@ -2798,7 +2798,7 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
         </div>
         
         {/* Method 2 Summary - Enhanced Layout */}
-        {method2Summary.average && (
+        {method2Summary && (method2Summary.mediumRange || method2Summary.largeRange || method2Summary.xlargeRange) && (
           <div style={{ borderTop: '2px solid #E5E7EB', backgroundColor: '#F8FAFC' }}>
             <div style={{ padding: '20px' }}>
               <h4 style={{ margin: '0 0 15px 0', fontSize: '16px', fontWeight: 'bold', color: '#1F2937' }}>
