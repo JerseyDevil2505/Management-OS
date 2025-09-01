@@ -5407,13 +5407,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         ) : '-'}
                       </td>
                       <td style={{ padding: '8px', fontSize: '10px', backgroundColor: isGrayedOut ? '#F3F4F6' : 'inherit', border: '1px solid #E5E7EB' }}>
-                        {!isGrayedOut ? cleanZoning : ''}
+                        {!isGrayedOut && !collapsedFields.zoning ? cleanZoning : (collapsedFields.zoning ? '...' : '')}
                       </td>
                       <td style={{ padding: '8px', fontSize: '10px', backgroundColor: isGrayedOut ? '#F3F4F6' : 'inherit', border: '1px solid #E5E7EB' }}>
-                        {!isGrayedOut ? data.keyPages || '' : ''}
+                        {!isGrayedOut && !collapsedFields.key ? data.keyPages || '' : (collapsedFields.key ? '...' : '')}
                       </td>
                       <td style={{ padding: '8px', fontSize: '10px', backgroundColor: isGrayedOut ? '#F3F4F6' : 'inherit', border: '1px solid #E5E7EB' }}>
-                        {!isGrayedOut ? data.mapPages || '' : ''}
+                        {!isGrayedOut && !collapsedFields.map ? data.mapPages || '' : (collapsedFields.map ? '...' : '')}
                       </td>
                     </tr>
                   );
