@@ -5149,10 +5149,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                           }}
                         />
                       </td>
-                      <td style={{ padding: '8px', textAlign: 'center' }}>{valuationMode}</td>
-                      <td style={{ padding: '8px', textAlign: 'center' }}>{typicalLot}</td>
-                      <td style={{ padding: '8px', textAlign: 'right' }}>${recSite.toLocaleString()}</td>
-                      <td style={{ padding: '8px' }}>
+                      <td style={{ padding: '8px', textAlign: 'center', border: '1px solid #E5E7EB' }}>{valuationMode}</td>
+                      <td style={{ padding: '8px', textAlign: 'center', border: '1px solid #E5E7EB' }}>{typicalLot}</td>
+                      <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>${recSite.toLocaleString()}</td>
+                      <td style={{ padding: '8px', border: '1px solid #E5E7EB' }}>
                         <input
                           type="number"
                           value={actSite}
