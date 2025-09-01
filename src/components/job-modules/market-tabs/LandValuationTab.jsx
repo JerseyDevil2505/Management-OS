@@ -570,6 +570,72 @@ const getPricePerUnit = useCallback((price, size) => {
   const filterVacantSales = useCallback(() => {
     if (!properties) return;
 
+    console.log('🔄 FilterVacantSales called - checking for existing sales:', {
+      currentVacantSalesCount: vacantSales.length,
+      hasSavedSalesMap: !!window._savedSalesMap,
+      savedSalesMapSize: window._savedSalesMap?.size || 0
+    });
+
+    // If we already have restored sales, preserve them and only add new ones
+    if (vacantSales.length > 0 && window._savedSalesMap) {
+      console.log('🔄 Preserving existing restored sales, checking for new ones only');
+
+      // Find any new sales that match criteria but aren't already in vacantSales
+      const existingIds = new Set(vacantSales.map(s => s.id));
+      const newSales = properties.filter(prop => {
+        if (existingIds.has(prop.id)) return false;
+
+        const hasValidSale = prop.sales_date && prop.sales_price && prop.sales_price > 0;
+        const inDateRange = prop.sales_date >= dateRange.start.toISOString().split('T')[0] &&
+                            prop.sales_date <= dateRange.end.toISOString().split('T')[0];
+
+        const nu = prop.sales_nu || '';
+        const validNu = !nu || nu === '' || nu === ' ' || nu === '00' || nu === '07' ||
+                        nu === '7' || nu.charCodeAt(0) === 32;
+
+        const isAdditionalCard = prop.property_addl_card &&
+                          prop.property_addl_card !== 'NONE' &&
+                          prop.property_addl_card !== 'M';
+        if (isAdditionalCard) return false;
+
+        const isVacantClass = prop.property_m4_class === '1' || prop.property_m4_class === '3B';
+        const isTeardown = prop.property_m4_class === '2' &&
+                          prop.asset_building_class && parseInt(prop.asset_building_class) > 10 &&
+                          prop.asset_design_style &&
+                          prop.asset_type_use &&
+                          prop.values_mod_improvement < 10000;
+        const isPreConstruction = prop.property_m4_class === '2' &&
+                                 prop.asset_building_class && parseInt(prop.asset_building_class) > 10 &&
+                                 prop.asset_design_style &&
+                                 prop.asset_type_use &&
+                                 prop.asset_year_built &&
+                                 prop.sales_date &&
+                                 new Date(prop.sales_date).getFullYear() < prop.asset_year_built;
+
+        return hasValidSale && inDateRange && validNu && (isVacantClass || isTeardown || isPreConstruction);
+      });
+
+      if (newSales.length > 0) {
+        console.log('🔄 Found new sales to add:', newSales.length);
+        const enriched = newSales.map(prop => {
+          const acres = calculateAcreage(prop);
+          const pricePerUnit = getPricePerUnit(prop.sales_price, acres);
+          return {
+            ...prop,
+            totalAcres: acres,
+            pricePerAcre: pricePerUnit
+          };
+        });
+
+        setVacantSales(prev => [...prev, ...enriched]);
+
+        // Auto-include new sales
+        setIncludedSales(prev => new Set([...prev, ...newSales.map(s => s.id)]));
+      }
+
+      return; // Don't rebuild if we already have restored sales
+    }
+
     // First identify all vacant/teardown/pre-construction sales
     const allSales = properties.filter(prop => {
       const hasValidSale = prop.sales_date && prop.sales_price && prop.sales_price > 0;
