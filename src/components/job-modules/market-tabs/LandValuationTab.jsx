@@ -660,20 +660,10 @@ const getPricePerUnit = useCallback((price, size) => {
           passesFilter = rawTypeUse === method2TypeFilter;
         }
 
-        if (!passesFilter) {
-          if (prop.new_vcs === 'RURL' && rawTypeUse === '1') {
-            console.log(`❌ RURL Type 1 filtered out - type filter:`, prop.property_block, prop.property_lot, rawTypeUse, method2TypeFilter);
-          }
-          return;
-        }
+        if (!passesFilter) return;
 
         const vcs = timeNormData.new_vcs;
-        if (!vcs) {
-          if (prop.new_vcs === 'RURL' && rawTypeUse === '1') {
-            console.log(`❌ RURL Type 1 filtered out - no VCS:`, prop.property_block, prop.property_lot);
-          }
-          return;
-        }
+        if (!vcs) return;
 
         if (!vcsSales[vcs]) {
           vcsSales[vcs] = [];
