@@ -502,7 +502,7 @@ const getPricePerUnit = useCallback((price, size) => {
       console.log('🛑 Clearing auto-save interval');
       clearInterval(interval);
     }
-  }, [cascadeConfig, landNotes, saleCategories, specialRegions, actualAllocations,
+  }, [cascadeConfig, landNotes, saleCategories, specialRegions, includedSales, actualAllocations,
       vcsManualSiteValues, actualAdjustments, targetAllocation, locationCodes, vcsTypes, method2ExcludedSales, vacantSales]);
   // ========== LAND RATES FUNCTIONS WITH ENHANCED FILTERS ==========
   const filterVacantSales = useCallback(() => {
