@@ -3517,7 +3517,10 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
             <div style={{ marginBottom: '15px', padding: '10px', backgroundColor: '#FEF3C7', borderRadius: '4px' }}>
               <p style={{ margin: 0, fontSize: '14px', color: '#92400E' }}>
                 <strong>Exclude problematic sales:</strong> Uncheck sales that should not be used in Method 2 calculations
-                (teardowns, poor condition, pre-construction, etc.)
+                (teardowns, poor condition, pre-construction, etc.).
+                <span style={{ display: 'block', marginTop: '4px' }}>
+                  ⚠️ <strong>Yellow highlighted rows</strong> are pre-construction sales (sold before year built).
+                </span>
               </p>
             </div>
 
