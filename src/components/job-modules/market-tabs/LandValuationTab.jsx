@@ -5116,8 +5116,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       opacity: isGrayedOut ? 0.7 : 1,
                       border: '1px solid #E5E7EB'
                     }}>
-                      <td style={{ padding: '8px', fontWeight: 'bold' }}>{vcs}</td>
-                      <td style={{ padding: '8px', textAlign: 'center' }}>{data.counts?.total || 0}</td>
+                      <td style={{ padding: '8px', fontWeight: 'bold', border: '1px solid #E5E7EB' }}>{vcs}</td>
+                      <td style={{ padding: '8px', textAlign: 'center', border: '1px solid #E5E7EB' }}>{data.counts?.total || 0}</td>
                       <td style={{ padding: '8px' }}>
                         <select
                           value={type}
