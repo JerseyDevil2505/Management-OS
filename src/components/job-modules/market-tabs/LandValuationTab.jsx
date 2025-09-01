@@ -190,14 +190,14 @@ useEffect(() => {
   //   setCascadeConfig(marketLandData.cascade_rates);
   // }
 
+  // Restore Method 1 state persistence (like Method 2)
   if (marketLandData.vacant_sales_analysis?.sales) {
     const savedCategories = {};
     const savedNotes = {};
     const savedRegions = {};
-    const savedIncluded = new Set();
-    const savedSalesMap = new Map();
+    const savedExcluded = new Set();
 
-    console.log('🔄 Loading saved sales data:', {
+    console.log('🔄 Loading saved Method 1 sales data:', {
       totalSales: marketLandData.vacant_sales_analysis.sales.length,
       salesWithCategories: marketLandData.vacant_sales_analysis.sales.filter(s => s.category).length,
       salesIncluded: marketLandData.vacant_sales_analysis.sales.filter(s => s.included).length,
@@ -207,38 +207,24 @@ useEffect(() => {
     marketLandData.vacant_sales_analysis.sales.forEach(s => {
       if (s.category) savedCategories[s.id] = s.category;
       if (s.notes) savedNotes[s.id] = s.notes;
-      if (s.special_region) savedRegions[s.id] = s.special_region;
-      if (s.included) savedIncluded.add(s.id);
-
-      // Store the saved sale ID for restoration
-      savedSalesMap.set(s.id, {
-        included: s.included,
-        category: s.category,
-        special_region: s.special_region,
-        notes: s.notes,
-        manually_added: s.manually_added,
-        is_package: s.is_package,
-        package_properties: s.package_properties
-      });
+      if (s.special_region && s.special_region !== 'Normal') savedRegions[s.id] = s.special_region;
+      if (!s.included) savedExcluded.add(s.id); // Track excluded instead of included
     });
 
-    console.log('🔄 Restored checkbox states:', {
-      includedCount: savedIncluded.size,
+    console.log('🔄 Restored Method 1 states:', {
+      excludedCount: savedExcluded.size,
       categoriesCount: Object.keys(savedCategories).length,
       regionsCount: Object.keys(savedRegions).length,
-      includedIds: Array.from(savedIncluded),
-      categories: savedCategories,
-      savedSalesCount: savedSalesMap.size,
-      sampleSalesData: marketLandData.vacant_sales_analysis.sales.slice(0, 3)
+      excludedIds: Array.from(savedExcluded),
+      categories: savedCategories
     });
 
     setSaleCategories(savedCategories);
     setLandNotes(savedNotes);
     setSpecialRegions(savedRegions);
-    setIncludedSales(savedIncluded);
 
-    // Store the saved sales map for use in filterVacantSales
-    window._savedSalesMap = savedSalesMap;
+    // Store excluded sales for application after filtering
+    window._method1ExcludedSales = savedExcluded;
   }
 
   // Restore Method 2 excluded sales
