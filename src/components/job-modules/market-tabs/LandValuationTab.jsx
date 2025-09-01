@@ -920,6 +920,21 @@ const getPricePerUnit = useCallback((price, size) => {
     const existingIds = new Set(vacantSales.map(s => s.id));
     results = results.filter(p => !existingIds.has(p.id));
 
+    // Sort results numerically by block, then lot
+    results.sort((a, b) => {
+      const blockA = parseInt(a.property_block) || 0;
+      const blockB = parseInt(b.property_block) || 0;
+
+      if (blockA !== blockB) {
+        return blockA - blockB;
+      }
+
+      // If blocks are the same, sort by lot
+      const lotA = parseInt(a.property_lot) || 0;
+      const lotB = parseInt(b.property_lot) || 0;
+      return lotA - lotB;
+    });
+
     setSearchResults(results);
   };
   // Method 2 Modal Functions
