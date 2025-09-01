@@ -667,16 +667,29 @@ const getPricePerUnit = useCallback((price, size) => {
 
     setVacantSales(finalSales);
 
-    // Only auto-include sales that don't have a saved state (preserve existing included/excluded choices)
+    // Preserve existing included/excluded state, only auto-include truly new sales
     setIncludedSales(prev => {
-      const newIncluded = new Set(prev);
+      const existingIds = new Set(prev);
+      const currentSaleIds = new Set(finalSales.map(s => s.id));
+
+      // Start with existing included sales that are still in the current results
+      const preservedIncluded = new Set([...prev].filter(id => currentSaleIds.has(id)));
+
+      // Auto-include only sales that are new (not in previous state)
       finalSales.forEach(sale => {
-        // Only auto-include if this sale doesn't have a saved state
-        if (!marketLandData?.vacant_sales_analysis?.sales?.some(s => s.id === sale.id)) {
-          newIncluded.add(sale.id);
+        if (!existingIds.has(sale.id)) {
+          preservedIncluded.add(sale.id);
         }
       });
-      return newIncluded;
+
+      console.log('🔄 Checkbox state preserved:', {
+        previousCount: prev.size,
+        currentSalesCount: finalSales.length,
+        preservedCount: preservedIncluded.size,
+        newlyAdded: preservedIncluded.size - [...prev].filter(id => currentSaleIds.has(id)).length
+      });
+
+      return preservedIncluded;
     });
   }, [properties, dateRange, calculateAcreage, getPricePerUnit, saleCategories]);
 
