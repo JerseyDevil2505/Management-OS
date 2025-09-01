@@ -1876,7 +1876,15 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
   // ========== SAVE & EXPORT FUNCTIONS ==========
   const saveAnalysis = async () => {
-    if (!jobData?.id) return;
+    if (!jobData?.id) {
+      console.log('❌ Save cancelled: No job ID');
+      return;
+    }
+
+    console.log('💾 Starting save...', {
+      vacantSalesCount: vacantSales.length,
+      excludedSalesCount: method2ExcludedSales.size
+    });
 
     setIsSaving(true);
 
