@@ -164,6 +164,7 @@ useEffect(() => {
           standard: savedConfig.normal?.standard || { max: 100, rate: null }
         },
         special: savedConfig.special || {},
+        vcsSpecific: savedConfig.vcsSpecific || {},
         specialCategories: savedConfig.specialCategories || {
           wetlands: null,
           landlocked: null,
