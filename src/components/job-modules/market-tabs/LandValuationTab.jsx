@@ -209,19 +209,31 @@ useEffect(() => {
     const savedNotes = {};
     const savedRegions = {};
     const savedIncluded = new Set();
-    
+
+    console.log('🔄 Loading saved sales data:', {
+      totalSales: marketLandData.vacant_sales_analysis.sales.length,
+      salesWithCategories: marketLandData.vacant_sales_analysis.sales.filter(s => s.category).length,
+      salesIncluded: marketLandData.vacant_sales_analysis.sales.filter(s => s.included).length,
+      salesExcluded: marketLandData.vacant_sales_analysis.sales.filter(s => !s.included).length
+    });
+
     marketLandData.vacant_sales_analysis.sales.forEach(s => {
       if (s.category) savedCategories[s.id] = s.category;
       if (s.notes) savedNotes[s.id] = s.notes;
       if (s.special_region) savedRegions[s.id] = s.special_region;
       if (s.included) savedIncluded.add(s.id);
     });
-    
+
+    console.log('🔄 Restored checkbox states:', {
+      includedCount: savedIncluded.size,
+      categoriesCount: Object.keys(savedCategories).length,
+      regionsCount: Object.keys(savedRegions).length
+    });
+
     setSaleCategories(savedCategories);
     setLandNotes(savedNotes);
     setSpecialRegions(savedRegions);
     setIncludedSales(savedIncluded);
-
   }
 
   // Restore Method 2 excluded sales
