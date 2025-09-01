@@ -775,6 +775,11 @@ const getPricePerUnit = useCallback((price, size) => {
         
         // Auto-include package in analysis
         setIncludedSales(prev => new Set([...prev, packageSale.id]));
+
+        // Set package category
+        if (packageSale.autoCategory) {
+          setSaleCategories(prev => ({...prev, [packageSale.id]: packageSale.autoCategory}));
+        }
       } else {
         // Single property with book/page
         const enriched = enrichProperty(group[0]);
@@ -784,12 +789,13 @@ const getPricePerUnit = useCallback((price, size) => {
         }
       }
     });
-    
+
     // Add standalone properties
     standalone.forEach(prop => {
       const enriched = enrichProperty(prop);
       finalSales.push(enriched);
       if (enriched.autoCategory) {
+        console.log(`🏗️ Auto-categorizing ${prop.property_block}/${prop.property_lot} as ${enriched.autoCategory}`);
         setSaleCategories(prev => ({...prev, [prop.id]: enriched.autoCategory}));
       }
     });
