@@ -2295,10 +2295,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       // Skip non-residential types for cascade rates
       const isResidential = type.startsWith('Residential');
 
-      // Get typical lot size
+      // Get typical lot size for all properties in this VCS
       const vcsProps = properties?.filter(p =>
         p.new_vcs === vcs &&
-        (p.property_m4_class === '2' || p.property_m4_class === '3A')
+        p.asset_lot_acre && p.asset_lot_acre > 0 // Only properties with valid acreage
       ) || [];
       const typicalLot = vcsProps.length > 0 ?
         (vcsProps.reduce((sum, p) => sum + parseFloat(calculateAcreage(p)), 0) / vcsProps.length).toFixed(2) : '';
