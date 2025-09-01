@@ -217,16 +217,16 @@ useEffect(() => {
     }
   }
 
-  if (marketLandData.vcs_sheet_data) {
-    setVcsSheetData(marketLandData.vcs_sheet_data);
-    if (marketLandData.vcs_sheet_data.manual_site_values) {
-      setVcsManualSiteValues(marketLandData.vcs_sheet_data.manual_site_values);
+  if (marketLandData.worksheet_data) {
+    setVcsSheetData(marketLandData.worksheet_data.sheet_data || {});
+    if (marketLandData.worksheet_data.manual_site_values) {
+      setVcsManualSiteValues(marketLandData.worksheet_data.manual_site_values);
     }
-    if (marketLandData.vcs_sheet_data.descriptions) {
-      setVcsDescriptions(marketLandData.vcs_sheet_data.descriptions);
+    if (marketLandData.worksheet_data.descriptions) {
+      setVcsDescriptions(marketLandData.worksheet_data.descriptions);
     }
-    if (marketLandData.vcs_sheet_data.types) {
-      setVcsTypes(marketLandData.vcs_sheet_data.types);
+    if (marketLandData.worksheet_data.types) {
+      setVcsTypes(marketLandData.worksheet_data.types);
     }
   }
 
@@ -1931,7 +1931,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           current_overall_allocation: currentOverallAllocation,
           stats: calculateAllocationStats()
         },
-        vcs_sheet_data: {
+        worksheet_data: {
           property_counts: vcsPropertyCounts,
           zoning_data: vcsZoningData,
           manual_site_values: vcsManualSiteValues,
