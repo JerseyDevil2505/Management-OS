@@ -717,26 +717,27 @@ const getPricePerUnit = useCallback((price, size) => {
             avgAdjusted: null
           };
 
-          const avgSalePrice = arr.reduce((sum, s) => sum + s.salesPrice, 0) / arr.length;
+          // Use time-normalized values for Method 2
+          const avgNormTime = arr.reduce((sum, s) => sum + s.normalizedTime, 0) / arr.length;
           const avgAcres = arr.reduce((sum, s) => sum + s.acres, 0) / arr.length;
           const validSFLA = arr.filter(s => s.sfla > 0);
           const avgSFLA = validSFLA.length > 0 ?
             validSFLA.reduce((sum, s) => sum + s.sfla, 0) / validSFLA.length : null;
 
-          // Jim's Magic Formula for size adjustment
-          let avgAdjusted = avgSalePrice;
+          // Jim's Magic Formula for size adjustment (using time-normalized values)
+          let avgAdjusted = avgNormTime;
           if (overallAvgSFLA && avgSFLA && avgSFLA > 0) {
             const sflaDiff = overallAvgSFLA - avgSFLA;
-            const pricePerSqFt = avgSalePrice / avgSFLA;
+            const pricePerSqFt = avgNormTime / avgSFLA;
             const sizeAdjustment = sflaDiff * (pricePerSqFt * 0.50);
-            avgAdjusted = avgSalePrice + sizeAdjustment;
+            avgAdjusted = avgNormTime + sizeAdjustment;
           }
 
           return {
             count: arr.length,
             avgAcres: Math.round(avgAcres * 100) / 100, // Round to 2 decimals
-            avgSalePrice: Math.round(avgSalePrice),
-            avgNormTime: Math.round(arr.reduce((sum, s) => sum + s.normalizedTime, 0) / arr.length),
+            avgSalePrice: Math.round(avgNormTime), // Time-normalized sale price
+            avgNormTime: Math.round(avgNormTime), // Keep for compatibility
             avgSFLA: avgSFLA ? Math.round(avgSFLA) : null,
             avgAdjusted: Math.round(avgAdjusted)
           };
@@ -762,7 +763,7 @@ const getPricePerUnit = useCallback((price, size) => {
 
         analysis[vcs] = {
           totalSales: sales.length,
-          avgPrice: Math.round(sales.reduce((sum, s) => sum + s.salesPrice, 0) / sales.length),
+          avgPrice: Math.round(sales.reduce((sum, s) => sum + s.normalizedTime, 0) / sales.length), // Use time-normalized
           avgAcres: Math.round((sales.reduce((sum, s) => sum + s.acres, 0) / sales.length) * 100) / 100,
           avgAdjusted: Math.round(sales.reduce((sum, s) => sum + s.normalizedTime, 0) / sales.length),
           brackets: bracketStats,
