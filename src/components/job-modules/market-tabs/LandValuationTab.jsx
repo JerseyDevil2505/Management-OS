@@ -2742,7 +2742,20 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
                     <div>
                       <span style={{ fontSize: '16px', fontWeight: 'bold' }}>{vcs}:</span>
                       <span style={{ fontSize: '12px', marginLeft: '8px', fontWeight: 'normal' }}>
-                        {summaryLine}
+                        <span
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openMethod2SalesModal(vcs);
+                          }}
+                          style={{
+                            textDecoration: 'underline',
+                            cursor: 'pointer',
+                            color: '#3B82F6'
+                          }}
+                        >
+                          {data.totalSales} sales
+                        </span>
+                        {` • Avg $${Math.round(data.avgPrice).toLocaleString()} • ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} • $${data.impliedRate || 0}`}
                       </span>
                     </div>
                     <span style={{ fontSize: '16px', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
