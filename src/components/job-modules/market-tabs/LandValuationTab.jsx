@@ -2350,14 +2350,20 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         if (valuationMode === 'ff') {
           csv += `${cascadeRates.standard?.rate || ''},${cascadeRates.excess?.rate || ''},`;
         } else {
-          csv += `${cascadeRates.prime?.rate || ''},${cascadeRates.secondary?.rate || ''},${cascadeRates.excess?.rate || ''},${cascadeRates.residual?.rate || ''},`;
+          csv += `${cascadeRates.prime?.rate || ''},${cascadeRates.secondary?.rate || ''},${cascadeRates.excess?.rate || ''},`;
+          if (shouldShowResidualColumn) {
+            csv += `${cascadeRates.residual?.rate || ''},`;
+          }
         }
       } else {
         // Empty cells for non-residential
         if (valuationMode === 'ff') {
           csv += ',,';
         } else {
-          csv += ',,,,';
+          csv += ',,,';
+          if (shouldShowResidualColumn) {
+            csv += ',';
+          }
         }
       }
 
