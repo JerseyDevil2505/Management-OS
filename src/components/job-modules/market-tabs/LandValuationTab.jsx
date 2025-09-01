@@ -1567,10 +1567,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         // Collect averages for residential with valid sales
         if (prop.sales_price > 0 && prop.sales_date) {
           const saleDate = new Date(prop.sales_date);
-          const octoberFirstTwoYearsPrior = getOctoberFirstTwoYearsPrior();
+          const octoberFirstThreeYearsPrior = getOctoberFirstThreeYearsPrior();
 
-          // Sales from October 1st two years prior to present
-          if (saleDate >= octoberFirstTwoYearsPrior) {
+          // Sales from October 1st three years prior to present
+          if (saleDate >= octoberFirstThreeYearsPrior) {
             if (prop.values_norm_time > 0) avgNormTime[prop.new_vcs].push(prop.values_norm_time);
             if (prop.values_norm_size > 0) avgNormSize[prop.new_vcs].push(prop.values_norm_size);
             
