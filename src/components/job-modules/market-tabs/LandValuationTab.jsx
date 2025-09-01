@@ -926,6 +926,9 @@ const getPricePerUnit = useCallback((price, size) => {
   const openMethod2SalesModal = (vcs) => {
     setMethod2ModalVCS(vcs);
     setShowMethod2Modal(true);
+    // Reset sort to block ascending
+    setModalSortField('block');
+    setModalSortDirection('asc');
   };
 
   const handleModalSort = (field) => {
