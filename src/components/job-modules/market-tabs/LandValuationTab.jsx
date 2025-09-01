@@ -1952,18 +1952,23 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         .single();
       
       if (existing) {
-        await supabase
+        console.log('📝 Updating existing record...');
+        const { error } = await supabase
           .from('market_land_valuation')
           .update(analysisData)
           .eq('job_id', jobData.id);
+        if (error) throw error;
       } else {
-        await supabase
+        console.log('➕ Creating new record...');
+        const { error } = await supabase
           .from('market_land_valuation')
           .insert(analysisData);
+        if (error) throw error;
       }
-      
+
+      console.log('✅ Save completed successfully');
       setLastSaved(new Date());
-      
+
       // Notify parent component
       if (onAnalysisUpdate) {
         onAnalysisUpdate(analysisData);
