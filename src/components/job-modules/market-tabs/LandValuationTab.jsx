@@ -634,27 +634,10 @@ const getPricePerUnit = useCallback((price, size) => {
 
       const vcsSales = {};
 
-      // DEBUG: Count RURL properties with asset_type_use = 1
-      const rurlType1Properties = properties.filter(p =>
-        p.new_vcs === 'RURL' &&
-        p.asset_type_use?.toString().trim().toUpperCase() === '1'
-      );
-      console.log(`🔍 DEBUG: Found ${rurlType1Properties.length} RURL properties with asset_type_use = 1`);
-
-      const rurlType1WithNormTime = rurlType1Properties.filter(p =>
-        p.values_norm_time != null && p.values_norm_time > 0
-      );
-      console.log(`🔍 DEBUG: ${rurlType1WithNormTime.length} RURL type 1 properties have values_norm_time > 0`);
-
       // Filter properties that have time normalization data
       properties.forEach(prop => {
         const timeNormData = timeNormLookup.get(prop.property_composite_key);
-        if (!timeNormData) {
-          if (prop.new_vcs === 'RURL' && prop.asset_type_use?.toString().trim().toUpperCase() === '1') {
-            console.log(`❌ RURL Type 1 filtered out - no timeNormData:`, prop.property_block, prop.property_lot, prop.values_norm_time);
-          }
-          return;
-        }
+        if (!timeNormData) return;
 
         // Apply type/use filter with umbrella group support
         const rawTypeUse = prop.asset_type_use?.toString().trim().toUpperCase();
