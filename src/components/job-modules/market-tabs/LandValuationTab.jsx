@@ -2158,22 +2158,25 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
   const exportVCSSheet = () => {
     let csv = 'VCS VALUATION SHEET\n';
-    csv += `Municipality: ${jobData?.municipality || ''}\n`;
-    csv += `County: ${jobData?.county || ''}\n`;
-    csv += `Date: ${new Date().toLocaleDateString()}\n`;
-    csv += `Method: ${valuationMode.toUpperCase()}\n`;
-    csv += `Target Allocation: ${targetAllocation || 'Not Set'}%\n\n`;
-    
+    csv += `Municipality,${jobData?.municipality || ''}\n`;
+    csv += `County,${jobData?.county || ''}\n`;
+    csv += `Date,${new Date().toLocaleDateString()}\n`;
+    csv += `Method,${valuationMode.toUpperCase()}\n`;
+    csv += `Target Allocation,${targetAllocation || 'Not Set'}%\n\n`;
+
+    // Header row - this will be the top row as requested
     csv += 'VCS,Total,Type,Description,Method,Typical Lot,Rec Site,Act Site,';
-    
+
     // Cascade headers based on mode
     if (valuationMode === 'ff') {
       csv += 'Standard FF,Excess FF,';
     } else {
       csv += 'Prime,Secondary,Excess,Residual,';
     }
-    
-    csv += 'Avg Norm Time,Avg Norm Size,Avg Price,CME,Zoning,Key Pages,Map Pages\n';
+
+    // Add special category columns to match UI
+    csv += 'Wetlands,Landlocked,Conservation,';
+    csv += 'Avg NT,Avg $,CME,Zoning,Key Pages,Map Pages\n';
     
     Object.keys(vcsSheetData).sort().forEach(vcs => {
       const data = vcsSheetData[vcs];
@@ -4705,7 +4708,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'yearBuilt' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Year Built {modalSortField === 'yearBuilt' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
+                      Year Built {modalSortField === 'yearBuilt' ? (modalSortDirection === 'asc' ? '��' : '↓') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('typeUse')}
