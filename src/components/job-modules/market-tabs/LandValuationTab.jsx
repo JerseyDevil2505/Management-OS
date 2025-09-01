@@ -68,9 +68,11 @@ const LandValuationTab = ({
       prime: { max: 1, rate: null },
       secondary: { max: 5, rate: null },
       excess: { max: 10, rate: null },
-      residual: { max: null, rate: null }
+      residual: { max: null, rate: null },
+      standard: { max: 100, rate: null } // For front foot method
     },
     special: {},
+    vcsSpecific: {}, // New: VCS-specific configurations
     specialCategories: {
       wetlands: null,
       landlocked: null,
