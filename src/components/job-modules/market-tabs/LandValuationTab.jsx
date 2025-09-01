@@ -382,7 +382,7 @@ const getPricePerUnit = useCallback((price, size) => {
 
     // Always include Single Family
     if (uniqueCodes.has('1') || uniqueCodes.has('10')) {
-      options.push({ code: '1', description: '1 - Single Family' });
+      options.push({ code: '1', description: '1-Single Family' });
     }
 
     // Add umbrella groups only if we have matching codes
@@ -390,17 +390,17 @@ const getPricePerUnit = useCallback((price, size) => {
       {
         codes: ['30', '31', '3E', '3I'],
         groupCode: '3',
-        description: '3 - Row/Townhouses'
+        description: '3-Row/Townhouses'
       },
       {
         codes: ['42', '43', '44'],
         groupCode: '4',
-        description: '4 - MultiFamily'
+        description: '4-MultiFamily'
       },
       {
         codes: ['51', '52', '53'],
         groupCode: '5',
-        description: '5 - Conversions'
+        description: '5-Conversions'
       }
     ];
 
@@ -415,7 +415,12 @@ const getPricePerUnit = useCallback((price, size) => {
     const allUmbrellaCodes = ['1', '10', '30', '31', '3E', '3I', '42', '43', '44', '51', '52', '53'];
     uniqueCodes.forEach(code => {
       if (!allUmbrellaCodes.includes(code)) {
-        options.push({ code, description: `${code} - Other` });
+        // Special case for code '2' - Semi Det
+        if (code === '2') {
+          options.push({ code, description: `2-Semi Det` });
+        } else {
+          options.push({ code, description: `${code}-Other` });
+        }
       }
     });
 
