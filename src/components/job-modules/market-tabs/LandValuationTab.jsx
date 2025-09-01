@@ -1302,10 +1302,36 @@ const getPricePerUnit = useCallback((price, size) => {
     setVacantSales([...vacantSales, ...enriched]);
     setIncludedSales(new Set([...includedSales, ...toAdd.map(p => p.id)]));
     
-    // Check if any are teardowns (Class 2)
+    // Auto-categorize teardowns and pre-construction (match filterVacantSales logic)
     toAdd.forEach(p => {
-      if (p.property_m4_class === '2') {
-        setSaleCategories(prev => ({...prev, [p.id]: 'teardown'}));
+      let autoCategory = null;
+
+      // Teardown detection (Class 2 with minimal improvement)
+      if (p.property_m4_class === '2' &&
+          p.asset_building_class && parseInt(p.asset_building_class) > 10 &&
+          p.asset_design_style &&
+          p.asset_type_use &&
+          p.values_mod_improvement < 10000) {
+        autoCategory = 'teardown';
+      }
+      // Pre-construction detection (sold before house was built)
+      else if (p.property_m4_class === '2' &&
+               p.asset_building_class && parseInt(p.asset_building_class) > 10 &&
+               p.asset_design_style &&
+               p.asset_type_use &&
+               p.asset_year_built &&
+               p.sales_date &&
+               new Date(p.sales_date).getFullYear() < p.asset_year_built) {
+        autoCategory = 'pre-construction';
+      }
+      // General Class 2 fallback to building lot
+      else if (p.property_m4_class === '2') {
+        autoCategory = 'building_lot';
+      }
+
+      if (autoCategory) {
+        console.log(`🏗️ Auto-categorizing manually added ${p.property_block}/${p.property_lot} as ${autoCategory}`);
+        setSaleCategories(prev => ({...prev, [p.id]: autoCategory}));
       }
     });
     
