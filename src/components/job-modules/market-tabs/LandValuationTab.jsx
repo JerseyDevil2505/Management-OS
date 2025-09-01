@@ -5786,6 +5786,29 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           >
             <Save size={16} /> {isSaving ? 'Saving...' : 'Save'}
           </button>
+          <button
+            onClick={() => {
+              console.log('🔧 MANUAL DEBUG SAVE TRIGGERED');
+              console.log('Current state snapshot:', {
+                includedSales: Array.from(includedSales),
+                specialCategories: cascadeConfig.specialCategories,
+                saleCategories,
+                vacantSalesCount: vacantSales.length
+              });
+              saveAnalysis();
+            }}
+            style={{
+              backgroundColor: '#8B5CF6',
+              color: 'white',
+              padding: '4px 8px',
+              borderRadius: '4px',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: '12px'
+            }}
+          >
+            🔧 Debug Save
+          </button>
           {lastSaved && (
             <span style={{ fontSize: '12px', color: '#6B7280' }}>
               Last saved: {lastSaved.toLocaleTimeString()}
