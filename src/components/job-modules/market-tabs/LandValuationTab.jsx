@@ -2802,43 +2802,76 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
           <div style={{ borderTop: '2px solid #E5E7EB', backgroundColor: '#F8FAFC' }}>
             <div style={{ padding: '20px' }}>
               <h4 style={{ margin: '0 0 15px 0', fontSize: '16px', fontWeight: 'bold', color: '#1F2937' }}>
-                Method 2 Summary - Implied {getUnitLabel()} Rates
+                Method 2 Summary - Implied $/Acre Rates
               </h4>
 
-              <div style={{ display: 'flex', gap: '30px', alignItems: 'center', flexWrap: 'wrap' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-                  <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: '14px', color: '#6B7280', marginBottom: '4px' }}>Average</div>
-                    <div style={{ fontSize: '32px', fontWeight: 'bold', color: '#059669' }}>
-                      ${method2Summary.average?.toLocaleString()}
-                    </div>
+              <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+                {/* 1.00-4.99 Range */}
+                <div style={{ textAlign: 'center', minWidth: '150px' }}>
+                  <div style={{ fontSize: '14px', color: '#6B7280', marginBottom: '4px' }}>1.00-4.99 Acres</div>
+                  <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#059669' }}>
+                    {method2Summary.mediumRange?.perAcre !== 'N/A' ?
+                      `$${method2Summary.mediumRange?.perAcre?.toLocaleString()}` : 'N/A'}
                   </div>
-
-                  <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: '14px', color: '#6B7280', marginBottom: '4px' }}>Median</div>
-                    <div style={{ fontSize: '32px', fontWeight: 'bold', color: '#0D9488' }}>
-                      ${method2Summary.median?.toLocaleString()}
-                    </div>
+                  <div style={{ fontSize: '12px', color: '#6B7280' }}>
+                    {method2Summary.mediumRange?.perSqFt !== 'N/A' ?
+                      `$${method2Summary.mediumRange?.perSqFt}/SF` : 'N/A'}
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#9CA3AF' }}>
+                    ({method2Summary.mediumRange?.count || 0} VCS)
                   </div>
                 </div>
 
-                <div style={{ width: '1px', height: '60px', backgroundColor: '#D1D5DB' }}></div>
+                {/* 5.00-9.99 Range */}
+                <div style={{ textAlign: 'center', minWidth: '150px' }}>
+                  <div style={{ fontSize: '14px', color: '#6B7280', marginBottom: '4px' }}>5.00-9.99 Acres</div>
+                  <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#0D9488' }}>
+                    {method2Summary.largeRange?.perAcre !== 'N/A' ?
+                      `$${method2Summary.largeRange?.perAcre?.toLocaleString()}` : 'N/A'}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#6B7280' }}>
+                    {method2Summary.largeRange?.perSqFt !== 'N/A' ?
+                      `$${method2Summary.largeRange?.perSqFt}/SF` : 'N/A'}
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#9CA3AF' }}>
+                    ({method2Summary.largeRange?.count || 0} VCS)
+                  </div>
+                </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', minWidth: '200px' }}>
-                    <span style={{ fontSize: '14px', color: '#6B7280' }}>VCS Coverage:</span>
-                    <span style={{ fontSize: '14px', fontWeight: '600', color: '#1F2937' }}>{method2Summary.coverage}</span>
+                {/* 10.00+ Range */}
+                <div style={{ textAlign: 'center', minWidth: '150px' }}>
+                  <div style={{ fontSize: '14px', color: '#6B7280', marginBottom: '4px' }}>10.00+ Acres</div>
+                  <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#7C3AED' }}>
+                    {method2Summary.xlargeRange?.perAcre !== 'N/A' ?
+                      `$${method2Summary.xlargeRange?.perAcre?.toLocaleString()}` : 'N/A'}
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', minWidth: '200px' }}>
-                    <span style={{ fontSize: '14px', color: '#6B7280' }}>Range:</span>
-                    <span style={{ fontSize: '14px', fontWeight: '600', color: '#1F2937' }}>
-                      ${method2Summary.min?.toLocaleString()} - ${method2Summary.max?.toLocaleString()}
-                    </span>
+                  <div style={{ fontSize: '12px', color: '#6B7280' }}>
+                    {method2Summary.xlargeRange?.perSqFt !== 'N/A' ?
+                      `$${method2Summary.xlargeRange?.perSqFt}/SF` : 'N/A'}
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', minWidth: '200px' }}>
+                  <div style={{ fontSize: '11px', color: '#9CA3AF' }}>
+                    ({method2Summary.xlargeRange?.count || 0} VCS)
+                  </div>
+                </div>
+
+                <div style={{ width: '1px', height: '80px', backgroundColor: '#D1D5DB' }}></div>
+
+                {/* Stats */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '200px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '14px', color: '#6B7280' }}>Total VCS Areas:</span>
+                    <span style={{ fontSize: '14px', fontWeight: '600', color: '#1F2937' }}>{method2Summary.totalVCS || 0}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ fontSize: '14px', color: '#6B7280' }}>Total Sales:</span>
                     <span style={{ fontSize: '14px', fontWeight: '600', color: '#1F2937' }}>
                       {Object.values(bracketAnalysis).reduce((sum, data) => sum + data.totalSales, 0)}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '14px', color: '#6B7280' }}>Positive Deltas:</span>
+                    <span style={{ fontSize: '14px', fontWeight: '600', color: '#059669' }}>
+                      {(method2Summary.mediumRange?.count || 0) + (method2Summary.largeRange?.count || 0) + (method2Summary.xlargeRange?.count || 0)}
                     </span>
                   </div>
                 </div>
