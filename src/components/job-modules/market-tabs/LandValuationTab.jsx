@@ -2788,6 +2788,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       {valuationMode === 'sf' ? `$${rawLand.avg}` : `$${rawLand.avg.toLocaleString()}`}
                     </div>
                     <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{rawLand.count} sales</div>
+                    {rawLand.count > 0 && (
+                      <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '2px' }}>
+                        Avg: {rawLand.avgLotSize}
+                      </div>
+                    )}
                   </div>
                   <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
                     <div style={{ fontSize: '12px', color: '#6B7280' }}>Building Lot</div>
@@ -2795,6 +2800,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       {valuationMode === 'sf' ? `$${buildingLot.avg}` : `$${buildingLot.avg.toLocaleString()}`}
                     </div>
                     <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{buildingLot.count} sales</div>
+                    {buildingLot.count > 0 && (
+                      <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '2px' }}>
+                        Avg: {buildingLot.avgLotSize}
+                      </div>
+                    )}
                   </div>
                   <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
                     <div style={{ fontSize: '12px', color: '#6B7280' }}>Wetlands</div>
@@ -2802,6 +2812,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       {valuationMode === 'sf' ? `$${wetlands.avg}` : `$${wetlands.avg.toLocaleString()}`}
                     </div>
                     <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{wetlands.count} sales</div>
+                    {wetlands.count > 0 && (
+                      <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '2px' }}>
+                        Avg: {wetlands.avgLotSize}
+                      </div>
+                    )}
                   </div>
                   <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
                     <div style={{ fontSize: '12px', color: '#6B7280' }}>Landlocked</div>
@@ -2809,6 +2824,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       {valuationMode === 'sf' ? `$${landlocked.avg}` : `$${landlocked.avg.toLocaleString()}`}
                     </div>
                     <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{landlocked.count} sales</div>
+                    {landlocked.count > 0 && (
+                      <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '2px' }}>
+                        Avg: {landlocked.avgLotSize}
+                      </div>
+                    )}
                   </div>
                   <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
                     <div style={{ fontSize: '12px', color: '#6B7280' }}>Conservation</div>
@@ -2816,6 +2836,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       {valuationMode === 'sf' ? `$${conservation.avg}` : `$${conservation.avg.toLocaleString()}`}
                     </div>
                     <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{conservation.count} sales</div>
+                    {conservation.count > 0 && (
+                      <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '2px' }}>
+                        Avg: {conservation.avgLotSize}
+                      </div>
+                    )}
                   </div>
                 </>
               );
