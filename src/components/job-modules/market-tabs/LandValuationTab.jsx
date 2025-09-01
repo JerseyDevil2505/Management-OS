@@ -5306,8 +5306,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       <td style={{
                         padding: '8px',
                         textAlign: 'right',
-                        backgroundColor: vcsSpecialCategories.wetlands ? '#DBEAFE' : '#F9FAFB',
-                        color: vcsSpecialCategories.wetlands ? '#1E40AF' : '#9CA3AF'
+                        color: vcsSpecialCategories.wetlands ? '#1E40AF' : '#9CA3AF',
+                        border: '1px solid #E5E7EB'
                       }}>
                         {vcsSpecialCategories.wetlands && cascadeConfig.specialCategories.wetlands ?
                           `$${cascadeConfig.specialCategories.wetlands.toLocaleString()}` : ''}
@@ -5315,8 +5315,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       <td style={{
                         padding: '8px',
                         textAlign: 'right',
-                        backgroundColor: vcsSpecialCategories.landlocked ? '#FEF3C7' : '#F9FAFB',
-                        color: vcsSpecialCategories.landlocked ? '#92400E' : '#9CA3AF'
+                        color: vcsSpecialCategories.landlocked ? '#92400E' : '#9CA3AF',
+                        border: '1px solid #E5E7EB'
                       }}>
                         {vcsSpecialCategories.landlocked && cascadeConfig.specialCategories.landlocked ?
                           `$${cascadeConfig.specialCategories.landlocked.toLocaleString()}` : ''}
@@ -5324,8 +5324,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       <td style={{
                         padding: '8px',
                         textAlign: 'right',
-                        backgroundColor: vcsSpecialCategories.conservation ? '#ECFDF5' : '#F9FAFB',
-                        color: vcsSpecialCategories.conservation ? '#059669' : '#9CA3AF'
+                        color: vcsSpecialCategories.conservation ? '#059669' : '#9CA3AF',
+                        border: '1px solid #E5E7EB'
                       }}>
                         {vcsSpecialCategories.conservation && cascadeConfig.specialCategories.conservation ?
                           `$${cascadeConfig.specialCategories.conservation.toLocaleString()}` : ''}
