@@ -2353,6 +2353,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     // Calculate average rate for checked items by category
     const checkedSales = vacantSales.filter(s => includedSales.has(s.id));
 
+    console.log('🔄 Recalculating category analysis');
+    console.log('📊 Checked sales count:', checkedSales.length);
+    console.log('📋 Included sales IDs:', Array.from(includedSales));
+
     // Helper function to calculate average for a category
     const getCategoryAverage = (filterFn, categoryType) => {
       const filtered = checkedSales.filter(filterFn);
