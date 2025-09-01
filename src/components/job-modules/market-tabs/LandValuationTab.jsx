@@ -5024,8 +5024,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       <th style={{ padding: '8px' }}>Res</th>
                     </>
                   )}
+                  <th style={{ padding: '8px' }}>Wetlands</th>
+                  <th style={{ padding: '8px' }}>Landlocked</th>
+                  <th style={{ padding: '8px' }}>Conservation</th>
                   <th style={{ padding: '8px' }}>Avg NT</th>
-                  <th style={{ padding: '8px' }}>Avg NS</th>
                   <th style={{ padding: '8px' }}>Avg $</th>
                   <th style={{ padding: '8px' }}>CME</th>
                   <th style={{ padding: '8px' }}>Zoning</th>
