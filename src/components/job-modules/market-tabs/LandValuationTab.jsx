@@ -195,6 +195,7 @@ useEffect(() => {
     const savedNotes = {};
     const savedRegions = {};
     const savedIncluded = new Set();
+    const savedSalesMap = new Map();
 
     console.log('🔄 Loading saved sales data:', {
       totalSales: marketLandData.vacant_sales_analysis.sales.length,
@@ -208,6 +209,17 @@ useEffect(() => {
       if (s.notes) savedNotes[s.id] = s.notes;
       if (s.special_region) savedRegions[s.id] = s.special_region;
       if (s.included) savedIncluded.add(s.id);
+
+      // Store the saved sale ID for restoration
+      savedSalesMap.set(s.id, {
+        included: s.included,
+        category: s.category,
+        special_region: s.special_region,
+        notes: s.notes,
+        manually_added: s.manually_added,
+        is_package: s.is_package,
+        package_properties: s.package_properties
+      });
     });
 
     console.log('🔄 Restored checkbox states:', {
@@ -216,6 +228,7 @@ useEffect(() => {
       regionsCount: Object.keys(savedRegions).length,
       includedIds: Array.from(savedIncluded),
       categories: savedCategories,
+      savedSalesCount: savedSalesMap.size,
       sampleSalesData: marketLandData.vacant_sales_analysis.sales.slice(0, 3)
     });
 
@@ -223,6 +236,9 @@ useEffect(() => {
     setLandNotes(savedNotes);
     setSpecialRegions(savedRegions);
     setIncludedSales(savedIncluded);
+
+    // Store the saved sales map for use in filterVacantSales
+    window._savedSalesMap = savedSalesMap;
   }
 
   // Restore Method 2 excluded sales
@@ -2077,7 +2093,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         onAnalysisUpdate(analysisData);
       }
     } catch (error) {
-      console.error('��� Save failed:', error);
+      console.error('����� Save failed:', error);
       console.error('Error details:', {
         message: error.message,
         code: error.code,
