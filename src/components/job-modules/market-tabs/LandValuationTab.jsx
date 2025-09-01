@@ -367,10 +367,13 @@ const getPricePerUnit = useCallback((price, size) => {
   const getTypeUseOptions = useCallback(() => {
     if (!properties) return [{ code: '1', description: '1 - Single Family' }];
 
-    // Get unique asset_type_use codes from properties
+    // Get unique asset_type_use codes ONLY from properties with time-normalized data
     const uniqueCodes = new Set();
     properties.forEach(prop => {
-      if (prop.asset_type_use && prop.property_m4_class === '2') {
+      if (prop.asset_type_use &&
+          prop.property_m4_class === '2' &&
+          prop.values_norm_time != null &&
+          prop.values_norm_time > 0) {
         const rawCode = prop.asset_type_use.toString().trim().toUpperCase();
         if (rawCode && rawCode !== '' && rawCode !== 'null' && rawCode !== 'undefined') {
           uniqueCodes.add(rawCode);
