@@ -5118,7 +5118,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     }}>
                       <td style={{ padding: '8px', fontWeight: 'bold', border: '1px solid #E5E7EB' }}>{vcs}</td>
                       <td style={{ padding: '8px', textAlign: 'center', border: '1px solid #E5E7EB' }}>{data.counts?.total || 0}</td>
-                      <td style={{ padding: '8px' }}>
+                      <td style={{ padding: '8px', border: '1px solid #E5E7EB' }}>
                         <select
                           value={type}
                           onChange={(e) => updateVCSType(vcs, e.target.value)}
@@ -5135,7 +5135,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                           ))}
                         </select>
                       </td>
-                      <td style={{ padding: '8px' }}>
+                      <td style={{ padding: '8px', border: '1px solid #E5E7EB' }}>
                         <input
                           type="text"
                           value={description}
