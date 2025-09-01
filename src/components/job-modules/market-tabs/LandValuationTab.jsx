@@ -3753,7 +3753,7 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
                   </tr>
                 </thead>
                 <tbody>
-                  {getMethod2SalesForVCS(method2ModalVCS).map(prop => {
+                  {sortModalData(getMethod2SalesForVCS(method2ModalVCS)).map(prop => {
                     const acres = parseFloat(prop.asset_lot_acre || 0);
                     const isExcluded = method2ExcludedSales.has(prop.id);
 
