@@ -92,6 +92,13 @@ const LandValuationTab = ({
   const [expandedVCS, setExpandedVCS] = useState(new Set());
   const [vcsColors, setVcsColors] = useState({});
 
+  // VCS Sheet UI State - Collapsible fields
+  const [collapsedFields, setCollapsedFields] = useState({
+    zoning: true,
+    key: true,
+    map: true
+  });
+
   // Method 2 Exclusion Modal State
   const [showMethod2Modal, setShowMethod2Modal] = useState(false);
   const [method2ModalVCS, setMethod2ModalVCS] = useState('');
