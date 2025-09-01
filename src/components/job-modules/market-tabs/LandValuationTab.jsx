@@ -2073,7 +2073,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           .eq('job_id', jobData.id);
         if (error) throw error;
       } else {
-        console.log('�� Creating new record...');
+        console.log('➕ Creating new record...');
         // Use upsert to handle race conditions
         const { error } = await supabase
           .from('market_land_valuation')
@@ -5120,6 +5120,26 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       </div>
     </div>
   );
+
+  // ========== DYNAMIC COLUMN HELPERS ==========
+  const shouldShowResidualColumn = useMemo(() => {
+    return cascadeConfig.normal.residual?.rate && cascadeConfig.normal.residual.rate > 0;
+  }, [cascadeConfig]);
+
+  const shouldShowKeyColumn = useMemo(() => {
+    return Object.values(vcsSheetData).some(data => data.keyPages && data.keyPages.trim() !== '');
+  }, [vcsSheetData]);
+
+  const shouldShowMapColumn = useMemo(() => {
+    return Object.values(vcsSheetData).some(data => data.mapPages && data.mapPages.trim() !== '');
+  }, [vcsSheetData]);
+
+  // ========== SALES DATE FILTERING FOR CME ==========
+  const getOctoberFirstTwoYearsPrior = () => {
+    const now = new Date();
+    const twoYearsPrior = now.getFullYear() - 2;
+    return new Date(twoYearsPrior, 9, 1); // October 1st (month 9 = October)
+  };
 
   // ========== CME BRACKET DEFINITIONS ==========
   const CME_BRACKETS = [
