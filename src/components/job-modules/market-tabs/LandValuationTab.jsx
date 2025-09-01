@@ -90,6 +90,11 @@ const LandValuationTab = ({
   const [expandedVCS, setExpandedVCS] = useState(new Set());
   const [vcsColors, setVcsColors] = useState({});
 
+  // Method 2 Exclusion Modal State
+  const [showMethod2Modal, setShowMethod2Modal] = useState(false);
+  const [method2ModalVCS, setMethod2ModalVCS] = useState('');
+  const [method2ExcludedSales, setMethod2ExcludedSales] = useState(new Set());
+
   // ========== ALLOCATION STUDY STATE ==========
   const [vacantTestSales, setVacantTestSales] = useState([]);
   const [improvedTestSales, setImprovedTestSales] = useState([]);
