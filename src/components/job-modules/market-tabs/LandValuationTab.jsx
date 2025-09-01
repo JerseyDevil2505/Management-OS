@@ -2490,12 +2490,21 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       'developable'
     );
 
-    const buildingLot = getCategoryAverage(s =>
-      saleCategories[s.id] === 'building_lot' ||
-      saleCategories[s.id] === 'teardown' ||
-      saleCategories[s.id] === 'pre-construction',
-      'developable'
-    );
+    const buildingLot = getCategoryAverage(s => {
+      const isInCategory = saleCategories[s.id] === 'building_lot' ||
+                          saleCategories[s.id] === 'teardown' ||
+                          saleCategories[s.id] === 'pre-construction';
+      if (s.property_block === '47' && s.property_lot === '2') {
+        console.log('🏠 Property 47/2 details:', {
+          id: s.id,
+          category: saleCategories[s.id],
+          isInBuildingLot: isInCategory,
+          price: s.sales_price,
+          acres: s.totalAcres
+        });
+      }
+      return isInCategory;
+    }, 'developable');
 
     const wetlands = getCategoryAverage(s => saleCategories[s.id] === 'wetlands', 'constrained');
     const landlocked = getCategoryAverage(s => saleCategories[s.id] === 'landlocked', 'constrained');
