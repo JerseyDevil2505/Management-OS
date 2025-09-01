@@ -5336,13 +5336,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         {vcsSpecialCategories.conservation && cascadeConfig.specialCategories.conservation ?
                           `$${cascadeConfig.specialCategories.conservation.toLocaleString()}` : ''}
                       </td>
-                      <td style={{ padding: '8px', textAlign: 'right' }}>
+                      <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>
                         {data.avgNormTime ? `$${data.avgNormTime.toLocaleString()}` : ''}
                       </td>
-                      <td style={{ padding: '8px', textAlign: 'right', fontWeight: 'bold' }}>
+                      <td style={{ padding: '8px', textAlign: 'right', fontWeight: 'bold', border: '1px solid #E5E7EB' }}>
                         {data.avgPrice ? `$${data.avgPrice.toLocaleString()}` : ''}
                       </td>
-                      <td style={{ padding: '8px', textAlign: 'center' }}>
+                      <td style={{ padding: '8px', textAlign: 'center', border: '1px solid #E5E7EB' }}>
                         {cmeBracket ? (
                           <span
                             style={{
@@ -5359,13 +5359,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                           </span>
                         ) : '-'}
                       </td>
-                      <td style={{ padding: '8px', fontSize: '10px', backgroundColor: isGrayedOut ? '#F3F4F6' : 'inherit' }}>
+                      <td style={{ padding: '8px', fontSize: '10px', backgroundColor: isGrayedOut ? '#F3F4F6' : 'inherit', border: '1px solid #E5E7EB' }}>
                         {!isGrayedOut ? cleanZoning : ''}
                       </td>
-                      <td style={{ padding: '8px', fontSize: '10px', backgroundColor: isGrayedOut ? '#F3F4F6' : 'inherit' }}>
+                      <td style={{ padding: '8px', fontSize: '10px', backgroundColor: isGrayedOut ? '#F3F4F6' : 'inherit', border: '1px solid #E5E7EB' }}>
                         {!isGrayedOut ? data.keyPages || '' : ''}
                       </td>
-                      <td style={{ padding: '8px', fontSize: '10px', backgroundColor: isGrayedOut ? '#F3F4F6' : 'inherit' }}>
+                      <td style={{ padding: '8px', fontSize: '10px', backgroundColor: isGrayedOut ? '#F3F4F6' : 'inherit', border: '1px solid #E5E7EB' }}>
                         {!isGrayedOut ? data.mapPages || '' : ''}
                       </td>
                     </tr>
