@@ -85,8 +85,8 @@ const LandValuationTab = ({
   const [bracketAnalysis, setBracketAnalysis] = useState({});
   const [method2Summary, setMethod2Summary] = useState({});
 
-  // Enhanced Method 2 UI State - Use vendor-specific default codes
-  const [method2TypeFilter, setMethod2TypeFilter] = useState(vendorType === 'Microsystems' ? '1' : '10');
+  // Enhanced Method 2 UI State - Use Single Family as default
+  const [method2TypeFilter, setMethod2TypeFilter] = useState('1');
   const [expandedVCS, setExpandedVCS] = useState(new Set());
   const [vcsColors, setVcsColors] = useState({});
 
@@ -323,58 +323,62 @@ const getPricePerUnit = useCallback((price, size) => {
 
   // ========== GET TYPE USE OPTIONS ==========
   const getTypeUseOptions = useCallback(() => {
-    const defaultCode = vendorType === 'Microsystems' ? '1' : '10';
-    if (!properties) return [{ code: defaultCode, description: 'Single Family' }];
+    if (!properties) return [{ code: '1', description: '1 - Single Family' }];
 
-    // Define grouping mappings
-    const typeUseGroups = {
-      '30': '3', '31': '3', '3E': '3', '3I': '3', // Row/Townhouses
-      '42': '4', '43': '4', '44': '4',             // MultiFamily
-      '51': '5', '52': '5', '53': '5'             // Conversions
-    };
-
-    const groupDescriptions = {
-      '3': '3 - Row/Townhouses',
-      '4': '4 - MultiFamily',
-      '5': '5 - Conversions'
-    };
-
-    const typeCodeMap = new Map();
-    typeCodeMap.set(defaultCode, 'Single Family'); // Always include default
-
+    // Get unique asset_type_use codes from properties
+    const uniqueCodes = new Set();
     properties.forEach(prop => {
       if (prop.asset_type_use && prop.property_m4_class === '2') {
         const rawCode = prop.asset_type_use.toString().trim().toUpperCase();
-
         if (rawCode && rawCode !== '' && rawCode !== 'null' && rawCode !== 'undefined') {
-          // Check if code should be grouped
-          const groupCode = typeUseGroups[rawCode];
-          const codeToUse = groupCode || rawCode;
-
-          if (!typeCodeMap.has(codeToUse)) {
-            let description;
-
-            if (groupCode) {
-              // Use predefined group description
-              description = groupDescriptions[groupCode];
-            } else {
-              // Get individual description
-              description = vendorType === 'Microsystems' && jobData?.parsed_code_definitions
-                ? interpretCodes.getMicrosystemsValue?.(prop, jobData.parsed_code_definitions, 'asset_type_use') || rawCode
-                : rawCode;
-            }
-
-            typeCodeMap.set(codeToUse, description);
-          }
+          uniqueCodes.add(rawCode);
         }
       }
     });
 
-    // Convert to array of objects and sort by code
-    return Array.from(typeCodeMap.entries())
-      .map(([code, description]) => ({ code, description }))
-      .sort((a, b) => a.code.localeCompare(b.code));
-  }, [properties, vendorType, jobData]);
+    const options = [];
+
+    // Always include Single Family
+    if (uniqueCodes.has('1') || uniqueCodes.has('10')) {
+      options.push({ code: '1', description: '1 - Single Family' });
+    }
+
+    // Add umbrella groups only if we have matching codes
+    const umbrellaGroups = [
+      {
+        codes: ['30', '31', '3E', '3I'],
+        groupCode: '3',
+        description: '3 - Row/Townhouses'
+      },
+      {
+        codes: ['42', '43', '44'],
+        groupCode: '4',
+        description: '4 - MultiFamily'
+      },
+      {
+        codes: ['51', '52', '53'],
+        groupCode: '5',
+        description: '5 - Conversions'
+      }
+    ];
+
+    umbrellaGroups.forEach(group => {
+      const hasMatchingCodes = group.codes.some(code => uniqueCodes.has(code));
+      if (hasMatchingCodes) {
+        options.push({ code: group.groupCode, description: group.description });
+      }
+    });
+
+    // Add any other individual codes that don't fit the umbrella groups
+    const allUmbrellaCodes = ['1', '10', '30', '31', '3E', '3I', '42', '43', '44', '51', '52', '53'];
+    uniqueCodes.forEach(code => {
+      if (!allUmbrellaCodes.includes(code)) {
+        options.push({ code, description: `${code} - Other` });
+      }
+    });
+
+    return options.sort((a, b) => a.code.localeCompare(b.code));
+  }, [properties]);
 
   // ========== GET VCS DESCRIPTION HELPER ==========
   const getVCSDescription = useCallback((vcsCode) => {
@@ -411,8 +415,7 @@ const getPricePerUnit = useCallback((price, size) => {
   // ========== LOAD DATA EFFECTS ==========
   // Update filter when vendor type changes
   useEffect(() => {
-    const defaultCode = vendorType === 'Microsystems' ? '1' : '10';
-    setMethod2TypeFilter(defaultCode);
+    setMethod2TypeFilter('1'); // Always default to Single Family
   }, [vendorType]);
 
   useEffect(() => {
@@ -602,194 +605,222 @@ const getPricePerUnit = useCallback((price, size) => {
     setIncludedSales(new Set(finalSales.map(s => s.id)));
   }, [properties, dateRange, calculateAcreage, getPricePerUnit, saleCategories]);
 
-  const performBracketAnalysis = useCallback(() => {
-    if (!properties) return;
+  const performBracketAnalysis = useCallback(async () => {
+    if (!properties || !jobData?.id) return;
 
-    const vcsSales = {};
+    try {
+      // Build time-normalized dataset from already-loaded properties (avoids extra DB joins)
+      const timeNormalizedData = properties
+        .filter(p =>
+          p.values_norm_time != null &&
+          p.values_norm_time > 0
+        )
+        .map(p => ({
+          property_composite_key: p.property_composite_key,
+          new_vcs: p.new_vcs,
+          values_norm_time: p.values_norm_time
+        }));
 
-    properties.forEach(prop => {
-      if (!prop.new_vcs || !prop.sales_price || prop.sales_price <= 0) return;
-      // Only residential for bracket analysis
-      if (prop.property_m4_class !== '2' && prop.property_m4_class !== '3A') return;
-
-      // Must have a valid sale date in our date range
-      if (!prop.sales_date) return;
-      const saleDate = new Date(prop.sales_date);
-      if (saleDate < dateRange.start || saleDate > dateRange.end) return;
-
-      // TODO: Need to join with property_market_analysis to filter by values_norm_time
-      // Temporarily removed filter since values_norm_time is in different table
-
-      // Valid NU codes for actual sales (not transfer codes)
-      const nu = prop.sales_nu || '';
-      const validNu = !nu || nu === '' || nu === ' ' || nu === '00' || nu === '07' ||
-                      nu === '7' || nu.charCodeAt(0) === 32;
-      if (!validNu) return;
-
-      // Apply type/use filter using raw codes (not converted text)
-      const rawTypeUse = prop.asset_type_use?.toString().trim().toUpperCase();
-
-      // Default to single family code if no type specified
-      const defaultCode = vendorType === 'Microsystems' ? '1' : '10';
-      const actualTypeCode = rawTypeUse || defaultCode;
-
-      // Handle grouped codes for filtering
-      const typeUseGroups = {
-        '3': ['30', '31', '3E', '3I'],
-        '4': ['42', '43', '44'],
-        '5': ['51', '52', '53']
-      };
-
-      let passesFilter = false;
-      if (typeUseGroups[method2TypeFilter]) {
-        // Filter is a group code, check if property's code is in the group
-        passesFilter = typeUseGroups[method2TypeFilter].includes(actualTypeCode);
-      } else {
-        // Filter is individual code, direct match
-        passesFilter = actualTypeCode === method2TypeFilter;
+      if (!timeNormalizedData || timeNormalizedData.length === 0) {
+        setBracketAnalysis({});
+        return;
       }
 
-      if (!passesFilter) return;
-
-      const vcs = prop.new_vcs;
-      if (!vcsSales[vcs]) {
-        vcsSales[vcs] = [];
-      }
-
-      const acres = parseFloat(calculateAcreage(prop));
-      const sfla = prop.asset_sfla || 0;
-
-      vcsSales[vcs].push({
-        acres,
-        salesPrice: prop.sales_price,
-        normalizedTime: prop.sales_price, // TODO: Get from property_market_analysis
-        normalizedSize: prop.sales_price, // TODO: Get from property_market_analysis
-        address: prop.property_location,
-        sfla: parseFloat(sfla),
-        yearBuilt: prop.asset_year_built,
-        saleDate: prop.sales_date,
-        typeUse: vendorType === 'Microsystems' && jobData?.parsed_code_definitions
-          ? interpretCodes.getMicrosystemsValue?.(prop, jobData.parsed_code_definitions, 'asset_type_use') || prop.asset_type_use
-          : prop.asset_type_use
+      // Create a lookup for time normalized data
+      const timeNormLookup = new Map();
+      timeNormalizedData.forEach(item => {
+        timeNormLookup.set(item.property_composite_key, item);
       });
-    });
 
-    const analysis = {};
-    let validRates = [];
+      const vcsSales = {};
 
-    Object.keys(vcsSales).forEach(vcs => {
-      const sales = vcsSales[vcs];
-      if (sales.length < 3) return; // Need minimum sales for analysis
+      // DEBUG: Count RURL properties with asset_type_use = 1
+      const rurlType1Properties = properties.filter(p =>
+        p.new_vcs === 'RURL' &&
+        p.asset_type_use?.toString().trim().toUpperCase() === '1'
+      );
+      console.log(`🔍 DEBUG: Found ${rurlType1Properties.length} RURL properties with asset_type_use = 1`);
 
-      // Sort by acreage for bracketing
-      sales.sort((a, b) => a.acres - b.acres);
+      const rurlType1WithNormTime = rurlType1Properties.filter(p =>
+        p.values_norm_time != null && p.values_norm_time > 0
+      );
+      console.log(`🔍 DEBUG: ${rurlType1WithNormTime.length} RURL type 1 properties have values_norm_time > 0`);
 
-      const brackets = {
-        small: sales.filter(s => s.acres < 1),
-        medium: sales.filter(s => s.acres >= 1 && s.acres < 5),
-        large: sales.filter(s => s.acres >= 5 && s.acres < 10),
-        xlarge: sales.filter(s => s.acres >= 10)
-      };
-
-      // Calculate overall VCS average SFLA for size adjustment
-      const allValidSFLA = sales.filter(s => s.sfla > 0);
-      const overallAvgSFLA = allValidSFLA.length > 0 ?
-        allValidSFLA.reduce((sum, s) => sum + s.sfla, 0) / allValidSFLA.length : null;
-
-      // Enhanced statistics calculation with size adjustment
-      const calcBracketStats = (arr) => {
-        if (arr.length === 0) return {
-          count: 0,
-          avgAcres: null,
-          avgSalePrice: null,
-          avgNormTime: null,
-          avgSFLA: null,
-          avgAdjusted: null
-        };
-
-        const avgSalePrice = arr.reduce((sum, s) => sum + s.salesPrice, 0) / arr.length;
-        const validSFLA = arr.filter(s => s.sfla > 0);
-        const avgSFLA = validSFLA.length > 0 ?
-          validSFLA.reduce((sum, s) => sum + s.sfla, 0) / validSFLA.length : null;
-
-        // Calculate size-adjusted price using the formula:
-        // (avgSFLA - bracketSFLA) * ((avgSalePrice / avgSFLA) * 0.50) + avgSalePrice
-        let avgAdjusted = avgSalePrice; // Default to raw price if no SFLA data
-
-        if (overallAvgSFLA && avgSFLA && avgSFLA > 0) {
-          const sflaDiff = overallAvgSFLA - avgSFLA;
-          const pricePerSqFt = avgSalePrice / avgSFLA;
-          const sizeAdjustment = sflaDiff * (pricePerSqFt * 0.50);
-          avgAdjusted = avgSalePrice + sizeAdjustment;
+      // Filter properties that have time normalization data
+      properties.forEach(prop => {
+        const timeNormData = timeNormLookup.get(prop.property_composite_key);
+        if (!timeNormData) {
+          if (prop.new_vcs === 'RURL' && prop.asset_type_use?.toString().trim().toUpperCase() === '1') {
+            console.log(`❌ RURL Type 1 filtered out - no timeNormData:`, prop.property_block, prop.property_lot, prop.values_norm_time);
+          }
+          return;
         }
 
-        return {
-          count: arr.length,
-          avgAcres: arr.reduce((sum, s) => sum + s.acres, 0) / arr.length,
-          avgSalePrice,
-          avgNormTime: arr.reduce((sum, s) => sum + s.normalizedTime, 0) / arr.length,
-          avgSFLA,
-          avgAdjusted: Math.round(avgAdjusted)
-        };
-      };
+        // Apply type/use filter with umbrella group support
+        const rawTypeUse = prop.asset_type_use?.toString().trim().toUpperCase();
 
-      const bracketStats = {
-        small: calcBracketStats(brackets.small),
-        medium: calcBracketStats(brackets.medium),
-        large: calcBracketStats(brackets.large),
-        xlarge: calcBracketStats(brackets.xlarge)
-      };
-
-      // Calculate implied rate from bracket differences
-      let impliedRate = null;
-      if (bracketStats.small.count > 0 && bracketStats.medium.count > 0) {
-        const priceDiff = bracketStats.medium.avgAdjusted - bracketStats.small.avgAdjusted;
-        const acresDiff = bracketStats.medium.avgAcres - bracketStats.small.avgAcres;
-        if (acresDiff > 0 && priceDiff > 0) {
-          impliedRate = Math.round(priceDiff / acresDiff);
-          validRates.push(impliedRate);
+        let passesFilter = false;
+        if (method2TypeFilter === '1') {
+          // Single Family - include both 1 and 10
+          passesFilter = rawTypeUse === '1' || rawTypeUse === '10';
+        } else if (method2TypeFilter === '3') {
+          // Row/Townhouses umbrella
+          passesFilter = ['30', '31', '3E', '3I'].includes(rawTypeUse);
+        } else if (method2TypeFilter === '4') {
+          // MultiFamily umbrella
+          passesFilter = ['42', '43', '44'].includes(rawTypeUse);
+        } else if (method2TypeFilter === '5') {
+          // Conversions umbrella
+          passesFilter = ['51', '52', '53'].includes(rawTypeUse);
+        } else {
+          // Direct match for other codes
+          passesFilter = rawTypeUse === method2TypeFilter;
         }
-      }
 
-      // NULL for negative rates
-      if (impliedRate && impliedRate < 0) {
-        impliedRate = null;
-      }
+        if (!passesFilter) {
+          if (prop.new_vcs === 'RURL' && rawTypeUse === '1') {
+            console.log(`❌ RURL Type 1 filtered out - type filter:`, prop.property_block, prop.property_lot, rawTypeUse, method2TypeFilter);
+          }
+          return;
+        }
 
-      // VCS summary statistics
-      const vcsAvgPrice = sales.reduce((sum, s) => sum + s.salesPrice, 0) / sales.length;
-      const vcsAvgAcres = sales.reduce((sum, s) => sum + s.acres, 0) / sales.length;
-      const vcsAvgAdjusted = sales.reduce((sum, s) => sum + (s.normalizedTime + s.normalizedSize) / 2, 0) / sales.length;
+        const vcs = timeNormData.new_vcs;
+        if (!vcs) {
+          if (prop.new_vcs === 'RURL' && rawTypeUse === '1') {
+            console.log(`❌ RURL Type 1 filtered out - no VCS:`, prop.property_block, prop.property_lot);
+          }
+          return;
+        }
 
-      analysis[vcs] = {
-        totalSales: sales.length,
-        avgPrice: vcsAvgPrice,
-        avgAcres: vcsAvgAcres,
-        avgAdjusted: vcsAvgAdjusted,
-        brackets: bracketStats,
-        impliedRate
-      };
-    });
+        if (!vcsSales[vcs]) {
+          vcsSales[vcs] = [];
+        }
 
-    // Calculate Method 2 Summary
-    if (validRates.length > 0) {
-      validRates.sort((a, b) => a - b);
-      const average = Math.round(validRates.reduce((sum, r) => sum + r, 0) / validRates.length);
-      const median = validRates.length % 2 === 0 ?
-        Math.round((validRates[validRates.length / 2 - 1] + validRates[validRates.length / 2]) / 2) :
-        validRates[Math.floor(validRates.length / 2)];
-      
-      setMethod2Summary({
-        average,
-        median,
-        coverage: `${validRates.length} of ${Object.keys(vcsSales).length} VCS areas`,
-        min: validRates[0],
-        max: validRates[validRates.length - 1]
+        const acres = parseFloat(prop.asset_lot_acre || 0);
+        const sfla = parseFloat(prop.asset_sfla || 0);
+
+        vcsSales[vcs].push({
+          acres,
+          salesPrice: prop.sales_price,
+          normalizedTime: timeNormData.values_norm_time,
+          sfla,
+          address: prop.property_location,
+          yearBuilt: prop.asset_year_built,
+          saleDate: prop.sales_date,
+          typeUse: prop.asset_type_use
+        });
       });
+
+      const analysis = {};
+      let validRates = [];
+
+      Object.keys(vcsSales).forEach(vcs => {
+        const sales = vcsSales[vcs];
+        if (sales.length < 3) return; // Need minimum sales for analysis
+
+        // Sort by acreage for bracketing
+        sales.sort((a, b) => a.acres - b.acres);
+
+        const brackets = {
+          small: sales.filter(s => s.acres < 1),              // 0 to 0.99
+          medium: sales.filter(s => s.acres >= 1 && s.acres < 5),  // 1.00-4.99
+          large: sales.filter(s => s.acres >= 5 && s.acres < 10),  // 5.00-9.99
+          xlarge: sales.filter(s => s.acres >= 10)            // 10.00 and greater
+        };
+
+        // Calculate overall VCS average SFLA for size adjustment
+        const allValidSFLA = sales.filter(s => s.sfla > 0);
+        const overallAvgSFLA = allValidSFLA.length > 0 ?
+          allValidSFLA.reduce((sum, s) => sum + s.sfla, 0) / allValidSFLA.length : null;
+
+        // FIXED statistics calculation
+        const calcBracketStats = (arr) => {
+          if (arr.length === 0) return {
+            count: 0,
+            avgAcres: null,
+            avgSalePrice: null,
+            avgNormTime: null,
+            avgSFLA: null,
+            avgAdjusted: null
+          };
+
+          const avgSalePrice = arr.reduce((sum, s) => sum + s.salesPrice, 0) / arr.length;
+          const avgAcres = arr.reduce((sum, s) => sum + s.acres, 0) / arr.length;
+          const validSFLA = arr.filter(s => s.sfla > 0);
+          const avgSFLA = validSFLA.length > 0 ?
+            validSFLA.reduce((sum, s) => sum + s.sfla, 0) / validSFLA.length : null;
+
+          // Jim's Magic Formula for size adjustment
+          let avgAdjusted = avgSalePrice;
+          if (overallAvgSFLA && avgSFLA && avgSFLA > 0) {
+            const sflaDiff = overallAvgSFLA - avgSFLA;
+            const pricePerSqFt = avgSalePrice / avgSFLA;
+            const sizeAdjustment = sflaDiff * (pricePerSqFt * 0.50);
+            avgAdjusted = avgSalePrice + sizeAdjustment;
+          }
+
+          return {
+            count: arr.length,
+            avgAcres: Math.round(avgAcres * 100) / 100, // Round to 2 decimals
+            avgSalePrice: Math.round(avgSalePrice),
+            avgNormTime: Math.round(arr.reduce((sum, s) => sum + s.normalizedTime, 0) / arr.length),
+            avgSFLA: avgSFLA ? Math.round(avgSFLA) : null,
+            avgAdjusted: Math.round(avgAdjusted)
+          };
+        };
+
+        const bracketStats = {
+          small: calcBracketStats(brackets.small),
+          medium: calcBracketStats(brackets.medium),
+          large: calcBracketStats(brackets.large),
+          xlarge: calcBracketStats(brackets.xlarge)
+        };
+
+        // Calculate implied rate from bracket differences
+        let impliedRate = null;
+        if (bracketStats.small.count > 0 && bracketStats.medium.count > 0) {
+          const priceDiff = bracketStats.medium.avgAdjusted - bracketStats.small.avgAdjusted;
+          const acresDiff = bracketStats.medium.avgAcres - bracketStats.small.avgAcres;
+          if (acresDiff > 0 && priceDiff > 0) {
+            impliedRate = Math.round(priceDiff / acresDiff);
+            validRates.push(impliedRate);
+          }
+        }
+
+        analysis[vcs] = {
+          totalSales: sales.length,
+          avgPrice: Math.round(sales.reduce((sum, s) => sum + s.salesPrice, 0) / sales.length),
+          avgAcres: Math.round((sales.reduce((sum, s) => sum + s.acres, 0) / sales.length) * 100) / 100,
+          avgAdjusted: Math.round(sales.reduce((sum, s) => sum + s.normalizedTime, 0) / sales.length),
+          brackets: bracketStats,
+          impliedRate
+        };
+      });
+
+      // Calculate Method 2 Summary
+      if (validRates.length > 0) {
+        validRates.sort((a, b) => a - b);
+        const average = Math.round(validRates.reduce((sum, r) => sum + r, 0) / validRates.length);
+        const median = validRates.length % 2 === 0 ?
+          Math.round((validRates[validRates.length / 2 - 1] + validRates[validRates.length / 2]) / 2) :
+          validRates[Math.floor(validRates.length / 2)];
+
+        setMethod2Summary({
+          average,
+          median,
+          coverage: `${validRates.length} of ${Object.keys(vcsSales).length} VCS areas`,
+          min: validRates[0],
+          max: validRates[validRates.length - 1]
+        });
+      }
+
+      setBracketAnalysis(analysis);
+
+    } catch (error) {
+      console.error('Error in performBracketAnalysis:', error);
+      setBracketAnalysis({});
     }
-
-    setBracketAnalysis(analysis);
-  }, [properties, calculateAcreage]);
+  }, [properties, jobData, method2TypeFilter]);
 
   const calculateRates = useCallback((regionFilter = null) => {
     const included = vacantSales.filter(s => {
