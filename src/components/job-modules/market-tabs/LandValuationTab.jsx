@@ -201,8 +201,8 @@ useEffect(() => {
   }
 
   // Restore Method 2 excluded sales
-  if (marketLandData.method2_excluded_sales) {
-    setMethod2ExcludedSales(new Set(marketLandData.method2_excluded_sales));
+  if (marketLandData.method2_summary?.excluded_sales) {
+    setMethod2ExcludedSales(new Set(marketLandData.method2_summary.excluded_sales));
   }
 
   if (marketLandData.allocation_study) {
@@ -490,10 +490,15 @@ const getPricePerUnit = useCallback((price, size) => {
 
   // Auto-save every 30 seconds
   useEffect(() => {
+    console.log('🔄 Auto-save effect triggered, setting up interval');
     const interval = setInterval(() => {
+      console.log('⏰ Auto-save interval triggered');
       saveAnalysis();
     }, 30000);
-    return () => clearInterval(interval);
+    return () => {
+      console.log('🛑 Clearing auto-save interval');
+      clearInterval(interval);
+    }
   }, [cascadeConfig, landNotes, saleCategories, specialRegions, actualAllocations,
       vcsManualSiteValues, actualAdjustments, targetAllocation, locationCodes, vcsTypes, method2ExcludedSales, vacantSales]);
   // ========== LAND RATES FUNCTIONS WITH ENHANCED FILTERS ==========
@@ -1876,7 +1881,15 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
   // ========== SAVE & EXPORT FUNCTIONS ==========
   const saveAnalysis = async () => {
-    if (!jobData?.id) return;
+    if (!jobData?.id) {
+      console.log('❌ Save cancelled: No job ID');
+      return;
+    }
+
+    console.log('💾 Starting save...', {
+      vacantSalesCount: vacantSales.length,
+      excludedSalesCount: method2ExcludedSales.size
+    });
 
     setIsSaving(true);
 
@@ -1906,8 +1919,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           }))
         },
         bracket_analysis: bracketAnalysis,
-        method2_summary: method2Summary,
-        method2_excluded_sales: Array.from(method2ExcludedSales),
+        method2_summary: {
+          ...method2Summary,
+          excluded_sales: Array.from(method2ExcludedSales)
+        },
         cascade_rates: cascadeConfig,
         allocation_study: {
           vcs_site_values: vcsSiteValues,
@@ -1944,24 +1959,34 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         .single();
       
       if (existing) {
-        await supabase
+        console.log('📝 Updating existing record...');
+        const { error } = await supabase
           .from('market_land_valuation')
           .update(analysisData)
           .eq('job_id', jobData.id);
+        if (error) throw error;
       } else {
-        await supabase
+        console.log('➕ Creating new record...');
+        const { error } = await supabase
           .from('market_land_valuation')
           .insert(analysisData);
+        if (error) throw error;
       }
-      
+
+      console.log('✅ Save completed successfully');
       setLastSaved(new Date());
-      
+
       // Notify parent component
       if (onAnalysisUpdate) {
         onAnalysisUpdate(analysisData);
       }
     } catch (error) {
-      console.error('Error saving:', error);
+      console.error('❌ Save failed:', error);
+      console.error('Error details:', {
+        message: error.message,
+        code: error.code,
+        details: error.details
+      });
       alert('Failed to save analysis. Please try again.');
     } finally {
       setIsSaving(false);
