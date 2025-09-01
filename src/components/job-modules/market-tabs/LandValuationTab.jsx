@@ -5223,7 +5223,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Prime</th>
                       <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Sec</th>
                       <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Exc</th>
-                      <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Res</th>
+                      {shouldShowResidualColumn && (
+                        <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Res</th>
+                      )}
                     </>
                   )}
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Wet</th>
