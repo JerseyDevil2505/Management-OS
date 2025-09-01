@@ -5098,6 +5098,17 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     landlocked: vacantSales.some(s => s.new_vcs === vcs && saleCategories[s.id] === 'landlocked'),
                     conservation: vacantSales.some(s => s.new_vcs === vcs && saleCategories[s.id] === 'conservation')
                   };
+
+                  // Clean up zoning - get unique instances only
+                  const vcsZoningValues = properties?.filter(p => p.new_vcs === vcs && p.asset_zoning)
+                    .map(p => p.asset_zoning.trim())
+                    .filter((value, index, array) => array.indexOf(value) === index && value !== '') || [];
+                  const cleanZoning = vcsZoningValues.length <= 3 ?
+                    vcsZoningValues.join(', ') :
+                    `${vcsZoningValues.slice(0, 2).join(', ')} +${vcsZoningValues.length - 2} more`;
+
+                  // Get CME bracket for average price
+                  const cmeBracket = data.avgPrice ? getCMEBracket(data.avgPrice) : null;
                   
                   return (
                     <tr key={vcs} style={{ backgroundColor: index % 2 === 0 ? 'white' : '#F9FAFB' }}>
