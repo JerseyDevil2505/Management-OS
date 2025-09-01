@@ -1918,10 +1918,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             rates: calculateRates(region)
           }))
         },
-        bracket_analysis: bracketAnalysis,
-        method2_summary: {
-          ...method2Summary,
-          excluded_sales: Array.from(method2ExcludedSales)
+        bracket_analysis: {
+          ...bracketAnalysis,
+          excluded_sales: Array.from(method2ExcludedSales),
+          summary: method2Summary
         },
         cascade_rates: cascadeConfig,
         allocation_study: {
