@@ -197,6 +197,35 @@ useEffect(() => {
     setLandNotes(savedNotes);
     setSpecialRegions(savedRegions);
     setIncludedSales(savedIncluded);
+
+    // Restore manually added properties to vacantSales
+    const manuallyAddedIds = marketLandData.vacant_sales_analysis.sales
+      .filter(s => s.manually_added)
+      .map(s => s.id);
+
+    if (manuallyAddedIds.length > 0 && properties) {
+      const manuallyAddedProps = properties.filter(p => manuallyAddedIds.includes(p.id));
+
+      if (manuallyAddedProps.length > 0) {
+        const enrichedManualProps = manuallyAddedProps.map(prop => {
+          const acres = calculateAcreage(prop);
+          const pricePerUnit = getPricePerUnit(prop.sales_price, acres);
+          return {
+            ...prop,
+            totalAcres: acres,
+            pricePerAcre: pricePerUnit,
+            manuallyAdded: true
+          };
+        });
+
+        // Add to vacant sales (will be combined with auto-detected ones later)
+        setVacantSales(prev => {
+          const existingIds = new Set(prev.map(s => s.id));
+          const newManualProps = enrichedManualProps.filter(p => !existingIds.has(p.id));
+          return [...prev, ...newManualProps];
+        });
+      }
+    }
   }
 
   // Restore Method 2 excluded sales
