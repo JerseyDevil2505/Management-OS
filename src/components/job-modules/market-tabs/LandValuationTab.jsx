@@ -150,6 +150,12 @@ useEffect(() => {
     return;
   }
 
+  console.log('🔄 Loading market land data:', {
+    hasRawLandConfig: !!marketLandData.raw_land_config,
+    hasCascadeRates: !!marketLandData.cascade_rates,
+    hasVacantSales: !!marketLandData.vacant_sales_analysis?.sales?.length
+  });
+
   // Restore all saved states from marketLandData
   if (marketLandData.raw_land_config) {
     if (marketLandData.raw_land_config.date_range) {
@@ -158,30 +164,38 @@ useEffect(() => {
         end: new Date(marketLandData.raw_land_config.date_range.end)
       });
     }
-    if (marketLandData.raw_land_config.cascade_config) {
-      // Ensure the structure is complete
-      const savedConfig = marketLandData.raw_land_config.cascade_config;
-      setCascadeConfig({
-        mode: savedConfig.mode || 'acre',
-        normal: {
-          prime: savedConfig.normal?.prime || { max: 1, rate: null },
-          secondary: savedConfig.normal?.secondary || { max: 5, rate: null },
-          excess: savedConfig.normal?.excess || { max: 10, rate: null },
-          residual: savedConfig.normal?.residual || { max: null, rate: null },
-          standard: savedConfig.normal?.standard || { max: 100, rate: null }
-        },
-        special: savedConfig.special || {},
-        vcsSpecific: savedConfig.vcsSpecific || {},
-        specialCategories: savedConfig.specialCategories || {
-          wetlands: null,
-          landlocked: null,
-          conservation: null
-        },
-        customCategories: savedConfig.customCategories || []
-      });
-      if (savedConfig.mode) {
-        setValuationMode(savedConfig.mode);
-      }
+  }
+
+  // Load cascade config from either location (prefer cascade_rates, fallback to raw_land_config)
+  const savedConfig = marketLandData.cascade_rates || marketLandData.raw_land_config?.cascade_config;
+  if (savedConfig) {
+    console.log('🔧 Loading cascade config:', {
+      source: marketLandData.cascade_rates ? 'cascade_rates' : 'raw_land_config',
+      specialCategories: savedConfig.specialCategories,
+      mode: savedConfig.mode
+    });
+
+    setCascadeConfig({
+      mode: savedConfig.mode || 'acre',
+      normal: {
+        prime: savedConfig.normal?.prime || { max: 1, rate: null },
+        secondary: savedConfig.normal?.secondary || { max: 5, rate: null },
+        excess: savedConfig.normal?.excess || { max: 10, rate: null },
+        residual: savedConfig.normal?.residual || { max: null, rate: null },
+        standard: savedConfig.normal?.standard || { max: 100, rate: null }
+      },
+      special: savedConfig.special || {},
+      vcsSpecific: savedConfig.vcsSpecific || {},
+      specialCategories: savedConfig.specialCategories || {
+        wetlands: null,
+        landlocked: null,
+        conservation: null
+      },
+      customCategories: savedConfig.customCategories || []
+    });
+
+    if (savedConfig.mode) {
+      setValuationMode(savedConfig.mode);
     }
   }
 
