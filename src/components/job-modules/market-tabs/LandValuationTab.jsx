@@ -3472,6 +3472,129 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
           </div>
         </div>
       )}
+
+      {/* Method 2 Sales Modal */}
+      {showMethod2Modal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '8px',
+            padding: '20px',
+            maxWidth: '95vw',
+            maxHeight: '90vh',
+            overflow: 'auto',
+            border: '1px solid #E5E7EB'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold' }}>
+                Method 2 Sales - VCS {method2ModalVCS}
+              </h3>
+              <button
+                onClick={() => setShowMethod2Modal(false)}
+                style={{
+                  backgroundColor: 'transparent',
+                  border: 'none',
+                  fontSize: '20px',
+                  cursor: 'pointer',
+                  color: '#6B7280'
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            <div style={{ marginBottom: '15px', padding: '10px', backgroundColor: '#FEF3C7', borderRadius: '4px' }}>
+              <p style={{ margin: 0, fontSize: '14px', color: '#92400E' }}>
+                <strong>Exclude problematic sales:</strong> Uncheck sales that should not be used in Method 2 calculations
+                (teardowns, poor condition, pre-construction, etc.)
+              </p>
+            </div>
+
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', fontSize: '12px', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#F9FAFB' }}>
+                    <th style={{ padding: '8px', textAlign: 'left', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>Include</th>
+                    <th style={{ padding: '8px', textAlign: 'left', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>Block</th>
+                    <th style={{ padding: '8px', textAlign: 'left', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>Lot</th>
+                    <th style={{ padding: '8px', textAlign: 'left', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>Address</th>
+                    <th style={{ padding: '8px', textAlign: 'left', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>Sale Date</th>
+                    <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>Sale Price</th>
+                    <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>Norm Time</th>
+                    <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>Acres</th>
+                    <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>SFLA</th>
+                    <th style={{ padding: '8px', textAlign: 'left', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>Year Built</th>
+                    <th style={{ padding: '8px', textAlign: 'left', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>Type/Use</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {getMethod2SalesForVCS(method2ModalVCS).map(prop => {
+                    const acres = parseFloat(prop.asset_lot_acre || 0);
+                    const isExcluded = method2ExcludedSales.has(prop.id);
+
+                    return (
+                      <tr key={prop.id} style={{ backgroundColor: isExcluded ? '#FEF2F2' : 'white' }}>
+                        <td style={{ padding: '8px' }}>
+                          <input
+                            type="checkbox"
+                            checked={!isExcluded}
+                            onChange={(e) => {
+                              const newExcluded = new Set(method2ExcludedSales);
+                              if (e.target.checked) {
+                                newExcluded.delete(prop.id);
+                              } else {
+                                newExcluded.add(prop.id);
+                              }
+                              setMethod2ExcludedSales(newExcluded);
+                            }}
+                          />
+                        </td>
+                        <td style={{ padding: '8px' }}>{prop.property_block}</td>
+                        <td style={{ padding: '8px' }}>{prop.property_lot}</td>
+                        <td style={{ padding: '8px' }}>{prop.property_location}</td>
+                        <td style={{ padding: '8px' }}>{prop.sales_date}</td>
+                        <td style={{ padding: '8px', textAlign: 'right' }}>${prop.sales_price?.toLocaleString()}</td>
+                        <td style={{ padding: '8px', textAlign: 'right' }}>${Math.round(prop.normalizedTime)?.toLocaleString()}</td>
+                        <td style={{ padding: '8px', textAlign: 'right' }}>{acres.toFixed(2)}</td>
+                        <td style={{ padding: '8px', textAlign: 'right' }}>{prop.asset_sfla || '-'}</td>
+                        <td style={{ padding: '8px' }}>{prop.asset_year_built || '-'}</td>
+                        <td style={{ padding: '8px' }}>{prop.asset_type_use || '-'}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div style={{ marginTop: '20px', textAlign: 'right' }}>
+              <button
+                onClick={() => setShowMethod2Modal(false)}
+                style={{
+                  backgroundColor: '#3B82F6',
+                  color: 'white',
+                  padding: '8px 16px',
+                  borderRadius: '4px',
+                  border: 'none',
+                  cursor: 'pointer'
+                }}
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
   // ========== RENDER ALLOCATION STUDY TAB ==========
