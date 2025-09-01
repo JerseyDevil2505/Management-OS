@@ -2351,6 +2351,25 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     }));
   };
 
+  const updateVCSSpecificCascade = (vcsKey, tier, field, value) => {
+    setCascadeConfig(prev => ({
+      ...prev,
+      vcsSpecific: {
+        ...prev.vcsSpecific,
+        [vcsKey]: {
+          ...prev.vcsSpecific[vcsKey],
+          rates: {
+            ...prev.vcsSpecific[vcsKey]?.rates,
+            [tier]: {
+              ...prev.vcsSpecific[vcsKey]?.rates?.[tier],
+              [field]: value ? parseFloat(value) : null
+            }
+          }
+        }
+      }
+    }));
+  };
+
   // ========== REACTIVE CATEGORY CALCULATIONS ==========
   const categoryAnalysis = useMemo(() => {
     // Calculate average rate for checked items by category
