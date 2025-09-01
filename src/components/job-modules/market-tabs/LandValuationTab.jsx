@@ -477,31 +477,47 @@ const getPricePerUnit = useCallback((price, size) => {
     return vcsCode; // Return code if no description found
   }, [jobData, vendorType, vcsDescriptions]);
 
-  // ========== RESTORE MANUALLY ADDED PROPERTIES ==========
+  // ========== RESTORE ALL SAVED SALES (NOT JUST MANUALLY ADDED) ==========
   useEffect(() => {
     if (!marketLandData?.vacant_sales_analysis?.sales || !properties || vacantSales.length > 0) return;
 
-    // Find manually added property IDs
-    const manuallyAddedIds = marketLandData.vacant_sales_analysis.sales
-      .filter(s => s.manually_added)
-      .map(s => s.id);
+    // Find all previously saved property IDs
+    const savedSalesIds = marketLandData.vacant_sales_analysis.sales.map(s => s.id);
 
-    if (manuallyAddedIds.length > 0) {
-      const manuallyAddedProps = properties.filter(p => manuallyAddedIds.includes(p.id));
+    console.log('🔄 Restoring saved sales:', {
+      totalSaved: savedSalesIds.length,
+      manuallyAdded: marketLandData.vacant_sales_analysis.sales.filter(s => s.manually_added).length,
+      included: marketLandData.vacant_sales_analysis.sales.filter(s => s.included).length
+    });
 
-      if (manuallyAddedProps.length > 0) {
-        const enrichedManualProps = manuallyAddedProps.map(prop => {
+    if (savedSalesIds.length > 0) {
+      const savedProps = properties.filter(p => savedSalesIds.includes(p.id));
+
+      if (savedProps.length > 0) {
+        const enrichedSavedProps = savedProps.map(prop => {
           const acres = calculateAcreage(prop);
           const pricePerUnit = getPricePerUnit(prop.sales_price, acres);
+          const savedData = marketLandData.vacant_sales_analysis.sales.find(s => s.id === prop.id);
+
           return {
             ...prop,
             totalAcres: acres,
             pricePerAcre: pricePerUnit,
-            manuallyAdded: true
+            manuallyAdded: savedData?.manually_added || false,
+            packageData: savedData?.is_package ? {
+              is_package: true,
+              package_properties: savedData.package_properties || []
+            } : undefined
           };
         });
 
-        setVacantSales(prev => [...prev, ...enrichedManualProps]);
+        console.log('🔄 Restored sales details:', {
+          restoredCount: enrichedSavedProps.length,
+          manuallyAddedCount: enrichedSavedProps.filter(p => p.manuallyAdded).length,
+          packageCount: enrichedSavedProps.filter(p => p.packageData).length
+        });
+
+        setVacantSales(enrichedSavedProps);
       }
     }
   }, [marketLandData, properties, calculateAcreage, getPricePerUnit]);
@@ -2093,7 +2109,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         onAnalysisUpdate(analysisData);
       }
     } catch (error) {
-      console.error('����� Save failed:', error);
+      console.error('��� Save failed:', error);
       console.error('Error details:', {
         message: error.message,
         code: error.code,
