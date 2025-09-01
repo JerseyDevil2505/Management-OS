@@ -228,7 +228,10 @@ useEffect(() => {
     console.log('🔄 Restored checkbox states:', {
       includedCount: savedIncluded.size,
       categoriesCount: Object.keys(savedCategories).length,
-      regionsCount: Object.keys(savedRegions).length
+      regionsCount: Object.keys(savedRegions).length,
+      includedIds: Array.from(savedIncluded),
+      categories: savedCategories,
+      sampleSalesData: marketLandData.vacant_sales_analysis.sales.slice(0, 3)
     });
 
     setSaleCategories(savedCategories);
