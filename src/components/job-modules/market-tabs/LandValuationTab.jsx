@@ -2836,6 +2836,23 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const isInCategory = saleCategories[s.id] === 'building_lot' ||
                           saleCategories[s.id] === 'teardown' ||
                           saleCategories[s.id] === 'pre-construction';
+
+      // Debug all teardown sales
+      if (saleCategories[s.id] === 'teardown') {
+        console.log('🏗️ Teardown sale details:', {
+          block: s.property_block,
+          lot: s.property_lot,
+          id: s.id,
+          category: saleCategories[s.id],
+          isIncluded: includedSales.has(s.id),
+          isInBuildingLot: isInCategory,
+          price: s.sales_price,
+          acres: s.totalAcres,
+          pricePerAcre: s.pricePerAcre
+        });
+      }
+
+      // Keep the 47/2 debug for reference
       if (s.property_block === '47' && s.property_lot === '2') {
         console.log('🏠 Property 47/2 details:', {
           id: s.id,
