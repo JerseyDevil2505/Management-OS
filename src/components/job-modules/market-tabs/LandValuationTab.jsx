@@ -2725,12 +2725,17 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         type="checkbox"
                         checked={includedSales.has(sale.id)}
                         onChange={(e) => {
+                          console.log(`📋 Checkbox change for ${sale.property_block}/${sale.property_lot}:`, {
+                            checked: e.target.checked,
+                            saleId: sale.id
+                          });
                           if (e.target.checked) {
                             setIncludedSales(prev => new Set([...prev, sale.id]));
                           } else {
                             setIncludedSales(prev => {
                               const newSet = new Set(prev);
                               newSet.delete(sale.id);
+                              console.log('❌ Removed from included sales, new size:', newSet.size);
                               return newSet;
                             });
                           }
