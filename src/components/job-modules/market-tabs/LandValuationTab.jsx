@@ -2881,7 +2881,7 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
         )}
         
         {/* Implied Front Foot Rates - ONLY IN FF MODE */}
-        {valuationMode === 'ff' && method2Summary.average && (
+        {valuationMode === 'ff' && method2Summary && (method2Summary.mediumRange || method2Summary.largeRange || method2Summary.xlargeRange) && (
           <div style={{ padding: '15px', borderTop: '1px solid #E5E7EB' }}>
             <h4 style={{ margin: '0 0 10px 0', fontSize: '14px', fontWeight: 'bold' }}>
               Implied Front Foot Rates by Zoning
