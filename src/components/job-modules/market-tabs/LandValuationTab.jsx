@@ -5067,12 +5067,19 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   }
                   
                   // Get typical lot size
-                  const vcsProps = properties?.filter(p => 
-                    p.new_vcs === vcs && 
+                  const vcsProps = properties?.filter(p =>
+                    p.new_vcs === vcs &&
                     (p.property_m4_class === '2' || p.property_m4_class === '3A')
                   ) || [];
                   const typicalLot = vcsProps.length > 0 ?
                     (vcsProps.reduce((sum, p) => sum + parseFloat(calculateAcreage(p)), 0) / vcsProps.length).toFixed(2) : '';
+
+                  // Check for special category properties in this VCS
+                  const vcsSpecialCategories = {
+                    wetlands: vacantSales.some(s => s.new_vcs === vcs && saleCategories[s.id] === 'wetlands'),
+                    landlocked: vacantSales.some(s => s.new_vcs === vcs && saleCategories[s.id] === 'landlocked'),
+                    conservation: vacantSales.some(s => s.new_vcs === vcs && saleCategories[s.id] === 'conservation')
+                  };
                   
                   return (
                     <tr key={vcs} style={{ backgroundColor: index % 2 === 0 ? 'white' : '#F9FAFB' }}>
