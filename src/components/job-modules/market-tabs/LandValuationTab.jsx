@@ -2073,7 +2073,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           .eq('job_id', jobData.id);
         if (error) throw error;
       } else {
-        console.log('➕ Creating new record...');
+        console.log('�� Creating new record...');
         // Use upsert to handle race conditions
         const { error } = await supabase
           .from('market_land_valuation')
@@ -5206,11 +5206,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Res</th>
                     </>
                   )}
-                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Wetlands</th>
-                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Landlocked</th>
-                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Conservation</th>
-                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Avg NT</th>
-                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Avg $</th>
+                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Wet</th>
+                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>LLocked</th>
+                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Consv</th>
+                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Avg Price (t)</th>
+                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Avg Price</th>
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>CME</th>
                   <th
                     style={{
