@@ -2435,6 +2435,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             (rates[rates.length / 2 - 1] + rates[rates.length / 2]) / 2 :
             rates[Math.floor(rates.length / 2)];
 
+          console.log(`💰 ${categoryType} paired analysis:`, {
+            pairs: pairedRates.length,
+            rates: rates.map(r => Math.round(r)),
+            medianRate: Math.round(medianRate),
+            properties: pairedRates.map(p => p.properties)
+          });
+
           if (valuationMode === 'sf') {
             return {
               avg: (medianRate / 43560).toFixed(2),
