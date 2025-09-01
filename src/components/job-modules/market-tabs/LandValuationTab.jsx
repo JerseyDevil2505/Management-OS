@@ -564,10 +564,10 @@ const getPricePerUnit = useCallback((price, size) => {
   const filterVacantSales = useCallback(() => {
     if (!properties) return;
 
-    console.log('🔄 FilterVacantSales called - checking for existing sales:', {
+    console.log('🔄 FilterVacantSales called:', {
       currentVacantSalesCount: vacantSales.length,
-      hasSavedSalesMap: !!window._savedSalesMap,
-      savedSalesMapSize: window._savedSalesMap?.size || 0
+      hasMethod1Excluded: !!window._method1ExcludedSales,
+      method1ExcludedSize: window._method1ExcludedSales?.size || 0
     });
 
     // If we already have restored sales, preserve them and only add new ones
