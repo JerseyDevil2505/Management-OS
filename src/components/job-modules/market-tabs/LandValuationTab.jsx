@@ -797,22 +797,70 @@ const getPricePerUnit = useCallback((price, size) => {
         };
       });
 
-      // Calculate Method 2 Summary
-      if (validRates.length > 0) {
-        validRates.sort((a, b) => a - b);
-        const average = Math.round(validRates.reduce((sum, r) => sum + r, 0) / validRates.length);
-        const median = validRates.length % 2 === 0 ?
-          Math.round((validRates[validRates.length / 2 - 1] + validRates[validRates.length / 2]) / 2) :
-          validRates[Math.floor(validRates.length / 2)];
+      // Calculate Method 2 Summary by bracket ranges with positive deltas only
+      const bracketRates = {
+        mediumRange: [], // 1.00-4.99 acre rates (medium vs small)
+        largeRange: [],  // 5.00-9.99 acre rates (large vs medium)
+        xlargeRange: [] // 10.00+ acre rates (xlarge vs large)
+      };
 
-        setMethod2Summary({
-          average,
-          median,
-          coverage: `${validRates.length} of ${Object.keys(vcsSales).length} VCS areas`,
-          min: validRates[0],
-          max: validRates[validRates.length - 1]
-        });
-      }
+      Object.keys(vcsSales).forEach(vcs => {
+        const vcsAnalysis = analysis[vcs];
+        if (!vcsAnalysis) return;
+
+        const { brackets } = vcsAnalysis;
+
+        // 1.00-4.99 range: medium vs small
+        if (brackets.small.count > 0 && brackets.medium.count > 0) {
+          const priceDiff = brackets.medium.avgAdjusted - brackets.small.avgAdjusted;
+          const acresDiff = brackets.medium.avgAcres - brackets.small.avgAcres;
+          if (acresDiff > 0 && priceDiff > 0) {
+            const rate = Math.round(priceDiff / acresDiff);
+            bracketRates.mediumRange.push(rate);
+          }
+        }
+
+        // 5.00-9.99 range: large vs medium
+        if (brackets.medium.count > 0 && brackets.large.count > 0) {
+          const priceDiff = brackets.large.avgAdjusted - brackets.medium.avgAdjusted;
+          const acresDiff = brackets.large.avgAcres - brackets.medium.avgAcres;
+          if (acresDiff > 0 && priceDiff > 0) {
+            const rate = Math.round(priceDiff / acresDiff);
+            bracketRates.largeRange.push(rate);
+          }
+        }
+
+        // 10.00+ range: xlarge vs large
+        if (brackets.large.count > 0 && brackets.xlarge.count > 0) {
+          const priceDiff = brackets.xlarge.avgAdjusted - brackets.large.avgAdjusted;
+          const acresDiff = brackets.xlarge.avgAcres - brackets.large.avgAcres;
+          if (acresDiff > 0 && priceDiff > 0) {
+            const rate = Math.round(priceDiff / acresDiff);
+            bracketRates.xlargeRange.push(rate);
+          }
+        }
+      });
+
+      // Calculate averages for each bracket range
+      const calculateBracketSummary = (rates) => {
+        if (rates.length === 0) return { perAcre: 'N/A', perSqFt: 'N/A', count: 0 };
+
+        const avgPerAcre = Math.round(rates.reduce((sum, r) => sum + r, 0) / rates.length);
+        const avgPerSqFt = (avgPerAcre / 43560).toFixed(2);
+
+        return {
+          perAcre: avgPerAcre,
+          perSqFt: avgPerSqFt,
+          count: rates.length
+        };
+      };
+
+      setMethod2Summary({
+        mediumRange: calculateBracketSummary(bracketRates.mediumRange), // 1.00-4.99
+        largeRange: calculateBracketSummary(bracketRates.largeRange),   // 5.00-9.99
+        xlargeRange: calculateBracketSummary(bracketRates.xlargeRange), // 10.00+
+        totalVCS: Object.keys(vcsSales).length
+      });
 
       setBracketAnalysis(analysis);
 
