@@ -2724,66 +2724,161 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         
         {/* Method 1 Summary - MOVED TO BOTTOM */}
         <div style={{ padding: '15px', backgroundColor: '#F9FAFB', borderTop: '1px solid #E5E7EB' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '15px' }}>
-            {(() => {
-              // Calculate average rate for checked items by category
-              const checkedSales = vacantSales.filter(s => includedSales.has(s.id));
+          {(() => {
+            // Calculate average rate for checked items by category
+            const checkedSales = vacantSales.filter(s => includedSales.has(s.id));
 
-              // Helper function to calculate average for a category
-              const getCategoryAverage = (filterFn) => {
-                const filtered = checkedSales.filter(filterFn);
-                if (filtered.length === 0) return { avg: 0, count: 0, avgLotSize: 0 };
+            // Helper function to calculate average for a category
+            const getCategoryAverage = (filterFn, categoryType) => {
+              const filtered = checkedSales.filter(filterFn);
+              if (filtered.length === 0) return { avg: 0, count: 0, avgLotSize: 0, method: 'none' };
 
-                // Calculate average lot size
-                const totalAcres = filtered.reduce((sum, s) => sum + s.totalAcres, 0);
-                const avgLotSizeAcres = totalAcres / filtered.length;
+              // Calculate average lot size
+              const totalAcres = filtered.reduce((sum, s) => sum + s.totalAcres, 0);
+              const avgLotSizeAcres = totalAcres / filtered.length;
 
-                let avgLotSize;
-                if (valuationMode === 'acre') {
-                  avgLotSize = avgLotSizeAcres.toFixed(2) + ' acres';
-                } else if (valuationMode === 'sf') {
-                  avgLotSize = Math.round(avgLotSizeAcres * 43560).toLocaleString() + ' sq ft';
-                } else if (valuationMode === 'ff') {
-                  avgLotSize = 'N/A ff'; // Front foot needs frontage data
-                }
+              let avgLotSize;
+              if (valuationMode === 'acre') {
+                avgLotSize = avgLotSizeAcres.toFixed(2) + ' acres';
+              } else if (valuationMode === 'sf') {
+                avgLotSize = Math.round(avgLotSizeAcres * 43560).toLocaleString() + ' sq ft';
+              } else if (valuationMode === 'ff') {
+                avgLotSize = 'N/A ff'; // Front foot needs frontage data
+              }
 
+              // For constrained land types (wetlands, landlocked, conservation), use simple $/acre
+              if (categoryType === 'constrained') {
                 if (valuationMode === 'sf') {
                   const totalPrice = filtered.reduce((sum, s) => sum + s.sales_price, 0);
                   const totalSF = filtered.reduce((sum, s) => sum + (s.totalAcres * 43560), 0);
                   return {
                     avg: totalSF > 0 ? (totalPrice / totalSF).toFixed(2) : 0,
                     count: filtered.length,
-                    avgLotSize
+                    avgLotSize,
+                    method: 'simple'
                   };
                 } else {
                   const avgRate = filtered.reduce((sum, s) => sum + s.pricePerAcre, 0) / filtered.length;
                   return {
                     avg: Math.round(avgRate),
                     count: filtered.length,
-                    avgLotSize
+                    avgLotSize,
+                    method: 'simple'
                   };
                 }
-              };
+              }
 
-              const rawLand = getCategoryAverage(s =>
-                saleCategories[s.id] === 'raw_land' ||
-                (!saleCategories[s.id] && s.property_m4_class === '1')
-              );
+              // For developable land (raw land, building lot), use paired sales analysis
+              if (categoryType === 'developable' && filtered.length >= 2) {
+                // Sort by acreage for paired analysis
+                const sortedSales = [...filtered].sort((a, b) => a.totalAcres - b.totalAcres);
 
-              const buildingLot = getCategoryAverage(s =>
-                saleCategories[s.id] === 'building_lot' ||
-                saleCategories[s.id] === 'teardown' ||
-                saleCategories[s.id] === 'pre-construction'
-              );
+                const pairedRates = [];
 
-              const wetlands = getCategoryAverage(s => saleCategories[s.id] === 'wetlands');
-              const landlocked = getCategoryAverage(s => saleCategories[s.id] === 'landlocked');
-              const conservation = getCategoryAverage(s => saleCategories[s.id] === 'conservation');
+                // Calculate incremental rates between pairs
+                for (let i = 0; i < sortedSales.length - 1; i++) {
+                  for (let j = i + 1; j < sortedSales.length; j++) {
+                    const smaller = sortedSales[i];
+                    const larger = sortedSales[j];
 
-              return (
-                <>
+                    const acreageDiff = larger.totalAcres - smaller.totalAcres;
+                    const priceDiff = larger.sales_price - smaller.sales_price;
+
+                    // Only include if meaningful acreage difference and positive price difference
+                    if (acreageDiff >= 0.25 && priceDiff > 0) {
+                      const incrementalRate = priceDiff / acreageDiff;
+                      pairedRates.push({
+                        rate: incrementalRate,
+                        smallerAcres: smaller.totalAcres,
+                        largerAcres: larger.totalAcres,
+                        priceDiff: priceDiff,
+                        acreageDiff: acreageDiff,
+                        properties: `${smaller.property_block}/${smaller.property_lot} vs ${larger.property_block}/${larger.property_lot}`
+                      });
+                    }
+                  }
+                }
+
+                if (pairedRates.length > 0) {
+                  // Use median to reduce outlier influence
+                  const rates = pairedRates.map(p => p.rate).sort((a, b) => a - b);
+                  const medianRate = rates.length % 2 === 0 ?
+                    (rates[rates.length / 2 - 1] + rates[rates.length / 2]) / 2 :
+                    rates[Math.floor(rates.length / 2)];
+
+                  if (valuationMode === 'sf') {
+                    return {
+                      avg: (medianRate / 43560).toFixed(2),
+                      count: filtered.length,
+                      avgLotSize,
+                      method: 'paired',
+                      pairedAnalysis: {
+                        pairs: pairedRates.length,
+                        medianRate: Math.round(medianRate),
+                        bestPair: pairedRates.sort((a, b) => Math.abs(a.acreageDiff - 1) - Math.abs(b.acreageDiff - 1))[0]
+                      }
+                    };
+                  } else {
+                    return {
+                      avg: Math.round(medianRate),
+                      count: filtered.length,
+                      avgLotSize,
+                      method: 'paired',
+                      pairedAnalysis: {
+                        pairs: pairedRates.length,
+                        medianRate: Math.round(medianRate),
+                        bestPair: pairedRates.sort((a, b) => Math.abs(a.acreageDiff - 1) - Math.abs(b.acreageDiff - 1))[0]
+                      }
+                    };
+                  }
+                }
+              }
+
+              // Fallback to simple calculation if paired analysis fails
+              if (valuationMode === 'sf') {
+                const totalPrice = filtered.reduce((sum, s) => sum + s.sales_price, 0);
+                const totalSF = filtered.reduce((sum, s) => sum + (s.totalAcres * 43560), 0);
+                return {
+                  avg: totalSF > 0 ? (totalPrice / totalSF).toFixed(2) : 0,
+                  count: filtered.length,
+                  avgLotSize,
+                  method: 'fallback'
+                };
+              } else {
+                const avgRate = filtered.reduce((sum, s) => sum + s.pricePerAcre, 0) / filtered.length;
+                return {
+                  avg: Math.round(avgRate),
+                  count: filtered.length,
+                  avgLotSize,
+                  method: 'fallback'
+                };
+              }
+            };
+
+            const rawLand = getCategoryAverage(s =>
+              saleCategories[s.id] === 'raw_land' ||
+              (!saleCategories[s.id] && s.property_m4_class === '1'),
+              'developable'
+            );
+
+            const buildingLot = getCategoryAverage(s =>
+              saleCategories[s.id] === 'building_lot' ||
+              saleCategories[s.id] === 'teardown' ||
+              saleCategories[s.id] === 'pre-construction',
+              'developable'
+            );
+
+            const wetlands = getCategoryAverage(s => saleCategories[s.id] === 'wetlands', 'constrained');
+            const landlocked = getCategoryAverage(s => saleCategories[s.id] === 'landlocked', 'constrained');
+            const conservation = getCategoryAverage(s => saleCategories[s.id] === 'conservation', 'constrained');
+
+            return (
+              <div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '15px' }}>
                   <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
-                    <div style={{ fontSize: '12px', color: '#6B7280' }}>Raw Land</div>
+                    <div style={{ fontSize: '12px', color: '#6B7280' }}>
+                      Raw Land {rawLand.method === 'paired' && <span style={{ color: '#10B981' }}>✓ Paired</span>}
+                    </div>
                     <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#10B981' }}>
                       {valuationMode === 'sf' ? `$${rawLand.avg}` : `$${rawLand.avg.toLocaleString()}`}
                     </div>
@@ -2793,9 +2888,16 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         Avg: {rawLand.avgLotSize}
                       </div>
                     )}
+                    {rawLand.method === 'paired' && rawLand.pairedAnalysis && (
+                      <div style={{ fontSize: '9px', color: '#059669', marginTop: '2px' }}>
+                        {rawLand.pairedAnalysis.pairs} pairs analyzed
+                      </div>
+                    )}
                   </div>
                   <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
-                    <div style={{ fontSize: '12px', color: '#6B7280' }}>Building Lot</div>
+                    <div style={{ fontSize: '12px', color: '#6B7280' }}>
+                      Building Lot {buildingLot.method === 'paired' && <span style={{ color: '#3B82F6' }}>✓ Paired</span>}
+                    </div>
                     <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#3B82F6' }}>
                       {valuationMode === 'sf' ? `$${buildingLot.avg}` : `$${buildingLot.avg.toLocaleString()}`}
                     </div>
@@ -2803,6 +2905,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     {buildingLot.count > 0 && (
                       <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '2px' }}>
                         Avg: {buildingLot.avgLotSize}
+                      </div>
+                    )}
+                    {buildingLot.method === 'paired' && buildingLot.pairedAnalysis && (
+                      <div style={{ fontSize: '9px', color: '#2563EB', marginTop: '2px' }}>
+                        {buildingLot.pairedAnalysis.pairs} pairs analyzed
                       </div>
                     )}
                   </div>
@@ -2842,11 +2949,82 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       </div>
                     )}
                   </div>
-                </>
-              );
-            })()}
-          </div>
+                </div>
 
+                {/* Paired Analysis Details */}
+                {(rawLand.method === 'paired' || buildingLot.method === 'paired') && (
+                  <div style={{ marginTop: '15px', paddingTop: '15px', borderTop: '1px solid #E5E7EB' }}>
+                    <h4 style={{ margin: '0 0 10px 0', fontSize: '14px', fontWeight: 'bold', color: '#374151' }}>
+                      Paired Sales Analysis Details
+                    </h4>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: rawLand.method === 'paired' && buildingLot.method === 'paired' ? '1fr 1fr' : '1fr', gap: '15px' }}>
+
+                      {rawLand.method === 'paired' && rawLand.pairedAnalysis && (
+                        <div style={{ backgroundColor: '#F0FDF4', padding: '12px', borderRadius: '6px', border: '1px solid #BBF7D0' }}>
+                          <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#059669', marginBottom: '8px' }}>
+                            Raw Land - Best Pair Analysis
+                          </div>
+                          {rawLand.pairedAnalysis.bestPair && (
+                            <div style={{ fontSize: '11px', color: '#065F46' }}>
+                              <div style={{ marginBottom: '4px' }}>
+                                <strong>Properties:</strong> {rawLand.pairedAnalysis.bestPair.properties}
+                              </div>
+                              <div style={{ marginBottom: '4px' }}>
+                                <strong>Acreage Difference:</strong> {rawLand.pairedAnalysis.bestPair.acreageDiff.toFixed(2)} acres
+                              </div>
+                              <div style={{ marginBottom: '4px' }}>
+                                <strong>Price Difference:</strong> ${rawLand.pairedAnalysis.bestPair.priceDiff.toLocaleString()}
+                              </div>
+                              <div style={{ marginBottom: '4px' }}>
+                                <strong>Raw Land Rate:</strong> ${Math.round(rawLand.pairedAnalysis.bestPair.rate).toLocaleString()}/acre
+                              </div>
+                              <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '6px' }}>
+                                Median of {rawLand.pairedAnalysis.pairs} paired comparisons
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {buildingLot.method === 'paired' && buildingLot.pairedAnalysis && (
+                        <div style={{ backgroundColor: '#EFF6FF', padding: '12px', borderRadius: '6px', border: '1px solid #BFDBFE' }}>
+                          <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#2563EB', marginBottom: '8px' }}>
+                            Building Lot - Best Pair Analysis
+                          </div>
+                          {buildingLot.pairedAnalysis.bestPair && (
+                            <div style={{ fontSize: '11px', color: '#1E40AF' }}>
+                              <div style={{ marginBottom: '4px' }}>
+                                <strong>Properties:</strong> {buildingLot.pairedAnalysis.bestPair.properties}
+                              </div>
+                              <div style={{ marginBottom: '4px' }}>
+                                <strong>Acreage Difference:</strong> {buildingLot.pairedAnalysis.bestPair.acreageDiff.toFixed(2)} acres
+                              </div>
+                              <div style={{ marginBottom: '4px' }}>
+                                <strong>Price Difference:</strong> ${buildingLot.pairedAnalysis.bestPair.priceDiff.toLocaleString()}
+                              </div>
+                              <div style={{ marginBottom: '4px' }}>
+                                <strong>Raw Land Rate:</strong> ${Math.round(buildingLot.pairedAnalysis.bestPair.rate).toLocaleString()}/acre
+                              </div>
+                              <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '6px' }}>
+                                Median of {buildingLot.pairedAnalysis.pairs} paired comparisons
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                    </div>
+
+                    <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '8px', fontStyle: 'italic' }}>
+                      * Paired analysis extracts incremental raw land value between similar sales with different acreages.
+                      This isolates the pure land component from site value and improvements.
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
       </div>
       {/* Method 2: Improved Sale Lot Size Analysis */}
