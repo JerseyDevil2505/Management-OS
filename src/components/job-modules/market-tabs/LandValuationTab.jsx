@@ -201,8 +201,8 @@ useEffect(() => {
   }
 
   // Restore Method 2 excluded sales
-  if (marketLandData.method2_excluded_sales) {
-    setMethod2ExcludedSales(new Set(marketLandData.method2_excluded_sales));
+  if (marketLandData.method2_summary?.excluded_sales) {
+    setMethod2ExcludedSales(new Set(marketLandData.method2_summary.excluded_sales));
   }
 
   if (marketLandData.allocation_study) {
