@@ -2528,11 +2528,39 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   }, [vacantSales, includedSales, saleCategories, valuationMode]);
 
   const saveRates = async () => {
+    // Update cascade config mode to match current valuation mode
+    setCascadeConfig(prev => ({ ...prev, mode: valuationMode }));
+
     // This triggers the main saveAnalysis function
     await saveAnalysis();
-    
+
+    // Calculate which VCS areas will be affected by the configurations
+    const affectedVCS = new Set();
+
+    // Normal configuration affects all VCS
+    if (properties) {
+      properties.forEach(p => {
+        if (p.new_vcs) affectedVCS.add(p.new_vcs);
+      });
+    }
+
+    // Special region configurations
+    Object.keys(cascadeConfig.special || {}).forEach(region => {
+      // Find VCS in this special region
+      vacantSales.forEach(sale => {
+        if (specialRegions[sale.id] === region && sale.new_vcs) {
+          affectedVCS.add(sale.new_vcs);
+        }
+      });
+    });
+
+    // VCS-specific configurations
+    Object.values(cascadeConfig.vcsSpecific || {}).forEach(config => {
+      config.vcsList?.forEach(vcs => affectedVCS.add(vcs));
+    });
+
     // Additional notification that rates have been saved
-    alert('Land rates have been saved and are now available in the Allocation Study and VCS Sheet tabs.');
+    alert(`Land rates have been saved for ${affectedVCS.size} VCS areas and are now available in the Allocation Study and VCS Sheet tabs.\\n\\nMethod: ${valuationMode.toUpperCase()}\\nNormal rates: ${Object.keys(cascadeConfig.normal).filter(k => cascadeConfig.normal[k]?.rate).length} tiers\\nSpecial regions: ${Object.keys(cascadeConfig.special || {}).length}\\nVCS-specific: ${Object.keys(cascadeConfig.vcsSpecific || {}).length}`);
   };
   // ========== RENDER LAND RATES TAB ==========
   const renderLandRatesTab = () => (
