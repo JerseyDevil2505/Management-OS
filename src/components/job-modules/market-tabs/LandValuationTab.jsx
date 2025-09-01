@@ -2038,7 +2038,15 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         },
         updated_at: new Date().toISOString()
       };
-      
+
+      // Debug: Log the exact data being saved
+      console.log('💾 Data structure being saved:', {
+        cascadeConfigLocation1: analysisData.raw_land_config.cascade_config.specialCategories,
+        cascadeConfigLocation2: analysisData.cascade_rates.specialCategories,
+        salesData: analysisData.vacant_sales_analysis.sales.slice(0, 3), // First 3 for brevity
+        totalSales: analysisData.vacant_sales_analysis.sales.length
+      });
+
       // Check if record exists
       const { data: existing } = await supabase
         .from('market_land_valuation')
