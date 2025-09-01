@@ -2728,43 +2728,58 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             {(() => {
               // Calculate average rate for checked items by category
               const checkedSales = vacantSales.filter(s => includedSales.has(s.id));
-              
+
               // Helper function to calculate average for a category
               const getCategoryAverage = (filterFn) => {
                 const filtered = checkedSales.filter(filterFn);
-                if (filtered.length === 0) return { avg: 0, count: 0 };
-                
+                if (filtered.length === 0) return { avg: 0, count: 0, avgLotSize: 0 };
+
+                // Calculate average lot size
+                const totalAcres = filtered.reduce((sum, s) => sum + s.totalAcres, 0);
+                const avgLotSizeAcres = totalAcres / filtered.length;
+
+                let avgLotSize;
+                if (valuationMode === 'acre') {
+                  avgLotSize = avgLotSizeAcres.toFixed(2) + ' acres';
+                } else if (valuationMode === 'sf') {
+                  avgLotSize = Math.round(avgLotSizeAcres * 43560).toLocaleString() + ' sq ft';
+                } else if (valuationMode === 'ff') {
+                  avgLotSize = 'N/A ff'; // Front foot needs frontage data
+                }
+
                 if (valuationMode === 'sf') {
                   const totalPrice = filtered.reduce((sum, s) => sum + s.sales_price, 0);
                   const totalSF = filtered.reduce((sum, s) => sum + (s.totalAcres * 43560), 0);
-                  return { 
-                    avg: totalSF > 0 ? (totalPrice / totalSF).toFixed(2) : 0, 
-                    count: filtered.length 
+                  return {
+                    avg: totalSF > 0 ? (totalPrice / totalSF).toFixed(2) : 0,
+                    count: filtered.length,
+                    avgLotSize
                   };
                 } else {
                   const avgRate = filtered.reduce((sum, s) => sum + s.pricePerAcre, 0) / filtered.length;
-                  return { 
-                    avg: Math.round(avgRate), 
-                    count: filtered.length 
+                  return {
+                    avg: Math.round(avgRate),
+                    count: filtered.length,
+                    avgLotSize
                   };
                 }
               };
-              
-              const rawLand = getCategoryAverage(s => 
-                saleCategories[s.id] === 'raw_land' || 
+
+              const rawLand = getCategoryAverage(s =>
+                saleCategories[s.id] === 'raw_land' ||
                 (!saleCategories[s.id] && s.property_m4_class === '1')
               );
-              
-              const buildingLot = getCategoryAverage(s => 
+
+              const buildingLot = getCategoryAverage(s =>
                 saleCategories[s.id] === 'building_lot' ||
                 saleCategories[s.id] === 'teardown' ||
                 saleCategories[s.id] === 'pre-construction'
               );
-              
+
               const wetlands = getCategoryAverage(s => saleCategories[s.id] === 'wetlands');
               const landlocked = getCategoryAverage(s => saleCategories[s.id] === 'landlocked');
               const conservation = getCategoryAverage(s => saleCategories[s.id] === 'conservation');
-              
+
               return (
                 <>
                   <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
@@ -2773,6 +2788,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       {valuationMode === 'sf' ? `$${rawLand.avg}` : `$${rawLand.avg.toLocaleString()}`}
                     </div>
                     <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{rawLand.count} sales</div>
+                    {rawLand.count > 0 && (
+                      <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '2px' }}>
+                        Avg: {rawLand.avgLotSize}
+                      </div>
+                    )}
                   </div>
                   <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
                     <div style={{ fontSize: '12px', color: '#6B7280' }}>Building Lot</div>
@@ -2780,6 +2800,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       {valuationMode === 'sf' ? `$${buildingLot.avg}` : `$${buildingLot.avg.toLocaleString()}`}
                     </div>
                     <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{buildingLot.count} sales</div>
+                    {buildingLot.count > 0 && (
+                      <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '2px' }}>
+                        Avg: {buildingLot.avgLotSize}
+                      </div>
+                    )}
                   </div>
                   <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
                     <div style={{ fontSize: '12px', color: '#6B7280' }}>Wetlands</div>
@@ -2787,6 +2812,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       {valuationMode === 'sf' ? `$${wetlands.avg}` : `$${wetlands.avg.toLocaleString()}`}
                     </div>
                     <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{wetlands.count} sales</div>
+                    {wetlands.count > 0 && (
+                      <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '2px' }}>
+                        Avg: {wetlands.avgLotSize}
+                      </div>
+                    )}
                   </div>
                   <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
                     <div style={{ fontSize: '12px', color: '#6B7280' }}>Landlocked</div>
@@ -2794,6 +2824,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       {valuationMode === 'sf' ? `$${landlocked.avg}` : `$${landlocked.avg.toLocaleString()}`}
                     </div>
                     <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{landlocked.count} sales</div>
+                    {landlocked.count > 0 && (
+                      <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '2px' }}>
+                        Avg: {landlocked.avgLotSize}
+                      </div>
+                    )}
                   </div>
                   <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
                     <div style={{ fontSize: '12px', color: '#6B7280' }}>Conservation</div>
@@ -2801,11 +2836,17 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       {valuationMode === 'sf' ? `$${conservation.avg}` : `$${conservation.avg.toLocaleString()}`}
                     </div>
                     <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{conservation.count} sales</div>
+                    {conservation.count > 0 && (
+                      <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '2px' }}>
+                        Avg: {conservation.avgLotSize}
+                      </div>
+                    )}
                   </div>
                 </>
               );
             })()}
           </div>
+
         </div>
       </div>
       {/* Method 2: Improved Sale Lot Size Analysis */}
