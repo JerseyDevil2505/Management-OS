@@ -201,8 +201,8 @@ useEffect(() => {
   }
 
   // Restore Method 2 excluded sales
-  if (marketLandData.method2_summary?.excluded_sales) {
-    setMethod2ExcludedSales(new Set(marketLandData.method2_summary.excluded_sales));
+  if (marketLandData.bracket_analysis?.excluded_sales) {
+    setMethod2ExcludedSales(new Set(marketLandData.bracket_analysis.excluded_sales));
   }
 
   if (marketLandData.allocation_study) {
@@ -1918,10 +1918,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             rates: calculateRates(region)
           }))
         },
-        bracket_analysis: bracketAnalysis,
-        method2_summary: {
-          ...method2Summary,
-          excluded_sales: Array.from(method2ExcludedSales)
+        bracket_analysis: {
+          ...bracketAnalysis,
+          excluded_sales: Array.from(method2ExcludedSales),
+          summary: method2Summary
         },
         cascade_rates: cascadeConfig,
         allocation_study: {
