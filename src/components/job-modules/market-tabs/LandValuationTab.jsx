@@ -217,16 +217,17 @@ useEffect(() => {
     }
   }
 
-  if (marketLandData.vcs_sheet_data) {
-    setVcsSheetData(marketLandData.vcs_sheet_data);
-    if (marketLandData.vcs_sheet_data.manual_site_values) {
-      setVcsManualSiteValues(marketLandData.vcs_sheet_data.manual_site_values);
+  if (marketLandData.allocation_study?.vcs_sheet_data) {
+    const vcsData = marketLandData.allocation_study.vcs_sheet_data;
+    setVcsSheetData(vcsData.sheet_data || {});
+    if (vcsData.manual_site_values) {
+      setVcsManualSiteValues(vcsData.manual_site_values);
     }
-    if (marketLandData.vcs_sheet_data.descriptions) {
-      setVcsDescriptions(marketLandData.vcs_sheet_data.descriptions);
+    if (vcsData.descriptions) {
+      setVcsDescriptions(vcsData.descriptions);
     }
-    if (marketLandData.vcs_sheet_data.types) {
-      setVcsTypes(marketLandData.vcs_sheet_data.types);
+    if (vcsData.types) {
+      setVcsTypes(vcsData.types);
     }
   }
 
