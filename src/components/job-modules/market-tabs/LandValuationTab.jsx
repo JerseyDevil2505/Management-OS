@@ -1971,7 +1971,12 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     console.log('💾 Starting save...', {
       vacantSalesCount: vacantSales.length,
-      excludedSalesCount: method2ExcludedSales.size
+      excludedSalesCount: method2ExcludedSales.size,
+      includedSalesCount: includedSales.size,
+      specialCategories: cascadeConfig.specialCategories,
+      normalRates: cascadeConfig.normal,
+      salesWithCategories: Object.keys(saleCategories).length,
+      checkboxStates: vacantSales.map(s => ({ id: s.id, block: s.property_block, lot: s.property_lot, included: includedSales.has(s.id) }))
     });
 
     setIsSaving(true);
