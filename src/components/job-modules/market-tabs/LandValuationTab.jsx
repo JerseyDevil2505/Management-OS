@@ -1690,6 +1690,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     }));
   };
 
+  const toggleFieldCollapse = (fieldName) => {
+    setCollapsedFields(prev => ({
+      ...prev,
+      [fieldName]: !prev[fieldName]
+    }));
+  };
+
   // ========== ECONOMIC OBSOLESCENCE FUNCTIONS - ENHANCED ==========
   const analyzeEconomicObsolescence = useCallback(() => {
     if (!properties) return;
