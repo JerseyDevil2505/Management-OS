@@ -5174,10 +5174,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   }, [valuationMode]);
 
   // ========== SALES DATE FILTERING FOR CME ==========
-  const getOctoberFirstTwoYearsPrior = () => {
+  const getOctoberFirstThreeYearsPrior = () => {
     const now = new Date();
-    const twoYearsPrior = now.getFullYear() - 2;
-    return new Date(twoYearsPrior, 9, 1); // October 1st (month 9 = October)
+    const threeYearsPrior = now.getFullYear() - 3;
+    return new Date(threeYearsPrior, 9, 1); // October 1st (month 9 = October)
   };
 
   // ========== CME BRACKET DEFINITIONS ==========
