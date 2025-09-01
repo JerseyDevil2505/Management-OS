@@ -3543,8 +3543,21 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
                     const acres = parseFloat(prop.asset_lot_acre || 0);
                     const isExcluded = method2ExcludedSales.has(prop.id);
 
+                    // Check for pre-construction (sale before year built)
+                    const saleYear = prop.sales_date ? new Date(prop.sales_date).getFullYear() : null;
+                    const yearBuilt = prop.asset_year_built ? parseInt(prop.asset_year_built) : null;
+                    const isPreConstruction = saleYear && yearBuilt && saleYear < yearBuilt;
+
+                    // Determine row background color
+                    let backgroundColor = 'white';
+                    if (isExcluded) {
+                      backgroundColor = '#FEF2F2'; // Light red for excluded
+                    } else if (isPreConstruction) {
+                      backgroundColor = '#FEF3C7'; // Light yellow for pre-construction
+                    }
+
                     return (
-                      <tr key={prop.id} style={{ backgroundColor: isExcluded ? '#FEF2F2' : 'white' }}>
+                      <tr key={prop.id} style={{ backgroundColor }}>
                         <td style={{ padding: '8px' }}>
                           <input
                             type="checkbox"
@@ -3563,12 +3576,18 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
                         <td style={{ padding: '8px' }}>{prop.property_block}</td>
                         <td style={{ padding: '8px' }}>{prop.property_lot}</td>
                         <td style={{ padding: '8px' }}>{prop.property_location}</td>
-                        <td style={{ padding: '8px' }}>{prop.sales_date}</td>
+                        <td style={{ padding: '8px' }}>
+                          {prop.sales_date}
+                          {isPreConstruction && <span style={{ color: '#F59E0B', marginLeft: '4px' }}>⚠️</span>}
+                        </td>
                         <td style={{ padding: '8px', textAlign: 'right' }}>${prop.sales_price?.toLocaleString()}</td>
                         <td style={{ padding: '8px', textAlign: 'right' }}>${Math.round(prop.normalizedTime)?.toLocaleString()}</td>
                         <td style={{ padding: '8px', textAlign: 'right' }}>{acres.toFixed(2)}</td>
                         <td style={{ padding: '8px', textAlign: 'right' }}>{prop.asset_sfla || '-'}</td>
-                        <td style={{ padding: '8px' }}>{prop.asset_year_built || '-'}</td>
+                        <td style={{ padding: '8px' }}>
+                          {prop.asset_year_built || '-'}
+                          {isPreConstruction && <span style={{ color: '#F59E0B', marginLeft: '4px' }}>⚠️</span>}
+                        </td>
                         <td style={{ padding: '8px' }}>{prop.asset_type_use || '-'}</td>
                       </tr>
                     );
