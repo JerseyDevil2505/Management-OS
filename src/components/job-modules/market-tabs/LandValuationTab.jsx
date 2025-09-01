@@ -3419,7 +3419,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         {/* Normal Region Cascade */}
         <div style={{ marginBottom: '15px' }}>
           <h4 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '10px' }}>Normal Properties</h4>
-          <div style={{ display: 'grid', gridTemplateColumns: valuationMode === 'ff' ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: '15px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns:
+            valuationMode === 'ff' ? 'repeat(2, 1fr)' :
+            valuationMode === 'sf' ? 'repeat(2, 1fr)' :
+            'repeat(4, 1fr)', gap: '15px' }}>
             {valuationMode === 'ff' ? (
               <>
                 <div>
