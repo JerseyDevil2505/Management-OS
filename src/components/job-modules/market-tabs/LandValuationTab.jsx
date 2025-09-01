@@ -566,6 +566,14 @@ const getPricePerUnit = useCallback((price, size) => {
     }
   }, [isInitialLoadComplete, cascadeConfig, landNotes, saleCategories, specialRegions, includedSales, actualAllocations,
       vcsManualSiteValues, actualAdjustments, targetAllocation, locationCodes, vcsTypes, method2ExcludedSales, vacantSales]);
+
+  // Clear saved sales map after initial restoration is complete
+  useEffect(() => {
+    if (isInitialLoadComplete && window._savedSalesMap) {
+      console.log('🧹 Clearing saved sales map after successful restoration');
+      delete window._savedSalesMap;
+    }
+  }, [isInitialLoadComplete]);
   // ========== LAND RATES FUNCTIONS WITH ENHANCED FILTERS ==========
   const filterVacantSales = useCallback(() => {
     if (!properties) return;
@@ -578,7 +586,7 @@ const getPricePerUnit = useCallback((price, size) => {
 
     // If we already have restored sales, preserve them and only add new ones
     if (vacantSales.length > 0 && window._savedSalesMap) {
-      console.log('🔄 Preserving existing restored sales, checking for new ones only');
+      console.log('���� Preserving existing restored sales, checking for new ones only');
 
       // Find any new sales that match criteria but aren't already in vacantSales
       const existingIds = new Set(vacantSales.map(s => s.id));
@@ -5020,7 +5028,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         <td style={{ padding: '8px', textAlign: 'right' }}>{prop.asset_sfla || '-'}</td>
                         <td style={{ padding: '8px' }}>
                           {prop.asset_year_built || '-'}
-                          {isPreConstruction && <span style={{ color: '#F59E0B', marginLeft: '4px' }}>⚠️</span>}
+                          {isPreConstruction && <span style={{ color: '#F59E0B', marginLeft: '4px' }}>��️</span>}
                         </td>
                         <td style={{ padding: '8px' }}>{prop.asset_type_use || '-'}</td>
                       </tr>
