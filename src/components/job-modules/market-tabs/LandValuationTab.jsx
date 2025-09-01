@@ -3358,7 +3358,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
         <div style={{ padding: '10px' }}>
           {Object.entries(bracketAnalysis)
-            .filter(([vcs]) => !vcsFilter || vcs.includes(vcsFilter))
             .sort(([a], [b]) => a.localeCompare(b))
             .map(([vcs, data], index) => {
               const isExpanded = expandedVCS.has(vcs);
