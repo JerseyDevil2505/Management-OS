@@ -1243,7 +1243,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       
       setLandNotes(prev => ({
         ...prev, 
-        [property.id]: '📋 Prompt copied! Opening Claude... (paste response here when ready)'
+        [property.id]: '��� Prompt copied! Opening Claude... (paste response here when ready)'
       }));
       
       window.open('https://claude.ai/new', '_blank');
@@ -5601,12 +5601,16 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       <td style={{ padding: '8px', fontSize: '10px', backgroundColor: isGrayedOut ? '#F3F4F6' : 'inherit', border: '1px solid #E5E7EB' }}>
                         {!isGrayedOut && !collapsedFields.zoning ? cleanZoning : (collapsedFields.zoning ? '...' : '')}
                       </td>
-                      <td style={{ padding: '8px', fontSize: '10px', backgroundColor: isGrayedOut ? '#F3F4F6' : 'inherit', border: '1px solid #E5E7EB' }}>
-                        {!isGrayedOut && !collapsedFields.key ? data.keyPages || '' : (collapsedFields.key ? '...' : '')}
-                      </td>
-                      <td style={{ padding: '8px', fontSize: '10px', backgroundColor: isGrayedOut ? '#F3F4F6' : 'inherit', border: '1px solid #E5E7EB' }}>
-                        {!isGrayedOut && !collapsedFields.map ? data.mapPages || '' : (collapsedFields.map ? '...' : '')}
-                      </td>
+                      {shouldShowKeyColumn && (
+                        <td style={{ padding: '8px', fontSize: '10px', backgroundColor: isGrayedOut ? '#F3F4F6' : 'inherit', border: '1px solid #E5E7EB' }}>
+                          {!isGrayedOut && !collapsedFields.key ? data.keyPages || '' : (collapsedFields.key ? '...' : '')}
+                        </td>
+                      )}
+                      {shouldShowMapColumn && (
+                        <td style={{ padding: '8px', fontSize: '10px', backgroundColor: isGrayedOut ? '#F3F4F6' : 'inherit', border: '1px solid #E5E7EB' }}>
+                          {!isGrayedOut && !collapsedFields.map ? data.mapPages || '' : (collapsedFields.map ? '...' : '')}
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
