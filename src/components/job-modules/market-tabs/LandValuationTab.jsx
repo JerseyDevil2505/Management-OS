@@ -242,35 +242,6 @@ useEffect(() => {
   setIsLoading(false);
 }, [marketLandData]);
 
-  // ========== RESTORE MANUALLY ADDED PROPERTIES ==========
-  useEffect(() => {
-    if (!marketLandData?.vacant_sales_analysis?.sales || !properties || vacantSales.length > 0) return;
-
-    // Find manually added property IDs
-    const manuallyAddedIds = marketLandData.vacant_sales_analysis.sales
-      .filter(s => s.manually_added)
-      .map(s => s.id);
-
-    if (manuallyAddedIds.length > 0) {
-      const manuallyAddedProps = properties.filter(p => manuallyAddedIds.includes(p.id));
-
-      if (manuallyAddedProps.length > 0) {
-        const enrichedManualProps = manuallyAddedProps.map(prop => {
-          const acres = calculateAcreage(prop);
-          const pricePerUnit = getPricePerUnit(prop.sales_price, acres);
-          return {
-            ...prop,
-            totalAcres: acres,
-            pricePerAcre: pricePerUnit,
-            manuallyAdded: true
-          };
-        });
-
-        setVacantSales(prev => [...prev, ...enrichedManualProps]);
-      }
-    }
-  }, [marketLandData, properties, calculateAcreage, getPricePerUnit]);
-
   // ========== CHECK FRONT FOOT AVAILABILITY ==========
   useEffect(() => {
     if (jobData?.parsed_code_definitions && vendorType) {
@@ -461,6 +432,35 @@ const getPricePerUnit = useCallback((price, size) => {
     
     return vcsCode; // Return code if no description found
   }, [jobData, vendorType, vcsDescriptions]);
+
+  // ========== RESTORE MANUALLY ADDED PROPERTIES ==========
+  useEffect(() => {
+    if (!marketLandData?.vacant_sales_analysis?.sales || !properties || vacantSales.length > 0) return;
+
+    // Find manually added property IDs
+    const manuallyAddedIds = marketLandData.vacant_sales_analysis.sales
+      .filter(s => s.manually_added)
+      .map(s => s.id);
+
+    if (manuallyAddedIds.length > 0) {
+      const manuallyAddedProps = properties.filter(p => manuallyAddedIds.includes(p.id));
+
+      if (manuallyAddedProps.length > 0) {
+        const enrichedManualProps = manuallyAddedProps.map(prop => {
+          const acres = calculateAcreage(prop);
+          const pricePerUnit = getPricePerUnit(prop.sales_price, acres);
+          return {
+            ...prop,
+            totalAcres: acres,
+            pricePerAcre: pricePerUnit,
+            manuallyAdded: true
+          };
+        });
+
+        setVacantSales(prev => [...prev, ...enrichedManualProps]);
+      }
+    }
+  }, [marketLandData, properties, calculateAcreage, getPricePerUnit]);
 
   // ========== LOAD DATA EFFECTS ==========
   // Update filter when vendor type changes
