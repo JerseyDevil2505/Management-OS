@@ -644,6 +644,9 @@ const getPricePerUnit = useCallback((price, size) => {
         const timeNormData = timeNormLookup.get(prop.property_composite_key);
         if (!timeNormData) return;
 
+        // Skip if manually excluded from Method 2
+        if (method2ExcludedSales.has(prop.id)) return;
+
         // Apply type/use filter with umbrella group support
         const rawTypeUse = prop.asset_type_use?.toString().trim().toUpperCase();
 
