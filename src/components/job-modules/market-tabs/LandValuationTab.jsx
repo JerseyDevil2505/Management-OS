@@ -2954,6 +2954,77 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             })()}
           </div>
 
+          {/* Paired Analysis Details */}
+          {(rawLand.method === 'paired' || buildingLot.method === 'paired') && (
+            <div style={{ marginTop: '15px', paddingTop: '15px', borderTop: '1px solid #E5E7EB' }}>
+              <h4 style={{ margin: '0 0 10px 0', fontSize: '14px', fontWeight: 'bold', color: '#374151' }}>
+                Paired Sales Analysis Details
+              </h4>
+
+              <div style={{ display: 'grid', gridTemplateColumns: rawLand.method === 'paired' && buildingLot.method === 'paired' ? '1fr 1fr' : '1fr', gap: '15px' }}>
+
+                {rawLand.method === 'paired' && rawLand.pairedAnalysis && (
+                  <div style={{ backgroundColor: '#F0FDF4', padding: '12px', borderRadius: '6px', border: '1px solid #BBF7D0' }}>
+                    <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#059669', marginBottom: '8px' }}>
+                      Raw Land - Best Pair Analysis
+                    </div>
+                    {rawLand.pairedAnalysis.bestPair && (
+                      <div style={{ fontSize: '11px', color: '#065F46' }}>
+                        <div style={{ marginBottom: '4px' }}>
+                          <strong>Properties:</strong> {rawLand.pairedAnalysis.bestPair.properties}
+                        </div>
+                        <div style={{ marginBottom: '4px' }}>
+                          <strong>Acreage Difference:</strong> {rawLand.pairedAnalysis.bestPair.acreageDiff.toFixed(2)} acres
+                        </div>
+                        <div style={{ marginBottom: '4px' }}>
+                          <strong>Price Difference:</strong> ${rawLand.pairedAnalysis.bestPair.priceDiff.toLocaleString()}
+                        </div>
+                        <div style={{ marginBottom: '4px' }}>
+                          <strong>Raw Land Rate:</strong> ${Math.round(rawLand.pairedAnalysis.bestPair.rate).toLocaleString()}/acre
+                        </div>
+                        <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '6px' }}>
+                          Median of {rawLand.pairedAnalysis.pairs} paired comparisons
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {buildingLot.method === 'paired' && buildingLot.pairedAnalysis && (
+                  <div style={{ backgroundColor: '#EFF6FF', padding: '12px', borderRadius: '6px', border: '1px solid #BFDBFE' }}>
+                    <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#2563EB', marginBottom: '8px' }}>
+                      Building Lot - Best Pair Analysis
+                    </div>
+                    {buildingLot.pairedAnalysis.bestPair && (
+                      <div style={{ fontSize: '11px', color: '#1E40AF' }}>
+                        <div style={{ marginBottom: '4px' }}>
+                          <strong>Properties:</strong> {buildingLot.pairedAnalysis.bestPair.properties}
+                        </div>
+                        <div style={{ marginBottom: '4px' }}>
+                          <strong>Acreage Difference:</strong> {buildingLot.pairedAnalysis.bestPair.acreageDiff.toFixed(2)} acres
+                        </div>
+                        <div style={{ marginBottom: '4px' }}>
+                          <strong>Price Difference:</strong> ${buildingLot.pairedAnalysis.bestPair.priceDiff.toLocaleString()}
+                        </div>
+                        <div style={{ marginBottom: '4px' }}>
+                          <strong>Raw Land Rate:</strong> ${Math.round(buildingLot.pairedAnalysis.bestPair.rate).toLocaleString()}/acre
+                        </div>
+                        <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '6px' }}>
+                          Median of {buildingLot.pairedAnalysis.pairs} paired comparisons
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+              </div>
+
+              <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '8px', fontStyle: 'italic' }}>
+                * Paired analysis extracts incremental raw land value between similar sales with different acreages.
+                This isolates the pure land component from site value and improvements.
+              </div>
+            </div>
+          )}
         </div>
       </div>
       {/* Method 2: Improved Sale Lot Size Analysis */}
