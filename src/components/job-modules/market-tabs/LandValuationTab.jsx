@@ -2346,13 +2346,18 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   };
 
   const updateSpecialCategory = (category, rate) => {
-    setCascadeConfig(prev => ({
-      ...prev,
-      specialCategories: {
-        ...prev.specialCategories,
-        [category]: rate ? parseFloat(rate) : null
-      }
-    }));
+    console.log(`🔧 Updating special category: ${category} = ${rate}`);
+    setCascadeConfig(prev => {
+      const newConfig = {
+        ...prev,
+        specialCategories: {
+          ...prev.specialCategories,
+          [category]: rate ? parseFloat(rate) : null
+        }
+      };
+      console.log('🔧 New cascade config special categories:', newConfig.specialCategories);
+      return newConfig;
+    });
   };
 
   const addCustomCategory = (categoryName) => {
