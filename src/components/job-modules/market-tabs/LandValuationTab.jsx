@@ -666,8 +666,18 @@ const getPricePerUnit = useCallback((price, size) => {
     });
 
     setVacantSales(finalSales);
-    // Auto-include all new sales
-    setIncludedSales(new Set(finalSales.map(s => s.id)));
+
+    // Only auto-include sales that don't have a saved state (preserve existing included/excluded choices)
+    setIncludedSales(prev => {
+      const newIncluded = new Set(prev);
+      finalSales.forEach(sale => {
+        // Only auto-include if this sale doesn't have a saved state
+        if (!marketLandData?.vacant_sales_analysis?.sales?.some(s => s.id === sale.id)) {
+          newIncluded.add(sale.id);
+        }
+      });
+      return newIncluded;
+    });
   }, [properties, dateRange, calculateAcreage, getPricePerUnit, saleCategories]);
 
   const performBracketAnalysis = useCallback(async () => {
