@@ -928,6 +928,79 @@ const getPricePerUnit = useCallback((price, size) => {
     setShowMethod2Modal(true);
   };
 
+  const handleModalSort = (field) => {
+    if (modalSortField === field) {
+      setModalSortDirection(modalSortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setModalSortField(field);
+      setModalSortDirection('asc');
+    }
+  };
+
+  const sortModalData = (data) => {
+    return [...data].sort((a, b) => {
+      let aVal, bVal;
+
+      switch (modalSortField) {
+        case 'block':
+          // Numerical sorting for blocks
+          aVal = parseInt(a.property_block) || 0;
+          bVal = parseInt(b.property_block) || 0;
+          break;
+        case 'lot':
+          // Numerical sorting for lots
+          aVal = parseInt(a.property_lot) || 0;
+          bVal = parseInt(b.property_lot) || 0;
+          break;
+        case 'address':
+          aVal = a.property_location || '';
+          bVal = b.property_location || '';
+          break;
+        case 'saleDate':
+          aVal = new Date(a.sales_date || 0);
+          bVal = new Date(b.sales_date || 0);
+          break;
+        case 'salePrice':
+          aVal = a.sales_price || 0;
+          bVal = b.sales_price || 0;
+          break;
+        case 'normTime':
+          aVal = a.normalizedTime || 0;
+          bVal = b.normalizedTime || 0;
+          break;
+        case 'acres':
+          aVal = parseFloat(a.asset_lot_acre || 0);
+          bVal = parseFloat(b.asset_lot_acre || 0);
+          break;
+        case 'sfla':
+          aVal = parseInt(a.asset_sfla || 0);
+          bVal = parseInt(b.asset_sfla || 0);
+          break;
+        case 'yearBuilt':
+          aVal = parseInt(a.asset_year_built || 0);
+          bVal = parseInt(b.asset_year_built || 0);
+          break;
+        case 'typeUse':
+          aVal = a.asset_type_use || '';
+          bVal = b.asset_type_use || '';
+          break;
+        default:
+          return 0;
+      }
+
+      if (typeof aVal === 'string') {
+        aVal = aVal.toLowerCase();
+        bVal = bVal.toLowerCase();
+      }
+
+      if (modalSortDirection === 'asc') {
+        return aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+      } else {
+        return aVal > bVal ? -1 : aVal < bVal ? 1 : 0;
+      }
+    });
+  };
+
   const getMethod2SalesForVCS = (vcs) => {
     if (!properties || !vcs) return [];
 
