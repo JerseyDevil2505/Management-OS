@@ -83,15 +83,12 @@ const LandValuationTab = ({
   });
   
   // VCS Analysis
-  const [showAllVCS, setShowAllVCS] = useState(false);
-  const [vcsFilter, setVcsFilter] = useState('');
   const [bracketAnalysis, setBracketAnalysis] = useState({});
   const [method2Summary, setMethod2Summary] = useState({});
 
   // Enhanced Method 2 UI State - Use Single Family as default
   const [method2TypeFilter, setMethod2TypeFilter] = useState('1');
   const [expandedVCS, setExpandedVCS] = useState(new Set());
-  const [vcsColors, setVcsColors] = useState({});
 
   // VCS Sheet UI State - Collapsible fields
   const [collapsedFields, setCollapsedFields] = useState({
@@ -4872,7 +4869,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'yearBuilt' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Year Built {modalSortField === 'yearBuilt' ? (modalSortDirection === 'asc' ? '↑' : '��') : ''}
+                      Year Built {modalSortField === 'yearBuilt' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('typeUse')}
