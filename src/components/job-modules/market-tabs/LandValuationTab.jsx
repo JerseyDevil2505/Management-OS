@@ -2327,7 +2327,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const cleanDescription = (description || '').replace(/"/g, '""');
       const cleanZoning = (data.zoning || '').replace(/"/g, '""');
 
-      csv += `"${vcs}",${data.counts?.total || 0},"${type}","${cleanDescription}",${valuationMode},${typicalLot},${recSite},${actSite},`;
+      csv += `"${vcs}",${data.counts?.total || 0},"${type}","${cleanDescription}",${getMethodDisplay(type, description)},${typicalLot},${recSite},${actSite},`;
 
       // Determine which cascade rates to use (priority: VCS-specific > Special Region > Normal)
       let cascadeRates = cascadeConfig.normal;
