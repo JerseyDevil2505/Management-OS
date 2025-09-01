@@ -128,15 +128,7 @@ const LandValuationTab = ({
   const [typeUseFilter, setTypeUseFilter] = useState({});
   const [computedAdjustments, setComputedAdjustments] = useState({});
   const [actualAdjustments, setActualAdjustments] = useState({});
-  const [ecoObsFilter, setEcoObsFilter] = useState('');
   const [customLocationCodes, setCustomLocationCodes] = useState([]);
-  
-  // STANDARD LOCATION CODES
-  const LOCATION_CODES = {
-    negative: ['BS', 'CM', 'RR', 'PL', 'ES'],
-    positive: ['GV', 'GC', 'WV', 'WF'],
-    custom: customLocationCodes
-  };
 // ========== INITIALIZE FROM PROPS ==========
 useEffect(() => {
   if (!marketLandData) {
@@ -2085,7 +2077,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         onAnalysisUpdate(analysisData);
       }
     } catch (error) {
-      console.error('����� Save failed:', error);
+      console.error('��� Save failed:', error);
       console.error('Error details:', {
         message: error.message,
         code: error.code,
