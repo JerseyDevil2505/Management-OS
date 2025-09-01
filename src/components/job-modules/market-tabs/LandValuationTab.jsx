@@ -1243,7 +1243,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       
       setLandNotes(prev => ({
         ...prev, 
-        [property.id]: '��� Prompt copied! Opening Claude... (paste response here when ready)'
+        [property.id]: '📋 Prompt copied! Opening Claude... (paste response here when ready)'
       }));
       
       window.open('https://claude.ai/new', '_blank');
@@ -5480,7 +5480,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                             padding: '8px',
                             textAlign: 'right',
                             backgroundColor: isGrayedOut ? '#F3F4F6' : (rateSource !== 'Normal' ? '#FEF3C7' : 'inherit'),
-                            position: 'relative'
+                            position: 'relative',
+                            border: '1px solid #E5E7EB'
                           }}>
                             {!isGrayedOut ? (
                               <span title={`Rate Source: ${rateSource}`}>
@@ -5502,7 +5503,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                             padding: '8px',
                             textAlign: 'right',
                             backgroundColor: isGrayedOut ? '#F3F4F6' : (rateSource !== 'Normal' ? '#FEF3C7' : 'inherit'),
-                            position: 'relative'
+                            position: 'relative',
+                            border: '1px solid #E5E7EB'
                           }}>
                             {!isGrayedOut ? (
                               <span title={`Rate Source: ${rateSource}`}>
