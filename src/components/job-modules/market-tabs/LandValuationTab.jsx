@@ -2013,7 +2013,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   const exportToExcel = (type) => {
     let csv = '';
     const timestamp = new Date().toISOString().split('T')[0];
-    const municipality = jobData?.municipality || 'export';
+    const municipality = (jobData?.municipality || 'export').replace(/[^a-zA-Z0-9]/g, '_');
     const filename = `${type}_${municipality}_${timestamp}.csv`;
 
     if (type === 'land-rates') {
