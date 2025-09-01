@@ -5246,30 +5246,34 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   >
                     Zoning {collapsedFields.zoning ? '▶' : '▼'}
                   </th>
-                  <th
-                    style={{
-                      padding: '8px',
-                      border: '1px solid #E5E7EB',
-                      cursor: 'pointer',
-                      userSelect: 'none'
-                    }}
-                    onClick={() => toggleFieldCollapse('key')}
-                    title="Click to expand/collapse"
-                  >
-                    Key {collapsedFields.key ? '▶' : '▼'}
-                  </th>
-                  <th
-                    style={{
-                      padding: '8px',
-                      border: '1px solid #E5E7EB',
-                      cursor: 'pointer',
-                      userSelect: 'none'
-                    }}
-                    onClick={() => toggleFieldCollapse('map')}
-                    title="Click to expand/collapse"
-                  >
-                    Map {collapsedFields.map ? '▶' : '▼'}
-                  </th>
+                  {shouldShowKeyColumn && (
+                    <th
+                      style={{
+                        padding: '8px',
+                        border: '1px solid #E5E7EB',
+                        cursor: 'pointer',
+                        userSelect: 'none'
+                      }}
+                      onClick={() => toggleFieldCollapse('key')}
+                      title="Click to expand/collapse"
+                    >
+                      Key {collapsedFields.key ? '▶' : '▼'}
+                    </th>
+                  )}
+                  {shouldShowMapColumn && (
+                    <th
+                      style={{
+                        padding: '8px',
+                        border: '1px solid #E5E7EB',
+                        cursor: 'pointer',
+                        userSelect: 'none'
+                      }}
+                      onClick={() => toggleFieldCollapse('map')}
+                      title="Click to expand/collapse"
+                    >
+                      Map {collapsedFields.map ? '▶' : '▼'}
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody>
