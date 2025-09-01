@@ -5111,7 +5111,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   const cmeBracket = data.avgPrice ? getCMEBracket(data.avgPrice) : null;
                   
                   return (
-                    <tr key={vcs} style={{ backgroundColor: index % 2 === 0 ? 'white' : '#F9FAFB' }}>
+                    <tr key={vcs} style={{
+                      backgroundColor: isGrayedOut ? '#F3F4F6' : (index % 2 === 0 ? 'white' : '#F9FAFB'),
+                      opacity: isGrayedOut ? 0.7 : 1,
+                      border: '1px solid #E5E7EB'
+                    }}>
                       <td style={{ padding: '8px', fontWeight: 'bold' }}>{vcs}</td>
                       <td style={{ padding: '8px', textAlign: 'center' }}>{data.counts?.total || 0}</td>
                       <td style={{ padding: '8px' }}>
