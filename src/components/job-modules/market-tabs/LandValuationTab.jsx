@@ -94,6 +94,8 @@ const LandValuationTab = ({
   const [showMethod2Modal, setShowMethod2Modal] = useState(false);
   const [method2ModalVCS, setMethod2ModalVCS] = useState('');
   const [method2ExcludedSales, setMethod2ExcludedSales] = useState(new Set());
+  const [modalSortField, setModalSortField] = useState('block');
+  const [modalSortDirection, setModalSortDirection] = useState('asc');
 
   // ========== ALLOCATION STUDY STATE ==========
   const [vacantTestSales, setVacantTestSales] = useState([]);
