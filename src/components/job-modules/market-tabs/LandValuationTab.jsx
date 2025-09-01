@@ -2830,11 +2830,28 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       }
     };
 
-    const rawLand = getCategoryAverage(s =>
-      saleCategories[s.id] === 'raw_land' ||
-      (!saleCategories[s.id] && s.property_m4_class === '1'),
-      'developable'
-    );
+    const rawLand = getCategoryAverage(s => {
+      const isRawLandCategory = saleCategories[s.id] === 'raw_land';
+      const isUncategorizedVacant = !saleCategories[s.id] && s.property_m4_class === '1';
+      const isInRawLand = isRawLandCategory || isUncategorizedVacant;
+
+      // Debug teardown sales to see if they're incorrectly going to raw land
+      if (saleCategories[s.id] === 'teardown' || (s.property_block === '5' && s.property_lot === '12.12')) {
+        console.log('🌱 Raw Land check for teardown/5.12.12:', {
+          block: s.property_block,
+          lot: s.property_lot,
+          id: s.id,
+          category: saleCategories[s.id],
+          hasCategory: !!saleCategories[s.id],
+          class: s.property_m4_class,
+          isRawLandCategory,
+          isUncategorizedVacant,
+          isInRawLand
+        });
+      }
+
+      return isInRawLand;
+    }, 'developable');
 
     const buildingLot = getCategoryAverage(s => {
       const isInCategory = saleCategories[s.id] === 'building_lot' ||
