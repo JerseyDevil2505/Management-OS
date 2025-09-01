@@ -2184,38 +2184,73 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const description = vcsDescriptions[vcs] || getVCSDescription(vcs);
       const recSite = vcsRecommendedSites[vcs] || 0;
       const actSite = vcsManualSiteValues[vcs] || recSite;
-      
+
       // Skip non-residential types for cascade rates
       const isResidential = !['Commercial', 'Industrial', 'Apartment', 'Special'].includes(type);
-      
+
       // Get typical lot size
-      const vcsProps = properties.filter(p => 
-        p.new_vcs === vcs && 
+      const vcsProps = properties?.filter(p =>
+        p.new_vcs === vcs &&
         (p.property_m4_class === '2' || p.property_m4_class === '3A')
-      );
+      ) || [];
       const typicalLot = vcsProps.length > 0 ?
         (vcsProps.reduce((sum, p) => sum + parseFloat(calculateAcreage(p)), 0) / vcsProps.length).toFixed(2) : '';
-      
-      csv += `"${vcs}",${data.counts.total},"${type}","${description}",${valuationMode},${typicalLot},${recSite},${actSite},`;
-      
+
+      // Check for special category properties in this VCS
+      const vcsSpecialCategories = {
+        wetlands: vacantSales.some(s => s.new_vcs === vcs && saleCategories[s.id] === 'wetlands'),
+        landlocked: vacantSales.some(s => s.new_vcs === vcs && saleCategories[s.id] === 'landlocked'),
+        conservation: vacantSales.some(s => s.new_vcs === vcs && saleCategories[s.id] === 'conservation')
+      };
+
+      // Clean description and zoning for CSV
+      const cleanDescription = (description || '').replace(/"/g, '""');
+      const cleanZoning = (data.zoning || '').replace(/"/g, '""');
+
+      csv += `"${vcs}",${data.counts?.total || 0},"${type}","${cleanDescription}",${valuationMode},${typicalLot},${recSite},${actSite},`;
+
+      // Determine which cascade rates to use (priority: VCS-specific > Special Region > Normal)
+      let cascadeRates = cascadeConfig.normal;
+      const vcsSpecificConfig = Object.values(cascadeConfig.vcsSpecific || {}).find(config =>
+        config.vcsList?.includes(vcs)
+      );
+      if (vcsSpecificConfig) {
+        cascadeRates = vcsSpecificConfig.rates || cascadeConfig.normal;
+      } else {
+        const vcsInSpecialRegion = vacantSales.find(sale =>
+          sale.new_vcs === vcs && specialRegions[sale.id] && specialRegions[sale.id] !== 'Normal'
+        );
+        if (vcsInSpecialRegion && cascadeConfig.special?.[specialRegions[vcsInSpecialRegion.id]]) {
+          cascadeRates = cascadeConfig.special[specialRegions[vcsInSpecialRegion.id]];
+        }
+      }
+
       // Cascade rates
       if (isResidential) {
         if (valuationMode === 'ff') {
-          csv += `${cascadeConfig.normal.standard?.rate || ''},${cascadeConfig.normal.excess?.rate || ''},`;
+          csv += `${cascadeRates.standard?.rate || ''},${cascadeRates.excess?.rate || ''},`;
         } else {
-          csv += `${cascadeConfig.normal.prime?.rate || ''},${cascadeConfig.normal.secondary?.rate || ''},${cascadeConfig.normal.excess?.rate || ''},${cascadeConfig.normal.residual?.rate || ''},`;
+          csv += `${cascadeRates.prime?.rate || ''},${cascadeRates.secondary?.rate || ''},${cascadeRates.excess?.rate || ''},${cascadeRates.residual?.rate || ''},`;
         }
       } else {
-        // Gray out cascade for non-residential
+        // Empty cells for non-residential
         if (valuationMode === 'ff') {
           csv += ',,';
         } else {
           csv += ',,,,';
         }
       }
-      
-      csv += `${data.avgNormTime || ''},${data.avgNormSize || ''},${data.avgPrice || ''},,`; // CME placeholder
-      csv += `"${data.zoning || ''}","${data.keyPages || ''}","${data.mapPages || ''}"\n`;
+
+      // Special category rates
+      csv += `${vcsSpecialCategories.wetlands && cascadeConfig.specialCategories.wetlands ? cascadeConfig.specialCategories.wetlands : ''},`;
+      csv += `${vcsSpecialCategories.landlocked && cascadeConfig.specialCategories.landlocked ? cascadeConfig.specialCategories.landlocked : ''},`;
+      csv += `${vcsSpecialCategories.conservation && cascadeConfig.specialCategories.conservation ? cascadeConfig.specialCategories.conservation : ''},`;
+
+      // Get CME bracket
+      const cmeBracket = data.avgPrice ? getCMEBracket(data.avgPrice) : null;
+      const cmeLabel = cmeBracket ? cmeBracket.label : '';
+
+      csv += `${data.avgNormTime || ''},${data.avgPrice || ''},"${cmeLabel}","${cleanZoning}","${data.keyPages || ''}","${data.mapPages || ''}"\n`;
     });
     
     // Special Category Rates
@@ -4708,7 +4743,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'yearBuilt' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Year Built {modalSortField === 'yearBuilt' ? (modalSortDirection === 'asc' ? '��' : '↓') : ''}
+                      Year Built {modalSortField === 'yearBuilt' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('typeUse')}
