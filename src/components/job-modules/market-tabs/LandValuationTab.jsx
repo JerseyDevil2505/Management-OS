@@ -3601,7 +3601,13 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
 
             <div style={{ marginTop: '20px', textAlign: 'right' }}>
               <button
-                onClick={() => setShowMethod2Modal(false)}
+                onClick={() => {
+                  setShowMethod2Modal(false);
+                  // Force refresh of calculations
+                  setTimeout(() => {
+                    performBracketAnalysis();
+                  }, 100);
+                }}
                 style={{
                   backgroundColor: '#3B82F6',
                   color: 'white',
