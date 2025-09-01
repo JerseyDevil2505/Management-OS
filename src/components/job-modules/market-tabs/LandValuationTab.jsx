@@ -553,11 +553,11 @@ const getPricePerUnit = useCallback((price, size) => {
   }, [isInitialLoadComplete, cascadeConfig, landNotes, saleCategories, specialRegions, includedSales, actualAllocations,
       vcsManualSiteValues, actualAdjustments, targetAllocation, locationCodes, vcsTypes, method2ExcludedSales, vacantSales]);
 
-  // Clear saved sales map after initial restoration is complete
+  // Clear Method 1 excluded sales after filtering is complete
   useEffect(() => {
-    if (isInitialLoadComplete && window._savedSalesMap) {
-      console.log('🧹 Clearing saved sales map after successful restoration');
-      delete window._savedSalesMap;
+    if (isInitialLoadComplete && window._method1ExcludedSales) {
+      console.log('🧹 Clearing Method 1 excluded sales after successful application');
+      delete window._method1ExcludedSales;
     }
   }, [isInitialLoadComplete]);
   // ========== LAND RATES FUNCTIONS WITH ENHANCED FILTERS ==========
