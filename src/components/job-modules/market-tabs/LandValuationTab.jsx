@@ -1763,6 +1763,7 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
         },
         bracket_analysis: bracketAnalysis,
         method2_summary: method2Summary,
+        method2_excluded_sales: Array.from(method2ExcludedSales),
         cascade_rates: cascadeConfig,
         allocation_study: {
           vcs_site_values: vcsSiteValues,
