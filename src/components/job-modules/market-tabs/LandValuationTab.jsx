@@ -3983,7 +3983,173 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             <div style={{ fontSize: '11px', color: '#059669', marginBottom: '8px' }}>
               {cascadeConfig.vcsSpecific[vcsKey].description}
             </div>
-            {/* VCS-specific cascade configuration would go here - similar structure to above */}
+
+            {/* VCS-Specific Cascade Configuration */}
+            <div style={{ display: 'grid', gridTemplateColumns:
+              cascadeConfig.vcsSpecific[vcsKey].method === 'ff' ? 'repeat(2, 1fr)' :
+              cascadeConfig.vcsSpecific[vcsKey].method === 'sf' ? 'repeat(2, 1fr)' :
+              'repeat(4, 1fr)', gap: '10px' }}>
+
+              {cascadeConfig.vcsSpecific[vcsKey].method === 'ff' ? (
+                // Front Foot for VCS-Specific
+                <>
+                  <div>
+                    <label style={{ fontSize: '11px', color: '#059669', display: 'block', marginBottom: '2px' }}>
+                      Standard (0-{cascadeConfig.vcsSpecific[vcsKey].rates?.standard?.max || 100} ft)
+                    </label>
+                    <div style={{ display: 'flex', gap: '3px' }}>
+                      <input
+                        type="number"
+                        value={cascadeConfig.vcsSpecific[vcsKey].rates?.standard?.max || ''}
+                        onChange={(e) => updateVCSSpecificCascade(vcsKey, 'standard', 'max', e.target.value)}
+                        placeholder="Max"
+                        style={{ width: '60px', padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
+                      />
+                      <input
+                        type="number"
+                        value={cascadeConfig.vcsSpecific[vcsKey].rates?.standard?.rate || ''}
+                        onChange={(e) => updateVCSSpecificCascade(vcsKey, 'standard', 'rate', e.target.value)}
+                        placeholder="Rate"
+                        style={{ flex: 1, padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '11px', color: '#059669', display: 'block', marginBottom: '2px' }}>
+                      Excess ({cascadeConfig.vcsSpecific[vcsKey].rates?.standard?.max || 100}+ ft)
+                    </label>
+                    <input
+                      type="number"
+                      value={cascadeConfig.vcsSpecific[vcsKey].rates?.excess?.rate || ''}
+                      onChange={(e) => updateVCSSpecificCascade(vcsKey, 'excess', 'rate', e.target.value)}
+                      placeholder="Rate"
+                      style={{ width: '100%', padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
+                    />
+                  </div>
+                </>
+              ) : cascadeConfig.vcsSpecific[vcsKey].method === 'sf' ? (
+                // Square Foot for VCS-Specific
+                <>
+                  <div>
+                    <label style={{ fontSize: '11px', color: '#059669', display: 'block', marginBottom: '2px' }}>
+                      Primary (0-{cascadeConfig.vcsSpecific[vcsKey].rates?.prime?.max || 5000} sq ft)
+                    </label>
+                    <div style={{ display: 'flex', gap: '3px' }}>
+                      <input
+                        type="number"
+                        value={cascadeConfig.vcsSpecific[vcsKey].rates?.prime?.max || ''}
+                        onChange={(e) => updateVCSSpecificCascade(vcsKey, 'prime', 'max', e.target.value)}
+                        placeholder="Max"
+                        style={{ width: '60px', padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
+                      />
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={cascadeConfig.vcsSpecific[vcsKey].rates?.prime?.rate || ''}
+                        onChange={(e) => updateVCSSpecificCascade(vcsKey, 'prime', 'rate', e.target.value)}
+                        placeholder="Rate"
+                        style={{ flex: 1, padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '11px', color: '#059669', display: 'block', marginBottom: '2px' }}>
+                      Secondary ({cascadeConfig.vcsSpecific[vcsKey].rates?.prime?.max || 5000}+ sq ft)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={cascadeConfig.vcsSpecific[vcsKey].rates?.secondary?.rate || ''}
+                      onChange={(e) => updateVCSSpecificCascade(vcsKey, 'secondary', 'rate', e.target.value)}
+                      placeholder="Rate"
+                      style={{ width: '100%', padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
+                    />
+                  </div>
+                </>
+              ) : (
+                // Acre for VCS-Specific
+                <>
+                  <div>
+                    <label style={{ fontSize: '11px', color: '#059669', display: 'block', marginBottom: '2px' }}>
+                      Prime (0-{cascadeConfig.vcsSpecific[vcsKey].rates?.prime?.max || 1} acres)
+                    </label>
+                    <div style={{ display: 'flex', gap: '3px' }}>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={cascadeConfig.vcsSpecific[vcsKey].rates?.prime?.max || ''}
+                        onChange={(e) => updateVCSSpecificCascade(vcsKey, 'prime', 'max', e.target.value)}
+                        placeholder="Max"
+                        style={{ width: '50px', padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
+                      />
+                      <input
+                        type="number"
+                        value={cascadeConfig.vcsSpecific[vcsKey].rates?.prime?.rate || ''}
+                        onChange={(e) => updateVCSSpecificCascade(vcsKey, 'prime', 'rate', e.target.value)}
+                        placeholder="Rate"
+                        style={{ flex: 1, padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '11px', color: '#059669', display: 'block', marginBottom: '2px' }}>
+                      Secondary ({cascadeConfig.vcsSpecific[vcsKey].rates?.prime?.max || 1}-{cascadeConfig.vcsSpecific[vcsKey].rates?.secondary?.max || 5} acres)
+                    </label>
+                    <div style={{ display: 'flex', gap: '3px' }}>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={cascadeConfig.vcsSpecific[vcsKey].rates?.secondary?.max || ''}
+                        onChange={(e) => updateVCSSpecificCascade(vcsKey, 'secondary', 'max', e.target.value)}
+                        placeholder="Max"
+                        style={{ width: '50px', padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
+                      />
+                      <input
+                        type="number"
+                        value={cascadeConfig.vcsSpecific[vcsKey].rates?.secondary?.rate || ''}
+                        onChange={(e) => updateVCSSpecificCascade(vcsKey, 'secondary', 'rate', e.target.value)}
+                        placeholder="Rate"
+                        style={{ flex: 1, padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '11px', color: '#059669', display: 'block', marginBottom: '2px' }}>
+                      Excess ({cascadeConfig.vcsSpecific[vcsKey].rates?.secondary?.max || 5}-{cascadeConfig.vcsSpecific[vcsKey].rates?.excess?.max || 10} acres)
+                    </label>
+                    <div style={{ display: 'flex', gap: '3px' }}>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={cascadeConfig.vcsSpecific[vcsKey].rates?.excess?.max || ''}
+                        onChange={(e) => updateVCSSpecificCascade(vcsKey, 'excess', 'max', e.target.value)}
+                        placeholder="Max"
+                        style={{ width: '50px', padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
+                      />
+                      <input
+                        type="number"
+                        value={cascadeConfig.vcsSpecific[vcsKey].rates?.excess?.rate || ''}
+                        onChange={(e) => updateVCSSpecificCascade(vcsKey, 'excess', 'rate', e.target.value)}
+                        placeholder="Rate"
+                        style={{ flex: 1, padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '11px', color: '#059669', display: 'block', marginBottom: '2px' }}>
+                      Residual ({cascadeConfig.vcsSpecific[vcsKey].rates?.excess?.max || 10}+ acres)
+                    </label>
+                    <input
+                      type="number"
+                      value={cascadeConfig.vcsSpecific[vcsKey].rates?.residual?.rate || ''}
+                      onChange={(e) => updateVCSSpecificCascade(vcsKey, 'residual', 'rate', e.target.value)}
+                      placeholder="Rate"
+                      style={{ width: '100%', padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
+                    />
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         ))}
 
