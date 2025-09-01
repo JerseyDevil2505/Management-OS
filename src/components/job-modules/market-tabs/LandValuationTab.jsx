@@ -2271,7 +2271,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const actSite = vcsManualSiteValues[vcs] || recSite;
 
       // Skip non-residential types for cascade rates
-      const isResidential = !['Commercial', 'Industrial', 'Apartment', 'Special'].includes(type);
+      const isResidential = type.startsWith('Residential');
 
       // Get typical lot size
       const vcsProps = properties?.filter(p =>
