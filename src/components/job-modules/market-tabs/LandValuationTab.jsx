@@ -5273,11 +5273,36 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                           </td>
                         </>
                       )}
-                      <td style={{ padding: '8px', textAlign: 'right' }}>
-                        {data.avgNormTime ? `$${data.avgNormTime.toLocaleString()}` : ''}
+                      {/* Special Category Rates */}
+                      <td style={{
+                        padding: '8px',
+                        textAlign: 'right',
+                        backgroundColor: vcsSpecialCategories.wetlands ? '#DBEAFE' : '#F9FAFB',
+                        color: vcsSpecialCategories.wetlands ? '#1E40AF' : '#9CA3AF'
+                      }}>
+                        {vcsSpecialCategories.wetlands && cascadeConfig.specialCategories.wetlands ?
+                          `$${cascadeConfig.specialCategories.wetlands.toLocaleString()}` : ''}
+                      </td>
+                      <td style={{
+                        padding: '8px',
+                        textAlign: 'right',
+                        backgroundColor: vcsSpecialCategories.landlocked ? '#FEF3C7' : '#F9FAFB',
+                        color: vcsSpecialCategories.landlocked ? '#92400E' : '#9CA3AF'
+                      }}>
+                        {vcsSpecialCategories.landlocked && cascadeConfig.specialCategories.landlocked ?
+                          `$${cascadeConfig.specialCategories.landlocked.toLocaleString()}` : ''}
+                      </td>
+                      <td style={{
+                        padding: '8px',
+                        textAlign: 'right',
+                        backgroundColor: vcsSpecialCategories.conservation ? '#ECFDF5' : '#F9FAFB',
+                        color: vcsSpecialCategories.conservation ? '#059669' : '#9CA3AF'
+                      }}>
+                        {vcsSpecialCategories.conservation && cascadeConfig.specialCategories.conservation ?
+                          `$${cascadeConfig.specialCategories.conservation.toLocaleString()}` : ''}
                       </td>
                       <td style={{ padding: '8px', textAlign: 'right' }}>
-                        {data.avgNormSize ? `$${data.avgNormSize.toLocaleString()}` : ''}
+                        {data.avgNormTime ? `$${data.avgNormTime.toLocaleString()}` : ''}
                       </td>
                       <td style={{ padding: '8px', textAlign: 'right', fontWeight: 'bold' }}>
                         {data.avgPrice ? `$${data.avgPrice.toLocaleString()}` : ''}
