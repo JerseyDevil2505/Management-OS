@@ -3610,16 +3610,146 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
                 <thead>
                   <tr style={{ backgroundColor: '#F9FAFB' }}>
                     <th style={{ padding: '8px', textAlign: 'left', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>Include</th>
-                    <th style={{ padding: '8px', textAlign: 'left', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>Block</th>
-                    <th style={{ padding: '8px', textAlign: 'left', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>Lot</th>
-                    <th style={{ padding: '8px', textAlign: 'left', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>Address</th>
-                    <th style={{ padding: '8px', textAlign: 'left', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>Sale Date</th>
-                    <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>Sale Price</th>
-                    <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>Norm Time</th>
-                    <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>Acres</th>
-                    <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>SFLA</th>
-                    <th style={{ padding: '8px', textAlign: 'left', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>Year Built</th>
-                    <th style={{ padding: '8px', textAlign: 'left', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>Type/Use</th>
+                    <th
+                      onClick={() => handleModalSort('block')}
+                      style={{
+                        padding: '8px',
+                        textAlign: 'left',
+                        fontWeight: '600',
+                        borderBottom: '1px solid #E5E7EB',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                        backgroundColor: modalSortField === 'block' ? '#EBF8FF' : 'transparent'
+                      }}
+                    >
+                      Block {modalSortField === 'block' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
+                    </th>
+                    <th
+                      onClick={() => handleModalSort('lot')}
+                      style={{
+                        padding: '8px',
+                        textAlign: 'left',
+                        fontWeight: '600',
+                        borderBottom: '1px solid #E5E7EB',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                        backgroundColor: modalSortField === 'lot' ? '#EBF8FF' : 'transparent'
+                      }}
+                    >
+                      Lot {modalSortField === 'lot' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
+                    </th>
+                    <th
+                      onClick={() => handleModalSort('address')}
+                      style={{
+                        padding: '8px',
+                        textAlign: 'left',
+                        fontWeight: '600',
+                        borderBottom: '1px solid #E5E7EB',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                        backgroundColor: modalSortField === 'address' ? '#EBF8FF' : 'transparent'
+                      }}
+                    >
+                      Address {modalSortField === 'address' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
+                    </th>
+                    <th
+                      onClick={() => handleModalSort('saleDate')}
+                      style={{
+                        padding: '8px',
+                        textAlign: 'left',
+                        fontWeight: '600',
+                        borderBottom: '1px solid #E5E7EB',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                        backgroundColor: modalSortField === 'saleDate' ? '#EBF8FF' : 'transparent'
+                      }}
+                    >
+                      Sale Date {modalSortField === 'saleDate' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
+                    </th>
+                    <th
+                      onClick={() => handleModalSort('salePrice')}
+                      style={{
+                        padding: '8px',
+                        textAlign: 'right',
+                        fontWeight: '600',
+                        borderBottom: '1px solid #E5E7EB',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                        backgroundColor: modalSortField === 'salePrice' ? '#EBF8FF' : 'transparent'
+                      }}
+                    >
+                      Sale Price {modalSortField === 'salePrice' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
+                    </th>
+                    <th
+                      onClick={() => handleModalSort('normTime')}
+                      style={{
+                        padding: '8px',
+                        textAlign: 'right',
+                        fontWeight: '600',
+                        borderBottom: '1px solid #E5E7EB',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                        backgroundColor: modalSortField === 'normTime' ? '#EBF8FF' : 'transparent'
+                      }}
+                    >
+                      Norm Time {modalSortField === 'normTime' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
+                    </th>
+                    <th
+                      onClick={() => handleModalSort('acres')}
+                      style={{
+                        padding: '8px',
+                        textAlign: 'right',
+                        fontWeight: '600',
+                        borderBottom: '1px solid #E5E7EB',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                        backgroundColor: modalSortField === 'acres' ? '#EBF8FF' : 'transparent'
+                      }}
+                    >
+                      Acres {modalSortField === 'acres' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
+                    </th>
+                    <th
+                      onClick={() => handleModalSort('sfla')}
+                      style={{
+                        padding: '8px',
+                        textAlign: 'right',
+                        fontWeight: '600',
+                        borderBottom: '1px solid #E5E7EB',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                        backgroundColor: modalSortField === 'sfla' ? '#EBF8FF' : 'transparent'
+                      }}
+                    >
+                      SFLA {modalSortField === 'sfla' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
+                    </th>
+                    <th
+                      onClick={() => handleModalSort('yearBuilt')}
+                      style={{
+                        padding: '8px',
+                        textAlign: 'left',
+                        fontWeight: '600',
+                        borderBottom: '1px solid #E5E7EB',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                        backgroundColor: modalSortField === 'yearBuilt' ? '#EBF8FF' : 'transparent'
+                      }}
+                    >
+                      Year Built {modalSortField === 'yearBuilt' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
+                    </th>
+                    <th
+                      onClick={() => handleModalSort('typeUse')}
+                      style={{
+                        padding: '8px',
+                        textAlign: 'left',
+                        fontWeight: '600',
+                        borderBottom: '1px solid #E5E7EB',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                        backgroundColor: modalSortField === 'typeUse' ? '#EBF8FF' : 'transparent'
+                      }}
+                    >
+                      Type/Use {modalSortField === 'typeUse' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
