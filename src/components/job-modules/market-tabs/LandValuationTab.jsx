@@ -702,26 +702,34 @@ const getPricePerUnit = useCallback((price, size) => {
 
     setVacantSales(finalSales);
 
-    // Preserve existing included/excluded state, only auto-include truly new sales
+    // Preserve checkbox states more intelligently
     setIncludedSales(prev => {
+      // If initial load isn't complete yet, don't modify included sales
+      if (!isInitialLoadComplete) {
+        console.log('⏸️ Skipping checkbox update - waiting for initial load');
+        return prev;
+      }
+
       const existingIds = new Set(prev);
       const currentSaleIds = new Set(finalSales.map(s => s.id));
 
       // Start with existing included sales that are still in the current results
       const preservedIncluded = new Set([...prev].filter(id => currentSaleIds.has(id)));
 
-      // Auto-include only sales that are new (not in previous state)
+      // Auto-include only sales that are truly new (not in previous state at all)
       finalSales.forEach(sale => {
         if (!existingIds.has(sale.id)) {
           preservedIncluded.add(sale.id);
         }
       });
 
-      console.log('🔄 Checkbox state preserved:', {
+      console.log('🔄 Checkbox state management:', {
+        isInitialLoadComplete,
         previousCount: prev.size,
         currentSalesCount: finalSales.length,
         preservedCount: preservedIncluded.size,
-        newlyAdded: preservedIncluded.size - [...prev].filter(id => currentSaleIds.has(id)).length
+        newlyAdded: preservedIncluded.size - [...prev].filter(id => currentSaleIds.has(id)).length,
+        excludedCount: finalSales.length - preservedIncluded.size
       });
 
       return preservedIncluded;
@@ -2056,7 +2064,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         onAnalysisUpdate(analysisData);
       }
     } catch (error) {
-      console.error('❌ Save failed:', error);
+      console.error('��� Save failed:', error);
       console.error('Error details:', {
         message: error.message,
         code: error.code,
