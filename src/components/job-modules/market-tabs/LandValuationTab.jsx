@@ -90,6 +90,13 @@ const LandValuationTab = ({
   const [expandedVCS, setExpandedVCS] = useState(new Set());
   const [vcsColors, setVcsColors] = useState({});
 
+  // Method 2 Exclusion Modal State
+  const [showMethod2Modal, setShowMethod2Modal] = useState(false);
+  const [method2ModalVCS, setMethod2ModalVCS] = useState('');
+  const [method2ExcludedSales, setMethod2ExcludedSales] = useState(new Set());
+  const [modalSortField, setModalSortField] = useState('block');
+  const [modalSortDirection, setModalSortDirection] = useState('asc');
+
   // ========== ALLOCATION STUDY STATE ==========
   const [vacantTestSales, setVacantTestSales] = useState([]);
   const [improvedTestSales, setImprovedTestSales] = useState([]);
@@ -190,6 +197,11 @@ useEffect(() => {
     setLandNotes(savedNotes);
     setSpecialRegions(savedRegions);
     setIncludedSales(savedIncluded);
+  }
+
+  // Restore Method 2 excluded sales
+  if (marketLandData.method2_excluded_sales) {
+    setMethod2ExcludedSales(new Set(marketLandData.method2_excluded_sales));
   }
 
   if (marketLandData.allocation_study) {
@@ -444,8 +456,8 @@ const getPricePerUnit = useCallback((price, size) => {
       saveAnalysis();
     }, 30000);
     return () => clearInterval(interval);
-  }, [cascadeConfig, landNotes, saleCategories, specialRegions, actualAllocations, 
-      vcsManualSiteValues, actualAdjustments, targetAllocation, locationCodes, vcsTypes]);
+  }, [cascadeConfig, landNotes, saleCategories, specialRegions, actualAllocations,
+      vcsManualSiteValues, actualAdjustments, targetAllocation, locationCodes, vcsTypes, method2ExcludedSales]);
   // ========== LAND RATES FUNCTIONS WITH ENHANCED FILTERS ==========
   const filterVacantSales = useCallback(() => {
     if (!properties) return;
@@ -634,27 +646,13 @@ const getPricePerUnit = useCallback((price, size) => {
 
       const vcsSales = {};
 
-      // DEBUG: Count RURL properties with asset_type_use = 1
-      const rurlType1Properties = properties.filter(p =>
-        p.new_vcs === 'RURL' &&
-        p.asset_type_use?.toString().trim().toUpperCase() === '1'
-      );
-      console.log(`🔍 DEBUG: Found ${rurlType1Properties.length} RURL properties with asset_type_use = 1`);
-
-      const rurlType1WithNormTime = rurlType1Properties.filter(p =>
-        p.values_norm_time != null && p.values_norm_time > 0
-      );
-      console.log(`🔍 DEBUG: ${rurlType1WithNormTime.length} RURL type 1 properties have values_norm_time > 0`);
-
       // Filter properties that have time normalization data
       properties.forEach(prop => {
         const timeNormData = timeNormLookup.get(prop.property_composite_key);
-        if (!timeNormData) {
-          if (prop.new_vcs === 'RURL' && prop.asset_type_use?.toString().trim().toUpperCase() === '1') {
-            console.log(`❌ RURL Type 1 filtered out - no timeNormData:`, prop.property_block, prop.property_lot, prop.values_norm_time);
-          }
-          return;
-        }
+        if (!timeNormData) return;
+
+        // Skip if manually excluded from Method 2
+        if (method2ExcludedSales.has(prop.id)) return;
 
         // Apply type/use filter with umbrella group support
         const rawTypeUse = prop.asset_type_use?.toString().trim().toUpperCase();
@@ -677,20 +675,10 @@ const getPricePerUnit = useCallback((price, size) => {
           passesFilter = rawTypeUse === method2TypeFilter;
         }
 
-        if (!passesFilter) {
-          if (prop.new_vcs === 'RURL' && rawTypeUse === '1') {
-            console.log(`❌ RURL Type 1 filtered out - type filter:`, prop.property_block, prop.property_lot, rawTypeUse, method2TypeFilter);
-          }
-          return;
-        }
+        if (!passesFilter) return;
 
         const vcs = timeNormData.new_vcs;
-        if (!vcs) {
-          if (prop.new_vcs === 'RURL' && rawTypeUse === '1') {
-            console.log(`❌ RURL Type 1 filtered out - no VCS:`, prop.property_block, prop.property_lot);
-          }
-          return;
-        }
+        if (!vcs) return;
 
         if (!vcsSales[vcs]) {
           vcsSales[vcs] = [];
@@ -744,26 +732,27 @@ const getPricePerUnit = useCallback((price, size) => {
             avgAdjusted: null
           };
 
-          const avgSalePrice = arr.reduce((sum, s) => sum + s.salesPrice, 0) / arr.length;
+          // Use time-normalized values for Method 2
+          const avgNormTime = arr.reduce((sum, s) => sum + s.normalizedTime, 0) / arr.length;
           const avgAcres = arr.reduce((sum, s) => sum + s.acres, 0) / arr.length;
           const validSFLA = arr.filter(s => s.sfla > 0);
           const avgSFLA = validSFLA.length > 0 ?
             validSFLA.reduce((sum, s) => sum + s.sfla, 0) / validSFLA.length : null;
 
-          // Jim's Magic Formula for size adjustment
-          let avgAdjusted = avgSalePrice;
+          // Jim's Magic Formula for size adjustment (using time-normalized values)
+          let avgAdjusted = avgNormTime;
           if (overallAvgSFLA && avgSFLA && avgSFLA > 0) {
             const sflaDiff = overallAvgSFLA - avgSFLA;
-            const pricePerSqFt = avgSalePrice / avgSFLA;
+            const pricePerSqFt = avgNormTime / avgSFLA;
             const sizeAdjustment = sflaDiff * (pricePerSqFt * 0.50);
-            avgAdjusted = avgSalePrice + sizeAdjustment;
+            avgAdjusted = avgNormTime + sizeAdjustment;
           }
 
           return {
             count: arr.length,
             avgAcres: Math.round(avgAcres * 100) / 100, // Round to 2 decimals
-            avgSalePrice: Math.round(avgSalePrice),
-            avgNormTime: Math.round(arr.reduce((sum, s) => sum + s.normalizedTime, 0) / arr.length),
+            avgSalePrice: Math.round(avgNormTime), // Time-normalized sale price
+            avgNormTime: Math.round(avgNormTime), // Keep for compatibility
             avgSFLA: avgSFLA ? Math.round(avgSFLA) : null,
             avgAdjusted: Math.round(avgAdjusted)
           };
@@ -789,7 +778,7 @@ const getPricePerUnit = useCallback((price, size) => {
 
         analysis[vcs] = {
           totalSales: sales.length,
-          avgPrice: Math.round(sales.reduce((sum, s) => sum + s.salesPrice, 0) / sales.length),
+          avgPrice: Math.round(sales.reduce((sum, s) => sum + s.normalizedTime, 0) / sales.length), // Use time-normalized
           avgAcres: Math.round((sales.reduce((sum, s) => sum + s.acres, 0) / sales.length) * 100) / 100,
           avgAdjusted: Math.round(sales.reduce((sum, s) => sum + s.normalizedTime, 0) / sales.length),
           brackets: bracketStats,
@@ -797,22 +786,70 @@ const getPricePerUnit = useCallback((price, size) => {
         };
       });
 
-      // Calculate Method 2 Summary
-      if (validRates.length > 0) {
-        validRates.sort((a, b) => a - b);
-        const average = Math.round(validRates.reduce((sum, r) => sum + r, 0) / validRates.length);
-        const median = validRates.length % 2 === 0 ?
-          Math.round((validRates[validRates.length / 2 - 1] + validRates[validRates.length / 2]) / 2) :
-          validRates[Math.floor(validRates.length / 2)];
+      // Calculate Method 2 Summary by bracket ranges with positive deltas only
+      const bracketRates = {
+        mediumRange: [], // 1.00-4.99 acre rates (medium vs small)
+        largeRange: [],  // 5.00-9.99 acre rates (large vs medium)
+        xlargeRange: [] // 10.00+ acre rates (xlarge vs large)
+      };
 
-        setMethod2Summary({
-          average,
-          median,
-          coverage: `${validRates.length} of ${Object.keys(vcsSales).length} VCS areas`,
-          min: validRates[0],
-          max: validRates[validRates.length - 1]
-        });
-      }
+      Object.keys(vcsSales).forEach(vcs => {
+        const vcsAnalysis = analysis[vcs];
+        if (!vcsAnalysis) return;
+
+        const { brackets } = vcsAnalysis;
+
+        // 1.00-4.99 range: medium vs small
+        if (brackets.small.count > 0 && brackets.medium.count > 0) {
+          const priceDiff = brackets.medium.avgAdjusted - brackets.small.avgAdjusted;
+          const acresDiff = brackets.medium.avgAcres - brackets.small.avgAcres;
+          if (acresDiff > 0 && priceDiff > 0) {
+            const rate = Math.round(priceDiff / acresDiff);
+            bracketRates.mediumRange.push(rate);
+          }
+        }
+
+        // 5.00-9.99 range: large vs medium
+        if (brackets.medium.count > 0 && brackets.large.count > 0) {
+          const priceDiff = brackets.large.avgAdjusted - brackets.medium.avgAdjusted;
+          const acresDiff = brackets.large.avgAcres - brackets.medium.avgAcres;
+          if (acresDiff > 0 && priceDiff > 0) {
+            const rate = Math.round(priceDiff / acresDiff);
+            bracketRates.largeRange.push(rate);
+          }
+        }
+
+        // 10.00+ range: xlarge vs large
+        if (brackets.large.count > 0 && brackets.xlarge.count > 0) {
+          const priceDiff = brackets.xlarge.avgAdjusted - brackets.large.avgAdjusted;
+          const acresDiff = brackets.xlarge.avgAcres - brackets.large.avgAcres;
+          if (acresDiff > 0 && priceDiff > 0) {
+            const rate = Math.round(priceDiff / acresDiff);
+            bracketRates.xlargeRange.push(rate);
+          }
+        }
+      });
+
+      // Calculate averages for each bracket range
+      const calculateBracketSummary = (rates) => {
+        if (rates.length === 0) return { perAcre: 'N/A', perSqFt: 'N/A', count: 0 };
+
+        const avgPerAcre = Math.round(rates.reduce((sum, r) => sum + r, 0) / rates.length);
+        const avgPerSqFt = (avgPerAcre / 43560).toFixed(2);
+
+        return {
+          perAcre: avgPerAcre,
+          perSqFt: avgPerSqFt,
+          count: rates.length
+        };
+      };
+
+      setMethod2Summary({
+        mediumRange: calculateBracketSummary(bracketRates.mediumRange), // 1.00-4.99
+        largeRange: calculateBracketSummary(bracketRates.largeRange),   // 5.00-9.99
+        xlargeRange: calculateBracketSummary(bracketRates.xlargeRange), // 10.00+
+        totalVCS: Object.keys(vcsSales).length
+      });
 
       setBracketAnalysis(analysis);
 
@@ -820,7 +857,7 @@ const getPricePerUnit = useCallback((price, size) => {
       console.error('Error in performBracketAnalysis:', error);
       setBracketAnalysis({});
     }
-  }, [properties, jobData, method2TypeFilter]);
+  }, [properties, jobData, method2TypeFilter, method2ExcludedSales]);
 
   const calculateRates = useCallback((regionFilter = null) => {
     const included = vacantSales.filter(s => {
@@ -885,6 +922,132 @@ const getPricePerUnit = useCallback((price, size) => {
 
     setSearchResults(results);
   };
+  // Method 2 Modal Functions
+  const openMethod2SalesModal = (vcs) => {
+    setMethod2ModalVCS(vcs);
+    setShowMethod2Modal(true);
+    // Reset sort to block ascending
+    setModalSortField('block');
+    setModalSortDirection('asc');
+  };
+
+  const handleModalSort = (field) => {
+    if (modalSortField === field) {
+      setModalSortDirection(modalSortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setModalSortField(field);
+      setModalSortDirection('asc');
+    }
+  };
+
+  const sortModalData = (data) => {
+    return [...data].sort((a, b) => {
+      let aVal, bVal;
+
+      switch (modalSortField) {
+        case 'block':
+          // Numerical sorting for blocks
+          aVal = parseInt(a.property_block) || 0;
+          bVal = parseInt(b.property_block) || 0;
+          break;
+        case 'lot':
+          // Numerical sorting for lots
+          aVal = parseInt(a.property_lot) || 0;
+          bVal = parseInt(b.property_lot) || 0;
+          break;
+        case 'address':
+          aVal = a.property_location || '';
+          bVal = b.property_location || '';
+          break;
+        case 'saleDate':
+          aVal = new Date(a.sales_date || 0);
+          bVal = new Date(b.sales_date || 0);
+          break;
+        case 'salePrice':
+          aVal = a.sales_price || 0;
+          bVal = b.sales_price || 0;
+          break;
+        case 'normTime':
+          aVal = a.normalizedTime || 0;
+          bVal = b.normalizedTime || 0;
+          break;
+        case 'acres':
+          aVal = parseFloat(a.asset_lot_acre || 0);
+          bVal = parseFloat(b.asset_lot_acre || 0);
+          break;
+        case 'sfla':
+          aVal = parseInt(a.asset_sfla || 0);
+          bVal = parseInt(b.asset_sfla || 0);
+          break;
+        case 'yearBuilt':
+          aVal = parseInt(a.asset_year_built || 0);
+          bVal = parseInt(b.asset_year_built || 0);
+          break;
+        case 'typeUse':
+          aVal = a.asset_type_use || '';
+          bVal = b.asset_type_use || '';
+          break;
+        default:
+          return 0;
+      }
+
+      if (typeof aVal === 'string') {
+        aVal = aVal.toLowerCase();
+        bVal = bVal.toLowerCase();
+      }
+
+      if (modalSortDirection === 'asc') {
+        return aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+      } else {
+        return aVal > bVal ? -1 : aVal < bVal ? 1 : 0;
+      }
+    });
+  };
+
+  const getMethod2SalesForVCS = (vcs) => {
+    if (!properties || !vcs) return [];
+
+    // Get time normalized data lookup
+    const timeNormalizedData = properties
+      .filter(p => p.values_norm_time != null && p.values_norm_time > 0)
+      .map(p => ({
+        property_composite_key: p.property_composite_key,
+        new_vcs: p.new_vcs,
+        values_norm_time: p.values_norm_time
+      }));
+
+    const timeNormLookup = new Map();
+    timeNormalizedData.forEach(item => {
+      timeNormLookup.set(item.property_composite_key, item);
+    });
+
+    // Filter properties for this VCS
+    return properties.filter(prop => {
+      const timeNormData = timeNormLookup.get(prop.property_composite_key);
+      if (!timeNormData || timeNormData.new_vcs !== vcs) return false;
+
+      // Apply type/use filter
+      const rawTypeUse = prop.asset_type_use?.toString().trim().toUpperCase();
+      let passesFilter = false;
+      if (method2TypeFilter === '1') {
+        passesFilter = rawTypeUse === '1' || rawTypeUse === '10';
+      } else if (method2TypeFilter === '3') {
+        passesFilter = ['30', '31', '3E', '3I'].includes(rawTypeUse);
+      } else if (method2TypeFilter === '4') {
+        passesFilter = ['42', '43', '44'].includes(rawTypeUse);
+      } else if (method2TypeFilter === '5') {
+        passesFilter = ['51', '52', '53'].includes(rawTypeUse);
+      } else {
+        passesFilter = rawTypeUse === method2TypeFilter;
+      }
+
+      return passesFilter;
+    }).map(prop => ({
+      ...prop,
+      normalizedTime: timeNormLookup.get(prop.property_composite_key).values_norm_time
+    }));
+  };
+
   const addSelectedProperties = () => {
     const toAdd = properties.filter(p => selectedToAdd.has(p.id));
 
@@ -1683,6 +1846,7 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
         },
         bracket_analysis: bracketAnalysis,
         method2_summary: method2Summary,
+        method2_excluded_sales: Array.from(method2ExcludedSales),
         cascade_rates: cascadeConfig,
         allocation_study: {
           vcs_site_values: vcsSiteValues,
@@ -2662,7 +2826,20 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
                     <div>
                       <span style={{ fontSize: '16px', fontWeight: 'bold' }}>{vcs}:</span>
                       <span style={{ fontSize: '12px', marginLeft: '8px', fontWeight: 'normal' }}>
-                        {summaryLine}
+                        <span
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openMethod2SalesModal(vcs);
+                          }}
+                          style={{
+                            textDecoration: 'underline',
+                            cursor: 'pointer',
+                            color: '#3B82F6'
+                          }}
+                        >
+                          {data.totalSales} sales
+                        </span>
+                        {` • Avg $${Math.round(data.avgPrice).toLocaleString()} • ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} • $${data.impliedRate || 0}`}
                       </span>
                     </div>
                     <span style={{ fontSize: '16px', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
@@ -2679,7 +2856,7 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
                             <th style={{ padding: '8px', textAlign: 'left', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>Bracket</th>
                             <th style={{ padding: '8px', textAlign: 'center', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>Count</th>
                             <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>Avg Lot Size</th>
-                            <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>Avg Sale Price</th>
+                            <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>Avg Sale Price (t)</th>
                             <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>Avg SFLA</th>
                             <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>ADJUSTED</th>
                             <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>DELTA</th>
@@ -2706,7 +2883,7 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
                               row.bracket.avgAdjusted - prevBracket.avgAdjusted : null;
                             const lotDelta = prevBracket && prevBracket.avgAcres && row.bracket.avgAcres ?
                               row.bracket.avgAcres - prevBracket.avgAcres : null;
-                            const perAcre = adjustedDelta && lotDelta && lotDelta > 0 ? adjustedDelta / lotDelta : null;
+                            const perAcre = adjustedDelta && lotDelta && lotDelta > 0 && adjustedDelta > 0 ? adjustedDelta / lotDelta : null;
                             const perSqFt = perAcre ? perAcre / 43560 : null;
 
                             return (
@@ -2732,10 +2909,10 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
                                   {lotDelta ? lotDelta.toFixed(2) : '-'}
                                 </td>
                                 <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', borderBottom: '1px solid #F1F3F4' }}>
-                                  {perAcre ? `$${Math.round(perAcre).toLocaleString()}` : '-'}
+                                  {perAcre ? `$${Math.round(perAcre).toLocaleString()}` : (adjustedDelta !== null && adjustedDelta <= 0 ? 'N/A' : '-')}
                                 </td>
                                 <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', borderBottom: '1px solid #F1F3F4' }}>
-                                  {perSqFt ? `$${perSqFt.toFixed(2)}` : '-'}
+                                  {perSqFt ? `$${perSqFt.toFixed(2)}` : (adjustedDelta !== null && adjustedDelta <= 0 ? 'N/A' : '-')}
                                 </td>
                               </tr>
                             );
@@ -2750,47 +2927,115 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
         </div>
         
         {/* Method 2 Summary - Enhanced Layout */}
-        {method2Summary.average && (
+        {method2Summary && (method2Summary.mediumRange || method2Summary.largeRange || method2Summary.xlargeRange) && (
           <div style={{ borderTop: '2px solid #E5E7EB', backgroundColor: '#F8FAFC' }}>
             <div style={{ padding: '20px' }}>
               <h4 style={{ margin: '0 0 15px 0', fontSize: '16px', fontWeight: 'bold', color: '#1F2937' }}>
-                Method 2 Summary - Implied {getUnitLabel()} Rates
+                Method 2 Summary - Implied $/Acre Rates
               </h4>
 
-              <div style={{ display: 'flex', gap: '30px', alignItems: 'center', flexWrap: 'wrap' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-                  <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: '14px', color: '#6B7280', marginBottom: '4px' }}>Average</div>
-                    <div style={{ fontSize: '32px', fontWeight: 'bold', color: '#059669' }}>
-                      ${method2Summary.average?.toLocaleString()}
-                    </div>
+              <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+                {/* 1.00-4.99 Range */}
+                <div style={{ textAlign: 'center', minWidth: '150px' }}>
+                  <div style={{ fontSize: '14px', color: '#6B7280', marginBottom: '4px' }}>1.00-4.99 Acres</div>
+                  <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#059669' }}>
+                    {method2Summary.mediumRange?.perAcre !== 'N/A' ?
+                      `$${method2Summary.mediumRange?.perAcre?.toLocaleString()}` : 'N/A'}
                   </div>
-
-                  <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: '14px', color: '#6B7280', marginBottom: '4px' }}>Median</div>
-                    <div style={{ fontSize: '32px', fontWeight: 'bold', color: '#0D9488' }}>
-                      ${method2Summary.median?.toLocaleString()}
-                    </div>
+                  <div style={{ fontSize: '12px', color: '#6B7280' }}>
+                    {method2Summary.mediumRange?.perSqFt !== 'N/A' ?
+                      `$${method2Summary.mediumRange?.perSqFt}/SF` : 'N/A'}
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#9CA3AF' }}>
+                    ({method2Summary.mediumRange?.count || 0} VCS)
                   </div>
                 </div>
 
-                <div style={{ width: '1px', height: '60px', backgroundColor: '#D1D5DB' }}></div>
+                {/* 5.00-9.99 Range */}
+                <div style={{ textAlign: 'center', minWidth: '150px' }}>
+                  <div style={{ fontSize: '14px', color: '#6B7280', marginBottom: '4px' }}>5.00-9.99 Acres</div>
+                  <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#0D9488' }}>
+                    {method2Summary.largeRange?.perAcre !== 'N/A' ?
+                      `$${method2Summary.largeRange?.perAcre?.toLocaleString()}` : 'N/A'}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#6B7280' }}>
+                    {method2Summary.largeRange?.perSqFt !== 'N/A' ?
+                      `$${method2Summary.largeRange?.perSqFt}/SF` : 'N/A'}
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#9CA3AF' }}>
+                    ({method2Summary.largeRange?.count || 0} VCS)
+                  </div>
+                </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', minWidth: '200px' }}>
-                    <span style={{ fontSize: '14px', color: '#6B7280' }}>VCS Coverage:</span>
-                    <span style={{ fontSize: '14px', fontWeight: '600', color: '#1F2937' }}>{method2Summary.coverage}</span>
+                {/* 10.00+ Range */}
+                <div style={{ textAlign: 'center', minWidth: '150px' }}>
+                  <div style={{ fontSize: '14px', color: '#6B7280', marginBottom: '4px' }}>10.00+ Acres</div>
+                  <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#7C3AED' }}>
+                    {method2Summary.xlargeRange?.perAcre !== 'N/A' ?
+                      `$${method2Summary.xlargeRange?.perAcre?.toLocaleString()}` : 'N/A'}
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', minWidth: '200px' }}>
-                    <span style={{ fontSize: '14px', color: '#6B7280' }}>Range:</span>
-                    <span style={{ fontSize: '14px', fontWeight: '600', color: '#1F2937' }}>
-                      ${method2Summary.min?.toLocaleString()} - ${method2Summary.max?.toLocaleString()}
-                    </span>
+                  <div style={{ fontSize: '12px', color: '#6B7280' }}>
+                    {method2Summary.xlargeRange?.perSqFt !== 'N/A' ?
+                      `$${method2Summary.xlargeRange?.perSqFt}/SF` : 'N/A'}
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', minWidth: '200px' }}>
+                  <div style={{ fontSize: '11px', color: '#9CA3AF' }}>
+                    ({method2Summary.xlargeRange?.count || 0} VCS)
+                  </div>
+                </div>
+
+                {/* Average Across All Positive Deltas */}
+                <div style={{ textAlign: 'center', minWidth: '150px' }}>
+                  <div style={{ fontSize: '14px', color: '#6B7280', marginBottom: '4px' }}>All Positive Deltas</div>
+                  <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#059669' }}>
+                    {(() => {
+                      const allRates = [];
+                      if (method2Summary.mediumRange?.perAcre !== 'N/A') allRates.push(method2Summary.mediumRange.perAcre);
+                      if (method2Summary.largeRange?.perAcre !== 'N/A') allRates.push(method2Summary.largeRange.perAcre);
+                      if (method2Summary.xlargeRange?.perAcre !== 'N/A') allRates.push(method2Summary.xlargeRange.perAcre);
+
+                      if (allRates.length === 0) return 'N/A';
+
+                      const avgRate = Math.round(allRates.reduce((sum, rate) => sum + rate, 0) / allRates.length);
+                      return `$${avgRate.toLocaleString()}`;
+                    })()}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#6B7280' }}>
+                    {(() => {
+                      const allRates = [];
+                      if (method2Summary.mediumRange?.perAcre !== 'N/A') allRates.push(method2Summary.mediumRange.perAcre);
+                      if (method2Summary.largeRange?.perAcre !== 'N/A') allRates.push(method2Summary.largeRange.perAcre);
+                      if (method2Summary.xlargeRange?.perAcre !== 'N/A') allRates.push(method2Summary.xlargeRange.perAcre);
+
+                      if (allRates.length === 0) return 'N/A';
+
+                      const avgRate = Math.round(allRates.reduce((sum, rate) => sum + rate, 0) / allRates.length);
+                      const perSqFt = (avgRate / 43560).toFixed(2);
+                      return `$${perSqFt}/SF`;
+                    })()}
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#9CA3AF' }}>
+                    ({(method2Summary.mediumRange?.count || 0) + (method2Summary.largeRange?.count || 0) + (method2Summary.xlargeRange?.count || 0)} Total)
+                  </div>
+                </div>
+
+                <div style={{ width: '1px', height: '80px', backgroundColor: '#D1D5DB' }}></div>
+
+                {/* Stats */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '200px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '14px', color: '#6B7280' }}>Total VCS Areas:</span>
+                    <span style={{ fontSize: '14px', fontWeight: '600', color: '#1F2937' }}>{method2Summary.totalVCS || 0}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ fontSize: '14px', color: '#6B7280' }}>Total Sales:</span>
                     <span style={{ fontSize: '14px', fontWeight: '600', color: '#1F2937' }}>
                       {Object.values(bracketAnalysis).reduce((sum, data) => sum + data.totalSales, 0)}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '14px', color: '#6B7280' }}>Positive Deltas:</span>
+                    <span style={{ fontSize: '14px', fontWeight: '600', color: '#059669' }}>
+                      {(method2Summary.mediumRange?.count || 0) + (method2Summary.largeRange?.count || 0) + (method2Summary.xlargeRange?.count || 0)}
                     </span>
                   </div>
                 </div>
@@ -2800,7 +3045,7 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
         )}
         
         {/* Implied Front Foot Rates - ONLY IN FF MODE */}
-        {valuationMode === 'ff' && method2Summary.average && (
+        {valuationMode === 'ff' && method2Summary && (method2Summary.mediumRange || method2Summary.largeRange || method2Summary.xlargeRange) && (
           <div style={{ padding: '15px', borderTop: '1px solid #E5E7EB' }}>
             <h4 style={{ margin: '0 0 10px 0', fontSize: '14px', fontWeight: 'bold' }}>
               Implied Front Foot Rates by Zoning
@@ -3307,6 +3552,287 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
                   Add Selected Properties
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Method 2 Sales Modal */}
+      {showMethod2Modal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '8px',
+            padding: '20px',
+            maxWidth: '95vw',
+            maxHeight: '90vh',
+            overflow: 'auto',
+            border: '1px solid #E5E7EB'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold' }}>
+                Method 2 Sales - VCS {method2ModalVCS}
+              </h3>
+              <button
+                onClick={() => setShowMethod2Modal(false)}
+                style={{
+                  backgroundColor: 'transparent',
+                  border: 'none',
+                  fontSize: '20px',
+                  cursor: 'pointer',
+                  color: '#6B7280'
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            <div style={{ marginBottom: '15px', padding: '10px', backgroundColor: '#FEF3C7', borderRadius: '4px' }}>
+              <p style={{ margin: 0, fontSize: '14px', color: '#92400E' }}>
+                <strong>Exclude problematic sales:</strong> Uncheck sales that should not be used in Method 2 calculations
+                (teardowns, poor condition, pre-construction, etc.).
+                <span style={{ display: 'block', marginTop: '4px' }}>
+                  ⚠️ <strong>Yellow highlighted rows</strong> are pre-construction sales (sold before year built).
+                </span>
+              </p>
+            </div>
+
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', fontSize: '12px', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#F9FAFB' }}>
+                    <th style={{ padding: '8px', textAlign: 'left', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>Include</th>
+                    <th
+                      onClick={() => handleModalSort('block')}
+                      style={{
+                        padding: '8px',
+                        textAlign: 'left',
+                        fontWeight: '600',
+                        borderBottom: '1px solid #E5E7EB',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                        backgroundColor: modalSortField === 'block' ? '#EBF8FF' : 'transparent'
+                      }}
+                    >
+                      Block {modalSortField === 'block' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
+                    </th>
+                    <th
+                      onClick={() => handleModalSort('lot')}
+                      style={{
+                        padding: '8px',
+                        textAlign: 'left',
+                        fontWeight: '600',
+                        borderBottom: '1px solid #E5E7EB',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                        backgroundColor: modalSortField === 'lot' ? '#EBF8FF' : 'transparent'
+                      }}
+                    >
+                      Lot {modalSortField === 'lot' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
+                    </th>
+                    <th
+                      onClick={() => handleModalSort('address')}
+                      style={{
+                        padding: '8px',
+                        textAlign: 'left',
+                        fontWeight: '600',
+                        borderBottom: '1px solid #E5E7EB',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                        backgroundColor: modalSortField === 'address' ? '#EBF8FF' : 'transparent'
+                      }}
+                    >
+                      Address {modalSortField === 'address' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
+                    </th>
+                    <th
+                      onClick={() => handleModalSort('saleDate')}
+                      style={{
+                        padding: '8px',
+                        textAlign: 'left',
+                        fontWeight: '600',
+                        borderBottom: '1px solid #E5E7EB',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                        backgroundColor: modalSortField === 'saleDate' ? '#EBF8FF' : 'transparent'
+                      }}
+                    >
+                      Sale Date {modalSortField === 'saleDate' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
+                    </th>
+                    <th
+                      onClick={() => handleModalSort('salePrice')}
+                      style={{
+                        padding: '8px',
+                        textAlign: 'right',
+                        fontWeight: '600',
+                        borderBottom: '1px solid #E5E7EB',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                        backgroundColor: modalSortField === 'salePrice' ? '#EBF8FF' : 'transparent'
+                      }}
+                    >
+                      Sale Price {modalSortField === 'salePrice' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
+                    </th>
+                    <th
+                      onClick={() => handleModalSort('normTime')}
+                      style={{
+                        padding: '8px',
+                        textAlign: 'right',
+                        fontWeight: '600',
+                        borderBottom: '1px solid #E5E7EB',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                        backgroundColor: modalSortField === 'normTime' ? '#EBF8FF' : 'transparent'
+                      }}
+                    >
+                      Norm Time {modalSortField === 'normTime' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
+                    </th>
+                    <th
+                      onClick={() => handleModalSort('acres')}
+                      style={{
+                        padding: '8px',
+                        textAlign: 'right',
+                        fontWeight: '600',
+                        borderBottom: '1px solid #E5E7EB',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                        backgroundColor: modalSortField === 'acres' ? '#EBF8FF' : 'transparent'
+                      }}
+                    >
+                      Acres {modalSortField === 'acres' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
+                    </th>
+                    <th
+                      onClick={() => handleModalSort('sfla')}
+                      style={{
+                        padding: '8px',
+                        textAlign: 'right',
+                        fontWeight: '600',
+                        borderBottom: '1px solid #E5E7EB',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                        backgroundColor: modalSortField === 'sfla' ? '#EBF8FF' : 'transparent'
+                      }}
+                    >
+                      SFLA {modalSortField === 'sfla' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
+                    </th>
+                    <th
+                      onClick={() => handleModalSort('yearBuilt')}
+                      style={{
+                        padding: '8px',
+                        textAlign: 'left',
+                        fontWeight: '600',
+                        borderBottom: '1px solid #E5E7EB',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                        backgroundColor: modalSortField === 'yearBuilt' ? '#EBF8FF' : 'transparent'
+                      }}
+                    >
+                      Year Built {modalSortField === 'yearBuilt' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
+                    </th>
+                    <th
+                      onClick={() => handleModalSort('typeUse')}
+                      style={{
+                        padding: '8px',
+                        textAlign: 'left',
+                        fontWeight: '600',
+                        borderBottom: '1px solid #E5E7EB',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                        backgroundColor: modalSortField === 'typeUse' ? '#EBF8FF' : 'transparent'
+                      }}
+                    >
+                      Type/Use {modalSortField === 'typeUse' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortModalData(getMethod2SalesForVCS(method2ModalVCS)).map(prop => {
+                    const acres = parseFloat(prop.asset_lot_acre || 0);
+                    const isExcluded = method2ExcludedSales.has(prop.id);
+
+                    // Check for pre-construction (sale before year built)
+                    const saleYear = prop.sales_date ? new Date(prop.sales_date).getFullYear() : null;
+                    const yearBuilt = prop.asset_year_built ? parseInt(prop.asset_year_built) : null;
+                    const isPreConstruction = saleYear && yearBuilt && saleYear < yearBuilt;
+
+                    // Determine row background color
+                    let backgroundColor = 'white';
+                    if (isExcluded) {
+                      backgroundColor = '#FEF2F2'; // Light red for excluded
+                    } else if (isPreConstruction) {
+                      backgroundColor = '#FEF3C7'; // Light yellow for pre-construction
+                    }
+
+                    return (
+                      <tr key={prop.id} style={{ backgroundColor }}>
+                        <td style={{ padding: '8px' }}>
+                          <input
+                            type="checkbox"
+                            checked={!isExcluded}
+                            onChange={(e) => {
+                              const newExcluded = new Set(method2ExcludedSales);
+                              if (e.target.checked) {
+                                newExcluded.delete(prop.id);
+                              } else {
+                                newExcluded.add(prop.id);
+                              }
+                              setMethod2ExcludedSales(newExcluded);
+                            }}
+                          />
+                        </td>
+                        <td style={{ padding: '8px' }}>{prop.property_block}</td>
+                        <td style={{ padding: '8px' }}>{prop.property_lot}</td>
+                        <td style={{ padding: '8px' }}>{prop.property_location}</td>
+                        <td style={{ padding: '8px' }}>
+                          {prop.sales_date}
+                          {isPreConstruction && <span style={{ color: '#F59E0B', marginLeft: '4px' }}>⚠️</span>}
+                        </td>
+                        <td style={{ padding: '8px', textAlign: 'right' }}>${prop.sales_price?.toLocaleString()}</td>
+                        <td style={{ padding: '8px', textAlign: 'right' }}>${Math.round(prop.normalizedTime)?.toLocaleString()}</td>
+                        <td style={{ padding: '8px', textAlign: 'right' }}>{acres.toFixed(2)}</td>
+                        <td style={{ padding: '8px', textAlign: 'right' }}>{prop.asset_sfla || '-'}</td>
+                        <td style={{ padding: '8px' }}>
+                          {prop.asset_year_built || '-'}
+                          {isPreConstruction && <span style={{ color: '#F59E0B', marginLeft: '4px' }}>⚠️</span>}
+                        </td>
+                        <td style={{ padding: '8px' }}>{prop.asset_type_use || '-'}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div style={{ marginTop: '20px', textAlign: 'right' }}>
+              <button
+                onClick={() => {
+                  setShowMethod2Modal(false);
+                  // Force refresh of calculations
+                  setTimeout(() => {
+                    performBracketAnalysis();
+                  }, 100);
+                }}
+                style={{
+                  backgroundColor: '#3B82F6',
+                  color: 'white',
+                  padding: '8px 16px',
+                  borderRadius: '4px',
+                  border: 'none',
+                  cursor: 'pointer'
+                }}
+              >
+                Done
+              </button>
             </div>
           </div>
         </div>
