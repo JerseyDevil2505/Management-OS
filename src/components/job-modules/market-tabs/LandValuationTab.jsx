@@ -2858,18 +2858,20 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
               const rawLand = getCategoryAverage(s =>
                 saleCategories[s.id] === 'raw_land' ||
-                (!saleCategories[s.id] && s.property_m4_class === '1')
+                (!saleCategories[s.id] && s.property_m4_class === '1'),
+                'developable'
               );
 
               const buildingLot = getCategoryAverage(s =>
                 saleCategories[s.id] === 'building_lot' ||
                 saleCategories[s.id] === 'teardown' ||
-                saleCategories[s.id] === 'pre-construction'
+                saleCategories[s.id] === 'pre-construction',
+                'developable'
               );
 
-              const wetlands = getCategoryAverage(s => saleCategories[s.id] === 'wetlands');
-              const landlocked = getCategoryAverage(s => saleCategories[s.id] === 'landlocked');
-              const conservation = getCategoryAverage(s => saleCategories[s.id] === 'conservation');
+              const wetlands = getCategoryAverage(s => saleCategories[s.id] === 'wetlands', 'constrained');
+              const landlocked = getCategoryAverage(s => saleCategories[s.id] === 'landlocked', 'constrained');
+              const conservation = getCategoryAverage(s => saleCategories[s.id] === 'conservation', 'constrained');
 
               return (
                 <>
