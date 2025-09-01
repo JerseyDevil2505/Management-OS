@@ -534,7 +534,7 @@ const getPricePerUnit = useCallback((price, size) => {
   // Auto-save every 30 seconds - but only after initial load is complete
   useEffect(() => {
     if (!isInitialLoadComplete) {
-      console.log('⏸️ Auto-save waiting for initial load to complete');
+      console.log('���️ Auto-save waiting for initial load to complete');
       return;
     }
 
@@ -2290,11 +2290,24 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const typicalLot = vcsProps.length > 0 ?
         (vcsProps.reduce((sum, p) => sum + parseFloat(calculateAcreage(p)), 0) / vcsProps.length).toFixed(2) : '';
 
-      // Check for special category properties in this VCS
-      const vcsSpecialCategories = {
-        wetlands: vacantSales.some(s => s.new_vcs === vcs && saleCategories[s.id] === 'wetlands'),
-        landlocked: vacantSales.some(s => s.new_vcs === vcs && saleCategories[s.id] === 'landlocked'),
-        conservation: vacantSales.some(s => s.new_vcs === vcs && saleCategories[s.id] === 'conservation')
+      // Check for special category properties in this VCS (only for residential)
+      const vcsSpecialCategories = isResidential ? {
+        wetlands: cascadeConfig.specialCategories.wetlands && (
+          vacantSales.some(s => s.new_vcs === vcs && saleCategories[s.id] === 'wetlands') ||
+          cascadeConfig.specialCategories.wetlands > 0
+        ),
+        landlocked: cascadeConfig.specialCategories.landlocked && (
+          vacantSales.some(s => s.new_vcs === vcs && saleCategories[s.id] === 'landlocked') ||
+          cascadeConfig.specialCategories.landlocked > 0
+        ),
+        conservation: cascadeConfig.specialCategories.conservation && (
+          vacantSales.some(s => s.new_vcs === vcs && saleCategories[s.id] === 'conservation') ||
+          cascadeConfig.specialCategories.conservation > 0
+        )
+      } : {
+        wetlands: false,
+        landlocked: false,
+        conservation: false
       };
 
       // Clean description and zoning for CSV
