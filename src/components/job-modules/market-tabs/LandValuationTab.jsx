@@ -5422,93 +5422,145 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         </div>
       </div>
 
-      {/* Vacant Land Test Table */}
-      <div style={{ marginBottom: '20px', backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden', border: '1px solid #E5E7EB' }}>
+      {/* Individual Allocation Analysis Table */}
+      <div style={{ backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden', border: '1px solid #E5E7EB' }}>
         <div style={{ padding: '15px', borderBottom: '1px solid #E5E7EB', backgroundColor: '#F9FAFB' }}>
-          <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 'bold' }}>Vacant Land Test</h3>
+          <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 'bold' }}>Individual Allocation Analysis</h3>
+          <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#6B7280' }}>
+            Each vacant sale matched with improved sales from the same year
+          </p>
         </div>
-        
+
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', fontSize: '13px' }}>
+          <table style={{ width: '100%', fontSize: '12px' }}>
             <thead>
               <tr style={{ backgroundColor: '#F9FAFB' }}>
-                <th style={{ padding: '8px' }}>VCS</th>
-                <th style={{ padding: '8px' }}>Year</th>
-                <th style={{ padding: '8px' }}>Region</th>
-                <th style={{ padding: '8px' }}>Block/Lot</th>
-                <th style={{ padding: '8px', textAlign: 'right' }}>Sale Price</th>
-                <th style={{ padding: '8px', textAlign: 'right' }}>Acres</th>
-                <th style={{ padding: '8px', textAlign: 'right' }}>Raw Land</th>
-                <th style={{ padding: '8px', textAlign: 'right' }}>Site Value</th>
-                <th style={{ padding: '8px', textAlign: 'center' }}>Status</th>
+                {/* Vacant Sale Info */}
+                <th style={{ padding: '8px', borderRight: '2px solid #E5E7EB' }} colSpan="6">Vacant Sale</th>
+                {/* Improved Sales Info */}
+                <th style={{ padding: '8px', borderRight: '2px solid #E5E7EB' }} colSpan="4">Improved Sales (Same Year)</th>
+                {/* Allocation Results */}
+                <th style={{ padding: '8px' }} colSpan="3">Allocation Analysis</th>
+              </tr>
+              <tr style={{ backgroundColor: '#F3F4F6', fontSize: '11px' }}>
+                {/* Vacant Sale Columns */}
+                <th style={{ padding: '6px' }}>VCS</th>
+                <th style={{ padding: '6px' }}>Year</th>
+                <th style={{ padding: '6px' }}>Block/Lot</th>
+                <th style={{ padding: '6px', textAlign: 'right' }}>Price</th>
+                <th style={{ padding: '6px', textAlign: 'right' }}>Acres</th>
+                <th style={{ padding: '6px', textAlign: 'right', borderRight: '2px solid #E5E7EB' }}>Site Value</th>
+                {/* Improved Sales Columns */}
+                <th style={{ padding: '6px', textAlign: 'center' }}>Count</th>
+                <th style={{ padding: '6px', textAlign: 'right' }}>Avg Price</th>
+                <th style={{ padding: '6px', textAlign: 'right' }}>Avg Acres</th>
+                <th style={{ padding: '6px', textAlign: 'right', borderRight: '2px solid #E5E7EB' }}>Total Land Value</th>
+                {/* Allocation Columns */}
+                <th style={{ padding: '6px', textAlign: 'center' }}>Current %</th>
+                <th style={{ padding: '6px', textAlign: 'center' }}>Recommended %</th>
+                <th style={{ padding: '6px', textAlign: 'center' }}>Status</th>
               </tr>
             </thead>
             <tbody>
               {vacantTestSales.map((sale, index) => (
-                <tr key={`${sale.id}_${index}`} style={{ backgroundColor: index % 2 === 0 ? 'white' : '#F9FAFB' }}>
-                  <td style={{ padding: '8px' }}>{sale.vcs}</td>
+                <tr
+                  key={`${sale.id}_${index}`}
+                  style={{
+                    backgroundColor: sale.isPositive ? (index % 2 === 0 ? 'white' : '#F9FAFB') : '#FEF2F2',
+                    opacity: sale.isPositive ? 1 : 0.7
+                  }}
+                >
+                  {/* Vacant Sale Data */}
+                  <td style={{ padding: '8px', fontWeight: 'bold' }}>{sale.vcs}</td>
                   <td style={{ padding: '8px' }}>{sale.year}</td>
-                  <td style={{ padding: '8px' }}>{sale.region}</td>
                   <td style={{ padding: '8px' }}>{sale.block}/{sale.lot}</td>
-                  <td style={{ padding: '8px', textAlign: 'right' }}>${sale.price?.toLocaleString()}</td>
+                  <td style={{ padding: '8px', textAlign: 'right' }}>${sale.vacantPrice?.toLocaleString()}</td>
                   <td style={{ padding: '8px', textAlign: 'right' }}>{sale.acres?.toFixed(2)}</td>
-                  <td style={{ padding: '8px', textAlign: 'right' }}>${sale.rawLandValue?.toLocaleString()}</td>
-                  <td style={{ padding: '8px', textAlign: 'right', fontWeight: 'bold', color: sale.siteValue > 0 ? '#10B981' : '#EF4444' }}>
+                  <td style={{
+                    padding: '8px',
+                    textAlign: 'right',
+                    fontWeight: 'bold',
+                    color: sale.siteValue > 0 ? '#10B981' : '#EF4444',
+                    borderRight: '2px solid #E5E7EB'
+                  }}>
                     ${sale.siteValue?.toLocaleString()}
                   </td>
-                  <td style={{ padding: '8px', textAlign: 'center' }}>
-                    {sale.siteValue > 0 ? '✓' : '✗'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
 
-      {/* Improved Sales Test */}
-      <div style={{ backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden', border: '1px solid #E5E7EB' }}>
-        <div style={{ padding: '15px', borderBottom: '1px solid #E5E7EB', backgroundColor: '#F9FAFB' }}>
-          <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 'bold' }}>Improved Sales Allocation Test</h3>
-        </div>
-        
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', fontSize: '13px' }}>
-            <thead>
-              <tr style={{ backgroundColor: '#F9FAFB' }}>
-                <th style={{ padding: '8px' }}>VCS</th>
-                <th style={{ padding: '8px' }}>Year</th>
-                <th style={{ padding: '8px', textAlign: 'center' }}>Sales</th>
-                <th style={{ padding: '8px', textAlign: 'right' }}>Avg Price</th>
-                <th style={{ padding: '8px', textAlign: 'right' }}>Avg Acres</th>
-                <th style={{ padding: '8px', textAlign: 'right' }}>Raw Land</th>
-                <th style={{ padding: '8px', textAlign: 'right' }}>Site Value</th>
-                <th style={{ padding: '8px', textAlign: 'right' }}>Total Land</th>
-                <th style={{ padding: '8px', textAlign: 'center' }}>Current %</th>
-                <th style={{ padding: '8px', textAlign: 'center' }}>Rec %</th>
-              </tr>
-            </thead>
-            <tbody>
-              {improvedTestSales.map((sale, index) => (
-                <tr key={`${sale.vcs}_${sale.year}`} style={{ backgroundColor: index % 2 === 0 ? 'white' : '#F9FAFB' }}>
-                  <td style={{ padding: '8px' }}>{sale.vcs}</td>
-                  <td style={{ padding: '8px' }}>{sale.year}</td>
-                  <td style={{ padding: '8px', textAlign: 'center' }}>{sale.salesCount}</td>
-                  <td style={{ padding: '8px', textAlign: 'right' }}>${sale.avgPrice?.toLocaleString()}</td>
-                  <td style={{ padding: '8px', textAlign: 'right' }}>{sale.avgAcres}</td>
-                  <td style={{ padding: '8px', textAlign: 'right' }}>${sale.rawLandValue?.toLocaleString()}</td>
-                  <td style={{ padding: '8px', textAlign: 'right' }}>${sale.siteValue?.toLocaleString()}</td>
-                  <td style={{ padding: '8px', textAlign: 'right', fontWeight: 'bold' }}>${sale.totalLandValue?.toLocaleString()}</td>
-                  <td style={{ padding: '8px', textAlign: 'center', color: '#6B7280' }}>
-                    {(sale.currentAllocation * 100).toFixed(1)}
+                  {/* Improved Sales Data */}
+                  <td style={{ padding: '8px', textAlign: 'center' }}>{sale.improvedSalesCount}</td>
+                  <td style={{ padding: '8px', textAlign: 'right' }}>${sale.avgImprovedPrice?.toLocaleString()}</td>
+                  <td style={{ padding: '8px', textAlign: 'right' }}>{sale.avgImprovedAcres}</td>
+                  <td style={{
+                    padding: '8px',
+                    textAlign: 'right',
+                    fontWeight: 'bold',
+                    borderRight: '2px solid #E5E7EB'
+                  }}>
+                    ${sale.totalLandValue?.toLocaleString()}
                   </td>
-                  <td style={{ padding: '8px', textAlign: 'center', fontWeight: 'bold', backgroundColor: sale.recommendedAllocation >= 0.25 && sale.recommendedAllocation <= 0.40 ? '#D1FAE5' : sale.recommendedAllocation >= 0.20 && sale.recommendedAllocation <= 0.45 ? '#FEF3C7' : '#FEE2E2' }}>
-                    {(sale.recommendedAllocation * 100).toFixed(1)}
+
+                  {/* Allocation Results */}
+                  <td style={{ padding: '8px', textAlign: 'center', color: '#6B7280' }}>
+                    {(sale.currentAllocation * 100).toFixed(1)}%
+                  </td>
+                  <td style={{
+                    padding: '8px',
+                    textAlign: 'center',
+                    fontWeight: 'bold',
+                    backgroundColor: sale.isPositive ?
+                      (sale.recommendedAllocation >= 0.25 && sale.recommendedAllocation <= 0.40 ? '#D1FAE5' :
+                       sale.recommendedAllocation >= 0.20 && sale.recommendedAllocation <= 0.45 ? '#FEF3C7' : '#FEE2E2') :
+                      'transparent'
+                  }}>
+                    {(sale.recommendedAllocation * 100).toFixed(1)}%
+                  </td>
+                  <td style={{ padding: '8px', textAlign: 'center' }}>
+                    <span style={{
+                      padding: '2px 8px',
+                      borderRadius: '12px',
+                      fontSize: '10px',
+                      fontWeight: 'bold',
+                      backgroundColor: sale.isPositive ? '#D1FAE5' : '#FEE2E2',
+                      color: sale.isPositive ? '#065F46' : '#991B1B'
+                    }}>
+                      {sale.isPositive ? 'Included' : 'Excluded'}
+                    </span>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+        </div>
+
+        {/* Summary Footer */}
+        <div style={{ padding: '15px', borderTop: '1px solid #E5E7EB', backgroundColor: '#F9FAFB' }}>
+          {(() => {
+            const positiveSales = vacantTestSales.filter(s => s.isPositive);
+            const totalLandValue = positiveSales.reduce((sum, s) => sum + s.totalLandValue, 0);
+            const totalSalePrice = positiveSales.reduce((sum, s) => sum + s.avgImprovedPrice, 0);
+            const overallRecommended = totalSalePrice > 0 ? (totalLandValue / totalSalePrice) * 100 : 0;
+
+            return (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px', fontSize: '14px' }}>
+                <div>
+                  <div style={{ color: '#6B7280', fontSize: '12px' }}>Sales Included</div>
+                  <div style={{ fontWeight: 'bold', color: '#10B981' }}>{positiveSales.length} of {vacantTestSales.length}</div>
+                </div>
+                <div>
+                  <div style={{ color: '#6B7280', fontSize: '12px' }}>Total Land Value</div>
+                  <div style={{ fontWeight: 'bold' }}>${totalLandValue.toLocaleString()}</div>
+                </div>
+                <div>
+                  <div style={{ color: '#6B7280', fontSize: '12px' }}>Total Sale Price</div>
+                  <div style={{ fontWeight: 'bold' }}>${totalSalePrice.toLocaleString()}</div>
+                </div>
+                <div>
+                  <div style={{ color: '#6B7280', fontSize: '12px' }}>Final Recommended</div>
+                  <div style={{ fontWeight: 'bold', fontSize: '16px', color: '#F59E0B' }}>{overallRecommended.toFixed(1)}%</div>
+                </div>
+              </div>
+            );
+          })()}
         </div>
       </div>
     </div>
