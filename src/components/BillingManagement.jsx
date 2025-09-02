@@ -3890,6 +3890,10 @@ const loadJobs = async () => {
                     
                     if (error) throw error;
                     
+                    // Immediately refresh local distribution data
+                    await loadDistributions();
+                    await calculateDistributionMetrics();
+
                     setShowDistributionForm(false);
                     setDistributionForm({
                       shareholder: '',
@@ -3897,7 +3901,11 @@ const loadJobs = async () => {
                       date: new Date().toISOString().split('T')[0],
                       notes: ''
                     });
+
+                    // Also call parent refresh for full data sync
                     if (onRefresh) onRefresh();
+
+                    alert('Distribution recorded successfully!');
                   } catch (error) {
                     console.error('Error recording distribution:', error);
                     alert('Error recording distribution');
