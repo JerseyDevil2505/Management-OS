@@ -200,7 +200,7 @@ useEffect(() => {
     const savedRegions = {};
     const savedExcluded = new Set();
 
-    console.log('���� Loading saved Method 1 sales data:', {
+    console.log('🔄 Loading saved Method 1 sales data:', {
       totalSales: marketLandData.vacant_sales_analysis.sales.length,
       salesWithCategories: marketLandData.vacant_sales_analysis.sales.filter(s => s.category).length,
       salesIncluded: marketLandData.vacant_sales_analysis.sales.filter(s => s.included).length,
@@ -512,7 +512,7 @@ const getPricePerUnit = useCallback((price, size) => {
       clearInterval(interval);
     }
   }, [isInitialLoadComplete, cascadeConfig, landNotes, saleCategories, specialRegions, includedSales, actualAllocations,
-      vcsManualSiteValues, actualAdjustments, targetAllocation, locationCodes, vcsTypes, method2ExcludedSales, vacantSales]);
+      vcsManualSiteValues, actualAdjustments, targetAllocation, locationCodes, vcsTypes, method2ExcludedSales, method1ExcludedSales, vacantSales]);
 
   // Clear Method 1 excluded sales after filtering is complete
   useEffect(() => {
