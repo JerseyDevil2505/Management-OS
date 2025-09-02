@@ -536,7 +536,7 @@ const getPricePerUnit = useCallback((price, size) => {
       console.log('🛑 Clearing auto-save interval');
       clearInterval(interval);
     }
-  }, [isInitialLoadComplete, saveAnalysis]);
+  }, [isInitialLoadComplete]);
 
   // Clear Method 1 temporary variables after filtering is complete
   useEffect(() => {
