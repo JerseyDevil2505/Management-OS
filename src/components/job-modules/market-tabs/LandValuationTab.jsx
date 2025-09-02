@@ -1702,25 +1702,31 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   }, [vacantTestSales, improvedTestSales]);
 
   const calculateAllocationStats = useCallback((region = null) => {
-    let filtered = improvedTestSales;
-    
+    // Use only positive sales for final calculation
+    let filtered = vacantTestSales.filter(s => s.isPositive);
+
     if (region && region !== 'all') {
       filtered = filtered.filter(s => s.region === region);
     }
-    
+
     if (filtered.length === 0) return null;
-    
+
+    // Calculate overall recommended allocation (sum of land values / sum of sale prices)
+    const totalLandValue = filtered.reduce((sum, s) => sum + s.totalLandValue, 0);
+    const totalSalePrice = filtered.reduce((sum, s) => sum + s.avgImprovedPrice, 0);
+    const overallRecommended = totalSalePrice > 0 ? (totalLandValue / totalSalePrice) * 100 : 0;
+
+    // Individual allocations for range analysis
     const allocations = filtered.map(s => s.recommendedAllocation * 100);
-    const avg = allocations.reduce((sum, a) => sum + a, 0) / allocations.length;
     const within25to40 = allocations.filter(a => a >= 25 && a <= 40).length;
-    const percentInRange = (within25to40 / allocations.length) * 100;
-    
+    const percentInRange = allocations.length > 0 ? (within25to40 / allocations.length) * 100 : 0;
+
     return {
-      averageAllocation: avg.toFixed(1),
+      averageAllocation: overallRecommended.toFixed(1),
       percentInTargetRange: percentInRange.toFixed(1),
       totalSales: filtered.length
     };
-  }, [improvedTestSales]);
+  }, [vacantTestSales]);
   // ========== VCS SHEET FUNCTIONS - ENHANCED ==========
   const loadVCSPropertyCounts = useCallback(() => {
     if (!properties) return;
