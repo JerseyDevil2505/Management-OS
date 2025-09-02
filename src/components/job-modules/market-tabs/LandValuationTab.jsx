@@ -536,8 +536,7 @@ const getPricePerUnit = useCallback((price, size) => {
       console.log('🛑 Clearing auto-save interval');
       clearInterval(interval);
     }
-  }, [isInitialLoadComplete, cascadeConfig, landNotes, saleCategories, specialRegions, includedSales, actualAllocations,
-      vcsManualSiteValues, actualAdjustments, targetAllocation, locationCodes, vcsTypes, method2ExcludedSales, method1ExcludedSales, vacantSales]);
+  }, [isInitialLoadComplete, saveAnalysis]);
 
   // Clear Method 1 temporary variables after filtering is complete
   useEffect(() => {
@@ -1355,6 +1354,10 @@ const getPricePerUnit = useCallback((price, size) => {
     setSelectedToAdd(new Set());
     setShowAddModal(false);
     setSearchResults([]);
+
+    // CRITICAL: Save immediately after adding sales to ensure persistence
+    console.log('💾 Auto-saving after adding manually selected sales:', toAdd.map(p => `${p.property_block}/${p.property_lot}`));
+    setTimeout(() => saveAnalysis(), 100); // Small delay to let state updates settle
   };
 
   const handlePropertyResearch = async (property) => {
@@ -5234,7 +5237,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         <td style={{ padding: '8px' }}>{prop.property_location}</td>
                         <td style={{ padding: '8px' }}>
                           {prop.sales_date}
-                          {isPreConstruction && <span style={{ color: '#F59E0B', marginLeft: '4px' }}>⚠️</span>}
+                          {isPreConstruction && <span style={{ color: '#F59E0B', marginLeft: '4px' }}>���️</span>}
                         </td>
                         <td style={{ padding: '8px', textAlign: 'right' }}>${prop.sales_price?.toLocaleString()}</td>
                         <td style={{ padding: '8px', textAlign: 'right' }}>${Math.round(prop.normalizedTime)?.toLocaleString()}</td>
