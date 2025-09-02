@@ -1438,112 +1438,147 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     console.log('🗑️ Sale removed and tracked as excluded:', saleId);
   };
 
-  // ========== ALLOCATION STUDY FUNCTIONS ==========
+  // ========== ALLOCATION STUDY FUNCTIONS - REBUILT ==========
   const loadAllocationStudyData = useCallback(() => {
     if (!cascadeConfig.normal.prime) return;
 
-    // Process vacant sales by VCS and Year
-    const vcsSiteValuesByYear = {};
+    console.log('🏠 Loading allocation study data - individual sale approach');
 
-    // Group vacant sales by VCS and Year
+    // Process each individual vacant sale (no grouping)
+    const processedVacantSales = [];
+
     vacantSales.filter(s => includedSales.has(s.id)).forEach(sale => {
       const year = new Date(sale.sales_date).getFullYear();
       const vcs = sale.new_vcs;
       const region = specialRegions[sale.id] || 'Normal';
-      
+
       if (!vcs) return;
-      
-      const key = `${vcs}_${year}_${region}`;
-      if (!vcsSiteValuesByYear[key]) {
-        vcsSiteValuesByYear[key] = {
-          vcs,
-          year,
-          region,
-          sales: []
-        };
-      }
-      
-      // Calculate site value for this sale
+
+      // Calculate site value for this individual sale
       const acres = sale.totalAcres || parseFloat(calculateAcreage(sale));
       const cascadeRates = region === 'Normal' ? cascadeConfig.normal : cascadeConfig.special[region];
-      
+
       if (!cascadeRates) return;
-      
-      let remainingAcres = acres;
-      let rawLandValue = 0;
-      
-      // Apply cascade calculation
-      if (cascadeRates.prime) {
-        const primeAcres = Math.min(remainingAcres, cascadeRates.prime.max || 1);
-        rawLandValue += primeAcres * (cascadeRates.prime.rate || 0);
-        remainingAcres -= primeAcres;
-      }
-      
-      if (cascadeRates.secondary && remainingAcres > 0) {
-        const secondaryMax = (cascadeRates.secondary.max || 5) - (cascadeRates.prime?.max || 1);
-        const secondaryAcres = Math.min(remainingAcres, secondaryMax);
-        rawLandValue += secondaryAcres * (cascadeRates.secondary.rate || 0);
-        remainingAcres -= secondaryAcres;
-      }
-      
-      if (cascadeRates.excess && remainingAcres > 0) {
-        const excessMax = (cascadeRates.excess.max || 10) - (cascadeRates.secondary?.max || 5);
-        const excessAcres = Math.min(remainingAcres, excessMax);
-        rawLandValue += excessAcres * (cascadeRates.excess.rate || 0);
-        remainingAcres -= excessAcres;
-      }
-      
-      if (cascadeRates.residual && remainingAcres > 0) {
-        rawLandValue += remainingAcres * (cascadeRates.residual.rate || 0);
-      }
-      
+
+      // Apply cascade calculation to get raw land value
+      const rawLandValue = calculateRawLandValue(acres, cascadeRates);
       const siteValue = sale.sales_price - rawLandValue;
-      
-      // Only include positive site values
-      if (siteValue > 0) {
-        vcsSiteValuesByYear[key].sales.push({
-          id: sale.id,
-          block: sale.property_block,
-          lot: sale.property_lot,
-          price: sale.sales_price,
-          acres,
-          rawLandValue,
-          siteValue
-        });
-      }
-    });
 
-    // Calculate average site values per VCS/Year
-    const processedVacant = [];
-    const siteValuesByVCS = {};
+      // Find improved sales for this sale's year
+      const improvedSalesForYear = properties.filter(prop => {
+        const isResidential = prop.property_m4_class === '2' || prop.property_m4_class === '3A';
+        const hasValidSale = prop.sales_date && prop.sales_price && prop.sales_price > 0;
+        const hasBuilding = prop.asset_year_built && prop.asset_year_built > 0;
+        const hasValues = prop.values_mod_land > 0 && prop.values_mod_total > 0;
+        const sameYear = new Date(prop.sales_date).getFullYear() === year;
 
-    Object.values(vcsSiteValuesByYear).forEach(group => {
-      if (group.sales.length === 0) return;
-      
-      const avgSiteValue = group.sales.reduce((sum, s) => sum + s.siteValue, 0) / group.sales.length;
-      
-      // Add individual sales to vacant test
-      group.sales.forEach(sale => {
-        processedVacant.push({
-          ...sale,
-          vcs: group.vcs,
-          year: group.year,
-          region: group.region,
-          avgSiteValue
-        });
+        return isResidential && hasValidSale && hasBuilding && hasValues && sameYear;
       });
-      
-      // Store for improved test
-      if (!siteValuesByVCS[group.vcs]) {
-        siteValuesByVCS[group.vcs] = {};
+
+      if (improvedSalesForYear.length === 0) {
+        console.log(`⚠️ No improved sales found for year ${year}`);
+        return;
       }
-      siteValuesByVCS[group.vcs][`${group.year}_${group.region}`] = avgSiteValue;
+
+      // Calculate averages for this year's improved sales
+      const avgImprovedPrice = improvedSalesForYear.reduce((sum, p) => sum + p.sales_price, 0) / improvedSalesForYear.length;
+      const avgImprovedAcres = improvedSalesForYear.reduce((sum, p) => sum + parseFloat(calculateAcreage(p)), 0) / improvedSalesForYear.length;
+
+      // Calculate current allocation for this year
+      const currentAllocs = improvedSalesForYear.map(p => p.values_mod_land / p.values_mod_total);
+      const avgCurrentAllocation = currentAllocs.reduce((sum, a) => sum + a, 0) / currentAllocs.length;
+
+      // Calculate new land value using this sale's site value + improved sales average raw land
+      const improvedRawLandValue = calculateRawLandValue(avgImprovedAcres, cascadeConfig.normal);
+      const totalLandValue = improvedRawLandValue + siteValue;
+
+      // Calculate recommended allocation
+      const recommendedAllocation = avgImprovedPrice > 0 ? totalLandValue / avgImprovedPrice : 0;
+
+      processedVacantSales.push({
+        // Vacant sale info
+        id: sale.id,
+        vcs,
+        year,
+        region,
+        block: sale.property_block,
+        lot: sale.property_lot,
+        vacantPrice: sale.sales_price,
+        acres,
+        rawLandValue,
+        siteValue,
+
+        // Improved sales info for this year
+        improvedSalesCount: improvedSalesForYear.length,
+        avgImprovedPrice: Math.round(avgImprovedPrice),
+        avgImprovedAcres: avgImprovedAcres.toFixed(2),
+        improvedRawLandValue: Math.round(improvedRawLandValue),
+        totalLandValue: Math.round(totalLandValue),
+
+        // Allocation calculations
+        currentAllocation: avgCurrentAllocation,
+        recommendedAllocation,
+
+        // Status
+        isPositive: siteValue > 0 && recommendedAllocation > 0
+      });
     });
 
-    setVacantTestSales(processedVacant);
-    setVcsSiteValues(siteValuesByVCS);
-    loadImprovedSales(siteValuesByVCS);
-  }, [cascadeConfig, vacantSales, includedSales, specialRegions, calculateAcreage]);
+    console.log('🏠 Processed allocation data:', {
+      totalVacantSales: processedVacantSales.length,
+      positiveSales: processedVacantSales.filter(s => s.isPositive).length,
+      negativeSales: processedVacantSales.filter(s => !s.isPositive).length
+    });
+
+    setVacantTestSales(processedVacantSales);
+
+    // Calculate overall recommended allocation (positive sales only)
+    const positiveSales = processedVacantSales.filter(s => s.isPositive);
+    if (positiveSales.length > 0) {
+      const totalLandValue = positiveSales.reduce((sum, s) => sum + s.totalLandValue, 0);
+      const totalSalePrice = positiveSales.reduce((sum, s) => sum + s.avgImprovedPrice, 0);
+      const overallRecommended = totalSalePrice > 0 ? (totalLandValue / totalSalePrice) * 100 : 0;
+
+      console.log('🎯 Overall recommended allocation:', {
+        positiveSalesCount: positiveSales.length,
+        totalLandValue,
+        totalSalePrice,
+        recommendedPercent: overallRecommended.toFixed(1)
+      });
+    }
+  }, [cascadeConfig, vacantSales, includedSales, specialRegions, calculateAcreage, properties]);
+
+  // Helper function to calculate raw land value using cascade rates
+  const calculateRawLandValue = (acres, cascadeRates) => {
+    let remainingAcres = acres;
+    let rawLandValue = 0;
+
+    if (cascadeRates.prime) {
+      const primeAcres = Math.min(remainingAcres, cascadeRates.prime.max || 1);
+      rawLandValue += primeAcres * (cascadeRates.prime.rate || 0);
+      remainingAcres -= primeAcres;
+    }
+
+    if (cascadeRates.secondary && remainingAcres > 0) {
+      const secondaryMax = (cascadeRates.secondary.max || 5) - (cascadeRates.prime?.max || 1);
+      const secondaryAcres = Math.min(remainingAcres, secondaryMax);
+      rawLandValue += secondaryAcres * (cascadeRates.secondary.rate || 0);
+      remainingAcres -= secondaryAcres;
+    }
+
+    if (cascadeRates.excess && remainingAcres > 0) {
+      const excessMax = (cascadeRates.excess.max || 10) - (cascadeRates.secondary?.max || 5);
+      const excessAcres = Math.min(remainingAcres, excessMax);
+      rawLandValue += excessAcres * (cascadeRates.excess.rate || 0);
+      remainingAcres -= excessAcres;
+    }
+
+    if (cascadeRates.residual && remainingAcres > 0) {
+      rawLandValue += remainingAcres * (cascadeRates.residual.rate || 0);
+    }
+
+    return rawLandValue;
+  };
 
   const loadImprovedSales = useCallback((siteValues) => {
     if (!properties || Object.keys(siteValues).length === 0) return;
