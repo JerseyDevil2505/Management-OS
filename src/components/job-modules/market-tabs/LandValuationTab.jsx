@@ -5331,6 +5331,22 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       }}
                     />
                     <span style={{ fontSize: '16px', fontWeight: 'bold' }}>%</span>
+                    <button
+                      onClick={() => saveTargetAllocation()}
+                      style={{
+                        backgroundColor: '#3B82F6',
+                        color: 'white',
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        border: 'none',
+                        cursor: 'pointer',
+                        fontSize: '10px',
+                        fontWeight: 'bold',
+                        marginLeft: '4px'
+                      }}
+                    >
+                      💾
+                    </button>
                   </div>
                 </div>
               </>
