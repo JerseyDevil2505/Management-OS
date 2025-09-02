@@ -1870,6 +1870,16 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
 
   const calculateVCSRecommendedSitesWithTarget = useCallback(() => {
+    console.log('🚀 calculateVCSRecommendedSitesWithTarget CALLED!');
+    console.log('📊 Input validation:', {
+      hasTargetAllocation: !!targetAllocation,
+      targetAllocationValue: targetAllocation,
+      hasCascadeRates: !!cascadeConfig.normal.prime,
+      cascadePrimeRate: cascadeConfig.normal.prime?.rate,
+      hasProperties: !!properties,
+      propertiesCount: properties?.length || 0
+    });
+
     if (!targetAllocation || !cascadeConfig.normal.prime || !properties) {
       console.log('❌ Cannot calculate VCS recommended sites: missing data');
       return;
