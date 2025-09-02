@@ -2460,6 +2460,67 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     return workbook;
   };
 
+  // Simple CSV version for complete analysis
+  const exportVCSSheetCSV = () => {
+    let csv = 'VCS VALUATION SHEET\n';
+    csv += `Municipality: ${jobData?.municipality || ''}\n`;
+    csv += `County: ${jobData?.county || ''}\n`;
+    csv += `Date: ${new Date().toLocaleDateString()}\n\n`;
+
+    // Headers
+    csv += 'VCS,Total,Type,Description,Prime Rate,Secondary Rate,Excess Rate';
+    if (shouldShowResidualColumn) csv += ',Residual Rate';
+    csv += ',Wetlands Rate,Landlocked Rate,Conservation Rate,Avg Price,CME Bracket\n';
+
+    // Data rows
+    Object.keys(vcsSheetData).sort().forEach(vcs => {
+      const data = vcsSheetData[vcs];
+      const type = vcsTypes[vcs] || 'Residential-Typical';
+      const description = vcsDescriptions[vcs] || getVCSDescription(vcs);
+      const isResidential = type.startsWith('Residential');
+
+      // Get cascade rates
+      let cascadeRates = cascadeConfig.normal;
+      const vcsSpecificConfig = Object.values(cascadeConfig.vcsSpecific || {}).find(config =>
+        config.vcsList?.includes(vcs)
+      );
+      if (vcsSpecificConfig) {
+        cascadeRates = vcsSpecificConfig.rates || cascadeConfig.normal;
+      }
+
+      // Clean description for CSV
+      const cleanDescription = (description || '').replace(/"/g, '""').substring(0, 50);
+
+      csv += `"${vcs}",${data.counts?.total || 0},"${type}","${cleanDescription}",`;
+
+      // Cascade rates
+      if (isResidential) {
+        csv += `${cascadeRates.prime?.rate || ''},${cascadeRates.secondary?.rate || ''},${cascadeRates.excess?.rate || ''}`;
+        if (shouldShowResidualColumn) {
+          csv += `,${cascadeRates.residual?.rate || ''}`;
+        }
+      } else {
+        csv += ',,,';
+        if (shouldShowResidualColumn) csv += ',';
+      }
+
+      // Special categories
+      const vcsSpecialCategories = isResidential ? {
+        wetlands: cascadeConfig.specialCategories.wetlands,
+        landlocked: cascadeConfig.specialCategories.landlocked,
+        conservation: cascadeConfig.specialCategories.conservation
+      } : { wetlands: '', landlocked: '', conservation: '' };
+
+      csv += `,${vcsSpecialCategories.wetlands || ''},${vcsSpecialCategories.landlocked || ''},${vcsSpecialCategories.conservation || ''}`;
+
+      // Price and CME
+      const cmeBracket = data.avgPrice ? getCMEBracket(data.avgPrice) : null;
+      csv += `,${data.avgPrice || ''},"${cmeBracket ? cmeBracket.label : ''}"\n`;
+    });
+
+    return csv;
+  };
+
   const exportToExcel = (type) => {
     const timestamp = new Date().toISOString().split('T')[0];
     const municipality = (jobData?.municipality || 'export').replace(/[^a-zA-Z0-9]/g, '_');
@@ -6141,7 +6202,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           </button>
           <button
             onClick={() => {
-              console.log('🔧 MANUAL DEBUG SAVE TRIGGERED');
+              console.log('��� MANUAL DEBUG SAVE TRIGGERED');
               console.log('Current state snapshot:', {
                 includedSales: Array.from(includedSales),
                 specialCategories: cascadeConfig.specialCategories,
