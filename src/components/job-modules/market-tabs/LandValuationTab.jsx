@@ -541,6 +541,20 @@ const getPricePerUnit = useCallback((price, size) => {
     }
   }, [isInitialLoadComplete]);
 
+  // Immediate auto-save when critical state changes (like adding sales)
+  useEffect(() => {
+    if (!isInitialLoadComplete) return;
+
+    console.log('🔄 State change detected, triggering immediate save');
+    const timeoutId = setTimeout(() => {
+      if (window.landValuationSave) {
+        window.landValuationSave();
+      }
+    }, 1000); // 1 second delay to batch multiple changes
+
+    return () => clearTimeout(timeoutId);
+  }, [vacantSales.length, Object.keys(saleCategories).length, isInitialLoadComplete]);
+
   // Clear Method 1 temporary variables after filtering is complete
   useEffect(() => {
     if (isInitialLoadComplete && window._method1ExcludedSales) {
