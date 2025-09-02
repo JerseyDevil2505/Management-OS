@@ -782,28 +782,28 @@ const getPricePerUnit = useCallback((price, size) => {
       }
 
       const existingIds = new Set(prev);
-      const currentSaleIds = new Set(finalSales.map(s => s.id));
+      const currentSaleIds = new Set(filteredSales.map(s => s.id));
 
-      // Start with existing included sales that are still in the current results
+      // Start with existing included sales that are still in the current results (after exclusion filter)
       const preservedIncluded = new Set([...prev].filter(id => currentSaleIds.has(id)));
 
       // Auto-include only sales that are truly new (not in previous state at all)
-      finalSales.forEach(sale => {
+      filteredSales.forEach(sale => {
         if (!existingIds.has(sale.id)) {
           preservedIncluded.add(sale.id);
         }
       });
 
-      console.log('��� Checkbox state management:', {
+      console.log('✅ Checkbox state management:', {
         isInitialLoadComplete,
         previousCount: prev.size,
-        currentSalesCount: finalSales.length,
+        currentSalesCount: filteredSales.length,
         preservedCount: preservedIncluded.size,
         newlyAdded: preservedIncluded.size - [...prev].filter(id => currentSaleIds.has(id)).length,
-        excludedCount: finalSales.length - preservedIncluded.size,
+        excludedCount: filteredSales.length - preservedIncluded.size,
         preservedIds: Array.from(preservedIncluded),
-        finalSalesIds: finalSales.map(s => s.id),
-        salesMismatch: finalSales.filter(s => !preservedIncluded.has(s.id)).map(s => ({id: s.id, block: s.property_block, lot: s.property_lot}))
+        filteredSalesIds: filteredSales.map(s => s.id),
+        salesMismatch: filteredSales.filter(s => !preservedIncluded.has(s.id)).map(s => ({id: s.id, block: s.property_block, lot: s.property_lot}))
       });
 
       return preservedIncluded;
