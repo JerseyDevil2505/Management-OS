@@ -290,9 +290,6 @@ const loadInitialData = async () => {
       const startDate = payrollPeriod.startDate;
       const endDate = payrollPeriod.endDate;
       
-      console.log(`Calculating bonuses from ${startDate} to ${endDate}`);
-      console.log('Fetching inspections from database...');
-      
       let query = supabase
         .from('inspection_data')
         .select('id, measure_by, measure_date, property_class, property_composite_key, property_location, job_id')
@@ -302,22 +299,17 @@ const loadInitialData = async () => {
         .limit(5000);
 
       if (selectedJob !== 'all') {
-        console.log(`Filtering by job: ${selectedJob}`);
         query = query.eq('job_id', selectedJob);
       }
 
-      console.log('Executing query...');
       const startTime = Date.now();
       const { data: allInspections, error: queryError } = await query;
       const queryTime = Date.now() - startTime;
-      
+
       if (queryError) {
         console.error('Query error:', queryError);
         throw new Error(`Database error: ${queryError.message}`);
       }
-      
-      console.log(`Query completed in ${queryTime}ms`);
-      console.log(`Total inspections fetched: ${allInspections?.length || 0}`);
 
       const inspectorCounts = {};
       
@@ -353,14 +345,7 @@ const loadInitialData = async () => {
           details: data.details
         };
       });
-      
-      console.log('\nTotal inspections by initials:');
-      Object.entries(bonusResults)
-        .sort((a, b) => b[1].inspections - a[1].inspections)
-        .forEach(([initials, data]) => {
-          console.log(`  ${initials}: ${data.inspections} inspections = ${data.bonus.toFixed(2)}`);
-        });
-      
+
       setInspectionBonuses(bonusResults);
       setSuccessMessage(`Successfully calculated bonuses for ${Object.keys(bonusResults).length} inspectors (${allInspections.length} total inspections)`);
     } catch (error) {
@@ -374,8 +359,6 @@ const loadInitialData = async () => {
   const processUploadedFile = async (file) => {
     if (!file) return;
     
-    console.log('Starting file processing...', file.name);
-    
     setIsProcessing(true);
     setError(null);
     setWorksheetIssues([]);
@@ -383,19 +366,15 @@ const loadInitialData = async () => {
     try {
       const reader = new FileReader();
       reader.onload = async (e) => {
-        console.log('FileReader loaded, starting to parse Excel...');
-        
         const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, { 
-          type: 'array', 
+        const workbook = XLSX.read(data, {
+          type: 'array',
           cellDates: true,
-          cellFormulas: true 
+          cellFormulas: true
         });
-        
+
         const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
         const rawData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
-        
-        console.log('Excel parsed, total rows:', rawData.length);
         
         const issues = [];
         const parsedData = [];
@@ -407,7 +386,6 @@ const loadInitialData = async () => {
         for (let i = 0; i < Math.min(10, rawData.length); i++) {
           if (rawData[i] && rawData[i][0] === 'EMPLOYEE') {
             rowsStartIndex = i + 2;
-            console.log(`Found EMPLOYEE header at row ${i}, data will start at row ${rowsStartIndex}`);
             break;
           }
         }
@@ -422,9 +400,7 @@ const loadInitialData = async () => {
           setIsProcessing(false);
           return;
         }
-        
-        console.log(`Processing employees from row ${rowsStartIndex} to ${rawData.length}`);
-        
+
         for (let i = rowsStartIndex; i < rawData.length; i++) {
           const row = rawData[i];
           if (row[0] && typeof row[0] === 'string' && !row[0].includes('TOTAL HOURS')) {
@@ -436,9 +412,7 @@ const loadInitialData = async () => {
             const fieldOT = row[5] || 0;
             const total = row[6] || 0;
             const comments = row[7] || '';
-            
-            console.log(`Processing ${employeeName}: hours=${hours} (type: ${typeof hours})`);
-            
+
             const empData = {
               worksheetName: employeeName,
               initials: initials,
@@ -463,7 +437,6 @@ const loadInitialData = async () => {
               empData.issues.push(`Negative hours (${hours}) - please check`);
             } else if (typeof hours === 'number' && !isNaN(hours)) {
               totalHoursSum += hours;
-              console.log(`  Added ${hours} to total, new sum: ${totalHoursSum}`);
               
               // Look up the employee in our employees data to check their actual status
               const employee = employees.find(emp => {
@@ -496,10 +469,7 @@ const loadInitialData = async () => {
             parsedData.push(empData);
           }
         }
-        
-        console.log(`Final totalHoursSum: ${totalHoursSum}`);
-        console.log(`Final apptOTSum: ${apptOTSum}`);
-        
+
         const totalsRowIndex = rawData.findIndex(row => 
           row[0] && row[0].toString().includes('TOTAL HOURS')
         );
@@ -508,14 +478,7 @@ const loadInitialData = async () => {
           const totalsRow = rawData[totalsRowIndex];
           const sheetTotalHours = totalsRow[2] || 0;
           const sheetApptOT = totalsRow[4] || 0;
-          
-          console.log('Totals validation:', {
-            sheetTotalHours,
-            totalHoursSum,
-            sheetApptOT,
-            apptOTSum
-          });
-          
+
           if (totalHoursSum > 0 && Math.abs(sheetTotalHours - totalHoursSum) > 0.01) {
             issues.push({
               type: 'warning',
@@ -537,12 +500,7 @@ const loadInitialData = async () => {
         setPayrollData(parsedData);
         
         const employeesWithIssues = parsedData.filter(emp => emp.issues.length > 0).length;
-        console.log(`Validation complete: ${parsedData.length} employees processed, ${employeesWithIssues} have issues`);
-        console.log('Employees with issues:', parsedData.filter(emp => emp.issues.length > 0).map(emp => ({
-          name: emp.worksheetName,
-          issues: emp.issues
-        })));
-        
+
         if (issues.length === 0 && employeesWithIssues === 0) {
           setSuccessMessage(`Processed ${parsedData.length} employees successfully - worksheet looks good!`);
         } else {
@@ -658,12 +616,6 @@ const loadInitialData = async () => {
         setError('No inspections to mark as processed');
         return;
       }
-      
-      console.log('Inspection IDs to update:', allInspectionIds.length, 'First few:', allInspectionIds.slice(0, 5));
-      console.log('Dates being set:', { 
-        payroll_period_end: payrollPeriod.endDate,
-        payroll_processed_date: payrollPeriod.processedDate 
-      });
       
       const batchSize = 500;
       for (let i = 0; i < allInspectionIds.length; i += batchSize) {

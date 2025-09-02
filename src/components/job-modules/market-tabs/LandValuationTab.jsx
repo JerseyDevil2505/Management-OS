@@ -1,12 +1,13 @@
 // LandValuationTab.jsx - SECTION 1: Imports and State Setup
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { 
-  Check, X, Plus, Search, TrendingUp, AlertCircle, 
-  Calculator, Download, Trash2, RefreshCw, Filter, 
-  Save, FileDown, ChevronDown, ChevronUp, MapPin, 
-  Home, DollarSign 
+import {
+  X, Plus, Search, TrendingUp,
+  Calculator, Download, Trash2,
+  Save, FileDown, MapPin,
+  Home
 } from 'lucide-react';
 import { supabase, interpretCodes } from '../../../lib/supabaseClient';
+import * as XLSX from 'xlsx';
 
 const LandValuationTab = ({
   properties,
@@ -20,6 +21,7 @@ const LandValuationTab = ({
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
+  const [isInitialLoadComplete, setIsInitialLoadComplete] = useState(false);
   
   // ========== MODE SELECTION (NEW) ==========
   const [valuationMode, setValuationMode] = useState('acre'); // acre, sf, ff
@@ -68,9 +70,11 @@ const LandValuationTab = ({
       prime: { max: 1, rate: null },
       secondary: { max: 5, rate: null },
       excess: { max: 10, rate: null },
-      residual: { max: null, rate: null }
+      residual: { max: null, rate: null },
+      standard: { max: 100, rate: null } // For front foot method
     },
     special: {},
+    vcsSpecific: {}, // New: VCS-specific configurations
     specialCategories: {
       wetlands: null,
       landlocked: null,
@@ -80,18 +84,32 @@ const LandValuationTab = ({
   });
   
   // VCS Analysis
-  const [showAllVCS, setShowAllVCS] = useState(false);
-  const [vcsFilter, setVcsFilter] = useState('');
   const [bracketAnalysis, setBracketAnalysis] = useState({});
   const [method2Summary, setMethod2Summary] = useState({});
 
+  // Enhanced Method 2 UI State - Use Single Family as default
+  const [method2TypeFilter, setMethod2TypeFilter] = useState('1');
+  const [expandedVCS, setExpandedVCS] = useState(new Set());
+
+  // VCS Sheet UI State - Collapsible fields
+  const [collapsedFields, setCollapsedFields] = useState({
+    zoning: true,
+    key: true,
+    map: true
+  });
+
+  // Method 1 Exclusion State (like Method 2)
+  const [method1ExcludedSales, setMethod1ExcludedSales] = useState(new Set());
+
+  // Method 2 Exclusion Modal State
+  const [showMethod2Modal, setShowMethod2Modal] = useState(false);
+  const [method2ModalVCS, setMethod2ModalVCS] = useState('');
+  const [method2ExcludedSales, setMethod2ExcludedSales] = useState(new Set());
+  const [modalSortField, setModalSortField] = useState('block');
+  const [modalSortDirection, setModalSortDirection] = useState('asc');
+
   // ========== ALLOCATION STUDY STATE ==========
   const [vacantTestSales, setVacantTestSales] = useState([]);
-  const [improvedTestSales, setImprovedTestSales] = useState([]);
-  const [categoryFilter, setCategoryFilter] = useState('all');
-  const [regionFilter, setRegionFilter] = useState('all');
-  const [allocationVcsFilter, setAllocationVcsFilter] = useState('all');
-  const [yearFilter, setYearFilter] = useState('all');
   const [actualAllocations, setActualAllocations] = useState({});
   const [vcsSiteValues, setVcsSiteValues] = useState({});
   const [targetAllocation, setTargetAllocation] = useState(null);
@@ -113,21 +131,19 @@ const LandValuationTab = ({
   const [typeUseFilter, setTypeUseFilter] = useState({});
   const [computedAdjustments, setComputedAdjustments] = useState({});
   const [actualAdjustments, setActualAdjustments] = useState({});
-  const [ecoObsFilter, setEcoObsFilter] = useState('');
   const [customLocationCodes, setCustomLocationCodes] = useState([]);
-  
-  // STANDARD LOCATION CODES
-  const LOCATION_CODES = {
-    negative: ['BS', 'CM', 'RR', 'PL', 'ES'],
-    positive: ['GV', 'GC', 'WV', 'WF'],
-    custom: customLocationCodes
-  };
 // ========== INITIALIZE FROM PROPS ==========
 useEffect(() => {
   if (!marketLandData) {
     setIsLoading(false);
     return;
   }
+
+  console.log('🔄 Loading market land data:', {
+    hasRawLandConfig: !!marketLandData.raw_land_config,
+    hasCascadeRates: !!marketLandData.cascade_rates,
+    hasVacantSales: !!marketLandData.vacant_sales_analysis?.sales?.length
+  });
 
   // Restore all saved states from marketLandData
   if (marketLandData.raw_land_config) {
@@ -137,29 +153,38 @@ useEffect(() => {
         end: new Date(marketLandData.raw_land_config.date_range.end)
       });
     }
-    if (marketLandData.raw_land_config.cascade_config) {
-      // Ensure the structure is complete
-      const savedConfig = marketLandData.raw_land_config.cascade_config;
-      setCascadeConfig({
-        mode: savedConfig.mode || 'acre',
-        normal: {
-          prime: savedConfig.normal?.prime || { max: 1, rate: null },
-          secondary: savedConfig.normal?.secondary || { max: 5, rate: null },
-          excess: savedConfig.normal?.excess || { max: 10, rate: null },
-          residual: savedConfig.normal?.residual || { max: null, rate: null },
-          standard: savedConfig.normal?.standard || { max: 100, rate: null }
-        },
-        special: savedConfig.special || {},
-        specialCategories: savedConfig.specialCategories || {
-          wetlands: null,
-          landlocked: null,
-          conservation: null
-        },
-        customCategories: savedConfig.customCategories || []
-      });
-      if (savedConfig.mode) {
-        setValuationMode(savedConfig.mode);
-      }
+  }
+
+  // Load cascade config from either location (prefer cascade_rates, fallback to raw_land_config)
+  const savedConfig = marketLandData.cascade_rates || marketLandData.raw_land_config?.cascade_config;
+  if (savedConfig) {
+    console.log('🔧 Loading cascade config:', {
+      source: marketLandData.cascade_rates ? 'cascade_rates' : 'raw_land_config',
+      specialCategories: savedConfig.specialCategories,
+      mode: savedConfig.mode
+    });
+
+    setCascadeConfig({
+      mode: savedConfig.mode || 'acre',
+      normal: {
+        prime: savedConfig.normal?.prime || { max: 1, rate: null },
+        secondary: savedConfig.normal?.secondary || { max: 5, rate: null },
+        excess: savedConfig.normal?.excess || { max: 10, rate: null },
+        residual: savedConfig.normal?.residual || { max: null, rate: null },
+        standard: savedConfig.normal?.standard || { max: 100, rate: null }
+      },
+      special: savedConfig.special || {},
+      vcsSpecific: savedConfig.vcsSpecific || {},
+      specialCategories: savedConfig.specialCategories || {
+        wetlands: null,
+        landlocked: null,
+        conservation: null
+      },
+      customCategories: savedConfig.customCategories || []
+    });
+
+    if (savedConfig.mode) {
+      setValuationMode(savedConfig.mode);
     }
   }
 
@@ -168,47 +193,122 @@ useEffect(() => {
   //   setCascadeConfig(marketLandData.cascade_rates);
   // }
 
+  // Restore Method 1 state persistence (like Method 2)
   if (marketLandData.vacant_sales_analysis?.sales) {
     const savedCategories = {};
     const savedNotes = {};
     const savedRegions = {};
+    const savedExcluded = new Set();
     const savedIncluded = new Set();
-    
+    const manuallyAddedIds = new Set();
+
+    console.log('🔄 Loading saved Method 1 sales data:', {
+      totalSales: marketLandData.vacant_sales_analysis.sales.length,
+      salesWithCategories: marketLandData.vacant_sales_analysis.sales.filter(s => s.category).length,
+      salesIncluded: marketLandData.vacant_sales_analysis.sales.filter(s => s.included).length,
+      salesExcluded: marketLandData.vacant_sales_analysis.sales.filter(s => !s.included).length,
+      manuallyAdded: marketLandData.vacant_sales_analysis.sales.filter(s => s.manually_added).length
+    });
+
     marketLandData.vacant_sales_analysis.sales.forEach(s => {
       if (s.category) savedCategories[s.id] = s.category;
       if (s.notes) savedNotes[s.id] = s.notes;
-      if (s.special_region) savedRegions[s.id] = s.special_region;
+      if (s.special_region && s.special_region !== 'Normal') savedRegions[s.id] = s.special_region;
+      if (!s.included) savedExcluded.add(s.id); // Track excluded instead of included
       if (s.included) savedIncluded.add(s.id);
+      if (s.manually_added) manuallyAddedIds.add(s.id);
     });
-    
+
+    console.log('🔄 Restored Method 1 states:', {
+      excludedCount: savedExcluded.size,
+      includedCount: savedIncluded.size,
+      manuallyAddedCount: manuallyAddedIds.size,
+      categoriesCount: Object.keys(savedCategories).length,
+      regionsCount: Object.keys(savedRegions).length,
+      excludedIds: Array.from(savedExcluded),
+      manuallyAddedIds: Array.from(manuallyAddedIds),
+      categories: savedCategories
+    });
+
     setSaleCategories(savedCategories);
     setLandNotes(savedNotes);
     setSpecialRegions(savedRegions);
+
+    // Store for application after filtering - both exclusions and manually added
+    window._method1ExcludedSales = savedExcluded;
+    window._method1IncludedSales = savedIncluded;
+    window._method1ManuallyAdded = manuallyAddedIds;
+
+    setMethod1ExcludedSales(savedExcluded);
     setIncludedSales(savedIncluded);
   }
 
-  if (marketLandData.allocation_study) {
-    if (marketLandData.allocation_study.actual_allocations) {
-      setActualAllocations(marketLandData.allocation_study.actual_allocations);
-    }
-    if (marketLandData.allocation_study.vcs_site_values) {
-      setVcsSiteValues(marketLandData.allocation_study.vcs_site_values);
-    }
+  // Also restore Method 1 excluded sales from new field (like Method 2)
+  if (marketLandData.vacant_sales_analysis?.excluded_sales) {
+    const method1Excluded = new Set(marketLandData.vacant_sales_analysis.excluded_sales);
+    setMethod1ExcludedSales(method1Excluded);
+    window._method1ExcludedSales = method1Excluded;
+
+    console.log('🔄 Restored Method 1 excluded sales from new field:', {
+      count: method1Excluded.size,
+      ids: Array.from(method1Excluded)
+    });
+  }
+
+  // Restore Method 2 excluded sales
+  if (marketLandData.bracket_analysis?.excluded_sales) {
+    setMethod2ExcludedSales(new Set(marketLandData.bracket_analysis.excluded_sales));
+  }
+
+  // Load target allocation from dedicated column (NEW)
+  if (marketLandData.target_allocation) {
+    console.log('🎯 LOADING TARGET ALLOCATION FROM DEDICATED COLUMN:', marketLandData.target_allocation);
+    setTargetAllocation(marketLandData.target_allocation);
+  }
+  // Load target allocation but skip cached site values to force fresh calculation (FALLBACK)
+  else if (marketLandData.allocation_study) {
+    // Skip loading cached actual allocations and site values to force fresh calculation
+    // if (marketLandData.allocation_study.actual_allocations) {
+    //   setActualAllocations(marketLandData.allocation_study.actual_allocations);
+    // }
+    // if (marketLandData.allocation_study.vcs_site_values) {
+    //   setVcsSiteValues(marketLandData.allocation_study.vcs_site_values);
+    // }
+
+    // BUT DO load the target allocation since that's user input, not calculated
     if (marketLandData.allocation_study.target_allocation) {
+      console.log('🎯 LOADING TARGET ALLOCATION FROM DATABASE:', marketLandData.allocation_study.target_allocation);
       setTargetAllocation(marketLandData.allocation_study.target_allocation);
+    } else {
+      console.log('�� NO TARGET ALLOCATION FOUND IN DATABASE');
     }
   }
 
-  if (marketLandData.vcs_sheet_data) {
-    setVcsSheetData(marketLandData.vcs_sheet_data);
-    if (marketLandData.vcs_sheet_data.manual_site_values) {
-      setVcsManualSiteValues(marketLandData.vcs_sheet_data.manual_site_values);
+  // Clear any existing allocation data to force fresh calculation
+  console.log('🧹 Clearing cached allocation data to force fresh calculation');
+  setVacantTestSales([]);
+
+  // If user is currently on allocation tab, force immediate recalculation
+  if (activeSubTab === 'allocation' && cascadeConfig.normal.prime) {
+    console.log('🔄 User on allocation tab - forcing immediate recalculation');
+    setTimeout(() => {
+      loadAllocationStudyData();
+    }, 100);
+  }
+
+  if (marketLandData.worksheet_data) {
+    setVcsSheetData(marketLandData.worksheet_data.sheet_data || {});
+    if (marketLandData.worksheet_data.manual_site_values) {
+      setVcsManualSiteValues(marketLandData.worksheet_data.manual_site_values);
     }
-    if (marketLandData.vcs_sheet_data.descriptions) {
-      setVcsDescriptions(marketLandData.vcs_sheet_data.descriptions);
+    if (marketLandData.worksheet_data.recommended_sites) {
+      setVcsRecommendedSites(marketLandData.worksheet_data.recommended_sites);
     }
-    if (marketLandData.vcs_sheet_data.types) {
-      setVcsTypes(marketLandData.vcs_sheet_data.types);
+    if (marketLandData.worksheet_data.descriptions) {
+      setVcsDescriptions(marketLandData.worksheet_data.descriptions);
+    }
+    if (marketLandData.worksheet_data.types) {
+      setVcsTypes(marketLandData.worksheet_data.types);
     }
   }
 
@@ -222,6 +322,9 @@ useEffect(() => {
 
   setLastSaved(marketLandData.updated_at ? new Date(marketLandData.updated_at) : null);
   setIsLoading(false);
+  setIsInitialLoadComplete(true);
+
+  console.log('�� Initial load complete');
 }, [marketLandData]);
 
   // ========== CHECK FRONT FOOT AVAILABILITY ==========
@@ -292,6 +395,97 @@ const getPricePerUnit = useCallback((price, size) => {
     return '$/Unit';
   }, [valuationMode]);
 
+  // ========== GENERATE VCS COLORS ==========
+  const generateVCSColor = useCallback((vcs, index) => {
+    // Light, distinct backgrounds - NO REDS/PINKS
+    const lightColors = [
+      '#E0F2FE', '#DBEAFE', '#E0E7FF', '#EDE9FE', '#F0FDF4',
+      '#ECFDF5', '#FEF3C7', '#FFFBEB', '#F7FEE7', '#EFF6FF',
+      '#F0F9FF', '#F1F5F9', '#F8FAFC', '#FAFAF9', '#F3F4F6',
+      '#E5E7EB', '#D1FAE5', '#DCFCE7', '#FEF9C3', '#FDF4FF'
+    ];
+
+    // Dark, readable text colors - NO REDS
+    const darkColors = [
+      '#0E7490', '#1D4ED8', '#4338CA', '#6D28D9', '#166534',
+      '#047857', '#A16207', '#D97706', '#65A30D', '#0284C7',
+      '#475569', '#64748B', '#374151', '#1F2937', '#111827',
+      '#0F172A', '#15803D', '#16A34A', '#CA8A04', '#7C3AED'
+    ];
+
+    return {
+      background: lightColors[index % lightColors.length],
+      text: darkColors[index % darkColors.length]
+    };
+  }, []);
+
+  // ========== GET TYPE USE OPTIONS ==========
+  const getTypeUseOptions = useCallback(() => {
+    if (!properties) return [{ code: '1', description: '1-Single Family' }];
+
+    // Get unique asset_type_use codes ONLY from properties with time-normalized data
+    const uniqueCodes = new Set();
+    properties.forEach(prop => {
+      if (prop.asset_type_use &&
+          prop.property_m4_class === '2' &&
+          prop.values_norm_time != null &&
+          prop.values_norm_time > 0) {
+        const rawCode = prop.asset_type_use.toString().trim().toUpperCase();
+        if (rawCode && rawCode !== '' && rawCode !== 'null' && rawCode !== 'undefined') {
+          uniqueCodes.add(rawCode);
+        }
+      }
+    });
+
+    const options = [];
+
+    // Always include Single Family
+    if (uniqueCodes.has('1') || uniqueCodes.has('10')) {
+      options.push({ code: '1', description: '1-Single Family' });
+    }
+
+    // Add umbrella groups only if we have matching codes
+    const umbrellaGroups = [
+      {
+        codes: ['30', '31', '3E', '3I'],
+        groupCode: '3',
+        description: '3-Row/Townhouses'
+      },
+      {
+        codes: ['42', '43', '44'],
+        groupCode: '4',
+        description: '4-MultiFamily'
+      },
+      {
+        codes: ['51', '52', '53'],
+        groupCode: '5',
+        description: '5-Conversions'
+      }
+    ];
+
+    umbrellaGroups.forEach(group => {
+      const hasMatchingCodes = group.codes.some(code => uniqueCodes.has(code));
+      if (hasMatchingCodes) {
+        options.push({ code: group.groupCode, description: group.description });
+      }
+    });
+
+    // Add any other individual codes that don't fit the umbrella groups
+    const allUmbrellaCodes = ['1', '10', '30', '31', '3E', '3I', '42', '43', '44', '51', '52', '53'];
+    uniqueCodes.forEach(code => {
+      if (!allUmbrellaCodes.includes(code)) {
+        // Special case for code '2' - Semi Det
+        if (code === '2') {
+          options.push({ code, description: `2-Semi Det` });
+        } else {
+          options.push({ code, description: `${code}-Other` });
+        }
+      }
+    });
+
+    return options.sort((a, b) => a.code.localeCompare(b.code));
+  }, [properties]);
+
   // ========== GET VCS DESCRIPTION HELPER ==========
   const getVCSDescription = useCallback((vcsCode) => {
     // First check manual descriptions
@@ -324,20 +518,50 @@ const getPricePerUnit = useCallback((price, size) => {
     return vcsCode; // Return code if no description found
   }, [jobData, vendorType, vcsDescriptions]);
 
+  // Let filterVacantSales handle all sales filtering and restoration
+
   // ========== LOAD DATA EFFECTS ==========
+  // Update filter when vendor type changes
+  useEffect(() => {
+    setMethod2TypeFilter('1'); // Always default to Single Family
+  }, [vendorType]);
+
   useEffect(() => {
     if (properties && properties.length > 0) {
       filterVacantSales();
       performBracketAnalysis();
       loadVCSPropertyCounts();
     }
-  }, [properties, dateRange, valuationMode]);
+  }, [properties, dateRange, valuationMode, method2TypeFilter]);
 
   useEffect(() => {
     if (activeSubTab === 'allocation' && cascadeConfig.normal.prime) {
+      console.log('🔄 Triggering allocation study recalculation...');
       loadAllocationStudyData();
     }
-  }, [activeSubTab, cascadeConfig, valuationMode]);
+  }, [activeSubTab, cascadeConfig, valuationMode, vacantSales, includedSales, specialRegions]);
+  // Note: intentionally exclude loadAllocationStudyData from deps to avoid TDZ issues, it is stable via useCallback.
+
+  // Auto-calculate VCS recommended sites when target allocation changes
+  useEffect(() => {
+    console.log('🔄 TARGET ALLOCATION USEEFFECT TRIGGERED:', {
+      targetAllocation,
+      hasCascadeRates: !!cascadeConfig.normal.prime,
+      propertiesCount: properties?.length || 0
+    });
+
+    if (targetAllocation && cascadeConfig.normal.prime && properties?.length > 0) {
+      console.log('✅ CONDITIONS MET - CALLING calculateVCSRecommendedSitesWithTarget');
+      calculateVCSRecommendedSitesWithTarget();
+    } else {
+      console.log('❌ CONDITIONS NOT MET FOR VCS CALCULATION:', {
+        hasTargetAllocation: !!targetAllocation,
+        hasCascadeRates: !!cascadeConfig.normal.prime,
+        hasProperties: properties?.length > 0
+      });
+    }
+  }, [targetAllocation]);
+  // Note: intentionally exclude calculateVCSRecommendedSitesWithTarget from deps to avoid TDZ issues, it is stable via useCallback.
 
   useEffect(() => {
     if (activeSubTab === 'eco-obs' && properties) {
@@ -345,56 +569,190 @@ const getPricePerUnit = useCallback((price, size) => {
     }
   }, [activeSubTab, properties]);
 
-  // Auto-save every 30 seconds
+  // Auto-save every 30 seconds - but only after initial load is complete
   useEffect(() => {
+    if (!isInitialLoadComplete) {
+      console.log('���️ Auto-save waiting for initial load to complete');
+      return;
+    }
+
+    console.log('🔄 Auto-save effect triggered, setting up interval');
     const interval = setInterval(() => {
-      saveAnalysis();
+      console.log('⏰ Auto-save interval triggered');
+      // Use window reference to avoid hoisting issues
+      if (window.landValuationSave) {
+        window.landValuationSave();
+      }
     }, 30000);
-    return () => clearInterval(interval);
-  }, [cascadeConfig, landNotes, saleCategories, specialRegions, actualAllocations, 
-      vcsManualSiteValues, actualAdjustments, targetAllocation, locationCodes, vcsTypes]);
+    return () => {
+      console.log('🛑 Clearing auto-save interval');
+      clearInterval(interval);
+    }
+  }, [isInitialLoadComplete]);
+
+  // Immediate auto-save when critical state changes (like adding sales)
+  useEffect(() => {
+    if (!isInitialLoadComplete) return;
+
+    console.log('🔄 State change detected, triggering immediate save');
+    const timeoutId = setTimeout(() => {
+      if (window.landValuationSave) {
+        window.landValuationSave();
+      }
+    }, 1000); // 1 second delay to batch multiple changes
+
+    return () => clearTimeout(timeoutId);
+  }, [vacantSales.length, Object.keys(saleCategories).length, isInitialLoadComplete]);
+
+  // Clear Method 1 temporary variables after filtering is complete
+  useEffect(() => {
+    if (isInitialLoadComplete && window._method1ExcludedSales) {
+      console.log('🧹 Clearing Method 1 temporary variables after successful application');
+      delete window._method1ExcludedSales;
+      delete window._method1IncludedSales;
+      delete window._method1ManuallyAdded;
+    }
+  }, [isInitialLoadComplete]);
   // ========== LAND RATES FUNCTIONS WITH ENHANCED FILTERS ==========
   const filterVacantSales = useCallback(() => {
     if (!properties) return;
 
-    // First identify all vacant/teardown/pre-construction sales
+    console.log('🔄 FilterVacantSales called:', {
+      currentVacantSalesCount: vacantSales.length,
+      hasMethod1Excluded: !!window._method1ExcludedSales,
+      method1ExcludedSize: window._method1ExcludedSales?.size || 0,
+      hasManuallyAdded: !!window._method1ManuallyAdded,
+      manuallyAddedSize: window._method1ManuallyAdded?.size || 0
+    });
+
+    // CRITICAL: First restore manually added properties that might not meet natural criteria
+    const finalSales = [];
+    const manuallyAddedIds = window._method1ManuallyAdded || new Set();
+
+    if (manuallyAddedIds.size > 0) {
+      const manuallyAddedProps = properties.filter(prop => manuallyAddedIds.has(prop.id));
+      console.log('🔄 Restoring manually added properties:', {
+        found: manuallyAddedProps.length,
+        expected: manuallyAddedIds.size,
+        foundIds: manuallyAddedProps.map(p => p.id),
+        expectedIds: Array.from(manuallyAddedIds)
+      });
+
+      manuallyAddedProps.forEach(prop => {
+        const acres = calculateAcreage(prop);
+        const pricePerUnit = getPricePerUnit(prop.sales_price, acres);
+        finalSales.push({
+          ...prop,
+          totalAcres: acres,
+          pricePerAcre: pricePerUnit,
+          manuallyAdded: true
+        });
+      });
+    }
+
+    // If we already have restored sales, preserve them and only add new ones
+    if (false) { // Disable complex caching logic
+      console.log('���� Preserving existing restored sales, checking for new ones only');
+
+      // Find any new sales that match criteria but aren't already in vacantSales
+      const existingIds = new Set(vacantSales.map(s => s.id));
+      const newSales = properties.filter(prop => {
+        if (existingIds.has(prop.id)) return false;
+
+        const hasValidSale = prop.sales_date && prop.sales_price && prop.sales_price > 0;
+        const inDateRange = prop.sales_date >= dateRange.start.toISOString().split('T')[0] &&
+                            prop.sales_date <= dateRange.end.toISOString().split('T')[0];
+
+        const nu = prop.sales_nu || '';
+        const validNu = !nu || nu === '' || nu === ' ' || nu === '00' || nu === '07' ||
+                        nu === '7' || nu.charCodeAt(0) === 32;
+
+        const isAdditionalCard = prop.property_addl_card &&
+                          prop.property_addl_card !== 'NONE' &&
+                          prop.property_addl_card !== 'M';
+        if (isAdditionalCard) return false;
+
+        const isVacantClass = prop.property_m4_class === '1' || prop.property_m4_class === '3B';
+        const isTeardown = prop.property_m4_class === '2' &&
+                          prop.asset_building_class && parseInt(prop.asset_building_class) > 10 &&
+                          prop.asset_design_style &&
+                          prop.asset_type_use &&
+                          prop.values_mod_improvement < 10000;
+        const isPreConstruction = prop.property_m4_class === '2' &&
+                                 prop.asset_building_class && parseInt(prop.asset_building_class) > 10 &&
+                                 prop.asset_design_style &&
+                                 prop.asset_type_use &&
+                                 prop.asset_year_built &&
+                                 prop.sales_date &&
+                                 new Date(prop.sales_date).getFullYear() < prop.asset_year_built;
+
+        return hasValidSale && inDateRange && validNu && (isVacantClass || isTeardown || isPreConstruction);
+      });
+
+      if (newSales.length > 0) {
+        console.log('🔄 Found new sales to add:', newSales.length);
+        const enriched = newSales.map(prop => {
+          const acres = calculateAcreage(prop);
+          const pricePerUnit = getPricePerUnit(prop.sales_price, acres);
+          return {
+            ...prop,
+            totalAcres: acres,
+            pricePerAcre: pricePerUnit
+          };
+        });
+
+        setVacantSales(prev => [...prev, ...enriched]);
+
+        // Auto-include new sales
+        setIncludedSales(prev => new Set([...prev, ...newSales.map(s => s.id)]));
+      }
+
+      return; // Don't rebuild if we already have restored sales
+    }
+
+    // Now identify naturally qualifying vacant/teardown/pre-construction sales (excluding manually added)
     const allSales = properties.filter(prop => {
+      // Skip if this is a manually added property - we already processed it
+      if (manuallyAddedIds.has(prop.id)) {
+        return false;
+      }
+
       const hasValidSale = prop.sales_date && prop.sales_price && prop.sales_price > 0;
       const inDateRange = prop.sales_date >= dateRange.start.toISOString().split('T')[0] &&
                           prop.sales_date <= dateRange.end.toISOString().split('T')[0];
-      
+
       // Check NU codes for valid sales
       const nu = prop.sales_nu || '';
-      const validNu = !nu || nu === '' || nu === ' ' || nu === '00' || nu === '07' || 
+      const validNu = !nu || nu === '' || nu === ' ' || nu === '00' || nu === '07' ||
                       nu === '7' || nu.charCodeAt(0) === 32;
 
       // Skip additional cards - they don't have land
-      const isAdditionalCard = prop.property_addl_card && 
-                        prop.property_addl_card !== 'NONE' && 
+      const isAdditionalCard = prop.property_addl_card &&
+                        prop.property_addl_card !== 'NONE' &&
                         prop.property_addl_card !== 'M';
       if (isAdditionalCard) {
         return false;
       }
-      
+
       // Standard vacant classes
       const isVacantClass = prop.property_m4_class === '1' || prop.property_m4_class === '3B';
-      
+
       // NEW: Teardown detection (Class 2 with minimal improvement)
       const isTeardown = prop.property_m4_class === '2' &&
                         prop.asset_building_class && parseInt(prop.asset_building_class) > 10 &&
-                        prop.asset_design_style && 
+                        prop.asset_design_style &&
                         prop.asset_type_use &&
                         prop.values_mod_improvement < 10000;
-      
+
       // NEW: Pre-construction detection (sold before house was built)
       const isPreConstruction = prop.property_m4_class === '2' &&
                                prop.asset_building_class && parseInt(prop.asset_building_class) > 10 &&
-                               prop.asset_design_style && 
+                               prop.asset_design_style &&
                                prop.asset_type_use &&
                                prop.asset_year_built &&
                                prop.sales_date &&
                                new Date(prop.sales_date).getFullYear() < prop.asset_year_built;
-      
+
       return hasValidSale && inDateRange && validNu && (isVacantClass || isTeardown || isPreConstruction);
     });
 
@@ -455,9 +813,8 @@ const getPricePerUnit = useCallback((price, size) => {
       };
     };
 
-    // Process packages and standalone
-    const finalSales = [];
-    
+    // Process packages and standalone (add to existing finalSales that contains manually added)
+
     // Consolidate package sales
     Object.entries(packageGroups).forEach(([key, group]) => {
       if (group.length > 1) {
@@ -488,6 +845,11 @@ const getPricePerUnit = useCallback((price, size) => {
         
         // Auto-include package in analysis
         setIncludedSales(prev => new Set([...prev, packageSale.id]));
+
+        // Set package category
+        if (packageSale.autoCategory) {
+          setSaleCategories(prev => ({...prev, [packageSale.id]: packageSale.autoCategory}));
+        }
       } else {
         // Single property with book/page
         const enriched = enrichProperty(group[0]);
@@ -497,131 +859,309 @@ const getPricePerUnit = useCallback((price, size) => {
         }
       }
     });
-    
+
     // Add standalone properties
     standalone.forEach(prop => {
       const enriched = enrichProperty(prop);
       finalSales.push(enriched);
       if (enriched.autoCategory) {
+        console.log(`🏷️ Auto-categorizing ${prop.property_block}/${prop.property_lot} as ${enriched.autoCategory}`);
         setSaleCategories(prev => ({...prev, [prop.id]: enriched.autoCategory}));
       }
     });
 
-    setVacantSales(finalSales);
-    // Auto-include all new sales
-    setIncludedSales(new Set(finalSales.map(s => s.id)));
+    // CRITICAL FIX: Filter out excluded sales from Method 1 before setting finalSales
+    const activeExcluded = window._method1ExcludedSales || method1ExcludedSales;
+    const filteredSales = finalSales.filter(sale => !activeExcluded.has(sale.id));
+
+    console.log('🔄 Applying Method 1 exclusions:', {
+      totalSalesBeforeExclusion: finalSales.length,
+      excludedSalesCount: activeExcluded.size,
+      totalSalesAfterExclusion: filteredSales.length,
+      excludedIds: Array.from(activeExcluded),
+      filteredOutSales: finalSales.filter(sale => activeExcluded.has(sale.id)).map(s => ({id: s.id, block: s.property_block, lot: s.property_lot}))
+    });
+
+    setVacantSales(filteredSales);
+
+    // Preserve checkbox states more intelligently
+    setIncludedSales(prev => {
+      // If initial load isn't complete yet, don't modify included sales
+      if (!isInitialLoadComplete) {
+        console.log('⏸��� Skipping checkbox update - waiting for initial load');
+        return prev;
+      }
+
+      const existingIds = new Set(prev);
+      const currentSaleIds = new Set(filteredSales.map(s => s.id));
+
+      // Start with existing included sales that are still in the current results (after exclusion filter)
+      const preservedIncluded = new Set([...prev].filter(id => currentSaleIds.has(id)));
+
+      // Auto-include only sales that are truly new (not in previous state at all)
+      filteredSales.forEach(sale => {
+        if (!existingIds.has(sale.id)) {
+          preservedIncluded.add(sale.id);
+        }
+      });
+
+      console.log('✅ Checkbox state management:', {
+        isInitialLoadComplete,
+        previousCount: prev.size,
+        currentSalesCount: filteredSales.length,
+        preservedCount: preservedIncluded.size,
+        newlyAdded: preservedIncluded.size - [...prev].filter(id => currentSaleIds.has(id)).length,
+        excludedCount: filteredSales.length - preservedIncluded.size,
+        preservedIds: Array.from(preservedIncluded),
+        filteredSalesIds: filteredSales.map(s => s.id),
+        salesMismatch: filteredSales.filter(s => !preservedIncluded.has(s.id)).map(s => ({id: s.id, block: s.property_block, lot: s.property_lot}))
+      });
+
+      return preservedIncluded;
+    });
   }, [properties, dateRange, calculateAcreage, getPricePerUnit, saleCategories]);
 
-  const performBracketAnalysis = useCallback(() => {
-    if (!properties) return;
+  const performBracketAnalysis = useCallback(async () => {
+    if (!properties || !jobData?.id) return;
 
-    const vcsSales = {};
+    try {
+      // Build time-normalized dataset from already-loaded properties (avoids extra DB joins)
+      const timeNormalizedData = properties
+        .filter(p =>
+          p.values_norm_time != null &&
+          p.values_norm_time > 0
+        )
+        .map(p => ({
+          property_composite_key: p.property_composite_key,
+          new_vcs: p.new_vcs,
+          values_norm_time: p.values_norm_time
+        }));
 
-    properties.forEach(prop => {
-      if (!prop.new_vcs || !prop.sales_price || prop.sales_price <= 0) return;
-      // Only residential for bracket analysis
-      if (prop.property_m4_class !== '2' && prop.property_m4_class !== '3A') return;
-      
-      const vcs = prop.new_vcs;
-      if (!vcsSales[vcs]) {
-        vcsSales[vcs] = [];
+      if (!timeNormalizedData || timeNormalizedData.length === 0) {
+        setBracketAnalysis({});
+        return;
       }
-      
-      const acres = parseFloat(calculateAcreage(prop));
-      
-      vcsSales[vcs].push({
-        acres,
-        normalizedPrice: prop.values_norm_size || prop.sales_price,
-        address: prop.property_location
+
+      // Create a lookup for time normalized data
+      const timeNormLookup = new Map();
+      timeNormalizedData.forEach(item => {
+        timeNormLookup.set(item.property_composite_key, item);
       });
-    });
 
-    const analysis = {};
-    let validRates = [];
+      const vcsSales = {};
 
-    Object.keys(vcsSales).forEach(vcs => {
-      const sales = vcsSales[vcs];
-      if (sales.length < 5) return; // Need minimum sales for analysis
-      
-      // Sort by acreage for bracketing
-      sales.sort((a, b) => a.acres - b.acres);
-      
-      const brackets = {
-        small: sales.filter(s => s.acres < 1),
-        medium: sales.filter(s => s.acres >= 1 && s.acres < 5),
-        large: sales.filter(s => s.acres >= 5 && s.acres < 10),
-        xlarge: sales.filter(s => s.acres >= 10)
-      };
-      
-      const avgPrice = (arr) => arr.length > 0 ? 
-        arr.reduce((sum, s) => sum + s.normalizedPrice, 0) / arr.length : null;
-      const avgAcres = (arr) => arr.length > 0 ? 
-        arr.reduce((sum, s) => sum + s.acres, 0) / arr.length : null;
-      
-      let impliedRate = null;
-      
-      // Calculate implied rate from bracket differences
-      if (brackets.small.length > 0 && brackets.medium.length > 0) {
-        const priceDiff = avgPrice(brackets.medium) - avgPrice(brackets.small);
-        const acresDiff = avgAcres(brackets.medium) - avgAcres(brackets.small);
-        if (acresDiff > 0 && priceDiff > 0) {
-          impliedRate = Math.round(priceDiff / acresDiff);
-          validRates.push(impliedRate);
+      // Filter properties that have time normalization data
+      properties.forEach(prop => {
+        const timeNormData = timeNormLookup.get(prop.property_composite_key);
+        if (!timeNormData) return;
+
+        // Skip if manually excluded from Method 2
+        if (method2ExcludedSales.has(prop.id)) return;
+
+        // Apply type/use filter with umbrella group support
+        const rawTypeUse = prop.asset_type_use?.toString().trim().toUpperCase();
+
+        let passesFilter = false;
+        if (method2TypeFilter === '1') {
+          // Single Family - include both 1 and 10
+          passesFilter = rawTypeUse === '1' || rawTypeUse === '10';
+        } else if (method2TypeFilter === '3') {
+          // Row/Townhouses umbrella
+          passesFilter = ['30', '31', '3E', '3I'].includes(rawTypeUse);
+        } else if (method2TypeFilter === '4') {
+          // MultiFamily umbrella
+          passesFilter = ['42', '43', '44'].includes(rawTypeUse);
+        } else if (method2TypeFilter === '5') {
+          // Conversions umbrella
+          passesFilter = ['51', '52', '53'].includes(rawTypeUse);
+        } else {
+          // Direct match for other codes
+          passesFilter = rawTypeUse === method2TypeFilter;
         }
-      }
-      
-      // NULL for negative rates (don't include in averages)
-      if (impliedRate && impliedRate < 0) {
-        impliedRate = null;
-      }
-      
-      analysis[vcs] = {
-        totalSales: sales.length,
-        brackets: {
-          small: { 
-            count: brackets.small.length, 
-            avgAcres: avgAcres(brackets.small), 
-            avgPrice: avgPrice(brackets.small) 
-          },
-          medium: { 
-            count: brackets.medium.length, 
-            avgAcres: avgAcres(brackets.medium), 
-            avgPrice: avgPrice(brackets.medium) 
-          },
-          large: { 
-            count: brackets.large.length, 
-            avgAcres: avgAcres(brackets.large), 
-            avgPrice: avgPrice(brackets.large) 
-          },
-          xlarge: { 
-            count: brackets.xlarge.length, 
-            avgAcres: avgAcres(brackets.xlarge), 
-            avgPrice: avgPrice(brackets.xlarge) 
-          }
-        },
-        impliedRate
-      };
-    });
 
-    // Calculate Method 2 Summary
-    if (validRates.length > 0) {
-      validRates.sort((a, b) => a - b);
-      const average = Math.round(validRates.reduce((sum, r) => sum + r, 0) / validRates.length);
-      const median = validRates.length % 2 === 0 ?
-        Math.round((validRates[validRates.length / 2 - 1] + validRates[validRates.length / 2]) / 2) :
-        validRates[Math.floor(validRates.length / 2)];
-      
-      setMethod2Summary({
-        average,
-        median,
-        coverage: `${validRates.length} of ${Object.keys(vcsSales).length} VCS areas`,
-        min: validRates[0],
-        max: validRates[validRates.length - 1]
+        if (!passesFilter) return;
+
+        const vcs = timeNormData.new_vcs;
+        if (!vcs) return;
+
+        if (!vcsSales[vcs]) {
+          vcsSales[vcs] = [];
+        }
+
+        const acres = parseFloat(prop.asset_lot_acre || 0);
+        const sfla = parseFloat(prop.asset_sfla || 0);
+
+        vcsSales[vcs].push({
+          acres,
+          salesPrice: prop.sales_price,
+          normalizedTime: timeNormData.values_norm_time,
+          sfla,
+          address: prop.property_location,
+          yearBuilt: prop.asset_year_built,
+          saleDate: prop.sales_date,
+          typeUse: prop.asset_type_use
+        });
       });
-    }
 
-    setBracketAnalysis(analysis);
-  }, [properties, calculateAcreage]);
+      const analysis = {};
+      let validRates = [];
+
+      Object.keys(vcsSales).forEach(vcs => {
+        const sales = vcsSales[vcs];
+        if (sales.length < 3) return; // Need minimum sales for analysis
+
+        // Sort by acreage for bracketing
+        sales.sort((a, b) => a.acres - b.acres);
+
+        const brackets = {
+          small: sales.filter(s => s.acres < 1),              // 0 to 0.99
+          medium: sales.filter(s => s.acres >= 1 && s.acres < 5),  // 1.00-4.99
+          large: sales.filter(s => s.acres >= 5 && s.acres < 10),  // 5.00-9.99
+          xlarge: sales.filter(s => s.acres >= 10)            // 10.00 and greater
+        };
+
+        // Calculate overall VCS average SFLA for size adjustment
+        const allValidSFLA = sales.filter(s => s.sfla > 0);
+        const overallAvgSFLA = allValidSFLA.length > 0 ?
+          allValidSFLA.reduce((sum, s) => sum + s.sfla, 0) / allValidSFLA.length : null;
+
+        // FIXED statistics calculation
+        const calcBracketStats = (arr) => {
+          if (arr.length === 0) return {
+            count: 0,
+            avgAcres: null,
+            avgSalePrice: null,
+            avgNormTime: null,
+            avgSFLA: null,
+            avgAdjusted: null
+          };
+
+          // Use time-normalized values for Method 2
+          const avgNormTime = arr.reduce((sum, s) => sum + s.normalizedTime, 0) / arr.length;
+          const avgAcres = arr.reduce((sum, s) => sum + s.acres, 0) / arr.length;
+          const validSFLA = arr.filter(s => s.sfla > 0);
+          const avgSFLA = validSFLA.length > 0 ?
+            validSFLA.reduce((sum, s) => sum + s.sfla, 0) / validSFLA.length : null;
+
+          // Jim's Magic Formula for size adjustment (using time-normalized values)
+          let avgAdjusted = avgNormTime;
+          if (overallAvgSFLA && avgSFLA && avgSFLA > 0) {
+            const sflaDiff = overallAvgSFLA - avgSFLA;
+            const pricePerSqFt = avgNormTime / avgSFLA;
+            const sizeAdjustment = sflaDiff * (pricePerSqFt * 0.50);
+            avgAdjusted = avgNormTime + sizeAdjustment;
+          }
+
+          return {
+            count: arr.length,
+            avgAcres: Math.round(avgAcres * 100) / 100, // Round to 2 decimals
+            avgSalePrice: Math.round(avgNormTime), // Time-normalized sale price
+            avgNormTime: Math.round(avgNormTime), // Keep for compatibility
+            avgSFLA: avgSFLA ? Math.round(avgSFLA) : null,
+            avgAdjusted: Math.round(avgAdjusted)
+          };
+        };
+
+        const bracketStats = {
+          small: calcBracketStats(brackets.small),
+          medium: calcBracketStats(brackets.medium),
+          large: calcBracketStats(brackets.large),
+          xlarge: calcBracketStats(brackets.xlarge)
+        };
+
+        // Calculate implied rate from bracket differences
+        let impliedRate = null;
+        if (bracketStats.small.count > 0 && bracketStats.medium.count > 0) {
+          const priceDiff = bracketStats.medium.avgAdjusted - bracketStats.small.avgAdjusted;
+          const acresDiff = bracketStats.medium.avgAcres - bracketStats.small.avgAcres;
+          if (acresDiff > 0 && priceDiff > 0) {
+            impliedRate = Math.round(priceDiff / acresDiff);
+            validRates.push(impliedRate);
+          }
+        }
+
+        analysis[vcs] = {
+          totalSales: sales.length,
+          avgPrice: Math.round(sales.reduce((sum, s) => sum + s.normalizedTime, 0) / sales.length), // Use time-normalized
+          avgAcres: Math.round((sales.reduce((sum, s) => sum + s.acres, 0) / sales.length) * 100) / 100,
+          avgAdjusted: Math.round(sales.reduce((sum, s) => sum + s.normalizedTime, 0) / sales.length),
+          brackets: bracketStats,
+          impliedRate
+        };
+      });
+
+      // Calculate Method 2 Summary by bracket ranges with positive deltas only
+      const bracketRates = {
+        mediumRange: [], // 1.00-4.99 acre rates (medium vs small)
+        largeRange: [],  // 5.00-9.99 acre rates (large vs medium)
+        xlargeRange: [] // 10.00+ acre rates (xlarge vs large)
+      };
+
+      Object.keys(vcsSales).forEach(vcs => {
+        const vcsAnalysis = analysis[vcs];
+        if (!vcsAnalysis) return;
+
+        const { brackets } = vcsAnalysis;
+
+        // 1.00-4.99 range: medium vs small
+        if (brackets.small.count > 0 && brackets.medium.count > 0) {
+          const priceDiff = brackets.medium.avgAdjusted - brackets.small.avgAdjusted;
+          const acresDiff = brackets.medium.avgAcres - brackets.small.avgAcres;
+          if (acresDiff > 0 && priceDiff > 0) {
+            const rate = Math.round(priceDiff / acresDiff);
+            bracketRates.mediumRange.push(rate);
+          }
+        }
+
+        // 5.00-9.99 range: large vs medium
+        if (brackets.medium.count > 0 && brackets.large.count > 0) {
+          const priceDiff = brackets.large.avgAdjusted - brackets.medium.avgAdjusted;
+          const acresDiff = brackets.large.avgAcres - brackets.medium.avgAcres;
+          if (acresDiff > 0 && priceDiff > 0) {
+            const rate = Math.round(priceDiff / acresDiff);
+            bracketRates.largeRange.push(rate);
+          }
+        }
+
+        // 10.00+ range: xlarge vs large
+        if (brackets.large.count > 0 && brackets.xlarge.count > 0) {
+          const priceDiff = brackets.xlarge.avgAdjusted - brackets.large.avgAdjusted;
+          const acresDiff = brackets.xlarge.avgAcres - brackets.large.avgAcres;
+          if (acresDiff > 0 && priceDiff > 0) {
+            const rate = Math.round(priceDiff / acresDiff);
+            bracketRates.xlargeRange.push(rate);
+          }
+        }
+      });
+
+      // Calculate averages for each bracket range
+      const calculateBracketSummary = (rates) => {
+        if (rates.length === 0) return { perAcre: 'N/A', perSqFt: 'N/A', count: 0 };
+
+        const avgPerAcre = Math.round(rates.reduce((sum, r) => sum + r, 0) / rates.length);
+        const avgPerSqFt = (avgPerAcre / 43560).toFixed(2);
+
+        return {
+          perAcre: avgPerAcre,
+          perSqFt: avgPerSqFt,
+          count: rates.length
+        };
+      };
+
+      setMethod2Summary({
+        mediumRange: calculateBracketSummary(bracketRates.mediumRange), // 1.00-4.99
+        largeRange: calculateBracketSummary(bracketRates.largeRange),   // 5.00-9.99
+        xlargeRange: calculateBracketSummary(bracketRates.xlargeRange), // 10.00+
+        totalVCS: Object.keys(vcsSales).length
+      });
+
+      setBracketAnalysis(analysis);
+
+    } catch (error) {
+      console.error('Error in performBracketAnalysis:', error);
+      setBracketAnalysis({});
+    }
+  }, [properties, jobData, method2TypeFilter, method2ExcludedSales]);
 
   const calculateRates = useCallback((regionFilter = null) => {
     const included = vacantSales.filter(s => {
@@ -684,8 +1224,149 @@ const getPricePerUnit = useCallback((price, size) => {
     const existingIds = new Set(vacantSales.map(s => s.id));
     results = results.filter(p => !existingIds.has(p.id));
 
+    // Sort results numerically by block, then lot
+    results.sort((a, b) => {
+      const blockA = parseInt(a.property_block) || 0;
+      const blockB = parseInt(b.property_block) || 0;
+
+      if (blockA !== blockB) {
+        return blockA - blockB;
+      }
+
+      // If blocks are the same, sort by lot
+      const lotA = parseInt(a.property_lot) || 0;
+      const lotB = parseInt(b.property_lot) || 0;
+      return lotA - lotB;
+    });
+
     setSearchResults(results);
   };
+  // Method 2 Modal Functions
+  const openMethod2SalesModal = (vcs) => {
+    setMethod2ModalVCS(vcs);
+    setShowMethod2Modal(true);
+    // Reset sort to block ascending
+    setModalSortField('block');
+    setModalSortDirection('asc');
+  };
+
+  const handleModalSort = (field) => {
+    if (modalSortField === field) {
+      setModalSortDirection(modalSortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setModalSortField(field);
+      setModalSortDirection('asc');
+    }
+  };
+
+  const sortModalData = (data) => {
+    return [...data].sort((a, b) => {
+      let aVal, bVal;
+
+      switch (modalSortField) {
+        case 'block':
+          // Numerical sorting for blocks
+          aVal = parseInt(a.property_block) || 0;
+          bVal = parseInt(b.property_block) || 0;
+          break;
+        case 'lot':
+          // Numerical sorting for lots
+          aVal = parseInt(a.property_lot) || 0;
+          bVal = parseInt(b.property_lot) || 0;
+          break;
+        case 'address':
+          aVal = a.property_location || '';
+          bVal = b.property_location || '';
+          break;
+        case 'saleDate':
+          aVal = new Date(a.sales_date || 0);
+          bVal = new Date(b.sales_date || 0);
+          break;
+        case 'salePrice':
+          aVal = a.sales_price || 0;
+          bVal = b.sales_price || 0;
+          break;
+        case 'normTime':
+          aVal = a.normalizedTime || 0;
+          bVal = b.normalizedTime || 0;
+          break;
+        case 'acres':
+          aVal = parseFloat(a.asset_lot_acre || 0);
+          bVal = parseFloat(b.asset_lot_acre || 0);
+          break;
+        case 'sfla':
+          aVal = parseInt(a.asset_sfla || 0);
+          bVal = parseInt(b.asset_sfla || 0);
+          break;
+        case 'yearBuilt':
+          aVal = parseInt(a.asset_year_built || 0);
+          bVal = parseInt(b.asset_year_built || 0);
+          break;
+        case 'typeUse':
+          aVal = a.asset_type_use || '';
+          bVal = b.asset_type_use || '';
+          break;
+        default:
+          return 0;
+      }
+
+      if (typeof aVal === 'string') {
+        aVal = aVal.toLowerCase();
+        bVal = bVal.toLowerCase();
+      }
+
+      if (modalSortDirection === 'asc') {
+        return aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+      } else {
+        return aVal > bVal ? -1 : aVal < bVal ? 1 : 0;
+      }
+    });
+  };
+
+  const getMethod2SalesForVCS = (vcs) => {
+    if (!properties || !vcs) return [];
+
+    // Get time normalized data lookup
+    const timeNormalizedData = properties
+      .filter(p => p.values_norm_time != null && p.values_norm_time > 0)
+      .map(p => ({
+        property_composite_key: p.property_composite_key,
+        new_vcs: p.new_vcs,
+        values_norm_time: p.values_norm_time
+      }));
+
+    const timeNormLookup = new Map();
+    timeNormalizedData.forEach(item => {
+      timeNormLookup.set(item.property_composite_key, item);
+    });
+
+    // Filter properties for this VCS
+    return properties.filter(prop => {
+      const timeNormData = timeNormLookup.get(prop.property_composite_key);
+      if (!timeNormData || timeNormData.new_vcs !== vcs) return false;
+
+      // Apply type/use filter
+      const rawTypeUse = prop.asset_type_use?.toString().trim().toUpperCase();
+      let passesFilter = false;
+      if (method2TypeFilter === '1') {
+        passesFilter = rawTypeUse === '1' || rawTypeUse === '10';
+      } else if (method2TypeFilter === '3') {
+        passesFilter = ['30', '31', '3E', '3I'].includes(rawTypeUse);
+      } else if (method2TypeFilter === '4') {
+        passesFilter = ['42', '43', '44'].includes(rawTypeUse);
+      } else if (method2TypeFilter === '5') {
+        passesFilter = ['51', '52', '53'].includes(rawTypeUse);
+      } else {
+        passesFilter = rawTypeUse === method2TypeFilter;
+      }
+
+      return passesFilter;
+    }).map(prop => ({
+      ...prop,
+      normalizedTime: timeNormLookup.get(prop.property_composite_key).values_norm_time
+    }));
+  };
+
   const addSelectedProperties = () => {
     const toAdd = properties.filter(p => selectedToAdd.has(p.id));
 
@@ -703,20 +1384,49 @@ const getPricePerUnit = useCallback((price, size) => {
     setVacantSales([...vacantSales, ...enriched]);
     setIncludedSales(new Set([...includedSales, ...toAdd.map(p => p.id)]));
     
-    // Check if any are teardowns (Class 2)
+    // Auto-categorize teardowns and pre-construction (match filterVacantSales logic)
     toAdd.forEach(p => {
-      if (p.property_m4_class === '2') {
-        setSaleCategories(prev => ({...prev, [p.id]: 'teardown'}));
+      let autoCategory = null;
+
+      // Teardown detection (Class 2 with minimal improvement)
+      if (p.property_m4_class === '2' &&
+          p.asset_building_class && parseInt(p.asset_building_class) > 10 &&
+          p.asset_design_style &&
+          p.asset_type_use &&
+          p.values_mod_improvement < 10000) {
+        autoCategory = 'teardown';
+      }
+      // Pre-construction detection (sold before house was built)
+      else if (p.property_m4_class === '2' &&
+               p.asset_building_class && parseInt(p.asset_building_class) > 10 &&
+               p.asset_design_style &&
+               p.asset_type_use &&
+               p.asset_year_built &&
+               p.sales_date &&
+               new Date(p.sales_date).getFullYear() < p.asset_year_built) {
+        autoCategory = 'pre-construction';
+      }
+      // General Class 2 fallback to building lot
+      else if (p.property_m4_class === '2') {
+        autoCategory = 'building_lot';
+      }
+
+      if (autoCategory) {
+        console.log(`🏗️ Auto-categorizing manually added ${p.property_block}/${p.property_lot} as ${autoCategory}`);
+        setSaleCategories(prev => ({...prev, [p.id]: autoCategory}));
       }
     });
     
     setSelectedToAdd(new Set());
     setShowAddModal(false);
     setSearchResults([]);
+
+    // Note: Auto-save will trigger within 30 seconds to persist these changes
+    console.log('💾 Sales added - auto-save will persist these changes:', toAdd.map(p => `${p.property_block}/${p.property_lot}`));
   };
 
   const handlePropertyResearch = async (property) => {
-    const prompt = `Analyze this land sale in ${jobData?.municipality || 'Unknown'}, ${jobData?.county || 'Unknown'} County, NJ:
+    const prompt = `Research and analyze this land sale in ${jobData?.municipality || 'Unknown'}, ${jobData?.county || 'Unknown'} County, NJ:
 
 Block ${property.property_block} Lot ${property.property_lot}
 Address: ${property.property_location}
@@ -726,7 +1436,15 @@ Acres: ${property.totalAcres?.toFixed(2)}
 Price/Acre: $${property.pricePerAcre?.toLocaleString()}
 Class: ${property.property_m4_class === '2' ? 'Residential (possible teardown)' : property.property_m4_class}
 
-Identify likely factors affecting this sale price (wetlands, access, zoning, teardown value, etc.). Be specific and actionable for valuation purposes. 2-3 sentences.`;
+Find specific information about this property and sale. Include:
+
+• Property ownership/seller details
+• Tax assessment and classification details
+• Documented environmental constraints (wetlands, floodplains)
+• Municipality-specific land use characteristics
+• Any circumstances of the sale (estate, distressed, etc.)
+
+Provide only verifiable facts with sources. Be specific and actionable for valuation purposes. 2-3 sentences.`;
 
     try {
       await navigator.clipboard.writeText(prompt);
@@ -758,219 +1476,179 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
   };
 
   const removeSale = (saleId) => {
-    setVacantSales(prev => prev.filter(s => s.id !== saleId));
+    // Track exclusion like Method 2 (don't remove from array entirely)
+    setMethod1ExcludedSales(prev => new Set([...prev, saleId]));
     setIncludedSales(prev => {
       const newSet = new Set(prev);
       newSet.delete(saleId);
       return newSet;
     });
+
+    console.log('🗑️ Sale removed and tracked as excluded:', saleId);
   };
 
-  // ========== ALLOCATION STUDY FUNCTIONS ==========
+  // ========== ALLOCATION STUDY FUNCTIONS - REBUILT ==========
   const loadAllocationStudyData = useCallback(() => {
     if (!cascadeConfig.normal.prime) return;
 
-    // Process vacant sales by VCS and Year
-    const vcsSiteValuesByYear = {};
+    console.log('🏠 Loading allocation study data - individual sale approach');
 
-    // Group vacant sales by VCS and Year
+    // Process each individual vacant sale (no grouping)
+    const processedVacantSales = [];
+
     vacantSales.filter(s => includedSales.has(s.id)).forEach(sale => {
       const year = new Date(sale.sales_date).getFullYear();
       const vcs = sale.new_vcs;
       const region = specialRegions[sale.id] || 'Normal';
-      
+
       if (!vcs) return;
-      
-      const key = `${vcs}_${year}_${region}`;
-      if (!vcsSiteValuesByYear[key]) {
-        vcsSiteValuesByYear[key] = {
-          vcs,
-          year,
-          region,
-          sales: []
-        };
-      }
-      
-      // Calculate site value for this sale
+
+      // Calculate site value for this individual sale
       const acres = sale.totalAcres || parseFloat(calculateAcreage(sale));
       const cascadeRates = region === 'Normal' ? cascadeConfig.normal : cascadeConfig.special[region];
-      
-      if (!cascadeRates) return;
-      
-      let remainingAcres = acres;
-      let rawLandValue = 0;
-      
-      // Apply cascade calculation
-      if (cascadeRates.prime) {
-        const primeAcres = Math.min(remainingAcres, cascadeRates.prime.max || 1);
-        rawLandValue += primeAcres * (cascadeRates.prime.rate || 0);
-        remainingAcres -= primeAcres;
+
+      if (!cascadeRates) {
+        console.warn(`⚠️ Missing cascade rates for region "${region}" on sale ${sale.property_block}/${sale.property_lot}`);
+        return;
       }
-      
-      if (cascadeRates.secondary && remainingAcres > 0) {
-        const secondaryMax = (cascadeRates.secondary.max || 5) - (cascadeRates.prime?.max || 1);
-        const secondaryAcres = Math.min(remainingAcres, secondaryMax);
-        rawLandValue += secondaryAcres * (cascadeRates.secondary.rate || 0);
-        remainingAcres -= secondaryAcres;
+
+      // Log special region usage
+      if (region !== 'Normal') {
+        console.log(`🌟 Using special region "${region}" rates for sale ${sale.property_block}/${sale.property_lot}:`, {
+          primeRate: cascadeRates.prime?.rate,
+          secondaryRate: cascadeRates.secondary?.rate,
+          excessRate: cascadeRates.excess?.rate
+        });
       }
-      
-      if (cascadeRates.excess && remainingAcres > 0) {
-        const excessMax = (cascadeRates.excess.max || 10) - (cascadeRates.secondary?.max || 5);
-        const excessAcres = Math.min(remainingAcres, excessMax);
-        rawLandValue += excessAcres * (cascadeRates.excess.rate || 0);
-        remainingAcres -= excessAcres;
-      }
-      
-      if (cascadeRates.residual && remainingAcres > 0) {
-        rawLandValue += remainingAcres * (cascadeRates.residual.rate || 0);
-      }
-      
+
+      // Apply cascade calculation to get raw land value
+      const rawLandValue = calculateRawLandValue(acres, cascadeRates);
       const siteValue = sale.sales_price - rawLandValue;
-      
-      // Only include positive site values
-      if (siteValue > 0) {
-        vcsSiteValuesByYear[key].sales.push({
-          id: sale.id,
-          block: sale.property_block,
-          lot: sale.property_lot,
-          price: sale.sales_price,
-          acres,
-          rawLandValue,
-          siteValue
-        });
-      }
-    });
 
-    // Calculate average site values per VCS/Year
-    const processedVacant = [];
-    const siteValuesByVCS = {};
+      // Find improved sales for this sale's year
+      const improvedSalesForYear = properties.filter(prop => {
+        const isResidential = prop.property_m4_class === '2' || prop.property_m4_class === '3A';
+        const hasValidSale = prop.sales_date && prop.sales_price && prop.sales_price > 0;
+        const hasBuilding = prop.asset_year_built && prop.asset_year_built > 0;
+        const hasValues = prop.values_mod_land > 0 && prop.values_mod_total > 0;
+        const sameYear = new Date(prop.sales_date).getFullYear() === year;
+        const hasValidTypeUse = prop.asset_type_use && prop.asset_type_use.toString().startsWith('1');
 
-    Object.values(vcsSiteValuesByYear).forEach(group => {
-      if (group.sales.length === 0) return;
-      
-      const avgSiteValue = group.sales.reduce((sum, s) => sum + s.siteValue, 0) / group.sales.length;
-      
-      // Add individual sales to vacant test
-      group.sales.forEach(sale => {
-        processedVacant.push({
-          ...sale,
-          vcs: group.vcs,
-          year: group.year,
-          region: group.region,
-          avgSiteValue
-        });
+        return isResidential && hasValidSale && hasBuilding && hasValues && sameYear && hasValidTypeUse;
       });
-      
-      // Store for improved test
-      if (!siteValuesByVCS[group.vcs]) {
-        siteValuesByVCS[group.vcs] = {};
-      }
-      siteValuesByVCS[group.vcs][`${group.year}_${group.region}`] = avgSiteValue;
-    });
 
-    setVacantTestSales(processedVacant);
-    setVcsSiteValues(siteValuesByVCS);
-    loadImprovedSales(siteValuesByVCS);
-  }, [cascadeConfig, vacantSales, includedSales, specialRegions, calculateAcreage]);
-
-  const loadImprovedSales = useCallback((siteValues) => {
-    if (!properties || Object.keys(siteValues).length === 0) return;
-
-    // Group improved sales by VCS and Year
-    const improvedByVCSYear = {};
-
-    properties.forEach(prop => {
-      const isResidential = prop.property_m4_class === '2' || prop.property_m4_class === '3A';
-      const hasValidSale = prop.sales_date && prop.sales_price && prop.sales_price > 0;
-      const hasBuilding = prop.asset_year_built && prop.asset_year_built > 0;
-      const hasValues = prop.values_mod_land > 0 && prop.values_mod_total > 0;
-      
-      if (!isResidential || !hasValidSale || !hasBuilding || !hasValues) return;
-      
-      const year = new Date(prop.sales_date).getFullYear();
-      const vcs = prop.new_vcs;
-      
-      if (!vcs || !siteValues[vcs]) return;
-      
-      const key = `${vcs}_${year}`;
-      if (!improvedByVCSYear[key]) {
-        improvedByVCSYear[key] = {
-          vcs,
-          year,
-          properties: []
-        };
+      if (improvedSalesForYear.length === 0) {
+        console.log(`⚠️ No improved sales found for year ${year} (with type_use starting with '1')`);
+        return;
       }
-      
-      improvedByVCSYear[key].properties.push(prop);
-    });
 
-    // Process each VCS/Year group
-    const processed = [];
+      console.log(`✅ Found ${improvedSalesForYear.length} improved sales for year ${year} with type_use starting with '1'`);
 
-    Object.values(improvedByVCSYear).forEach(group => {
-      if (group.properties.length === 0) return;
-      
-      // Calculate averages for the group
-      const avgPrice = group.properties.reduce((sum, p) => sum + p.sales_price, 0) / group.properties.length;
-      const avgAcres = group.properties.reduce((sum, p) => sum + parseFloat(calculateAcreage(p)), 0) / group.properties.length;
-      
-      // Get current allocation from assessment records
-      const currentAllocs = group.properties.map(p => p.values_mod_land / p.values_mod_total);
-      const currentAllocation = currentAllocs.reduce((sum, a) => sum + a, 0) / currentAllocs.length;
-      
-      // Calculate recommended allocation using cascade and site value
-      const region = 'Normal'; // Default for improved sales
-      const cascadeRates = cascadeConfig.normal;
-      
-      let remainingAcres = avgAcres;
-      let rawLandValue = 0;
-      
-      // Apply cascade
-      if (cascadeRates.prime) {
-        const primeAcres = Math.min(remainingAcres, cascadeRates.prime.max || 1);
-        rawLandValue += primeAcres * (cascadeRates.prime.rate || 0);
-        remainingAcres -= primeAcres;
-      }
-      
-      if (cascadeRates.secondary && remainingAcres > 0) {
-        const secondaryMax = (cascadeRates.secondary.max || 5) - (cascadeRates.prime?.max || 1);
-        const secondaryAcres = Math.min(remainingAcres, secondaryMax);
-        rawLandValue += secondaryAcres * (cascadeRates.secondary.rate || 0);
-        remainingAcres -= secondaryAcres;
-      }
-      
-      if (cascadeRates.excess && remainingAcres > 0) {
-        const excessMax = (cascadeRates.excess.max || 10) - (cascadeRates.secondary?.max || 5);
-        const excessAcres = Math.min(remainingAcres, excessMax);
-        rawLandValue += excessAcres * (cascadeRates.excess.rate || 0);
-        remainingAcres -= excessAcres;
-      }
-      
-      if (cascadeRates.residual && remainingAcres > 0) {
-        rawLandValue += remainingAcres * (cascadeRates.residual.rate || 0);
-      }
-      
-      // Get site value for this VCS/Year
-      const siteValue = siteValues[group.vcs][`${group.year}_Normal`] || 0;
-      const totalLandValue = rawLandValue + siteValue;
-      const recommendedAllocation = avgPrice > 0 ? totalLandValue / avgPrice : 0;
-      
-      processed.push({
-        vcs: group.vcs,
-        year: group.year,
-        salesCount: group.properties.length,
-        avgPrice: Math.round(avgPrice),
-        avgAcres: avgAcres.toFixed(2),
-        rawLandValue: Math.round(rawLandValue),
-        siteValue: Math.round(siteValue),
-        totalLandValue: Math.round(totalLandValue),
+      // Calculate averages for this year's improved sales
+      const avgImprovedPrice = improvedSalesForYear.reduce((sum, p) => sum + p.sales_price, 0) / improvedSalesForYear.length;
+      const avgImprovedAcres = improvedSalesForYear.reduce((sum, p) => sum + parseFloat(calculateAcreage(p)), 0) / improvedSalesForYear.length;
+
+      // Calculate current allocation for this year
+      const currentAllocs = improvedSalesForYear.map(p => p.values_mod_land / p.values_mod_total);
+      const avgCurrentAllocation = currentAllocs.reduce((sum, a) => sum + a, 0) / currentAllocs.length;
+
+      // Calculate new land value using this sale's site value + improved sales average raw land
+      const improvedRawLandValue = calculateRawLandValue(avgImprovedAcres, cascadeConfig.normal);
+      const totalLandValue = improvedRawLandValue + siteValue;
+
+      // Calculate recommended allocation
+      const recommendedAllocation = avgImprovedPrice > 0 ? totalLandValue / avgImprovedPrice : 0;
+
+      processedVacantSales.push({
+        // Vacant sale info
+        id: sale.id,
+        vcs,
+        year,
+        region,
+        block: sale.property_block,
+        lot: sale.property_lot,
+        vacantPrice: sale.sales_price,
+        acres,
+        rawLandValue,
+        siteValue,
+
+        // Improved sales info for this year
+        improvedSalesCount: improvedSalesForYear.length,
+        avgImprovedPrice: avgImprovedPrice,
+        avgImprovedAcres: avgImprovedAcres.toFixed(2),
+        improvedRawLandValue: improvedRawLandValue,
+        totalLandValue: totalLandValue,
+
+        // Allocation calculations
+        currentAllocation: avgCurrentAllocation,
         recommendedAllocation,
-        currentAllocation
+
+        // Status
+        isPositive: siteValue > 0 && recommendedAllocation > 0
       });
     });
 
-    setImprovedTestSales(processed);
-  }, [properties, calculateAcreage, cascadeConfig]);
+    console.log('🏠 Processed allocation data:', {
+      totalVacantSales: processedVacantSales.length,
+      positiveSales: processedVacantSales.filter(s => s.isPositive).length,
+      negativeSales: processedVacantSales.filter(s => !s.isPositive).length
+    });
+
+    setVacantTestSales(processedVacantSales);
+
+    // Calculate overall recommended allocation (positive sales only)
+    const positiveSales = processedVacantSales.filter(s => s.isPositive);
+    if (positiveSales.length > 0) {
+      const totalLandValue = positiveSales.reduce((sum, s) => sum + s.totalLandValue, 0);
+      const totalSalePrice = positiveSales.reduce((sum, s) => sum + s.avgImprovedPrice, 0);
+      const overallRecommended = totalSalePrice > 0 ? (totalLandValue / totalSalePrice) * 100 : 0;
+
+      console.log('🎯 Overall recommended allocation:', {
+        positiveSalesCount: positiveSales.length,
+        totalLandValue,
+        totalSalePrice,
+        recommendedPercent: overallRecommended.toFixed(1)
+      });
+    }
+  }, [cascadeConfig, vacantSales, includedSales, specialRegions, calculateAcreage, properties]);
+
+  // Helper function to calculate raw land value using cascade rates
+  const calculateRawLandValue = (acres, cascadeRates) => {
+    let remainingAcres = acres;
+    let rawLandValue = 0;
+    const breakdown = [];
+
+    // TIER 1: First acre at prime rate ($15,000)
+    if (cascadeRates.prime && remainingAcres > 0) {
+      const tier1Acres = Math.min(remainingAcres, 1);
+      const tier1Value = tier1Acres * (cascadeRates.prime.rate || 0);
+      rawLandValue += tier1Value;
+      remainingAcres -= tier1Acres;
+      breakdown.push(`Tier 1 (0-1 acre): ${tier1Acres.toFixed(2)} × $${cascadeRates.prime.rate || 0} = $${tier1Value.toFixed(0)}`);
+    }
+
+    // TIER 2: Acres 1-5 at secondary rate ($10,000) - that's 4 acres total
+    if (cascadeRates.secondary && remainingAcres > 0) {
+      const tier2Acres = Math.min(remainingAcres, 4); // Only 4 acres in this tier (1-5)
+      const tier2Value = tier2Acres * (cascadeRates.secondary.rate || 0);
+      rawLandValue += tier2Value;
+      remainingAcres -= tier2Acres;
+      breakdown.push(`Tier 2 (1-5 acres): ${tier2Acres.toFixed(2)} × $${cascadeRates.secondary.rate || 0} = $${tier2Value.toFixed(0)}`);
+    }
+
+    // TIER 3: All remaining acres above 5 at excess rate ($5,000)
+    if (cascadeRates.excess && remainingAcres > 0) {
+      const tier3Value = remainingAcres * (cascadeRates.excess.rate || 0);
+      rawLandValue += tier3Value;
+      breakdown.push(`Tier 3 (>5 acres): ${remainingAcres.toFixed(2)} × $${cascadeRates.excess.rate || 0} = $${tier3Value.toFixed(0)}`);
+      remainingAcres = 0;
+    }
+
+    console.log(`🔢 Raw land calculation for ${acres} acres:`, breakdown.join(' + '), `= $${rawLandValue.toFixed(0)}`);
+
+    return rawLandValue;
+  };
+
 
   const getUniqueRegions = useCallback(() => {
     const regions = new Set(['Normal']);
@@ -980,40 +1658,46 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
 
   const getUniqueYears = useCallback(() => {
     const years = new Set();
-    [...vacantTestSales, ...improvedTestSales].forEach(sale => {
+    vacantTestSales.forEach(sale => {
       if (sale.year) years.add(sale.year);
     });
     return Array.from(years).sort((a, b) => b - a);
-  }, [vacantTestSales, improvedTestSales]);
+  }, [vacantTestSales]);
 
   const getUniqueVCS = useCallback(() => {
     const vcs = new Set();
-    [...vacantTestSales, ...improvedTestSales].forEach(sale => {
+    vacantTestSales.forEach(sale => {
       if (sale.vcs) vcs.add(sale.vcs);
     });
     return Array.from(vcs).sort();
-  }, [vacantTestSales, improvedTestSales]);
+  }, [vacantTestSales]);
 
   const calculateAllocationStats = useCallback((region = null) => {
-    let filtered = improvedTestSales;
-    
+    // Use only positive sales for final calculation
+    let filtered = vacantTestSales.filter(s => s.isPositive);
+
     if (region && region !== 'all') {
       filtered = filtered.filter(s => s.region === region);
     }
-    
+
     if (filtered.length === 0) return null;
-    
+
+    // Calculate overall recommended allocation (sum of land values / sum of sale prices)
+    const totalLandValue = filtered.reduce((sum, s) => sum + s.totalLandValue, 0);
+    const totalSalePrice = filtered.reduce((sum, s) => sum + s.avgImprovedPrice, 0);
+    const overallRecommended = totalSalePrice > 0 ? (totalLandValue / totalSalePrice) * 100 : 0;
+
+    // Individual allocations for range analysis
     const allocations = filtered.map(s => s.recommendedAllocation * 100);
-    const avg = allocations.reduce((sum, a) => sum + a, 0) / allocations.length;
     const within25to40 = allocations.filter(a => a >= 25 && a <= 40).length;
-    const percentInRange = (within25to40 / allocations.length) * 100;
-    
+    const percentInRange = allocations.length > 0 ? (within25to40 / allocations.length) * 100 : 0;
+
     return {
-      averageAllocation: avg.toFixed(1),
+      averageAllocation: overallRecommended.toFixed(1),
       percentInTargetRange: percentInRange.toFixed(1),
       totalSales: filtered.length
     };
-  }, [improvedTestSales]);
+  }, [vacantTestSales]);
   // ========== VCS SHEET FUNCTIONS - ENHANCED ==========
   const loadVCSPropertyCounts = useCallback(() => {
     if (!properties) return;
@@ -1056,11 +1740,11 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
         
         // Collect averages for residential with valid sales
         if (prop.sales_price > 0 && prop.sales_date) {
-          const saleYear = new Date(prop.sales_date).getFullYear();
-          const currentYear = new Date().getFullYear();
-          
-          // Last 3 years of sales
-          if (currentYear - saleYear <= 3) {
+          const saleDate = new Date(prop.sales_date);
+          const octoberFirstThreeYearsPrior = getOctoberFirstThreeYearsPrior();
+
+          // Sales from October 1st three years prior to present
+          if (saleDate >= octoberFirstThreeYearsPrior) {
             if (prop.values_norm_time > 0) avgNormTime[prop.new_vcs].push(prop.values_norm_time);
             if (prop.values_norm_size > 0) avgNormSize[prop.new_vcs].push(prop.values_norm_size);
             
@@ -1151,64 +1835,121 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
 
   const calculateVCSRecommendedSites = useCallback((avgNormTimes, counts) => {
     if (!targetAllocation || !cascadeConfig.normal.prime) return;
-    
+
     const recommendedSites = {};
-    
+
     Object.keys(avgNormTimes).forEach(vcs => {
       // Only calculate for residential VCS
       if (counts[vcs].residential === 0) return;
-      
+
       const avgNormTime = avgNormTimes[vcs];
       if (!avgNormTime) return;
-      
+
       // Get average lot size for this VCS
-      const vcsProps = properties.filter(p => 
-        p.new_vcs === vcs && 
+      const vcsProps = properties.filter(p =>
+        p.new_vcs === vcs &&
         (p.property_m4_class === '2' || p.property_m4_class === '3A')
       );
-      
+
       if (vcsProps.length === 0) return;
-      
+
       const avgAcres = vcsProps.reduce((sum, p) => sum + parseFloat(calculateAcreage(p)), 0) / vcsProps.length;
-      
-      // Apply cascade to get raw land value
-      let remainingAcres = avgAcres;
-      let rawLandValue = 0;
-      const cascadeRates = cascadeConfig.normal;
-      
-      if (cascadeRates.prime) {
-        const primeAcres = Math.min(remainingAcres, cascadeRates.prime.max || 1);
-        rawLandValue += primeAcres * (cascadeRates.prime.rate || 0);
-        remainingAcres -= primeAcres;
-      }
-      
-      if (cascadeRates.secondary && remainingAcres > 0) {
-        const secondaryMax = (cascadeRates.secondary.max || 5) - (cascadeRates.prime?.max || 1);
-        const secondaryAcres = Math.min(remainingAcres, secondaryMax);
-        rawLandValue += secondaryAcres * (cascadeRates.secondary.rate || 0);
-        remainingAcres -= secondaryAcres;
-      }
-      
-      if (cascadeRates.excess && remainingAcres > 0) {
-        const excessMax = (cascadeRates.excess.max || 10) - (cascadeRates.secondary?.max || 5);
-        const excessAcres = Math.min(remainingAcres, excessMax);
-        rawLandValue += excessAcres * (cascadeRates.excess.rate || 0);
-        remainingAcres -= excessAcres;
-      }
-      
-      if (cascadeRates.residual && remainingAcres > 0) {
-        rawLandValue += remainingAcres * (cascadeRates.residual.rate || 0);
-      }
-      
+
+      // Use corrected cascade logic
+      const rawLandValue = calculateRawLandValue(avgAcres, cascadeConfig.normal);
+
       // Calculate site value using target allocation
       const totalLandValue = avgNormTime * (parseFloat(targetAllocation) / 100);
       const siteValue = totalLandValue - rawLandValue;
-      
-      recommendedSites[vcs] = Math.round(siteValue);
+
+      recommendedSites[vcs] = siteValue; // No rounding - store exact value
     });
-    
+
     setVcsRecommendedSites(recommendedSites);
-  }, [targetAllocation, cascadeConfig, properties, calculateAcreage]);
+  }, [targetAllocation, cascadeConfig, properties, calculateAcreage, calculateRawLandValue, vcsTypes]);
+
+
+  const calculateVCSRecommendedSitesWithTarget = useCallback(() => {
+    if (!targetAllocation || !cascadeConfig.normal.prime || !properties) {
+      console.log('❌ Cannot calculate VCS recommended sites: missing data');
+      return;
+    }
+
+    console.log('🎯 Calculating VCS recommended site values with target allocation:', targetAllocation + '%');
+
+    const recommendedSites = {};
+    const octoberFirstThreeYearsPrior = getOctoberFirstThreeYearsPrior();
+
+    // Get all VCS from properties
+    const allVCS = new Set(properties.map(p => p.new_vcs).filter(vcs => vcs));
+
+    allVCS.forEach(vcs => {
+      // Only calculate for VCS with residential properties
+      const residentialProps = properties.filter(p =>
+        p.new_vcs === vcs &&
+        (p.property_m4_class === '2' || p.property_m4_class === '3A')
+      );
+
+      if (residentialProps.length === 0) return;
+
+      // Get 3 years of relevant sales for this VCS
+      const relevantSales = residentialProps.filter(prop => {
+        const hasValidSale = prop.sales_date && prop.sales_price > 0;
+        const isWithinThreeYears = new Date(prop.sales_date) >= octoberFirstThreeYearsPrior;
+        const hasValidTypeUse = prop.asset_type_use && prop.asset_type_use.toString().startsWith('1');
+
+        return hasValidSale && isWithinThreeYears && hasValidTypeUse;
+      });
+
+      if (relevantSales.length === 0) {
+        console.log(`⚠️ No relevant sales found for VCS ${vcs} in past 3 years`);
+        return;
+      }
+
+      // Calculate average sale price from relevant sales
+      const avgSalePrice = relevantSales.reduce((sum, p) => sum + p.sales_price, 0) / relevantSales.length;
+
+      // Check if this VCS is a condo type
+      const vcsType = vcsTypes[vcs] || 'Residential-Typical';
+      const isCondo = vcsType.toLowerCase().includes('condo');
+
+      let siteValue;
+
+      if (isCondo) {
+        // For condos: recommended site = target allocation % × average sale price
+        siteValue = avgSalePrice * (parseFloat(targetAllocation) / 100);
+        console.log(`🏢 VCS ${vcs} (CONDO):`, {
+          relevantSalesCount: relevantSales.length,
+          avgSalePrice: Math.round(avgSalePrice),
+          targetAllocation: targetAllocation + '%',
+          recommendedSiteValue: Math.round(siteValue),
+          note: 'No lot size calculation for condos'
+        });
+      } else {
+        // For regular properties: calculate with lot size and cascade rates
+        const avgAcres = relevantSales.reduce((sum, p) => sum + parseFloat(calculateAcreage(p)), 0) / relevantSales.length;
+        const totalLandValue = avgSalePrice * (parseFloat(targetAllocation) / 100);
+        const rawLandValue = calculateRawLandValue(avgAcres, cascadeConfig.normal);
+        siteValue = totalLandValue - rawLandValue;
+
+        console.log(`🏠 VCS ${vcs}:`, {
+          relevantSalesCount: relevantSales.length,
+          avgSalePrice: Math.round(avgSalePrice),
+          avgAcres: avgAcres.toFixed(2),
+          targetAllocation: targetAllocation + '%',
+          totalLandValue: Math.round(totalLandValue),
+          rawLandValue: Math.round(rawLandValue),
+          recommendedSiteValue: Math.round(siteValue)
+        });
+      }
+
+      recommendedSites[vcs] = siteValue; // No rounding - store exact value
+    });
+
+    setVcsRecommendedSites(recommendedSites);
+    console.log('✅ VCS recommended site values updated:', Object.keys(recommendedSites).length, 'VCS areas');
+
+  }, [targetAllocation, cascadeConfig, properties, calculateAcreage, calculateRawLandValue, vcsTypes]);
 
   const formatPageRanges = (pages) => {
     if (pages.length === 0) return '';
@@ -1249,6 +1990,13 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
     setVcsTypes(prev => ({
       ...prev,
       [vcs]: type
+    }));
+  };
+
+  const toggleFieldCollapse = (fieldName) => {
+    setCollapsedFields(prev => ({
+      ...prev,
+      [fieldName]: !prev[fieldName]
     }));
   };
 
@@ -1451,9 +2199,111 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
     setCustomLocationCodes(prev => [...prev, newCode]);
   };
 
+  // ========== SAVE TARGET ALLOCATION FUNCTION ==========
+  const saveTargetAllocation = async () => {
+    if (!jobData?.id) {
+      console.log('❌ Save target allocation cancelled: No job ID');
+      alert('Error: No job ID found. Cannot save target allocation.');
+      return;
+    }
+
+    if (!targetAllocation || targetAllocation === '') {
+      console.log('❌ Save target allocation cancelled: No target allocation value');
+      alert('Please enter a target allocation percentage before saving.');
+      return;
+    }
+
+    const targetValue = parseFloat(targetAllocation);
+    if (isNaN(targetValue) || targetValue <= 0 || targetValue > 100) {
+      console.log('❌ Save target allocation cancelled: Invalid value:', targetAllocation);
+      alert('Please enter a valid target allocation percentage between 1 and 100.');
+      return;
+    }
+
+    console.log('💾 Saving target allocation:', `${targetValue}%`, 'for job:', jobData.id);
+
+    try {
+      // Check if record exists first
+      const { data: existing, error: checkError } = await supabase
+        .from('market_land_valuation')
+        .select('id, target_allocation, allocation_study')
+        .eq('job_id', jobData.id)
+        .maybeSingle();
+
+      if (checkError && checkError.code !== 'PGRST116') {
+        console.error('❌ Error checking for existing record:', checkError);
+        throw checkError;
+      }
+
+      let result;
+      if (existing) {
+        console.log('📝 Updating existing record with target allocation...');
+        result = await supabase
+          .from('market_land_valuation')
+          .update({
+            target_allocation: targetValue,
+            updated_at: new Date().toISOString()
+          })
+          .eq('job_id', jobData.id);
+      } else {
+        console.log('➕ Creating new record with target allocation...');
+        result = await supabase
+          .from('market_land_valuation')
+          .insert({
+            job_id: jobData.id,
+            target_allocation: targetValue,
+            updated_at: new Date().toISOString()
+          });
+      }
+
+      if (result.error) {
+        console.error('❌ Database error saving target allocation:', result.error);
+        throw result.error;
+      }
+
+      console.log('✅ Target allocation saved successfully to database');
+
+      // Update last saved timestamp
+      setLastSaved(new Date());
+
+      // Show success feedback
+      alert(`Target allocation ${targetValue}% saved successfully!`);
+
+      // Trigger VCS recommended sites calculation
+      console.log('🔄 Triggering VCS recommended sites calculation...');
+      if (cascadeConfig.normal.prime && properties?.length > 0) {
+        calculateVCSRecommendedSitesWithTarget();
+      } else {
+        console.log('⚠️ Cannot calculate VCS recommended sites: missing cascade config or properties');
+      }
+
+    } catch (error) {
+      console.error('❌ Error saving target allocation:', error);
+      console.error('Error details:', {
+        message: error.message,
+        code: error.code,
+        details: error.details
+      });
+      alert(`Failed to save target allocation: ${error.message}`);
+    }
+  };
+
   // ========== SAVE & EXPORT FUNCTIONS ==========
   const saveAnalysis = async () => {
-    if (!jobData?.id) return;
+    if (!jobData?.id) {
+      console.log('❌ Save cancelled: No job ID');
+      return;
+    }
+
+    console.log('💾 Starting save...', {
+      vacantSalesCount: vacantSales.length,
+      excludedSalesCount: method2ExcludedSales.size,
+      includedSalesCount: includedSales.size,
+      specialCategories: cascadeConfig.specialCategories,
+      normalRates: cascadeConfig.normal,
+      salesWithCategories: Object.keys(saleCategories).length,
+      checkboxStates: vacantSales.map(s => ({ id: s.id, block: s.property_block, lot: s.property_lot, included: includedSales.has(s.id) }))
+    });
 
     setIsSaving(true);
 
@@ -1476,23 +2326,27 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
             is_package: s.packageData?.is_package || false,
             package_properties: s.packageData?.properties || []
           })),
+          excluded_sales: Array.from(method1ExcludedSales), // Track Method 1 exclusions like Method 2
           rates: calculateRates(),
           rates_by_region: getUniqueRegions().map(region => ({
             region,
             rates: calculateRates(region)
           }))
         },
-        bracket_analysis: bracketAnalysis,
-        method2_summary: method2Summary,
+        bracket_analysis: {
+          ...bracketAnalysis,
+          excluded_sales: Array.from(method2ExcludedSales),
+          summary: method2Summary
+        },
         cascade_rates: cascadeConfig,
+        target_allocation: targetAllocation,
         allocation_study: {
           vcs_site_values: vcsSiteValues,
           actual_allocations: actualAllocations,
-          target_allocation: targetAllocation,
           current_overall_allocation: currentOverallAllocation,
           stats: calculateAllocationStats()
         },
-        vcs_sheet_data: {
+        worksheet_data: {
           property_counts: vcsPropertyCounts,
           zoning_data: vcsZoningData,
           manual_site_values: vcsManualSiteValues,
@@ -1511,67 +2365,359 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
         },
         updated_at: new Date().toISOString()
       };
-      
-      // Check if record exists
-      const { data: existing } = await supabase
+
+      // Debug: Log the exact data being saved
+      console.log('💾 Data structure being saved:', {
+        cascadeConfigLocation1: analysisData.raw_land_config.cascade_config.specialCategories,
+        cascadeConfigLocation2: analysisData.cascade_rates.specialCategories,
+        salesData: analysisData.vacant_sales_analysis.sales.slice(0, 3), // First 3 for brevity
+        totalSales: analysisData.vacant_sales_analysis.sales.length
+      });
+
+      // Check if record exists - don't use .single() to avoid errors
+      const { data: existing, error: checkError } = await supabase
         .from('market_land_valuation')
         .select('id')
         .eq('job_id', jobData.id)
-        .single();
-      
+        .maybeSingle();
+
+      // If there was an error checking, log it but try to proceed with upsert
+      if (checkError && checkError.code !== 'PGRST116') {
+        console.warn('⚠️ Error checking for existing record:', checkError);
+      }
+
       if (existing) {
-        await supabase
+        console.log('📝 Updating existing record...');
+        const { error } = await supabase
           .from('market_land_valuation')
           .update(analysisData)
           .eq('job_id', jobData.id);
+        if (error) throw error;
       } else {
-        await supabase
+        console.log('➕ Creating new record...');
+        // Use upsert to handle race conditions
+        const { error } = await supabase
           .from('market_land_valuation')
-          .insert(analysisData);
+          .upsert(analysisData, {
+            onConflict: 'job_id',
+            ignoreDuplicates: false
+          });
+        if (error) throw error;
       }
-      
+
+      console.log('✅ Save completed successfully');
       setLastSaved(new Date());
-      
+
       // Notify parent component
       if (onAnalysisUpdate) {
         onAnalysisUpdate(analysisData);
       }
     } catch (error) {
-      console.error('Error saving:', error);
+      console.error('��� Save failed:', error);
+      console.error('Error details:', {
+        message: error.message,
+        code: error.code,
+        details: error.details
+      });
       alert('Failed to save analysis. Please try again.');
     } finally {
       setIsSaving(false);
     }
   };
 
-  const exportToExcel = (type) => {
-    let csv = '';
-    const timestamp = new Date().toISOString().split('T')[0];
-    const municipality = jobData?.municipality || 'export';
-    const filename = `${type}_${municipality}_${timestamp}.csv`;
+  // Expose saveAnalysis to window for auto-save access (avoids hoisting issues)
+  window.landValuationSave = saveAnalysis;
 
-    if (type === 'land-rates') {
-      csv = exportLandRates();
-    } else if (type === 'allocation') {
-      csv = exportAllocation();
-    } else if (type === 'vcs-sheet') {
-      csv = exportVCSSheet();
-    } else if (type === 'eco-obs') {
-      csv = exportEconomicObsolescence();
-    } else if (type === 'complete') {
-      csv = exportCompleteAnalysis();
+  // Excel export functions need to be defined before being used
+  const exportVCSSheetExcel = () => {
+    // Create new workbook
+    const workbook = XLSX.utils.book_new();
+
+    // Create title row
+    const data = [];
+    data.push(['VCS VALUATION SHEET']);
+    data.push([]); // Empty row
+
+    // Build headers array
+    const headers = ['VCS', 'Total', 'Type', 'Description', 'Method', 'Typical Lot Size', 'Rec Site Value', 'Act Site Value'];
+
+    // Dynamic cascade headers
+    if (valuationMode === 'ff') {
+      headers.push('Standard Rate ($/FF)', 'Excess Rate ($/FF)');
+    } else {
+      headers.push('Prime Rate ($/Acre)', 'Secondary Rate ($/Acre)', 'Excess Rate ($/Acre)');
+      if (shouldShowResidualColumn) {
+        headers.push('Residual Rate ($/Acre)');
+      }
     }
 
-    // Create and download file
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
+    // Special category headers
+    headers.push('Wetlands Rate', 'Landlocked Rate', 'Conservation Rate', 'Avg Price (Time Norm)', 'Avg Price (Current)', 'CME Bracket', 'Zoning');
+    if (shouldShowKeyColumn) headers.push('Key Pages');
+    if (shouldShowMapColumn) headers.push('Map Pages');
+
+    data.push(headers);
+
+    // Add data rows
+    Object.keys(vcsSheetData).sort().forEach(vcs => {
+      const vcsData = vcsSheetData[vcs];
+      const type = vcsTypes[vcs] || 'Residential-Typical';
+      const description = vcsDescriptions[vcs] || getVCSDescription(vcs);
+      const recSite = vcsRecommendedSites[vcs] || 0;
+      const actSite = vcsManualSiteValues[vcs] || recSite;
+      const isResidential = type.startsWith('Residential');
+
+      // Get typical lot size
+      const vcsProps = properties?.filter(p =>
+        p.new_vcs === vcs && p.asset_lot_acre && p.asset_lot_acre > 0
+      ) || [];
+
+      let typicalLot = '';
+      if (vcsProps.length > 0) {
+        const avgAcres = vcsProps.reduce((sum, p) => sum + parseFloat(calculateAcreage(p)), 0) / vcsProps.length;
+        if (valuationMode === 'sf') {
+          typicalLot = Math.round(avgAcres * 43560);
+        } else {
+          typicalLot = Number(avgAcres.toFixed(2));
+        }
+      }
+
+      // Check special categories
+      const vcsSpecialCategories = isResidential ? {
+        wetlands: cascadeConfig.specialCategories.wetlands && (
+          vacantSales.some(s => s.new_vcs === vcs && saleCategories[s.id] === 'wetlands') ||
+          cascadeConfig.specialCategories.wetlands > 0
+        ),
+        landlocked: cascadeConfig.specialCategories.landlocked && (
+          vacantSales.some(s => s.new_vcs === vcs && saleCategories[s.id] === 'landlocked') ||
+          cascadeConfig.specialCategories.landlocked > 0
+        ),
+        conservation: cascadeConfig.specialCategories.conservation && (
+          vacantSales.some(s => s.new_vcs === vcs && saleCategories[s.id] === 'conservation') ||
+          cascadeConfig.specialCategories.conservation > 0
+        )
+      } : { wetlands: false, landlocked: false, conservation: false };
+
+      // Clean data
+      const cleanDescription = (description || '').substring(0, 100);
+      const cleanZoning = (vcsData.zoning || '').replace(/\n/g, ' ').substring(0, 50);
+
+      // Start building row
+      const row = [
+        vcs,
+        vcsData.counts?.total || 0,
+        type,
+        cleanDescription,
+        getMethodDisplay(type, description),
+        typicalLot,
+        recSite || '',
+        actSite || ''
+      ];
+
+      // Get cascade rates
+      let cascadeRates = cascadeConfig.normal;
+      const vcsSpecificConfig = Object.values(cascadeConfig.vcsSpecific || {}).find(config =>
+        config.vcsList?.includes(vcs)
+      );
+      if (vcsSpecificConfig) {
+        cascadeRates = vcsSpecificConfig.rates || cascadeConfig.normal;
+      } else {
+        const vcsInSpecialRegion = vacantSales.find(sale =>
+          sale.new_vcs === vcs && specialRegions[sale.id] && specialRegions[sale.id] !== 'Normal'
+        );
+        if (vcsInSpecialRegion && cascadeConfig.special?.[specialRegions[vcsInSpecialRegion.id]]) {
+          cascadeRates = cascadeConfig.special[specialRegions[vcsInSpecialRegion.id]];
+        }
+      }
+
+      // Add cascade rates
+      if (isResidential) {
+        if (valuationMode === 'ff') {
+          row.push(cascadeRates.standard?.rate || '', cascadeRates.excess?.rate || '');
+        } else {
+          row.push(
+            cascadeRates.prime?.rate || '',
+            cascadeRates.secondary?.rate || '',
+            cascadeRates.excess?.rate || ''
+          );
+          if (shouldShowResidualColumn) {
+            row.push(cascadeRates.residual?.rate || '');
+          }
+        }
+      } else {
+        // Empty cells for non-residential
+        if (valuationMode === 'ff') {
+          row.push('', '');
+        } else {
+          row.push('', '', '');
+          if (shouldShowResidualColumn) {
+            row.push('');
+          }
+        }
+      }
+
+      // Special category rates
+      row.push(
+        vcsSpecialCategories.wetlands && cascadeConfig.specialCategories.wetlands ? cascadeConfig.specialCategories.wetlands : '',
+        vcsSpecialCategories.landlocked && cascadeConfig.specialCategories.landlocked ? cascadeConfig.specialCategories.landlocked : '',
+        vcsSpecialCategories.conservation && cascadeConfig.specialCategories.conservation ? cascadeConfig.specialCategories.conservation : ''
+      );
+
+      // Price columns
+      row.push(
+        vcsData.avgNormTime || '',
+        vcsData.avgPrice || ''
+      );
+
+      // CME bracket
+      const cmeBracket = vcsData.avgPrice ? getCMEBracket(vcsData.avgPrice) : null;
+      row.push(cmeBracket ? cmeBracket.label : '');
+
+      // Zoning
+      row.push(cleanZoning);
+
+      // Optional columns
+      if (shouldShowKeyColumn) row.push(vcsData.keyPages || '');
+      if (shouldShowMapColumn) row.push(vcsData.mapPages || '');
+
+      data.push(row);
+    });
+
+    // Add summary section
+    data.push([]);
+    data.push(['SUMMARY INFORMATION']);
+    data.push([]);
+    data.push(['Municipality:', jobData?.municipality || '']);
+    data.push(['County:', jobData?.county || '']);
+    data.push(['Analysis Date:', new Date().toLocaleDateString()]);
+    data.push(['Valuation Method:', valuationMode.toUpperCase()]);
+    data.push(['Target Allocation:', targetAllocation ? `${targetAllocation}%` : 'Not Set']);
+
+    // Create worksheet
+    const worksheet = XLSX.utils.aoa_to_sheet(data);
+
+    // Set column widths
+    const colWidths = [
+      { wch: 8 },   // VCS
+      { wch: 8 },   // Total
+      { wch: 20 },  // Type
+      { wch: 25 },  // Description
+      { wch: 12 },  // Method
+      { wch: 15 },  // Typical Lot
+      { wch: 15 },  // Rec Site
+      { wch: 15 },  // Act Site
+    ];
+
+    // Add cascade rate column widths
+    if (valuationMode === 'ff') {
+      colWidths.push({ wch: 15 }, { wch: 15 });
+    } else {
+      colWidths.push({ wch: 15 }, { wch: 15 }, { wch: 15 });
+      if (shouldShowResidualColumn) {
+        colWidths.push({ wch: 15 });
+      }
+    }
+
+    // Add remaining column widths
+    colWidths.push(
+      { wch: 15 },  // Wetlands
+      { wch: 15 },  // Landlocked
+      { wch: 15 },  // Conservation
+      { wch: 18 },  // Avg Price (Time)
+      { wch: 18 },  // Avg Price
+      { wch: 12 },  // CME
+      { wch: 20 }   // Zoning
+    );
+
+    if (shouldShowKeyColumn) colWidths.push({ wch: 15 });
+    if (shouldShowMapColumn) colWidths.push({ wch: 15 });
+
+    worksheet['!cols'] = colWidths;
+
+    // Add worksheet to workbook
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'VCS Sheet');
+
+    return workbook;
+  };
+
+  // Simple CSV version for complete analysis
+  const exportVCSSheetCSV = () => {
+    let csv = 'VCS VALUATION SHEET\n';
+    csv += `Municipality: ${jobData?.municipality || ''}\n`;
+    csv += `County: ${jobData?.county || ''}\n`;
+    csv += `Date: ${new Date().toLocaleDateString()}\n\n`;
+
+    // Headers
+    csv += 'VCS,Total,Type,Description,Prime Rate,Secondary Rate,Excess Rate';
+    if (shouldShowResidualColumn) csv += ',Residual Rate';
+    csv += ',Wetlands Rate,Landlocked Rate,Conservation Rate,Avg Price,CME Bracket\n';
+
+    // Data rows
+    Object.keys(vcsSheetData).sort().forEach(vcs => {
+      const data = vcsSheetData[vcs];
+      const type = vcsTypes[vcs] || 'Residential-Typical';
+      const description = vcsDescriptions[vcs] || getVCSDescription(vcs);
+      const isResidential = type.startsWith('Residential');
+
+      // Get cascade rates
+      let cascadeRates = cascadeConfig.normal;
+      const vcsSpecificConfig = Object.values(cascadeConfig.vcsSpecific || {}).find(config =>
+        config.vcsList?.includes(vcs)
+      );
+      if (vcsSpecificConfig) {
+        cascadeRates = vcsSpecificConfig.rates || cascadeConfig.normal;
+      }
+
+      // Clean description for CSV
+      const cleanDescription = (description || '').replace(/"/g, '""').substring(0, 50);
+
+      csv += `"${vcs}",${data.counts?.total || 0},"${type}","${cleanDescription}",`;
+
+      // Cascade rates
+      if (isResidential) {
+        csv += `${cascadeRates.prime?.rate || ''},${cascadeRates.secondary?.rate || ''},${cascadeRates.excess?.rate || ''}`;
+        if (shouldShowResidualColumn) {
+          csv += `,${cascadeRates.residual?.rate || ''}`;
+        }
+      } else {
+        csv += ',,,';
+        if (shouldShowResidualColumn) csv += ',';
+      }
+
+      // Special categories
+      const vcsSpecialCategories = isResidential ? {
+        wetlands: cascadeConfig.specialCategories.wetlands,
+        landlocked: cascadeConfig.specialCategories.landlocked,
+        conservation: cascadeConfig.specialCategories.conservation
+      } : { wetlands: '', landlocked: '', conservation: '' };
+
+      csv += `,${vcsSpecialCategories.wetlands || ''},${vcsSpecialCategories.landlocked || ''},${vcsSpecialCategories.conservation || ''}`;
+
+      // Price and CME
+      const cmeBracket = data.avgPrice ? getCMEBracket(data.avgPrice) : null;
+      csv += `,${data.avgPrice || ''},"${cmeBracket ? cmeBracket.label : ''}"\n`;
+    });
+
+    return csv;
+  };
+
+  const exportToExcel = (type) => {
+    const timestamp = new Date().toISOString().split('T')[0];
+    const municipality = (jobData?.municipality || 'export').replace(/[^a-zA-Z0-9]/g, '_');
+    const filename = `${type}_${municipality}_${timestamp}.xlsx`;
+
+    let workbook;
+    if (type === 'vcs-sheet') {
+      workbook = exportVCSSheetExcel();
+    } else {
+      // For other types, create a simple workbook for now
+      workbook = XLSX.utils.book_new();
+      const worksheet = XLSX.utils.aoa_to_sheet([['Export type not yet converted to Excel format']]);
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Sheet1');
+    }
+
+    // Create and download Excel file
+    XLSX.writeFile(workbook, filename);
   };
 
   const exportLandRates = () => {
@@ -1670,94 +2816,26 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
       csv += '\n';
     }
     
-    // Vacant Land Test
-    csv += 'VACANT LAND TEST\n';
-    csv += 'VCS,Year,Region,Block,Lot,Sale Price,Acres,Raw Land,Site Value,Status\n';
-    
-    vacantTestSales.forEach(sale => {
-      const status = sale.siteValue > 0 ? 'Valid' : 'Excluded';
-      csv += `"${sale.vcs}",${sale.year},"${sale.region}","${sale.block}","${sale.lot}",${sale.price},${sale.acres.toFixed(2)},${sale.rawLandValue},${sale.siteValue},"${status}"\n`;
-    });
-    
-    // Improved Sales Test
-    csv += '\n\nIMPROVED SALES ALLOCATION TEST\n';
-    csv += 'VCS,Year,Sales Count,Avg Price,Avg Acres,Raw Land,Site Value,Total Land,Current %,Recommended %\n';
-    
-    improvedTestSales.forEach(sale => {
-      csv += `"${sale.vcs}",${sale.year},${sale.salesCount},${sale.avgPrice},${sale.avgAcres},${sale.rawLandValue},${sale.siteValue},${sale.totalLandValue},${(sale.currentAllocation * 100).toFixed(1)},${(sale.recommendedAllocation * 100).toFixed(1)}\n`;
-    });
-    
-    return csv;
-  };
+    // Individual Allocation Analysis
+    csv += 'INDIVIDUAL ALLOCATION ANALYSIS\n';
+    csv += 'VCS,Year,Region,Block/Lot,Vacant Price,Acres,Raw Land,Site Value,Improved Sales Count,Avg Improved Price,Avg Improved Acres,Improved Raw Land,Total Land Value,Current %,Recommended %,Status\n';
 
-  const exportVCSSheet = () => {
-    let csv = 'VCS VALUATION SHEET\n';
-    csv += `Municipality: ${jobData?.municipality || ''}\n`;
-    csv += `County: ${jobData?.county || ''}\n`;
-    csv += `Date: ${new Date().toLocaleDateString()}\n`;
-    csv += `Method: ${valuationMode.toUpperCase()}\n`;
-    csv += `Target Allocation: ${targetAllocation || 'Not Set'}%\n\n`;
-    
-    csv += 'VCS,Total,Type,Description,Method,Typical Lot,Rec Site,Act Site,';
-    
-    // Cascade headers based on mode
-    if (valuationMode === 'ff') {
-      csv += 'Standard FF,Excess FF,';
-    } else {
-      csv += 'Prime,Secondary,Excess,Residual,';
-    }
-    
-    csv += 'Avg Norm Time,Avg Norm Size,Avg Price,CME,Zoning,Key Pages,Map Pages\n';
-    
-    Object.keys(vcsSheetData).sort().forEach(vcs => {
-      const data = vcsSheetData[vcs];
-      const type = vcsTypes[vcs] || 'Residential-Typical';
-      const description = vcsDescriptions[vcs] || getVCSDescription(vcs);
-      const recSite = vcsRecommendedSites[vcs] || 0;
-      const actSite = vcsManualSiteValues[vcs] || recSite;
-      
-      // Skip non-residential types for cascade rates
-      const isResidential = !['Commercial', 'Industrial', 'Apartment', 'Special'].includes(type);
-      
-      // Get typical lot size
-      const vcsProps = properties.filter(p => 
-        p.new_vcs === vcs && 
-        (p.property_m4_class === '2' || p.property_m4_class === '3A')
-      );
-      const typicalLot = vcsProps.length > 0 ?
-        (vcsProps.reduce((sum, p) => sum + parseFloat(calculateAcreage(p)), 0) / vcsProps.length).toFixed(2) : '';
-      
-      csv += `"${vcs}",${data.counts.total},"${type}","${description}",${valuationMode},${typicalLot},${recSite},${actSite},`;
-      
-      // Cascade rates
-      if (isResidential) {
-        if (valuationMode === 'ff') {
-          csv += `${cascadeConfig.normal.standard?.rate || ''},${cascadeConfig.normal.excess?.rate || ''},`;
-        } else {
-          csv += `${cascadeConfig.normal.prime?.rate || ''},${cascadeConfig.normal.secondary?.rate || ''},${cascadeConfig.normal.excess?.rate || ''},${cascadeConfig.normal.residual?.rate || ''},`;
-        }
-      } else {
-        // Gray out cascade for non-residential
-        if (valuationMode === 'ff') {
-          csv += ',,';
-        } else {
-          csv += ',,,,';
-        }
-      }
-      
-      csv += `${data.avgNormTime || ''},${data.avgNormSize || ''},${data.avgPrice || ''},,`; // CME placeholder
-      csv += `"${data.zoning || ''}","${data.keyPages || ''}","${data.mapPages || ''}"\n`;
+    vacantTestSales.forEach(sale => {
+      const status = sale.isPositive ? 'Included' : 'Excluded';
+      csv += `"${sale.vcs}",${sale.year},"${sale.region}","${sale.block}/${sale.lot}",${sale.vacantPrice},${sale.acres.toFixed(2)},${sale.rawLandValue},${sale.siteValue},${sale.improvedSalesCount},${sale.avgImprovedPrice},${sale.avgImprovedAcres},${sale.improvedRawLandValue},${sale.totalLandValue},${(sale.currentAllocation * 100).toFixed(1)},${(sale.recommendedAllocation * 100).toFixed(1)},"${status}"\n`;
     });
-    
-    // Special Category Rates
-    if (Object.keys(cascadeConfig.specialCategories).length > 0) {
-      csv += '\n\nSPECIAL CATEGORY LAND RATES\n';
-      csv += 'Category,Rate\n';
-      Object.entries(cascadeConfig.specialCategories).forEach(([category, rate]) => {
-        if (rate !== null) {
-          csv += `"${category}",${rate}\n`;
-        }
-      });
+
+    // Summary of positive sales only
+    const positiveSales = vacantTestSales.filter(s => s.isPositive);
+    if (positiveSales.length > 0) {
+      csv += '\n\nSUMMARY (Positive Sales Only)\n';
+      csv += `Total Sales Included: ${positiveSales.length}\n`;
+      csv += `Total Sales Excluded: ${vacantTestSales.length - positiveSales.length}\n`;
+      csv += `Sum of Total Land Values: $${positiveSales.reduce((sum, s) => sum + s.totalLandValue, 0).toLocaleString()}\n`;
+      csv += `Sum of Improved Sale Prices: $${positiveSales.reduce((sum, s) => sum + s.avgImprovedPrice, 0).toLocaleString()}\n`;
+      const overallRecommended = positiveSales.reduce((sum, s) => sum + s.avgImprovedPrice, 0) > 0 ?
+        (positiveSales.reduce((sum, s) => sum + s.totalLandValue, 0) / positiveSales.reduce((sum, s) => sum + s.avgImprovedPrice, 0)) * 100 : 0;
+      csv += `Overall Recommended Allocation: ${overallRecommended.toFixed(1)}%\n`;
     }
     
     return csv;
@@ -1842,7 +2920,7 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
     csv += '\n' + '='.repeat(80) + '\n\n';
     csv += exportAllocation();
     csv += '\n' + '='.repeat(80) + '\n\n';
-    csv += exportVCSSheet();
+    csv += exportVCSSheetCSV();
     csv += '\n' + '='.repeat(80) + '\n\n';
     csv += exportEconomicObsolescence();
     
@@ -1880,13 +2958,18 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
   };
 
   const updateSpecialCategory = (category, rate) => {
-    setCascadeConfig(prev => ({
-      ...prev,
-      specialCategories: {
-        ...prev.specialCategories,
-        [category]: rate ? parseFloat(rate) : null
-      }
-    }));
+    console.log(`🔧 Updating special category: ${category} = ${rate}`);
+    setCascadeConfig(prev => {
+      const newConfig = {
+        ...prev,
+        specialCategories: {
+          ...prev.specialCategories,
+          [category]: rate ? parseFloat(rate) : null
+        }
+      };
+      console.log('🔧 New cascade config special categories:', newConfig.specialCategories);
+      return newConfig;
+    });
   };
 
   const addCustomCategory = (categoryName) => {
@@ -1899,12 +2982,280 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
     }));
   };
 
+  const updateVCSSpecificCascade = (vcsKey, tier, field, value) => {
+    setCascadeConfig(prev => ({
+      ...prev,
+      vcsSpecific: {
+        ...prev.vcsSpecific,
+        [vcsKey]: {
+          ...prev.vcsSpecific[vcsKey],
+          rates: {
+            ...prev.vcsSpecific[vcsKey]?.rates,
+            [tier]: {
+              ...prev.vcsSpecific[vcsKey]?.rates?.[tier],
+              [field]: value ? parseFloat(value) : null
+            }
+          }
+        }
+      }
+    }));
+  };
+
+  // ========== REACTIVE CATEGORY CALCULATIONS ==========
+  const categoryAnalysis = useMemo(() => {
+    // Calculate average rate for checked items by category
+    const checkedSales = vacantSales.filter(s => includedSales.has(s.id));
+
+    console.log('🔄 Recalculating category analysis');
+    console.log('��� Total vacant sales:', vacantSales.length);
+    console.log('📊 Checked sales count:', checkedSales.length);
+    console.log('📋 Included sales IDs:', Array.from(includedSales));
+    console.log('📋 Sale categories state:', saleCategories);
+    console.log('📋 Teardown sales in checked:', checkedSales.filter(s => saleCategories[s.id] === 'teardown').map(s => `${s.property_block}/${s.property_lot}`));
+    console.log('📋 Building lot sales in checked:', checkedSales.filter(s => saleCategories[s.id] === 'building_lot').map(s => `${s.property_block}/${s.property_lot}`));
+
+    // Helper function to calculate average for a category
+    const getCategoryAverage = (filterFn, categoryType) => {
+      const filtered = checkedSales.filter(filterFn);
+      if (filtered.length === 0) return { avg: 0, count: 0, avgLotSize: 0, method: 'none' };
+
+      // Calculate average lot size
+      const totalAcres = filtered.reduce((sum, s) => sum + s.totalAcres, 0);
+      const avgLotSizeAcres = totalAcres / filtered.length;
+
+      let avgLotSize;
+      if (valuationMode === 'acre') {
+        avgLotSize = avgLotSizeAcres.toFixed(2) + ' acres';
+      } else if (valuationMode === 'sf') {
+        avgLotSize = Math.round(avgLotSizeAcres * 43560).toLocaleString() + ' sq ft';
+      } else if (valuationMode === 'ff') {
+        avgLotSize = 'N/A ff'; // Front foot needs frontage data
+      }
+
+      // For constrained land types (wetlands, landlocked, conservation), use simple $/acre
+      if (categoryType === 'constrained') {
+        if (valuationMode === 'sf') {
+          const totalPrice = filtered.reduce((sum, s) => sum + s.sales_price, 0);
+          const totalSF = filtered.reduce((sum, s) => sum + (s.totalAcres * 43560), 0);
+          return {
+            avg: totalSF > 0 ? (totalPrice / totalSF).toFixed(2) : 0,
+            count: filtered.length,
+            avgLotSize,
+            method: 'simple'
+          };
+        } else {
+          const avgRate = filtered.reduce((sum, s) => sum + s.pricePerAcre, 0) / filtered.length;
+          return {
+            avg: Math.round(avgRate),
+            count: filtered.length,
+            avgLotSize,
+            method: 'simple'
+          };
+        }
+      }
+
+      // For developable land (raw land, building lot), use paired sales analysis
+      if (categoryType === 'developable' && filtered.length >= 2) {
+        // Sort by acreage for paired analysis
+        const sortedSales = [...filtered].sort((a, b) => a.totalAcres - b.totalAcres);
+
+        const pairedRates = [];
+
+        // Calculate incremental rates between pairs
+        for (let i = 0; i < sortedSales.length - 1; i++) {
+          for (let j = i + 1; j < sortedSales.length; j++) {
+            const smaller = sortedSales[i];
+            const larger = sortedSales[j];
+
+            const acreageDiff = larger.totalAcres - smaller.totalAcres;
+            const priceDiff = larger.sales_price - smaller.sales_price;
+
+            // Only exclude negative price differences - include all acreage differences
+            if (priceDiff > 0) {
+              const incrementalRate = priceDiff / acreageDiff;
+              pairedRates.push({
+                rate: incrementalRate,
+                smallerAcres: smaller.totalAcres,
+                largerAcres: larger.totalAcres,
+                priceDiff: priceDiff,
+                acreageDiff: acreageDiff,
+                properties: `${smaller.property_block}/${smaller.property_lot} vs ${larger.property_block}/${larger.property_lot}`
+              });
+            }
+          }
+        }
+
+        if (pairedRates.length > 0) {
+          // Use median to reduce outlier influence
+          const rates = pairedRates.map(p => p.rate).sort((a, b) => a - b);
+          const medianRate = rates.length % 2 === 0 ?
+            (rates[rates.length / 2 - 1] + rates[rates.length / 2]) / 2 :
+            rates[Math.floor(rates.length / 2)];
+
+          console.log(`��� ${categoryType} paired analysis:`, {
+            totalProperties: filtered.length,
+            possiblePairs: (filtered.length * (filtered.length - 1)) / 2,
+            validPairs: pairedRates.length,
+            filteredOut: (filtered.length * (filtered.length - 1)) / 2 - pairedRates.length,
+            rates: rates.map(r => Math.round(r)),
+            medianRate: Math.round(medianRate),
+            properties: pairedRates.map(p => p.properties),
+            acreageRanges: pairedRates.map(p => `${p.acreageDiff.toFixed(2)} acres`)
+          });
+
+          if (valuationMode === 'sf') {
+            return {
+              avg: (medianRate / 43560).toFixed(2),
+              count: filtered.length,
+              avgLotSize,
+              method: 'paired',
+              pairedAnalysis: {
+                pairs: pairedRates.length,
+                medianRate: Math.round(medianRate),
+                bestPair: pairedRates.sort((a, b) => Math.abs(a.acreageDiff - 1) - Math.abs(b.acreageDiff - 1))[0]
+              }
+            };
+          } else {
+            return {
+              avg: Math.round(medianRate),
+              count: filtered.length,
+              avgLotSize,
+              method: 'paired',
+              pairedAnalysis: {
+                pairs: pairedRates.length,
+                medianRate: Math.round(medianRate),
+                bestPair: pairedRates.sort((a, b) => Math.abs(a.acreageDiff - 1) - Math.abs(b.acreageDiff - 1))[0]
+              }
+            };
+          }
+        }
+      }
+
+      // Fallback to simple calculation if paired analysis fails
+      if (valuationMode === 'sf') {
+        const totalPrice = filtered.reduce((sum, s) => sum + s.sales_price, 0);
+        const totalSF = filtered.reduce((sum, s) => sum + (s.totalAcres * 43560), 0);
+        return {
+          avg: totalSF > 0 ? (totalPrice / totalSF).toFixed(2) : 0,
+          count: filtered.length,
+          avgLotSize,
+          method: 'fallback'
+        };
+      } else {
+        const avgRate = filtered.reduce((sum, s) => sum + s.pricePerAcre, 0) / filtered.length;
+        return {
+          avg: Math.round(avgRate),
+          count: filtered.length,
+          avgLotSize,
+          method: 'fallback'
+        };
+      }
+    };
+
+    const rawLand = getCategoryAverage(s => {
+      const isRawLandCategory = saleCategories[s.id] === 'raw_land';
+      const isUncategorizedVacant = !saleCategories[s.id] && s.property_m4_class === '1';
+      const isInRawLand = isRawLandCategory || isUncategorizedVacant;
+
+      // Debug teardown sales to see if they're incorrectly going to raw land
+      if (saleCategories[s.id] === 'teardown' || (s.property_block === '5' && s.property_lot === '12.12')) {
+        console.log('🌱 Raw Land check for teardown/5.12.12:', {
+          block: s.property_block,
+          lot: s.property_lot,
+          id: s.id,
+          category: saleCategories[s.id],
+          hasCategory: !!saleCategories[s.id],
+          class: s.property_m4_class,
+          isRawLandCategory,
+          isUncategorizedVacant,
+          isInRawLand
+        });
+      }
+
+      return isInRawLand;
+    }, 'developable');
+
+    const buildingLot = getCategoryAverage(s => {
+      const isInCategory = saleCategories[s.id] === 'building_lot' ||
+                          saleCategories[s.id] === 'teardown' ||
+                          saleCategories[s.id] === 'pre-construction';
+
+      // Debug all teardown sales
+      if (saleCategories[s.id] === 'teardown') {
+        console.log('🏗️ Teardown sale details:', {
+          block: s.property_block,
+          lot: s.property_lot,
+          id: s.id,
+          category: saleCategories[s.id],
+          isIncluded: includedSales.has(s.id),
+          isInBuildingLot: isInCategory,
+          price: s.sales_price,
+          acres: s.totalAcres,
+          pricePerAcre: s.pricePerAcre
+        });
+      }
+
+      // Keep the 47/2 debug for reference
+      if (s.property_block === '47' && s.property_lot === '2') {
+        console.log('🏠 Property 47/2 details:', {
+          id: s.id,
+          category: saleCategories[s.id],
+          isInBuildingLot: isInCategory,
+          price: s.sales_price,
+          acres: s.totalAcres
+        });
+      }
+      return isInCategory;
+    }, 'developable');
+
+    const wetlands = getCategoryAverage(s => saleCategories[s.id] === 'wetlands', 'constrained');
+    const landlocked = getCategoryAverage(s => saleCategories[s.id] === 'landlocked', 'constrained');
+    const conservation = getCategoryAverage(s => saleCategories[s.id] === 'conservation', 'constrained');
+
+    console.log('🏗️ Building Lot Analysis Result:', {
+      avg: buildingLot.avg,
+      count: buildingLot.count,
+      method: buildingLot.method,
+      hasPairedAnalysis: !!buildingLot.pairedAnalysis
+    });
+
+    return { rawLand, buildingLot, wetlands, landlocked, conservation };
+  }, [vacantSales, includedSales, saleCategories, valuationMode]);
+
   const saveRates = async () => {
+    // Update cascade config mode to match current valuation mode
+    setCascadeConfig(prev => ({ ...prev, mode: valuationMode }));
+
     // This triggers the main saveAnalysis function
     await saveAnalysis();
-    
+
+    // Calculate which VCS areas will be affected by the configurations
+    const affectedVCS = new Set();
+
+    // Normal configuration affects all VCS
+    if (properties) {
+      properties.forEach(p => {
+        if (p.new_vcs) affectedVCS.add(p.new_vcs);
+      });
+    }
+
+    // Special region configurations
+    Object.keys(cascadeConfig.special || {}).forEach(region => {
+      // Find VCS in this special region
+      vacantSales.forEach(sale => {
+        if (specialRegions[sale.id] === region && sale.new_vcs) {
+          affectedVCS.add(sale.new_vcs);
+        }
+      });
+    });
+
+    // VCS-specific configurations
+    Object.values(cascadeConfig.vcsSpecific || {}).forEach(config => {
+      config.vcsList?.forEach(vcs => affectedVCS.add(vcs));
+    });
+
     // Additional notification that rates have been saved
-    alert('Land rates have been saved and are now available in the Allocation Study and VCS Sheet tabs.');
+    alert(`Land rates have been saved for ${affectedVCS.size} VCS areas and are now available in the Allocation Study and VCS Sheet tabs.\\n\\nMethod: ${valuationMode.toUpperCase()}\\nNormal rates: ${Object.keys(cascadeConfig.normal).filter(k => cascadeConfig.normal[k]?.rate).length} tiers\\nSpecial regions: ${Object.keys(cascadeConfig.special || {}).length}\\nVCS-specific: ${Object.keys(cascadeConfig.vcsSpecific || {}).length}`);
   };
   // ========== RENDER LAND RATES TAB ==========
   const renderLandRatesTab = () => (
@@ -1930,7 +3281,10 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
         <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold' }}>Land Valuation Analysis</h3>
         <div style={{ display: 'flex', gap: '10px' }}>
           <button
-            onClick={() => setValuationMode('acre')}
+            onClick={() => {
+              setValuationMode('acre');
+              setCascadeConfig(prev => ({ ...prev, mode: 'acre' }));
+            }}
             style={{
               padding: '8px 16px',
               backgroundColor: valuationMode === 'acre' ? '#3B82F6' : 'white',
@@ -1944,7 +3298,10 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
             Acre
           </button>
           <button
-            onClick={() => setValuationMode('sf')}
+            onClick={() => {
+              setValuationMode('sf');
+              setCascadeConfig(prev => ({ ...prev, mode: 'sf' }));
+            }}
             style={{
               padding: '8px 16px',
               backgroundColor: valuationMode === 'sf' ? '#3B82F6' : 'white',
@@ -1958,7 +3315,12 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
             Square Foot
           </button>
           <button
-            onClick={() => canUseFrontFoot && setValuationMode('ff')}
+            onClick={() => {
+              if (canUseFrontFoot) {
+                setValuationMode('ff');
+                setCascadeConfig(prev => ({ ...prev, mode: 'ff' }));
+              }
+            }}
             disabled={!canUseFrontFoot}
             style={{
               padding: '8px 16px',
@@ -2104,12 +3466,17 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
                         type="checkbox"
                         checked={includedSales.has(sale.id)}
                         onChange={(e) => {
+                          console.log(`📋 Checkbox change for ${sale.property_block}/${sale.property_lot}:`, {
+                            checked: e.target.checked,
+                            saleId: sale.id
+                          });
                           if (e.target.checked) {
                             setIncludedSales(prev => new Set([...prev, sale.id]));
                           } else {
                             setIncludedSales(prev => {
                               const newSet = new Set(prev);
                               newSet.delete(sale.id);
+                              console.log('❌ Removed from included sales, new size:', newSet.size);
                               return newSet;
                             });
                           }
@@ -2275,150 +3642,476 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
         
         {/* Method 1 Summary - MOVED TO BOTTOM */}
         <div style={{ padding: '15px', backgroundColor: '#F9FAFB', borderTop: '1px solid #E5E7EB' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '15px' }}>
-            {(() => {
-              // Calculate average rate for checked items by category
-              const checkedSales = vacantSales.filter(s => includedSales.has(s.id));
-              
-              // Helper function to calculate average for a category
-              const getCategoryAverage = (filterFn) => {
-                const filtered = checkedSales.filter(filterFn);
-                if (filtered.length === 0) return { avg: 0, count: 0 };
-                
-                if (valuationMode === 'sf') {
-                  const totalPrice = filtered.reduce((sum, s) => sum + s.sales_price, 0);
-                  const totalSF = filtered.reduce((sum, s) => sum + (s.totalAcres * 43560), 0);
-                  return { 
-                    avg: totalSF > 0 ? (totalPrice / totalSF).toFixed(2) : 0, 
-                    count: filtered.length 
-                  };
-                } else {
-                  const avgRate = filtered.reduce((sum, s) => sum + s.pricePerAcre, 0) / filtered.length;
-                  return { 
-                    avg: Math.round(avgRate), 
-                    count: filtered.length 
-                  };
-                }
-              };
-              
-              const rawLand = getCategoryAverage(s => 
-                saleCategories[s.id] === 'raw_land' || 
-                (!saleCategories[s.id] && s.property_m4_class === '1')
-              );
-              
-              const buildingLot = getCategoryAverage(s => 
-                saleCategories[s.id] === 'building_lot' ||
-                saleCategories[s.id] === 'teardown' ||
-                saleCategories[s.id] === 'pre-construction'
-              );
-              
-              const wetlands = getCategoryAverage(s => saleCategories[s.id] === 'wetlands');
-              const landlocked = getCategoryAverage(s => saleCategories[s.id] === 'landlocked');
-              const conservation = getCategoryAverage(s => saleCategories[s.id] === 'conservation');
-              
-              return (
-                <>
-                  <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
-                    <div style={{ fontSize: '12px', color: '#6B7280' }}>Raw Land</div>
-                    <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#10B981' }}>
-                      {valuationMode === 'sf' ? `$${rawLand.avg}` : `$${rawLand.avg.toLocaleString()}`}
-                    </div>
-                    <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{rawLand.count} sales</div>
+          <div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '15px' }}>
+              <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
+                <div style={{ fontSize: '12px', color: '#6B7280' }}>
+                  Raw Land {categoryAnalysis.rawLand.method === 'paired' && <span style={{ color: '#10B981' }}>✓ Paired</span>}
+                </div>
+                <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#10B981' }}>
+                  {valuationMode === 'sf' ? `$${categoryAnalysis.rawLand.avg}` : `$${categoryAnalysis.rawLand.avg.toLocaleString()}`}
+                </div>
+                <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{categoryAnalysis.rawLand.count} sales</div>
+                {categoryAnalysis.rawLand.count > 0 && (
+                  <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '2px' }}>
+                    Avg: {categoryAnalysis.rawLand.avgLotSize}
                   </div>
-                  <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
-                    <div style={{ fontSize: '12px', color: '#6B7280' }}>Building Lot</div>
-                    <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#3B82F6' }}>
-                      {valuationMode === 'sf' ? `$${buildingLot.avg}` : `$${buildingLot.avg.toLocaleString()}`}
-                    </div>
-                    <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{buildingLot.count} sales</div>
+                )}
+                {categoryAnalysis.rawLand.method === 'paired' && categoryAnalysis.rawLand.pairedAnalysis && (
+                  <div style={{ fontSize: '9px', color: '#059669', marginTop: '2px' }}>
+                    {categoryAnalysis.rawLand.count} properties • {categoryAnalysis.rawLand.pairedAnalysis.pairs} comparisons
                   </div>
-                  <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
-                    <div style={{ fontSize: '12px', color: '#6B7280' }}>Wetlands</div>
-                    <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#06B6D4' }}>
-                      {valuationMode === 'sf' ? `$${wetlands.avg}` : `$${wetlands.avg.toLocaleString()}`}
-                    </div>
-                    <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{wetlands.count} sales</div>
+                )}
+              </div>
+              <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
+                <div style={{ fontSize: '12px', color: '#6B7280' }}>
+                  Building Lot {categoryAnalysis.buildingLot.method === 'paired' && <span style={{ color: '#3B82F6' }}>✓ Paired</span>}
+                </div>
+                <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#3B82F6' }}>
+                  {valuationMode === 'sf' ? `$${categoryAnalysis.buildingLot.avg}` : `$${categoryAnalysis.buildingLot.avg.toLocaleString()}`}
+                </div>
+                <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{categoryAnalysis.buildingLot.count} sales</div>
+                {categoryAnalysis.buildingLot.count > 0 && (
+                  <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '2px' }}>
+                    Avg: {categoryAnalysis.buildingLot.avgLotSize}
                   </div>
-                  <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
-                    <div style={{ fontSize: '12px', color: '#6B7280' }}>Landlocked</div>
-                    <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#F59E0B' }}>
-                      {valuationMode === 'sf' ? `$${landlocked.avg}` : `$${landlocked.avg.toLocaleString()}`}
-                    </div>
-                    <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{landlocked.count} sales</div>
+                )}
+                {categoryAnalysis.buildingLot.method === 'paired' && categoryAnalysis.buildingLot.pairedAnalysis && (
+                  <div style={{ fontSize: '9px', color: '#2563EB', marginTop: '2px' }}>
+                    {categoryAnalysis.buildingLot.count} properties • {categoryAnalysis.buildingLot.pairedAnalysis.pairs} comparisons
                   </div>
-                  <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
-                    <div style={{ fontSize: '12px', color: '#6B7280' }}>Conservation</div>
-                    <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#8B5CF6' }}>
-                      {valuationMode === 'sf' ? `$${conservation.avg}` : `$${conservation.avg.toLocaleString()}`}
-                    </div>
-                    <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{conservation.count} sales</div>
+                )}
+              </div>
+              <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
+                <div style={{ fontSize: '12px', color: '#6B7280' }}>Wetlands</div>
+                <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#06B6D4' }}>
+                  {valuationMode === 'sf' ? `$${categoryAnalysis.wetlands.avg}` : `$${categoryAnalysis.wetlands.avg.toLocaleString()}`}
+                </div>
+                <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{categoryAnalysis.wetlands.count} sales</div>
+                {categoryAnalysis.wetlands.count > 0 && (
+                  <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '2px' }}>
+                    Avg: {categoryAnalysis.wetlands.avgLotSize}
                   </div>
-                </>
-              );
-            })()}
+                )}
+              </div>
+              <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
+                <div style={{ fontSize: '12px', color: '#6B7280' }}>Landlocked</div>
+                <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#F59E0B' }}>
+                  {valuationMode === 'sf' ? `$${categoryAnalysis.landlocked.avg}` : `$${categoryAnalysis.landlocked.avg.toLocaleString()}`}
+                </div>
+                <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{categoryAnalysis.landlocked.count} sales</div>
+                {categoryAnalysis.landlocked.count > 0 && (
+                  <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '2px' }}>
+                    Avg: {categoryAnalysis.landlocked.avgLotSize}
+                  </div>
+                )}
+              </div>
+              <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
+                <div style={{ fontSize: '12px', color: '#6B7280' }}>Conservation</div>
+                <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#8B5CF6' }}>
+                  {valuationMode === 'sf' ? `$${categoryAnalysis.conservation.avg}` : `$${categoryAnalysis.conservation.avg.toLocaleString()}`}
+                </div>
+                <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{categoryAnalysis.conservation.count} sales</div>
+                {categoryAnalysis.conservation.count > 0 && (
+                  <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '2px' }}>
+                    Avg: {categoryAnalysis.conservation.avgLotSize}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Paired Analysis Details */}
+            {(categoryAnalysis.rawLand.method === 'paired' || categoryAnalysis.buildingLot.method === 'paired') && (
+              <div style={{ marginTop: '15px', paddingTop: '15px', borderTop: '1px solid #E5E7EB' }}>
+                <h4 style={{ margin: '0 0 10px 0', fontSize: '14px', fontWeight: 'bold', color: '#374151' }}>
+                  Paired Sales Analysis Details
+                </h4>
+
+                <div style={{ display: 'grid', gridTemplateColumns: categoryAnalysis.rawLand.method === 'paired' && categoryAnalysis.buildingLot.method === 'paired' ? '1fr 1fr' : '1fr', gap: '15px' }}>
+
+                  {categoryAnalysis.rawLand.method === 'paired' && categoryAnalysis.rawLand.pairedAnalysis && (
+                    <div style={{ backgroundColor: '#F0FDF4', padding: '12px', borderRadius: '6px', border: '1px solid #BBF7D0' }}>
+                      <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#059669', marginBottom: '8px' }}>
+                        Raw Land - Best Pair Analysis
+                      </div>
+                      {categoryAnalysis.rawLand.pairedAnalysis.bestPair && (
+                        <div style={{ fontSize: '11px', color: '#065F46' }}>
+                          <div style={{ marginBottom: '4px' }}>
+                            <strong>Properties:</strong> {categoryAnalysis.rawLand.pairedAnalysis.bestPair.properties}
+                          </div>
+                          <div style={{ marginBottom: '4px' }}>
+                            <strong>Acreage Difference:</strong> {categoryAnalysis.rawLand.pairedAnalysis.bestPair.acreageDiff.toFixed(2)} acres
+                          </div>
+                          <div style={{ marginBottom: '4px' }}>
+                            <strong>Price Difference:</strong> ${categoryAnalysis.rawLand.pairedAnalysis.bestPair.priceDiff.toLocaleString()}
+                          </div>
+                          <div style={{ marginBottom: '4px' }}>
+                            <strong>Raw Land Rate:</strong> ${Math.round(categoryAnalysis.rawLand.pairedAnalysis.bestPair.rate).toLocaleString()}/acre
+                          </div>
+                          <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '6px' }}>
+                            Median of {categoryAnalysis.rawLand.pairedAnalysis.pairs} paired comparisons from {categoryAnalysis.rawLand.count} properties
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {categoryAnalysis.buildingLot.method === 'paired' && categoryAnalysis.buildingLot.pairedAnalysis && (
+                    <div style={{ backgroundColor: '#EFF6FF', padding: '12px', borderRadius: '6px', border: '1px solid #BFDBFE' }}>
+                      <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#2563EB', marginBottom: '8px' }}>
+                        Building Lot - Best Pair Analysis
+                      </div>
+                      {categoryAnalysis.buildingLot.pairedAnalysis.bestPair && (
+                        <div style={{ fontSize: '11px', color: '#1E40AF' }}>
+                          <div style={{ marginBottom: '4px' }}>
+                            <strong>Properties:</strong> {categoryAnalysis.buildingLot.pairedAnalysis.bestPair.properties}
+                          </div>
+                          <div style={{ marginBottom: '4px' }}>
+                            <strong>Acreage Difference:</strong> {categoryAnalysis.buildingLot.pairedAnalysis.bestPair.acreageDiff.toFixed(2)} acres
+                          </div>
+                          <div style={{ marginBottom: '4px' }}>
+                            <strong>Price Difference:</strong> ${categoryAnalysis.buildingLot.pairedAnalysis.bestPair.priceDiff.toLocaleString()}
+                          </div>
+                          <div style={{ marginBottom: '4px' }}>
+                            <strong>Raw Land Rate:</strong> ${Math.round(categoryAnalysis.buildingLot.pairedAnalysis.bestPair.rate).toLocaleString()}/acre
+                          </div>
+                          <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '6px' }}>
+                            Median of {categoryAnalysis.buildingLot.pairedAnalysis.pairs} paired comparisons from {categoryAnalysis.buildingLot.count} properties
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                </div>
+
+                <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '8px', fontStyle: 'italic' }}>
+                  * Paired analysis extracts incremental raw land value between similar sales with different acreages.
+                  This isolates the pure land component from site value and improvements.
+                  <br />
+                  * All properties are included regardless of acreage similarity.
+                  Only sales with negative price differences are excluded.
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
       {/* Method 2: Improved Sale Lot Size Analysis */}
       <div style={{ marginBottom: '30px', backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden', border: '1px solid #E5E7EB' }}>
         <div style={{ padding: '15px', borderBottom: '1px solid #E5E7EB', backgroundColor: '#F9FAFB' }}>
-          <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 'bold' }}>Method 2: Improved Sale Lot Size Analysis</h3>
-        </div>
-        
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', fontSize: '14px' }}>
-            <thead>
-              <tr style={{ backgroundColor: '#F9FAFB' }}>
-                <th style={{ padding: '8px', textAlign: 'left' }}>VCS</th>
-                <th style={{ padding: '8px', textAlign: 'center' }}>Total Sales</th>
-                <th style={{ padding: '8px', textAlign: 'center' }}>&lt;1 Acre</th>
-                <th style={{ padding: '8px', textAlign: 'center' }}>1-5 Acres</th>
-                <th style={{ padding: '8px', textAlign: 'center' }}>5-10 Acres</th>
-                <th style={{ padding: '8px', textAlign: 'center' }}>&gt;10 Acres</th>
-                <th style={{ padding: '8px', textAlign: 'right' }}>Implied {getUnitLabel()}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {Object.entries(bracketAnalysis)
-                .filter(([vcs]) => !vcsFilter || vcs.includes(vcsFilter))
-                .sort(([a], [b]) => a.localeCompare(b))
-                .map(([vcs, data], index) => (
-                  <tr key={vcs} style={{ backgroundColor: index % 2 === 0 ? 'white' : '#F9FAFB' }}>
-                    <td style={{ padding: '8px', fontWeight: 'bold' }}>{vcs}</td>
-                    <td style={{ padding: '8px', textAlign: 'center' }}>{data.totalSales}</td>
-                    <td style={{ padding: '8px', textAlign: 'center' }}>{data.brackets.small.count}</td>
-                    <td style={{ padding: '8px', textAlign: 'center' }}>{data.brackets.medium.count}</td>
-                    <td style={{ padding: '8px', textAlign: 'center' }}>{data.brackets.large.count}</td>
-                    <td style={{ padding: '8px', textAlign: 'center' }}>{data.brackets.xlarge.count}</td>
-                    <td style={{ padding: '8px', textAlign: 'right', fontWeight: 'bold' }}>
-                      {data.impliedRate !== null ? `$${data.impliedRate.toLocaleString()}` : 'NULL'}
-                    </td>
-                  </tr>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 'bold' }}>Method 2: Improved Sale Lot Size Analysis</h3>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+              <label style={{ fontSize: '12px', color: '#6B7280' }}>Type and Use:</label>
+              <select
+                value={method2TypeFilter}
+                onChange={(e) => setMethod2TypeFilter(e.target.value)}
+                style={{
+                  padding: '6px 10px',
+                  border: '1px solid #D1D5DB',
+                  borderRadius: '4px',
+                  fontSize: '14px',
+                  backgroundColor: 'white'
+                }}
+              >
+                {getTypeUseOptions().map(option => (
+                  <option key={option.code} value={option.code}>
+                    {option.code} - {option.description}
+                  </option>
                 ))}
-            </tbody>
-          </table>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ padding: '10px 15px 5px 15px', borderBottom: '1px solid #E5E7EB', backgroundColor: '#F9FAFB', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ fontSize: '12px', color: '#6B7280' }}>
+            {Object.keys(bracketAnalysis).length} VCS areas • Filtered by: {method2TypeFilter} ({getTypeUseOptions().find(opt => opt.code === method2TypeFilter)?.description || 'Unknown'})
+          </div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              onClick={() => setExpandedVCS(new Set(Object.keys(bracketAnalysis)))}
+              style={{
+                padding: '4px 8px',
+                fontSize: '11px',
+                backgroundColor: '#3B82F6',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer'
+              }}
+            >
+              Expand All
+            </button>
+            <button
+              onClick={() => setExpandedVCS(new Set())}
+              style={{
+                padding: '4px 8px',
+                fontSize: '11px',
+                backgroundColor: '#6B7280',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer'
+              }}
+            >
+              Collapse All
+            </button>
+          </div>
+        </div>
+
+        <div style={{ padding: '10px' }}>
+          {Object.entries(bracketAnalysis)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([vcs, data], index) => {
+              const isExpanded = expandedVCS.has(vcs);
+              const vcsColors = generateVCSColor(vcs, index);
+
+              // Format VCS summary line exactly like screenshot
+              const summaryLine = `${data.totalSales} sales • Avg $${Math.round(data.avgPrice).toLocaleString()} • ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} • $${data.impliedRate || 0}`;
+
+              return (
+                <div key={vcs} style={{ marginBottom: '8px', border: '1px solid #E5E7EB', borderRadius: '6px', overflow: 'hidden' }}>
+                  {/* VCS Header */}
+                  <div
+                    onClick={() => {
+                      const newExpanded = new Set(expandedVCS);
+                      if (isExpanded) {
+                        newExpanded.delete(vcs);
+                      } else {
+                        newExpanded.add(vcs);
+                      }
+                      setExpandedVCS(newExpanded);
+                    }}
+                    style={{
+                      backgroundColor: vcsColors.background,
+                      color: vcsColors.text,
+                      padding: '10px 15px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      fontWeight: 'bold',
+                      fontSize: '14px',
+                      border: 'none'
+                    }}
+                  >
+                    <div>
+                      <span style={{ fontSize: '16px', fontWeight: 'bold' }}>{vcs}:</span>
+                      <span style={{ fontSize: '12px', marginLeft: '8px', fontWeight: 'normal' }}>
+                        <span
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openMethod2SalesModal(vcs);
+                          }}
+                          style={{
+                            textDecoration: 'underline',
+                            cursor: 'pointer',
+                            color: '#3B82F6'
+                          }}
+                        >
+                          {data.totalSales} sales
+                        </span>
+                        {` • Avg $${Math.round(data.avgPrice).toLocaleString()} • ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} • $${data.impliedRate || 0}`}
+                      </span>
+                    </div>
+                    <span style={{ fontSize: '16px', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
+                      ▼
+                    </span>
+                  </div>
+
+                  {/* VCS Details */}
+                  {isExpanded && (
+                    <div style={{ backgroundColor: '#FFFFFF', padding: '0', border: '1px solid #E5E7EB', borderTop: 'none' }}>
+                      <table style={{ width: '100%', fontSize: '12px', borderCollapse: 'collapse' }}>
+                        <thead>
+                          <tr style={{ backgroundColor: '#F8F9FA' }}>
+                            <th style={{ padding: '8px', textAlign: 'left', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>Bracket</th>
+                            <th style={{ padding: '8px', textAlign: 'center', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>Count</th>
+                            <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>Avg Lot Size</th>
+                            <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>Avg Sale Price (t)</th>
+                            <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>Avg SFLA</th>
+                            <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>ADJUSTED</th>
+                            <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>DELTA</th>
+                            <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>LOT DELTA</th>
+                            <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>PER ACRE</th>
+                            <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>PER SQ FT</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {[
+                            { key: 'small', label: '<1.00', bracket: data.brackets.small },
+                            { key: 'medium', label: '1.00-5.00', bracket: data.brackets.medium },
+                            { key: 'large', label: '5.00-10.00', bracket: data.brackets.large },
+                            { key: 'xlarge', label: '>10.00', bracket: data.brackets.xlarge }
+                          ].map((row, rowIndex) => {
+                            if (row.bracket.count === 0) return null;
+
+                            // Calculate deltas from previous bracket
+                            const prevBracket = rowIndex > 0 ?
+                              [data.brackets.small, data.brackets.medium, data.brackets.large, data.brackets.xlarge][rowIndex - 1]
+                              : null;
+
+                            const adjustedDelta = prevBracket && prevBracket.avgAdjusted && row.bracket.avgAdjusted ?
+                              row.bracket.avgAdjusted - prevBracket.avgAdjusted : null;
+                            const lotDelta = prevBracket && prevBracket.avgAcres && row.bracket.avgAcres ?
+                              row.bracket.avgAcres - prevBracket.avgAcres : null;
+                            const perAcre = adjustedDelta && lotDelta && lotDelta > 0 && adjustedDelta > 0 ? adjustedDelta / lotDelta : null;
+                            const perSqFt = perAcre ? perAcre / 43560 : null;
+
+                            return (
+                              <tr key={row.key} style={{ backgroundColor: '#FFFFFF' }}>
+                                <td style={{ padding: '6px 8px', fontWeight: '500', borderBottom: '1px solid #F1F3F4' }}>{row.label}</td>
+                                <td style={{ padding: '6px 8px', textAlign: 'center', borderBottom: '1px solid #F1F3F4' }}>{row.bracket.count}</td>
+                                <td style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '1px solid #F1F3F4' }}>
+                                  {row.bracket.avgAcres ? row.bracket.avgAcres.toFixed(2) : '-'}
+                                </td>
+                                <td style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '1px solid #F1F3F4' }}>
+                                  {row.bracket.avgSalePrice ? `$${Math.round(row.bracket.avgSalePrice).toLocaleString()}` : '-'}
+                                </td>
+                                <td style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '1px solid #F1F3F4' }}>
+                                  {row.bracket.avgSFLA ? Math.round(row.bracket.avgSFLA).toLocaleString() : '-'}
+                                </td>
+                                <td style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '1px solid #F1F3F4' }}>
+                                  {row.bracket.avgAdjusted ? `$${Math.round(row.bracket.avgAdjusted).toLocaleString()}` : '-'}
+                                </td>
+                                <td style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '1px solid #F1F3F4' }}>
+                                  {adjustedDelta ? `$${Math.round(adjustedDelta).toLocaleString()}` : '-'}
+                                </td>
+                                <td style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '1px solid #F1F3F4' }}>
+                                  {lotDelta ? lotDelta.toFixed(2) : '-'}
+                                </td>
+                                <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', borderBottom: '1px solid #F1F3F4' }}>
+                                  {perAcre ? `$${Math.round(perAcre).toLocaleString()}` : (adjustedDelta !== null && adjustedDelta <= 0 ? 'N/A' : '-')}
+                                </td>
+                                <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', borderBottom: '1px solid #F1F3F4' }}>
+                                  {perSqFt ? `$${perSqFt.toFixed(2)}` : (adjustedDelta !== null && adjustedDelta <= 0 ? 'N/A' : '-')}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
         </div>
         
-        {/* Method 2 Summary - AT BOTTOM */}
-        {method2Summary.average && (
-          <div style={{ padding: '15px', backgroundColor: '#F9FAFB', borderTop: '1px solid #E5E7EB' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px' }}>
-              <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
-                <div style={{ fontSize: '12px', color: '#6B7280' }}>Average Implied Rate</div>
-                <div style={{ fontSize: '20px', fontWeight: 'bold' }}>${method2Summary.average?.toLocaleString()}</div>
-              </div>
-              <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
-                <div style={{ fontSize: '12px', color: '#6B7280' }}>Median Implied Rate</div>
-                <div style={{ fontSize: '20px', fontWeight: 'bold' }}>${method2Summary.median?.toLocaleString()}</div>
-              </div>
-              <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
-                <div style={{ fontSize: '12px', color: '#6B7280' }}>VCS Coverage</div>
-                <div style={{ fontSize: '16px', fontWeight: 'bold' }}>{method2Summary.coverage}</div>
-              </div>
-              <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
-                <div style={{ fontSize: '12px', color: '#6B7280' }}>Range</div>
-                <div style={{ fontSize: '16px', fontWeight: 'bold' }}>
-                  ${method2Summary.min?.toLocaleString()} - ${method2Summary.max?.toLocaleString()}
+        {/* Method 2 Summary - Enhanced Layout */}
+        {method2Summary && (method2Summary.mediumRange || method2Summary.largeRange || method2Summary.xlargeRange) && (
+          <div style={{ borderTop: '2px solid #E5E7EB', backgroundColor: '#F8FAFC' }}>
+            <div style={{ padding: '20px' }}>
+              <h4 style={{ margin: '0 0 15px 0', fontSize: '16px', fontWeight: 'bold', color: '#1F2937' }}>
+                Method 2 Summary - Implied $/Acre Rates
+              </h4>
+
+              <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+                {/* 1.00-4.99 Range */}
+                <div style={{ textAlign: 'center', minWidth: '150px' }}>
+                  <div style={{ fontSize: '14px', color: '#6B7280', marginBottom: '4px' }}>1.00-4.99 Acres</div>
+                  <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#059669' }}>
+                    {method2Summary.mediumRange?.perAcre !== 'N/A' ?
+                      `$${method2Summary.mediumRange?.perAcre?.toLocaleString()}` : 'N/A'}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#6B7280' }}>
+                    {method2Summary.mediumRange?.perSqFt !== 'N/A' ?
+                      `$${method2Summary.mediumRange?.perSqFt}/SF` : 'N/A'}
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#9CA3AF' }}>
+                    ({method2Summary.mediumRange?.count || 0} VCS)
+                  </div>
+                </div>
+
+                {/* 5.00-9.99 Range */}
+                <div style={{ textAlign: 'center', minWidth: '150px' }}>
+                  <div style={{ fontSize: '14px', color: '#6B7280', marginBottom: '4px' }}>5.00-9.99 Acres</div>
+                  <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#0D9488' }}>
+                    {method2Summary.largeRange?.perAcre !== 'N/A' ?
+                      `$${method2Summary.largeRange?.perAcre?.toLocaleString()}` : 'N/A'}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#6B7280' }}>
+                    {method2Summary.largeRange?.perSqFt !== 'N/A' ?
+                      `$${method2Summary.largeRange?.perSqFt}/SF` : 'N/A'}
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#9CA3AF' }}>
+                    ({method2Summary.largeRange?.count || 0} VCS)
+                  </div>
+                </div>
+
+                {/* 10.00+ Range */}
+                <div style={{ textAlign: 'center', minWidth: '150px' }}>
+                  <div style={{ fontSize: '14px', color: '#6B7280', marginBottom: '4px' }}>10.00+ Acres</div>
+                  <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#7C3AED' }}>
+                    {method2Summary.xlargeRange?.perAcre !== 'N/A' ?
+                      `$${method2Summary.xlargeRange?.perAcre?.toLocaleString()}` : 'N/A'}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#6B7280' }}>
+                    {method2Summary.xlargeRange?.perSqFt !== 'N/A' ?
+                      `$${method2Summary.xlargeRange?.perSqFt}/SF` : 'N/A'}
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#9CA3AF' }}>
+                    ({method2Summary.xlargeRange?.count || 0} VCS)
+                  </div>
+                </div>
+
+                {/* Average Across All Positive Deltas */}
+                <div style={{ textAlign: 'center', minWidth: '150px' }}>
+                  <div style={{ fontSize: '14px', color: '#6B7280', marginBottom: '4px' }}>All Positive Deltas</div>
+                  <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#059669' }}>
+                    {(() => {
+                      const allRates = [];
+                      if (method2Summary.mediumRange?.perAcre !== 'N/A') allRates.push(method2Summary.mediumRange.perAcre);
+                      if (method2Summary.largeRange?.perAcre !== 'N/A') allRates.push(method2Summary.largeRange.perAcre);
+                      if (method2Summary.xlargeRange?.perAcre !== 'N/A') allRates.push(method2Summary.xlargeRange.perAcre);
+
+                      if (allRates.length === 0) return 'N/A';
+
+                      const avgRate = Math.round(allRates.reduce((sum, rate) => sum + rate, 0) / allRates.length);
+                      return `$${avgRate.toLocaleString()}`;
+                    })()}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#6B7280' }}>
+                    {(() => {
+                      const allRates = [];
+                      if (method2Summary.mediumRange?.perAcre !== 'N/A') allRates.push(method2Summary.mediumRange.perAcre);
+                      if (method2Summary.largeRange?.perAcre !== 'N/A') allRates.push(method2Summary.largeRange.perAcre);
+                      if (method2Summary.xlargeRange?.perAcre !== 'N/A') allRates.push(method2Summary.xlargeRange.perAcre);
+
+                      if (allRates.length === 0) return 'N/A';
+
+                      const avgRate = Math.round(allRates.reduce((sum, rate) => sum + rate, 0) / allRates.length);
+                      const perSqFt = (avgRate / 43560).toFixed(2);
+                      return `$${perSqFt}/SF`;
+                    })()}
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#9CA3AF' }}>
+                    ({(method2Summary.mediumRange?.count || 0) + (method2Summary.largeRange?.count || 0) + (method2Summary.xlargeRange?.count || 0)} Total)
+                  </div>
+                </div>
+
+                <div style={{ width: '1px', height: '80px', backgroundColor: '#D1D5DB' }}></div>
+
+                {/* Stats */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '200px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '14px', color: '#6B7280' }}>Total VCS Areas:</span>
+                    <span style={{ fontSize: '14px', fontWeight: '600', color: '#1F2937' }}>{method2Summary.totalVCS || 0}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '14px', color: '#6B7280' }}>Total Sales:</span>
+                    <span style={{ fontSize: '14px', fontWeight: '600', color: '#1F2937' }}>
+                      {Object.values(bracketAnalysis).reduce((sum, data) => sum + data.totalSales, 0)}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '14px', color: '#6B7280' }}>Positive Deltas:</span>
+                    <span style={{ fontSize: '14px', fontWeight: '600', color: '#059669' }}>
+                      {(method2Summary.mediumRange?.count || 0) + (method2Summary.largeRange?.count || 0) + (method2Summary.xlargeRange?.count || 0)}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -2426,7 +4119,7 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
         )}
         
         {/* Implied Front Foot Rates - ONLY IN FF MODE */}
-        {valuationMode === 'ff' && method2Summary.average && (
+        {valuationMode === 'ff' && method2Summary && (method2Summary.mediumRange || method2Summary.largeRange || method2Summary.xlargeRange) && (
           <div style={{ padding: '15px', borderTop: '1px solid #E5E7EB' }}>
             <h4 style={{ margin: '0 0 10px 0', fontSize: '14px', fontWeight: 'bold' }}>
               Implied Front Foot Rates by Zoning
@@ -2462,8 +4155,12 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
         {/* Normal Region Cascade */}
         <div style={{ marginBottom: '15px' }}>
           <h4 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '10px' }}>Normal Properties</h4>
-          <div style={{ display: 'grid', gridTemplateColumns: valuationMode === 'ff' ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: '15px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns:
+            valuationMode === 'ff' ? 'repeat(2, 1fr)' :
+            valuationMode === 'sf' ? 'repeat(2, 1fr)' :
+            'repeat(4, 1fr)', gap: '15px' }}>
             {valuationMode === 'ff' ? (
+              // FRONT FOOT MODE: Standard + Excess
               <>
                 <div>
                   <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
@@ -2474,9 +4171,9 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
                       type="number"
                       value={cascadeConfig.normal.standard?.max || ''}
                       onChange={(e) => updateCascadeBreak('standard', 'max', e.target.value)}
-                      placeholder="Max"
+                      placeholder="Max Frontage"
                       style={{
-                        width: '80px',
+                        width: '120px',
                         padding: '8px',
                         border: '1px solid #D1D5DB',
                         borderRadius: '4px'
@@ -2486,7 +4183,7 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
                       type="number"
                       value={cascadeConfig.normal.standard?.rate || ''}
                       onChange={(e) => updateCascadeBreak('standard', 'rate', e.target.value)}
-                      placeholder="Rate"
+                      placeholder="Rate per front foot"
                       style={{
                         flex: 1,
                         padding: '8px',
@@ -2504,7 +4201,61 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
                     type="number"
                     value={cascadeConfig.normal.excess?.rate || ''}
                     onChange={(e) => updateCascadeBreak('excess', 'rate', e.target.value)}
-                    placeholder="Enter rate"
+                    placeholder="Excess rate per front foot"
+                    style={{
+                      width: '100%',
+                      padding: '8px',
+                      border: '1px solid #D1D5DB',
+                      borderRadius: '4px'
+                    }}
+                  />
+                </div>
+              </>
+            ) : valuationMode === 'sf' ? (
+              // SQUARE FOOT MODE: Primary + Secondary only
+              <>
+                <div>
+                  <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
+                    Primary (0-{cascadeConfig.normal.prime?.max || 5000} sq ft)
+                  </label>
+                  <div style={{ display: 'flex', gap: '5px' }}>
+                    <input
+                      type="number"
+                      value={cascadeConfig.normal.prime?.max || ''}
+                      onChange={(e) => updateCascadeBreak('prime', 'max', e.target.value)}
+                      placeholder="Max sq ft"
+                      style={{
+                        width: '100px',
+                        padding: '8px',
+                        border: '1px solid #D1D5DB',
+                        borderRadius: '4px'
+                      }}
+                    />
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={cascadeConfig.normal.prime?.rate || ''}
+                      onChange={(e) => updateCascadeBreak('prime', 'rate', e.target.value)}
+                      placeholder="Rate per sq ft"
+                      style={{
+                        flex: 1,
+                        padding: '8px',
+                        border: '1px solid #D1D5DB',
+                        borderRadius: '4px'
+                      }}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
+                    Secondary ({cascadeConfig.normal.prime?.max || 5000}+ sq ft)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={cascadeConfig.normal.secondary?.rate || ''}
+                    onChange={(e) => updateCascadeBreak('secondary', 'rate', e.target.value)}
+                    placeholder="Rate per sq ft"
                     style={{
                       width: '100%',
                       padding: '8px',
@@ -2515,19 +4266,21 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
                 </div>
               </>
             ) : (
+              // ACRE MODE: Prime + Secondary + Excess + Residual
               <>
                 <div>
                   <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
-                    Prime (0-{cascadeConfig.normal.prime?.max || 1} {valuationMode})
+                    Prime (0-{cascadeConfig.normal.prime?.max || 1} acres)
                   </label>
                   <div style={{ display: 'flex', gap: '5px' }}>
                     <input
                       type="number"
+                      step="0.01"
                       value={cascadeConfig.normal.prime?.max || ''}
                       onChange={(e) => updateCascadeBreak('prime', 'max', e.target.value)}
-                      placeholder="Max"
+                      placeholder="Max acres"
                       style={{
-                        width: '60px',
+                        width: '80px',
                         padding: '8px',
                         border: '1px solid #D1D5DB',
                         borderRadius: '4px'
@@ -2537,7 +4290,7 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
                       type="number"
                       value={cascadeConfig.normal.prime?.rate || ''}
                       onChange={(e) => updateCascadeBreak('prime', 'rate', e.target.value)}
-                      placeholder="Rate"
+                      placeholder="Rate per acre"
                       style={{
                         flex: 1,
                         padding: '8px',
@@ -2549,16 +4302,17 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
                 </div>
                 <div>
                   <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
-                    Secondary ({cascadeConfig.normal.prime?.max || 1}-{cascadeConfig.normal.secondary?.max || 5} {valuationMode})
+                    Secondary ({cascadeConfig.normal.prime?.max || 1}-{cascadeConfig.normal.secondary?.max || 5} acres)
                   </label>
                   <div style={{ display: 'flex', gap: '5px' }}>
                     <input
                       type="number"
+                      step="0.01"
                       value={cascadeConfig.normal.secondary?.max || ''}
                       onChange={(e) => updateCascadeBreak('secondary', 'max', e.target.value)}
-                      placeholder="Max"
+                      placeholder="Max acres"
                       style={{
-                        width: '60px',
+                        width: '80px',
                         padding: '8px',
                         border: '1px solid #D1D5DB',
                         borderRadius: '4px'
@@ -2568,7 +4322,7 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
                       type="number"
                       value={cascadeConfig.normal.secondary?.rate || ''}
                       onChange={(e) => updateCascadeBreak('secondary', 'rate', e.target.value)}
-                      placeholder="Rate"
+                      placeholder="Rate per acre"
                       style={{
                         flex: 1,
                         padding: '8px',
@@ -2580,16 +4334,17 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
                 </div>
                 <div>
                   <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
-                    Excess ({cascadeConfig.normal.secondary?.max || 5}-{cascadeConfig.normal.excess?.max || 10} {valuationMode})
+                    Excess ({cascadeConfig.normal.secondary?.max || 5}-{cascadeConfig.normal.excess?.max || 10} acres)
                   </label>
                   <div style={{ display: 'flex', gap: '5px' }}>
                     <input
                       type="number"
+                      step="0.01"
                       value={cascadeConfig.normal.excess?.max || ''}
                       onChange={(e) => updateCascadeBreak('excess', 'max', e.target.value)}
-                      placeholder="Max"
+                      placeholder="Max acres"
                       style={{
-                        width: '60px',
+                        width: '80px',
                         padding: '8px',
                         border: '1px solid #D1D5DB',
                         borderRadius: '4px'
@@ -2599,7 +4354,7 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
                       type="number"
                       value={cascadeConfig.normal.excess?.rate || ''}
                       onChange={(e) => updateCascadeBreak('excess', 'rate', e.target.value)}
-                      placeholder="Rate"
+                      placeholder="Rate per acre"
                       style={{
                         flex: 1,
                         padding: '8px',
@@ -2611,13 +4366,13 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
                 </div>
                 <div>
                   <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
-                    Residual ({cascadeConfig.normal.excess?.max || 10}+ {valuationMode})
+                    Residual ({cascadeConfig.normal.excess?.max || 10}+ acres)
                   </label>
                   <input
                     type="number"
                     value={cascadeConfig.normal.residual?.rate || ''}
                     onChange={(e) => updateCascadeBreak('residual', 'rate', e.target.value)}
-                    placeholder="Enter rate"
+                    placeholder="Rate per acre"
                     style={{
                       width: '100%',
                       padding: '8px',
@@ -2630,7 +4385,495 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
             )}
           </div>
         </div>
-        
+
+        {/* Special Region Cascades */}
+        {Object.keys(cascadeConfig.special || {}).map(region => (
+          <div key={region} style={{ marginBottom: '15px', backgroundColor: '#EFF6FF', padding: '12px', borderRadius: '6px', border: '1px solid #BFDBFE' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+              <h4 style={{ fontSize: '14px', fontWeight: '600', color: '#1E40AF' }}>{region} Properties</h4>
+              <button
+                onClick={() => {
+                  setCascadeConfig(prev => {
+                    const newSpecial = { ...prev.special };
+                    delete newSpecial[region];
+                    return { ...prev, special: newSpecial };
+                  });
+                }}
+                style={{
+                  backgroundColor: '#EF4444',
+                  color: 'white',
+                  padding: '4px 8px',
+                  borderRadius: '4px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: '11px'
+                }}
+              >
+                Remove
+              </button>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns:
+              valuationMode === 'ff' ? 'repeat(2, 1fr)' :
+              valuationMode === 'sf' ? 'repeat(2, 1fr)' :
+              'repeat(4, 1fr)', gap: '15px' }}>
+
+              {valuationMode === 'ff' ? (
+                // Front Foot for Special Region
+                <>
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#1E40AF', display: 'block', marginBottom: '4px' }}>
+                      Standard (0-{cascadeConfig.special[region]?.standard?.max || 100} ft)
+                    </label>
+                    <div style={{ display: 'flex', gap: '5px' }}>
+                      <input
+                        type="number"
+                        value={cascadeConfig.special[region]?.standard?.max || ''}
+                        onChange={(e) => updateSpecialRegionCascade(region, 'standard', 'max', e.target.value)}
+                        placeholder="Max"
+                        style={{ width: '80px', padding: '6px', border: '1px solid #BFDBFE', borderRadius: '4px' }}
+                      />
+                      <input
+                        type="number"
+                        value={cascadeConfig.special[region]?.standard?.rate || ''}
+                        onChange={(e) => updateSpecialRegionCascade(region, 'standard', 'rate', e.target.value)}
+                        placeholder="Rate"
+                        style={{ flex: 1, padding: '6px', border: '1px solid #BFDBFE', borderRadius: '4px' }}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#1E40AF', display: 'block', marginBottom: '4px' }}>
+                      Excess ({cascadeConfig.special[region]?.standard?.max || 100}+ ft)
+                    </label>
+                    <input
+                      type="number"
+                      value={cascadeConfig.special[region]?.excess?.rate || ''}
+                      onChange={(e) => updateSpecialRegionCascade(region, 'excess', 'rate', e.target.value)}
+                      placeholder="Rate"
+                      style={{ width: '100%', padding: '6px', border: '1px solid #BFDBFE', borderRadius: '4px' }}
+                    />
+                  </div>
+                </>
+              ) : valuationMode === 'sf' ? (
+                // Square Foot for Special Region
+                <>
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#1E40AF', display: 'block', marginBottom: '4px' }}>
+                      Primary (0-{cascadeConfig.special[region]?.prime?.max || 5000} sq ft)
+                    </label>
+                    <div style={{ display: 'flex', gap: '5px' }}>
+                      <input
+                        type="number"
+                        value={cascadeConfig.special[region]?.prime?.max || ''}
+                        onChange={(e) => updateSpecialRegionCascade(region, 'prime', 'max', e.target.value)}
+                        placeholder="Max"
+                        style={{ width: '80px', padding: '6px', border: '1px solid #BFDBFE', borderRadius: '4px' }}
+                      />
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={cascadeConfig.special[region]?.prime?.rate || ''}
+                        onChange={(e) => updateSpecialRegionCascade(region, 'prime', 'rate', e.target.value)}
+                        placeholder="Rate"
+                        style={{ flex: 1, padding: '6px', border: '1px solid #BFDBFE', borderRadius: '4px' }}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#1E40AF', display: 'block', marginBottom: '4px' }}>
+                      Secondary ({cascadeConfig.special[region]?.prime?.max || 5000}+ sq ft)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={cascadeConfig.special[region]?.secondary?.rate || ''}
+                      onChange={(e) => updateSpecialRegionCascade(region, 'secondary', 'rate', e.target.value)}
+                      placeholder="Rate"
+                      style={{ width: '100%', padding: '6px', border: '1px solid #BFDBFE', borderRadius: '4px' }}
+                    />
+                  </div>
+                </>
+              ) : (
+                // Acre for Special Region
+                <>
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#1E40AF', display: 'block', marginBottom: '4px' }}>
+                      Prime (0-{cascadeConfig.special[region]?.prime?.max || 1} acres)
+                    </label>
+                    <div style={{ display: 'flex', gap: '5px' }}>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={cascadeConfig.special[region]?.prime?.max || ''}
+                        onChange={(e) => updateSpecialRegionCascade(region, 'prime', 'max', e.target.value)}
+                        placeholder="Max"
+                        style={{ width: '60px', padding: '6px', border: '1px solid #BFDBFE', borderRadius: '4px' }}
+                      />
+                      <input
+                        type="number"
+                        value={cascadeConfig.special[region]?.prime?.rate || ''}
+                        onChange={(e) => updateSpecialRegionCascade(region, 'prime', 'rate', e.target.value)}
+                        placeholder="Rate"
+                        style={{ flex: 1, padding: '6px', border: '1px solid #BFDBFE', borderRadius: '4px' }}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#1E40AF', display: 'block', marginBottom: '4px' }}>
+                      Secondary ({cascadeConfig.special[region]?.prime?.max || 1}-{cascadeConfig.special[region]?.secondary?.max || 5} acres)
+                    </label>
+                    <div style={{ display: 'flex', gap: '5px' }}>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={cascadeConfig.special[region]?.secondary?.max || ''}
+                        onChange={(e) => updateSpecialRegionCascade(region, 'secondary', 'max', e.target.value)}
+                        placeholder="Max"
+                        style={{ width: '60px', padding: '6px', border: '1px solid #BFDBFE', borderRadius: '4px' }}
+                      />
+                      <input
+                        type="number"
+                        value={cascadeConfig.special[region]?.secondary?.rate || ''}
+                        onChange={(e) => updateSpecialRegionCascade(region, 'secondary', 'rate', e.target.value)}
+                        placeholder="Rate"
+                        style={{ flex: 1, padding: '6px', border: '1px solid #BFDBFE', borderRadius: '4px' }}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#1E40AF', display: 'block', marginBottom: '4px' }}>
+                      Excess ({cascadeConfig.special[region]?.secondary?.max || 5}-{cascadeConfig.special[region]?.excess?.max || 10} acres)
+                    </label>
+                    <div style={{ display: 'flex', gap: '5px' }}>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={cascadeConfig.special[region]?.excess?.max || ''}
+                        onChange={(e) => updateSpecialRegionCascade(region, 'excess', 'max', e.target.value)}
+                        placeholder="Max"
+                        style={{ width: '60px', padding: '6px', border: '1px solid #BFDBFE', borderRadius: '4px' }}
+                      />
+                      <input
+                        type="number"
+                        value={cascadeConfig.special[region]?.excess?.rate || ''}
+                        onChange={(e) => updateSpecialRegionCascade(region, 'excess', 'rate', e.target.value)}
+                        placeholder="Rate"
+                        style={{ flex: 1, padding: '6px', border: '1px solid #BFDBFE', borderRadius: '4px' }}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#1E40AF', display: 'block', marginBottom: '4px' }}>
+                      Residual ({cascadeConfig.special[region]?.excess?.max || 10}+ acres)
+                    </label>
+                    <input
+                      type="number"
+                      value={cascadeConfig.special[region]?.residual?.rate || ''}
+                      onChange={(e) => updateSpecialRegionCascade(region, 'residual', 'rate', e.target.value)}
+                      placeholder="Rate"
+                      style={{ width: '100%', padding: '6px', border: '1px solid #BFDBFE', borderRadius: '4px' }}
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        ))}
+
+        {/* Add Special Region Button */}
+        {getUniqueRegions().filter(r => r !== 'Normal' && !cascadeConfig.special?.[r]).length > 0 && (
+          <div style={{ marginBottom: '15px' }}>
+            <button
+              onClick={() => {
+                const availableRegions = getUniqueRegions().filter(r => r !== 'Normal' && !cascadeConfig.special?.[r]);
+                if (availableRegions.length === 1) {
+                  // Auto-add if only one region available
+                  const region = availableRegions[0];
+                  setCascadeConfig(prev => ({
+                    ...prev,
+                    special: {
+                      ...prev.special,
+                      [region]: {}
+                    }
+                  }));
+                } else {
+                  // Show selection if multiple regions
+                  const region = prompt(`Select special region to add:\\n${availableRegions.map((r, i) => `${i + 1}. ${r}`).join('\\n')}`);
+                  if (region && availableRegions.includes(region)) {
+                    setCascadeConfig(prev => ({
+                      ...prev,
+                      special: {
+                        ...prev.special,
+                        [region]: {}
+                      }
+                    }));
+                  }
+                }
+              }}
+              style={{
+                backgroundColor: '#3B82F6',
+                color: 'white',
+                padding: '8px 16px',
+                borderRadius: '4px',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}
+            >
+              <Plus size={16} /> Add Special Region Configuration
+            </button>
+          </div>
+        )}
+
+        {/* VCS-Specific Configurations */}
+        {Object.keys(cascadeConfig.vcsSpecific || {}).map(vcsKey => (
+          <div key={vcsKey} style={{ marginBottom: '15px', backgroundColor: '#F0FDF4', padding: '12px', borderRadius: '6px', border: '1px solid #BBF7D0' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+              <h4 style={{ fontSize: '14px', fontWeight: '600', color: '#059669' }}>
+                VCS {cascadeConfig.vcsSpecific[vcsKey].vcsList?.join(', ')} - {cascadeConfig.vcsSpecific[vcsKey].method?.toUpperCase()} Method
+              </h4>
+              <button
+                onClick={() => {
+                  setCascadeConfig(prev => {
+                    const newVcsSpecific = { ...prev.vcsSpecific };
+                    delete newVcsSpecific[vcsKey];
+                    return { ...prev, vcsSpecific: newVcsSpecific };
+                  });
+                }}
+                style={{
+                  backgroundColor: '#EF4444',
+                  color: 'white',
+                  padding: '4px 8px',
+                  borderRadius: '4px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: '11px'
+                }}
+              >
+                Remove
+              </button>
+            </div>
+            <div style={{ fontSize: '11px', color: '#059669', marginBottom: '8px' }}>
+              {cascadeConfig.vcsSpecific[vcsKey].description}
+            </div>
+
+            {/* VCS-Specific Cascade Configuration */}
+            <div style={{ display: 'grid', gridTemplateColumns:
+              cascadeConfig.vcsSpecific[vcsKey].method === 'ff' ? 'repeat(2, 1fr)' :
+              cascadeConfig.vcsSpecific[vcsKey].method === 'sf' ? 'repeat(2, 1fr)' :
+              'repeat(4, 1fr)', gap: '10px' }}>
+
+              {cascadeConfig.vcsSpecific[vcsKey].method === 'ff' ? (
+                // Front Foot for VCS-Specific
+                <>
+                  <div>
+                    <label style={{ fontSize: '11px', color: '#059669', display: 'block', marginBottom: '2px' }}>
+                      Standard (0-{cascadeConfig.vcsSpecific[vcsKey].rates?.standard?.max || 100} ft)
+                    </label>
+                    <div style={{ display: 'flex', gap: '3px' }}>
+                      <input
+                        type="number"
+                        value={cascadeConfig.vcsSpecific[vcsKey].rates?.standard?.max || ''}
+                        onChange={(e) => updateVCSSpecificCascade(vcsKey, 'standard', 'max', e.target.value)}
+                        placeholder="Max"
+                        style={{ width: '60px', padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
+                      />
+                      <input
+                        type="number"
+                        value={cascadeConfig.vcsSpecific[vcsKey].rates?.standard?.rate || ''}
+                        onChange={(e) => updateVCSSpecificCascade(vcsKey, 'standard', 'rate', e.target.value)}
+                        placeholder="Rate"
+                        style={{ flex: 1, padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '11px', color: '#059669', display: 'block', marginBottom: '2px' }}>
+                      Excess ({cascadeConfig.vcsSpecific[vcsKey].rates?.standard?.max || 100}+ ft)
+                    </label>
+                    <input
+                      type="number"
+                      value={cascadeConfig.vcsSpecific[vcsKey].rates?.excess?.rate || ''}
+                      onChange={(e) => updateVCSSpecificCascade(vcsKey, 'excess', 'rate', e.target.value)}
+                      placeholder="Rate"
+                      style={{ width: '100%', padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
+                    />
+                  </div>
+                </>
+              ) : cascadeConfig.vcsSpecific[vcsKey].method === 'sf' ? (
+                // Square Foot for VCS-Specific
+                <>
+                  <div>
+                    <label style={{ fontSize: '11px', color: '#059669', display: 'block', marginBottom: '2px' }}>
+                      Primary (0-{cascadeConfig.vcsSpecific[vcsKey].rates?.prime?.max || 5000} sq ft)
+                    </label>
+                    <div style={{ display: 'flex', gap: '3px' }}>
+                      <input
+                        type="number"
+                        value={cascadeConfig.vcsSpecific[vcsKey].rates?.prime?.max || ''}
+                        onChange={(e) => updateVCSSpecificCascade(vcsKey, 'prime', 'max', e.target.value)}
+                        placeholder="Max"
+                        style={{ width: '60px', padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
+                      />
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={cascadeConfig.vcsSpecific[vcsKey].rates?.prime?.rate || ''}
+                        onChange={(e) => updateVCSSpecificCascade(vcsKey, 'prime', 'rate', e.target.value)}
+                        placeholder="Rate"
+                        style={{ flex: 1, padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '11px', color: '#059669', display: 'block', marginBottom: '2px' }}>
+                      Secondary ({cascadeConfig.vcsSpecific[vcsKey].rates?.prime?.max || 5000}+ sq ft)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={cascadeConfig.vcsSpecific[vcsKey].rates?.secondary?.rate || ''}
+                      onChange={(e) => updateVCSSpecificCascade(vcsKey, 'secondary', 'rate', e.target.value)}
+                      placeholder="Rate"
+                      style={{ width: '100%', padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
+                    />
+                  </div>
+                </>
+              ) : (
+                // Acre for VCS-Specific
+                <>
+                  <div>
+                    <label style={{ fontSize: '11px', color: '#059669', display: 'block', marginBottom: '2px' }}>
+                      Prime (0-{cascadeConfig.vcsSpecific[vcsKey].rates?.prime?.max || 1} acres)
+                    </label>
+                    <div style={{ display: 'flex', gap: '3px' }}>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={cascadeConfig.vcsSpecific[vcsKey].rates?.prime?.max || ''}
+                        onChange={(e) => updateVCSSpecificCascade(vcsKey, 'prime', 'max', e.target.value)}
+                        placeholder="Max"
+                        style={{ width: '50px', padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
+                      />
+                      <input
+                        type="number"
+                        value={cascadeConfig.vcsSpecific[vcsKey].rates?.prime?.rate || ''}
+                        onChange={(e) => updateVCSSpecificCascade(vcsKey, 'prime', 'rate', e.target.value)}
+                        placeholder="Rate"
+                        style={{ flex: 1, padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '11px', color: '#059669', display: 'block', marginBottom: '2px' }}>
+                      Secondary ({cascadeConfig.vcsSpecific[vcsKey].rates?.prime?.max || 1}-{cascadeConfig.vcsSpecific[vcsKey].rates?.secondary?.max || 5} acres)
+                    </label>
+                    <div style={{ display: 'flex', gap: '3px' }}>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={cascadeConfig.vcsSpecific[vcsKey].rates?.secondary?.max || ''}
+                        onChange={(e) => updateVCSSpecificCascade(vcsKey, 'secondary', 'max', e.target.value)}
+                        placeholder="Max"
+                        style={{ width: '50px', padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
+                      />
+                      <input
+                        type="number"
+                        value={cascadeConfig.vcsSpecific[vcsKey].rates?.secondary?.rate || ''}
+                        onChange={(e) => updateVCSSpecificCascade(vcsKey, 'secondary', 'rate', e.target.value)}
+                        placeholder="Rate"
+                        style={{ flex: 1, padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '11px', color: '#059669', display: 'block', marginBottom: '2px' }}>
+                      Excess ({cascadeConfig.vcsSpecific[vcsKey].rates?.secondary?.max || 5}-{cascadeConfig.vcsSpecific[vcsKey].rates?.excess?.max || 10} acres)
+                    </label>
+                    <div style={{ display: 'flex', gap: '3px' }}>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={cascadeConfig.vcsSpecific[vcsKey].rates?.excess?.max || ''}
+                        onChange={(e) => updateVCSSpecificCascade(vcsKey, 'excess', 'max', e.target.value)}
+                        placeholder="Max"
+                        style={{ width: '50px', padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
+                      />
+                      <input
+                        type="number"
+                        value={cascadeConfig.vcsSpecific[vcsKey].rates?.excess?.rate || ''}
+                        onChange={(e) => updateVCSSpecificCascade(vcsKey, 'excess', 'rate', e.target.value)}
+                        placeholder="Rate"
+                        style={{ flex: 1, padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '11px', color: '#059669', display: 'block', marginBottom: '2px' }}>
+                      Residual ({cascadeConfig.vcsSpecific[vcsKey].rates?.excess?.max || 10}+ acres)
+                    </label>
+                    <input
+                      type="number"
+                      value={cascadeConfig.vcsSpecific[vcsKey].rates?.residual?.rate || ''}
+                      onChange={(e) => updateVCSSpecificCascade(vcsKey, 'residual', 'rate', e.target.value)}
+                      placeholder="Rate"
+                      style={{ width: '100%', padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        ))}
+
+        {/* Add VCS-Specific Configuration Button */}
+        <div style={{ marginBottom: '15px' }}>
+          <button
+            onClick={() => {
+              // This will open a modal to select VCS and method
+              const vcsInput = prompt('Enter VCS codes (comma-separated for multiple):');
+              if (!vcsInput) return;
+
+              const vcsList = vcsInput.split(',').map(v => v.trim()).filter(v => v);
+              const method = prompt('Select method for these VCS:\\n1. acre\\n2. sf\\n3. ff');
+
+              const methodMap = { '1': 'acre', '2': 'sf', '3': 'ff' };
+              const selectedMethod = methodMap[method] || 'acre';
+
+              const description = prompt('Enter description (e.g., "Rural areas", "Subdivision lots"):') || 'Custom configuration';
+
+              const vcsKey = `vcs_${Date.now()}`;
+              setCascadeConfig(prev => ({
+                ...prev,
+                vcsSpecific: {
+                  ...prev.vcsSpecific,
+                  [vcsKey]: {
+                    vcsList,
+                    method: selectedMethod,
+                    description,
+                    rates: {}
+                  }
+                }
+              }));
+            }}
+            style={{
+              backgroundColor: '#10B981',
+              color: 'white',
+              padding: '8px 16px',
+              borderRadius: '4px',
+              border: 'none',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px'
+            }}
+          >
+            <Plus size={16} /> Add VCS-Specific Configuration
+          </button>
+        </div>
+
         {/* Special Categories */}
         <div style={{ marginBottom: '15px' }}>
           <h4 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '10px' }}>Special Category Land Rates</h4>
@@ -2937,6 +5180,287 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
           </div>
         </div>
       )}
+
+      {/* Method 2 Sales Modal */}
+      {showMethod2Modal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '8px',
+            padding: '20px',
+            maxWidth: '95vw',
+            maxHeight: '90vh',
+            overflow: 'auto',
+            border: '1px solid #E5E7EB'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold' }}>
+                Method 2 Sales - VCS {method2ModalVCS}
+              </h3>
+              <button
+                onClick={() => setShowMethod2Modal(false)}
+                style={{
+                  backgroundColor: 'transparent',
+                  border: 'none',
+                  fontSize: '20px',
+                  cursor: 'pointer',
+                  color: '#6B7280'
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            <div style={{ marginBottom: '15px', padding: '10px', backgroundColor: '#FEF3C7', borderRadius: '4px' }}>
+              <p style={{ margin: 0, fontSize: '14px', color: '#92400E' }}>
+                <strong>Exclude problematic sales:</strong> Uncheck sales that should not be used in Method 2 calculations
+                (teardowns, poor condition, pre-construction, etc.).
+                <span style={{ display: 'block', marginTop: '4px' }}>
+                  ⚠️ <strong>Yellow highlighted rows</strong> are pre-construction sales (sold before year built).
+                </span>
+              </p>
+            </div>
+
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', fontSize: '12px', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#F9FAFB' }}>
+                    <th style={{ padding: '8px', textAlign: 'left', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>Include</th>
+                    <th
+                      onClick={() => handleModalSort('block')}
+                      style={{
+                        padding: '8px',
+                        textAlign: 'left',
+                        fontWeight: '600',
+                        borderBottom: '1px solid #E5E7EB',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                        backgroundColor: modalSortField === 'block' ? '#EBF8FF' : 'transparent'
+                      }}
+                    >
+                      Block {modalSortField === 'block' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
+                    </th>
+                    <th
+                      onClick={() => handleModalSort('lot')}
+                      style={{
+                        padding: '8px',
+                        textAlign: 'left',
+                        fontWeight: '600',
+                        borderBottom: '1px solid #E5E7EB',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                        backgroundColor: modalSortField === 'lot' ? '#EBF8FF' : 'transparent'
+                      }}
+                    >
+                      Lot {modalSortField === 'lot' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
+                    </th>
+                    <th
+                      onClick={() => handleModalSort('address')}
+                      style={{
+                        padding: '8px',
+                        textAlign: 'left',
+                        fontWeight: '600',
+                        borderBottom: '1px solid #E5E7EB',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                        backgroundColor: modalSortField === 'address' ? '#EBF8FF' : 'transparent'
+                      }}
+                    >
+                      Address {modalSortField === 'address' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
+                    </th>
+                    <th
+                      onClick={() => handleModalSort('saleDate')}
+                      style={{
+                        padding: '8px',
+                        textAlign: 'left',
+                        fontWeight: '600',
+                        borderBottom: '1px solid #E5E7EB',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                        backgroundColor: modalSortField === 'saleDate' ? '#EBF8FF' : 'transparent'
+                      }}
+                    >
+                      Sale Date {modalSortField === 'saleDate' ? (modalSortDirection === 'asc' ? '↑' : '���') : ''}
+                    </th>
+                    <th
+                      onClick={() => handleModalSort('salePrice')}
+                      style={{
+                        padding: '8px',
+                        textAlign: 'right',
+                        fontWeight: '600',
+                        borderBottom: '1px solid #E5E7EB',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                        backgroundColor: modalSortField === 'salePrice' ? '#EBF8FF' : 'transparent'
+                      }}
+                    >
+                      Sale Price {modalSortField === 'salePrice' ? (modalSortDirection === 'asc' ? '↑' : '���') : ''}
+                    </th>
+                    <th
+                      onClick={() => handleModalSort('normTime')}
+                      style={{
+                        padding: '8px',
+                        textAlign: 'right',
+                        fontWeight: '600',
+                        borderBottom: '1px solid #E5E7EB',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                        backgroundColor: modalSortField === 'normTime' ? '#EBF8FF' : 'transparent'
+                      }}
+                    >
+                      Norm Time {modalSortField === 'normTime' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
+                    </th>
+                    <th
+                      onClick={() => handleModalSort('acres')}
+                      style={{
+                        padding: '8px',
+                        textAlign: 'right',
+                        fontWeight: '600',
+                        borderBottom: '1px solid #E5E7EB',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                        backgroundColor: modalSortField === 'acres' ? '#EBF8FF' : 'transparent'
+                      }}
+                    >
+                      Acres {modalSortField === 'acres' ? (modalSortDirection === 'asc' ? '↑' : '��') : ''}
+                    </th>
+                    <th
+                      onClick={() => handleModalSort('sfla')}
+                      style={{
+                        padding: '8px',
+                        textAlign: 'right',
+                        fontWeight: '600',
+                        borderBottom: '1px solid #E5E7EB',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                        backgroundColor: modalSortField === 'sfla' ? '#EBF8FF' : 'transparent'
+                      }}
+                    >
+                      SFLA {modalSortField === 'sfla' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
+                    </th>
+                    <th
+                      onClick={() => handleModalSort('yearBuilt')}
+                      style={{
+                        padding: '8px',
+                        textAlign: 'left',
+                        fontWeight: '600',
+                        borderBottom: '1px solid #E5E7EB',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                        backgroundColor: modalSortField === 'yearBuilt' ? '#EBF8FF' : 'transparent'
+                      }}
+                    >
+                      Year Built {modalSortField === 'yearBuilt' ? (modalSortDirection === 'asc' ? '��' : '↓') : ''}
+                    </th>
+                    <th
+                      onClick={() => handleModalSort('typeUse')}
+                      style={{
+                        padding: '8px',
+                        textAlign: 'left',
+                        fontWeight: '600',
+                        borderBottom: '1px solid #E5E7EB',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                        backgroundColor: modalSortField === 'typeUse' ? '#EBF8FF' : 'transparent'
+                      }}
+                    >
+                      Type/Use {modalSortField === 'typeUse' ? (modalSortDirection === 'asc' ? '↑' : '��') : ''}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortModalData(getMethod2SalesForVCS(method2ModalVCS)).map(prop => {
+                    const acres = parseFloat(prop.asset_lot_acre || 0);
+                    const isExcluded = method2ExcludedSales.has(prop.id);
+
+                    // Check for pre-construction (sale before year built)
+                    const saleYear = prop.sales_date ? new Date(prop.sales_date).getFullYear() : null;
+                    const yearBuilt = prop.asset_year_built ? parseInt(prop.asset_year_built) : null;
+                    const isPreConstruction = saleYear && yearBuilt && saleYear < yearBuilt;
+
+                    // Determine row background color
+                    let backgroundColor = 'white';
+                    if (isExcluded) {
+                      backgroundColor = '#FEF2F2'; // Light red for excluded
+                    } else if (isPreConstruction) {
+                      backgroundColor = '#FEF3C7'; // Light yellow for pre-construction
+                    }
+
+                    return (
+                      <tr key={prop.id} style={{ backgroundColor }}>
+                        <td style={{ padding: '8px' }}>
+                          <input
+                            type="checkbox"
+                            checked={!isExcluded}
+                            onChange={(e) => {
+                              const newExcluded = new Set(method2ExcludedSales);
+                              if (e.target.checked) {
+                                newExcluded.delete(prop.id);
+                              } else {
+                                newExcluded.add(prop.id);
+                              }
+                              setMethod2ExcludedSales(newExcluded);
+                            }}
+                          />
+                        </td>
+                        <td style={{ padding: '8px' }}>{prop.property_block}</td>
+                        <td style={{ padding: '8px' }}>{prop.property_lot}</td>
+                        <td style={{ padding: '8px' }}>{prop.property_location}</td>
+                        <td style={{ padding: '8px' }}>
+                          {prop.sales_date}
+                          {isPreConstruction && <span style={{ color: '#F59E0B', marginLeft: '4px' }}>���️</span>}
+                        </td>
+                        <td style={{ padding: '8px', textAlign: 'right' }}>${prop.sales_price?.toLocaleString()}</td>
+                        <td style={{ padding: '8px', textAlign: 'right' }}>${Math.round(prop.normalizedTime)?.toLocaleString()}</td>
+                        <td style={{ padding: '8px', textAlign: 'right' }}>{acres.toFixed(2)}</td>
+                        <td style={{ padding: '8px', textAlign: 'right' }}>{prop.asset_sfla || '-'}</td>
+                        <td style={{ padding: '8px' }}>
+                          {prop.asset_year_built || '-'}
+                          {isPreConstruction && <span style={{ color: '#F59E0B', marginLeft: '4px' }}>��️</span>}
+                        </td>
+                        <td style={{ padding: '8px' }}>{prop.asset_type_use || '-'}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div style={{ marginTop: '20px', textAlign: 'right' }}>
+              <button
+                onClick={() => {
+                  setShowMethod2Modal(false);
+                  // Force refresh of calculations
+                  setTimeout(() => {
+                    performBracketAnalysis();
+                  }, 100);
+                }}
+                style={{
+                  backgroundColor: '#3B82F6',
+                  color: 'white',
+                  padding: '8px 16px',
+                  borderRadius: '4px',
+                  border: 'none',
+                  cursor: 'pointer'
+                }}
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
   // ========== RENDER ALLOCATION STUDY TAB ==========
@@ -2960,8 +5484,8 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
                   <div style={{ fontSize: '20px', fontWeight: 'bold' }}>{vacantTestSales.length}</div>
                 </div>
                 <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
-                  <div style={{ fontSize: '12px', color: '#6B7280' }}>Improved Test</div>
-                  <div style={{ fontSize: '20px', fontWeight: 'bold' }}>{improvedTestSales.length}</div>
+                  <div style={{ fontSize: '12px', color: '#6B7280' }}>Positive Sales</div>
+                  <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#10B981' }}>{vacantTestSales.filter(s => s.isPositive).length}</div>
                 </div>
                 <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
                   <div style={{ fontSize: '12px', color: '#6B7280' }}>Recommended</div>
@@ -2975,7 +5499,10 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
                     <input
                       type="number"
                       value={targetAllocation || ''}
-                      onChange={(e) => setTargetAllocation(e.target.value)}
+                      onChange={(e) => {
+                        console.log('🎯 Target allocation input changed:', e.target.value);
+                        setTargetAllocation(e.target.value);
+                      }}
                       placeholder="Set"
                       style={{
                         width: '60px',
@@ -2987,6 +5514,28 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
                       }}
                     />
                     <span style={{ fontSize: '16px', fontWeight: 'bold' }}>%</span>
+                    <button
+                      onClick={() => {
+                        console.log('💾 Save button clicked for target allocation:', targetAllocation);
+                        saveTargetAllocation();
+                      }}
+                      disabled={!targetAllocation || targetAllocation === ''}
+                      style={{
+                        backgroundColor: (!targetAllocation || targetAllocation === '') ? '#9CA3AF' : '#3B82F6',
+                        color: 'white',
+                        padding: '6px 12px',
+                        borderRadius: '4px',
+                        border: 'none',
+                        cursor: (!targetAllocation || targetAllocation === '') ? 'not-allowed' : 'pointer',
+                        fontSize: '12px',
+                        fontWeight: 'bold',
+                        marginLeft: '8px',
+                        opacity: (!targetAllocation || targetAllocation === '') ? 0.5 : 1
+                      }}
+                      title={(!targetAllocation || targetAllocation === '') ? 'Enter a target allocation percentage first' : 'Save target allocation to database'}
+                    >
+                      Save
+                    </button>
                   </div>
                 </div>
               </>
@@ -3016,97 +5565,410 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
         </div>
       </div>
 
-      {/* Vacant Land Test Table */}
-      <div style={{ marginBottom: '20px', backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden', border: '1px solid #E5E7EB' }}>
+      {/* Individual Allocation Analysis Table */}
+      <div style={{ backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden', border: '1px solid #E5E7EB' }}>
         <div style={{ padding: '15px', borderBottom: '1px solid #E5E7EB', backgroundColor: '#F9FAFB' }}>
-          <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 'bold' }}>Vacant Land Test</h3>
+          <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 'bold' }}>Individual Allocation Analysis</h3>
+          <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#6B7280' }}>
+            Each vacant sale matched with improved sales from the same year
+          </p>
         </div>
-        
+
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', fontSize: '13px' }}>
+          <table style={{
+            width: '100%',
+            fontSize: '12px',
+            borderCollapse: 'collapse',
+            border: '1px solid #D1D5DB'
+          }}>
             <thead>
-              <tr style={{ backgroundColor: '#F9FAFB' }}>
-                <th style={{ padding: '8px' }}>VCS</th>
-                <th style={{ padding: '8px' }}>Year</th>
-                <th style={{ padding: '8px' }}>Region</th>
-                <th style={{ padding: '8px' }}>Block/Lot</th>
-                <th style={{ padding: '8px', textAlign: 'right' }}>Sale Price</th>
-                <th style={{ padding: '8px', textAlign: 'right' }}>Acres</th>
-                <th style={{ padding: '8px', textAlign: 'right' }}>Raw Land</th>
-                <th style={{ padding: '8px', textAlign: 'right' }}>Site Value</th>
-                <th style={{ padding: '8px', textAlign: 'center' }}>Status</th>
+              <tr style={{ backgroundColor: '#F9FAFB', borderBottom: '2px solid #D1D5DB' }}>
+                {/* Vacant Sale Info */}
+                <th style={{
+                  padding: '8px',
+                  borderRight: '2px solid #E5E7EB',
+                  border: '1px solid #D1D5DB',
+                  fontWeight: 'bold'
+                }} colSpan="6">Vacant Sale</th>
+                {/* Improved Sales Info */}
+                <th style={{
+                  padding: '8px',
+                  borderRight: '2px solid #E5E7EB',
+                  border: '1px solid #D1D5DB',
+                  fontWeight: 'bold'
+                }} colSpan="4">Improved Sales (Same Year)</th>
+                {/* Allocation Results */}
+                <th style={{
+                  padding: '8px',
+                  border: '1px solid #D1D5DB',
+                  fontWeight: 'bold'
+                }} colSpan="3">Allocation Analysis</th>
+              </tr>
+              <tr style={{ backgroundColor: '#F3F4F6', fontSize: '11px', borderBottom: '1px solid #D1D5DB' }}>
+                {/* Vacant Sale Columns */}
+                <th style={{ padding: '6px', border: '1px solid #D1D5DB', fontWeight: '600' }}>VCS</th>
+                <th style={{ padding: '6px', border: '1px solid #D1D5DB', fontWeight: '600' }}>Year</th>
+                <th style={{ padding: '6px', border: '1px solid #D1D5DB', fontWeight: '600' }}>Block/Lot</th>
+                <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Price</th>
+                <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Acres</th>
+                <th style={{ padding: '6px', textAlign: 'right', borderRight: '2px solid #E5E7EB', border: '1px solid #D1D5DB', fontWeight: '600' }}>Site Value</th>
+                {/* Improved Sales Columns */}
+                <th style={{ padding: '6px', textAlign: 'center', border: '1px solid #D1D5DB', fontWeight: '600' }}>Count</th>
+                <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Avg Price</th>
+                <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Avg Acres</th>
+                <th style={{ padding: '6px', textAlign: 'right', borderRight: '2px solid #E5E7EB', border: '1px solid #D1D5DB', fontWeight: '600' }}>Total Land Value</th>
+                {/* Allocation Columns */}
+                <th style={{ padding: '6px', textAlign: 'center', border: '1px solid #D1D5DB', fontWeight: '600' }}>Current %</th>
+                <th style={{ padding: '6px', textAlign: 'center', border: '1px solid #D1D5DB', fontWeight: '600' }}>Recommended %</th>
+                <th style={{ padding: '6px', textAlign: 'center', border: '1px solid #D1D5DB', fontWeight: '600' }}>Status</th>
               </tr>
             </thead>
             <tbody>
-              {vacantTestSales.map((sale, index) => (
-                <tr key={`${sale.id}_${index}`} style={{ backgroundColor: index % 2 === 0 ? 'white' : '#F9FAFB' }}>
-                  <td style={{ padding: '8px' }}>{sale.vcs}</td>
-                  <td style={{ padding: '8px' }}>{sale.year}</td>
-                  <td style={{ padding: '8px' }}>{sale.region}</td>
-                  <td style={{ padding: '8px' }}>{sale.block}/{sale.lot}</td>
-                  <td style={{ padding: '8px', textAlign: 'right' }}>${sale.price?.toLocaleString()}</td>
-                  <td style={{ padding: '8px', textAlign: 'right' }}>{sale.acres?.toFixed(2)}</td>
-                  <td style={{ padding: '8px', textAlign: 'right' }}>${sale.rawLandValue?.toLocaleString()}</td>
-                  <td style={{ padding: '8px', textAlign: 'right', fontWeight: 'bold', color: sale.siteValue > 0 ? '#10B981' : '#EF4444' }}>
-                    ${sale.siteValue?.toLocaleString()}
+              {vacantTestSales.filter(sale => sale.region === 'Normal').map((sale, index) => (
+                <tr
+                  key={`${sale.id}_${index}`}
+                  style={{
+                    backgroundColor: sale.isPositive ? (index % 2 === 0 ? 'white' : '#F9FAFB') : '#FEF2F2',
+                    opacity: sale.isPositive ? 1 : 0.7,
+                    borderBottom: '1px solid #E5E7EB'
+                  }}
+                >
+                  {/* Vacant Sale Data */}
+                  <td style={{ padding: '8px', fontWeight: 'bold', border: '1px solid #E5E7EB' }}>{sale.vcs}</td>
+                  <td style={{ padding: '8px', border: '1px solid #E5E7EB' }}>{sale.year}</td>
+                  <td style={{ padding: '8px', border: '1px solid #E5E7EB' }}>{sale.block}/{sale.lot}</td>
+                  <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>${sale.vacantPrice?.toLocaleString()}</td>
+                  <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{sale.acres?.toFixed(2)}</td>
+                  <td style={{
+                    padding: '8px',
+                    textAlign: 'right',
+                    fontWeight: 'bold',
+                    color: sale.siteValue > 0 ? '#10B981' : '#EF4444',
+                    borderRight: '2px solid #E5E7EB',
+                    border: '1px solid #E5E7EB'
+                  }}>
+                    ${Math.round(sale.siteValue).toLocaleString()}
                   </td>
-                  <td style={{ padding: '8px', textAlign: 'center' }}>
-                    {sale.siteValue > 0 ? '✓' : '✗'}
+
+                  {/* Improved Sales Data */}
+                  <td style={{ padding: '8px', textAlign: 'center', border: '1px solid #E5E7EB' }}>{sale.improvedSalesCount}</td>
+                  <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>${Math.round(sale.avgImprovedPrice)?.toLocaleString()}</td>
+                  <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{sale.avgImprovedAcres}</td>
+                  <td style={{
+                    padding: '8px',
+                    textAlign: 'right',
+                    fontWeight: 'bold',
+                    borderRight: '2px solid #E5E7EB',
+                    border: '1px solid #E5E7EB'
+                  }}>
+                    ${Math.round(sale.totalLandValue)?.toLocaleString()}
+                  </td>
+
+                  {/* Allocation Results */}
+                  <td style={{ padding: '8px', textAlign: 'center', color: '#6B7280', border: '1px solid #E5E7EB' }}>
+                    {(sale.currentAllocation * 100).toFixed(1)}%
+                  </td>
+                  <td style={{
+                    padding: '8px',
+                    textAlign: 'center',
+                    fontWeight: 'bold',
+                    border: '1px solid #E5E7EB',
+                    backgroundColor: sale.isPositive ?
+                      (sale.recommendedAllocation >= 0.25 && sale.recommendedAllocation <= 0.40 ? '#D1FAE5' :
+                       sale.recommendedAllocation >= 0.20 && sale.recommendedAllocation <= 0.45 ? '#FEF3C7' : '#FEE2E2') :
+                      'transparent'
+                  }}>
+                    {(sale.recommendedAllocation * 100).toFixed(1)}%
+                  </td>
+                  <td style={{ padding: '8px', textAlign: 'center', border: '1px solid #E5E7EB' }}>
+                    <span style={{
+                      padding: '2px 8px',
+                      borderRadius: '12px',
+                      fontSize: '10px',
+                      fontWeight: 'bold',
+                      backgroundColor: sale.isPositive ? '#D1FAE5' : '#FEE2E2',
+                      color: sale.isPositive ? '#065F46' : '#991B1B'
+                    }}>
+                      {sale.isPositive ? 'Included' : 'Excluded'}
+                    </span>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+        </div>
+
+        {/* Summary Footer */}
+        <div style={{ padding: '15px', borderTop: '1px solid #E5E7EB', backgroundColor: '#F9FAFB' }}>
+          {(() => {
+            const normalRegionSales = vacantTestSales.filter(s => s.region === 'Normal');
+            const positiveSales = normalRegionSales.filter(s => s.isPositive);
+            const totalLandValue = positiveSales.reduce((sum, s) => sum + s.totalLandValue, 0);
+            const totalSalePrice = positiveSales.reduce((sum, s) => sum + s.avgImprovedPrice, 0);
+            const overallRecommended = totalSalePrice > 0 ? (totalLandValue / totalSalePrice) * 100 : 0;
+
+            return (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px', fontSize: '14px' }}>
+                <div>
+                  <div style={{ color: '#6B7280', fontSize: '12px' }}>Normal Region Sales Included</div>
+                  <div style={{ fontWeight: 'bold', color: '#10B981' }}>{positiveSales.length} of {normalRegionSales.length}</div>
+                </div>
+                <div>
+                  <div style={{ color: '#6B7280', fontSize: '12px' }}>Total Land Value</div>
+                  <div style={{ fontWeight: 'bold' }}>${Math.round(totalLandValue).toLocaleString()}</div>
+                </div>
+                <div>
+                  <div style={{ color: '#6B7280', fontSize: '12px' }}>Total Sale Price</div>
+                  <div style={{ fontWeight: 'bold' }}>${Math.round(totalSalePrice).toLocaleString()}</div>
+                </div>
+                <div>
+                  <div style={{ color: '#6B7280', fontSize: '12px' }}>Normal Region Recommended</div>
+                  <div style={{ fontWeight: 'bold', fontSize: '16px', color: '#F59E0B' }}>{overallRecommended.toFixed(1)}%</div>
+                </div>
+              </div>
+            );
+          })()}
         </div>
       </div>
 
-      {/* Improved Sales Test */}
-      <div style={{ backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden', border: '1px solid #E5E7EB' }}>
-        <div style={{ padding: '15px', borderBottom: '1px solid #E5E7EB', backgroundColor: '#F9FAFB' }}>
-          <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 'bold' }}>Improved Sales Allocation Test</h3>
-        </div>
-        
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', fontSize: '13px' }}>
-            <thead>
-              <tr style={{ backgroundColor: '#F9FAFB' }}>
-                <th style={{ padding: '8px' }}>VCS</th>
-                <th style={{ padding: '8px' }}>Year</th>
-                <th style={{ padding: '8px', textAlign: 'center' }}>Sales</th>
-                <th style={{ padding: '8px', textAlign: 'right' }}>Avg Price</th>
-                <th style={{ padding: '8px', textAlign: 'right' }}>Avg Acres</th>
-                <th style={{ padding: '8px', textAlign: 'right' }}>Raw Land</th>
-                <th style={{ padding: '8px', textAlign: 'right' }}>Site Value</th>
-                <th style={{ padding: '8px', textAlign: 'right' }}>Total Land</th>
-                <th style={{ padding: '8px', textAlign: 'center' }}>Current %</th>
-                <th style={{ padding: '8px', textAlign: 'center' }}>Rec %</th>
-              </tr>
-            </thead>
-            <tbody>
-              {improvedTestSales.map((sale, index) => (
-                <tr key={`${sale.vcs}_${sale.year}`} style={{ backgroundColor: index % 2 === 0 ? 'white' : '#F9FAFB' }}>
-                  <td style={{ padding: '8px' }}>{sale.vcs}</td>
-                  <td style={{ padding: '8px' }}>{sale.year}</td>
-                  <td style={{ padding: '8px', textAlign: 'center' }}>{sale.salesCount}</td>
-                  <td style={{ padding: '8px', textAlign: 'right' }}>${sale.avgPrice?.toLocaleString()}</td>
-                  <td style={{ padding: '8px', textAlign: 'right' }}>{sale.avgAcres}</td>
-                  <td style={{ padding: '8px', textAlign: 'right' }}>${sale.rawLandValue?.toLocaleString()}</td>
-                  <td style={{ padding: '8px', textAlign: 'right' }}>${sale.siteValue?.toLocaleString()}</td>
-                  <td style={{ padding: '8px', textAlign: 'right', fontWeight: 'bold' }}>${sale.totalLandValue?.toLocaleString()}</td>
-                  <td style={{ padding: '8px', textAlign: 'center', color: '#6B7280' }}>
-                    {(sale.currentAllocation * 100).toFixed(1)}
-                  </td>
-                  <td style={{ padding: '8px', textAlign: 'center', fontWeight: 'bold', backgroundColor: sale.recommendedAllocation >= 0.25 && sale.recommendedAllocation <= 0.40 ? '#D1FAE5' : sale.recommendedAllocation >= 0.20 && sale.recommendedAllocation <= 0.45 ? '#FEF3C7' : '#FEE2E2' }}>
-                    {(sale.recommendedAllocation * 100).toFixed(1)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      {/* Special Region Individual Allocation Analysis Table */}
+      {(() => {
+        const specialRegionSales = vacantTestSales.filter(sale => sale.region !== 'Normal');
+        if (specialRegionSales.length === 0) return null;
+
+        return (
+          <div style={{ backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden', border: '1px solid #E5E7EB', marginTop: '20px' }}>
+            <div style={{ padding: '15px', borderBottom: '1px solid #E5E7EB', backgroundColor: '#F3E8FF' }}>
+              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 'bold', color: '#8B5CF6' }}>Special Region Individual Allocation Analysis</h3>
+              <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#6B7280' }}>
+                Vacant sales using special region cascade rates
+              </p>
+            </div>
+
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{
+                width: '100%',
+                fontSize: '12px',
+                borderCollapse: 'collapse',
+                border: '1px solid #D1D5DB'
+              }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#F9FAFB', borderBottom: '2px solid #D1D5DB' }}>
+                    {/* Vacant Sale Info */}
+                    <th style={{
+                      padding: '8px',
+                      borderRight: '2px solid #E5E7EB',
+                      border: '1px solid #D1D5DB',
+                      fontWeight: 'bold'
+                    }} colSpan="7">Vacant Sale</th>
+                    {/* Improved Sales Info */}
+                    <th style={{
+                      padding: '8px',
+                      borderRight: '2px solid #E5E7EB',
+                      border: '1px solid #D1D5DB',
+                      fontWeight: 'bold'
+                    }} colSpan="4">Improved Sales (Same Year)</th>
+                    {/* Allocation Results */}
+                    <th style={{
+                      padding: '8px',
+                      border: '1px solid #D1D5DB',
+                      fontWeight: 'bold'
+                    }} colSpan="3">Allocation Analysis</th>
+                  </tr>
+                  <tr style={{ backgroundColor: '#F3F4F6', fontSize: '11px', borderBottom: '1px solid #D1D5DB' }}>
+                    {/* Vacant Sale Columns */}
+                    <th style={{ padding: '6px', border: '1px solid #D1D5DB', fontWeight: '600' }}>VCS</th>
+                    <th style={{ padding: '6px', border: '1px solid #D1D5DB', fontWeight: '600' }}>Year</th>
+                    <th style={{ padding: '6px', border: '1px solid #D1D5DB', fontWeight: '600' }}>Block/Lot</th>
+                    <th style={{ padding: '6px', border: '1px solid #D1D5DB', fontWeight: '600' }}>Region</th>
+                    <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Price</th>
+                    <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Acres</th>
+                    <th style={{ padding: '6px', textAlign: 'right', borderRight: '2px solid #E5E7EB', border: '1px solid #D1D5DB', fontWeight: '600' }}>Site Value</th>
+                    {/* Improved Sales Columns */}
+                    <th style={{ padding: '6px', textAlign: 'center', border: '1px solid #D1D5DB', fontWeight: '600' }}>Count</th>
+                    <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Avg Price</th>
+                    <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Avg Acres</th>
+                    <th style={{ padding: '6px', textAlign: 'right', borderRight: '2px solid #E5E7EB', border: '1px solid #D1D5DB', fontWeight: '600' }}>Total Land Value</th>
+                    {/* Allocation Columns */}
+                    <th style={{ padding: '6px', textAlign: 'center', border: '1px solid #D1D5DB', fontWeight: '600' }}>Current %</th>
+                    <th style={{ padding: '6px', textAlign: 'center', border: '1px solid #D1D5DB', fontWeight: '600' }}>Recommended %</th>
+                    <th style={{ padding: '6px', textAlign: 'center', border: '1px solid #D1D5DB', fontWeight: '600' }}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {specialRegionSales.map((sale, index) => (
+                    <tr
+                      key={`special_${sale.id}_${index}`}
+                      style={{
+                        backgroundColor: sale.isPositive ? (index % 2 === 0 ? 'white' : '#F9FAFB') : '#FEF2F2',
+                        opacity: sale.isPositive ? 1 : 0.7,
+                        borderBottom: '1px solid #E5E7EB'
+                      }}
+                    >
+                      {/* Vacant Sale Data */}
+                      <td style={{ padding: '8px', fontWeight: 'bold', border: '1px solid #E5E7EB' }}>{sale.vcs}</td>
+                      <td style={{ padding: '8px', border: '1px solid #E5E7EB' }}>{sale.year}</td>
+                      <td style={{ padding: '8px', border: '1px solid #E5E7EB' }}>{sale.block}/{sale.lot}</td>
+                      <td style={{
+                        padding: '8px',
+                        border: '1px solid #E5E7EB',
+                        fontSize: '10px',
+                        fontWeight: '600',
+                        color: '#8B5CF6'
+                      }}>
+                        {sale.region}
+                      </td>
+                      <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>${sale.vacantPrice?.toLocaleString()}</td>
+                      <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{sale.acres?.toFixed(2)}</td>
+                      <td style={{
+                        padding: '8px',
+                        textAlign: 'right',
+                        fontWeight: 'bold',
+                        color: sale.siteValue > 0 ? '#10B981' : '#EF4444',
+                        borderRight: '2px solid #E5E7EB',
+                        border: '1px solid #E5E7EB'
+                      }}>
+                        ${Math.round(sale.siteValue).toLocaleString()}
+                      </td>
+
+                      {/* Improved Sales Data */}
+                      <td style={{ padding: '8px', textAlign: 'center', border: '1px solid #E5E7EB' }}>{sale.improvedSalesCount}</td>
+                      <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>${Math.round(sale.avgImprovedPrice)?.toLocaleString()}</td>
+                      <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{sale.avgImprovedAcres}</td>
+                      <td style={{
+                        padding: '8px',
+                        textAlign: 'right',
+                        fontWeight: 'bold',
+                        borderRight: '2px solid #E5E7EB',
+                        border: '1px solid #E5E7EB'
+                      }}>
+                        ${Math.round(sale.totalLandValue)?.toLocaleString()}
+                      </td>
+
+                      {/* Allocation Results */}
+                      <td style={{ padding: '8px', textAlign: 'center', color: '#6B7280', border: '1px solid #E5E7EB' }}>
+                        {(sale.currentAllocation * 100).toFixed(1)}%
+                      </td>
+                      <td style={{
+                        padding: '8px',
+                        textAlign: 'center',
+                        fontWeight: 'bold',
+                        border: '1px solid #E5E7EB',
+                        backgroundColor: sale.isPositive ?
+                          (sale.recommendedAllocation >= 0.25 && sale.recommendedAllocation <= 0.40 ? '#D1FAE5' :
+                           sale.recommendedAllocation >= 0.20 && sale.recommendedAllocation <= 0.45 ? '#FEF3C7' : '#FEE2E2') :
+                          'transparent'
+                      }}>
+                        {(sale.recommendedAllocation * 100).toFixed(1)}%
+                      </td>
+                      <td style={{ padding: '8px', textAlign: 'center', border: '1px solid #E5E7EB' }}>
+                        <span style={{
+                          padding: '2px 8px',
+                          borderRadius: '12px',
+                          fontSize: '10px',
+                          fontWeight: 'bold',
+                          backgroundColor: sale.isPositive ? '#D1FAE5' : '#FEE2E2',
+                          color: sale.isPositive ? '#065F46' : '#991B1B'
+                        }}>
+                          {sale.isPositive ? 'Included' : 'Excluded'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Special Region Summary Footer */}
+            <div style={{ padding: '15px', borderTop: '1px solid #E5E7EB', backgroundColor: '#F3E8FF' }}>
+              {(() => {
+                const positiveSales = specialRegionSales.filter(s => s.isPositive);
+                const totalLandValue = positiveSales.reduce((sum, s) => sum + s.totalLandValue, 0);
+                const totalSalePrice = positiveSales.reduce((sum, s) => sum + s.avgImprovedPrice, 0);
+                const overallRecommended = totalSalePrice > 0 ? (totalLandValue / totalSalePrice) * 100 : 0;
+
+                return (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px', fontSize: '14px' }}>
+                    <div>
+                      <div style={{ color: '#6B7280', fontSize: '12px' }}>Special Region Sales Included</div>
+                      <div style={{ fontWeight: 'bold', color: '#8B5CF6' }}>{positiveSales.length} of {specialRegionSales.length}</div>
+                    </div>
+                    <div>
+                      <div style={{ color: '#6B7280', fontSize: '12px' }}>Total Land Value</div>
+                      <div style={{ fontWeight: 'bold' }}>${Math.round(totalLandValue).toLocaleString()}</div>
+                    </div>
+                    <div>
+                      <div style={{ color: '#6B7280', fontSize: '12px' }}>Total Sale Price</div>
+                      <div style={{ fontWeight: 'bold' }}>${Math.round(totalSalePrice).toLocaleString()}</div>
+                    </div>
+                    <div>
+                      <div style={{ color: '#6B7280', fontSize: '12px' }}>Special Region Recommended</div>
+                      <div style={{ fontWeight: 'bold', fontSize: '16px', color: '#8B5CF6' }}>{overallRecommended.toFixed(1)}%</div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
+
+  // ========== DYNAMIC COLUMN HELPERS ==========
+  const shouldShowResidualColumn = useMemo(() => {
+    return cascadeConfig.normal.residual?.rate && cascadeConfig.normal.residual.rate > 0;
+  }, [cascadeConfig]);
+
+  const shouldShowKeyColumn = useMemo(() => {
+    return Object.values(vcsSheetData).some(data => data.keyPages && data.keyPages.trim() !== '');
+  }, [vcsSheetData]);
+
+  const shouldShowMapColumn = useMemo(() => {
+    return Object.values(vcsSheetData).some(data => data.mapPages && data.mapPages.trim() !== '');
+  }, [vcsSheetData]);
+
+  // ========== METHOD FORMATTING HELPER ==========
+  const getMethodDisplay = useCallback((type, description) => {
+    // Check if it's a residential description that includes "condo"
+    if (type && type.startsWith('Residential') &&
+        description && description.toLowerCase().includes('condo')) {
+      return 'SITE';
+    }
+
+    // Otherwise use the valuation mode mapping
+    switch (valuationMode) {
+      case 'acre': return 'AC';
+      case 'sf': return 'SF';
+      case 'ff': return 'FF';
+      default: return valuationMode.toUpperCase();
+    }
+  }, [valuationMode]);
+
+  // ========== SALES DATE FILTERING FOR CME ==========
+  const getOctoberFirstThreeYearsPrior = () => {
+    const now = new Date();
+    const threeYearsPrior = now.getFullYear() - 3;
+    return new Date(threeYearsPrior, 9, 1); // October 1st (month 9 = October)
+  };
+
+  // ========== CME BRACKET DEFINITIONS ==========
+  const CME_BRACKETS = [
+    { min: 0, max: 99999, label: '<100', color: '#FF9999', textColor: 'black' },
+    { min: 100000, max: 199999, label: '100-199', color: '#FFB366', textColor: 'black' },
+    { min: 200000, max: 299999, label: '200-299', color: '#FFCC99', textColor: 'black' },
+    { min: 300000, max: 399999, label: '300-399', color: '#FFFF99', textColor: 'black' },
+    { min: 400000, max: 499999, label: '400-499', color: '#CCFF99', textColor: 'black' },
+    { min: 500000, max: 749999, label: '500-749', color: '#99FF99', textColor: 'black' },
+    { min: 750000, max: 999999, label: '750-999', color: '#99CCFF', textColor: 'black' },
+    { min: 1000000, max: 1499999, label: '1000-1499', color: '#9999FF', textColor: 'black' },
+    { min: 1500000, max: 1999999, label: '1500-1999', color: '#CC99FF', textColor: 'black' },
+    { min: 2000000, max: 99999999, label: '2000+', color: '#FF99FF', textColor: 'black' }
+  ];
+
+  const getCMEBracket = (price) => {
+    return CME_BRACKETS.find(bracket => price >= bracket.min && price <= bracket.max) || CME_BRACKETS[0];
+  };
 
   // ========== RENDER VCS SHEET TAB ==========
   const renderVCSSheetTab = () => {
@@ -3151,61 +6013,159 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
 
         <div style={{ backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden', border: '1px solid #E5E7EB' }}>
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', fontSize: '12px' }}>
+            <table style={{ width: '100%', fontSize: '12px', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ backgroundColor: '#1E40AF', color: 'white' }}>
-                  <th style={{ padding: '8px' }}>VCS</th>
-                  <th style={{ padding: '8px' }}>Total</th>
-                  <th style={{ padding: '8px' }}>Type</th>
-                  <th style={{ padding: '8px' }}>Description</th>
-                  <th style={{ padding: '8px' }}>Method</th>
-                  <th style={{ padding: '8px' }}>Typ Lot</th>
-                  <th style={{ padding: '8px' }}>Rec Site</th>
-                  <th style={{ padding: '8px' }}>Act Site</th>
+                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>VCS</th>
+                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Total</th>
+                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Type</th>
+                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Description</th>
+                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Method</th>
+                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Typ Lot</th>
+                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Rec Site</th>
+                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Act Site</th>
                   {valuationMode === 'ff' ? (
                     <>
-                      <th style={{ padding: '8px' }}>Std FF</th>
-                      <th style={{ padding: '8px' }}>Exc FF</th>
+                      <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Std FF</th>
+                      <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Exc FF</th>
                     </>
                   ) : (
                     <>
-                      <th style={{ padding: '8px' }}>Prime</th>
-                      <th style={{ padding: '8px' }}>Sec</th>
-                      <th style={{ padding: '8px' }}>Exc</th>
-                      <th style={{ padding: '8px' }}>Res</th>
+                      <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Prime</th>
+                      <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Sec</th>
+                      <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Exc</th>
+                      {shouldShowResidualColumn && (
+                        <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Res</th>
+                      )}
                     </>
                   )}
-                  <th style={{ padding: '8px' }}>Avg NT</th>
-                  <th style={{ padding: '8px' }}>Avg NS</th>
-                  <th style={{ padding: '8px' }}>Avg $</th>
-                  <th style={{ padding: '8px' }}>CME</th>
-                  <th style={{ padding: '8px' }}>Zoning</th>
-                  <th style={{ padding: '8px' }}>Key</th>
-                  <th style={{ padding: '8px' }}>Map</th>
+                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Wet</th>
+                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>LLocked</th>
+                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Consv</th>
+                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Avg Price (t)</th>
+                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Avg Price</th>
+                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>CME</th>
+                  <th
+                    style={{
+                      padding: '8px',
+                      border: '1px solid #E5E7EB',
+                      cursor: 'pointer',
+                      userSelect: 'none'
+                    }}
+                    onClick={() => toggleFieldCollapse('zoning')}
+                    title="Click to expand/collapse"
+                  >
+                    Zoning {collapsedFields.zoning ? '▶' : '▼'}
+                  </th>
+                  {shouldShowKeyColumn && (
+                    <th
+                      style={{
+                        padding: '8px',
+                        border: '1px solid #E5E7EB',
+                        cursor: 'pointer',
+                        userSelect: 'none'
+                      }}
+                      onClick={() => toggleFieldCollapse('key')}
+                      title="Click to expand/collapse"
+                    >
+                      Key {collapsedFields.key ? '▶' : '▼'}
+                    </th>
+                  )}
+                  {shouldShowMapColumn && (
+                    <th
+                      style={{
+                        padding: '8px',
+                        border: '1px solid #E5E7EB',
+                        cursor: 'pointer',
+                        userSelect: 'none'
+                      }}
+                      onClick={() => toggleFieldCollapse('map')}
+                      title="Click to expand/collapse"
+                    >
+                      Map {collapsedFields.map ? '▶' : '▼'}
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody>
                 {Object.keys(vcsSheetData).sort().map((vcs, index) => {
                   const data = vcsSheetData[vcs];
                   const type = vcsTypes[vcs] || 'Residential-Typical';
-                  const isGrayedOut = ['Commercial', 'Industrial', 'Apartment', 'Special'].includes(type);
+                  const isGrayedOut = !type.startsWith('Residential');
                   const description = vcsDescriptions[vcs] || getVCSDescription(vcs);
                   const recSite = vcsRecommendedSites[vcs] || 0;
                   const actSite = vcsManualSiteValues[vcs] || recSite;
+
+                  // Determine which cascade rates to use (priority: VCS-specific > Special Region > Normal)
+                  let cascadeRates = cascadeConfig.normal;
+                  let rateSource = 'Normal';
+
+                  // Check for VCS-specific configuration
+                  const vcsSpecificConfig = Object.values(cascadeConfig.vcsSpecific || {}).find(config =>
+                    config.vcsList?.includes(vcs)
+                  );
+                  if (vcsSpecificConfig) {
+                    cascadeRates = vcsSpecificConfig.rates || cascadeConfig.normal;
+                    rateSource = `VCS-Specific (${vcsSpecificConfig.method?.toUpperCase()})`;
+                  } else {
+                    // Check for special region configuration
+                    const vcsInSpecialRegion = vacantSales.find(sale =>
+                      sale.new_vcs === vcs && specialRegions[sale.id] && specialRegions[sale.id] !== 'Normal'
+                    );
+                    if (vcsInSpecialRegion && cascadeConfig.special?.[specialRegions[vcsInSpecialRegion.id]]) {
+                      cascadeRates = cascadeConfig.special[specialRegions[vcsInSpecialRegion.id]];
+                      rateSource = specialRegions[vcsInSpecialRegion.id];
+                    }
+                  }
                   
-                  // Get typical lot size
-                  const vcsProps = properties?.filter(p => 
-                    p.new_vcs === vcs && 
-                    (p.property_m4_class === '2' || p.property_m4_class === '3A')
+                  // Get typical lot size for all properties in this VCS
+                  const vcsProps = properties?.filter(p =>
+                    p.new_vcs === vcs &&
+                    p.asset_lot_acre && p.asset_lot_acre > 0 // Only properties with valid acreage
                   ) || [];
                   const typicalLot = vcsProps.length > 0 ?
                     (vcsProps.reduce((sum, p) => sum + parseFloat(calculateAcreage(p)), 0) / vcsProps.length).toFixed(2) : '';
+
+                  // Check for special category properties in this VCS (only for residential)
+                  const vcsSpecialCategories = !isGrayedOut ? {
+                    wetlands: cascadeConfig.specialCategories.wetlands && (
+                      vacantSales.some(s => s.new_vcs === vcs && saleCategories[s.id] === 'wetlands') ||
+                      cascadeConfig.specialCategories.wetlands > 0
+                    ),
+                    landlocked: cascadeConfig.specialCategories.landlocked && (
+                      vacantSales.some(s => s.new_vcs === vcs && saleCategories[s.id] === 'landlocked') ||
+                      cascadeConfig.specialCategories.landlocked > 0
+                    ),
+                    conservation: cascadeConfig.specialCategories.conservation && (
+                      vacantSales.some(s => s.new_vcs === vcs && saleCategories[s.id] === 'conservation') ||
+                      cascadeConfig.specialCategories.conservation > 0
+                    )
+                  } : {
+                    wetlands: false,
+                    landlocked: false,
+                    conservation: false
+                  };
+
+                  // Clean up zoning - get unique instances only
+                  const vcsZoningValues = properties?.filter(p => p.new_vcs === vcs && p.asset_zoning)
+                    .map(p => p.asset_zoning.trim())
+                    .filter((value, index, array) => array.indexOf(value) === index && value !== '') || [];
+                  const cleanZoning = vcsZoningValues.length <= 3 ?
+                    vcsZoningValues.join(', ') :
+                    `${vcsZoningValues.slice(0, 2).join(', ')} +${vcsZoningValues.length - 2} more`;
+
+                  // Get CME bracket for average price
+                  const cmeBracket = data.avgPrice ? getCMEBracket(data.avgPrice) : null;
                   
                   return (
-                    <tr key={vcs} style={{ backgroundColor: index % 2 === 0 ? 'white' : '#F9FAFB' }}>
-                      <td style={{ padding: '8px', fontWeight: 'bold' }}>{vcs}</td>
-                      <td style={{ padding: '8px', textAlign: 'center' }}>{data.counts?.total || 0}</td>
-                      <td style={{ padding: '8px' }}>
+                    <tr key={vcs} style={{
+                      backgroundColor: isGrayedOut ? '#F3F4F6' : (index % 2 === 0 ? 'white' : '#F9FAFB'),
+                      opacity: isGrayedOut ? 0.7 : 1,
+                      border: '1px solid #E5E7EB'
+                    }}>
+                      <td style={{ padding: '8px', fontWeight: 'bold', border: '1px solid #E5E7EB' }}>{vcs}</td>
+                      <td style={{ padding: '8px', textAlign: 'center', border: '1px solid #E5E7EB' }}>{data.counts?.total || 0}</td>
+                      <td style={{ padding: '8px', border: '1px solid #E5E7EB' }}>
                         <select
                           value={type}
                           onChange={(e) => updateVCSType(vcs, e.target.value)}
@@ -3222,7 +6182,7 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
                           ))}
                         </select>
                       </td>
-                      <td style={{ padding: '8px' }}>
+                      <td style={{ padding: '8px', border: '1px solid #E5E7EB' }}>
                         <input
                           type="text"
                           value={description}
@@ -3236,10 +6196,10 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
                           }}
                         />
                       </td>
-                      <td style={{ padding: '8px', textAlign: 'center' }}>{valuationMode}</td>
-                      <td style={{ padding: '8px', textAlign: 'center' }}>{typicalLot}</td>
-                      <td style={{ padding: '8px', textAlign: 'right' }}>${recSite.toLocaleString()}</td>
-                      <td style={{ padding: '8px' }}>
+                      <td style={{ padding: '8px', textAlign: 'center', border: '1px solid #E5E7EB' }}>{getMethodDisplay(type, description)}</td>
+                      <td style={{ padding: '8px', textAlign: 'center', border: '1px solid #E5E7EB' }}>{typicalLot}</td>
+                      <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>${Math.round(recSite).toLocaleString()}</td>
+                      <td style={{ padding: '8px', border: '1px solid #E5E7EB' }}>
                         <input
                           type="number"
                           value={actSite}
@@ -3256,53 +6216,242 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
                       </td>
                       {valuationMode === 'ff' ? (
                         <>
-                          <td style={{ padding: '8px', textAlign: 'right', backgroundColor: isGrayedOut ? '#F3F4F6' : 'inherit' }}>
-                            {!isGrayedOut ? cascadeConfig.normal.standard?.rate || '' : ''}
+                          <td style={{
+                            padding: '8px',
+                            textAlign: 'right',
+                            backgroundColor: isGrayedOut ? '#F3F4F6' : (rateSource !== 'Normal' ? '#FEF3C7' : 'inherit'),
+                            position: 'relative',
+                            border: '1px solid #E5E7EB'
+                          }}>
+                            {!isGrayedOut ? (
+                              <span title={`Rate Source: ${rateSource}`}>
+                                {cascadeRates.standard?.rate ? `$${cascadeRates.standard.rate.toLocaleString()}` : ''}
+                                {rateSource !== 'Normal' && (
+                                  <span style={{
+                                    position: 'absolute',
+                                    top: '2px',
+                                    right: '2px',
+                                    fontSize: '8px',
+                                    color: '#92400E',
+                                    fontWeight: 'bold'
+                                  }}>*</span>
+                                )}
+                              </span>
+                            ) : ''}
                           </td>
-                          <td style={{ padding: '8px', textAlign: 'right', backgroundColor: isGrayedOut ? '#F3F4F6' : 'inherit' }}>
-                            {!isGrayedOut ? cascadeConfig.normal.excess?.rate || '' : ''}
+                          <td style={{
+                            padding: '8px',
+                            textAlign: 'right',
+                            backgroundColor: isGrayedOut ? '#F3F4F6' : (rateSource !== 'Normal' ? '#FEF3C7' : 'inherit'),
+                            position: 'relative',
+                            border: '1px solid #E5E7EB'
+                          }}>
+                            {!isGrayedOut ? (
+                              <span title={`Rate Source: ${rateSource}`}>
+                                {cascadeRates.excess?.rate ? `$${cascadeRates.excess.rate.toLocaleString()}` : ''}
+                                {rateSource !== 'Normal' && (
+                                  <span style={{
+                                    position: 'absolute',
+                                    top: '2px',
+                                    right: '2px',
+                                    fontSize: '8px',
+                                    color: '#92400E',
+                                    fontWeight: 'bold'
+                                  }}>*</span>
+                                )}
+                              </span>
+                            ) : ''}
                           </td>
                         </>
                       ) : (
                         <>
-                          <td style={{ padding: '8px', textAlign: 'right', backgroundColor: isGrayedOut ? '#F3F4F6' : 'inherit' }}>
-                            {!isGrayedOut ? cascadeConfig.normal.prime?.rate || '' : ''}
+                          <td style={{
+                            padding: '8px',
+                            textAlign: 'right',
+                            backgroundColor: isGrayedOut ? '#F3F4F6' : (rateSource !== 'Normal' ? '#FEF3C7' : 'inherit'),
+                            position: 'relative',
+                            border: '1px solid #E5E7EB'
+                          }}>
+                            {!isGrayedOut ? (
+                              <span title={`Rate Source: ${rateSource}`}>
+                                {cascadeRates.prime?.rate ? `$${cascadeRates.prime.rate.toLocaleString()}` : ''}
+                                {rateSource !== 'Normal' && (
+                                  <span style={{
+                                    position: 'absolute',
+                                    top: '2px',
+                                    right: '2px',
+                                    fontSize: '8px',
+                                    color: '#92400E',
+                                    fontWeight: 'bold'
+                                  }}>*</span>
+                                )}
+                              </span>
+                            ) : ''}
                           </td>
-                          <td style={{ padding: '8px', textAlign: 'right', backgroundColor: isGrayedOut ? '#F3F4F6' : 'inherit' }}>
-                            {!isGrayedOut ? cascadeConfig.normal.secondary?.rate || '' : ''}
+                          <td style={{
+                            padding: '8px',
+                            textAlign: 'right',
+                            backgroundColor: isGrayedOut ? '#F3F4F6' : (rateSource !== 'Normal' ? '#FEF3C7' : 'inherit'),
+                            position: 'relative',
+                            border: '1px solid #E5E7EB'
+                          }}>
+                            {!isGrayedOut ? (
+                              <span title={`Rate Source: ${rateSource}`}>
+                                {cascadeRates.secondary?.rate ? `$${cascadeRates.secondary.rate.toLocaleString()}` : ''}
+                                {rateSource !== 'Normal' && (
+                                  <span style={{
+                                    position: 'absolute',
+                                    top: '2px',
+                                    right: '2px',
+                                    fontSize: '8px',
+                                    color: '#92400E',
+                                    fontWeight: 'bold'
+                                  }}>*</span>
+                                )}
+                              </span>
+                            ) : ''}
                           </td>
-                          <td style={{ padding: '8px', textAlign: 'right', backgroundColor: isGrayedOut ? '#F3F4F6' : 'inherit' }}>
-                            {!isGrayedOut ? cascadeConfig.normal.excess?.rate || '' : ''}
+                          <td style={{
+                            padding: '8px',
+                            textAlign: 'right',
+                            backgroundColor: isGrayedOut ? '#F3F4F6' : (rateSource !== 'Normal' ? '#FEF3C7' : 'inherit'),
+                            position: 'relative',
+                            border: '1px solid #E5E7EB'
+                          }}>
+                            {!isGrayedOut ? (
+                              <span title={`Rate Source: ${rateSource}`}>
+                                {cascadeRates.excess?.rate ? `$${cascadeRates.excess.rate.toLocaleString()}` : ''}
+                                {rateSource !== 'Normal' && (
+                                  <span style={{
+                                    position: 'absolute',
+                                    top: '2px',
+                                    right: '2px',
+                                    fontSize: '8px',
+                                    color: '#92400E',
+                                    fontWeight: 'bold'
+                                  }}>*</span>
+                                )}
+                              </span>
+                            ) : ''}
                           </td>
-                          <td style={{ padding: '8px', textAlign: 'right', backgroundColor: isGrayedOut ? '#F3F4F6' : 'inherit' }}>
-                            {!isGrayedOut ? cascadeConfig.normal.residual?.rate || '' : ''}
-                          </td>
+                          {shouldShowResidualColumn && (
+                            <td style={{
+                              padding: '8px',
+                              textAlign: 'right',
+                              backgroundColor: isGrayedOut ? '#F3F4F6' : (rateSource !== 'Normal' ? '#FEF3C7' : 'inherit'),
+                              position: 'relative',
+                              border: '1px solid #E5E7EB'
+                            }}>
+                              {!isGrayedOut ? (
+                                <span title={`Rate Source: ${rateSource}`}>
+                                  {cascadeRates.residual?.rate ? `$${cascadeRates.residual.rate.toLocaleString()}` : ''}
+                                  {rateSource !== 'Normal' && (
+                                    <span style={{
+                                      position: 'absolute',
+                                      top: '2px',
+                                      right: '2px',
+                                      fontSize: '8px',
+                                      color: '#92400E',
+                                      fontWeight: 'bold'
+                                    }}>*</span>
+                                  )}
+                                </span>
+                              ) : ''}
+                            </td>
+                          )}
                         </>
                       )}
-                      <td style={{ padding: '8px', textAlign: 'right' }}>
+                      {/* Special Category Rates */}
+                      <td style={{
+                        padding: '8px',
+                        textAlign: 'right',
+                        color: vcsSpecialCategories.wetlands ? '#1E40AF' : '#9CA3AF',
+                        border: '1px solid #E5E7EB'
+                      }}>
+                        {vcsSpecialCategories.wetlands && cascadeConfig.specialCategories.wetlands ?
+                          `$${cascadeConfig.specialCategories.wetlands.toLocaleString()}` : ''}
+                      </td>
+                      <td style={{
+                        padding: '8px',
+                        textAlign: 'right',
+                        color: vcsSpecialCategories.landlocked ? '#92400E' : '#9CA3AF',
+                        border: '1px solid #E5E7EB'
+                      }}>
+                        {vcsSpecialCategories.landlocked && cascadeConfig.specialCategories.landlocked ?
+                          `$${cascadeConfig.specialCategories.landlocked.toLocaleString()}` : ''}
+                      </td>
+                      <td style={{
+                        padding: '8px',
+                        textAlign: 'right',
+                        color: vcsSpecialCategories.conservation ? '#059669' : '#9CA3AF',
+                        border: '1px solid #E5E7EB'
+                      }}>
+                        {vcsSpecialCategories.conservation && cascadeConfig.specialCategories.conservation ?
+                          `$${cascadeConfig.specialCategories.conservation.toLocaleString()}` : ''}
+                      </td>
+                      <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>
                         {data.avgNormTime ? `$${data.avgNormTime.toLocaleString()}` : ''}
                       </td>
-                      <td style={{ padding: '8px', textAlign: 'right' }}>
-                        {data.avgNormSize ? `$${data.avgNormSize.toLocaleString()}` : ''}
-                      </td>
-                      <td style={{ padding: '8px', textAlign: 'right', fontWeight: 'bold' }}>
+                      <td style={{ padding: '8px', textAlign: 'right', fontWeight: 'bold', border: '1px solid #E5E7EB' }}>
                         {data.avgPrice ? `$${data.avgPrice.toLocaleString()}` : ''}
                       </td>
-                      <td style={{ padding: '8px', textAlign: 'center' }}>-</td>
-                      <td style={{ padding: '8px', fontSize: '10px', backgroundColor: isGrayedOut ? '#F3F4F6' : 'inherit' }}>
-                        {!isGrayedOut ? data.zoning || '' : ''}
+                      <td style={{ padding: '8px', textAlign: 'center', border: '1px solid #E5E7EB' }}>
+                        {cmeBracket ? (
+                          <span
+                            style={{
+                              padding: '2px 6px',
+                              borderRadius: '3px',
+                              fontSize: '10px',
+                              fontWeight: 'bold',
+                              backgroundColor: cmeBracket.color,
+                              color: cmeBracket.textColor
+                            }}
+                            title={cmeBracket.label}
+                          >
+                            {cmeBracket.label}
+                          </span>
+                        ) : '-'}
                       </td>
-                      <td style={{ padding: '8px', fontSize: '10px', backgroundColor: isGrayedOut ? '#F3F4F6' : 'inherit' }}>
-                        {!isGrayedOut ? data.keyPages || '' : ''}
+                      <td style={{ padding: '8px', fontSize: '10px', backgroundColor: isGrayedOut ? '#F3F4F6' : 'inherit', border: '1px solid #E5E7EB' }}>
+                        {!isGrayedOut && !collapsedFields.zoning ? cleanZoning : (collapsedFields.zoning ? '...' : '')}
                       </td>
-                      <td style={{ padding: '8px', fontSize: '10px', backgroundColor: isGrayedOut ? '#F3F4F6' : 'inherit' }}>
-                        {!isGrayedOut ? data.mapPages || '' : ''}
-                      </td>
+                      {shouldShowKeyColumn && (
+                        <td style={{ padding: '8px', fontSize: '10px', backgroundColor: isGrayedOut ? '#F3F4F6' : 'inherit', border: '1px solid #E5E7EB' }}>
+                          {!isGrayedOut && !collapsedFields.key ? data.keyPages || '' : (collapsedFields.key ? '...' : '')}
+                        </td>
+                      )}
+                      {shouldShowMapColumn && (
+                        <td style={{ padding: '8px', fontSize: '10px', backgroundColor: isGrayedOut ? '#F3F4F6' : 'inherit', border: '1px solid #E5E7EB' }}>
+                          {!isGrayedOut && !collapsedFields.map ? data.mapPages || '' : (collapsedFields.map ? '...' : '')}
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
               </tbody>
             </table>
+          </div>
+        </div>
+
+        {/* Rate Source Legend */}
+        <div style={{ marginTop: '10px', padding: '12px', backgroundColor: '#F9FAFB', borderRadius: '6px', fontSize: '11px' }}>
+          <div style={{ fontWeight: 'bold', marginBottom: '6px', color: '#374151' }}>Cascade Rate Sources:</div>
+          <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <div style={{ width: '12px', height: '12px', backgroundColor: 'white', border: '1px solid #D1D5DB' }}></div>
+              <span>Normal rates (default for all residential VCS)</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <div style={{ width: '12px', height: '12px', backgroundColor: '#FEF3C7', border: '1px solid #D1D5DB' }}></div>
+              <span>Special region or VCS-specific rates (*)</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <div style={{ width: '12px', height: '12px', backgroundColor: '#F3F4F6', border: '1px solid #D1D5DB' }}></div>
+              <span>Non-residential (rates not applicable)</span>
+            </div>
+          </div>
+          <div style={{ marginTop: '6px', color: '#6B7280', fontStyle: 'italic' }}>
+            * Hover over highlighted rates to see the specific source (Special Region or VCS-Specific configuration)
           </div>
         </div>
       </div>
@@ -3518,6 +6667,84 @@ Identify likely factors affecting this sale price (wetlands, access, zoning, tea
             }}
           >
             <Save size={16} /> {isSaving ? 'Saving...' : 'Save'}
+          </button>
+          <button
+            onClick={() => {
+              console.log('��� MANUAL DEBUG SAVE TRIGGERED');
+              console.log('Current state snapshot:', {
+                includedSales: Array.from(includedSales),
+                specialCategories: cascadeConfig.specialCategories,
+                saleCategories,
+                vacantSalesCount: vacantSales.length,
+                isInitialLoadComplete
+              });
+              saveAnalysis();
+            }}
+            style={{
+              backgroundColor: '#8B5CF6',
+              color: 'white',
+              padding: '4px 8px',
+              borderRadius: '4px',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: '12px'
+            }}
+          >
+            🔧 Debug
+          </button>
+          <button
+            onClick={() => {
+              console.log('🔧 MANUAL DEBUG SAVE TRIGGERED');
+              console.log('Current state snapshot:', {
+                includedSales: Array.from(includedSales),
+                specialCategories: cascadeConfig.specialCategories,
+                saleCategories,
+                vacantSalesCount: vacantSales.length
+              });
+              saveAnalysis();
+            }}
+            style={{
+              backgroundColor: '#8B5CF6',
+              color: 'white',
+              padding: '4px 8px',
+              borderRadius: '4px',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: '12px'
+            }}
+          >
+            🔧 Debug Save
+          </button>
+          <button
+            onClick={() => {
+              console.log('🎯 MANUAL VCS RECALCULATION TRIGGERED');
+              console.log('Current state:', {
+                targetAllocation,
+                hasCascadeRates: !!cascadeConfig.normal.prime,
+                propertiesCount: properties?.length || 0,
+                cascadeRates: cascadeConfig.normal
+              });
+
+              // Force target allocation to 28 if it's not set
+              if (!targetAllocation) {
+                console.log('🔧 FORCING TARGET ALLOCATION TO 28%');
+                setTargetAllocation(28);
+              }
+
+              // Force recalculation
+              calculateVCSRecommendedSitesWithTarget();
+            }}
+            style={{
+              backgroundColor: '#DC2626',
+              color: 'white',
+              padding: '4px 8px',
+              borderRadius: '4px',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: '12px'
+            }}
+          >
+            🎯 Force VCS Calc
           </button>
           {lastSaved && (
             <span style={{ fontSize: '12px', color: '#6B7280' }}>

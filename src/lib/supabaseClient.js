@@ -2360,14 +2360,18 @@ export const propertyService = {
       // Store preserved fields handler in versionInfo for updaters to use
       versionInfo.preservedFieldsHandler = this.createPreservedFieldsHandler.bind(this);
       versionInfo.preservedFields = PRESERVED_FIELDS;
-      
-      // Use updaters for UPSERT operations
+
+      // OPTIMIZED: Extract deletion list from versionInfo for targeted deletion
+      const deletionsList = versionInfo.deletionsList || null;
+      console.log(`🎯 DELETION OPTIMIZATION: ${deletionsList ? `Passing ${deletionsList.length} properties for targeted deletion` : 'No deletion list provided'}`);
+
+      // Use updaters for UPSERT operations with optimized deletion
       if (vendorType === 'BRT') {
         const { brtUpdater } = await import('./data-pipeline/brt-updater.js');
-        return await brtUpdater.processFile(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, versionInfo);
+        return await brtUpdater.processFile(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, versionInfo, deletionsList);
       } else if (vendorType === 'Microsystems') {
         const { microsystemsUpdater } = await import('./data-pipeline/microsystems-updater.js');
-        return await microsystemsUpdater.processFile(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, versionInfo);
+        return await microsystemsUpdater.processFile(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, versionInfo, deletionsList);
       } else {
         throw new Error(`Unsupported vendor type: ${vendorType}`);
       }

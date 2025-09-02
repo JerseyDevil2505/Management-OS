@@ -82,7 +82,6 @@ const loadEmployees = () => {
     const now = Date.now();
     
     if (analyticsCache && cacheTimestamp && (now - cacheTimestamp) < CACHE_DURATION) {
-      console.log('📦 Using cached data, reprocessing with current filters...');
       // Reprocess the cached raw data with current filters
       const reprocessed = processGlobalInspectionData(
         analyticsCache.rawData || [], 
@@ -92,8 +91,7 @@ const loadEmployees = () => {
       setGlobalAnalytics(reprocessed);
       return; // Use cached data instead of reloading
     }
-    
-    console.log('🔄 Loading fresh analytics data...');
+
     setIsLoadingAnalytics(true);
     try {
       // First, get all jobs to get their InfoBy category configs and vendor type
@@ -103,8 +101,6 @@ const loadEmployees = () => {
         .not('infoby_category_config', 'is', null);
 
       if (jobsError) throw jobsError;
-
-      console.log('🔍 Jobs with InfoBy configs:', jobsData?.length);
 
       // Create a map of job IDs to their InfoBy configs and vendor type
       const jobInfoByConfigs = {};
@@ -129,7 +125,6 @@ const loadEmployees = () => {
       .from('inspection_data')
       .select('*', { count: 'exact', head: true });
 
-    console.log(`🔍 Total inspection records in database: ${totalCount}`);
     setAnalyticsLoadProgress({ loaded: 0, total: totalCount || 0, retries: 0 });
 
     while (hasMore) {
@@ -153,8 +148,7 @@ const loadEmployees = () => {
           }
           
           retries++;
-          console.log(`⚠️ Retry ${retries}/${maxRetries} for page ${page + 1} after error:`, error);
-          
+
           if (retries < maxRetries) {
             // Wait before retrying
             await new Promise(resolve => setTimeout(resolve, retryDelay * retries));
@@ -162,8 +156,7 @@ const loadEmployees = () => {
           
         } catch (err) {
           retries++;
-          console.log(`⚠️ Retry ${retries}/${maxRetries} for page ${page + 1} after error:`, err);
-          
+
           if (retries < maxRetries) {
             await new Promise(resolve => setTimeout(resolve, retryDelay * retries));
           } else {
@@ -190,24 +183,15 @@ const loadEmployees = () => {
           retries: prev.retries + retries
         }));
 
-        // Log progress every 5 pages or on first/last page
-        if (page === 1 || page % 5 === 0 || !hasMore) {
-          console.log(`🔍 Progress: ${allInspectionData.length} / ${totalCount} records loaded (${Math.round((allInspectionData.length / totalCount) * 100)}%)`);
-        }
-
         // Add timing gap between successful page loads to prevent database overload
         if (hasMore) {
           const delay = 300; // 300ms delay between page loads
-          console.log(`⏳ Waiting ${delay}ms before next page to prevent database overload...`);
           await new Promise(resolve => setTimeout(resolve, delay));
         }
       } else {
         hasMore = false;
       }
     }
-
-    console.log('🔍 INSPECTION DATA:', allInspectionData.length, 'total records loaded');
-      console.log('🔍 Sample inspection record:', allInspectionData[0]);
 
       // Get ONLY inspector employees (Residential and Commercial - exclude Management)
       let employeesQuery = supabase
@@ -227,9 +211,6 @@ const loadEmployees = () => {
 
       if (employeesError) throw employeesError;
 
-      console.log('🔍 EMPLOYEES DATA:', employeesData?.length, 'inspector employees found');
-      console.log('🔍 Employee initials:', employeesData?.map(e => e.initials).filter(Boolean));
-
       if (!allInspectionData || allInspectionData.length === 0) {
         setGlobalAnalytics({
           summary: { totalInspections: 0, overallEntryRate: 0, overallRefusalRate: 0, avgInspectionsPerDay: 0 },
@@ -246,8 +227,6 @@ const loadEmployees = () => {
           employeeMap[emp.initials] = emp;
         }
       });
-
-      console.log('🔍 EMPLOYEE MAP:', Object.keys(employeeMap));
 
       // Process inspection data and match with employees
       const enrichedData = [];
@@ -279,21 +258,14 @@ const loadEmployees = () => {
         }
       });
 
-      console.log('🔍 ENRICHED DATA:', enrichedData.length, 'matched records');
-      
       // Add debug to see what's happening
       if (enrichedData.length === 0) {
-        console.log('⚠️ No enriched data! Checking why...');
-        console.log('Sample inspection record:', allInspectionData[0]);
-        console.log('Employee initials available:', Object.keys(employeeMap));
-        
         // Check a few records to see what initials they have
         const sampleInitials = allInspectionData.slice(0, 5).map(r => ({
           list_by: r.list_by,
           measure_by: r.measure_by,
           price_by: r.price_by
         }));
-        console.log('Sample initials from inspection data:', sampleInitials);
       }
 
       // Process the enriched data similar to ProductionTracker
@@ -308,7 +280,6 @@ const loadEmployees = () => {
         totalCount: allInspectionData.length
       });
       setCacheTimestamp(Date.now());
-      console.log(`💾 Cached ${enrichedData.length} records for instant filtering`);
 
     } catch (error) {
       console.error('Error loading global analytics:', error);
@@ -417,18 +388,9 @@ const loadEmployees = () => {
 
           // DEBUG: Check if info_by codes are being read correctly
           if (initials === 'SO') {
-            const alRecords = residentialRecords.filter(r => 
+            const alRecords = residentialRecords.filter(r =>
               r.measure_by === 'SO' && r.list_by === 'SO'
             );
-            console.log('🔍 AL DEBUG:');
-            console.log('Total AL measured & listed:', alRecords.length);
-            console.log('SO entries with info_by check:', myEntries);
-            console.log('Sample AL records:', alRecords.slice(0, 3).map(r => ({
-              info_by_code: r.info_by_code,
-              jobConfig: r.jobInfoByConfig,
-              hasEntryArray: r.jobInfoByConfig?.entry,
-              isInEntryArray: r.jobInfoByConfig?.entry?.includes(r.info_by_code?.toString())
-            })));
           }          
           
           // Refusal: my records with refusal codes
@@ -703,7 +665,6 @@ const loadEmployees = () => {
   // When filters change, reprocess cached data without reloading
   useEffect(() => {
     if (analyticsCache && analyticsCache.rawData && !isLoadingAnalytics) {
-      console.log('🔄 Filter changed, reprocessing cached data...');
       const reprocessed = processGlobalInspectionData(
         analyticsCache.rawData,
         analyticsFilter,
@@ -738,8 +699,7 @@ const loadEmployees = () => {
       });
       
       const mainSheetData = XLSX.utils.sheet_to_json(workbook.Sheets['Sheet1']);
-      console.log('File columns detected:', Object.keys(mainSheetData[0] || {}));
-      
+
       const existingEmployees = await employeeService.getAll();
       const existingEmailMap = new Map(existingEmployees.map(emp => [emp.email, emp]));
       
@@ -840,9 +800,7 @@ const loadEmployees = () => {
           created_by: '5df85ca3-7a54-4798-a665-c31da8d9caad'
         };
       });
-      
-      console.log('Processed employees sample:', processedEmployees[0]);
-      
+
       // Mark employees not in new import as inactive
       const newEmployeeEmails = new Set(processedEmployees.map(emp => emp.email));
       const inactiveUpdates = existingEmployees
@@ -886,7 +844,7 @@ const loadEmployees = () => {
       
     } catch (error) {
       console.error('Error importing employee data:', error);
-      alert(`❌ Error importing file: ${error.message}`);
+      alert(`�� Error importing file: ${error.message}`);
     } finally {
       setIsImporting(false);
     }

@@ -2,10 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { Upload, FileText, CheckCircle, AlertTriangle, X, Database, Settings, Download, Eye, Calendar, RefreshCw } from 'lucide-react';
 import { jobService, propertyService, supabase, preservedFieldsHandler } from '../../lib/supabaseClient';
 
-const FileUploadButton = ({ job, onFileProcessed, isJobLoading = false, onDataRefresh }) => {
+const FileUploadButton = ({
+  job,
+  onFileProcessed,
+  isJobLoading = false,
+  onDataRefresh,
+  isJobContainerLoading = false  // Accept loading state from JobContainer
+}) => {
   const [sourceFile, setSourceFile] = useState(null);
   const [codeFile, setCodeFile] = useState(null);
-  const [detectedVendor, setDetectedVendor] = useState(null);
+  // REMOVED: No need for detectedVendor state - use job.vendor_type directly
   const [sourceFileContent, setSourceFileContent] = useState(null);
   const [codeFileContent, setCodeFileContent] = useState(null);
   const [comparing, setComparing] = useState(false);
@@ -29,7 +35,13 @@ const FileUploadButton = ({ job, onFileProcessed, isJobLoading = false, onDataRe
 
   // Pagination for reports modal
   const [currentReportPage, setCurrentReportPage] = useState(1);
-  const reportsPerPage = 100;
+  const [reportsPerPage, setReportsPerPage] = useState(5);
+
+  // Modal resize functionality
+  const [modalSize, setModalSize] = useState({
+    width: 800,
+    height: 600
+  });
   
   // NEW: Batch processing modal state
   const [showBatchModal, setShowBatchModal] = useState(false);
@@ -47,6 +59,8 @@ const FileUploadButton = ({ job, onFileProcessed, isJobLoading = false, onDataRe
     currentOperation: ''
   });
 
+
+  // REMOVED: No syncing needed - use job.vendor_type directly
 
   const addNotification = (message, type = 'info') => {
     const id = Date.now() + Math.random(); // Make unique with random component
@@ -128,34 +142,7 @@ const FileUploadButton = ({ job, onFileProcessed, isJobLoading = false, onDataRe
     return null;
   };
 
-  // FIXED: Enhanced vendor detection with BRT code file support
-  const detectVendorType = (fileContent, fileName) => {
-    if (!fileName) return null;
-    
-    // BRT source files: .csv extension
-    if (fileName.endsWith('.csv')) {
-      return 'BRT';
-    }
-    
-    // Text files - distinguish by content
-    if (fileName.endsWith('.txt')) {
-      // BRT code files: contain JSON braces
-      if (fileContent.includes('{')) {
-        return 'BRT';
-      }
-      // Microsystems files: contain pipe delimiters
-      else if (fileContent.includes('|')) {
-        return 'Microsystems';
-      }
-    }
-    
-    // JSON files are BRT
-    if (fileName.endsWith('.json')) {
-      return 'BRT';
-    }
-    
-    return null;
-  };
+  // REMOVED: No longer needed - vendor type comes from job data
 
   // NEW: Parse BRT mixed format code files (headers + JSON sections)
   const parseBRTMixedFormat = (fileContent) => {
@@ -265,20 +252,17 @@ const handleCodeFileUpdate = async () => {
     return;
   }
 
-  if (!detectedVendor) {
-    addNotification('Could not detect vendor type for code file', 'error');
-    return;
-  }
+  // Vendor type is now guaranteed from JobContainer props
 
   try {
     setProcessing(true);
     setProcessingStatus('Processing code file...');
 
     // Call the actual processor to handle the code file properly
-    if (detectedVendor === 'BRT') {
+    if (job.vendor_type === 'BRT') {
       const { brtProcessor } = await import('../../lib/data-pipeline/brt-processor.js');
       await brtProcessor.processCodeFile(codeFileContent, job.id);
-    } else if (detectedVendor === 'Microsystems') {
+    } else if (job.vendor_type === 'Microsystems') {
       const { microsystemsProcessor } = await import('../../lib/data-pipeline/microsystems-processor.js');
       await microsystemsProcessor.processCodeFile(codeFileContent, job.id);
     } else {
@@ -305,7 +289,7 @@ const handleCodeFileUpdate = async () => {
 
     console.log(`🔧 Code Update - jobService.update result:`, updateResult);
 
-    addNotification(`✅ Successfully updated code definitions for ${detectedVendor}`, 'success');
+    addNotification(`✅ Successfully updated code definitions for ${job.vendor_type}`, 'success');
 
     // Clear code file selection
     setCodeFile(null);
@@ -314,7 +298,7 @@ const handleCodeFileUpdate = async () => {
 
     // Refresh job data in parent component
     if (onDataRefresh) {
-      console.log(`🔧 Code Update - Calling onDataRefresh to update job data`);
+      console.log(`���� Code Update - Calling onDataRefresh to update job data`);
       console.log(`🔧 Code Update - BEFORE refresh - job.code_file_uploaded_at: ${job.code_file_uploaded_at}`);
       console.log(`🔧 Code Update - BEFORE refresh - job.code_file_version: ${job.code_file_version}`);
 
@@ -326,7 +310,7 @@ const handleCodeFileUpdate = async () => {
       // Wait a bit and check again - sometimes React needs a moment to update props
       setTimeout(() => {
         console.log(`🔧 Code Update - DELAYED check - job.code_file_uploaded_at: ${job.code_file_uploaded_at}`);
-        console.log(`🔧 Code Update - DELAYED check - job.code_file_version: ${job.code_file_version}`);
+        console.log(`���� Code Update - DELAYED check - job.code_file_version: ${job.code_file_version}`);
       }, 1000);
     }
 
@@ -334,7 +318,7 @@ const handleCodeFileUpdate = async () => {
     if (onFileProcessed) {
       onFileProcessed({
         type: 'code_update',
-        vendor: detectedVendor
+        vendor: job.vendor_type
       });
     }
 
@@ -352,17 +336,22 @@ const handleCodeFileUpdate = async () => {
   const parseSourceFile = (fileContent, vendor) => {
     const lines = fileContent.split('\n').filter(line => line.trim());
     if (lines.length < 2) return [];
-    
+
+    // Defensive check for undefined vendor
+    if (!vendor) {
+      throw new Error('Vendor type is required but not provided');
+    }
+
     let headers, separator;
-    
+
     if (vendor === 'BRT') {
       // Auto-detect BRT separator (comma vs tab)
       const firstLine = lines[0];
       const commaCount = (firstLine.match(/,/g) || []).length;
       const tabCount = (firstLine.match(/\t/g) || []).length;
-      
+
       separator = (tabCount > 10 && tabCount > commaCount * 2) ? '\t' : ',';
-      
+
       if (separator === ',') {
         headers = parseCSVLine(lines[0]);
       } else {
@@ -372,6 +361,13 @@ const handleCodeFileUpdate = async () => {
       separator = '|';
       const originalHeaders = lines[0].split('|');
       headers = renameDuplicateHeaders(originalHeaders);
+    } else {
+      throw new Error(`Unsupported vendor type: "${vendor}". Expected 'BRT' or 'Microsystems'`);
+    }
+
+    // Additional safety check
+    if (!headers) {
+      throw new Error('Failed to parse file headers');
     }
     
     const records = [];
@@ -453,10 +449,10 @@ const handleCodeFileUpdate = async () => {
       // Add removed properties
       if (comparisonResults.details.missing?.length > 0) {
         comparisonResults.details.missing.forEach(record => {
-          const blockField = detectedVendor === 'BRT' ? 'BLOCK' : 'Block';
-          const lotField = detectedVendor === 'BRT' ? 'LOT' : 'Lot';
-          const qualifierField = detectedVendor === 'BRT' ? 'QUALIFIER' : 'Qual';
-          const locationField = detectedVendor === 'BRT' ? 'PROPERTY_LOCATION' : 'Location';
+          const blockField = job.vendor_type === 'BRT' ? 'BLOCK' : 'Block';
+          const lotField = job.vendor_type === 'BRT' ? 'LOT' : 'Lot';
+          const qualifierField = job.vendor_type === 'BRT' ? 'QUALIFIER' : 'Qual';
+          const locationField = job.vendor_type === 'BRT' ? 'PROPERTY_LOCATION' : 'Location';
           
           reportChanges.push({
             Report_Date: reportDate,
@@ -545,7 +541,7 @@ const handleCodeFileUpdate = async () => {
         summary: comparisonResults.summary,
         changes: reportChanges,
         sales_decisions: Object.fromEntries(salesDecisions),
-        vendor_detected: detectedVendor,
+        vendor_detected: job.vendor_type,
         source_file_name: sourceFile?.name,
         comparison_timestamp: new Date().toISOString()
       };
@@ -559,11 +555,11 @@ const handleCodeFileUpdate = async () => {
       if (comparisonResults.details.missing?.length > 0) {
         comparisonResults.details.missing.forEach(record => {
           // Generate composite key from source record
-          const blockField = detectedVendor === 'BRT' ? 'BLOCK' : 'Block';
-          const lotField = detectedVendor === 'BRT' ? 'LOT' : 'Lot';
-          const qualifierField = detectedVendor === 'BRT' ? 'QUALIFIER' : 'Qual';
-          const cardField = detectedVendor === 'BRT' ? 'CARD' : 'Bldg';
-          const locationField = detectedVendor === 'BRT' ? 'PROPERTY_LOCATION' : 'Location';
+          const blockField = job.vendor_type === 'BRT' ? 'BLOCK' : 'Block';
+          const lotField = job.vendor_type === 'BRT' ? 'LOT' : 'Lot';
+          const qualifierField = job.vendor_type === 'BRT' ? 'QUALIFIER' : 'Qual';
+          const cardField = job.vendor_type === 'BRT' ? 'CARD' : 'Bldg';
+          const locationField = job.vendor_type === 'BRT' ? 'PROPERTY_LOCATION' : 'Location';
 
           // Construct composite key similar to processors
           const year = job.start_date ? new Date(job.start_date).getFullYear() : new Date().getFullYear();
@@ -660,10 +656,10 @@ const handleCodeFileUpdate = async () => {
     // Add new records
     if (comparisonResults.details.missing?.length > 0) {
       comparisonResults.details.missing.forEach(record => {
-        const blockField = detectedVendor === 'BRT' ? 'BLOCK' : 'Block';
-        const lotField = detectedVendor === 'BRT' ? 'LOT' : 'Lot';
-        const qualifierField = detectedVendor === 'BRT' ? 'QUALIFIER' : 'Qual';
-        const locationField = detectedVendor === 'BRT' ? 'PROPERTY_LOCATION' : 'Location';
+        const blockField = job.vendor_type === 'BRT' ? 'BLOCK' : 'Block';
+        const lotField = job.vendor_type === 'BRT' ? 'LOT' : 'Lot';
+        const qualifierField = job.vendor_type === 'BRT' ? 'QUALIFIER' : 'Qual';
+        const locationField = job.vendor_type === 'BRT' ? 'PROPERTY_LOCATION' : 'Location';
         
         csvContent += `"${reportDate}","Property_Added","${record[blockField]}","${record[lotField]}","${record[qualifierField] || ''}","${record[locationField] || ''}","Property_Not_Existed","Property_Added","pending_review","",""\n`;
       });
@@ -701,12 +697,17 @@ const handleCodeFileUpdate = async () => {
   // FIXED: Comparison logic using property_records directly instead of current_properties view
   const performComparison = async () => {
     if (!sourceFileContent || !job) return null;
-    
+
     try {
       setProcessingStatus('Analyzing files...');
-      
+
+      // Get vendor type directly from job data
+      if (!job.vendor_type) {
+        throw new Error('Vendor type not found in job data. Please check job configuration.');
+      }
+
       // Parse source file
-      const sourceRecords = parseSourceFile(sourceFileContent, detectedVendor);
+      const sourceRecords = parseSourceFile(sourceFileContent, job.vendor_type);
       
       // FIXED: Get ALL database records from property_records table directly
       setProcessingStatus('Fetching current database records...');
@@ -764,7 +765,7 @@ const handleCodeFileUpdate = async () => {
       const sourceKeyMap = new Map();
       
       sourceRecords.forEach(record => {
-        const compositeKey = generateCompositeKey(record, detectedVendor, yearCreated, ccddCode);
+        const compositeKey = generateCompositeKey(record, job.vendor_type, yearCreated, ccddCode);
         if (compositeKey) {
           sourceKeys.add(compositeKey);
           sourceKeyMap.set(compositeKey, record);
@@ -798,19 +799,19 @@ const handleCodeFileUpdate = async () => {
         const dbRecord = dbKeyMap.get(key);
         
         // FIXED: Check for sales changes with proper number and date comparison
-        const sourceSalesPrice = parseFloat(String(sourceRecord[detectedVendor === 'BRT' ? 'CURRENTSALE_PRICE' : 'Sale Price'] || 0).replace(/[,$]/g, '')) || 0;
+        const sourceSalesPrice = parseFloat(String(sourceRecord[job.vendor_type === 'BRT' ? 'CURRENTSALE_PRICE' : 'Sale Price'] || 0).replace(/[,$]/g, '')) || 0;
         const dbSalesPrice = parseFloat(dbRecord.sales_price || 0);
 
         // ADD: Get sales_nu values
-        const sourceSalesNu = sourceRecord[detectedVendor === 'BRT' ? 'CURRENTSALE_NU' : 'Sale Nu'] || '';
+        const sourceSalesNu = sourceRecord[job.vendor_type === 'BRT' ? 'CURRENTSALE_NU' : 'Sale Nu'] || '';
         const dbSalesNu = dbRecord.sales_nu || '';
-        const sourceSalesBook = sourceRecord[detectedVendor === 'BRT' ? 'CURRENTSALE_DEEDBOOK' : 'Sale Book'] || '';
+        const sourceSalesBook = sourceRecord[job.vendor_type === 'BRT' ? 'CURRENTSALE_DEEDBOOK' : 'Sale Book'] || '';
         const dbSalesBook = dbRecord.sales_book || '';
-        const sourceSalesPage = sourceRecord[detectedVendor === 'BRT' ? 'CURRENTSALE_DEEDPAGE' : 'Sale Page'] || '';
+        const sourceSalesPage = sourceRecord[job.vendor_type === 'BRT' ? 'CURRENTSALE_DEEDPAGE' : 'Sale Page'] || '';
         const dbSalesPage = dbRecord.sales_page || '';
           
         // FIXED: Normalize both dates for accurate comparison using processor method
-        const sourceSalesDate = parseDate(sourceRecord[detectedVendor === 'BRT' ? 'CURRENTSALE_DATE' : 'Sale Date']);
+        const sourceSalesDate = parseDate(sourceRecord[job.vendor_type === 'BRT' ? 'CURRENTSALE_DATE' : 'Sale Date']);
         const dbSalesDate = parseDate(dbRecord.sales_date);
         
         // FIXED: Use proper number comparison with reasonable tolerance AND normalized date comparison
@@ -825,7 +826,7 @@ const handleCodeFileUpdate = async () => {
             sourcePrice: sourceSalesPrice,
             dbPrice: dbSalesPrice, 
             pricesDifferent,
-            sourceDateRaw: sourceRecord[detectedVendor === 'BRT' ? 'CURRENTSALE_DATE' : 'Sale Date'],
+            sourceDateRaw: sourceRecord[job.vendor_type === 'BRT' ? 'CURRENTSALE_DATE' : 'Sale Date'],
             sourceDateNormalized: sourceSalesDate,
             dbDateRaw: dbRecord.sales_date,
             dbDateNormalized: dbSalesDate,
@@ -851,7 +852,7 @@ const handleCodeFileUpdate = async () => {
         }
         
         // Check for class changes
-        if (detectedVendor === 'BRT') {
+        if (job.vendor_type === 'BRT') {
           // BRT: Check both property_m4_class and property_cama_class
           const sourceM4Class = sourceRecord['PROPERTY_CLASS'];
           const sourceCamaClass = sourceRecord['PROPCLASS'];
@@ -885,7 +886,7 @@ const handleCodeFileUpdate = async () => {
             });
           }
           
-        } else if (detectedVendor === 'Microsystems') {
+        } else if (job.vendor_type === 'Microsystems') {
           // Microsystems: Check only property_m4_class
           const sourceM4Class = sourceRecord['Class'];
           
@@ -1199,7 +1200,7 @@ const handleCodeFileUpdate = async () => {
           }))
         }));
         
-        addBatchLog(`✅ All batches complete - Total records: ${totalRecords}`, 'success');
+        addBatchLog(`�� All batches complete - Total records: ${totalRecords}`, 'success');
         
         resolve(result);
       }).catch(error => {
@@ -1224,7 +1225,7 @@ const handleCodeFileUpdate = async () => {
         }));
 
         if (isTimeout) {
-          addBatchLog('⏰ Operation timed out after 2 minutes. The database may be overloaded or there\'s a query issue. Try refreshing the page and uploading again.', 'error');
+          addBatchLog('��� Operation timed out after 2 minutes. The database may be overloaded or there\'s a query issue. Try refreshing the page and uploading again.', 'error');
         }
         
         addBatchLog(`❌ Batch processing failed: ${error.message}`, 'error');
@@ -1270,10 +1271,10 @@ const handleCodeFileUpdate = async () => {
       setProcessing(true);
 
       // Direct Supabase processing
-      setProcessingStatus(`Processing ${detectedVendor} data via Supabase...`);
+      setProcessingStatus(`Processing ${job.vendor_type} data via Supabase...`);
 
       addBatchLog('🚀 Starting direct Supabase processing workflow', 'batch_start', {
-        vendor: detectedVendor,
+        vendor: job.vendor_type,
         fileName: sourceFile.name,
         changesDetected: comparisonResults.summary.missing + comparisonResults.summary.changes + comparisonResults.summary.deletions + comparisonResults.summary.salesChanges + comparisonResults.summary.classChanges,
         salesDecisions: salesDecisions.size,
@@ -1282,7 +1283,7 @@ const handleCodeFileUpdate = async () => {
       
       
       // Call the updater to UPSERT the database
-      addBatchLog(`📊 Calling ${detectedVendor} updater (UPSERT mode)...`, 'info');
+      addBatchLog(`📊 Calling ${job.vendor_type} updater (UPSERT mode)...`, 'info');
 
       // FIX: Calculate new file_version for property_records - fetch current from DB with timeout
       addBatchLog('🔍 Fetching current file version from database...', 'info');
@@ -1319,7 +1320,7 @@ const handleCodeFileUpdate = async () => {
         addBatchLog(`📊 Current DB version: ${currentFileVersion}, incrementing to: ${newFileVersion}`, 'info');
 
       } catch (error) {
-        addBatchLog(`⚠️ Version fetch failed: ${error.message}, using default version increment`, 'warning');
+        addBatchLog(`⚠��� Version fetch failed: ${error.message}, using default version increment`, 'warning');
         // Fallback: get a reasonable version number
         currentFileVersion = Date.now() % 100; // Use timestamp as version
         newFileVersion = currentFileVersion + 1;
@@ -1332,13 +1333,17 @@ const handleCodeFileUpdate = async () => {
           const startTime = Date.now();
           addBatchLog('🔄 Processing file data...', 'info');
 
+          // OPTIMIZED: Extract deletion list from comparison results to avoid expensive .not.in() queries
+          const deletionsList = comparisonResults?.details?.deletions || [];
+          addBatchLog(`🎯 DELETION OPTIMIZATION: Passing ${deletionsList.length} properties for targeted deletion`, 'info');
+
           const result = await propertyService.updateCSVData(
             sourceFileContent,
             codeFileContent,
             job.id,
             job.year_created || new Date().getFullYear(),
             job.ccdd_code || job.ccddCode,
-            detectedVendor,
+            job.vendor_type,
             {
               source_file_name: sourceFile?.name,
               source_file_version_id: crypto.randomUUID(),
@@ -1347,7 +1352,8 @@ const handleCodeFileUpdate = async () => {
               preservedFieldsHandler: preservedFieldsHandler,
               preservedFields: [
                 'is_assigned_property'     // AdminJobManagement - from assignments
-              ]
+              ],
+              deletionsList: deletionsList  // OPTIMIZED: Pass pre-computed deletion list
             }
           );
 
@@ -1361,7 +1367,7 @@ const handleCodeFileUpdate = async () => {
           addBatchLog(`�� Update failed: ${updateError.message}`, 'error', {
             error: updateError.message,
             stack: updateError.stack,
-            vendor: detectedVendor
+            vendor: job.vendor_type
           });
           throw updateError;
         }
@@ -1585,10 +1591,10 @@ const handleCodeFileUpdate = async () => {
       } else {
         addBatchLog('🎉 All processing completed successfully!', 'success', {
           totalProcessed,
-          vendor: detectedVendor,
+          vendor: job.vendor_type,
           salesDecisions: salesDecisions.size
         });
-        addNotification(`✅ Successfully processed ${totalProcessed} records via ${detectedVendor} updater`, 'success');
+        addNotification(`✅ Successfully processed ${totalProcessed} records via ${job.vendor_type} updater`, 'success');
         
         if (salesDecisions.size > 0) {
           addNotification(`💾 Saved ${salesDecisions.size} sales decisions`, 'success');
@@ -1599,44 +1605,25 @@ const handleCodeFileUpdate = async () => {
         addBatchLog('⚠️ UPDATE FAILED - All changes have been rolled back', 'error', {
           message: 'The update encountered errors and all changes were automatically reversed'
         });
-        addNotification('��� Update failed - all changes rolled back. Check logs for details.', 'error');
+        addNotification('���� Update failed - all changes rolled back. Check logs for details.', 'error');
       }
 
       // Update local file version and date from DB
       await fetchCurrentFileVersion(); // Refresh file version and updated_at from DB
 
       setBatchComplete(true);
-      
-      // Auto-close modal after 3 seconds if successful
-      if (errorCount === 0) {
-        setTimeout(() => {
-          setShowBatchModal(false);
-          setShowResultsModal(false);
-          setSourceFile(null);
-          setSourceFileContent(null);
-          setSalesDecisions(new Map());
-        }, 3000);
-      }
-        
-      // Notify parent component
+
+      // REMOVED: Auto-close modal - let user close manually to prevent timing conflicts
+      // The modal will now stay open until user manually closes it
+      addBatchLog('✅ Processing complete! Please review results and close this modal manually.', 'success');
+
+      // Notify parent component (but don't trigger immediate refresh)
       if (onFileProcessed) {
         onFileProcessed(result);
       }
-      
-      // Trigger data refresh in JobContainer
-      if (onDataRefresh) {
-        addBatchLog('🔄 Triggering data refresh in JobContainer...', 'info');
-        await onDataRefresh();
-        addBatchLog('✅ JobContainer data refreshed', 'success');
 
-        // DEBUG: Small delay then check if JobContainer shows the new version
-        setTimeout(() => {
-          addBatchLog('⏰ Checking if JobContainer updated (after 2 second delay)...', 'info');
-          // This will show in console - user should check JobContainer UI
-        }, 2000);
-      } else {
-        addBatchLog('⚠️ No onDataRefresh callback provided!', 'warning');
-      }
+      // REMOVED: Immediate data refresh - this will now happen only when user closes modal
+      // This prevents timing conflicts and 500 errors
     } catch (error) {
       console.error('❌ Processing failed:', error);
       
@@ -1669,13 +1656,11 @@ const handleCodeFileUpdate = async () => {
       const content = await file.text();
       setSourceFileContent(content);
       
-      const vendor = detectVendorType(content, file.name);
-      setDetectedVendor(vendor);
+      // Use vendor type from job data
+      const vendor = job.vendor_type;
       
       if (vendor) {
-        addNotification(`✅ Detected ${vendor} file format`, 'success');
-      } else {
-        addNotification('��️ Could not detect vendor type', 'warning');
+        addNotification(`✅ Using ${vendor} file format`, 'success');
       }
     } catch (error) {
       console.error('Error reading file:', error);
@@ -1693,10 +1678,9 @@ const handleCodeFileUpdate = async () => {
       const content = await file.text();
       setCodeFileContent(content);
       
-      const vendor = detectVendorType(content, file.name);
-      if (vendor) {
-        setDetectedVendor(vendor); 
-        addNotification(`✅ Detected ${vendor} code file`, 'success');
+      // Use vendor type from job data
+      if (job.vendor_type) {
+        addNotification(`✅ Detected ${job.vendor_type} code file`, 'success');
       }
     } catch (error) {
       console.error('Error reading code file:', error);
@@ -1716,7 +1700,17 @@ const handleCodeFileUpdate = async () => {
 
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-        <div className="bg-white rounded-lg max-w-2xl w-full max-h-[70vh] overflow-hidden shadow-2xl flex flex-col">
+        <div
+          className="bg-white rounded-lg overflow-hidden shadow-2xl flex flex-col resize-none"
+          style={{
+            width: `${modalSize.width}px`,
+            height: `${modalSize.height}px`,
+            minWidth: '600px',
+            minHeight: '400px',
+            maxWidth: '90vw',
+            maxHeight: '90vh'
+          }}
+        >
           {/* Header */}
           <div className="p-4 border-b border-gray-200 bg-gray-50 shrink-0">
             <div className="flex items-center justify-between">
@@ -1755,16 +1749,16 @@ const handleCodeFileUpdate = async () => {
                                      (summary.salesChanges || 0) + (summary.classChanges || 0);
                   
                   return (
-                    <div key={report.id || idx} className="border rounded-lg p-4 hover:bg-gray-50">
+                    <div key={report.id || idx} className="border border-gray-300 rounded-lg p-4 hover:bg-gray-50 bg-white">
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
                           <div className="font-semibold text-gray-900">
                             {formatDate(report.report_date)}
                           </div>
-                          <div className="text-sm text-gray-600 mt-1">
+                          <div className="text-sm text-gray-700 mt-1">
                             File: {reportData.source_file_name || 'Unknown'}
                           </div>
-                          <div className="text-sm text-gray-600">
+                          <div className="text-sm text-gray-700">
                             Vendor: {reportData.vendor_detected || 'Unknown'}
                           </div>
                           <div className="flex gap-4 mt-2 text-xs">
@@ -1819,53 +1813,89 @@ const handleCodeFileUpdate = async () => {
             )}
           </div>
 
-          {/* Footer with Pagination */}
-          <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-between items-center shrink-0">
-            <div className="text-sm text-gray-600">
-              Showing {startIndex + 1}-{Math.min(endIndex, reportsList.length)} of {reportsList.length} reports
+          {/* Enhanced Footer with Pagination */}
+          <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 shrink-0">
+            {/* First row - Page info and navigation */}
+            <div className="flex justify-between items-center mb-3">
+              <div className="text-sm text-gray-700">
+                Showing {startIndex + 1}-{Math.min(endIndex, reportsList.length)} of {reportsList.length} reports
+              </div>
+
+              {/* Enhanced Pagination Controls */}
+              {totalPages > 1 && (
+                <div className="flex items-center space-x-1">
+                  {/* First page */}
+                  <button
+                    onClick={() => setCurrentReportPage(1)}
+                    disabled={currentReportPage === 1}
+                    className="px-2 py-1 text-sm rounded bg-gray-200 text-gray-700 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="First page"
+                  >
+                    ««
+                  </button>
+
+                  {/* Previous page */}
+                  <button
+                    onClick={() => setCurrentReportPage(Math.max(1, currentReportPage - 1))}
+                    disabled={currentReportPage === 1}
+                    className="px-2 py-1 text-sm rounded bg-gray-200 text-gray-700 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Previous page"
+                  >
+                    ‹
+                  </button>
+
+                  {/* Page input */}
+                  <div className="flex items-center space-x-1">
+                    <input
+                      type="number"
+                      min="1"
+                      max={totalPages}
+                      value={currentReportPage}
+                      onChange={(e) => {
+                        const page = parseInt(e.target.value);
+                        if (page >= 1 && page <= totalPages) {
+                          setCurrentReportPage(page);
+                        }
+                      }}
+                      className="w-16 px-2 py-1 text-sm text-center border border-gray-300 rounded text-gray-900 bg-white"
+                    />
+                    <span className="text-sm text-gray-700">of {totalPages}</span>
+                  </div>
+
+                  {/* Next page */}
+                  <button
+                    onClick={() => setCurrentReportPage(Math.min(totalPages, currentReportPage + 1))}
+                    disabled={currentReportPage === totalPages}
+                    className="px-2 py-1 text-sm rounded bg-gray-200 text-gray-700 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Next page"
+                  >
+                    ›
+                  </button>
+
+                  {/* Last page */}
+                  <button
+                    onClick={() => setCurrentReportPage(totalPages)}
+                    disabled={currentReportPage === totalPages}
+                    className="px-2 py-1 text-sm rounded bg-gray-200 text-gray-700 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Last page"
+                  >
+                    »»
+                  </button>
+                </div>
+              )}
             </div>
 
-            {/* Pagination Controls */}
-            {totalPages > 1 && (
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={() => setCurrentReportPage(Math.max(1, currentReportPage - 1))}
-                  disabled={currentReportPage === 1}
-                  className="p-2 rounded bg-gray-700 text-white hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="Previous page"
-                >
-                  <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
-                  </svg>
-                </button>
-
-                <span className="text-sm font-medium text-gray-700">
-                  {currentReportPage} / {totalPages}
-                </span>
-
-                <button
-                  onClick={() => setCurrentReportPage(Math.min(totalPages, currentReportPage + 1))}
-                  disabled={currentReportPage === totalPages}
-                  className="p-2 rounded bg-gray-700 text-white hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="Next page"
-                >
-                  <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
-                  </svg>
-                </button>
-              </div>
-            )}
-
-            <div className="flex space-x-3">
+            {/* Second row - Action buttons */}
+            <div className="flex justify-end space-x-3">
               <button
                 onClick={viewAllReports}
-                className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 font-medium"
+                className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 font-medium transition-colors"
               >
                 Export All Reports
               </button>
               <button
                 onClick={() => setShowReportsModal(false)}
-                className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 font-medium"
+                className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 font-medium transition-colors"
               >
                 Close
               </button>
@@ -1895,11 +1925,25 @@ const handleCodeFileUpdate = async () => {
               {batchComplete && (
                 <button
                   onClick={() => {
+                    // Close modal immediately
                     setShowBatchModal(false);
                     setShowResultsModal(false);
                     setSourceFile(null);
                     setSourceFileContent(null);
                     setSalesDecisions(new Map());
+
+                    // FIXED: Trigger JobContainer data refresh with timeout to prevent 500 errors
+                    if (onDataRefresh) {
+                      console.log('🔄 User closed modal - triggering data refresh after 2 second timeout...');
+                      setTimeout(async () => {
+                        try {
+                          await onDataRefresh();
+                          console.log('✅ JobContainer data refreshed successfully after modal close');
+                        } catch (refreshError) {
+                          console.error('❌ Data refresh failed after modal close:', refreshError);
+                        }
+                      }, 2000);  // 2 second timeout as suggested by Supabase AI
+                    }
                   }}
                   className="text-gray-400 hover:text-gray-600 p-1"
                 >
@@ -2342,13 +2386,13 @@ const handleCodeFileUpdate = async () => {
                 </div>
                 <div className="space-y-2" style={{ maxHeight: '300px', overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '1rem' }}>
                   {details.missing.slice(0, 10).map((record, idx) => {
-                    const blockField = detectedVendor === 'BRT' ? 'BLOCK' : 'Block';
-                    const lotField = detectedVendor === 'BRT' ? 'LOT' : 'Lot';
-                    const qualifierField = detectedVendor === 'BRT' ? 'QUALIFIER' : 'Qual';
-                    const locationField = detectedVendor === 'BRT' ? 'PROPERTY_LOCATION' : 'Location';
-                    const classField = detectedVendor === 'BRT' ? 'PROPERTY_CLASS' : 'Class';
-                    const priceField = detectedVendor === 'BRT' ? 'CURRENTSALE_PRICE' : 'Sale Price';
-                    const dateField = detectedVendor === 'BRT' ? 'CURRENTSALE_DATE' : 'Sale Date';
+                    const blockField = job.vendor_type === 'BRT' ? 'BLOCK' : 'Block';
+                    const lotField = job.vendor_type === 'BRT' ? 'LOT' : 'Lot';
+                    const qualifierField = job.vendor_type === 'BRT' ? 'QUALIFIER' : 'Qual';
+                    const locationField = job.vendor_type === 'BRT' ? 'PROPERTY_LOCATION' : 'Location';
+                    const classField = job.vendor_type === 'BRT' ? 'PROPERTY_CLASS' : 'Class';
+                    const priceField = job.vendor_type === 'BRT' ? 'CURRENTSALE_PRICE' : 'Sale Price';
+                    const dateField = job.vendor_type === 'BRT' ? 'CURRENTSALE_DATE' : 'Sale Date';
                     
                     const salePrice = parseFloat(String(record[priceField] || 0).replace(/[,$]/g, '')) || 0;
                     
@@ -2406,7 +2450,7 @@ const handleCodeFileUpdate = async () => {
             <div className="mt-6 p-4 bg-gray-100 rounded-lg">
               <h3 className="font-bold text-gray-900 mb-2">🔍 Debug Info:</h3>
               <div className="text-sm text-gray-700 space-y-1">
-                <div>Vendor: {detectedVendor}</div>
+                <div>Vendor: {job.vendor_type}</div>
                 <div>Job ID: {job.id}</div>
                 <div>Source File: {sourceFile?.name}</div>
                 <div>Total Changes: {summary.missing + summary.changes + summary.deletions + summary.salesChanges + summary.classChanges}</div>
@@ -2419,11 +2463,11 @@ const handleCodeFileUpdate = async () => {
                     {details.missing.slice(0, 3).map((record, idx) => {
                       const yearCreated = job.year_created || new Date().getFullYear();
                       const ccddCode = job.ccdd_code || job.ccddCode;
-                      const generatedKey = generateCompositeKey(record, detectedVendor, yearCreated, ccddCode);
+                      const generatedKey = generateCompositeKey(record, job.vendor_type, yearCreated, ccddCode);
                       
                       return (
                         <div key={idx} className="text-xs text-yellow-700 font-mono">
-                          {detectedVendor === 'BRT' ? 
+                          {job.vendor_type === 'BRT' ?
                             `${record.BLOCK}-${record.LOT} → ${generatedKey}` :
                             `${record.Block}-${record.Lot} → ${generatedKey}`
                           }
@@ -2453,7 +2497,6 @@ const handleCodeFileUpdate = async () => {
               <button
                 onClick={viewAllReports}
                 className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 flex items-center space-x-2 transition-colors"
-                style={{color: 'white' }}
               >
                 <Eye className="w-4 h-4" />
                 <span>View All Reports</span>
@@ -2462,7 +2505,6 @@ const handleCodeFileUpdate = async () => {
               <button
                 onClick={exportComparisonReport}
                 className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 flex items-center space-x-2 transition-colors"
-                style={{ color: 'white'}}
               >
                 <Download className="w-4 h-4" />
                 <span>Export This Report</span>
@@ -2491,10 +2533,10 @@ const handleCodeFileUpdate = async () => {
                     clearBatchLogs();
                     setShowBatchModal(true);
                     setProcessing(true);
-                    setProcessingStatus(`Processing ${detectedVendor} data via updater...`);
-                    
+                    setProcessingStatus(`Processing ${job.vendor_type} data via updater...`);
+
                     addBatchLog('🚀 Processing file with no changes detected', 'batch_start', {
-                      vendor: detectedVendor,
+                      vendor: job.vendor_type,
                       fileName: sourceFile.name,
                       changesDetected: 0,
                       salesDecisions: 0
@@ -2502,7 +2544,7 @@ const handleCodeFileUpdate = async () => {
                     
                     
                     // Call the updater to UPSERT the database with latest data
-                    addBatchLog(`📊 Calling ${detectedVendor} updater for version refresh...`, 'info');
+                    addBatchLog(`�� Calling ${job.vendor_type} updater for version refresh...`, 'info');
 
                     // FIX 1: Calculate new file_version for property_records - fetch current from DB
                     addBatchLog('🔍 Fetching current file version from database...', 'info');
@@ -2528,7 +2570,7 @@ const handleCodeFileUpdate = async () => {
                         job.id,
                         job.year_created || new Date().getFullYear(),
                         job.ccdd_code || job.ccddCode,
-                        detectedVendor,
+                        job.vendor_type,
                         {
                           source_file_name: sourceFile?.name,
                           source_file_version_id: crypto.randomUUID(),
@@ -2567,8 +2609,8 @@ const handleCodeFileUpdate = async () => {
                       addBatchLog(`⚠️ Refresh completed with ${errorCount} errors`, 'warning');
                       addNotification(`⚠️ Processing completed with ${errorCount} errors. ${totalProcessed} records updated.`, 'warning');
                     } else {
-                      addBatchLog('🎉 File version refresh completed successfully!', 'success');
-                      addNotification(`✅ Successfully updated ${totalProcessed} records with latest data via ${detectedVendor} updater`, 'success');
+                      addBatchLog('���� File version refresh completed successfully!', 'success');
+                      addNotification(`✅ Successfully updated ${totalProcessed} records with latest data via ${job.vendor_type} updater`, 'success');
                     }
                     // Check if rollback occurred during refresh
                     if (result.warnings && result.warnings.some(w => w.includes('rolled back'))) {
@@ -2625,7 +2667,6 @@ const handleCodeFileUpdate = async () => {
                 }}
                 disabled={processing}
                 className="px-6 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 disabled:opacity-50 font-medium transition-colors"
-                style={{ color: 'white'}}
               >
                 {processing ? 'Processing...' : 'Acknowledge & Close'}
               </button>
@@ -2817,6 +2858,16 @@ const handleCodeFileUpdate = async () => {
         ))}
       </div>
 
+      {/* NEW: Loading state while JobContainer loads job data */}
+      {isJobContainerLoading && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
+          <div className="flex items-center justify-center space-x-2 text-blue-600">
+            <RefreshCw className="w-4 h-4 animate-spin" />
+            <span className="text-sm font-medium">Loading job data...</span>
+          </div>
+          <p className="text-xs text-blue-500 mt-1">File uploads disabled until job data loads</p>
+        </div>
+      )}
 
       {/* Source File Section */}
       <div className="flex items-center gap-3 text-gray-300">
@@ -2835,9 +2886,9 @@ const handleCodeFileUpdate = async () => {
         
         <button
           onClick={() => document.getElementById('source-file-upload').click()}
-          disabled={comparing || processing || isJobLoading}
+          disabled={comparing || processing || isJobLoading || isJobContainerLoading}
           className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:bg-gray-500 flex items-center gap-1"
-          title={isJobLoading ? 'Job data is loading...' : ''}
+          title={isJobLoading || isJobContainerLoading ? 'Job data is loading...' : ''}
         >
           <Upload className="w-3 h-3" />
           {sourceFile ? sourceFile.name.substring(0, 10) + '...' : 'Select File'}
@@ -2849,7 +2900,7 @@ const handleCodeFileUpdate = async () => {
               onClick={() => {
                 setSourceFile(null);
                 setSourceFileContent(null);
-                setDetectedVendor(null);
+                // REMOVED: Don't reset vendor - keep using prop from JobContainer
                 document.getElementById('source-file-upload').value = '';
                 addNotification('Source file cleared', 'info');
               }}
@@ -2892,7 +2943,7 @@ const handleCodeFileUpdate = async () => {
         
         <button
           onClick={() => document.getElementById('code-file-upload').click()}
-          disabled={comparing || processing}
+          disabled={comparing || processing || isJobContainerLoading}
           className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 disabled:bg-gray-500 flex items-center gap-1"
         >
           <Upload className="w-3 h-3" />
@@ -2908,7 +2959,7 @@ const handleCodeFileUpdate = async () => {
                 document.getElementById('code-file-upload').value = '';
                 addNotification('Code file cleared', 'info');
               }}
-              disabled={comparing || processing}
+              disabled={comparing || processing || isJobContainerLoading}
               className="px-2 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600 disabled:bg-gray-500 flex items-center"
             >
               <X className="w-3 h-3" />
