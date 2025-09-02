@@ -2698,22 +2698,27 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       csv += '\n';
     }
     
-    // Vacant Land Test
-    csv += 'VACANT LAND TEST\n';
-    csv += 'VCS,Year,Region,Block,Lot,Sale Price,Acres,Raw Land,Site Value,Status\n';
-    
+    // Individual Allocation Analysis
+    csv += 'INDIVIDUAL ALLOCATION ANALYSIS\n';
+    csv += 'VCS,Year,Region,Block/Lot,Vacant Price,Acres,Raw Land,Site Value,Improved Sales Count,Avg Improved Price,Avg Improved Acres,Improved Raw Land,Total Land Value,Current %,Recommended %,Status\n';
+
     vacantTestSales.forEach(sale => {
-      const status = sale.siteValue > 0 ? 'Valid' : 'Excluded';
-      csv += `"${sale.vcs}",${sale.year},"${sale.region}","${sale.block}","${sale.lot}",${sale.price},${sale.acres.toFixed(2)},${sale.rawLandValue},${sale.siteValue},"${status}"\n`;
+      const status = sale.isPositive ? 'Included' : 'Excluded';
+      csv += `"${sale.vcs}",${sale.year},"${sale.region}","${sale.block}/${sale.lot}",${sale.vacantPrice},${sale.acres.toFixed(2)},${sale.rawLandValue},${sale.siteValue},${sale.improvedSalesCount},${sale.avgImprovedPrice},${sale.avgImprovedAcres},${sale.improvedRawLandValue},${sale.totalLandValue},${(sale.currentAllocation * 100).toFixed(1)},${(sale.recommendedAllocation * 100).toFixed(1)},"${status}"\n`;
     });
-    
-    // Improved Sales Test
-    csv += '\n\nIMPROVED SALES ALLOCATION TEST\n';
-    csv += 'VCS,Year,Sales Count,Avg Price,Avg Acres,Raw Land,Site Value,Total Land,Current %,Recommended %\n';
-    
-    improvedTestSales.forEach(sale => {
-      csv += `"${sale.vcs}",${sale.year},${sale.salesCount},${sale.avgPrice},${sale.avgAcres},${sale.rawLandValue},${sale.siteValue},${sale.totalLandValue},${(sale.currentAllocation * 100).toFixed(1)},${(sale.recommendedAllocation * 100).toFixed(1)}\n`;
-    });
+
+    // Summary of positive sales only
+    const positiveSales = vacantTestSales.filter(s => s.isPositive);
+    if (positiveSales.length > 0) {
+      csv += '\n\nSUMMARY (Positive Sales Only)\n';
+      csv += `Total Sales Included: ${positiveSales.length}\n`;
+      csv += `Total Sales Excluded: ${vacantTestSales.length - positiveSales.length}\n`;
+      csv += `Sum of Total Land Values: $${positiveSales.reduce((sum, s) => sum + s.totalLandValue, 0).toLocaleString()}\n`;
+      csv += `Sum of Improved Sale Prices: $${positiveSales.reduce((sum, s) => sum + s.avgImprovedPrice, 0).toLocaleString()}\n`;
+      const overallRecommended = positiveSales.reduce((sum, s) => sum + s.avgImprovedPrice, 0) > 0 ?
+        (positiveSales.reduce((sum, s) => sum + s.totalLandValue, 0) / positiveSales.reduce((sum, s) => sum + s.avgImprovedPrice, 0)) * 100 : 0;
+      csv += `Overall Recommended Allocation: ${overallRecommended.toFixed(1)}%\n`;
+    }
     
     return csv;
   };
