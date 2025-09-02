@@ -1932,14 +1932,17 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         const rawLandValue = calculateRawLandValue(avgAcres, cascadeConfig.normal);
         siteValue = totalLandValue - rawLandValue;
 
-        console.log(`🏠 VCS ${vcs}:`, {
+        console.log(`🏠 VCS ${vcs} DETAILED DEBUG:`, {
           relevantSalesCount: relevantSales.length,
           avgSalePrice: Math.round(avgSalePrice),
           avgAcres: avgAcres.toFixed(2),
           targetAllocation: targetAllocation + '%',
+          targetAllocationDecimal: parseFloat(targetAllocation) / 100,
           totalLandValue: Math.round(totalLandValue),
           rawLandValue: Math.round(rawLandValue),
-          recommendedSiteValue: Math.round(siteValue)
+          recommendedSiteValue: Math.round(siteValue),
+          cascadeRates: cascadeConfig.normal,
+          formula: `${Math.round(avgSalePrice)} * ${(parseFloat(targetAllocation) / 100).toFixed(3)} - ${Math.round(rawLandValue)} = ${Math.round(siteValue)}`
         });
       }
 
@@ -3678,7 +3681,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 )}
                 {categoryAnalysis.buildingLot.method === 'paired' && categoryAnalysis.buildingLot.pairedAnalysis && (
                   <div style={{ fontSize: '9px', color: '#2563EB', marginTop: '2px' }}>
-                    {categoryAnalysis.buildingLot.count} properties • {categoryAnalysis.buildingLot.pairedAnalysis.pairs} comparisons
+                    {categoryAnalysis.buildingLot.count} properties ��� {categoryAnalysis.buildingLot.pairedAnalysis.pairs} comparisons
                   </div>
                 )}
               </div>
