@@ -532,6 +532,13 @@ const getPricePerUnit = useCallback((price, size) => {
   }, [activeSubTab, cascadeConfig, valuationMode, vacantSales, includedSales, specialRegions]);
   // Note: intentionally exclude loadAllocationStudyData from deps to avoid TDZ issues, it is stable via useCallback.
 
+  // Auto-calculate VCS recommended sites when target allocation changes
+  useEffect(() => {
+    if (targetAllocation && cascadeConfig.normal.prime && properties?.length > 0) {
+      calculateVCSRecommendedSitesWithTarget();
+    }
+  }, [targetAllocation, calculateVCSRecommendedSitesWithTarget]);
+
   useEffect(() => {
     if (activeSubTab === 'eco-obs' && properties) {
       analyzeEconomicObsolescence();
@@ -5237,7 +5244,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'acres' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Acres {modalSortField === 'acres' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
+                      Acres {modalSortField === 'acres' ? (modalSortDirection === 'asc' ? '↑' : '��') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('sfla')}
