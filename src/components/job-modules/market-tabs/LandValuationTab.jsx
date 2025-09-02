@@ -530,7 +530,10 @@ const getPricePerUnit = useCallback((price, size) => {
     console.log('🔄 Auto-save effect triggered, setting up interval');
     const interval = setInterval(() => {
       console.log('⏰ Auto-save interval triggered');
-      saveAnalysis();
+      // Use window reference to avoid hoisting issues
+      if (window.landValuationSave) {
+        window.landValuationSave();
+      }
     }, 30000);
     return () => {
       console.log('🛑 Clearing auto-save interval');
