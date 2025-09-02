@@ -1552,12 +1552,14 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     let remainingAcres = acres;
     let rawLandValue = 0;
 
+    // First tier (prime): typically first 1 acre
     if (cascadeRates.prime) {
       const primeAcres = Math.min(remainingAcres, cascadeRates.prime.max || 1);
       rawLandValue += primeAcres * (cascadeRates.prime.rate || 0);
       remainingAcres -= primeAcres;
     }
 
+    // Second tier (secondary): typically acres 1-5 (so 4 acres)
     if (cascadeRates.secondary && remainingAcres > 0) {
       const secondaryMax = (cascadeRates.secondary.max || 5) - (cascadeRates.prime?.max || 1);
       const secondaryAcres = Math.min(remainingAcres, secondaryMax);
@@ -1565,13 +1567,23 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       remainingAcres -= secondaryAcres;
     }
 
+    // Third tier (excess): typically anything above 5 acres - apply to ALL remaining acres
+    // Note: We don't limit this tier, it applies to all remaining acres if no residual tier exists
     if (cascadeRates.excess && remainingAcres > 0) {
-      const excessMax = (cascadeRates.excess.max || 10) - (cascadeRates.secondary?.max || 5);
-      const excessAcres = Math.min(remainingAcres, excessMax);
-      rawLandValue += excessAcres * (cascadeRates.excess.rate || 0);
-      remainingAcres -= excessAcres;
+      if (cascadeRates.residual) {
+        // If there's a residual tier, excess only applies up to its max
+        const excessMax = (cascadeRates.excess.max || 10) - (cascadeRates.secondary?.max || 5);
+        const excessAcres = Math.min(remainingAcres, excessMax);
+        rawLandValue += excessAcres * (cascadeRates.excess.rate || 0);
+        remainingAcres -= excessAcres;
+      } else {
+        // If no residual tier, excess applies to ALL remaining acres
+        rawLandValue += remainingAcres * (cascadeRates.excess.rate || 0);
+        remainingAcres = 0;
+      }
     }
 
+    // Fourth tier (residual): anything beyond excess max (if defined)
     if (cascadeRates.residual && remainingAcres > 0) {
       rawLandValue += remainingAcres * (cascadeRates.residual.rate || 0);
     }
