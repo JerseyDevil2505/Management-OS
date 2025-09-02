@@ -2230,19 +2230,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         throw checkError;
       }
 
-      const allocationStudyData = {
-        ...existing?.allocation_study,
-        target_allocation: targetValue,
-        updated_at: new Date().toISOString()
-      };
-
       let result;
       if (existing) {
         console.log('📝 Updating existing record with target allocation...');
         result = await supabase
           .from('market_land_valuation')
           .update({
-            allocation_study: allocationStudyData,
+            target_allocation: targetValue,
             updated_at: new Date().toISOString()
           })
           .eq('job_id', jobData.id);
@@ -2252,7 +2246,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           .from('market_land_valuation')
           .insert({
             job_id: jobData.id,
-            allocation_study: allocationStudyData,
+            target_allocation: targetValue,
             updated_at: new Date().toISOString()
           });
       }
