@@ -153,11 +153,6 @@ useEffect(() => {
   // Load cascade config from either location (prefer cascade_rates, fallback to raw_land_config)
   const savedConfig = marketLandData.cascade_rates || marketLandData.raw_land_config?.cascade_config;
   if (savedConfig) {
-    console.log('🔧 Loading cascade config:', {
-      source: marketLandData.cascade_rates ? 'cascade_rates' : 'raw_land_config',
-      specialCategories: savedConfig.specialCategories,
-      mode: savedConfig.mode
-    });
 
     setCascadeConfig({
       mode: savedConfig.mode || 'acre',
