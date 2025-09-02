@@ -5544,7 +5544,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     <input
                       type="number"
                       value={targetAllocation || ''}
-                      onChange={(e) => setTargetAllocation(e.target.value)}
+                      onChange={(e) => {
+                        console.log('🎯 Target allocation input changed:', e.target.value);
+                        setTargetAllocation(e.target.value);
+                      }}
                       placeholder="Set"
                       style={{
                         width: '60px',
