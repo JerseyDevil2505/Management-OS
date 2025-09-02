@@ -139,11 +139,6 @@ useEffect(() => {
     return;
   }
 
-  console.log('🔄 Loading market land data:', {
-    hasRawLandConfig: !!marketLandData.raw_land_config,
-    hasCascadeRates: !!marketLandData.cascade_rates,
-    hasVacantSales: !!marketLandData.vacant_sales_analysis?.sales?.length
-  });
 
   // Restore all saved states from marketLandData
   if (marketLandData.raw_land_config) {
@@ -5302,7 +5297,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'block' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Block {modalSortField === 'block' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
+                      Block {modalSortField === 'block' ? (modalSortDirection === 'asc' ? '↑' : '���') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('lot')}
@@ -6756,7 +6751,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           </button>
           <button
             onClick={() => {
-              console.log('��� MANUAL DEBUG SAVE TRIGGERED');
+              console.log('���� MANUAL DEBUG SAVE TRIGGERED');
               console.log('Current state snapshot:', {
                 includedSales: Array.from(includedSales),
                 specialCategories: cascadeConfig.specialCategories,
