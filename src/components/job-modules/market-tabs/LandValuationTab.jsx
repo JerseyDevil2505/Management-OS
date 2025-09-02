@@ -5425,7 +5425,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     color: sale.siteValue > 0 ? '#10B981' : '#EF4444',
                     borderRight: '2px solid #E5E7EB'
                   }}>
-                    ${sale.siteValue?.toFixed(0)}
+                    ${Math.round(sale.siteValue)}
                   </td>
 
                   {/* Improved Sales Data */}
