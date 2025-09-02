@@ -1281,8 +1281,10 @@ const loadJobs = async () => {
       setShowEditBilling(false);
       setEditingEvent(null);
       if (onRefresh) onRefresh();
+      alert('Billing event deleted successfully!');
     } catch (error) {
       console.error('Error deleting billing event:', error);
+      alert('Error deleting billing event: ' + error.message);
     }
   };
 
