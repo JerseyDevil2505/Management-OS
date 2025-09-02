@@ -1686,19 +1686,19 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
   const getUniqueYears = useCallback(() => {
     const years = new Set();
-    [...vacantTestSales, ...improvedTestSales].forEach(sale => {
+    vacantTestSales.forEach(sale => {
       if (sale.year) years.add(sale.year);
     });
     return Array.from(years).sort((a, b) => b - a);
-  }, [vacantTestSales, improvedTestSales]);
+  }, [vacantTestSales]);
 
   const getUniqueVCS = useCallback(() => {
     const vcs = new Set();
-    [...vacantTestSales, ...improvedTestSales].forEach(sale => {
+    vacantTestSales.forEach(sale => {
       if (sale.vcs) vcs.add(sale.vcs);
     });
     return Array.from(vcs).sort();
-  }, [vacantTestSales, improvedTestSales]);
+  }, [vacantTestSales]);
 
   const calculateAllocationStats = useCallback((region = null) => {
     // Use only positive sales for final calculation
