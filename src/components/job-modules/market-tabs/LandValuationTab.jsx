@@ -2011,9 +2011,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   };
 
   const updateManualSiteValue = (vcs, value) => {
+    console.log(`🔧 Updating manual site value for VCS ${vcs}:`, value);
     setVcsManualSiteValues(prev => ({
       ...prev,
-      [vcs]: value ? parseInt(value) : null
+      // Fix: Use nullish coalescing - allow 0 values, only null for empty strings
+      [vcs]: value === '' ? null : parseInt(value) || 0
     }));
   };
 
@@ -5458,7 +5460,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         <td style={{ padding: '8px' }}>{prop.property_location}</td>
                         <td style={{ padding: '8px' }}>
                           {prop.sales_date}
-                          {isPreConstruction && <span style={{ color: '#F59E0B', marginLeft: '4px' }}>����️</span>}
+                          {isPreConstruction && <span style={{ color: '#F59E0B', marginLeft: '4px' }}>���️</span>}
                         </td>
                         <td style={{ padding: '8px', textAlign: 'right' }}>${prop.sales_price?.toLocaleString()}</td>
                         <td style={{ padding: '8px', textAlign: 'right' }}>${Math.round(prop.normalizedTime)?.toLocaleString()}</td>
@@ -6789,7 +6791,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           </button>
           <button
             onClick={() => {
-              console.log('🎯 MANUAL VCS RECALCULATION TRIGGERED');
+              console.log('���� MANUAL VCS RECALCULATION TRIGGERED');
               console.log('Current state:', {
                 targetAllocation,
                 hasCascadeRates: !!cascadeConfig.normal.prime,
