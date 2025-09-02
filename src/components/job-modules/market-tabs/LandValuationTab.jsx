@@ -1357,7 +1357,17 @@ const getPricePerUnit = useCallback((price, size) => {
 
     // CRITICAL: Save immediately after adding sales to ensure persistence
     console.log('💾 Auto-saving after adding manually selected sales:', toAdd.map(p => `${p.property_block}/${p.property_lot}`));
-    setTimeout(() => saveAnalysis(), 100); // Small delay to let state updates settle
+    // Use setTimeout with async function to avoid hoisting issues
+    setTimeout(async () => {
+      try {
+        if (!jobData?.id) return;
+        // Trigger a manual save here - the auto-save will pick up the changes
+        const saveEvent = new CustomEvent('triggerSave');
+        window.dispatchEvent(saveEvent);
+      } catch (error) {
+        console.error('Error triggering save after adding sales:', error);
+      }
+    }, 100);
   };
 
   const handlePropertyResearch = async (property) => {
