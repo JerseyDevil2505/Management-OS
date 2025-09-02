@@ -916,6 +916,14 @@ const loadJobs = async () => {
           console.error('Error updating job percent_billed:', jobUpdateError);
         } else {
           console.log(`✅ Updated job ${selectedJob.id} percent_billed to ${(newTotalPercent * 100).toFixed(2)}%`);
+
+          // Notify parent components that data has changed
+          if (onDataUpdate) {
+            onDataUpdate();
+          }
+          if (onRefresh) {
+            onRefresh();
+          }
         }
        
         // Update legacy jobs if this is a legacy job
