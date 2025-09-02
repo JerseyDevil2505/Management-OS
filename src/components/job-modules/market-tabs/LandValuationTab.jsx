@@ -5431,46 +5431,50 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   key={`${sale.id}_${index}`}
                   style={{
                     backgroundColor: sale.isPositive ? (index % 2 === 0 ? 'white' : '#F9FAFB') : '#FEF2F2',
-                    opacity: sale.isPositive ? 1 : 0.7
+                    opacity: sale.isPositive ? 1 : 0.7,
+                    borderBottom: '1px solid #E5E7EB'
                   }}
                 >
                   {/* Vacant Sale Data */}
-                  <td style={{ padding: '8px', fontWeight: 'bold' }}>{sale.vcs}</td>
-                  <td style={{ padding: '8px' }}>{sale.year}</td>
-                  <td style={{ padding: '8px' }}>{sale.block}/{sale.lot}</td>
-                  <td style={{ padding: '8px', textAlign: 'right' }}>${sale.vacantPrice?.toLocaleString()}</td>
-                  <td style={{ padding: '8px', textAlign: 'right' }}>{sale.acres?.toFixed(2)}</td>
+                  <td style={{ padding: '8px', fontWeight: 'bold', border: '1px solid #E5E7EB' }}>{sale.vcs}</td>
+                  <td style={{ padding: '8px', border: '1px solid #E5E7EB' }}>{sale.year}</td>
+                  <td style={{ padding: '8px', border: '1px solid #E5E7EB' }}>{sale.block}/{sale.lot}</td>
+                  <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>${sale.vacantPrice?.toLocaleString()}</td>
+                  <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{sale.acres?.toFixed(2)}</td>
                   <td style={{
                     padding: '8px',
                     textAlign: 'right',
                     fontWeight: 'bold',
                     color: sale.siteValue > 0 ? '#10B981' : '#EF4444',
-                    borderRight: '2px solid #E5E7EB'
+                    borderRight: '2px solid #E5E7EB',
+                    border: '1px solid #E5E7EB'
                   }}>
                     ${Math.round(sale.siteValue)}
                   </td>
 
                   {/* Improved Sales Data */}
-                  <td style={{ padding: '8px', textAlign: 'center' }}>{sale.improvedSalesCount}</td>
-                  <td style={{ padding: '8px', textAlign: 'right' }}>${Math.round(sale.avgImprovedPrice)?.toLocaleString()}</td>
-                  <td style={{ padding: '8px', textAlign: 'right' }}>{sale.avgImprovedAcres}</td>
+                  <td style={{ padding: '8px', textAlign: 'center', border: '1px solid #E5E7EB' }}>{sale.improvedSalesCount}</td>
+                  <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>${Math.round(sale.avgImprovedPrice)?.toLocaleString()}</td>
+                  <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{sale.avgImprovedAcres}</td>
                   <td style={{
                     padding: '8px',
                     textAlign: 'right',
                     fontWeight: 'bold',
-                    borderRight: '2px solid #E5E7EB'
+                    borderRight: '2px solid #E5E7EB',
+                    border: '1px solid #E5E7EB'
                   }}>
                     ${Math.round(sale.totalLandValue)?.toLocaleString()}
                   </td>
 
                   {/* Allocation Results */}
-                  <td style={{ padding: '8px', textAlign: 'center', color: '#6B7280' }}>
+                  <td style={{ padding: '8px', textAlign: 'center', color: '#6B7280', border: '1px solid #E5E7EB' }}>
                     {(sale.currentAllocation * 100).toFixed(1)}%
                   </td>
                   <td style={{
                     padding: '8px',
                     textAlign: 'center',
                     fontWeight: 'bold',
+                    border: '1px solid #E5E7EB',
                     backgroundColor: sale.isPositive ?
                       (sale.recommendedAllocation >= 0.25 && sale.recommendedAllocation <= 0.40 ? '#D1FAE5' :
                        sale.recommendedAllocation >= 0.20 && sale.recommendedAllocation <= 0.45 ? '#FEF3C7' : '#FEE2E2') :
