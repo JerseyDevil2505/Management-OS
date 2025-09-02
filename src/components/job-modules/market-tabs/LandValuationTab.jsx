@@ -5113,7 +5113,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'salePrice' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Sale Price {modalSortField === 'salePrice' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
+                      Sale Price {modalSortField === 'salePrice' ? (modalSortDirection === 'asc' ? '↑' : '���') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('normTime')}
@@ -5417,12 +5417,12 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 {/* Improved Sales Columns */}
                 <th style={{ padding: '6px', textAlign: 'center', border: '1px solid #D1D5DB', fontWeight: '600' }}>Count</th>
                 <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Avg Price</th>
-                <th style={{ padding: '6px', textAlign: 'right' }}>Avg Acres</th>
-                <th style={{ padding: '6px', textAlign: 'right', borderRight: '2px solid #E5E7EB' }}>Total Land Value</th>
+                <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Avg Acres</th>
+                <th style={{ padding: '6px', textAlign: 'right', borderRight: '2px solid #E5E7EB', border: '1px solid #D1D5DB', fontWeight: '600' }}>Total Land Value</th>
                 {/* Allocation Columns */}
-                <th style={{ padding: '6px', textAlign: 'center' }}>Current %</th>
-                <th style={{ padding: '6px', textAlign: 'center' }}>Recommended %</th>
-                <th style={{ padding: '6px', textAlign: 'center' }}>Status</th>
+                <th style={{ padding: '6px', textAlign: 'center', border: '1px solid #D1D5DB', fontWeight: '600' }}>Current %</th>
+                <th style={{ padding: '6px', textAlign: 'center', border: '1px solid #D1D5DB', fontWeight: '600' }}>Recommended %</th>
+                <th style={{ padding: '6px', textAlign: 'center', border: '1px solid #D1D5DB', fontWeight: '600' }}>Status</th>
               </tr>
             </thead>
             <tbody>
