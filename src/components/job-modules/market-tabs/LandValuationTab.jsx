@@ -5549,7 +5549,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     borderRight: '2px solid #E5E7EB',
                     border: '1px solid #E5E7EB'
                   }}>
-                    ${Math.round(sale.siteValue)}
+                    ${Math.round(sale.siteValue).toLocaleString()}
                   </td>
 
                   {/* Improved Sales Data */}
@@ -5730,7 +5730,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         borderRight: '2px solid #E5E7EB',
                         border: '1px solid #E5E7EB'
                       }}>
-                        ${Math.round(sale.siteValue)}
+                        ${Math.round(sale.siteValue).toLocaleString()}
                       </td>
 
                       {/* Improved Sales Data */}
