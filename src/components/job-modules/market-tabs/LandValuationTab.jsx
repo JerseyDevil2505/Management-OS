@@ -202,7 +202,7 @@ useEffect(() => {
     const savedIncluded = new Set();
     const manuallyAddedIds = new Set();
 
-    console.log('�� Loading saved Method 1 sales data:', {
+    console.log('🔄 Loading saved Method 1 sales data:', {
       totalSales: marketLandData.vacant_sales_analysis.sales.length,
       salesWithCategories: marketLandData.vacant_sales_analysis.sales.filter(s => s.category).length,
       salesIncluded: marketLandData.vacant_sales_analysis.sales.filter(s => s.included).length,
@@ -539,7 +539,7 @@ const getPricePerUnit = useCallback((price, size) => {
 
   // Auto-calculate VCS recommended sites when target allocation changes
   useEffect(() => {
-    console.log('��� TARGET ALLOCATION USEEFFECT TRIGGERED:', {
+    console.log('🔄 TARGET ALLOCATION USEEFFECT TRIGGERED:', {
       targetAllocation,
       hasCascadeRates: !!cascadeConfig.normal.prime,
       propertiesCount: properties?.length || 0
@@ -1863,50 +1863,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     setVcsRecommendedSites(recommendedSites);
   }, [targetAllocation, cascadeConfig, properties, calculateAcreage, calculateRawLandValue, vcsTypes]);
 
-  // ========== SAVE TARGET ALLOCATION AND CALCULATE VCS RECOMMENDED SITES ==========
-  const saveTargetAllocation = async () => {
-    if (!jobData?.id || !targetAllocation) {
-      console.log('❌ Save target allocation cancelled: No job ID or target allocation');
-      return;
-    }
-
-    console.log('💾 Saving target allocation:', targetAllocation + '%');
-
-    try {
-      // Save target allocation to database
-      const { error } = await supabase
-        .from('market_land_valuation')
-        .update({
-          allocation_study: {
-            ...marketLandData?.allocation_study,
-            target_allocation: targetAllocation,
-            updated_at: new Date().toISOString()
-          }
-        })
-        .eq('job_id', jobData.id);
-
-      if (error) {
-        console.error('❌ Error saving target allocation:', error);
-        // Log the specific error details if available
-        if (error.details) console.error('Error details:', error.details);
-        if (error.hint) console.error('Error hint:', error.hint);
-        return;
-      }
-
-      console.log('✅ Target allocation saved to database successfully.');
-      // Log the value that was supposedly saved
-      console.log('Saved target allocation value:', targetAllocation);
-
-      // Calculate recommended site values for VCS using target allocation
-      calculateVCSRecommendedSitesWithTarget();
-
-    } catch (err) {
-      console.error('❌ Exception caught in saveTargetAllocation:', err);
-      // Log the specific error details if available
-      if (err.details) console.error('Error details:', err.details);
-      if (err.hint) console.error('Error hint:', err.hint);
-    }
-  };
 
   const calculateVCSRecommendedSitesWithTarget = useCallback(() => {
     if (!targetAllocation || !cascadeConfig.normal.prime || !properties) {
