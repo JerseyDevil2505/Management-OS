@@ -1511,10 +1511,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
         // Improved sales info for this year
         improvedSalesCount: improvedSalesForYear.length,
-        avgImprovedPrice: Math.round(avgImprovedPrice),
+        avgImprovedPrice: avgImprovedPrice,
         avgImprovedAcres: avgImprovedAcres.toFixed(2),
-        improvedRawLandValue: Math.round(improvedRawLandValue),
-        totalLandValue: Math.round(totalLandValue),
+        improvedRawLandValue: improvedRawLandValue,
+        totalLandValue: totalLandValue,
 
         // Allocation calculations
         currentAllocation: avgCurrentAllocation,
@@ -2798,7 +2798,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const checkedSales = vacantSales.filter(s => includedSales.has(s.id));
 
     console.log('🔄 Recalculating category analysis');
-    console.log('📊 Total vacant sales:', vacantSales.length);
+    console.log('��� Total vacant sales:', vacantSales.length);
     console.log('📊 Checked sales count:', checkedSales.length);
     console.log('📋 Included sales IDs:', Array.from(includedSales));
     console.log('📋 Sale categories state:', saleCategories);
