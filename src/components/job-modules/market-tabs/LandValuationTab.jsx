@@ -2336,7 +2336,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           .eq('job_id', jobData.id);
         if (error) throw error;
       } else {
-        console.log('➕ Creating new record...');
+        console.log('��� Creating new record...');
         // Use upsert to handle race conditions
         const { error } = await supabase
           .from('market_land_valuation')
@@ -6647,6 +6647,37 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             }}
           >
             🔧 Debug Save
+          </button>
+          <button
+            onClick={() => {
+              console.log('🎯 MANUAL VCS RECALCULATION TRIGGERED');
+              console.log('Current state:', {
+                targetAllocation,
+                hasCascadeRates: !!cascadeConfig.normal.prime,
+                propertiesCount: properties?.length || 0,
+                cascadeRates: cascadeConfig.normal
+              });
+
+              // Force target allocation to 28 if it's not set
+              if (!targetAllocation) {
+                console.log('🔧 FORCING TARGET ALLOCATION TO 28%');
+                setTargetAllocation(28);
+              }
+
+              // Force recalculation
+              calculateVCSRecommendedSitesWithTarget();
+            }}
+            style={{
+              backgroundColor: '#DC2626',
+              color: 'white',
+              padding: '4px 8px',
+              borderRadius: '4px',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: '12px'
+            }}
+          >
+            🎯 Force VCS Calc
           </button>
           {lastSaved && (
             <span style={{ fontSize: '12px', color: '#6B7280' }}>
