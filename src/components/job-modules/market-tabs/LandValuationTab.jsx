@@ -1473,7 +1473,19 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const acres = sale.totalAcres || parseFloat(calculateAcreage(sale));
       const cascadeRates = region === 'Normal' ? cascadeConfig.normal : cascadeConfig.special[region];
 
-      if (!cascadeRates) return;
+      if (!cascadeRates) {
+        console.warn(`⚠️ Missing cascade rates for region "${region}" on sale ${sale.property_block}/${sale.property_lot}`);
+        return;
+      }
+
+      // Log special region usage
+      if (region !== 'Normal') {
+        console.log(`🌟 Using special region "${region}" rates for sale ${sale.property_block}/${sale.property_lot}:`, {
+          primeRate: cascadeRates.prime?.rate,
+          secondaryRate: cascadeRates.secondary?.rate,
+          excessRate: cascadeRates.excess?.rate
+        });
+      }
 
       // Apply cascade calculation to get raw land value
       const rawLandValue = calculateRawLandValue(acres, cascadeRates);
