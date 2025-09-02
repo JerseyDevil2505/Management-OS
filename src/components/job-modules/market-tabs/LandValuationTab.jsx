@@ -5491,11 +5491,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 </div>
                 <div>
                   <div style={{ color: '#6B7280', fontSize: '12px' }}>Total Land Value</div>
-                  <div style={{ fontWeight: 'bold' }}>${totalLandValue.toFixed(0)}</div>
+                  <div style={{ fontWeight: 'bold' }}>${Math.round(totalLandValue).toLocaleString()}</div>
                 </div>
                 <div>
                   <div style={{ color: '#6B7280', fontSize: '12px' }}>Total Sale Price</div>
-                  <div style={{ fontWeight: 'bold' }}>${totalSalePrice.toFixed(0)}</div>
+                  <div style={{ fontWeight: 'bold' }}>${Math.round(totalSalePrice).toLocaleString()}</div>
                 </div>
                 <div>
                   <div style={{ color: '#6B7280', fontSize: '12px' }}>Final Recommended</div>
