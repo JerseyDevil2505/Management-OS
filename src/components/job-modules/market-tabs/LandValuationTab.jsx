@@ -97,6 +97,9 @@ const LandValuationTab = ({
     map: true
   });
 
+  // Method 1 Exclusion State (like Method 2)
+  const [method1ExcludedSales, setMethod1ExcludedSales] = useState(new Set());
+
   // Method 2 Exclusion Modal State
   const [showMethod2Modal, setShowMethod2Modal] = useState(false);
   const [method2ModalVCS, setMethod2ModalVCS] = useState('');
@@ -196,12 +199,15 @@ useEffect(() => {
     const savedNotes = {};
     const savedRegions = {};
     const savedExcluded = new Set();
+    const savedIncluded = new Set();
+    const manuallyAddedIds = new Set();
 
     console.log('🔄 Loading saved Method 1 sales data:', {
       totalSales: marketLandData.vacant_sales_analysis.sales.length,
       salesWithCategories: marketLandData.vacant_sales_analysis.sales.filter(s => s.category).length,
       salesIncluded: marketLandData.vacant_sales_analysis.sales.filter(s => s.included).length,
-      salesExcluded: marketLandData.vacant_sales_analysis.sales.filter(s => !s.included).length
+      salesExcluded: marketLandData.vacant_sales_analysis.sales.filter(s => !s.included).length,
+      manuallyAdded: marketLandData.vacant_sales_analysis.sales.filter(s => s.manually_added).length
     });
 
     marketLandData.vacant_sales_analysis.sales.forEach(s => {
@@ -209,13 +215,18 @@ useEffect(() => {
       if (s.notes) savedNotes[s.id] = s.notes;
       if (s.special_region && s.special_region !== 'Normal') savedRegions[s.id] = s.special_region;
       if (!s.included) savedExcluded.add(s.id); // Track excluded instead of included
+      if (s.included) savedIncluded.add(s.id);
+      if (s.manually_added) manuallyAddedIds.add(s.id);
     });
 
     console.log('🔄 Restored Method 1 states:', {
       excludedCount: savedExcluded.size,
+      includedCount: savedIncluded.size,
+      manuallyAddedCount: manuallyAddedIds.size,
       categoriesCount: Object.keys(savedCategories).length,
       regionsCount: Object.keys(savedRegions).length,
       excludedIds: Array.from(savedExcluded),
+      manuallyAddedIds: Array.from(manuallyAddedIds),
       categories: savedCategories
     });
 
@@ -223,8 +234,25 @@ useEffect(() => {
     setLandNotes(savedNotes);
     setSpecialRegions(savedRegions);
 
-    // Store excluded sales for application after filtering
+    // Store for application after filtering - both exclusions and manually added
     window._method1ExcludedSales = savedExcluded;
+    window._method1IncludedSales = savedIncluded;
+    window._method1ManuallyAdded = manuallyAddedIds;
+
+    setMethod1ExcludedSales(savedExcluded);
+    setIncludedSales(savedIncluded);
+  }
+
+  // Also restore Method 1 excluded sales from new field (like Method 2)
+  if (marketLandData.vacant_sales_analysis?.excluded_sales) {
+    const method1Excluded = new Set(marketLandData.vacant_sales_analysis.excluded_sales);
+    setMethod1ExcludedSales(method1Excluded);
+    window._method1ExcludedSales = method1Excluded;
+
+    console.log('🔄 Restored Method 1 excluded sales from new field:', {
+      count: method1Excluded.size,
+      ids: Array.from(method1Excluded)
+    });
   }
 
   // Restore Method 2 excluded sales
@@ -508,13 +536,15 @@ const getPricePerUnit = useCallback((price, size) => {
       clearInterval(interval);
     }
   }, [isInitialLoadComplete, cascadeConfig, landNotes, saleCategories, specialRegions, includedSales, actualAllocations,
-      vcsManualSiteValues, actualAdjustments, targetAllocation, locationCodes, vcsTypes, method2ExcludedSales, vacantSales]);
+      vcsManualSiteValues, actualAdjustments, targetAllocation, locationCodes, vcsTypes, method2ExcludedSales, method1ExcludedSales, vacantSales]);
 
-  // Clear Method 1 excluded sales after filtering is complete
+  // Clear Method 1 temporary variables after filtering is complete
   useEffect(() => {
     if (isInitialLoadComplete && window._method1ExcludedSales) {
-      console.log('🧹 Clearing Method 1 excluded sales after successful application');
+      console.log('🧹 Clearing Method 1 temporary variables after successful application');
       delete window._method1ExcludedSales;
+      delete window._method1IncludedSales;
+      delete window._method1ManuallyAdded;
     }
   }, [isInitialLoadComplete]);
   // ========== LAND RATES FUNCTIONS WITH ENHANCED FILTERS ==========
@@ -524,8 +554,35 @@ const getPricePerUnit = useCallback((price, size) => {
     console.log('🔄 FilterVacantSales called:', {
       currentVacantSalesCount: vacantSales.length,
       hasMethod1Excluded: !!window._method1ExcludedSales,
-      method1ExcludedSize: window._method1ExcludedSales?.size || 0
+      method1ExcludedSize: window._method1ExcludedSales?.size || 0,
+      hasManuallyAdded: !!window._method1ManuallyAdded,
+      manuallyAddedSize: window._method1ManuallyAdded?.size || 0
     });
+
+    // CRITICAL: First restore manually added properties that might not meet natural criteria
+    const finalSales = [];
+    const manuallyAddedIds = window._method1ManuallyAdded || new Set();
+
+    if (manuallyAddedIds.size > 0) {
+      const manuallyAddedProps = properties.filter(prop => manuallyAddedIds.has(prop.id));
+      console.log('🔄 Restoring manually added properties:', {
+        found: manuallyAddedProps.length,
+        expected: manuallyAddedIds.size,
+        foundIds: manuallyAddedProps.map(p => p.id),
+        expectedIds: Array.from(manuallyAddedIds)
+      });
+
+      manuallyAddedProps.forEach(prop => {
+        const acres = calculateAcreage(prop);
+        const pricePerUnit = getPricePerUnit(prop.sales_price, acres);
+        finalSales.push({
+          ...prop,
+          totalAcres: acres,
+          pricePerAcre: pricePerUnit,
+          manuallyAdded: true
+        });
+      });
+    }
 
     // If we already have restored sales, preserve them and only add new ones
     if (false) { // Disable complex caching logic
@@ -587,44 +644,49 @@ const getPricePerUnit = useCallback((price, size) => {
       return; // Don't rebuild if we already have restored sales
     }
 
-    // First identify all vacant/teardown/pre-construction sales
+    // Now identify naturally qualifying vacant/teardown/pre-construction sales (excluding manually added)
     const allSales = properties.filter(prop => {
+      // Skip if this is a manually added property - we already processed it
+      if (manuallyAddedIds.has(prop.id)) {
+        return false;
+      }
+
       const hasValidSale = prop.sales_date && prop.sales_price && prop.sales_price > 0;
       const inDateRange = prop.sales_date >= dateRange.start.toISOString().split('T')[0] &&
                           prop.sales_date <= dateRange.end.toISOString().split('T')[0];
-      
+
       // Check NU codes for valid sales
       const nu = prop.sales_nu || '';
-      const validNu = !nu || nu === '' || nu === ' ' || nu === '00' || nu === '07' || 
+      const validNu = !nu || nu === '' || nu === ' ' || nu === '00' || nu === '07' ||
                       nu === '7' || nu.charCodeAt(0) === 32;
 
       // Skip additional cards - they don't have land
-      const isAdditionalCard = prop.property_addl_card && 
-                        prop.property_addl_card !== 'NONE' && 
+      const isAdditionalCard = prop.property_addl_card &&
+                        prop.property_addl_card !== 'NONE' &&
                         prop.property_addl_card !== 'M';
       if (isAdditionalCard) {
         return false;
       }
-      
+
       // Standard vacant classes
       const isVacantClass = prop.property_m4_class === '1' || prop.property_m4_class === '3B';
-      
+
       // NEW: Teardown detection (Class 2 with minimal improvement)
       const isTeardown = prop.property_m4_class === '2' &&
                         prop.asset_building_class && parseInt(prop.asset_building_class) > 10 &&
-                        prop.asset_design_style && 
+                        prop.asset_design_style &&
                         prop.asset_type_use &&
                         prop.values_mod_improvement < 10000;
-      
+
       // NEW: Pre-construction detection (sold before house was built)
       const isPreConstruction = prop.property_m4_class === '2' &&
                                prop.asset_building_class && parseInt(prop.asset_building_class) > 10 &&
-                               prop.asset_design_style && 
+                               prop.asset_design_style &&
                                prop.asset_type_use &&
                                prop.asset_year_built &&
                                prop.sales_date &&
                                new Date(prop.sales_date).getFullYear() < prop.asset_year_built;
-      
+
       return hasValidSale && inDateRange && validNu && (isVacantClass || isTeardown || isPreConstruction);
     });
 
@@ -685,9 +747,8 @@ const getPricePerUnit = useCallback((price, size) => {
       };
     };
 
-    // Process packages and standalone
-    const finalSales = [];
-    
+    // Process packages and standalone (add to existing finalSales that contains manually added)
+
     // Consolidate package sales
     Object.entries(packageGroups).forEach(([key, group]) => {
       if (group.length > 1) {
@@ -738,12 +799,24 @@ const getPricePerUnit = useCallback((price, size) => {
       const enriched = enrichProperty(prop);
       finalSales.push(enriched);
       if (enriched.autoCategory) {
-        console.log(`��️ Auto-categorizing ${prop.property_block}/${prop.property_lot} as ${enriched.autoCategory}`);
+        console.log(`🏷️ Auto-categorizing ${prop.property_block}/${prop.property_lot} as ${enriched.autoCategory}`);
         setSaleCategories(prev => ({...prev, [prop.id]: enriched.autoCategory}));
       }
     });
 
-    setVacantSales(finalSales);
+    // CRITICAL FIX: Filter out excluded sales from Method 1 before setting finalSales
+    const activeExcluded = window._method1ExcludedSales || method1ExcludedSales;
+    const filteredSales = finalSales.filter(sale => !activeExcluded.has(sale.id));
+
+    console.log('🔄 Applying Method 1 exclusions:', {
+      totalSalesBeforeExclusion: finalSales.length,
+      excludedSalesCount: activeExcluded.size,
+      totalSalesAfterExclusion: filteredSales.length,
+      excludedIds: Array.from(activeExcluded),
+      filteredOutSales: finalSales.filter(sale => activeExcluded.has(sale.id)).map(s => ({id: s.id, block: s.property_block, lot: s.property_lot}))
+    });
+
+    setVacantSales(filteredSales);
 
     // Preserve checkbox states more intelligently
     setIncludedSales(prev => {
@@ -754,28 +827,28 @@ const getPricePerUnit = useCallback((price, size) => {
       }
 
       const existingIds = new Set(prev);
-      const currentSaleIds = new Set(finalSales.map(s => s.id));
+      const currentSaleIds = new Set(filteredSales.map(s => s.id));
 
-      // Start with existing included sales that are still in the current results
+      // Start with existing included sales that are still in the current results (after exclusion filter)
       const preservedIncluded = new Set([...prev].filter(id => currentSaleIds.has(id)));
 
       // Auto-include only sales that are truly new (not in previous state at all)
-      finalSales.forEach(sale => {
+      filteredSales.forEach(sale => {
         if (!existingIds.has(sale.id)) {
           preservedIncluded.add(sale.id);
         }
       });
 
-      console.log('��� Checkbox state management:', {
+      console.log('✅ Checkbox state management:', {
         isInitialLoadComplete,
         previousCount: prev.size,
-        currentSalesCount: finalSales.length,
+        currentSalesCount: filteredSales.length,
         preservedCount: preservedIncluded.size,
         newlyAdded: preservedIncluded.size - [...prev].filter(id => currentSaleIds.has(id)).length,
-        excludedCount: finalSales.length - preservedIncluded.size,
+        excludedCount: filteredSales.length - preservedIncluded.size,
         preservedIds: Array.from(preservedIncluded),
-        finalSalesIds: finalSales.map(s => s.id),
-        salesMismatch: finalSales.filter(s => !preservedIncluded.has(s.id)).map(s => ({id: s.id, block: s.property_block, lot: s.property_lot}))
+        filteredSalesIds: filteredSales.map(s => s.id),
+        salesMismatch: filteredSales.filter(s => !preservedIncluded.has(s.id)).map(s => ({id: s.id, block: s.property_block, lot: s.property_lot}))
       });
 
       return preservedIncluded;
@@ -1334,12 +1407,15 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   };
 
   const removeSale = (saleId) => {
-    setVacantSales(prev => prev.filter(s => s.id !== saleId));
+    // Track exclusion like Method 2 (don't remove from array entirely)
+    setMethod1ExcludedSales(prev => new Set([...prev, saleId]));
     setIncludedSales(prev => {
       const newSet = new Set(prev);
       newSet.delete(saleId);
       return newSet;
     });
+
+    console.log('🗑️ Sale removed and tracked as excluded:', saleId);
   };
 
   // ========== ALLOCATION STUDY FUNCTIONS ==========
@@ -2072,6 +2148,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             is_package: s.packageData?.is_package || false,
             package_properties: s.packageData?.properties || []
           })),
+          excluded_sales: Array.from(method1ExcludedSales), // Track Method 1 exclusions like Method 2
           rates: calculateRates(),
           rates_by_region: getUniqueRegions().map(region => ({
             region,
