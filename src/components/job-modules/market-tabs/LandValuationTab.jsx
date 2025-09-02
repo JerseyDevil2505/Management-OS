@@ -5403,7 +5403,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   borderRight: '2px solid #E5E7EB',
                   border: '1px solid #D1D5DB',
                   fontWeight: 'bold'
-                }} colSpan="7">Vacant Sale</th>
+                }} colSpan="6">Vacant Sale</th>
                 {/* Improved Sales Info */}
                 <th style={{
                   padding: '8px',
