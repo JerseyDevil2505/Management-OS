@@ -2266,13 +2266,20 @@ const AdminJobManagement = ({
                           <div className="flex justify-between items-center mb-2">
                             <h4 className="text-lg font-bold text-gray-900">{job.name}</h4>
                             <div className="flex items-center space-x-2">
-                              <span className={`px-3 py-1 rounded-full text-xs font-medium shadow-sm ${
-                                job.vendor === 'Microsystems' 
-                                  ? 'bg-blue-100 text-blue-800' 
-                                  : 'bg-orange-200 text-orange-800'
-                              }`}>
-                                {job.vendor}
-                              </span>
+                              {(() => {
+                                const vendor = job.vendor || job.vendorDetection?.vendor || 'Unknown';
+                                return (
+                                  <span className={`px-3 py-1 rounded-full text-xs font-medium shadow-sm ${
+                                    vendor === 'Microsystems'
+                                      ? 'bg-blue-100 text-blue-800'
+                                      : vendor === 'BRT'
+                                      ? 'bg-orange-100 text-orange-800'
+                                      : 'bg-gray-100 text-gray-800'
+                                  }`}>
+                                    {vendor}
+                                  </span>
+                                );
+                              })()}
                               <span className={`px-3 py-1 rounded-full text-xs font-medium shadow-sm text-green-600 bg-green-100`}>
                                 Active
                               </span>
