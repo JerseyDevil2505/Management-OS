@@ -530,13 +530,30 @@ const getPricePerUnit = useCallback((price, size) => {
     console.log('🔄 Auto-save effect triggered, setting up interval');
     const interval = setInterval(() => {
       console.log('⏰ Auto-save interval triggered');
-      saveAnalysis();
+      // Use window reference to avoid hoisting issues
+      if (window.landValuationSave) {
+        window.landValuationSave();
+      }
     }, 30000);
     return () => {
       console.log('🛑 Clearing auto-save interval');
       clearInterval(interval);
     }
-  }, [isInitialLoadComplete, saveAnalysis]);
+  }, [isInitialLoadComplete]);
+
+  // Immediate auto-save when critical state changes (like adding sales)
+  useEffect(() => {
+    if (!isInitialLoadComplete) return;
+
+    console.log('🔄 State change detected, triggering immediate save');
+    const timeoutId = setTimeout(() => {
+      if (window.landValuationSave) {
+        window.landValuationSave();
+      }
+    }, 1000); // 1 second delay to batch multiple changes
+
+    return () => clearTimeout(timeoutId);
+  }, [vacantSales.length, Object.keys(saleCategories).length, isInitialLoadComplete]);
 
   // Clear Method 1 temporary variables after filtering is complete
   useEffect(() => {
@@ -1355,9 +1372,8 @@ const getPricePerUnit = useCallback((price, size) => {
     setShowAddModal(false);
     setSearchResults([]);
 
-    // CRITICAL: Save immediately after adding sales to ensure persistence
-    console.log('💾 Auto-saving after adding manually selected sales:', toAdd.map(p => `${p.property_block}/${p.property_lot}`));
-    setTimeout(() => saveAnalysis(), 100); // Small delay to let state updates settle
+    // Note: Auto-save will trigger within 30 seconds to persist these changes
+    console.log('💾 Sales added - auto-save will persist these changes:', toAdd.map(p => `${p.property_block}/${p.property_lot}`));
   };
 
   const handlePropertyResearch = async (property) => {
@@ -2250,6 +2266,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       setIsSaving(false);
     }
   };
+
+  // Expose saveAnalysis to window for auto-save access (avoids hoisting issues)
+  window.landValuationSave = saveAnalysis;
 
   // Excel export functions need to be defined before being used
   const exportVCSSheetExcel = () => {
