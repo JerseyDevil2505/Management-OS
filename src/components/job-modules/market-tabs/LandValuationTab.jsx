@@ -231,6 +231,18 @@ useEffect(() => {
     setMethod1ExcludedSales(savedExcluded);
   }
 
+  // Also restore Method 1 excluded sales from new field (like Method 2)
+  if (marketLandData.vacant_sales_analysis?.excluded_sales) {
+    const method1Excluded = new Set(marketLandData.vacant_sales_analysis.excluded_sales);
+    setMethod1ExcludedSales(method1Excluded);
+    window._method1ExcludedSales = method1Excluded;
+
+    console.log('🔄 Restored Method 1 excluded sales from new field:', {
+      count: method1Excluded.size,
+      ids: Array.from(method1Excluded)
+    });
+  }
+
   // Restore Method 2 excluded sales
   if (marketLandData.bracket_analysis?.excluded_sales) {
     setMethod2ExcludedSales(new Set(marketLandData.bracket_analysis.excluded_sales));
