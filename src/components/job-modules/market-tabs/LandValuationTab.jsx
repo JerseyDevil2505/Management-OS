@@ -7,6 +7,7 @@ import {
   Home
 } from 'lucide-react';
 import { supabase, interpretCodes } from '../../../lib/supabaseClient';
+import * as XLSX from 'xlsx';
 
 const LandValuationTab = ({
   properties,
