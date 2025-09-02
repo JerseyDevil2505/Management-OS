@@ -110,7 +110,6 @@ const LandValuationTab = ({
 
   // ========== ALLOCATION STUDY STATE ==========
   const [vacantTestSales, setVacantTestSales] = useState([]);
-  const [improvedTestSales, setImprovedTestSales] = useState([]);
   const [actualAllocations, setActualAllocations] = useState({});
   const [vcsSiteValues, setVcsSiteValues] = useState({});
   const [targetAllocation, setTargetAllocation] = useState(null);
