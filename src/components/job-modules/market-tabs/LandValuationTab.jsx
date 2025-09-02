@@ -5431,7 +5431,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
                   {/* Improved Sales Data */}
                   <td style={{ padding: '8px', textAlign: 'center' }}>{sale.improvedSalesCount}</td>
-                  <td style={{ padding: '8px', textAlign: 'right' }}>${sale.avgImprovedPrice?.toFixed(0)}</td>
+                  <td style={{ padding: '8px', textAlign: 'right' }}>${Math.round(sale.avgImprovedPrice)?.toLocaleString()}</td>
                   <td style={{ padding: '8px', textAlign: 'right' }}>{sale.avgImprovedAcres}</td>
                   <td style={{
                     padding: '8px',
@@ -5439,7 +5439,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     fontWeight: 'bold',
                     borderRight: '2px solid #E5E7EB'
                   }}>
-                    ${sale.totalLandValue?.toFixed(0)}
+                    ${Math.round(sale.totalLandValue)?.toLocaleString()}
                   </td>
 
                   {/* Allocation Results */}
