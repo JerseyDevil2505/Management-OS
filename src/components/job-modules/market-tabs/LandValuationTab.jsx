@@ -200,7 +200,7 @@ useEffect(() => {
     const savedRegions = {};
     const savedExcluded = new Set();
 
-    console.log('🔄 Loading saved Method 1 sales data:', {
+    console.log('���� Loading saved Method 1 sales data:', {
       totalSales: marketLandData.vacant_sales_analysis.sales.length,
       salesWithCategories: marketLandData.vacant_sales_analysis.sales.filter(s => s.category).length,
       salesIncluded: marketLandData.vacant_sales_analysis.sales.filter(s => s.included).length,
@@ -1338,12 +1338,15 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   };
 
   const removeSale = (saleId) => {
-    setVacantSales(prev => prev.filter(s => s.id !== saleId));
+    // Track exclusion like Method 2 (don't remove from array entirely)
+    setMethod1ExcludedSales(prev => new Set([...prev, saleId]));
     setIncludedSales(prev => {
       const newSet = new Set(prev);
       newSet.delete(saleId);
       return newSet;
     });
+
+    console.log('🗑️ Sale removed and tracked as excluded:', saleId);
   };
 
   // ========== ALLOCATION STUDY FUNCTIONS ==========
