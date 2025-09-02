@@ -268,7 +268,6 @@ useEffect(() => {
     loadedTargetAllocation = marketLandData.target_allocation;
     console.log('🎯 LOADING TARGET ALLOCATION FROM DEDICATED COLUMN:', loadedTargetAllocation);
   }
-  // Load target allocation but skip cached site values to force fresh calculation (FALLBACK)
   // Priority 2: Legacy allocation_study structure (fallback)
   else if (marketLandData.allocation_study?.target_allocation !== null &&
            marketLandData.allocation_study?.target_allocation !== undefined) {
@@ -287,24 +286,6 @@ useEffect(() => {
     console.log('ℹ️ No target allocation found in database');
   }
 
-  // Skip the old else if block - keeping only the necessary parts
-  if (false && marketLandData.allocation_study) {
-    // Skip loading cached actual allocations and site values to force fresh calculation
-    // if (marketLandData.allocation_study.actual_allocations) {
-    //   setActualAllocations(marketLandData.allocation_study.actual_allocations);
-    // }
-    // if (marketLandData.allocation_study.vcs_site_values) {
-    //   setVcsSiteValues(marketLandData.allocation_study.vcs_site_values);
-    // }
-
-    // BUT DO load the target allocation since that's user input, not calculated
-    if (marketLandData.allocation_study.target_allocation) {
-      console.log('🎯 LOADING TARGET ALLOCATION FROM DATABASE:', marketLandData.allocation_study.target_allocation);
-      setTargetAllocation(marketLandData.allocation_study.target_allocation);
-    } else {
-      console.log('�� NO TARGET ALLOCATION FOUND IN DATABASE');
-    }
-  }
 
   // Clear any existing allocation data to force fresh calculation
   console.log('🧹 Clearing cached allocation data to force fresh calculation');
@@ -6832,7 +6813,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
               // Force target allocation to 27 if it's not set
               if (!targetAllocation) {
-                console.log('🔧 FORCING TARGET ALLOCATION TO 27%');
+                console.log('�� FORCING TARGET ALLOCATION TO 27%');
                 setTargetAllocation(27);
               }
 
