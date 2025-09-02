@@ -2055,12 +2055,21 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   const analyzeEconomicObsolescence = useCallback(() => {
     if (!properties) return;
 
+    // Count properties that meet ALL criteria for Economic Obsolescence
+    const qualifyingProperties = properties.filter(p =>
+      p.new_vcs &&
+      p.sales_price > 0 &&
+      p.location_analysis
+    );
+
     console.log('🔍 Economic Obsolescence Analysis - Property Sample:', {
       totalProperties: properties.length,
       sampleProperty: properties[0],
       propertiesWithLocationAnalysis: properties.filter(p => p.location_analysis).length,
       propertiesWithVCS: properties.filter(p => p.new_vcs).length,
-      propertiesWithSales: properties.filter(p => p.sales_price > 0).length
+      propertiesWithSales: properties.filter(p => p.sales_price > 0).length,
+      qualifyingForEcoObs: qualifyingProperties.length,
+      sampleQualifyingProperty: qualifyingProperties[0] || 'None found'
     });
 
     const factors = {};
