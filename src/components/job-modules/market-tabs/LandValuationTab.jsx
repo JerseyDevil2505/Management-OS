@@ -3221,7 +3221,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       // Debug all teardown sales
       if (saleCategories[s.id] === 'teardown') {
-        console.log('��️ Teardown sale details:', {
+        console.log('🏗️ Teardown sale details:', {
           block: s.property_block,
           lot: s.property_lot,
           id: s.id,
@@ -5458,7 +5458,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         <td style={{ padding: '8px' }}>{prop.property_location}</td>
                         <td style={{ padding: '8px' }}>
                           {prop.sales_date}
-                          {isPreConstruction && <span style={{ color: '#F59E0B', marginLeft: '4px' }}>���️</span>}
+                          {isPreConstruction && <span style={{ color: '#F59E0B', marginLeft: '4px' }}>����️</span>}
                         </td>
                         <td style={{ padding: '8px', textAlign: 'right' }}>${prop.sales_price?.toLocaleString()}</td>
                         <td style={{ padding: '8px', textAlign: 'right' }}>${Math.round(prop.normalizedTime)?.toLocaleString()}</td>
@@ -5539,8 +5539,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       type="number"
                       value={targetAllocation || ''}
                       onChange={(e) => {
-                        console.log('🎯 Target allocation input changed:', e.target.value);
-                        setTargetAllocation(e.target.value);
+                        const value = e.target.value;
+                        console.log('🎯 Target allocation input changed:', value);
+                        // Fix: Parse as number to prevent caching issues
+                        setTargetAllocation(value === '' ? null : parseFloat(value));
                       }}
                       placeholder="Set"
                       style={{
