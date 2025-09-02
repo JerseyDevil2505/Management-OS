@@ -3681,7 +3681,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 )}
                 {categoryAnalysis.buildingLot.method === 'paired' && categoryAnalysis.buildingLot.pairedAnalysis && (
                   <div style={{ fontSize: '9px', color: '#2563EB', marginTop: '2px' }}>
-                    {categoryAnalysis.buildingLot.count} properties ��� {categoryAnalysis.buildingLot.pairedAnalysis.pairs} comparisons
+                    {categoryAnalysis.buildingLot.count} properties • {categoryAnalysis.buildingLot.pairedAnalysis.pairs} comparisons
                   </div>
                 )}
               </div>
@@ -6725,16 +6725,18 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 targetAllocation,
                 hasCascadeRates: !!cascadeConfig.normal.prime,
                 propertiesCount: properties?.length || 0,
-                cascadeRates: cascadeConfig.normal
+                cascadeRates: cascadeConfig.normal,
+                vcsRecommendedSites: Object.keys(vcsRecommendedSites).length
               });
 
-              // Force target allocation to 28 if it's not set
+              // Force target allocation to 27 if it's not set
               if (!targetAllocation) {
-                console.log('🔧 FORCING TARGET ALLOCATION TO 28%');
-                setTargetAllocation(28);
+                console.log('🔧 FORCING TARGET ALLOCATION TO 27%');
+                setTargetAllocation(27);
               }
 
               // Force recalculation
+              console.log('🔧 CALLING calculateVCSRecommendedSitesWithTarget MANUALLY');
               calculateVCSRecommendedSitesWithTarget();
             }}
             style={{
