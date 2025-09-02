@@ -5524,18 +5524,18 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       style={{
                         backgroundColor: (!targetAllocation || targetAllocation === '') ? '#9CA3AF' : '#3B82F6',
                         color: 'white',
-                        padding: '4px 8px',
+                        padding: '6px 12px',
                         borderRadius: '4px',
                         border: 'none',
                         cursor: (!targetAllocation || targetAllocation === '') ? 'not-allowed' : 'pointer',
-                        fontSize: '10px',
+                        fontSize: '12px',
                         fontWeight: 'bold',
-                        marginLeft: '4px',
+                        marginLeft: '8px',
                         opacity: (!targetAllocation || targetAllocation === '') ? 0.5 : 1
                       }}
                       title={(!targetAllocation || targetAllocation === '') ? 'Enter a target allocation percentage first' : 'Save target allocation to database'}
                     >
-                      💾 Save
+                      Save
                     </button>
                   </div>
                 </div>
