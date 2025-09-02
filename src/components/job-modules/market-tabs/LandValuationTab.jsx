@@ -260,15 +260,17 @@ useEffect(() => {
     setMethod2ExcludedSales(new Set(marketLandData.bracket_analysis.excluded_sales));
   }
 
-  // TEMPORARILY DISABLED: Skip loading cached allocation study data to force fresh calculation
-  // This ensures the corrected cascade calculation logic is used instead of old cached values
-  if (false && marketLandData.allocation_study) {
-    if (marketLandData.allocation_study.actual_allocations) {
-      setActualAllocations(marketLandData.allocation_study.actual_allocations);
-    }
-    if (marketLandData.allocation_study.vcs_site_values) {
-      setVcsSiteValues(marketLandData.allocation_study.vcs_site_values);
-    }
+  // Load target allocation but skip cached site values to force fresh calculation
+  if (marketLandData.allocation_study) {
+    // Skip loading cached actual allocations and site values to force fresh calculation
+    // if (marketLandData.allocation_study.actual_allocations) {
+    //   setActualAllocations(marketLandData.allocation_study.actual_allocations);
+    // }
+    // if (marketLandData.allocation_study.vcs_site_values) {
+    //   setVcsSiteValues(marketLandData.allocation_study.vcs_site_values);
+    // }
+
+    // BUT DO load the target allocation since that's user input, not calculated
     if (marketLandData.allocation_study.target_allocation) {
       setTargetAllocation(marketLandData.allocation_study.target_allocation);
     }
