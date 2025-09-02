@@ -840,7 +840,7 @@ const getPricePerUnit = useCallback((price, size) => {
     const activeExcluded = window._method1ExcludedSales || method1ExcludedSales;
     const filteredSales = finalSales.filter(sale => !activeExcluded.has(sale.id));
 
-    console.log('���� Applying Method 1 exclusions:', {
+    console.log('🔄 Applying Method 1 exclusions:', {
       totalSalesBeforeExclusion: finalSales.length,
       excludedSalesCount: activeExcluded.size,
       totalSalesAfterExclusion: filteredSales.length,
@@ -1801,64 +1801,38 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
   const calculateVCSRecommendedSites = useCallback((avgNormTimes, counts) => {
     if (!targetAllocation || !cascadeConfig.normal.prime) return;
-    
+
     const recommendedSites = {};
-    
+
     Object.keys(avgNormTimes).forEach(vcs => {
       // Only calculate for residential VCS
       if (counts[vcs].residential === 0) return;
-      
+
       const avgNormTime = avgNormTimes[vcs];
       if (!avgNormTime) return;
-      
+
       // Get average lot size for this VCS
-      const vcsProps = properties.filter(p => 
-        p.new_vcs === vcs && 
+      const vcsProps = properties.filter(p =>
+        p.new_vcs === vcs &&
         (p.property_m4_class === '2' || p.property_m4_class === '3A')
       );
-      
+
       if (vcsProps.length === 0) return;
-      
+
       const avgAcres = vcsProps.reduce((sum, p) => sum + parseFloat(calculateAcreage(p)), 0) / vcsProps.length;
-      
-      // Apply cascade to get raw land value
-      let remainingAcres = avgAcres;
-      let rawLandValue = 0;
-      const cascadeRates = cascadeConfig.normal;
-      
-      if (cascadeRates.prime) {
-        const primeAcres = Math.min(remainingAcres, cascadeRates.prime.max || 1);
-        rawLandValue += primeAcres * (cascadeRates.prime.rate || 0);
-        remainingAcres -= primeAcres;
-      }
-      
-      if (cascadeRates.secondary && remainingAcres > 0) {
-        const secondaryMax = (cascadeRates.secondary.max || 5) - (cascadeRates.prime?.max || 1);
-        const secondaryAcres = Math.min(remainingAcres, secondaryMax);
-        rawLandValue += secondaryAcres * (cascadeRates.secondary.rate || 0);
-        remainingAcres -= secondaryAcres;
-      }
-      
-      if (cascadeRates.excess && remainingAcres > 0) {
-        const excessMax = (cascadeRates.excess.max || 10) - (cascadeRates.secondary?.max || 5);
-        const excessAcres = Math.min(remainingAcres, excessMax);
-        rawLandValue += excessAcres * (cascadeRates.excess.rate || 0);
-        remainingAcres -= excessAcres;
-      }
-      
-      if (cascadeRates.residual && remainingAcres > 0) {
-        rawLandValue += remainingAcres * (cascadeRates.residual.rate || 0);
-      }
-      
+
+      // Use corrected cascade logic
+      const rawLandValue = calculateRawLandValue(avgAcres, cascadeConfig.normal);
+
       // Calculate site value using target allocation
       const totalLandValue = avgNormTime * (parseFloat(targetAllocation) / 100);
       const siteValue = totalLandValue - rawLandValue;
-      
-      recommendedSites[vcs] = Math.round(siteValue);
+
+      recommendedSites[vcs] = siteValue; // No rounding - store exact value
     });
-    
+
     setVcsRecommendedSites(recommendedSites);
-  }, [targetAllocation, cascadeConfig, properties, calculateAcreage]);
+  }, [targetAllocation, cascadeConfig, properties, calculateAcreage, calculateRawLandValue]);
 
   // ========== SAVE TARGET ALLOCATION AND CALCULATE VCS RECOMMENDED SITES ==========
   const saveTargetAllocation = async () => {
@@ -2935,7 +2909,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     console.log('🔄 Recalculating category analysis');
     console.log('��� Total vacant sales:', vacantSales.length);
-    console.log('���� Checked sales count:', checkedSales.length);
+    console.log('📊 Checked sales count:', checkedSales.length);
     console.log('📋 Included sales IDs:', Array.from(includedSales));
     console.log('📋 Sale categories state:', saleCategories);
     console.log('📋 Teardown sales in checked:', checkedSales.filter(s => saleCategories[s.id] === 'teardown').map(s => `${s.property_block}/${s.property_lot}`));
@@ -3124,7 +3098,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       // Keep the 47/2 debug for reference
       if (s.property_block === '47' && s.property_lot === '2') {
-        console.log('��� Property 47/2 details:', {
+        console.log('🏠 Property 47/2 details:', {
           id: s.id,
           category: saleCategories[s.id],
           isInBuildingLot: isInCategory,
