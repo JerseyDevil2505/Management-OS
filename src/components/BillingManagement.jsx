@@ -905,24 +905,36 @@ const loadJobs = async () => {
 
         if (error) throw error;
 
-        // CRITICAL FIX: Update jobs table with new percent_billed
-        const newTotalPercent = (selectedJob.percent_billed || 0) + percentageDecimal;
-        const { error: jobUpdateError } = await supabase
-          .from('jobs')
-          .update({ percent_billed: newTotalPercent })
-          .eq('id', selectedJob.id);
+        // FIXED: Recalculate total percent_billed from all billing events
+        const { data: allBillingEvents, error: eventsError } = await supabase
+          .from('billing_events')
+          .select('percentage_billed')
+          .eq('job_id', selectedJob.id);
 
-        if (jobUpdateError) {
-          console.error('Error updating job percent_billed:', jobUpdateError);
+        if (eventsError) {
+          console.error('Error fetching billing events:', eventsError);
         } else {
-          console.log(`✅ Updated job ${selectedJob.id} percent_billed to ${(newTotalPercent * 100).toFixed(2)}%`);
+          // Calculate the actual total from all billing events
+          const actualTotalPercent = allBillingEvents.reduce((sum, event) =>
+            sum + parseFloat(event.percentage_billed || 0), 0);
 
-          // Notify parent components that data has changed
-          if (onDataUpdate) {
-            onDataUpdate();
-          }
-          if (onRefresh) {
-            onRefresh();
+          const { error: jobUpdateError } = await supabase
+            .from('jobs')
+            .update({ percent_billed: actualTotalPercent })
+            .eq('id', selectedJob.id);
+
+          if (jobUpdateError) {
+            console.error('Error updating job percent_billed:', jobUpdateError);
+          } else {
+            console.log(`✅ Updated job ${selectedJob.id} percent_billed to ${(actualTotalPercent * 100).toFixed(4)}% (recalculated from ${allBillingEvents.length} events)`);
+
+            // Notify parent components that data has changed
+            if (onDataUpdate) {
+              onDataUpdate();
+            }
+            if (onRefresh) {
+              onRefresh();
+            }
           }
         }
        
