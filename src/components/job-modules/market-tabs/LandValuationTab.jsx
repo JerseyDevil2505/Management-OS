@@ -840,7 +840,7 @@ const getPricePerUnit = useCallback((price, size) => {
     const activeExcluded = window._method1ExcludedSales || method1ExcludedSales;
     const filteredSales = finalSales.filter(sale => !activeExcluded.has(sale.id));
 
-    console.log('🔄 Applying Method 1 exclusions:', {
+    console.log('���� Applying Method 1 exclusions:', {
       totalSalesBeforeExclusion: finalSales.length,
       excludedSalesCount: activeExcluded.size,
       totalSalesAfterExclusion: filteredSales.length,
@@ -1860,6 +1860,113 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     setVcsRecommendedSites(recommendedSites);
   }, [targetAllocation, cascadeConfig, properties, calculateAcreage]);
 
+  // ========== SAVE TARGET ALLOCATION AND CALCULATE VCS RECOMMENDED SITES ==========
+  const saveTargetAllocation = async () => {
+    if (!jobData?.id || !targetAllocation) {
+      console.log('❌ Save target allocation cancelled: No job ID or target allocation');
+      return;
+    }
+
+    console.log('💾 Saving target allocation:', targetAllocation + '%');
+
+    try {
+      // Save target allocation to database
+      const { error } = await supabase
+        .from('market_land_valuation')
+        .update({
+          allocation_study: {
+            ...marketLandData?.allocation_study,
+            target_allocation: targetAllocation,
+            updated_at: new Date().toISOString()
+          }
+        })
+        .eq('job_id', jobData.id);
+
+      if (error) {
+        console.error('❌ Error saving target allocation:', error);
+        return;
+      }
+
+      console.log('✅ Target allocation saved to database');
+
+      // Calculate recommended site values for VCS using target allocation
+      calculateVCSRecommendedSitesWithTarget();
+
+    } catch (err) {
+      console.error('❌ Error in saveTargetAllocation:', err);
+    }
+  };
+
+  const calculateVCSRecommendedSitesWithTarget = useCallback(() => {
+    if (!targetAllocation || !cascadeConfig.normal.prime || !properties) {
+      console.log('❌ Cannot calculate VCS recommended sites: missing data');
+      return;
+    }
+
+    console.log('🎯 Calculating VCS recommended site values with target allocation:', targetAllocation + '%');
+
+    const recommendedSites = {};
+    const octoberFirstThreeYearsPrior = getOctoberFirstThreeYearsPrior();
+
+    // Get all VCS from properties
+    const allVCS = new Set(properties.map(p => p.new_vcs).filter(vcs => vcs));
+
+    allVCS.forEach(vcs => {
+      // Only calculate for VCS with residential properties
+      const residentialProps = properties.filter(p =>
+        p.new_vcs === vcs &&
+        (p.property_m4_class === '2' || p.property_m4_class === '3A')
+      );
+
+      if (residentialProps.length === 0) return;
+
+      // Get 3 years of relevant sales for this VCS
+      const relevantSales = residentialProps.filter(prop => {
+        const hasValidSale = prop.sales_date && prop.sales_price > 0;
+        const isWithinThreeYears = new Date(prop.sales_date) >= octoberFirstThreeYearsPrior;
+        const hasValidTypeUse = prop.asset_type_use && prop.asset_type_use.toString().startsWith('1');
+
+        return hasValidSale && isWithinThreeYears && hasValidTypeUse;
+      });
+
+      if (relevantSales.length === 0) {
+        console.log(`⚠️ No relevant sales found for VCS ${vcs} in past 3 years`);
+        return;
+      }
+
+      // Calculate average sale price from relevant sales
+      const avgSalePrice = relevantSales.reduce((sum, p) => sum + p.sales_price, 0) / relevantSales.length;
+
+      // Calculate average lot size from relevant sales
+      const avgAcres = relevantSales.reduce((sum, p) => sum + parseFloat(calculateAcreage(p)), 0) / relevantSales.length;
+
+      // Calculate total land value needed using target allocation
+      const totalLandValue = avgSalePrice * (parseFloat(targetAllocation) / 100);
+
+      // Calculate raw land value using corrected cascade logic
+      const rawLandValue = calculateRawLandValue(avgAcres, cascadeConfig.normal);
+
+      // Calculate recommended site value (no rounding)
+      const siteValue = totalLandValue - rawLandValue;
+
+      console.log(`📊 VCS ${vcs}:`, {
+        relevantSalesCount: relevantSales.length,
+        avgSalePrice: Math.round(avgSalePrice),
+        avgAcres: avgAcres.toFixed(2),
+        targetAllocation: targetAllocation + '%',
+        totalLandValue: Math.round(totalLandValue),
+        rawLandValue: Math.round(rawLandValue),
+        recommendedSiteValue: Math.round(siteValue)
+      });
+
+      recommendedSites[vcs] = siteValue; // No rounding - store exact value
+    });
+
+    setVcsRecommendedSites(recommendedSites);
+    console.log('✅ VCS recommended site values updated:', Object.keys(recommendedSites).length, 'VCS areas');
+
+  }, [targetAllocation, cascadeConfig, properties, calculateAcreage, calculateRawLandValue]);
+
   const formatPageRanges = (pages) => {
     if (pages.length === 0) return '';
     
@@ -2828,7 +2935,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     console.log('🔄 Recalculating category analysis');
     console.log('��� Total vacant sales:', vacantSales.length);
-    console.log('📊 Checked sales count:', checkedSales.length);
+    console.log('���� Checked sales count:', checkedSales.length);
     console.log('📋 Included sales IDs:', Array.from(includedSales));
     console.log('📋 Sale categories state:', saleCategories);
     console.log('📋 Teardown sales in checked:', checkedSales.filter(s => saleCategories[s.id] === 'teardown').map(s => `${s.property_block}/${s.property_lot}`));
@@ -3017,7 +3124,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       // Keep the 47/2 debug for reference
       if (s.property_block === '47' && s.property_lot === '2') {
-        console.log('🏠 Property 47/2 details:', {
+        console.log('��� Property 47/2 details:', {
           id: s.id,
           category: saleCategories[s.id],
           isInBuildingLot: isInCategory,
