@@ -97,6 +97,9 @@ const LandValuationTab = ({
     map: true
   });
 
+  // Method 1 Exclusion State (like Method 2)
+  const [method1ExcludedSales, setMethod1ExcludedSales] = useState(new Set());
+
   // Method 2 Exclusion Modal State
   const [showMethod2Modal, setShowMethod2Modal] = useState(false);
   const [method2ModalVCS, setMethod2ModalVCS] = useState('');
