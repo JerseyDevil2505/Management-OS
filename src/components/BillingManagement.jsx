@@ -1210,7 +1210,7 @@ const loadJobs = async () => {
       console.log(`✅ Updated planning job ${jobId} contract amount to $${Number(contractAmount).toLocaleString()}`);
 
       // Update local state to reflect change
-      setPlanningJobs(prev =>
+      setPlanningJobsState(prev =>
         prev.map(j => j.id === jobId ? {...j, contract_amount: parseFloat(contractAmount)} : j)
       );
 
