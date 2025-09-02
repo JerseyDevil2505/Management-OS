@@ -6045,34 +6045,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold' }}>VCS Valuation Sheet</h3>
           <div style={{ display: 'flex', gap: '10px' }}>
             <button
-              onClick={() => {
-                console.log('🔧 FORCE VCS CALC BUTTON CLICKED');
-                console.log('Target allocation before:', targetAllocation);
-                if (!targetAllocation) {
-                  console.log('Setting target allocation to 27%');
-                  setTargetAllocation(27);
-                }
-                setTimeout(() => {
-                  console.log('Calling calculateVCSRecommendedSitesWithTarget...');
-                  calculateVCSRecommendedSitesWithTarget();
-                }, 100);
-              }}
-              style={{
-                backgroundColor: '#8B5CF6',
-                color: 'white',
-                padding: '8px 16px',
-                borderRadius: '4px',
-                border: 'none',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-                fontSize: '14px'
-              }}
-            >
-              🎯 Force VCS Calc
-            </button>
-            <button
               onClick={() => exportToExcel('vcs-sheet')}
               style={{
                 backgroundColor: '#10B981',
@@ -6827,7 +6799,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               fontSize: '12px'
             }}
           >
-            🎯 Force VCS Calc
+            ���� Force VCS Calc
           </button>
           {lastSaved && (
             <span style={{ fontSize: '12px', color: '#6B7280' }}>
