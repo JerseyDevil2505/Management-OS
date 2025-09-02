@@ -754,12 +754,24 @@ const getPricePerUnit = useCallback((price, size) => {
       const enriched = enrichProperty(prop);
       finalSales.push(enriched);
       if (enriched.autoCategory) {
-        console.log(`��️ Auto-categorizing ${prop.property_block}/${prop.property_lot} as ${enriched.autoCategory}`);
+        console.log(`🏷️ Auto-categorizing ${prop.property_block}/${prop.property_lot} as ${enriched.autoCategory}`);
         setSaleCategories(prev => ({...prev, [prop.id]: enriched.autoCategory}));
       }
     });
 
-    setVacantSales(finalSales);
+    // CRITICAL FIX: Filter out excluded sales from Method 1 before setting finalSales
+    const activeExcluded = window._method1ExcludedSales || method1ExcludedSales;
+    const filteredSales = finalSales.filter(sale => !activeExcluded.has(sale.id));
+
+    console.log('🔄 Applying Method 1 exclusions:', {
+      totalSalesBeforeExclusion: finalSales.length,
+      excludedSalesCount: activeExcluded.size,
+      totalSalesAfterExclusion: filteredSales.length,
+      excludedIds: Array.from(activeExcluded),
+      filteredOutSales: finalSales.filter(sale => activeExcluded.has(sale.id)).map(s => ({id: s.id, block: s.property_block, lot: s.property_lot}))
+    });
+
+    setVacantSales(filteredSales);
 
     // Preserve checkbox states more intelligently
     setIncludedSales(prev => {
