@@ -1955,16 +1955,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         });
       }
 
-      console.log(`📊 VCS ${vcs}:`, {
-        relevantSalesCount: relevantSales.length,
-        avgSalePrice: Math.round(avgSalePrice),
-        avgAcres: avgAcres.toFixed(2),
-        targetAllocation: targetAllocation + '%',
-        totalLandValue: Math.round(totalLandValue),
-        rawLandValue: Math.round(rawLandValue),
-        recommendedSiteValue: Math.round(siteValue)
-      });
-
       recommendedSites[vcs] = siteValue; // No rounding - store exact value
     });
 
@@ -5294,7 +5284,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'yearBuilt' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Year Built {modalSortField === 'yearBuilt' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
+                      Year Built {modalSortField === 'yearBuilt' ? (modalSortDirection === 'asc' ? '��' : '↓') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('typeUse')}
