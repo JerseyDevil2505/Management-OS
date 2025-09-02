@@ -1354,6 +1354,10 @@ const getPricePerUnit = useCallback((price, size) => {
     setSelectedToAdd(new Set());
     setShowAddModal(false);
     setSearchResults([]);
+
+    // CRITICAL: Save immediately after adding sales to ensure persistence
+    console.log('💾 Auto-saving after adding manually selected sales:', toAdd.map(p => `${p.property_block}/${p.property_lot}`));
+    setTimeout(() => saveAnalysis(), 100); // Small delay to let state updates settle
   };
 
   const handlePropertyResearch = async (property) => {
