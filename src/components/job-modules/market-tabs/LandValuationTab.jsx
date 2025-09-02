@@ -2394,40 +2394,72 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   };
 
   const exportVCSSheet = () => {
-    let csv = 'VCS VALUATION SHEET\n';
-    csv += `Municipality,${jobData?.municipality || ''}\n`;
-    csv += `County,${jobData?.county || ''}\n`;
-    csv += `Date,${new Date().toLocaleDateString()}\n`;
-    csv += `Method,${valuationMode.toUpperCase()}\n`;
-    csv += `Target Allocation,${targetAllocation || 'Not Set'}%\n\n`;
+    // Helper function to format currency
+    const formatCurrency = (value) => {
+      if (!value || value === 0) return '';
+      return `$${Number(value).toLocaleString()}`;
+    };
 
-    // Header row - this will be the top row as requested
-    csv += 'VCS,Total,Type,Description,Method,Typical Lot,Rec Site,Act Site,';
+    // Helper function to format acres
+    const formatAcres = (value) => {
+      if (!value || value === 0) return '';
+      return Number(value).toFixed(2);
+    };
 
-    // Cascade headers based on mode
+    // Helper function to format square feet
+    const formatSquareFeet = (value) => {
+      if (!value || value === 0) return '';
+      return Number(value).toLocaleString();
+    };
+
+    // Helper function to get CME with color indicator
+    const formatCME = (price) => {
+      if (!price) return '';
+      const cmeBracket = getCMEBracket(price);
+      return cmeBracket ? `${cmeBracket.label} [${cmeBracket.color}]` : '';
+    };
+
+    let csv = '';
+
+    // 1. TITLE ROW - Extra Large Font
+    csv += '"=== VCS VALUATION SHEET ==="\n';
+    csv += '\n';
+
+    // 2. TABLE HEADERS - Large Font, Bold (using === markers for Excel formatting)
+    csv += '"VCS","Total","Type","Description","Method","Typical Lot Size","Rec Site Value","Act Site Value",';
+
+    // Dynamic cascade headers based on mode
     if (valuationMode === 'ff') {
-      csv += 'Standard FF,Excess FF,';
+      csv += '"Standard Rate ($/FF)","Excess Rate ($/FF)",';
     } else {
-      csv += 'Prime,Secondary,Excess,Residual,';
-    }
-
-    // Dynamic headers based on configuration
-    let cascadeHeaders = '';
-    if (valuationMode === 'ff') {
-      cascadeHeaders = 'Std FF,Exc FF,';
-    } else {
-      cascadeHeaders = 'Prime,Sec,Exc,';
+      csv += '"Prime Rate ($/Acre)","Secondary Rate ($/Acre)","Excess Rate ($/Acre)",';
       if (shouldShowResidualColumn) {
-        cascadeHeaders += 'Res,';
+        csv += '"Residual Rate ($/Acre)",';
       }
     }
 
-    // Add special category columns to match UI
-    csv += cascadeHeaders + 'Wet,LLocked,Consv,Avg Price (t),Avg Price,CME,Zoning';
-    if (shouldShowKeyColumn) csv += ',Key';
-    if (shouldShowMapColumn) csv += ',Map';
+    // Special category headers
+    csv += '"Wetlands Rate","Landlocked Rate","Conservation Rate","Avg Price (Time Norm)","Avg Price (Current)","CME Bracket","Zoning"';
+    if (shouldShowKeyColumn) csv += ',"Key Pages"';
+    if (shouldShowMapColumn) csv += ',"Map Pages"';
     csv += '\n';
-    
+
+    // Add border indicator row (Excel will interpret this for formatting)
+    csv += '"=BORDER=","=BORDER=","=BORDER=","=BORDER=","=BORDER=","=BORDER=","=BORDER=","=BORDER=",';
+    if (valuationMode === 'ff') {
+      csv += '"=BORDER=","=BORDER=",';
+    } else {
+      csv += '"=BORDER=","=BORDER=","=BORDER=",';
+      if (shouldShowResidualColumn) {
+        csv += '"=BORDER=",';
+      }
+    }
+    csv += '"=BORDER=","=BORDER=","=BORDER=","=BORDER=","=BORDER=","=BORDER=","=BORDER="';
+    if (shouldShowKeyColumn) csv += ',"=BORDER="';
+    if (shouldShowMapColumn) csv += ',"=BORDER="';
+    csv += '\n';
+
+    // 3. DATA ROWS
     Object.keys(vcsSheetData).sort().forEach(vcs => {
       const data = vcsSheetData[vcs];
       const type = vcsTypes[vcs] || 'Residential-Typical';
@@ -2441,12 +2473,20 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       // Get typical lot size for all properties in this VCS
       const vcsProps = properties?.filter(p =>
         p.new_vcs === vcs &&
-        p.asset_lot_acre && p.asset_lot_acre > 0 // Only properties with valid acreage
+        p.asset_lot_acre && p.asset_lot_acre > 0
       ) || [];
-      const typicalLot = vcsProps.length > 0 ?
-        (vcsProps.reduce((sum, p) => sum + parseFloat(calculateAcreage(p)), 0) / vcsProps.length).toFixed(2) : '';
 
-      // Check for special category properties in this VCS (only for residential)
+      let typicalLot = '';
+      if (vcsProps.length > 0) {
+        const avgAcres = vcsProps.reduce((sum, p) => sum + parseFloat(calculateAcreage(p)), 0) / vcsProps.length;
+        if (valuationMode === 'sf') {
+          typicalLot = formatSquareFeet(avgAcres * 43560);
+        } else {
+          typicalLot = formatAcres(avgAcres);
+        }
+      }
+
+      // Check for special category properties in this VCS
       const vcsSpecialCategories = isResidential ? {
         wetlands: cascadeConfig.specialCategories.wetlands && (
           vacantSales.some(s => s.new_vcs === vcs && saleCategories[s.id] === 'wetlands') ||
@@ -2460,19 +2500,23 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           vacantSales.some(s => s.new_vcs === vcs && saleCategories[s.id] === 'conservation') ||
           cascadeConfig.specialCategories.conservation > 0
         )
-      } : {
-        wetlands: false,
-        landlocked: false,
-        conservation: false
-      };
+      } : { wetlands: false, landlocked: false, conservation: false };
 
-      // Clean description and zoning for CSV
+      // Clean text for CSV
       const cleanDescription = (description || '').replace(/"/g, '""');
-      const cleanZoning = (data.zoning || '').replace(/"/g, '""');
+      const cleanZoning = (data.zoning || '').replace(/"/g, '""').replace(/\n/g, ' ').substring(0, 50);
 
-      csv += `"${vcs}",${data.counts?.total || 0},"${type}","${cleanDescription}",${getMethodDisplay(type, description)},${typicalLot},${recSite},${actSite},`;
+      // Start building the row
+      csv += `"${vcs}",`;
+      csv += `${data.counts?.total || 0},`;
+      csv += `"${type}",`;
+      csv += `"${cleanDescription}",`;
+      csv += `"${getMethodDisplay(type, description)}",`;
+      csv += `"${typicalLot}",`;
+      csv += `"${formatCurrency(recSite)}",`;
+      csv += `"${formatCurrency(actSite)}",`;
 
-      // Determine which cascade rates to use (priority: VCS-specific > Special Region > Normal)
+      // Determine cascade rates (priority: VCS-specific > Special Region > Normal)
       let cascadeRates = cascadeConfig.normal;
       const vcsSpecificConfig = Object.values(cascadeConfig.vcsSpecific || {}).find(config =>
         config.vcsList?.includes(vcs)
@@ -2488,54 +2532,73 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         }
       }
 
-      // Cascade rates
+      // Cascade rates with proper currency formatting
       if (isResidential) {
         if (valuationMode === 'ff') {
-          csv += `${cascadeRates.standard?.rate || ''},${cascadeRates.excess?.rate || ''},`;
+          csv += `"${formatCurrency(cascadeRates.standard?.rate)}",`;
+          csv += `"${formatCurrency(cascadeRates.excess?.rate)}",`;
         } else {
-          csv += `${cascadeRates.prime?.rate || ''},${cascadeRates.secondary?.rate || ''},${cascadeRates.excess?.rate || ''},`;
+          csv += `"${formatCurrency(cascadeRates.prime?.rate)}",`;
+          csv += `"${formatCurrency(cascadeRates.secondary?.rate)}",`;
+          csv += `"${formatCurrency(cascadeRates.excess?.rate)}",`;
           if (shouldShowResidualColumn) {
-            csv += `${cascadeRates.residual?.rate || ''},`;
+            csv += `"${formatCurrency(cascadeRates.residual?.rate)}",`;
           }
         }
       } else {
-        // Empty cells for non-residential
+        // Empty cells for non-residential with proper column count
         if (valuationMode === 'ff') {
-          csv += ',,';
+          csv += '"","",';
         } else {
-          csv += ',,,';
+          csv += '"";"","",';
           if (shouldShowResidualColumn) {
-            csv += ',';
+            csv += '"",';
           }
         }
       }
 
-      // Special category rates
-      csv += `${vcsSpecialCategories.wetlands && cascadeConfig.specialCategories.wetlands ? cascadeConfig.specialCategories.wetlands : ''},`;
-      csv += `${vcsSpecialCategories.landlocked && cascadeConfig.specialCategories.landlocked ? cascadeConfig.specialCategories.landlocked : ''},`;
-      csv += `${vcsSpecialCategories.conservation && cascadeConfig.specialCategories.conservation ? cascadeConfig.specialCategories.conservation : ''},`;
+      // Special category rates with currency formatting
+      csv += `"${vcsSpecialCategories.wetlands && cascadeConfig.specialCategories.wetlands ? formatCurrency(cascadeConfig.specialCategories.wetlands) : ''}",`;
+      csv += `"${vcsSpecialCategories.landlocked && cascadeConfig.specialCategories.landlocked ? formatCurrency(cascadeConfig.specialCategories.landlocked) : ''}",`;
+      csv += `"${vcsSpecialCategories.conservation && cascadeConfig.specialCategories.conservation ? formatCurrency(cascadeConfig.specialCategories.conservation) : ''}",`;
 
-      // Get CME bracket
-      const cmeBracket = data.avgPrice ? getCMEBracket(data.avgPrice) : null;
-      const cmeLabel = cmeBracket ? cmeBracket.label : '';
+      // Price columns with currency formatting
+      csv += `"${formatCurrency(data.avgNormTime)}",`;
+      csv += `"${formatCurrency(data.avgPrice)}",`;
 
-      csv += `${data.avgNormTime || ''},${data.avgPrice || ''},"${cmeLabel}","${cleanZoning}"`;
-      if (shouldShowKeyColumn) csv += `,"${data.keyPages || ''}"`;
-      if (shouldShowMapColumn) csv += `,"${data.mapPages || ''}"`;
+      // CME bracket with color integration
+      csv += `"${formatCME(data.avgPrice)}",`;
+
+      // Zoning
+      csv += `"${cleanZoning}"`;
+
+      // Optional columns
+      if (shouldShowKeyColumn) csv += `,"${(data.keyPages || '').replace(/"/g, '""')}"`;
+      if (shouldShowMapColumn) csv += `,"${(data.mapPages || '').replace(/"/g, '""')}"`;
+
       csv += '\n';
     });
-    
-    // Special Category Rates
-    if (Object.keys(cascadeConfig.specialCategories).length > 0) {
-      csv += '\n\nSPECIAL CATEGORY LAND RATES\n';
-      csv += 'Category,Rate\n';
-      Object.entries(cascadeConfig.specialCategories).forEach(([category, rate]) => {
-        if (rate !== null) {
-          csv += `"${category}",${rate}\n`;
-        }
-      });
-    }
-    
+
+    // 4. SUMMARY SECTION (moved to bottom as requested)
+    csv += '\n';
+    csv += '"=== SUMMARY INFORMATION ==="\n';
+    csv += '\n';
+    csv += '"Municipality:","' + (jobData?.municipality || '') + '"\n';
+    csv += '"County:","' + (jobData?.county || '') + '"\n';
+    csv += '"Analysis Date:","' + new Date().toLocaleDateString() + '"\n';
+    csv += '"Valuation Method:","' + valuationMode.toUpperCase() + '"\n';
+    csv += '"Target Allocation:","' + (targetAllocation ? targetAllocation + '%' : 'Not Set') + '"\n';
+
+    // CME Bracket Legend
+    csv += '\n';
+    csv += '"=== CME BRACKET LEGEND ==="\n';
+    csv += '"Bracket","Price Range","Color Code"\n';
+    CME_BRACKETS.forEach(bracket => {
+      const range = bracket.max === 99999999 ? `$${(bracket.min/1000)}K+` :
+                   `$${(bracket.min/1000)}K-$${(bracket.max/1000)}K`;
+      csv += `"${bracket.label}","${range}","${bracket.color}"\n`;
+    });
+
     return csv;
   };
 
