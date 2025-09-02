@@ -260,17 +260,27 @@ useEffect(() => {
     setMethod2ExcludedSales(new Set(marketLandData.bracket_analysis.excluded_sales));
   }
 
-  // TEMPORARILY DISABLED: Skip loading cached allocation study data to force fresh calculation
-  // This ensures the corrected cascade calculation logic is used instead of old cached values
-  if (false && marketLandData.allocation_study) {
-    if (marketLandData.allocation_study.actual_allocations) {
-      setActualAllocations(marketLandData.allocation_study.actual_allocations);
-    }
-    if (marketLandData.allocation_study.vcs_site_values) {
-      setVcsSiteValues(marketLandData.allocation_study.vcs_site_values);
-    }
+  // Load target allocation from dedicated column (NEW)
+  if (marketLandData.target_allocation) {
+    console.log('🎯 LOADING TARGET ALLOCATION FROM DEDICATED COLUMN:', marketLandData.target_allocation);
+    setTargetAllocation(marketLandData.target_allocation);
+  }
+  // Load target allocation but skip cached site values to force fresh calculation (FALLBACK)
+  else if (marketLandData.allocation_study) {
+    // Skip loading cached actual allocations and site values to force fresh calculation
+    // if (marketLandData.allocation_study.actual_allocations) {
+    //   setActualAllocations(marketLandData.allocation_study.actual_allocations);
+    // }
+    // if (marketLandData.allocation_study.vcs_site_values) {
+    //   setVcsSiteValues(marketLandData.allocation_study.vcs_site_values);
+    // }
+
+    // BUT DO load the target allocation since that's user input, not calculated
     if (marketLandData.allocation_study.target_allocation) {
+      console.log('🎯 LOADING TARGET ALLOCATION FROM DATABASE:', marketLandData.allocation_study.target_allocation);
       setTargetAllocation(marketLandData.allocation_study.target_allocation);
+    } else {
+      console.log('�� NO TARGET ALLOCATION FOUND IN DATABASE');
     }
   }
 
@@ -534,8 +544,21 @@ const getPricePerUnit = useCallback((price, size) => {
 
   // Auto-calculate VCS recommended sites when target allocation changes
   useEffect(() => {
+    console.log('🔄 TARGET ALLOCATION USEEFFECT TRIGGERED:', {
+      targetAllocation,
+      hasCascadeRates: !!cascadeConfig.normal.prime,
+      propertiesCount: properties?.length || 0
+    });
+
     if (targetAllocation && cascadeConfig.normal.prime && properties?.length > 0) {
+      console.log('✅ CONDITIONS MET - CALLING calculateVCSRecommendedSitesWithTarget');
       calculateVCSRecommendedSitesWithTarget();
+    } else {
+      console.log('❌ CONDITIONS NOT MET FOR VCS CALCULATION:', {
+        hasTargetAllocation: !!targetAllocation,
+        hasCascadeRates: !!cascadeConfig.normal.prime,
+        hasProperties: properties?.length > 0
+      });
     }
   }, [targetAllocation]);
   // Note: intentionally exclude calculateVCSRecommendedSitesWithTarget from deps to avoid TDZ issues, it is stable via useCallback.
@@ -1845,42 +1868,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     setVcsRecommendedSites(recommendedSites);
   }, [targetAllocation, cascadeConfig, properties, calculateAcreage, calculateRawLandValue, vcsTypes]);
 
-  // ========== SAVE TARGET ALLOCATION AND CALCULATE VCS RECOMMENDED SITES ==========
-  const saveTargetAllocation = async () => {
-    if (!jobData?.id || !targetAllocation) {
-      console.log('❌ Save target allocation cancelled: No job ID or target allocation');
-      return;
-    }
-
-    console.log('💾 Saving target allocation:', targetAllocation + '%');
-
-    try {
-      // Save target allocation to database
-      const { error } = await supabase
-        .from('market_land_valuation')
-        .update({
-          allocation_study: {
-            ...marketLandData?.allocation_study,
-            target_allocation: targetAllocation,
-            updated_at: new Date().toISOString()
-          }
-        })
-        .eq('job_id', jobData.id);
-
-      if (error) {
-        console.error('❌ Error saving target allocation:', error);
-        return;
-      }
-
-      console.log('✅ Target allocation saved to database');
-
-      // Calculate recommended site values for VCS using target allocation
-      calculateVCSRecommendedSitesWithTarget();
-
-    } catch (err) {
-      console.error('❌ Error in saveTargetAllocation:', err);
-    }
-  };
 
   const calculateVCSRecommendedSitesWithTarget = useCallback(() => {
     if (!targetAllocation || !cascadeConfig.normal.prime || !properties) {
@@ -2212,6 +2199,95 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     setCustomLocationCodes(prev => [...prev, newCode]);
   };
 
+  // ========== SAVE TARGET ALLOCATION FUNCTION ==========
+  const saveTargetAllocation = async () => {
+    if (!jobData?.id) {
+      console.log('❌ Save target allocation cancelled: No job ID');
+      alert('Error: No job ID found. Cannot save target allocation.');
+      return;
+    }
+
+    if (!targetAllocation || targetAllocation === '') {
+      console.log('❌ Save target allocation cancelled: No target allocation value');
+      alert('Please enter a target allocation percentage before saving.');
+      return;
+    }
+
+    const targetValue = parseFloat(targetAllocation);
+    if (isNaN(targetValue) || targetValue <= 0 || targetValue > 100) {
+      console.log('❌ Save target allocation cancelled: Invalid value:', targetAllocation);
+      alert('Please enter a valid target allocation percentage between 1 and 100.');
+      return;
+    }
+
+    console.log('💾 Saving target allocation:', `${targetValue}%`, 'for job:', jobData.id);
+
+    try {
+      // Check if record exists first
+      const { data: existing, error: checkError } = await supabase
+        .from('market_land_valuation')
+        .select('id, target_allocation, allocation_study')
+        .eq('job_id', jobData.id)
+        .maybeSingle();
+
+      if (checkError && checkError.code !== 'PGRST116') {
+        console.error('❌ Error checking for existing record:', checkError);
+        throw checkError;
+      }
+
+      let result;
+      if (existing) {
+        console.log('📝 Updating existing record with target allocation...');
+        result = await supabase
+          .from('market_land_valuation')
+          .update({
+            target_allocation: targetValue,
+            updated_at: new Date().toISOString()
+          })
+          .eq('job_id', jobData.id);
+      } else {
+        console.log('➕ Creating new record with target allocation...');
+        result = await supabase
+          .from('market_land_valuation')
+          .insert({
+            job_id: jobData.id,
+            target_allocation: targetValue,
+            updated_at: new Date().toISOString()
+          });
+      }
+
+      if (result.error) {
+        console.error('❌ Database error saving target allocation:', result.error);
+        throw result.error;
+      }
+
+      console.log('✅ Target allocation saved successfully to database');
+
+      // Update last saved timestamp
+      setLastSaved(new Date());
+
+      // Show success feedback
+      alert(`Target allocation ${targetValue}% saved successfully!`);
+
+      // Trigger VCS recommended sites calculation
+      console.log('🔄 Triggering VCS recommended sites calculation...');
+      if (cascadeConfig.normal.prime && properties?.length > 0) {
+        calculateVCSRecommendedSitesWithTarget();
+      } else {
+        console.log('⚠️ Cannot calculate VCS recommended sites: missing cascade config or properties');
+      }
+
+    } catch (error) {
+      console.error('❌ Error saving target allocation:', error);
+      console.error('Error details:', {
+        message: error.message,
+        code: error.code,
+        details: error.details
+      });
+      alert(`Failed to save target allocation: ${error.message}`);
+    }
+  };
+
   // ========== SAVE & EXPORT FUNCTIONS ==========
   const saveAnalysis = async () => {
     if (!jobData?.id) {
@@ -2263,10 +2339,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           summary: method2Summary
         },
         cascade_rates: cascadeConfig,
+        target_allocation: targetAllocation,
         allocation_study: {
           vcs_site_values: vcsSiteValues,
           actual_allocations: actualAllocations,
-          target_allocation: targetAllocation,
           current_overall_allocation: currentOverallAllocation,
           stats: calculateAllocationStats()
         },
@@ -5215,7 +5291,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'saleDate' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Sale Date {modalSortField === 'saleDate' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
+                      Sale Date {modalSortField === 'saleDate' ? (modalSortDirection === 'asc' ? '↑' : '���') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('salePrice')}
@@ -5423,7 +5499,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     <input
                       type="number"
                       value={targetAllocation || ''}
-                      onChange={(e) => setTargetAllocation(e.target.value)}
+                      onChange={(e) => {
+                        console.log('🎯 Target allocation input changed:', e.target.value);
+                        setTargetAllocation(e.target.value);
+                      }}
                       placeholder="Set"
                       style={{
                         width: '60px',
@@ -5436,20 +5515,26 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     />
                     <span style={{ fontSize: '16px', fontWeight: 'bold' }}>%</span>
                     <button
-                      onClick={() => saveTargetAllocation()}
+                      onClick={() => {
+                        console.log('💾 Save button clicked for target allocation:', targetAllocation);
+                        saveTargetAllocation();
+                      }}
+                      disabled={!targetAllocation || targetAllocation === ''}
                       style={{
-                        backgroundColor: '#3B82F6',
+                        backgroundColor: (!targetAllocation || targetAllocation === '') ? '#9CA3AF' : '#3B82F6',
                         color: 'white',
-                        padding: '4px 8px',
+                        padding: '6px 12px',
                         borderRadius: '4px',
                         border: 'none',
-                        cursor: 'pointer',
-                        fontSize: '10px',
+                        cursor: (!targetAllocation || targetAllocation === '') ? 'not-allowed' : 'pointer',
+                        fontSize: '12px',
                         fontWeight: 'bold',
-                        marginLeft: '4px'
+                        marginLeft: '8px',
+                        opacity: (!targetAllocation || targetAllocation === '') ? 0.5 : 1
                       }}
+                      title={(!targetAllocation || targetAllocation === '') ? 'Enter a target allocation percentage first' : 'Save target allocation to database'}
                     >
-                      💾
+                      Save
                     </button>
                   </div>
                 </div>
@@ -6629,6 +6714,37 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             }}
           >
             🔧 Debug Save
+          </button>
+          <button
+            onClick={() => {
+              console.log('🎯 MANUAL VCS RECALCULATION TRIGGERED');
+              console.log('Current state:', {
+                targetAllocation,
+                hasCascadeRates: !!cascadeConfig.normal.prime,
+                propertiesCount: properties?.length || 0,
+                cascadeRates: cascadeConfig.normal
+              });
+
+              // Force target allocation to 28 if it's not set
+              if (!targetAllocation) {
+                console.log('🔧 FORCING TARGET ALLOCATION TO 28%');
+                setTargetAllocation(28);
+              }
+
+              // Force recalculation
+              calculateVCSRecommendedSitesWithTarget();
+            }}
+            style={{
+              backgroundColor: '#DC2626',
+              color: 'white',
+              padding: '4px 8px',
+              borderRadius: '4px',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: '12px'
+            }}
+          >
+            🎯 Force VCS Calc
           </button>
           {lastSaved && (
             <span style={{ fontSize: '12px', color: '#6B7280' }}>
