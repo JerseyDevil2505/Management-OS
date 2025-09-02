@@ -260,7 +260,9 @@ useEffect(() => {
     setMethod2ExcludedSales(new Set(marketLandData.bracket_analysis.excluded_sales));
   }
 
-  if (marketLandData.allocation_study) {
+  // TEMPORARILY DISABLED: Skip loading cached allocation study data to force fresh calculation
+  // This ensures the corrected cascade calculation logic is used instead of old cached values
+  if (false && marketLandData.allocation_study) {
     if (marketLandData.allocation_study.actual_allocations) {
       setActualAllocations(marketLandData.allocation_study.actual_allocations);
     }
@@ -271,6 +273,10 @@ useEffect(() => {
       setTargetAllocation(marketLandData.allocation_study.target_allocation);
     }
   }
+
+  // Clear any existing allocation data to force fresh calculation
+  console.log('🧹 Clearing cached allocation data to force fresh calculation');
+  setVacantTestSales([]);
 
   if (marketLandData.worksheet_data) {
     setVcsSheetData(marketLandData.worksheet_data.sheet_data || {});
