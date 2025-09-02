@@ -511,7 +511,7 @@ const getPricePerUnit = useCallback((price, size) => {
     if (activeSubTab === 'allocation' && cascadeConfig.normal.prime) {
       loadAllocationStudyData();
     }
-  }, [activeSubTab, cascadeConfig, valuationMode]);
+  }, [activeSubTab, cascadeConfig, valuationMode, vacantSales, includedSales, specialRegions]);
 
   useEffect(() => {
     if (activeSubTab === 'eco-obs' && properties) {
@@ -838,7 +838,7 @@ const getPricePerUnit = useCallback((price, size) => {
     setIncludedSales(prev => {
       // If initial load isn't complete yet, don't modify included sales
       if (!isInitialLoadComplete) {
-        console.log('⏸️ Skipping checkbox update - waiting for initial load');
+        console.log('⏸��� Skipping checkbox update - waiting for initial load');
         return prev;
       }
 
