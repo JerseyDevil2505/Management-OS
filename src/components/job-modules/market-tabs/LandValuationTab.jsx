@@ -5411,6 +5411,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 <th style={{ padding: '6px', border: '1px solid #D1D5DB', fontWeight: '600' }}>VCS</th>
                 <th style={{ padding: '6px', border: '1px solid #D1D5DB', fontWeight: '600' }}>Year</th>
                 <th style={{ padding: '6px', border: '1px solid #D1D5DB', fontWeight: '600' }}>Block/Lot</th>
+                <th style={{ padding: '6px', border: '1px solid #D1D5DB', fontWeight: '600' }}>Region</th>
                 <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Price</th>
                 <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Acres</th>
                 <th style={{ padding: '6px', textAlign: 'right', borderRight: '2px solid #E5E7EB', border: '1px solid #D1D5DB', fontWeight: '600' }}>Site Value</th>
