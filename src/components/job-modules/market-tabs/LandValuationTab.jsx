@@ -1921,17 +1921,39 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       // Calculate average sale price from relevant sales
       const avgSalePrice = relevantSales.reduce((sum, p) => sum + p.sales_price, 0) / relevantSales.length;
 
-      // Calculate average lot size from relevant sales
-      const avgAcres = relevantSales.reduce((sum, p) => sum + parseFloat(calculateAcreage(p)), 0) / relevantSales.length;
+      // Check if this VCS is a condo type
+      const vcsType = vcsTypes[vcs] || 'Residential-Typical';
+      const isCondo = vcsType.toLowerCase().includes('condo');
 
-      // Calculate total land value needed using target allocation
-      const totalLandValue = avgSalePrice * (parseFloat(targetAllocation) / 100);
+      let siteValue;
 
-      // Calculate raw land value using corrected cascade logic
-      const rawLandValue = calculateRawLandValue(avgAcres, cascadeConfig.normal);
+      if (isCondo) {
+        // For condos: recommended site = target allocation % × average sale price
+        siteValue = avgSalePrice * (parseFloat(targetAllocation) / 100);
+        console.log(`🏢 VCS ${vcs} (CONDO):`, {
+          relevantSalesCount: relevantSales.length,
+          avgSalePrice: Math.round(avgSalePrice),
+          targetAllocation: targetAllocation + '%',
+          recommendedSiteValue: Math.round(siteValue),
+          note: 'No lot size calculation for condos'
+        });
+      } else {
+        // For regular properties: calculate with lot size and cascade rates
+        const avgAcres = relevantSales.reduce((sum, p) => sum + parseFloat(calculateAcreage(p)), 0) / relevantSales.length;
+        const totalLandValue = avgSalePrice * (parseFloat(targetAllocation) / 100);
+        const rawLandValue = calculateRawLandValue(avgAcres, cascadeConfig.normal);
+        siteValue = totalLandValue - rawLandValue;
 
-      // Calculate recommended site value (no rounding)
-      const siteValue = totalLandValue - rawLandValue;
+        console.log(`🏠 VCS ${vcs}:`, {
+          relevantSalesCount: relevantSales.length,
+          avgSalePrice: Math.round(avgSalePrice),
+          avgAcres: avgAcres.toFixed(2),
+          targetAllocation: targetAllocation + '%',
+          totalLandValue: Math.round(totalLandValue),
+          rawLandValue: Math.round(rawLandValue),
+          recommendedSiteValue: Math.round(siteValue)
+        });
+      }
 
       console.log(`📊 VCS ${vcs}:`, {
         relevantSalesCount: relevantSales.length,
