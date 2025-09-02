@@ -993,10 +993,14 @@ const loadJobs = async () => {
                 billing_type: billingForm.billingType
               };
               
+              const updatedEvents = [...(job.billing_events || []), newEvent];
+              const recalculatedPercent = updatedEvents.reduce((sum, event) =>
+                sum + parseFloat(event.percentage_billed || 0), 0);
+
               return {
                 ...job,
-                billing_events: [...(job.billing_events || []), newEvent],
-                percent_billed: (job.percent_billed || 0) + percentageDecimal
+                billing_events: updatedEvents,
+                percent_billed: recalculatedPercent
               };
             }
             return job;
