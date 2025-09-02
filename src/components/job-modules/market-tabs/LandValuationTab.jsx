@@ -2883,7 +2883,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             (rates[rates.length / 2 - 1] + rates[rates.length / 2]) / 2 :
             rates[Math.floor(rates.length / 2)];
 
-          console.log(`💰 ${categoryType} paired analysis:`, {
+          console.log(`��� ${categoryType} paired analysis:`, {
             totalProperties: filtered.length,
             possiblePairs: (filtered.length * (filtered.length - 1)) / 2,
             validPairs: pairedRates.length,
@@ -5476,11 +5476,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 </div>
                 <div>
                   <div style={{ color: '#6B7280', fontSize: '12px' }}>Total Land Value</div>
-                  <div style={{ fontWeight: 'bold' }}>${totalLandValue.toLocaleString()}</div>
+                  <div style={{ fontWeight: 'bold' }}>${totalLandValue.toFixed(0)}</div>
                 </div>
                 <div>
                   <div style={{ color: '#6B7280', fontSize: '12px' }}>Total Sale Price</div>
-                  <div style={{ fontWeight: 'bold' }}>${totalSalePrice.toLocaleString()}</div>
+                  <div style={{ fontWeight: 'bold' }}>${totalSalePrice.toFixed(0)}</div>
                 </div>
                 <div>
                   <div style={{ color: '#6B7280', fontSize: '12px' }}>Final Recommended</div>
