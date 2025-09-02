@@ -552,8 +552,35 @@ const getPricePerUnit = useCallback((price, size) => {
     console.log('🔄 FilterVacantSales called:', {
       currentVacantSalesCount: vacantSales.length,
       hasMethod1Excluded: !!window._method1ExcludedSales,
-      method1ExcludedSize: window._method1ExcludedSales?.size || 0
+      method1ExcludedSize: window._method1ExcludedSales?.size || 0,
+      hasManuallyAdded: !!window._method1ManuallyAdded,
+      manuallyAddedSize: window._method1ManuallyAdded?.size || 0
     });
+
+    // CRITICAL: First restore manually added properties that might not meet natural criteria
+    const finalSales = [];
+    const manuallyAddedIds = window._method1ManuallyAdded || new Set();
+
+    if (manuallyAddedIds.size > 0) {
+      const manuallyAddedProps = properties.filter(prop => manuallyAddedIds.has(prop.id));
+      console.log('🔄 Restoring manually added properties:', {
+        found: manuallyAddedProps.length,
+        expected: manuallyAddedIds.size,
+        foundIds: manuallyAddedProps.map(p => p.id),
+        expectedIds: Array.from(manuallyAddedIds)
+      });
+
+      manuallyAddedProps.forEach(prop => {
+        const acres = calculateAcreage(prop);
+        const pricePerUnit = getPricePerUnit(prop.sales_price, acres);
+        finalSales.push({
+          ...prop,
+          totalAcres: acres,
+          pricePerAcre: pricePerUnit,
+          manuallyAdded: true
+        });
+      });
+    }
 
     // If we already have restored sales, preserve them and only add new ones
     if (false) { // Disable complex caching logic
@@ -2862,7 +2889,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       // Keep the 47/2 debug for reference
       if (s.property_block === '47' && s.property_lot === '2') {
-        console.log('���� Property 47/2 details:', {
+        console.log('🏠 Property 47/2 details:', {
           id: s.id,
           category: saleCategories[s.id],
           isInBuildingLot: isInCategory,
