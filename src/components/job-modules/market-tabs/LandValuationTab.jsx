@@ -2674,7 +2674,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     csv += '\n' + '='.repeat(80) + '\n\n';
     csv += exportAllocation();
     csv += '\n' + '='.repeat(80) + '\n\n';
-    csv += exportVCSSheet();
+    csv += exportVCSSheetCSV();
     csv += '\n' + '='.repeat(80) + '\n\n';
     csv += exportEconomicObsolescence();
     
