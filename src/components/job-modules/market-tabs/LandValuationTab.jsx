@@ -192,13 +192,6 @@ useEffect(() => {
     const savedIncluded = new Set();
     const manuallyAddedIds = new Set();
 
-    console.log('🔄 Loading saved Method 1 sales data:', {
-      totalSales: marketLandData.vacant_sales_analysis.sales.length,
-      salesWithCategories: marketLandData.vacant_sales_analysis.sales.filter(s => s.category).length,
-      salesIncluded: marketLandData.vacant_sales_analysis.sales.filter(s => s.included).length,
-      salesExcluded: marketLandData.vacant_sales_analysis.sales.filter(s => !s.included).length,
-      manuallyAdded: marketLandData.vacant_sales_analysis.sales.filter(s => s.manually_added).length
-    });
 
     marketLandData.vacant_sales_analysis.sales.forEach(s => {
       if (s.category) savedCategories[s.id] = s.category;
