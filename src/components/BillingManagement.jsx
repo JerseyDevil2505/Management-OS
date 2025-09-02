@@ -1196,6 +1196,30 @@ const loadJobs = async () => {
     }
   };
 
+  const handleUpdatePlannedContract = async (jobId, contractAmount) => {
+    if (!contractAmount) return;
+
+    try {
+      const { error } = await supabase
+        .from('planning_jobs')
+        .update({ contract_amount: parseFloat(contractAmount) })
+        .eq('id', jobId);
+
+      if (error) throw error;
+
+      console.log(`✅ Updated planning job ${jobId} contract amount to $${Number(contractAmount).toLocaleString()}`);
+
+      // Update local state to reflect change
+      setPlanningJobs(prev =>
+        prev.map(j => j.id === jobId ? {...j, contract_amount: parseFloat(contractAmount)} : j)
+      );
+
+    } catch (error) {
+      console.error('Error updating planning job contract:', error);
+      alert('Error updating contract amount: ' + error.message);
+    }
+  };
+
   const handleRolloverToActive = async (planningJob) => {
     if (!window.confirm(`Roll over "${planningJob.job_name}" to active jobs? This will create a new active job with billing setup.`)) {
       return;
