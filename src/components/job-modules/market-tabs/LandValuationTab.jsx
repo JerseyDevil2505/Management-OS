@@ -199,12 +199,15 @@ useEffect(() => {
     const savedNotes = {};
     const savedRegions = {};
     const savedExcluded = new Set();
+    const savedIncluded = new Set();
+    const manuallyAddedIds = new Set();
 
     console.log('🔄 Loading saved Method 1 sales data:', {
       totalSales: marketLandData.vacant_sales_analysis.sales.length,
       salesWithCategories: marketLandData.vacant_sales_analysis.sales.filter(s => s.category).length,
       salesIncluded: marketLandData.vacant_sales_analysis.sales.filter(s => s.included).length,
-      salesExcluded: marketLandData.vacant_sales_analysis.sales.filter(s => !s.included).length
+      salesExcluded: marketLandData.vacant_sales_analysis.sales.filter(s => !s.included).length,
+      manuallyAdded: marketLandData.vacant_sales_analysis.sales.filter(s => s.manually_added).length
     });
 
     marketLandData.vacant_sales_analysis.sales.forEach(s => {
@@ -212,13 +215,18 @@ useEffect(() => {
       if (s.notes) savedNotes[s.id] = s.notes;
       if (s.special_region && s.special_region !== 'Normal') savedRegions[s.id] = s.special_region;
       if (!s.included) savedExcluded.add(s.id); // Track excluded instead of included
+      if (s.included) savedIncluded.add(s.id);
+      if (s.manually_added) manuallyAddedIds.add(s.id);
     });
 
     console.log('🔄 Restored Method 1 states:', {
       excludedCount: savedExcluded.size,
+      includedCount: savedIncluded.size,
+      manuallyAddedCount: manuallyAddedIds.size,
       categoriesCount: Object.keys(savedCategories).length,
       regionsCount: Object.keys(savedRegions).length,
       excludedIds: Array.from(savedExcluded),
+      manuallyAddedIds: Array.from(manuallyAddedIds),
       categories: savedCategories
     });
 
@@ -226,9 +234,13 @@ useEffect(() => {
     setLandNotes(savedNotes);
     setSpecialRegions(savedRegions);
 
-    // Store excluded sales for application after filtering
+    // Store for application after filtering - both exclusions and manually added
     window._method1ExcludedSales = savedExcluded;
+    window._method1IncludedSales = savedIncluded;
+    window._method1ManuallyAdded = manuallyAddedIds;
+
     setMethod1ExcludedSales(savedExcluded);
+    setIncludedSales(savedIncluded);
   }
 
   // Also restore Method 1 excluded sales from new field (like Method 2)
@@ -2850,7 +2862,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       // Keep the 47/2 debug for reference
       if (s.property_block === '47' && s.property_lot === '2') {
-        console.log('🏠 Property 47/2 details:', {
+        console.log('���� Property 47/2 details:', {
           id: s.id,
           category: saleCategories[s.id],
           isInBuildingLot: isInCategory,
