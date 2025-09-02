@@ -1492,9 +1492,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       });
 
       if (improvedSalesForYear.length === 0) {
-        console.log(`⚠️ No improved sales found for year ${year}`);
+        console.log(`⚠️ No improved sales found for year ${year} (with type_use starting with '1')`);
         return;
       }
+
+      console.log(`✅ Found ${improvedSalesForYear.length} improved sales for year ${year} with type_use starting with '1'`);
 
       // Calculate averages for this year's improved sales
       const avgImprovedPrice = improvedSalesForYear.reduce((sum, p) => sum + p.sales_price, 0) / improvedSalesForYear.length;
