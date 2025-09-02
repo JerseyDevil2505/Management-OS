@@ -1555,53 +1555,33 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     let rawLandValue = 0;
     const breakdown = [];
 
-    // First tier (prime): typically first 1 acre
-    if (cascadeRates.prime) {
-      const primeAcres = Math.min(remainingAcres, cascadeRates.prime.max || 1);
-      const primeValue = primeAcres * (cascadeRates.prime.rate || 0);
-      rawLandValue += primeValue;
-      remainingAcres -= primeAcres;
-      breakdown.push(`Prime: ${primeAcres.toFixed(2)} acres × $${cascadeRates.prime.rate || 0} = $${primeValue.toFixed(0)}`);
+    // TIER 1: First acre at prime rate ($15,000)
+    if (cascadeRates.prime && remainingAcres > 0) {
+      const tier1Acres = Math.min(remainingAcres, 1);
+      const tier1Value = tier1Acres * (cascadeRates.prime.rate || 0);
+      rawLandValue += tier1Value;
+      remainingAcres -= tier1Acres;
+      breakdown.push(`Tier 1 (0-1 acre): ${tier1Acres.toFixed(2)} × $${cascadeRates.prime.rate || 0} = $${tier1Value.toFixed(0)}`);
     }
 
-    // Second tier (secondary): typically acres 1-5 (so 4 acres)
+    // TIER 2: Acres 1-5 at secondary rate ($10,000) - that's 4 acres total
     if (cascadeRates.secondary && remainingAcres > 0) {
-      const secondaryMax = (cascadeRates.secondary.max || 5) - (cascadeRates.prime?.max || 1);
-      const secondaryAcres = Math.min(remainingAcres, secondaryMax);
-      const secondaryValue = secondaryAcres * (cascadeRates.secondary.rate || 0);
-      rawLandValue += secondaryValue;
-      remainingAcres -= secondaryAcres;
-      breakdown.push(`Secondary: ${secondaryAcres.toFixed(2)} acres × $${cascadeRates.secondary.rate || 0} = $${secondaryValue.toFixed(0)}`);
+      const tier2Acres = Math.min(remainingAcres, 4); // Only 4 acres in this tier (1-5)
+      const tier2Value = tier2Acres * (cascadeRates.secondary.rate || 0);
+      rawLandValue += tier2Value;
+      remainingAcres -= tier2Acres;
+      breakdown.push(`Tier 2 (1-5 acres): ${tier2Acres.toFixed(2)} × $${cascadeRates.secondary.rate || 0} = $${tier2Value.toFixed(0)}`);
     }
 
-    // Third tier (excess): typically anything above 5 acres - apply to ALL remaining acres
-    // Note: We don't limit this tier, it applies to all remaining acres if no residual tier exists
+    // TIER 3: All remaining acres above 5 at excess rate ($5,000)
     if (cascadeRates.excess && remainingAcres > 0) {
-      if (cascadeRates.residual) {
-        // If there's a residual tier, excess only applies up to its max
-        const excessMax = (cascadeRates.excess.max || 10) - (cascadeRates.secondary?.max || 5);
-        const excessAcres = Math.min(remainingAcres, excessMax);
-        const excessValue = excessAcres * (cascadeRates.excess.rate || 0);
-        rawLandValue += excessValue;
-        remainingAcres -= excessAcres;
-        breakdown.push(`Excess: ${excessAcres.toFixed(2)} acres × $${cascadeRates.excess.rate || 0} = $${excessValue.toFixed(0)}`);
-      } else {
-        // If no residual tier, excess applies to ALL remaining acres
-        const excessValue = remainingAcres * (cascadeRates.excess.rate || 0);
-        rawLandValue += excessValue;
-        breakdown.push(`Excess: ${remainingAcres.toFixed(2)} acres × $${cascadeRates.excess.rate || 0} = $${excessValue.toFixed(0)}`);
-        remainingAcres = 0;
-      }
+      const tier3Value = remainingAcres * (cascadeRates.excess.rate || 0);
+      rawLandValue += tier3Value;
+      breakdown.push(`Tier 3 (>5 acres): ${remainingAcres.toFixed(2)} × $${cascadeRates.excess.rate || 0} = $${tier3Value.toFixed(0)}`);
+      remainingAcres = 0;
     }
 
-    // Fourth tier (residual): anything beyond excess max (if defined)
-    if (cascadeRates.residual && remainingAcres > 0) {
-      const residualValue = remainingAcres * (cascadeRates.residual.rate || 0);
-      rawLandValue += residualValue;
-      breakdown.push(`Residual: ${remainingAcres.toFixed(2)} acres × $${cascadeRates.residual.rate || 0} = $${residualValue.toFixed(0)}`);
-    }
-
-    console.log(`🔢 Raw land calculation for ${acres} acres:`, breakdown.join(', '), `Total: $${rawLandValue.toFixed(0)}`);
+    console.log(`🔢 Raw land calculation for ${acres} acres:`, breakdown.join(' + '), `= $${rawLandValue.toFixed(0)}`);
 
     return rawLandValue;
   };
