@@ -1842,7 +1842,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     });
 
     setVcsRecommendedSites(recommendedSites);
-  }, [targetAllocation, cascadeConfig, properties, calculateAcreage, calculateRawLandValue]);
+  }, [targetAllocation, cascadeConfig, properties, calculateAcreage, calculateRawLandValue, vcsTypes]);
 
   // ========== SAVE TARGET ALLOCATION AND CALCULATE VCS RECOMMENDED SITES ==========
   const saveTargetAllocation = async () => {
@@ -1961,7 +1961,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     setVcsRecommendedSites(recommendedSites);
     console.log('✅ VCS recommended site values updated:', Object.keys(recommendedSites).length, 'VCS areas');
 
-  }, [targetAllocation, cascadeConfig, properties, calculateAcreage, calculateRawLandValue]);
+  }, [targetAllocation, cascadeConfig, properties, calculateAcreage, calculateRawLandValue, vcsTypes]);
 
   const formatPageRanges = (pages) => {
     if (pages.length === 0) return '';
