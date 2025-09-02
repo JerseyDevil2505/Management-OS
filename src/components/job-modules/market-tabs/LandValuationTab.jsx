@@ -202,7 +202,7 @@ useEffect(() => {
     const savedIncluded = new Set();
     const manuallyAddedIds = new Set();
 
-    console.log('🔄 Loading saved Method 1 sales data:', {
+    console.log('�� Loading saved Method 1 sales data:', {
       totalSales: marketLandData.vacant_sales_analysis.sales.length,
       salesWithCategories: marketLandData.vacant_sales_analysis.sales.filter(s => s.category).length,
       salesIncluded: marketLandData.vacant_sales_analysis.sales.filter(s => s.included).length,
@@ -539,7 +539,7 @@ const getPricePerUnit = useCallback((price, size) => {
 
   // Auto-calculate VCS recommended sites when target allocation changes
   useEffect(() => {
-    console.log('🔄 TARGET ALLOCATION USEEFFECT TRIGGERED:', {
+    console.log('��� TARGET ALLOCATION USEEFFECT TRIGGERED:', {
       targetAllocation,
       hasCascadeRates: !!cascadeConfig.normal.prime,
       propertiesCount: properties?.length || 0
@@ -5560,20 +5560,26 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     />
                     <span style={{ fontSize: '16px', fontWeight: 'bold' }}>%</span>
                     <button
-                      onClick={() => saveTargetAllocation()}
+                      onClick={() => {
+                        console.log('💾 Save button clicked for target allocation:', targetAllocation);
+                        saveTargetAllocation();
+                      }}
+                      disabled={!targetAllocation || targetAllocation === ''}
                       style={{
-                        backgroundColor: '#3B82F6',
+                        backgroundColor: (!targetAllocation || targetAllocation === '') ? '#9CA3AF' : '#3B82F6',
                         color: 'white',
                         padding: '4px 8px',
                         borderRadius: '4px',
                         border: 'none',
-                        cursor: 'pointer',
+                        cursor: (!targetAllocation || targetAllocation === '') ? 'not-allowed' : 'pointer',
                         fontSize: '10px',
                         fontWeight: 'bold',
-                        marginLeft: '4px'
+                        marginLeft: '4px',
+                        opacity: (!targetAllocation || targetAllocation === '') ? 0.5 : 1
                       }}
+                      title={(!targetAllocation || targetAllocation === '') ? 'Enter a target allocation percentage first' : 'Save target allocation to database'}
                     >
-                      💾
+                      💾 Save
                     </button>
                   </div>
                 </div>
