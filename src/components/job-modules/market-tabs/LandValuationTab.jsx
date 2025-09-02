@@ -7,6 +7,7 @@ import {
   Home
 } from 'lucide-react';
 import { supabase, interpretCodes } from '../../../lib/supabaseClient';
+import * as XLSX from 'xlsx';
 
 const LandValuationTab = ({
   properties,
@@ -2247,34 +2248,296 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     }
   };
 
-  const exportToExcel = (type) => {
-    let csv = '';
-    const timestamp = new Date().toISOString().split('T')[0];
-    const municipality = (jobData?.municipality || 'export').replace(/[^a-zA-Z0-9]/g, '_');
-    const filename = `${type}_${municipality}_${timestamp}.csv`;
+  // Excel export functions need to be defined before being used
+  const exportVCSSheetExcel = () => {
+    // Create new workbook
+    const workbook = XLSX.utils.book_new();
 
-    if (type === 'land-rates') {
-      csv = exportLandRates();
-    } else if (type === 'allocation') {
-      csv = exportAllocation();
-    } else if (type === 'vcs-sheet') {
-      csv = exportVCSSheet();
-    } else if (type === 'eco-obs') {
-      csv = exportEconomicObsolescence();
-    } else if (type === 'complete') {
-      csv = exportCompleteAnalysis();
+    // Create title row
+    const data = [];
+    data.push(['VCS VALUATION SHEET']);
+    data.push([]); // Empty row
+
+    // Build headers array
+    const headers = ['VCS', 'Total', 'Type', 'Description', 'Method', 'Typical Lot Size', 'Rec Site Value', 'Act Site Value'];
+
+    // Dynamic cascade headers
+    if (valuationMode === 'ff') {
+      headers.push('Standard Rate ($/FF)', 'Excess Rate ($/FF)');
+    } else {
+      headers.push('Prime Rate ($/Acre)', 'Secondary Rate ($/Acre)', 'Excess Rate ($/Acre)');
+      if (shouldShowResidualColumn) {
+        headers.push('Residual Rate ($/Acre)');
+      }
     }
 
-    // Create and download file
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
+    // Special category headers
+    headers.push('Wetlands Rate', 'Landlocked Rate', 'Conservation Rate', 'Avg Price (Time Norm)', 'Avg Price (Current)', 'CME Bracket', 'Zoning');
+    if (shouldShowKeyColumn) headers.push('Key Pages');
+    if (shouldShowMapColumn) headers.push('Map Pages');
+
+    data.push(headers);
+
+    // Add data rows
+    Object.keys(vcsSheetData).sort().forEach(vcs => {
+      const vcsData = vcsSheetData[vcs];
+      const type = vcsTypes[vcs] || 'Residential-Typical';
+      const description = vcsDescriptions[vcs] || getVCSDescription(vcs);
+      const recSite = vcsRecommendedSites[vcs] || 0;
+      const actSite = vcsManualSiteValues[vcs] || recSite;
+      const isResidential = type.startsWith('Residential');
+
+      // Get typical lot size
+      const vcsProps = properties?.filter(p =>
+        p.new_vcs === vcs && p.asset_lot_acre && p.asset_lot_acre > 0
+      ) || [];
+
+      let typicalLot = '';
+      if (vcsProps.length > 0) {
+        const avgAcres = vcsProps.reduce((sum, p) => sum + parseFloat(calculateAcreage(p)), 0) / vcsProps.length;
+        if (valuationMode === 'sf') {
+          typicalLot = Math.round(avgAcres * 43560);
+        } else {
+          typicalLot = Number(avgAcres.toFixed(2));
+        }
+      }
+
+      // Check special categories
+      const vcsSpecialCategories = isResidential ? {
+        wetlands: cascadeConfig.specialCategories.wetlands && (
+          vacantSales.some(s => s.new_vcs === vcs && saleCategories[s.id] === 'wetlands') ||
+          cascadeConfig.specialCategories.wetlands > 0
+        ),
+        landlocked: cascadeConfig.specialCategories.landlocked && (
+          vacantSales.some(s => s.new_vcs === vcs && saleCategories[s.id] === 'landlocked') ||
+          cascadeConfig.specialCategories.landlocked > 0
+        ),
+        conservation: cascadeConfig.specialCategories.conservation && (
+          vacantSales.some(s => s.new_vcs === vcs && saleCategories[s.id] === 'conservation') ||
+          cascadeConfig.specialCategories.conservation > 0
+        )
+      } : { wetlands: false, landlocked: false, conservation: false };
+
+      // Clean data
+      const cleanDescription = (description || '').substring(0, 100);
+      const cleanZoning = (vcsData.zoning || '').replace(/\n/g, ' ').substring(0, 50);
+
+      // Start building row
+      const row = [
+        vcs,
+        vcsData.counts?.total || 0,
+        type,
+        cleanDescription,
+        getMethodDisplay(type, description),
+        typicalLot,
+        recSite || '',
+        actSite || ''
+      ];
+
+      // Get cascade rates
+      let cascadeRates = cascadeConfig.normal;
+      const vcsSpecificConfig = Object.values(cascadeConfig.vcsSpecific || {}).find(config =>
+        config.vcsList?.includes(vcs)
+      );
+      if (vcsSpecificConfig) {
+        cascadeRates = vcsSpecificConfig.rates || cascadeConfig.normal;
+      } else {
+        const vcsInSpecialRegion = vacantSales.find(sale =>
+          sale.new_vcs === vcs && specialRegions[sale.id] && specialRegions[sale.id] !== 'Normal'
+        );
+        if (vcsInSpecialRegion && cascadeConfig.special?.[specialRegions[vcsInSpecialRegion.id]]) {
+          cascadeRates = cascadeConfig.special[specialRegions[vcsInSpecialRegion.id]];
+        }
+      }
+
+      // Add cascade rates
+      if (isResidential) {
+        if (valuationMode === 'ff') {
+          row.push(cascadeRates.standard?.rate || '', cascadeRates.excess?.rate || '');
+        } else {
+          row.push(
+            cascadeRates.prime?.rate || '',
+            cascadeRates.secondary?.rate || '',
+            cascadeRates.excess?.rate || ''
+          );
+          if (shouldShowResidualColumn) {
+            row.push(cascadeRates.residual?.rate || '');
+          }
+        }
+      } else {
+        // Empty cells for non-residential
+        if (valuationMode === 'ff') {
+          row.push('', '');
+        } else {
+          row.push('', '', '');
+          if (shouldShowResidualColumn) {
+            row.push('');
+          }
+        }
+      }
+
+      // Special category rates
+      row.push(
+        vcsSpecialCategories.wetlands && cascadeConfig.specialCategories.wetlands ? cascadeConfig.specialCategories.wetlands : '',
+        vcsSpecialCategories.landlocked && cascadeConfig.specialCategories.landlocked ? cascadeConfig.specialCategories.landlocked : '',
+        vcsSpecialCategories.conservation && cascadeConfig.specialCategories.conservation ? cascadeConfig.specialCategories.conservation : ''
+      );
+
+      // Price columns
+      row.push(
+        vcsData.avgNormTime || '',
+        vcsData.avgPrice || ''
+      );
+
+      // CME bracket
+      const cmeBracket = vcsData.avgPrice ? getCMEBracket(vcsData.avgPrice) : null;
+      row.push(cmeBracket ? cmeBracket.label : '');
+
+      // Zoning
+      row.push(cleanZoning);
+
+      // Optional columns
+      if (shouldShowKeyColumn) row.push(vcsData.keyPages || '');
+      if (shouldShowMapColumn) row.push(vcsData.mapPages || '');
+
+      data.push(row);
+    });
+
+    // Add summary section
+    data.push([]);
+    data.push(['SUMMARY INFORMATION']);
+    data.push([]);
+    data.push(['Municipality:', jobData?.municipality || '']);
+    data.push(['County:', jobData?.county || '']);
+    data.push(['Analysis Date:', new Date().toLocaleDateString()]);
+    data.push(['Valuation Method:', valuationMode.toUpperCase()]);
+    data.push(['Target Allocation:', targetAllocation ? `${targetAllocation}%` : 'Not Set']);
+
+    // Create worksheet
+    const worksheet = XLSX.utils.aoa_to_sheet(data);
+
+    // Set column widths
+    const colWidths = [
+      { wch: 8 },   // VCS
+      { wch: 8 },   // Total
+      { wch: 20 },  // Type
+      { wch: 25 },  // Description
+      { wch: 12 },  // Method
+      { wch: 15 },  // Typical Lot
+      { wch: 15 },  // Rec Site
+      { wch: 15 },  // Act Site
+    ];
+
+    // Add cascade rate column widths
+    if (valuationMode === 'ff') {
+      colWidths.push({ wch: 15 }, { wch: 15 });
+    } else {
+      colWidths.push({ wch: 15 }, { wch: 15 }, { wch: 15 });
+      if (shouldShowResidualColumn) {
+        colWidths.push({ wch: 15 });
+      }
+    }
+
+    // Add remaining column widths
+    colWidths.push(
+      { wch: 15 },  // Wetlands
+      { wch: 15 },  // Landlocked
+      { wch: 15 },  // Conservation
+      { wch: 18 },  // Avg Price (Time)
+      { wch: 18 },  // Avg Price
+      { wch: 12 },  // CME
+      { wch: 20 }   // Zoning
+    );
+
+    if (shouldShowKeyColumn) colWidths.push({ wch: 15 });
+    if (shouldShowMapColumn) colWidths.push({ wch: 15 });
+
+    worksheet['!cols'] = colWidths;
+
+    // Add worksheet to workbook
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'VCS Sheet');
+
+    return workbook;
+  };
+
+  // Simple CSV version for complete analysis
+  const exportVCSSheetCSV = () => {
+    let csv = 'VCS VALUATION SHEET\n';
+    csv += `Municipality: ${jobData?.municipality || ''}\n`;
+    csv += `County: ${jobData?.county || ''}\n`;
+    csv += `Date: ${new Date().toLocaleDateString()}\n\n`;
+
+    // Headers
+    csv += 'VCS,Total,Type,Description,Prime Rate,Secondary Rate,Excess Rate';
+    if (shouldShowResidualColumn) csv += ',Residual Rate';
+    csv += ',Wetlands Rate,Landlocked Rate,Conservation Rate,Avg Price,CME Bracket\n';
+
+    // Data rows
+    Object.keys(vcsSheetData).sort().forEach(vcs => {
+      const data = vcsSheetData[vcs];
+      const type = vcsTypes[vcs] || 'Residential-Typical';
+      const description = vcsDescriptions[vcs] || getVCSDescription(vcs);
+      const isResidential = type.startsWith('Residential');
+
+      // Get cascade rates
+      let cascadeRates = cascadeConfig.normal;
+      const vcsSpecificConfig = Object.values(cascadeConfig.vcsSpecific || {}).find(config =>
+        config.vcsList?.includes(vcs)
+      );
+      if (vcsSpecificConfig) {
+        cascadeRates = vcsSpecificConfig.rates || cascadeConfig.normal;
+      }
+
+      // Clean description for CSV
+      const cleanDescription = (description || '').replace(/"/g, '""').substring(0, 50);
+
+      csv += `"${vcs}",${data.counts?.total || 0},"${type}","${cleanDescription}",`;
+
+      // Cascade rates
+      if (isResidential) {
+        csv += `${cascadeRates.prime?.rate || ''},${cascadeRates.secondary?.rate || ''},${cascadeRates.excess?.rate || ''}`;
+        if (shouldShowResidualColumn) {
+          csv += `,${cascadeRates.residual?.rate || ''}`;
+        }
+      } else {
+        csv += ',,,';
+        if (shouldShowResidualColumn) csv += ',';
+      }
+
+      // Special categories
+      const vcsSpecialCategories = isResidential ? {
+        wetlands: cascadeConfig.specialCategories.wetlands,
+        landlocked: cascadeConfig.specialCategories.landlocked,
+        conservation: cascadeConfig.specialCategories.conservation
+      } : { wetlands: '', landlocked: '', conservation: '' };
+
+      csv += `,${vcsSpecialCategories.wetlands || ''},${vcsSpecialCategories.landlocked || ''},${vcsSpecialCategories.conservation || ''}`;
+
+      // Price and CME
+      const cmeBracket = data.avgPrice ? getCMEBracket(data.avgPrice) : null;
+      csv += `,${data.avgPrice || ''},"${cmeBracket ? cmeBracket.label : ''}"\n`;
+    });
+
+    return csv;
+  };
+
+  const exportToExcel = (type) => {
+    const timestamp = new Date().toISOString().split('T')[0];
+    const municipality = (jobData?.municipality || 'export').replace(/[^a-zA-Z0-9]/g, '_');
+    const filename = `${type}_${municipality}_${timestamp}.xlsx`;
+
+    let workbook;
+    if (type === 'vcs-sheet') {
+      workbook = exportVCSSheetExcel();
+    } else {
+      // For other types, create a simple workbook for now
+      workbook = XLSX.utils.book_new();
+      const worksheet = XLSX.utils.aoa_to_sheet([['Export type not yet converted to Excel format']]);
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Sheet1');
+    }
+
+    // Create and download Excel file
+    XLSX.writeFile(workbook, filename);
   };
 
   const exportLandRates = () => {
@@ -2393,152 +2656,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     return csv;
   };
 
-  const exportVCSSheet = () => {
-    let csv = 'VCS VALUATION SHEET\n';
-    csv += `Municipality,${jobData?.municipality || ''}\n`;
-    csv += `County,${jobData?.county || ''}\n`;
-    csv += `Date,${new Date().toLocaleDateString()}\n`;
-    csv += `Method,${valuationMode.toUpperCase()}\n`;
-    csv += `Target Allocation,${targetAllocation || 'Not Set'}%\n\n`;
-
-    // Header row - this will be the top row as requested
-    csv += 'VCS,Total,Type,Description,Method,Typical Lot,Rec Site,Act Site,';
-
-    // Cascade headers based on mode
-    if (valuationMode === 'ff') {
-      csv += 'Standard FF,Excess FF,';
-    } else {
-      csv += 'Prime,Secondary,Excess,Residual,';
-    }
-
-    // Dynamic headers based on configuration
-    let cascadeHeaders = '';
-    if (valuationMode === 'ff') {
-      cascadeHeaders = 'Std FF,Exc FF,';
-    } else {
-      cascadeHeaders = 'Prime,Sec,Exc,';
-      if (shouldShowResidualColumn) {
-        cascadeHeaders += 'Res,';
-      }
-    }
-
-    // Add special category columns to match UI
-    csv += cascadeHeaders + 'Wet,LLocked,Consv,Avg Price (t),Avg Price,CME,Zoning';
-    if (shouldShowKeyColumn) csv += ',Key';
-    if (shouldShowMapColumn) csv += ',Map';
-    csv += '\n';
-    
-    Object.keys(vcsSheetData).sort().forEach(vcs => {
-      const data = vcsSheetData[vcs];
-      const type = vcsTypes[vcs] || 'Residential-Typical';
-      const description = vcsDescriptions[vcs] || getVCSDescription(vcs);
-      const recSite = vcsRecommendedSites[vcs] || 0;
-      const actSite = vcsManualSiteValues[vcs] || recSite;
-
-      // Skip non-residential types for cascade rates
-      const isResidential = type.startsWith('Residential');
-
-      // Get typical lot size for all properties in this VCS
-      const vcsProps = properties?.filter(p =>
-        p.new_vcs === vcs &&
-        p.asset_lot_acre && p.asset_lot_acre > 0 // Only properties with valid acreage
-      ) || [];
-      const typicalLot = vcsProps.length > 0 ?
-        (vcsProps.reduce((sum, p) => sum + parseFloat(calculateAcreage(p)), 0) / vcsProps.length).toFixed(2) : '';
-
-      // Check for special category properties in this VCS (only for residential)
-      const vcsSpecialCategories = isResidential ? {
-        wetlands: cascadeConfig.specialCategories.wetlands && (
-          vacantSales.some(s => s.new_vcs === vcs && saleCategories[s.id] === 'wetlands') ||
-          cascadeConfig.specialCategories.wetlands > 0
-        ),
-        landlocked: cascadeConfig.specialCategories.landlocked && (
-          vacantSales.some(s => s.new_vcs === vcs && saleCategories[s.id] === 'landlocked') ||
-          cascadeConfig.specialCategories.landlocked > 0
-        ),
-        conservation: cascadeConfig.specialCategories.conservation && (
-          vacantSales.some(s => s.new_vcs === vcs && saleCategories[s.id] === 'conservation') ||
-          cascadeConfig.specialCategories.conservation > 0
-        )
-      } : {
-        wetlands: false,
-        landlocked: false,
-        conservation: false
-      };
-
-      // Clean description and zoning for CSV
-      const cleanDescription = (description || '').replace(/"/g, '""');
-      const cleanZoning = (data.zoning || '').replace(/"/g, '""');
-
-      csv += `"${vcs}",${data.counts?.total || 0},"${type}","${cleanDescription}",${getMethodDisplay(type, description)},${typicalLot},${recSite},${actSite},`;
-
-      // Determine which cascade rates to use (priority: VCS-specific > Special Region > Normal)
-      let cascadeRates = cascadeConfig.normal;
-      const vcsSpecificConfig = Object.values(cascadeConfig.vcsSpecific || {}).find(config =>
-        config.vcsList?.includes(vcs)
-      );
-      if (vcsSpecificConfig) {
-        cascadeRates = vcsSpecificConfig.rates || cascadeConfig.normal;
-      } else {
-        const vcsInSpecialRegion = vacantSales.find(sale =>
-          sale.new_vcs === vcs && specialRegions[sale.id] && specialRegions[sale.id] !== 'Normal'
-        );
-        if (vcsInSpecialRegion && cascadeConfig.special?.[specialRegions[vcsInSpecialRegion.id]]) {
-          cascadeRates = cascadeConfig.special[specialRegions[vcsInSpecialRegion.id]];
-        }
-      }
-
-      // Cascade rates
-      if (isResidential) {
-        if (valuationMode === 'ff') {
-          csv += `${cascadeRates.standard?.rate || ''},${cascadeRates.excess?.rate || ''},`;
-        } else {
-          csv += `${cascadeRates.prime?.rate || ''},${cascadeRates.secondary?.rate || ''},${cascadeRates.excess?.rate || ''},`;
-          if (shouldShowResidualColumn) {
-            csv += `${cascadeRates.residual?.rate || ''},`;
-          }
-        }
-      } else {
-        // Empty cells for non-residential
-        if (valuationMode === 'ff') {
-          csv += ',,';
-        } else {
-          csv += ',,,';
-          if (shouldShowResidualColumn) {
-            csv += ',';
-          }
-        }
-      }
-
-      // Special category rates
-      csv += `${vcsSpecialCategories.wetlands && cascadeConfig.specialCategories.wetlands ? cascadeConfig.specialCategories.wetlands : ''},`;
-      csv += `${vcsSpecialCategories.landlocked && cascadeConfig.specialCategories.landlocked ? cascadeConfig.specialCategories.landlocked : ''},`;
-      csv += `${vcsSpecialCategories.conservation && cascadeConfig.specialCategories.conservation ? cascadeConfig.specialCategories.conservation : ''},`;
-
-      // Get CME bracket
-      const cmeBracket = data.avgPrice ? getCMEBracket(data.avgPrice) : null;
-      const cmeLabel = cmeBracket ? cmeBracket.label : '';
-
-      csv += `${data.avgNormTime || ''},${data.avgPrice || ''},"${cmeLabel}","${cleanZoning}"`;
-      if (shouldShowKeyColumn) csv += `,"${data.keyPages || ''}"`;
-      if (shouldShowMapColumn) csv += `,"${data.mapPages || ''}"`;
-      csv += '\n';
-    });
-    
-    // Special Category Rates
-    if (Object.keys(cascadeConfig.specialCategories).length > 0) {
-      csv += '\n\nSPECIAL CATEGORY LAND RATES\n';
-      csv += 'Category,Rate\n';
-      Object.entries(cascadeConfig.specialCategories).forEach(([category, rate]) => {
-        if (rate !== null) {
-          csv += `"${category}",${rate}\n`;
-        }
-      });
-    }
-    
-    return csv;
-  };
-
   const exportEconomicObsolescence = () => {
     let csv = 'ECONOMIC OBSOLESCENCE ANALYSIS\n';
     csv += `Municipality: ${jobData?.municipality || ''}\n`;
@@ -2618,7 +2735,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     csv += '\n' + '='.repeat(80) + '\n\n';
     csv += exportAllocation();
     csv += '\n' + '='.repeat(80) + '\n\n';
-    csv += exportVCSSheet();
+    csv += exportVCSSheetCSV();
     csv += '\n' + '='.repeat(80) + '\n\n';
     csv += exportEconomicObsolescence();
     
@@ -6085,7 +6202,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           </button>
           <button
             onClick={() => {
-              console.log('🔧 MANUAL DEBUG SAVE TRIGGERED');
+              console.log('��� MANUAL DEBUG SAVE TRIGGERED');
               console.log('Current state snapshot:', {
                 includedSales: Array.from(includedSales),
                 specialCategories: cascadeConfig.specialCategories,
