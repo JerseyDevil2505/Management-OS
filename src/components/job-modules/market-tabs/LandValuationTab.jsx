@@ -260,10 +260,13 @@ useEffect(() => {
     setMethod2ExcludedSales(new Set(marketLandData.bracket_analysis.excluded_sales));
   }
 
-  // Load target allocation from dedicated column (NEW)
-  if (marketLandData.target_allocation) {
-    console.log('🎯 LOADING TARGET ALLOCATION FROM DEDICATED COLUMN:', marketLandData.target_allocation);
-    setTargetAllocation(marketLandData.target_allocation);
+  // Load target allocation with proper precedence to avoid stale data conflicts
+  let loadedTargetAllocation = null;
+
+  // Priority 1: Dedicated column (most recent saves go here)
+  if (marketLandData.target_allocation !== null && marketLandData.target_allocation !== undefined) {
+    loadedTargetAllocation = marketLandData.target_allocation;
+    console.log('🎯 LOADING TARGET ALLOCATION FROM DEDICATED COLUMN:', loadedTargetAllocation);
   }
   // Load target allocation but skip cached site values to force fresh calculation (FALLBACK)
   else if (marketLandData.allocation_study) {
