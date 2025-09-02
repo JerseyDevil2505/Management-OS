@@ -5330,9 +5330,28 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         {/* Filters */}
         <div style={{ marginTop: '15px', display: 'flex', gap: '10px', alignItems: 'center' }}>
           <button
-            onClick={() => exportToExcel('allocation')}
+            onClick={() => {
+              console.log('🔄 Manual refresh triggered');
+              loadAllocationStudyData();
+            }}
             style={{
               marginLeft: 'auto',
+              backgroundColor: '#6366F1',
+              color: 'white',
+              padding: '8px 16px',
+              borderRadius: '4px',
+              border: 'none',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px'
+            }}
+          >
+            🔄 Refresh
+          </button>
+          <button
+            onClick={() => exportToExcel('allocation')}
+            style={{
               backgroundColor: '#10B981',
               color: 'white',
               padding: '8px 16px',
