@@ -1,4 +1,4 @@
-  import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import * as XLSX from 'xlsx';
 
@@ -904,6 +904,19 @@ const loadJobs = async () => {
           .insert(billingData);
 
         if (error) throw error;
+
+        // CRITICAL FIX: Update jobs table with new percent_billed
+        const newTotalPercent = (selectedJob.percent_billed || 0) + percentageDecimal;
+        const { error: jobUpdateError } = await supabase
+          .from('jobs')
+          .update({ percent_billed: newTotalPercent })
+          .eq('id', selectedJob.id);
+
+        if (jobUpdateError) {
+          console.error('Error updating job percent_billed:', jobUpdateError);
+        } else {
+          console.log(`✅ Updated job ${selectedJob.id} percent_billed to ${(newTotalPercent * 100).toFixed(2)}%`);
+        }
        
         // Update legacy jobs if this is a legacy job
         if (selectedJob.job_type === 'legacy_billing') {
