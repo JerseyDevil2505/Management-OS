@@ -1486,8 +1486,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         const hasBuilding = prop.asset_year_built && prop.asset_year_built > 0;
         const hasValues = prop.values_mod_land > 0 && prop.values_mod_total > 0;
         const sameYear = new Date(prop.sales_date).getFullYear() === year;
+        const hasValidTypeUse = prop.asset_type_use && prop.asset_type_use.toString().startsWith('1');
 
-        return isResidential && hasValidSale && hasBuilding && hasValues && sameYear;
+        return isResidential && hasValidSale && hasBuilding && hasValues && sameYear && hasValidTypeUse;
       });
 
       if (improvedSalesForYear.length === 0) {
