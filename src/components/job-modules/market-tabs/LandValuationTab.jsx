@@ -512,7 +512,8 @@ const getPricePerUnit = useCallback((price, size) => {
       console.log('🔄 Triggering allocation study recalculation...');
       loadAllocationStudyData();
     }
-  }, [activeSubTab, cascadeConfig, valuationMode, vacantSales, includedSales, specialRegions, loadAllocationStudyData]);
+  }, [activeSubTab, cascadeConfig, valuationMode, vacantSales, includedSales, specialRegions]);
+  // Note: intentionally exclude loadAllocationStudyData from deps to avoid TDZ issues, it is stable via useCallback.
 
   useEffect(() => {
     if (activeSubTab === 'eco-obs' && properties) {
@@ -839,7 +840,7 @@ const getPricePerUnit = useCallback((price, size) => {
     setIncludedSales(prev => {
       // If initial load isn't complete yet, don't modify included sales
       if (!isInitialLoadComplete) {
-        console.log('⏸����� Skipping checkbox update - waiting for initial load');
+        console.log('⏸��� Skipping checkbox update - waiting for initial load');
         return prev;
       }
 
