@@ -48,14 +48,6 @@ const LandingPage = ({ onLogin }) => {
     }
   };
 
-  // Logo component using provided image
-  const LogoImage = () => (
-    <img
-      src="https://cdn.builder.io/api/v1/image/assets%2F3a0ecd403c3d43a899b6b2065bb803d7%2F0bb052847abd4179b00037bd7055ded4?format=webp&width=800"
-      alt="LOJIK Logo"
-      className="company-logo"
-    />
-  );
 
   return (
     <div className="landing-container">
