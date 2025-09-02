@@ -260,29 +260,32 @@ useEffect(() => {
     setMethod2ExcludedSales(new Set(marketLandData.bracket_analysis.excluded_sales));
   }
 
-  // Load target allocation from dedicated column (NEW)
-  if (marketLandData.target_allocation) {
-    console.log('🎯 LOADING TARGET ALLOCATION FROM DEDICATED COLUMN:', marketLandData.target_allocation);
-    setTargetAllocation(marketLandData.target_allocation);
-  }
-  // Load target allocation but skip cached site values to force fresh calculation (FALLBACK)
-  else if (marketLandData.allocation_study) {
-    // Skip loading cached actual allocations and site values to force fresh calculation
-    // if (marketLandData.allocation_study.actual_allocations) {
-    //   setActualAllocations(marketLandData.allocation_study.actual_allocations);
-    // }
-    // if (marketLandData.allocation_study.vcs_site_values) {
-    //   setVcsSiteValues(marketLandData.allocation_study.vcs_site_values);
-    // }
+  // Load target allocation with proper precedence to avoid stale data conflicts
+  let loadedTargetAllocation = null;
 
-    // BUT DO load the target allocation since that's user input, not calculated
-    if (marketLandData.allocation_study.target_allocation) {
-      console.log('🎯 LOADING TARGET ALLOCATION FROM DATABASE:', marketLandData.allocation_study.target_allocation);
-      setTargetAllocation(marketLandData.allocation_study.target_allocation);
-    } else {
-      console.log('�� NO TARGET ALLOCATION FOUND IN DATABASE');
-    }
+  // Priority 1: Dedicated column (most recent saves go here)
+  if (marketLandData.target_allocation !== null && marketLandData.target_allocation !== undefined) {
+    loadedTargetAllocation = marketLandData.target_allocation;
+    console.log('🎯 LOADING TARGET ALLOCATION FROM DEDICATED COLUMN:', loadedTargetAllocation);
   }
+  // Priority 2: Legacy allocation_study structure (fallback)
+  else if (marketLandData.allocation_study?.target_allocation !== null &&
+           marketLandData.allocation_study?.target_allocation !== undefined) {
+    loadedTargetAllocation = marketLandData.allocation_study.target_allocation;
+    console.log('🎯 LOADING TARGET ALLOCATION FROM ALLOCATION STUDY:', loadedTargetAllocation);
+  }
+
+  // Only set if we found a valid value
+  if (loadedTargetAllocation !== null) {
+    // Ensure it's a number to prevent caching issues
+    const numericValue = typeof loadedTargetAllocation === 'string' ?
+      parseFloat(loadedTargetAllocation) : loadedTargetAllocation;
+    setTargetAllocation(numericValue);
+    console.log('✅ Target allocation set to:', numericValue, typeof numericValue);
+  } else {
+    console.log('ℹ️ No target allocation found in database');
+  }
+
 
   // Clear any existing allocation data to force fresh calculation
   console.log('🧹 Clearing cached allocation data to force fresh calculation');
@@ -1870,6 +1873,16 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
 
   const calculateVCSRecommendedSitesWithTarget = useCallback(() => {
+    console.log('🚀 calculateVCSRecommendedSitesWithTarget CALLED!');
+    console.log('📊 Input validation:', {
+      hasTargetAllocation: !!targetAllocation,
+      targetAllocationValue: targetAllocation,
+      hasCascadeRates: !!cascadeConfig.normal.prime,
+      cascadePrimeRate: cascadeConfig.normal.prime?.rate,
+      hasProperties: !!properties,
+      propertiesCount: properties?.length || 0
+    });
+
     if (!targetAllocation || !cascadeConfig.normal.prime || !properties) {
       console.log('❌ Cannot calculate VCS recommended sites: missing data');
       return;
@@ -1892,13 +1905,38 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       if (residentialProps.length === 0) return;
 
-      // Get 3 years of relevant sales for this VCS
-      const relevantSales = residentialProps.filter(prop => {
-        const hasValidSale = prop.sales_date && prop.sales_price > 0;
-        const isWithinThreeYears = new Date(prop.sales_date) >= octoberFirstThreeYearsPrior;
-        const hasValidTypeUse = prop.asset_type_use && prop.asset_type_use.toString().startsWith('1');
+      // Get 3 years of relevant sales for this VCS - MATCH SQL QUERY EXACTLY
+      const relevantSales = properties.filter(prop => {
+        // Must match this specific VCS
+        if (prop.new_vcs !== vcs) return false;
 
-        return hasValidSale && isWithinThreeYears && hasValidTypeUse;
+        // Residential properties only (Class 2 = Single Family, 3A = Two Family)
+        if (!['2', '3A'].includes(prop.property_m4_class)) return false;
+
+        // Valid sales data
+        const hasValidSale = prop.sales_date && prop.sales_price > 0;
+        if (!hasValidSale) return false;
+
+        // Sales within the last 3 years from October 1st
+        const isWithinThreeYears = new Date(prop.sales_date) >= octoberFirstThreeYearsPrior;
+        if (!isWithinThreeYears) return false;
+
+        // Valid asset type use starting with '1' (residential)
+        if (!prop.asset_type_use) return false;
+        const typeUseStr = prop.asset_type_use.toString().trim();
+        const hasValidTypeUse = typeUseStr.startsWith('1') || typeUseStr.startsWith('01');
+        if (!hasValidTypeUse) return false;
+
+        // Valid NU codes (blank, '7', '07', '00', or space) - MATCH SQL EXACTLY
+        const nu = prop.sales_nu;
+        const validNu = !nu ||
+                       nu.trim() === '' ||
+                       nu.trim() === '7' ||
+                       nu.trim() === '07' ||
+                       nu.trim() === '00';
+        if (!validNu) return false;
+
+        return true;
       });
 
       if (relevantSales.length === 0) {
@@ -1932,14 +1970,17 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         const rawLandValue = calculateRawLandValue(avgAcres, cascadeConfig.normal);
         siteValue = totalLandValue - rawLandValue;
 
-        console.log(`🏠 VCS ${vcs}:`, {
+        console.log(`🏠 VCS ${vcs} DETAILED DEBUG:`, {
           relevantSalesCount: relevantSales.length,
           avgSalePrice: Math.round(avgSalePrice),
           avgAcres: avgAcres.toFixed(2),
           targetAllocation: targetAllocation + '%',
+          targetAllocationDecimal: parseFloat(targetAllocation) / 100,
           totalLandValue: Math.round(totalLandValue),
           rawLandValue: Math.round(rawLandValue),
-          recommendedSiteValue: Math.round(siteValue)
+          recommendedSiteValue: Math.round(siteValue),
+          cascadeRates: cascadeConfig.normal,
+          formula: `${Math.round(avgSalePrice)} * ${(parseFloat(targetAllocation) / 100).toFixed(3)} - ${Math.round(rawLandValue)} = ${Math.round(siteValue)}`
         });
       }
 
@@ -1973,10 +2014,20 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   };
 
   const updateManualSiteValue = (vcs, value) => {
+    console.log(`🔧 Updating manual site value for VCS ${vcs}:`, value);
     setVcsManualSiteValues(prev => ({
       ...prev,
-      [vcs]: value ? parseInt(value) : null
+      // Fix: Use nullish coalescing - allow 0 values, only null for empty strings
+      [vcs]: value === '' ? null : parseInt(value) || 0
     }));
+
+    // Immediate save to prevent data loss when navigating away
+    console.log('💾 Triggering immediate save for Act Site change');
+    setTimeout(() => {
+      if (window.landValuationSave) {
+        window.landValuationSave();
+      }
+    }, 500); // Short delay to batch multiple rapid changes
   };
 
   const updateVCSDescription = (vcs, description) => {
@@ -2202,7 +2253,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   // ========== SAVE TARGET ALLOCATION FUNCTION ==========
   const saveTargetAllocation = async () => {
     if (!jobData?.id) {
-      console.log('❌ Save target allocation cancelled: No job ID');
+      console.log('�� Save target allocation cancelled: No job ID');
       alert('Error: No job ID found. Cannot save target allocation.');
       return;
     }
@@ -2367,7 +2418,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       };
 
       // Debug: Log the exact data being saved
-      console.log('💾 Data structure being saved:', {
+      console.log('��� Data structure being saved:', {
         cascadeConfigLocation1: analysisData.raw_land_config.cascade_config.specialCategories,
         cascadeConfigLocation2: analysisData.cascade_rates.specialCategories,
         salesData: analysisData.vacant_sales_analysis.sales.slice(0, 3), // First 3 for brevity
@@ -2464,7 +2515,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const type = vcsTypes[vcs] || 'Residential-Typical';
       const description = vcsDescriptions[vcs] || getVCSDescription(vcs);
       const recSite = vcsRecommendedSites[vcs] || 0;
-      const actSite = vcsManualSiteValues[vcs] || recSite;
+      // Fix: Use nullish coalescing to allow 0 values in Act Site
+      const actSite = vcsManualSiteValues[vcs] ?? recSite;
       const isResidential = type.startsWith('Residential');
 
       // Get typical lot size
@@ -5500,8 +5552,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       type="number"
                       value={targetAllocation || ''}
                       onChange={(e) => {
-                        console.log('🎯 Target allocation input changed:', e.target.value);
-                        setTargetAllocation(e.target.value);
+                        const value = e.target.value;
+                        console.log('🎯 Target allocation input changed:', value);
+                        // Fix: Parse as number to prevent caching issues
+                        setTargetAllocation(value === '' ? null : parseFloat(value));
                       }}
                       placeholder="Set"
                       style={{
@@ -5993,22 +6047,52 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       <div style={{ padding: '20px' }}>
         <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold' }}>VCS Valuation Sheet</h3>
-          <button
-            onClick={() => exportToExcel('vcs-sheet')}
-            style={{
-              backgroundColor: '#10B981',
-              color: 'white',
-              padding: '8px 16px',
-              borderRadius: '4px',
-              border: 'none',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px'
-            }}
-          >
-            <Download size={16} /> Export Sheet
-          </button>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button
+              onClick={() => {
+                console.log('🔧 FORCE VCS CALC BUTTON CLICKED');
+                console.log('Target allocation before:', targetAllocation);
+                if (!targetAllocation) {
+                  console.log('Setting target allocation to 27%');
+                  setTargetAllocation(27);
+                }
+                setTimeout(() => {
+                  console.log('Calling calculateVCSRecommendedSitesWithTarget...');
+                  calculateVCSRecommendedSitesWithTarget();
+                }, 100);
+              }}
+              style={{
+                backgroundColor: '#8B5CF6',
+                color: 'white',
+                padding: '8px 16px',
+                borderRadius: '4px',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                fontSize: '14px'
+              }}
+            >
+              🎯 Force VCS Calc
+            </button>
+            <button
+              onClick={() => exportToExcel('vcs-sheet')}
+              style={{
+                backgroundColor: '#10B981',
+                color: 'white',
+                padding: '8px 16px',
+                borderRadius: '4px',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}
+            >
+              <Download size={16} /> Export Sheet
+            </button>
+          </div>
         </div>
 
         <div style={{ backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden', border: '1px solid #E5E7EB' }}>
@@ -6094,7 +6178,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   const isGrayedOut = !type.startsWith('Residential');
                   const description = vcsDescriptions[vcs] || getVCSDescription(vcs);
                   const recSite = vcsRecommendedSites[vcs] || 0;
-                  const actSite = vcsManualSiteValues[vcs] || recSite;
+                  // Fix: Use nullish coalescing to allow 0 values in Act Site
+                  const actSite = vcsManualSiteValues[vcs] ?? recSite;
 
                   // Determine which cascade rates to use (priority: VCS-specific > Special Region > Normal)
                   let cascadeRates = cascadeConfig.normal;
@@ -6118,7 +6203,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     }
                   }
                   
-                  // Get typical lot size for all properties in this VCS
+                  // Get typical lot size for ALL properties in this VCS (for display purposes)
                   const vcsProps = properties?.filter(p =>
                     p.new_vcs === vcs &&
                     p.asset_lot_acre && p.asset_lot_acre > 0 // Only properties with valid acreage
@@ -6717,21 +6802,23 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           </button>
           <button
             onClick={() => {
-              console.log('🎯 MANUAL VCS RECALCULATION TRIGGERED');
+              console.log('���� MANUAL VCS RECALCULATION TRIGGERED');
               console.log('Current state:', {
                 targetAllocation,
                 hasCascadeRates: !!cascadeConfig.normal.prime,
                 propertiesCount: properties?.length || 0,
-                cascadeRates: cascadeConfig.normal
+                cascadeRates: cascadeConfig.normal,
+                vcsRecommendedSites: Object.keys(vcsRecommendedSites).length
               });
 
-              // Force target allocation to 28 if it's not set
+              // Force target allocation to 27 if it's not set
               if (!targetAllocation) {
-                console.log('🔧 FORCING TARGET ALLOCATION TO 28%');
-                setTargetAllocation(28);
+                console.log('�� FORCING TARGET ALLOCATION TO 27%');
+                setTargetAllocation(27);
               }
 
               // Force recalculation
+              console.log('🔧 CALLING calculateVCSRecommendedSitesWithTarget MANUALLY');
               calculateVCSRecommendedSitesWithTarget();
             }}
             style={{
