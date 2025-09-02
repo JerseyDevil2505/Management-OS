@@ -5377,27 +5377,46 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         </div>
 
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', fontSize: '12px' }}>
+          <table style={{
+            width: '100%',
+            fontSize: '12px',
+            borderCollapse: 'collapse',
+            border: '1px solid #D1D5DB'
+          }}>
             <thead>
-              <tr style={{ backgroundColor: '#F9FAFB' }}>
+              <tr style={{ backgroundColor: '#F9FAFB', borderBottom: '2px solid #D1D5DB' }}>
                 {/* Vacant Sale Info */}
-                <th style={{ padding: '8px', borderRight: '2px solid #E5E7EB' }} colSpan="6">Vacant Sale</th>
+                <th style={{
+                  padding: '8px',
+                  borderRight: '2px solid #E5E7EB',
+                  border: '1px solid #D1D5DB',
+                  fontWeight: 'bold'
+                }} colSpan="6">Vacant Sale</th>
                 {/* Improved Sales Info */}
-                <th style={{ padding: '8px', borderRight: '2px solid #E5E7EB' }} colSpan="4">Improved Sales (Same Year)</th>
+                <th style={{
+                  padding: '8px',
+                  borderRight: '2px solid #E5E7EB',
+                  border: '1px solid #D1D5DB',
+                  fontWeight: 'bold'
+                }} colSpan="4">Improved Sales (Same Year)</th>
                 {/* Allocation Results */}
-                <th style={{ padding: '8px' }} colSpan="3">Allocation Analysis</th>
+                <th style={{
+                  padding: '8px',
+                  border: '1px solid #D1D5DB',
+                  fontWeight: 'bold'
+                }} colSpan="3">Allocation Analysis</th>
               </tr>
-              <tr style={{ backgroundColor: '#F3F4F6', fontSize: '11px' }}>
+              <tr style={{ backgroundColor: '#F3F4F6', fontSize: '11px', borderBottom: '1px solid #D1D5DB' }}>
                 {/* Vacant Sale Columns */}
-                <th style={{ padding: '6px' }}>VCS</th>
-                <th style={{ padding: '6px' }}>Year</th>
-                <th style={{ padding: '6px' }}>Block/Lot</th>
-                <th style={{ padding: '6px', textAlign: 'right' }}>Price</th>
-                <th style={{ padding: '6px', textAlign: 'right' }}>Acres</th>
-                <th style={{ padding: '6px', textAlign: 'right', borderRight: '2px solid #E5E7EB' }}>Site Value</th>
+                <th style={{ padding: '6px', border: '1px solid #D1D5DB', fontWeight: '600' }}>VCS</th>
+                <th style={{ padding: '6px', border: '1px solid #D1D5DB', fontWeight: '600' }}>Year</th>
+                <th style={{ padding: '6px', border: '1px solid #D1D5DB', fontWeight: '600' }}>Block/Lot</th>
+                <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Price</th>
+                <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Acres</th>
+                <th style={{ padding: '6px', textAlign: 'right', borderRight: '2px solid #E5E7EB', border: '1px solid #D1D5DB', fontWeight: '600' }}>Site Value</th>
                 {/* Improved Sales Columns */}
-                <th style={{ padding: '6px', textAlign: 'center' }}>Count</th>
-                <th style={{ padding: '6px', textAlign: 'right' }}>Avg Price</th>
+                <th style={{ padding: '6px', textAlign: 'center', border: '1px solid #D1D5DB', fontWeight: '600' }}>Count</th>
+                <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Avg Price</th>
                 <th style={{ padding: '6px', textAlign: 'right' }}>Avg Acres</th>
                 <th style={{ padding: '6px', textAlign: 'right', borderRight: '2px solid #E5E7EB' }}>Total Land Value</th>
                 {/* Allocation Columns */}
