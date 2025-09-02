@@ -2339,10 +2339,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           summary: method2Summary
         },
         cascade_rates: cascadeConfig,
+        target_allocation: targetAllocation,
         allocation_study: {
           vcs_site_values: vcsSiteValues,
           actual_allocations: actualAllocations,
-          target_allocation: targetAllocation,
           current_overall_allocation: currentOverallAllocation,
           stats: calculateAllocationStats()
         },
@@ -2387,7 +2387,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       }
 
       if (existing) {
-        console.log('���� Updating existing record...');
+        console.log('📝 Updating existing record...');
         const { error } = await supabase
           .from('market_land_valuation')
           .update(analysisData)
@@ -5291,7 +5291,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'saleDate' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Sale Date {modalSortField === 'saleDate' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
+                      Sale Date {modalSortField === 'saleDate' ? (modalSortDirection === 'asc' ? '↑' : '���') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('salePrice')}
