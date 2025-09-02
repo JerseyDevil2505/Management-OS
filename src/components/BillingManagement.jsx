@@ -2322,10 +2322,6 @@ const loadJobs = async () => {
                           <td className="px-6 py-2 text-center text-xs font-bold text-blue-700 bg-blue-100">
                             {Object.values(workingDays).reduce((sum, days) => sum + days, 0)}
                           </td>
-                          ))}
-                          <td className="px-6 py-2 text-center text-xs font-bold text-blue-700 bg-blue-100">
-                            {Object.values(workingDays).reduce((sum, days) => sum + days, 0)}
-                          </td>
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
