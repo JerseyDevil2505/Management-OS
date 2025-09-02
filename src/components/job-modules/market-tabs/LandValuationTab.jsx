@@ -5411,7 +5411,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     color: sale.siteValue > 0 ? '#10B981' : '#EF4444',
                     borderRight: '2px solid #E5E7EB'
                   }}>
-                    ${sale.siteValue?.toLocaleString()}
+                    ${sale.siteValue?.toFixed(0)}
                   </td>
 
                   {/* Improved Sales Data */}
