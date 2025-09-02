@@ -1902,13 +1902,38 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       if (residentialProps.length === 0) return;
 
-      // Get 3 years of relevant sales for this VCS
-      const relevantSales = residentialProps.filter(prop => {
-        const hasValidSale = prop.sales_date && prop.sales_price > 0;
-        const isWithinThreeYears = new Date(prop.sales_date) >= octoberFirstThreeYearsPrior;
-        const hasValidTypeUse = prop.asset_type_use && prop.asset_type_use.toString().startsWith('1');
+      // Get 3 years of relevant sales for this VCS - MATCH SQL QUERY EXACTLY
+      const relevantSales = properties.filter(prop => {
+        // Must match this specific VCS
+        if (prop.new_vcs !== vcs) return false;
 
-        return hasValidSale && isWithinThreeYears && hasValidTypeUse;
+        // Residential properties only (Class 2 = Single Family, 3A = Two Family)
+        if (!['2', '3A'].includes(prop.property_m4_class)) return false;
+
+        // Valid sales data
+        const hasValidSale = prop.sales_date && prop.sales_price > 0;
+        if (!hasValidSale) return false;
+
+        // Sales within the last 3 years from October 1st
+        const isWithinThreeYears = new Date(prop.sales_date) >= octoberFirstThreeYearsPrior;
+        if (!isWithinThreeYears) return false;
+
+        // Valid asset type use starting with '1' (residential)
+        if (!prop.asset_type_use) return false;
+        const typeUseStr = prop.asset_type_use.toString().trim();
+        const hasValidTypeUse = typeUseStr.startsWith('1') || typeUseStr.startsWith('01');
+        if (!hasValidTypeUse) return false;
+
+        // Valid NU codes (blank, '7', '07', '00', or space) - MATCH SQL EXACTLY
+        const nu = prop.sales_nu;
+        const validNu = !nu ||
+                       nu.trim() === '' ||
+                       nu.trim() === '7' ||
+                       nu.trim() === '07' ||
+                       nu.trim() === '00';
+        if (!validNu) return false;
+
+        return true;
       });
 
       if (relevantSales.length === 0) {
