@@ -5438,7 +5438,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               </tr>
             </thead>
             <tbody>
-              {vacantTestSales.map((sale, index) => (
+              {vacantTestSales.filter(sale => sale.region === 'Normal').map((sale, index) => (
                 <tr
                   key={`${sale.id}_${index}`}
                   style={{
@@ -5451,15 +5451,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   <td style={{ padding: '8px', fontWeight: 'bold', border: '1px solid #E5E7EB' }}>{sale.vcs}</td>
                   <td style={{ padding: '8px', border: '1px solid #E5E7EB' }}>{sale.year}</td>
                   <td style={{ padding: '8px', border: '1px solid #E5E7EB' }}>{sale.block}/{sale.lot}</td>
-                  <td style={{
-                    padding: '8px',
-                    border: '1px solid #E5E7EB',
-                    fontSize: '10px',
-                    fontWeight: '600',
-                    color: sale.region === 'Normal' ? '#6B7280' : '#8B5CF6'
-                  }}>
-                    {sale.region}
-                  </td>
                   <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>${sale.vacantPrice?.toLocaleString()}</td>
                   <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{sale.acres?.toFixed(2)}</td>
                   <td style={{
