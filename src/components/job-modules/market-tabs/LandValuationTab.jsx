@@ -536,7 +536,7 @@ const getPricePerUnit = useCallback((price, size) => {
 
   useEffect(() => {
     if (activeSubTab === 'allocation' && cascadeConfig.normal.prime) {
-      console.log('🔄 Triggering allocation study recalculation...');
+      console.log('��� Triggering allocation study recalculation...');
       loadAllocationStudyData();
     }
   }, [activeSubTab, cascadeConfig, valuationMode, vacantSales, includedSales, specialRegions]);
@@ -6118,13 +6118,18 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     }
                   }
                   
-                  // Get typical lot size for all properties in this VCS
-                  const vcsProps = properties?.filter(p =>
-                    p.new_vcs === vcs &&
-                    p.asset_lot_acre && p.asset_lot_acre > 0 // Only properties with valid acreage
-                  ) || [];
-                  const typicalLot = vcsProps.length > 0 ?
-                    (vcsProps.reduce((sum, p) => sum + parseFloat(calculateAcreage(p)), 0) / vcsProps.length).toFixed(2) : '';
+                  // Get typical lot size from SALES data (same as used in Rec Site calculation)
+                  const octoberFirstThreeYearsPrior = getOctoberFirstThreeYearsPrior();
+                  const relevantSales = properties?.filter(prop => {
+                    if (prop.new_vcs !== vcs) return false;
+                    const hasValidSale = prop.sales_date && prop.sales_price > 0;
+                    const isWithinThreeYears = new Date(prop.sales_date) >= octoberFirstThreeYearsPrior;
+                    const hasValidTypeUse = prop.asset_type_use && prop.asset_type_use.toString().startsWith('1');
+                    return hasValidSale && isWithinThreeYears && hasValidTypeUse;
+                  }) || [];
+
+                  const typicalLot = relevantSales.length > 0 ?
+                    (relevantSales.reduce((sum, p) => sum + parseFloat(calculateAcreage(p)), 0) / relevantSales.length).toFixed(2) : '';
 
                   // Check for special category properties in this VCS (only for residential)
                   const vcsSpecialCategories = !isGrayedOut ? {
