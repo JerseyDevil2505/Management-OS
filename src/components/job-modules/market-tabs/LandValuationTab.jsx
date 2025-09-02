@@ -2226,7 +2226,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       // Check if record exists first
       const { data: existing, error: checkError } = await supabase
         .from('market_land_valuation')
-        .select('id, allocation_study')
+        .select('id, target_allocation, allocation_study')
         .eq('job_id', jobData.id)
         .maybeSingle();
 
@@ -2387,7 +2387,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       }
 
       if (existing) {
-        console.log('📝 Updating existing record...');
+        console.log('���� Updating existing record...');
         const { error } = await supabase
           .from('market_land_valuation')
           .update(analysisData)
