@@ -2249,33 +2249,22 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   };
 
   const exportToExcel = (type) => {
-    let csv = '';
     const timestamp = new Date().toISOString().split('T')[0];
     const municipality = (jobData?.municipality || 'export').replace(/[^a-zA-Z0-9]/g, '_');
-    const filename = `${type}_${municipality}_${timestamp}.csv`;
+    const filename = `${type}_${municipality}_${timestamp}.xlsx`;
 
-    if (type === 'land-rates') {
-      csv = exportLandRates();
-    } else if (type === 'allocation') {
-      csv = exportAllocation();
-    } else if (type === 'vcs-sheet') {
-      csv = exportVCSSheet();
-    } else if (type === 'eco-obs') {
-      csv = exportEconomicObsolescence();
-    } else if (type === 'complete') {
-      csv = exportCompleteAnalysis();
+    let workbook;
+    if (type === 'vcs-sheet') {
+      workbook = exportVCSSheetExcel();
+    } else {
+      // For other types, create a simple workbook for now
+      workbook = XLSX.utils.book_new();
+      const worksheet = XLSX.utils.aoa_to_sheet([['Export type not yet converted to Excel format']]);
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Sheet1');
     }
 
-    // Create and download file
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
+    // Create and download Excel file
+    XLSX.writeFile(workbook, filename);
   };
 
   const exportLandRates = () => {
