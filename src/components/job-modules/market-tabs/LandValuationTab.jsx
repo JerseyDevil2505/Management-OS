@@ -5366,8 +5366,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   <div style={{ fontSize: '20px', fontWeight: 'bold' }}>{vacantTestSales.length}</div>
                 </div>
                 <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
-                  <div style={{ fontSize: '12px', color: '#6B7280' }}>Improved Test</div>
-                  <div style={{ fontSize: '20px', fontWeight: 'bold' }}>{improvedTestSales.length}</div>
+                  <div style={{ fontSize: '12px', color: '#6B7280' }}>Positive Sales</div>
+                  <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#10B981' }}>{vacantTestSales.filter(s => s.isPositive).length}</div>
                 </div>
                 <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
                   <div style={{ fontSize: '12px', color: '#6B7280' }}>Recommended</div>
