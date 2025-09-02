@@ -272,7 +272,10 @@ useEffect(() => {
 
     // BUT DO load the target allocation since that's user input, not calculated
     if (marketLandData.allocation_study.target_allocation) {
+      console.log('🎯 LOADING TARGET ALLOCATION FROM DATABASE:', marketLandData.allocation_study.target_allocation);
       setTargetAllocation(marketLandData.allocation_study.target_allocation);
+    } else {
+      console.log('�� NO TARGET ALLOCATION FOUND IN DATABASE');
     }
   }
 
@@ -536,8 +539,21 @@ const getPricePerUnit = useCallback((price, size) => {
 
   // Auto-calculate VCS recommended sites when target allocation changes
   useEffect(() => {
+    console.log('🔄 TARGET ALLOCATION USEEFFECT TRIGGERED:', {
+      targetAllocation,
+      hasCascadeRates: !!cascadeConfig.normal.prime,
+      propertiesCount: properties?.length || 0
+    });
+
     if (targetAllocation && cascadeConfig.normal.prime && properties?.length > 0) {
+      console.log('✅ CONDITIONS MET - CALLING calculateVCSRecommendedSitesWithTarget');
       calculateVCSRecommendedSitesWithTarget();
+    } else {
+      console.log('❌ CONDITIONS NOT MET FOR VCS CALCULATION:', {
+        hasTargetAllocation: !!targetAllocation,
+        hasCascadeRates: !!cascadeConfig.normal.prime,
+        hasProperties: properties?.length > 0
+      });
     }
   }, [targetAllocation]);
   // Note: intentionally exclude calculateVCSRecommendedSitesWithTarget from deps to avoid TDZ issues, it is stable via useCallback.
