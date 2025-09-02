@@ -278,6 +278,14 @@ useEffect(() => {
   console.log('🧹 Clearing cached allocation data to force fresh calculation');
   setVacantTestSales([]);
 
+  // If user is currently on allocation tab, force immediate recalculation
+  if (activeSubTab === 'allocation' && cascadeConfig.normal.prime) {
+    console.log('🔄 User on allocation tab - forcing immediate recalculation');
+    setTimeout(() => {
+      loadAllocationStudyData();
+    }, 100);
+  }
+
   if (marketLandData.worksheet_data) {
     setVcsSheetData(marketLandData.worksheet_data.sheet_data || {});
     if (marketLandData.worksheet_data.manual_site_values) {
