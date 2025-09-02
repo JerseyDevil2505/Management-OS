@@ -269,7 +269,26 @@ useEffect(() => {
     console.log('🎯 LOADING TARGET ALLOCATION FROM DEDICATED COLUMN:', loadedTargetAllocation);
   }
   // Load target allocation but skip cached site values to force fresh calculation (FALLBACK)
-  else if (marketLandData.allocation_study) {
+  // Priority 2: Legacy allocation_study structure (fallback)
+  else if (marketLandData.allocation_study?.target_allocation !== null &&
+           marketLandData.allocation_study?.target_allocation !== undefined) {
+    loadedTargetAllocation = marketLandData.allocation_study.target_allocation;
+    console.log('🎯 LOADING TARGET ALLOCATION FROM ALLOCATION STUDY:', loadedTargetAllocation);
+  }
+
+  // Only set if we found a valid value
+  if (loadedTargetAllocation !== null) {
+    // Ensure it's a number to prevent caching issues
+    const numericValue = typeof loadedTargetAllocation === 'string' ?
+      parseFloat(loadedTargetAllocation) : loadedTargetAllocation;
+    setTargetAllocation(numericValue);
+    console.log('✅ Target allocation set to:', numericValue, typeof numericValue);
+  } else {
+    console.log('ℹ️ No target allocation found in database');
+  }
+
+  // Skip the old else if block - keeping only the necessary parts
+  if (false && marketLandData.allocation_study) {
     // Skip loading cached actual allocations and site values to force fresh calculation
     // if (marketLandData.allocation_study.actual_allocations) {
     //   setActualAllocations(marketLandData.allocation_study.actual_allocations);
