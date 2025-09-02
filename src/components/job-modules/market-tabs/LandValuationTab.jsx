@@ -745,9 +745,8 @@ const getPricePerUnit = useCallback((price, size) => {
       };
     };
 
-    // Process packages and standalone
-    const finalSales = [];
-    
+    // Process packages and standalone (add to existing finalSales that contains manually added)
+
     // Consolidate package sales
     Object.entries(packageGroups).forEach(([key, group]) => {
       if (group.length > 1) {
