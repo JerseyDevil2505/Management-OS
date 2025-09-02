@@ -265,8 +265,22 @@ Thank you for your immediate attention to this matter.`;
   }; 
 
   const loadDistributions = async () => {
-    // Just use the distributions from props
-    setDistributions(distributions);
+    try {
+      // Fetch fresh data from Supabase instead of using stale props
+      const { data, error } = await supabase
+        .from('shareholder_distributions')
+        .select('*')
+        .order('distribution_date', { ascending: false });
+
+      if (error) throw error;
+
+      setDistributions(data || []);
+      console.log('✅ Fresh distribution data loaded:', data?.length || 0);
+    } catch (error) {
+      console.error('Error loading distributions:', error);
+      // Fallback to props if Supabase fails
+      setDistributions(distributions);
+    }
   };
   
 const calculateDistributionMetrics = async () => {
