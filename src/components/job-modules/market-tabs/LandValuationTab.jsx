@@ -5592,6 +5592,188 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           })()}
         </div>
       </div>
+
+      {/* Special Region Individual Allocation Analysis Table */}
+      {(() => {
+        const specialRegionSales = vacantTestSales.filter(sale => sale.region !== 'Normal');
+        if (specialRegionSales.length === 0) return null;
+
+        return (
+          <div style={{ backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden', border: '1px solid #E5E7EB', marginTop: '20px' }}>
+            <div style={{ padding: '15px', borderBottom: '1px solid #E5E7EB', backgroundColor: '#F3E8FF' }}>
+              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 'bold', color: '#8B5CF6' }}>Special Region Individual Allocation Analysis</h3>
+              <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#6B7280' }}>
+                Vacant sales using special region cascade rates
+              </p>
+            </div>
+
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{
+                width: '100%',
+                fontSize: '12px',
+                borderCollapse: 'collapse',
+                border: '1px solid #D1D5DB'
+              }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#F9FAFB', borderBottom: '2px solid #D1D5DB' }}>
+                    {/* Vacant Sale Info */}
+                    <th style={{
+                      padding: '8px',
+                      borderRight: '2px solid #E5E7EB',
+                      border: '1px solid #D1D5DB',
+                      fontWeight: 'bold'
+                    }} colSpan="7">Vacant Sale</th>
+                    {/* Improved Sales Info */}
+                    <th style={{
+                      padding: '8px',
+                      borderRight: '2px solid #E5E7EB',
+                      border: '1px solid #D1D5DB',
+                      fontWeight: 'bold'
+                    }} colSpan="4">Improved Sales (Same Year)</th>
+                    {/* Allocation Results */}
+                    <th style={{
+                      padding: '8px',
+                      border: '1px solid #D1D5DB',
+                      fontWeight: 'bold'
+                    }} colSpan="3">Allocation Analysis</th>
+                  </tr>
+                  <tr style={{ backgroundColor: '#F3F4F6', fontSize: '11px', borderBottom: '1px solid #D1D5DB' }}>
+                    {/* Vacant Sale Columns */}
+                    <th style={{ padding: '6px', border: '1px solid #D1D5DB', fontWeight: '600' }}>VCS</th>
+                    <th style={{ padding: '6px', border: '1px solid #D1D5DB', fontWeight: '600' }}>Year</th>
+                    <th style={{ padding: '6px', border: '1px solid #D1D5DB', fontWeight: '600' }}>Block/Lot</th>
+                    <th style={{ padding: '6px', border: '1px solid #D1D5DB', fontWeight: '600' }}>Region</th>
+                    <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Price</th>
+                    <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Acres</th>
+                    <th style={{ padding: '6px', textAlign: 'right', borderRight: '2px solid #E5E7EB', border: '1px solid #D1D5DB', fontWeight: '600' }}>Site Value</th>
+                    {/* Improved Sales Columns */}
+                    <th style={{ padding: '6px', textAlign: 'center', border: '1px solid #D1D5DB', fontWeight: '600' }}>Count</th>
+                    <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Avg Price</th>
+                    <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Avg Acres</th>
+                    <th style={{ padding: '6px', textAlign: 'right', borderRight: '2px solid #E5E7EB', border: '1px solid #D1D5DB', fontWeight: '600' }}>Total Land Value</th>
+                    {/* Allocation Columns */}
+                    <th style={{ padding: '6px', textAlign: 'center', border: '1px solid #D1D5DB', fontWeight: '600' }}>Current %</th>
+                    <th style={{ padding: '6px', textAlign: 'center', border: '1px solid #D1D5DB', fontWeight: '600' }}>Recommended %</th>
+                    <th style={{ padding: '6px', textAlign: 'center', border: '1px solid #D1D5DB', fontWeight: '600' }}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {specialRegionSales.map((sale, index) => (
+                    <tr
+                      key={`special_${sale.id}_${index}`}
+                      style={{
+                        backgroundColor: sale.isPositive ? (index % 2 === 0 ? 'white' : '#F9FAFB') : '#FEF2F2',
+                        opacity: sale.isPositive ? 1 : 0.7,
+                        borderBottom: '1px solid #E5E7EB'
+                      }}
+                    >
+                      {/* Vacant Sale Data */}
+                      <td style={{ padding: '8px', fontWeight: 'bold', border: '1px solid #E5E7EB' }}>{sale.vcs}</td>
+                      <td style={{ padding: '8px', border: '1px solid #E5E7EB' }}>{sale.year}</td>
+                      <td style={{ padding: '8px', border: '1px solid #E5E7EB' }}>{sale.block}/{sale.lot}</td>
+                      <td style={{
+                        padding: '8px',
+                        border: '1px solid #E5E7EB',
+                        fontSize: '10px',
+                        fontWeight: '600',
+                        color: '#8B5CF6'
+                      }}>
+                        {sale.region}
+                      </td>
+                      <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>${sale.vacantPrice?.toLocaleString()}</td>
+                      <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{sale.acres?.toFixed(2)}</td>
+                      <td style={{
+                        padding: '8px',
+                        textAlign: 'right',
+                        fontWeight: 'bold',
+                        color: sale.siteValue > 0 ? '#10B981' : '#EF4444',
+                        borderRight: '2px solid #E5E7EB',
+                        border: '1px solid #E5E7EB'
+                      }}>
+                        ${Math.round(sale.siteValue)}
+                      </td>
+
+                      {/* Improved Sales Data */}
+                      <td style={{ padding: '8px', textAlign: 'center', border: '1px solid #E5E7EB' }}>{sale.improvedSalesCount}</td>
+                      <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>${Math.round(sale.avgImprovedPrice)?.toLocaleString()}</td>
+                      <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{sale.avgImprovedAcres}</td>
+                      <td style={{
+                        padding: '8px',
+                        textAlign: 'right',
+                        fontWeight: 'bold',
+                        borderRight: '2px solid #E5E7EB',
+                        border: '1px solid #E5E7EB'
+                      }}>
+                        ${Math.round(sale.totalLandValue)?.toLocaleString()}
+                      </td>
+
+                      {/* Allocation Results */}
+                      <td style={{ padding: '8px', textAlign: 'center', color: '#6B7280', border: '1px solid #E5E7EB' }}>
+                        {(sale.currentAllocation * 100).toFixed(1)}%
+                      </td>
+                      <td style={{
+                        padding: '8px',
+                        textAlign: 'center',
+                        fontWeight: 'bold',
+                        border: '1px solid #E5E7EB',
+                        backgroundColor: sale.isPositive ?
+                          (sale.recommendedAllocation >= 0.25 && sale.recommendedAllocation <= 0.40 ? '#D1FAE5' :
+                           sale.recommendedAllocation >= 0.20 && sale.recommendedAllocation <= 0.45 ? '#FEF3C7' : '#FEE2E2') :
+                          'transparent'
+                      }}>
+                        {(sale.recommendedAllocation * 100).toFixed(1)}%
+                      </td>
+                      <td style={{ padding: '8px', textAlign: 'center', border: '1px solid #E5E7EB' }}>
+                        <span style={{
+                          padding: '2px 8px',
+                          borderRadius: '12px',
+                          fontSize: '10px',
+                          fontWeight: 'bold',
+                          backgroundColor: sale.isPositive ? '#D1FAE5' : '#FEE2E2',
+                          color: sale.isPositive ? '#065F46' : '#991B1B'
+                        }}>
+                          {sale.isPositive ? 'Included' : 'Excluded'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Special Region Summary Footer */}
+            <div style={{ padding: '15px', borderTop: '1px solid #E5E7EB', backgroundColor: '#F3E8FF' }}>
+              {(() => {
+                const positiveSales = specialRegionSales.filter(s => s.isPositive);
+                const totalLandValue = positiveSales.reduce((sum, s) => sum + s.totalLandValue, 0);
+                const totalSalePrice = positiveSales.reduce((sum, s) => sum + s.avgImprovedPrice, 0);
+                const overallRecommended = totalSalePrice > 0 ? (totalLandValue / totalSalePrice) * 100 : 0;
+
+                return (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px', fontSize: '14px' }}>
+                    <div>
+                      <div style={{ color: '#6B7280', fontSize: '12px' }}>Special Region Sales Included</div>
+                      <div style={{ fontWeight: 'bold', color: '#8B5CF6' }}>{positiveSales.length} of {specialRegionSales.length}</div>
+                    </div>
+                    <div>
+                      <div style={{ color: '#6B7280', fontSize: '12px' }}>Total Land Value</div>
+                      <div style={{ fontWeight: 'bold' }}>${Math.round(totalLandValue).toLocaleString()}</div>
+                    </div>
+                    <div>
+                      <div style={{ color: '#6B7280', fontSize: '12px' }}>Total Sale Price</div>
+                      <div style={{ fontWeight: 'bold' }}>${Math.round(totalSalePrice).toLocaleString()}</div>
+                    </div>
+                    <div>
+                      <div style={{ color: '#6B7280', fontSize: '12px' }}>Special Region Recommended</div>
+                      <div style={{ fontWeight: 'bold', fontSize: '16px', color: '#8B5CF6' }}>{overallRecommended.toFixed(1)}%</div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 
