@@ -291,6 +291,9 @@ useEffect(() => {
     if (marketLandData.worksheet_data.manual_site_values) {
       setVcsManualSiteValues(marketLandData.worksheet_data.manual_site_values);
     }
+    if (marketLandData.worksheet_data.recommended_sites) {
+      setVcsRecommendedSites(marketLandData.worksheet_data.recommended_sites);
+    }
     if (marketLandData.worksheet_data.descriptions) {
       setVcsDescriptions(marketLandData.worksheet_data.descriptions);
     }
