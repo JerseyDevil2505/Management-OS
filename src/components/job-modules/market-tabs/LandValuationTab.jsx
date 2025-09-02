@@ -2502,7 +2502,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const type = vcsTypes[vcs] || 'Residential-Typical';
       const description = vcsDescriptions[vcs] || getVCSDescription(vcs);
       const recSite = vcsRecommendedSites[vcs] || 0;
-      const actSite = vcsManualSiteValues[vcs] || recSite;
+      // Fix: Use nullish coalescing to allow 0 values in Act Site
+      const actSite = vcsManualSiteValues[vcs] ?? recSite;
       const isResidential = type.startsWith('Residential');
 
       // Get typical lot size
