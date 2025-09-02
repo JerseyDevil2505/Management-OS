@@ -1551,20 +1551,25 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   const calculateRawLandValue = (acres, cascadeRates) => {
     let remainingAcres = acres;
     let rawLandValue = 0;
+    const breakdown = [];
 
     // First tier (prime): typically first 1 acre
     if (cascadeRates.prime) {
       const primeAcres = Math.min(remainingAcres, cascadeRates.prime.max || 1);
-      rawLandValue += primeAcres * (cascadeRates.prime.rate || 0);
+      const primeValue = primeAcres * (cascadeRates.prime.rate || 0);
+      rawLandValue += primeValue;
       remainingAcres -= primeAcres;
+      breakdown.push(`Prime: ${primeAcres.toFixed(2)} acres × $${cascadeRates.prime.rate || 0} = $${primeValue.toFixed(0)}`);
     }
 
     // Second tier (secondary): typically acres 1-5 (so 4 acres)
     if (cascadeRates.secondary && remainingAcres > 0) {
       const secondaryMax = (cascadeRates.secondary.max || 5) - (cascadeRates.prime?.max || 1);
       const secondaryAcres = Math.min(remainingAcres, secondaryMax);
-      rawLandValue += secondaryAcres * (cascadeRates.secondary.rate || 0);
+      const secondaryValue = secondaryAcres * (cascadeRates.secondary.rate || 0);
+      rawLandValue += secondaryValue;
       remainingAcres -= secondaryAcres;
+      breakdown.push(`Secondary: ${secondaryAcres.toFixed(2)} acres × $${cascadeRates.secondary.rate || 0} = $${secondaryValue.toFixed(0)}`);
     }
 
     // Third tier (excess): typically anything above 5 acres - apply to ALL remaining acres
@@ -1574,19 +1579,27 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         // If there's a residual tier, excess only applies up to its max
         const excessMax = (cascadeRates.excess.max || 10) - (cascadeRates.secondary?.max || 5);
         const excessAcres = Math.min(remainingAcres, excessMax);
-        rawLandValue += excessAcres * (cascadeRates.excess.rate || 0);
+        const excessValue = excessAcres * (cascadeRates.excess.rate || 0);
+        rawLandValue += excessValue;
         remainingAcres -= excessAcres;
+        breakdown.push(`Excess: ${excessAcres.toFixed(2)} acres × $${cascadeRates.excess.rate || 0} = $${excessValue.toFixed(0)}`);
       } else {
         // If no residual tier, excess applies to ALL remaining acres
-        rawLandValue += remainingAcres * (cascadeRates.excess.rate || 0);
+        const excessValue = remainingAcres * (cascadeRates.excess.rate || 0);
+        rawLandValue += excessValue;
+        breakdown.push(`Excess: ${remainingAcres.toFixed(2)} acres × $${cascadeRates.excess.rate || 0} = $${excessValue.toFixed(0)}`);
         remainingAcres = 0;
       }
     }
 
     // Fourth tier (residual): anything beyond excess max (if defined)
     if (cascadeRates.residual && remainingAcres > 0) {
-      rawLandValue += remainingAcres * (cascadeRates.residual.rate || 0);
+      const residualValue = remainingAcres * (cascadeRates.residual.rate || 0);
+      rawLandValue += residualValue;
+      breakdown.push(`Residual: ${remainingAcres.toFixed(2)} acres × $${cascadeRates.residual.rate || 0} = $${residualValue.toFixed(0)}`);
     }
+
+    console.log(`🔢 Raw land calculation for ${acres} acres:`, breakdown.join(', '), `Total: $${rawLandValue.toFixed(0)}`);
 
     return rawLandValue;
   };
