@@ -642,44 +642,49 @@ const getPricePerUnit = useCallback((price, size) => {
       return; // Don't rebuild if we already have restored sales
     }
 
-    // First identify all vacant/teardown/pre-construction sales
+    // Now identify naturally qualifying vacant/teardown/pre-construction sales (excluding manually added)
     const allSales = properties.filter(prop => {
+      // Skip if this is a manually added property - we already processed it
+      if (manuallyAddedIds.has(prop.id)) {
+        return false;
+      }
+
       const hasValidSale = prop.sales_date && prop.sales_price && prop.sales_price > 0;
       const inDateRange = prop.sales_date >= dateRange.start.toISOString().split('T')[0] &&
                           prop.sales_date <= dateRange.end.toISOString().split('T')[0];
-      
+
       // Check NU codes for valid sales
       const nu = prop.sales_nu || '';
-      const validNu = !nu || nu === '' || nu === ' ' || nu === '00' || nu === '07' || 
+      const validNu = !nu || nu === '' || nu === ' ' || nu === '00' || nu === '07' ||
                       nu === '7' || nu.charCodeAt(0) === 32;
 
       // Skip additional cards - they don't have land
-      const isAdditionalCard = prop.property_addl_card && 
-                        prop.property_addl_card !== 'NONE' && 
+      const isAdditionalCard = prop.property_addl_card &&
+                        prop.property_addl_card !== 'NONE' &&
                         prop.property_addl_card !== 'M';
       if (isAdditionalCard) {
         return false;
       }
-      
+
       // Standard vacant classes
       const isVacantClass = prop.property_m4_class === '1' || prop.property_m4_class === '3B';
-      
+
       // NEW: Teardown detection (Class 2 with minimal improvement)
       const isTeardown = prop.property_m4_class === '2' &&
                         prop.asset_building_class && parseInt(prop.asset_building_class) > 10 &&
-                        prop.asset_design_style && 
+                        prop.asset_design_style &&
                         prop.asset_type_use &&
                         prop.values_mod_improvement < 10000;
-      
+
       // NEW: Pre-construction detection (sold before house was built)
       const isPreConstruction = prop.property_m4_class === '2' &&
                                prop.asset_building_class && parseInt(prop.asset_building_class) > 10 &&
-                               prop.asset_design_style && 
+                               prop.asset_design_style &&
                                prop.asset_type_use &&
                                prop.asset_year_built &&
                                prop.sales_date &&
                                new Date(prop.sales_date).getFullYear() < prop.asset_year_built;
-      
+
       return hasValidSale && inDateRange && validNu && (isVacantClass || isTeardown || isPreConstruction);
     });
 
