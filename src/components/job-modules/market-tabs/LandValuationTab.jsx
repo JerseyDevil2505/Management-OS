@@ -5530,24 +5530,73 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             const totalSalePrice = positiveSales.reduce((sum, s) => sum + s.avgImprovedPrice, 0);
             const overallRecommended = totalSalePrice > 0 ? (totalLandValue / totalSalePrice) * 100 : 0;
 
+            // Group by region for regional analysis
+            const byRegion = vacantTestSales.reduce((acc, sale) => {
+              if (!acc[sale.region]) {
+                acc[sale.region] = { all: [], positive: [] };
+              }
+              acc[sale.region].all.push(sale);
+              if (sale.isPositive) acc[sale.region].positive.push(sale);
+              return acc;
+            }, {});
+
             return (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px', fontSize: '14px' }}>
-                <div>
-                  <div style={{ color: '#6B7280', fontSize: '12px' }}>Sales Included</div>
-                  <div style={{ fontWeight: 'bold', color: '#10B981' }}>{positiveSales.length} of {vacantTestSales.length}</div>
+              <div>
+                {/* Overall Summary */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px', fontSize: '14px', marginBottom: '15px' }}>
+                  <div>
+                    <div style={{ color: '#6B7280', fontSize: '12px' }}>Sales Included</div>
+                    <div style={{ fontWeight: 'bold', color: '#10B981' }}>{positiveSales.length} of {vacantTestSales.length}</div>
+                  </div>
+                  <div>
+                    <div style={{ color: '#6B7280', fontSize: '12px' }}>Total Land Value</div>
+                    <div style={{ fontWeight: 'bold' }}>${Math.round(totalLandValue).toLocaleString()}</div>
+                  </div>
+                  <div>
+                    <div style={{ color: '#6B7280', fontSize: '12px' }}>Total Sale Price</div>
+                    <div style={{ fontWeight: 'bold' }}>${Math.round(totalSalePrice).toLocaleString()}</div>
+                  </div>
+                  <div>
+                    <div style={{ color: '#6B7280', fontSize: '12px' }}>Final Recommended</div>
+                    <div style={{ fontWeight: 'bold', fontSize: '16px', color: '#F59E0B' }}>{overallRecommended.toFixed(1)}%</div>
+                  </div>
                 </div>
-                <div>
-                  <div style={{ color: '#6B7280', fontSize: '12px' }}>Total Land Value</div>
-                  <div style={{ fontWeight: 'bold' }}>${Math.round(totalLandValue).toLocaleString()}</div>
-                </div>
-                <div>
-                  <div style={{ color: '#6B7280', fontSize: '12px' }}>Total Sale Price</div>
-                  <div style={{ fontWeight: 'bold' }}>${Math.round(totalSalePrice).toLocaleString()}</div>
-                </div>
-                <div>
-                  <div style={{ color: '#6B7280', fontSize: '12px' }}>Final Recommended</div>
-                  <div style={{ fontWeight: 'bold', fontSize: '16px', color: '#F59E0B' }}>{overallRecommended.toFixed(1)}%</div>
-                </div>
+
+                {/* Regional Breakdown */}
+                {Object.keys(byRegion).length > 1 && (
+                  <div style={{ paddingTop: '15px', borderTop: '1px solid #E5E7EB' }}>
+                    <div style={{ fontSize: '12px', color: '#6B7280', marginBottom: '8px', fontWeight: '600' }}>
+                      Regional Analysis
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
+                      {Object.entries(byRegion).map(([region, data]) => {
+                        const regionTotalLand = data.positive.reduce((sum, s) => sum + s.totalLandValue, 0);
+                        const regionTotalPrice = data.positive.reduce((sum, s) => sum + s.avgImprovedPrice, 0);
+                        const regionRecommended = regionTotalPrice > 0 ? (regionTotalLand / regionTotalPrice) * 100 : 0;
+
+                        return (
+                          <div key={region} style={{
+                            backgroundColor: 'white',
+                            padding: '8px',
+                            borderRadius: '4px',
+                            border: '1px solid #E5E7EB',
+                            fontSize: '11px'
+                          }}>
+                            <div style={{
+                              fontWeight: 'bold',
+                              color: region === 'Normal' ? '#6B7280' : '#8B5CF6',
+                              marginBottom: '4px'
+                            }}>
+                              {region}
+                            </div>
+                            <div>Sales: {data.positive.length}/{data.all.length}</div>
+                            <div>Recommended: {regionRecommended.toFixed(1)}%</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })()}
