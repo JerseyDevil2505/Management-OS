@@ -1887,16 +1887,24 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       if (error) {
         console.error('❌ Error saving target allocation:', error);
+        // Log the specific error details if available
+        if (error.details) console.error('Error details:', error.details);
+        if (error.hint) console.error('Error hint:', error.hint);
         return;
       }
 
-      console.log('✅ Target allocation saved to database');
+      console.log('✅ Target allocation saved to database successfully.');
+      // Log the value that was supposedly saved
+      console.log('Saved target allocation value:', targetAllocation);
 
       // Calculate recommended site values for VCS using target allocation
       calculateVCSRecommendedSitesWithTarget();
 
     } catch (err) {
-      console.error('❌ Error in saveTargetAllocation:', err);
+      console.error('❌ Exception caught in saveTargetAllocation:', err);
+      // Log the specific error details if available
+      if (err.details) console.error('Error details:', err.details);
+      if (err.hint) console.error('Error hint:', err.hint);
     }
   };
 
@@ -2336,7 +2344,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           .eq('job_id', jobData.id);
         if (error) throw error;
       } else {
-        console.log('��� Creating new record...');
+        console.log('➕ Creating new record...');
         // Use upsert to handle race conditions
         const { error } = await supabase
           .from('market_land_valuation')
