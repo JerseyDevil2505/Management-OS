@@ -538,11 +538,13 @@ const getPricePerUnit = useCallback((price, size) => {
   }, [isInitialLoadComplete, cascadeConfig, landNotes, saleCategories, specialRegions, includedSales, actualAllocations,
       vcsManualSiteValues, actualAdjustments, targetAllocation, locationCodes, vcsTypes, method2ExcludedSales, method1ExcludedSales, vacantSales]);
 
-  // Clear Method 1 excluded sales after filtering is complete
+  // Clear Method 1 temporary variables after filtering is complete
   useEffect(() => {
     if (isInitialLoadComplete && window._method1ExcludedSales) {
-      console.log('🧹 Clearing Method 1 excluded sales after successful application');
+      console.log('🧹 Clearing Method 1 temporary variables after successful application');
       delete window._method1ExcludedSales;
+      delete window._method1IncludedSales;
+      delete window._method1ManuallyAdded;
     }
   }, [isInitialLoadComplete]);
   // ========== LAND RATES FUNCTIONS WITH ENHANCED FILTERS ==========
