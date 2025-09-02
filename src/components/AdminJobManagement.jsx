@@ -2269,7 +2269,7 @@ const AdminJobManagement = ({
                               <span className={`px-3 py-1 rounded-full text-xs font-medium shadow-sm ${
                                 job.vendor_type === 'Microsystems'
                                   ? 'bg-blue-100 text-blue-800'
-                                  : 'bg-orange-100 text-orange-800'
+                                  : 'bg-orange-200 text-orange-900'
                               }`}>
                                 {job.vendor_type || 'BRT'}
                               </span>
