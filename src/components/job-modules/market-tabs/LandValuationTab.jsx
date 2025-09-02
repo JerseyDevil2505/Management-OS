@@ -314,7 +314,7 @@ useEffect(() => {
   setIsLoading(false);
   setIsInitialLoadComplete(true);
 
-  console.log('✅ Initial load complete');
+  console.log('�� Initial load complete');
 }, [marketLandData]);
 
   // ========== CHECK FRONT FOOT AVAILABILITY ==========
@@ -537,7 +537,8 @@ const getPricePerUnit = useCallback((price, size) => {
     if (targetAllocation && cascadeConfig.normal.prime && properties?.length > 0) {
       calculateVCSRecommendedSitesWithTarget();
     }
-  }, [targetAllocation, calculateVCSRecommendedSitesWithTarget]);
+  }, [targetAllocation]);
+  // Note: intentionally exclude calculateVCSRecommendedSitesWithTarget from deps to avoid TDZ issues, it is stable via useCallback.
 
   useEffect(() => {
     if (activeSubTab === 'eco-obs' && properties) {
@@ -5298,7 +5299,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'typeUse' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Type/Use {modalSortField === 'typeUse' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
+                      Type/Use {modalSortField === 'typeUse' ? (modalSortDirection === 'asc' ? '↑' : '��') : ''}
                     </th>
                   </tr>
                 </thead>
