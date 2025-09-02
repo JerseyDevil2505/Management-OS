@@ -1726,7 +1726,7 @@ const AdminJobManagement = ({
                   <Plus className="w-8 h-8 mr-3 text-blue-600" />
                   <div>
                     <h2 className="text-2xl font-bold text-gray-900">
-                      {editingJob ? '✏️ Edit Job' : '🚀 Create New Appraisal Job'}
+                      {editingJob ? '���️ Edit Job' : '🚀 Create New Appraisal Job'}
                     </h2>
                     <p className="text-gray-600 mt-1">Set up a job with source data and manager assignments</p>
                   </div>
@@ -2266,12 +2266,18 @@ const AdminJobManagement = ({
                           <div className="flex justify-between items-center mb-2">
                             <h4 className="text-lg font-bold text-gray-900">{job.name}</h4>
                             <div className="flex items-center space-x-2">
-                              <span className={`px-3 py-1 rounded-full text-xs font-medium shadow-sm ${
-                                job.vendor === 'Microsystems' 
-                                  ? 'bg-blue-100 text-blue-800' 
-                                  : 'bg-orange-200 text-orange-800'
-                              }`}>
-                                {job.vendor}
+                              <span
+                                className={`px-3 py-1 rounded-full text-xs font-medium shadow-sm ${
+                                  job.vendor_type === 'Microsystems'
+                                    ? 'bg-blue-100 text-blue-800'
+                                    : ''
+                                }`}
+                                style={job.vendor_type !== 'Microsystems' ? {
+                                  backgroundColor: '#fed7aa',
+                                  color: '#9a3412'
+                                } : {}}
+                              >
+                                {job.vendor_type || 'BRT'}
                               </span>
                               <span className={`px-3 py-1 rounded-full text-xs font-medium shadow-sm text-green-600 bg-green-100`}>
                                 Active
