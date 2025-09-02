@@ -228,6 +228,7 @@ useEffect(() => {
 
     // Store excluded sales for application after filtering
     window._method1ExcludedSales = savedExcluded;
+    setMethod1ExcludedSales(savedExcluded);
   }
 
   // Restore Method 2 excluded sales
