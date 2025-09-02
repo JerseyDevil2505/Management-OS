@@ -5482,7 +5482,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   }}>
                     {(sale.recommendedAllocation * 100).toFixed(1)}%
                   </td>
-                  <td style={{ padding: '8px', textAlign: 'center' }}>
+                  <td style={{ padding: '8px', textAlign: 'center', border: '1px solid #E5E7EB' }}>
                     <span style={{
                       padding: '2px 8px',
                       borderRadius: '12px',
