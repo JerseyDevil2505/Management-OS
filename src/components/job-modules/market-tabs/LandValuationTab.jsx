@@ -2238,6 +2238,101 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     setCustomLocationCodes(prev => [...prev, newCode]);
   };
 
+  // ========== SAVE TARGET ALLOCATION FUNCTION ==========
+  const saveTargetAllocation = async () => {
+    if (!jobData?.id) {
+      console.log('❌ Save target allocation cancelled: No job ID');
+      alert('Error: No job ID found. Cannot save target allocation.');
+      return;
+    }
+
+    if (!targetAllocation || targetAllocation === '') {
+      console.log('❌ Save target allocation cancelled: No target allocation value');
+      alert('Please enter a target allocation percentage before saving.');
+      return;
+    }
+
+    const targetValue = parseFloat(targetAllocation);
+    if (isNaN(targetValue) || targetValue <= 0 || targetValue > 100) {
+      console.log('❌ Save target allocation cancelled: Invalid value:', targetAllocation);
+      alert('Please enter a valid target allocation percentage between 1 and 100.');
+      return;
+    }
+
+    console.log('💾 Saving target allocation:', `${targetValue}%`, 'for job:', jobData.id);
+
+    try {
+      // Check if record exists first
+      const { data: existing, error: checkError } = await supabase
+        .from('market_land_valuation')
+        .select('id, allocation_study')
+        .eq('job_id', jobData.id)
+        .maybeSingle();
+
+      if (checkError && checkError.code !== 'PGRST116') {
+        console.error('❌ Error checking for existing record:', checkError);
+        throw checkError;
+      }
+
+      const allocationStudyData = {
+        ...existing?.allocation_study,
+        target_allocation: targetValue,
+        updated_at: new Date().toISOString()
+      };
+
+      let result;
+      if (existing) {
+        console.log('📝 Updating existing record with target allocation...');
+        result = await supabase
+          .from('market_land_valuation')
+          .update({
+            allocation_study: allocationStudyData,
+            updated_at: new Date().toISOString()
+          })
+          .eq('job_id', jobData.id);
+      } else {
+        console.log('➕ Creating new record with target allocation...');
+        result = await supabase
+          .from('market_land_valuation')
+          .insert({
+            job_id: jobData.id,
+            allocation_study: allocationStudyData,
+            updated_at: new Date().toISOString()
+          });
+      }
+
+      if (result.error) {
+        console.error('❌ Database error saving target allocation:', result.error);
+        throw result.error;
+      }
+
+      console.log('✅ Target allocation saved successfully to database');
+
+      // Update last saved timestamp
+      setLastSaved(new Date());
+
+      // Show success feedback
+      alert(`Target allocation ${targetValue}% saved successfully!`);
+
+      // Trigger VCS recommended sites calculation
+      console.log('🔄 Triggering VCS recommended sites calculation...');
+      if (cascadeConfig.normal.prime && properties?.length > 0) {
+        calculateVCSRecommendedSitesWithTarget();
+      } else {
+        console.log('⚠️ Cannot calculate VCS recommended sites: missing cascade config or properties');
+      }
+
+    } catch (error) {
+      console.error('❌ Error saving target allocation:', error);
+      console.error('Error details:', {
+        message: error.message,
+        code: error.code,
+        details: error.details
+      });
+      alert(`Failed to save target allocation: ${error.message}`);
+    }
+  };
+
   // ========== SAVE & EXPORT FUNCTIONS ==========
   const saveAnalysis = async () => {
     if (!jobData?.id) {
