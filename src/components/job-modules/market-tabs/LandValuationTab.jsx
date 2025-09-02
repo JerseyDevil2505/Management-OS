@@ -2079,6 +2079,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             is_package: s.packageData?.is_package || false,
             package_properties: s.packageData?.properties || []
           })),
+          excluded_sales: Array.from(method1ExcludedSales), // Track Method 1 exclusions like Method 2
           rates: calculateRates(),
           rates_by_region: getUniqueRegions().map(region => ({
             region,
