@@ -3221,7 +3221,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       // Debug all teardown sales
       if (saleCategories[s.id] === 'teardown') {
-        console.log('🏗️ Teardown sale details:', {
+        console.log('��️ Teardown sale details:', {
           block: s.property_block,
           lot: s.property_lot,
           id: s.id,
@@ -6163,7 +6163,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   const isGrayedOut = !type.startsWith('Residential');
                   const description = vcsDescriptions[vcs] || getVCSDescription(vcs);
                   const recSite = vcsRecommendedSites[vcs] || 0;
-                  const actSite = vcsManualSiteValues[vcs] || recSite;
+                  // Fix: Use nullish coalescing to allow 0 values in Act Site
+                  const actSite = vcsManualSiteValues[vcs] ?? recSite;
 
                   // Determine which cascade rates to use (priority: VCS-specific > Special Region > Normal)
                   let cascadeRates = cascadeConfig.normal;
