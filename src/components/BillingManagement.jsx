@@ -2010,7 +2010,7 @@ const loadJobs = async () => {
                                 onChange={(e) => {
                                   // Remove commas and non-numeric characters
                                   const numericValue = e.target.value.replace(/[^0-9]/g, '');
-                                  setPlanningJobsState(prev =>
+                                  setPlanningJobs(prev =>
                                     prev.map(j => j.id === job.id ? {...j, contract_amount: numericValue} : j)
                                   );
                                 }}
