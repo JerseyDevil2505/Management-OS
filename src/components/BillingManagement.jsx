@@ -1103,21 +1103,6 @@ const loadJobs = async () => {
     }
   };
 
-  const handleUpdatePlannedContract = async (planningJobId, contractAmount) => {
-    try {
-      const { error } = await supabase
-        .from('planning_jobs')
-        .update({ contract_amount: parseFloat(contractAmount) })
-        .eq('id', planningJobId);
-
-      if (error) throw error;
-      
-      if (onRefresh) onRefresh();
-    } catch (error) {
-      console.error('Error updating planned contract:', error);
-    }
-  };
-
   const loadAllOpenInvoices = async () => {
     try {
       // Get all jobs with open invoices (both standard and legacy)
