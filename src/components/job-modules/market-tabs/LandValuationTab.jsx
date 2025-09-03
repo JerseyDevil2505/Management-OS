@@ -235,7 +235,6 @@ useEffect(() => {
   // Priority 1: Dedicated column (most recent saves go here)
   if (marketLandData.target_allocation !== null && marketLandData.target_allocation !== undefined) {
     loadedTargetAllocation = marketLandData.target_allocation;
-    console.log('🎯 LOADING TARGET ALLOCATION FROM DEDICATED COLUMN:', loadedTargetAllocation);
   }
   // Priority 2: Legacy allocation_study structure (fallback)
   else if (marketLandData.allocation_study?.target_allocation !== null &&
