@@ -2069,17 +2069,16 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       withNewVCS: properties.filter(p => p.new_vcs).length,
       withLocationAnalysis: properties.filter(p => p.location_analysis).length,
       withSalesData: properties.filter(p => p.sales_price > 0).length,
+      withVCSOnly: properties.filter(p => p.new_vcs && !p.location_analysis).length,
+      withVCSAndLocation: properties.filter(p => p.new_vcs && p.location_analysis).length,
       withAllThree: properties.filter(p => p.new_vcs && p.location_analysis && p.sales_price > 0).length,
-      sampleProperty: properties[0] ? {
-        hasNewVCS: !!properties[0].new_vcs,
-        hasLocationAnalysis: !!properties[0].location_analysis,
-        hasSalesPrice: !!properties[0].sales_price,
-        actualValues: {
-          new_vcs: properties[0].new_vcs,
-          location_analysis: properties[0].location_analysis,
-          sales_price: properties[0].sales_price
-        }
-      } : 'No properties'
+      uniqueVCSCodes: [...new Set(properties.filter(p => p.new_vcs).map(p => p.new_vcs))],
+      samplePropertiesWithVCS: properties.filter(p => p.new_vcs).slice(0, 5).map(p => ({
+        new_vcs: p.new_vcs,
+        location_analysis: p.location_analysis,
+        sales_price: p.sales_price,
+        address: p.property_location
+      }))
     });
 
     const factors = {};
