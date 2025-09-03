@@ -2103,19 +2103,19 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       if (!factors[vcs]) {
         factors[vcs] = {};
       }
-      
-      if (!factors[vcs][codeString]) {
-        factors[vcs][codeString] = {
+
+      if (!factors[vcs][locationAnalysis]) {
+        factors[vcs][locationAnalysis] = {
           withFactor: [],
           withoutFactor: []
         };
       }
-      
+
       // Add all properties to build VCS structure, but only include sales data if available
       const hasSalesData = prop.sales_price && prop.sales_price > 0;
 
       if (hasSalesData) {
-        factors[vcs][codeString].withFactor.push({
+        factors[vcs][locationAnalysis].withFactor.push({
           id: prop.id,
           price: prop.sales_price,
           normalizedTime: prop.values_norm_time || prop.sales_price,
@@ -2505,7 +2505,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       };
 
       // Debug: Log the exact data being saved
-      console.log('��� Data structure being saved:', {
+      console.log('���� Data structure being saved:', {
         cascadeConfigLocation1: analysisData.raw_land_config.cascade_config.specialCategories,
         cascadeConfigLocation2: analysisData.cascade_rates.specialCategories,
         salesData: analysisData.vacant_sales_analysis.sales.slice(0, 3), // First 3 for brevity
@@ -3231,7 +3231,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             (rates[rates.length / 2 - 1] + rates[rates.length / 2]) / 2 :
             rates[Math.floor(rates.length / 2)];
 
-          console.log(`��� ${categoryType} paired analysis:`, {
+          console.log(`����� ${categoryType} paired analysis:`, {
             totalProperties: filtered.length,
             possiblePairs: (filtered.length * (filtered.length - 1)) / 2,
             validPairs: pairedRates.length,
