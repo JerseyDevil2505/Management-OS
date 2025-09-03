@@ -2265,7 +2265,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         withoutLivingArea: avgWithoutLivingArea,
         withoutSalePrice: Math.round(avgWithoutTime),
         adjustedSaleWith: 0,
-        adjustedSaleWithout: Math.round(avgWithoutTime),
+        adjustedSaleWithout: Math.round(avgWithoutTime), // No adjustment possible without "with" data
         dollarImpact: 0,
         percentImpact: 'N/A',
         withNormTime: 0,
