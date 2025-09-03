@@ -2277,9 +2277,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     if (withoutFactor.length === 0) {
       const avgWithTime = withFactor.reduce((sum, s) => sum + s.normalizedTime, 0) / withFactor.length;
       const avgWithYear = Math.round(withFactor.reduce((sum, s) => sum + (s.year || 0), 0) / withFactor.length);
-      const withFactorSFLA = withFactor.filter(s => s.design && parseInt(s.design) > 0);
+      const withFactorSFLA = withFactor.filter(s => s.sfla && s.sfla > 0);
       const avgWithLivingArea = withFactorSFLA.length > 0 ?
-        Math.round(withFactorSFLA.reduce((sum, s) => sum + parseInt(s.design || 0), 0) / withFactorSFLA.length) : 0;
+        Math.round(withFactorSFLA.reduce((sum, s) => sum + s.sfla, 0) / withFactorSFLA.length) : 0;
 
       return {
         withCount: withFactor.length,
