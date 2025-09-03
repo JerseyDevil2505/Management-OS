@@ -1323,19 +1323,26 @@ const loadJobs = async () => {
         let runningTotal = 0;
 
         // Update remaining_due for each event in chronological order
+        const updatePromises = [];
         for (const event of sortedEvents) {
           runningTotal += parseFloat(event.amount_billed || 0);
           const remainingDue = contractAmount - runningTotal;
 
-          const { error } = await supabase
-            .from('billing_events')
-            .update({ remaining_due: remainingDue })
-            .eq('id', event.id);
-
-          if (error) {
-            console.error('Error updating remaining_due for event:', event.id, error);
-          }
+          updatePromises.push(
+            supabase
+              .from('billing_events')
+              .update({ remaining_due: remainingDue })
+              .eq('id', event.id)
+          );
         }
+
+        // Wait for all updates to complete
+        const results = await Promise.allSettled(updatePromises);
+        results.forEach((result, index) => {
+          if (result.status === 'rejected') {
+            console.error('Error updating remaining_due for event:', sortedEvents[index].id, result.reason);
+          }
+        });
       }
 
       // Update the job in state without reloading
