@@ -1561,7 +1561,8 @@ const loadJobs = async () => {
         thirdYearAppealsPercentage: 0.00
       });
       setActiveTab('legacy');
-      if (onRefresh) onRefresh();
+      // Refresh all data immediately after creating legacy job
+      await loadAllData();
     } catch (error) {
       console.error('Error creating legacy job:', error);
     }
