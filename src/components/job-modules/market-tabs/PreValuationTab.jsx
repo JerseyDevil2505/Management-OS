@@ -1035,12 +1035,14 @@ const handleSalesDecision = async (saleId, decision) => {
   );
   setTimeNormalizedSales(updatedSales);
 
-  // Update stats
+  // Update stats including acceptedSales for the banner display
   const newStats = {
     ...normalizationStats,
     pendingReview: updatedSales.filter(s => s.keep_reject === 'pending').length,
     keptCount: updatedSales.filter(s => s.keep_reject === 'keep').length,
-    rejectedCount: updatedSales.filter(s => s.keep_reject === 'reject').length
+    rejectedCount: updatedSales.filter(s => s.keep_reject === 'reject').length,
+    // CRITICAL: Update acceptedSales for the banner count display
+    acceptedSales: updatedSales.filter(s => s.keep_reject === 'keep').length
   };
   setNormalizationStats(newStats);
 
@@ -1531,7 +1533,7 @@ const analyzeImportFile = async (file) => {
         
         // Debug for specific blocks
         if (parseInt(block) >= 7 && parseInt(block) <= 10) {
-          console.log(`🔍 Import row ${block}-${lot}: compositeKey = ${compositeKey}`);
+          console.log(`�� Import row ${block}-${lot}: compositeKey = ${compositeKey}`);
         }
         
         // Find matching property in worksheet
