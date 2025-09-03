@@ -230,8 +230,8 @@ Thank you for your immediate attention to this matter.`;
 
   // Update displayed lists when props change, but avoid overwriting during edit operations
   useEffect(() => {
-    // Don't update local state if we're in the middle of editing
-    if (showEditBilling) return;
+    // Don't update local state if we're in the middle of editing or updating
+    if (showEditBilling || isUpdatingBilling) return;
 
     if (activeTab === 'active') {
       setJobs(activeJobs);
@@ -240,7 +240,7 @@ Thank you for your immediate attention to this matter.`;
     } else if (activeTab === 'planned') {
       setPlanningJobs(planningJobs);
     }
-  }, [activeJobs, legacyJobs, planningJobs, activeTab, showEditBilling]);
+  }, [activeJobs, legacyJobs, planningJobs, activeTab, showEditBilling, isUpdatingBilling]);
 
   // Update other data when props change
   useEffect(() => {
