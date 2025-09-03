@@ -2347,7 +2347,14 @@ const analyzeImportFile = async (file) => {
 
                     <div className="mt-4 p-4 bg-blue-50 rounded">
                       <p className="text-sm">
-                        <strong>Review Guidelines:</strong> Sales with ratios outside {((equalizationRatio * (1 - outlierThreshold/100))).toFixed(2)}%-{((equalizationRatio * (1 + outlierThreshold/100))).toFixed(2)}% are flagged.
+                        <strong>Review Guidelines:</strong> Sales with ratios outside {(() => {
+                          const eqRatio = parseFloat(equalizationRatio);
+                          const outThreshold = parseFloat(outlierThreshold);
+                          if (!eqRatio || !outThreshold) return 'N/A (set ratios first)';
+                          const lower = (eqRatio * (1 - outThreshold/100)).toFixed(2);
+                          const upper = (eqRatio * (1 + outThreshold/100)).toFixed(2);
+                          return `${lower}%-${upper}%`;
+                        })()} are flagged.
                         Consider property condition, special circumstances, and market conditions when making keep/reject decisions.
                       </p>
                     </div>
