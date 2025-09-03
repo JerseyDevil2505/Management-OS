@@ -2183,12 +2183,19 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       vcsCodesWithFactors: Object.keys(factors).map(vcs => ({
         vcs,
         factorTypes: Object.keys(factors[vcs]),
-        totalFactorTypes: Object.keys(factors[vcs]).length
+        totalFactorTypes: Object.keys(factors[vcs]).length,
+        propertiesPerFactor: Object.keys(factors[vcs]).map(code => ({
+          code,
+          withFactorCount: factors[vcs][code].withFactor.length,
+          withoutFactorCount: factors[vcs][code].withoutFactor.length
+        }))
       })),
-      sampleFactorData: Object.keys(factors)[0] ? {
-        vcs: Object.keys(factors)[0],
-        factors: factors[Object.keys(factors)[0]]
-      } : 'No VCS codes found'
+      allFactors: factors,
+      totalPropertiesProcessed: Object.values(factors).reduce((total, vcsFactors) => {
+        return total + Object.values(vcsFactors).reduce((vcsTotal, factor) => {
+          return vcsTotal + factor.withFactor.length;
+        }, 0);
+      }, 0)
     });
 
     setEcoObsFactors(factors);
