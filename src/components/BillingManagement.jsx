@@ -258,9 +258,99 @@ Thank you for your immediate attention to this matter.`;
   }, [globalMetrics, activeTab, reserveSettings]);
 
   const calculateGlobalMetrics = async () => {
-    // Use the pre-calculated metrics from App.js
-    if (billingMetrics) {
-      setGlobalMetrics(billingMetrics);
+    // Always fetch fresh metrics from database
+    try {
+      // Fetch all jobs with contracts and billing events
+      const { data: allJobs, error: jobsError } = await supabase
+        .from('jobs')
+        .select(`
+          *,
+          job_contracts(*),
+          billing_events(*)
+        `);
+
+      if (jobsError) throw jobsError;
+
+      // Fetch planning jobs
+      const { data: planningJobsData, error: planningError } = await supabase
+        .from('planning_jobs')
+        .select('*')
+        .eq('is_archived', false);
+
+      if (planningError) throw planningError;
+
+      // Fetch expenses for current year
+      const { data: expensesData, error: expensesError } = await supabase
+        .from('expenses')
+        .select('*')
+        .eq('year', new Date().getFullYear());
+
+      if (expensesError) throw expensesError;
+
+      // Calculate metrics from fresh data
+      let totalSigned = 0;
+      let totalPaid = 0;
+      let totalOpen = 0;
+      let totalRemaining = 0;
+      let totalRemainingExcludingRetainer = 0;
+
+      allJobs.forEach(job => {
+        if (job.job_contracts && job.job_contracts.length > 0) {
+          const contract = job.job_contracts[0];
+          totalSigned += contract.contract_amount;
+
+          if (job.billing_events) {
+            job.billing_events.forEach(event => {
+              if (event.status === 'P') {
+                totalPaid += event.amount_billed;
+              } else if (event.status === 'O') {
+                totalOpen += event.amount_billed;
+              }
+            });
+
+            const totalBilled = job.billing_events.reduce((sum, event) => sum + event.amount_billed, 0);
+            const remaining = contract.contract_amount - totalBilled;
+            totalRemaining += remaining;
+
+            const remainingExcludingRetainer = (contract.contract_amount - contract.retainer_amount) - totalBilled;
+            totalRemainingExcludingRetainer += Math.max(0, remainingExcludingRetainer);
+          } else {
+            totalRemaining += contract.contract_amount;
+            totalRemainingExcludingRetainer += (contract.contract_amount - contract.retainer_amount);
+          }
+        }
+      });
+
+      // Calculate daily fringe from expenses
+      const currentExpenses = expensesData.reduce((sum, expense) => sum + expense.amount, 0);
+      const currentDate = new Date();
+      const daysElapsed = Math.floor((currentDate - new Date(currentDate.getFullYear(), 0, 1)) / (1000 * 60 * 60 * 24));
+      const dailyFringe = daysElapsed > 0 ? currentExpenses / daysElapsed : 0;
+
+      const remainingDaysInYear = 365 - daysElapsed;
+      const projectedExpenses = currentExpenses + (dailyFringe * remainingDaysInYear);
+
+      const projectedCash = totalPaid + totalOpen + totalRemaining;
+      const projectedProfitLoss = projectedCash - projectedExpenses;
+      const projectedProfitLossPercent = projectedCash > 0 ? (projectedProfitLoss / projectedCash) * 100 : 0;
+
+      setGlobalMetrics({
+        totalSigned,
+        totalPaid,
+        totalOpen,
+        totalRemaining,
+        totalRemainingExcludingRetainer,
+        dailyFringe,
+        currentExpenses,
+        projectedExpenses,
+        profitLoss: totalPaid - currentExpenses,
+        profitLossPercent: totalPaid > 0 ? ((totalPaid - currentExpenses) / totalPaid) * 100 : 0,
+        projectedCash,
+        projectedProfitLoss,
+        projectedProfitLossPercent
+      });
+    } catch (error) {
+      console.error('Error calculating metrics:', error);
     }
   };
 
