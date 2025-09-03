@@ -248,7 +248,6 @@ useEffect(() => {
     const numericValue = typeof loadedTargetAllocation === 'string' ?
       parseFloat(loadedTargetAllocation) : loadedTargetAllocation;
     setTargetAllocation(numericValue);
-    console.log('✅ Target allocation set to:', numericValue, typeof numericValue);
   } else {
     console.log('ℹ️ No target allocation found in database');
   }
@@ -1937,7 +1936,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         const rawLandValue = calculateRawLandValue(avgAcres, cascadeConfig.normal);
         siteValue = totalLandValue - rawLandValue;
 
-        console.log(`���� VCS ${vcs} DETAILED DEBUG:`, {
+        console.log(`🏠 VCS ${vcs} DETAILED DEBUG:`, {
           relevantSalesCount: relevantSales.length,
           avgSalePrice: Math.round(avgSalePrice),
           avgAcres: avgAcres.toFixed(2),
