@@ -315,12 +315,18 @@ useEffect(() => {
     }
   }
 
-  if (marketLandData.economic_obsolescence) {
-    setEcoObsFactors(marketLandData.economic_obsolescence.factors || {});
-    setLocationCodes(marketLandData.economic_obsolescence.location_codes || {});
-    setTrafficLevels(marketLandData.economic_obsolescence.traffic_levels || {});
-    setActualAdjustments(marketLandData.economic_obsolescence.actual_adjustments || {});
-    setCustomLocationCodes(marketLandData.economic_obsolescence.custom_codes || []);
+  // Load economic obsolescence data from new schema fields
+  if (marketLandData.eco_obs_code_config) {
+    setEcoObsFactors(marketLandData.eco_obs_code_config.factors || {});
+    setLocationCodes(marketLandData.eco_obs_code_config.location_codes || {});
+    setTrafficLevels(marketLandData.eco_obs_code_config.traffic_levels || {});
+    setCustomLocationCodes(marketLandData.eco_obs_code_config.custom_codes || []);
+  }
+  if (marketLandData.eco_obs_applied_adjustments) {
+    setActualAdjustments(marketLandData.eco_obs_applied_adjustments);
+  }
+  if (marketLandData.eco_obs_compound_overrides) {
+    setComputedAdjustments(marketLandData.eco_obs_compound_overrides);
   }
 
   setLastSaved(marketLandData.updated_at ? new Date(marketLandData.updated_at) : null);
@@ -2253,7 +2259,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   // ========== SAVE TARGET ALLOCATION FUNCTION ==========
   const saveTargetAllocation = async () => {
     if (!jobData?.id) {
-      console.log('��� Save target allocation cancelled: No job ID');
+      console.log('�� Save target allocation cancelled: No job ID');
       alert('Error: No job ID found. Cannot save target allocation.');
       return;
     }
