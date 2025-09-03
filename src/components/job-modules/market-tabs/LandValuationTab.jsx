@@ -286,7 +286,7 @@ useEffect(() => {
     setTargetAllocation(numericValue);
     console.log('✅ Target allocation set to:', numericValue, typeof numericValue);
   } else {
-    console.log('ℹ️ No target allocation found in database');
+    console.log('��️ No target allocation found in database');
   }
 
 
@@ -2288,42 +2288,47 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       };
     }
     
-    // Calculate averages
+    // Calculate detailed averages using values_norm_time specifically
     const avgWithTime = withFactor.reduce((sum, s) => sum + s.normalizedTime, 0) / withFactor.length;
-    const avgWithSize = withFactor.reduce((sum, s) => sum + s.normalizedSize, 0) / withFactor.length;
-    const avgWithFinal = (avgWithTime + avgWithSize) / 2; // Jim's formula
     const avgWithYear = Math.round(withFactor.reduce((sum, s) => sum + (s.year || 0), 0) / withFactor.length);
-    
+
+    // Get living area averages (SFLA from property data)
+    const withFactorSFLA = withFactor.filter(s => s.design && parseInt(s.design) > 0);
+    const avgWithLivingArea = withFactorSFLA.length > 0 ?
+      Math.round(withFactorSFLA.reduce((sum, s) => sum + parseInt(s.design || 0), 0) / withFactorSFLA.length) : 0;
+
     const avgWithoutTime = withoutFactor.reduce((sum, s) => sum + s.normalizedTime, 0) / withoutFactor.length;
-    const avgWithoutSize = withoutFactor.reduce((sum, s) => sum + s.normalizedSize, 0) / withoutFactor.length;
-    const avgWithoutFinal = (avgWithoutTime + avgWithoutSize) / 2;
     const avgWithoutYear = Math.round(withoutFactor.reduce((sum, s) => sum + (s.year || 0), 0) / withoutFactor.length);
-    
-    const impact = ((avgWithFinal - avgWithoutFinal) / avgWithoutFinal) * 100;
-    
-    // NULL out positive impacts for negative factors and vice versa
-    const isNegativeFactor = codes.split('/').some(c => 
-      ['BS', 'CM', 'RR', 'PL', 'ES'].includes(c)
-    );
-    const isPositiveFactor = codes.split('/').some(c => 
-      ['GV', 'GC', 'WV', 'WF'].includes(c)
-    );
-    
-    if (isNegativeFactor && impact > 0) return null;
-    if (isPositiveFactor && impact < 0) return null;
-    
+
+    const withoutFactorSFLA = withoutFactor.filter(s => s.design && parseInt(s.design) > 0);
+    const avgWithoutLivingArea = withoutFactorSFLA.length > 0 ?
+      Math.round(withoutFactorSFLA.reduce((sum, s) => sum + parseInt(s.design || 0), 0) / withoutFactorSFLA.length) : 0;
+
+    // Use values_norm_time as adjusted sale prices
+    const adjustedSaleWith = Math.round(avgWithTime);
+    const adjustedSaleWithout = Math.round(avgWithoutTime);
+
+    // Calculate dollar and percent impact
+    const dollarImpact = adjustedSaleWith - adjustedSaleWithout;
+    const percentImpact = avgWithoutTime > 0 ? ((avgWithTime - avgWithoutTime) / avgWithoutTime) * 100 : 0;
+
     return {
       withCount: withFactor.length,
       withYearBuilt: avgWithYear,
-      withNormTime: Math.round(avgWithTime),
-      withNormSize: Math.round(avgWithSize),
-      withAvg: Math.round(avgWithFinal),
+      withLivingArea: avgWithLivingArea,
+      withSalePrice: Math.round(avgWithTime), // values_norm_time
       withoutCount: withoutFactor.length,
       withoutYearBuilt: avgWithoutYear,
+      withoutLivingArea: avgWithoutLivingArea,
+      withoutSalePrice: Math.round(avgWithoutTime), // values_norm_time
+      adjustedSaleWith: adjustedSaleWith,
+      adjustedSaleWithout: adjustedSaleWithout,
+      dollarImpact: dollarImpact,
+      percentImpact: percentImpact.toFixed(1),
+      // Legacy fields for compatibility
+      withNormTime: Math.round(avgWithTime),
       withoutNormTime: Math.round(avgWithoutTime),
-      withoutNormSize: Math.round(avgWithoutSize),
-      withoutAvg: Math.round(avgWithoutFinal),
-      impact: impact.toFixed(1)
+      impact: percentImpact.toFixed(1)
     };
   }, [ecoObsFactors, trafficLevels]);
 
