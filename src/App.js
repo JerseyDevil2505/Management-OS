@@ -127,13 +127,15 @@ useEffect(() => {
   // Job selection state
   const [selectedJob, setSelectedJob] = useState(null);
 
-    // Authentication state
+  // Authentication state
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);  
+  const [loading, setLoading] = useState(true);
 
-  // Background refresh control
-  const refreshTimerRef = useRef(null);
-  const dbRef = useRef(null);
+  // Performance tracking for development
+  const performanceRef = useRef({
+    appStartTime: Date.now(),
+    dbQueries: 0
+  });
 
   // ==========================================
   // PERSISTENT STORAGE HELPERS
