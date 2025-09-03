@@ -638,12 +638,35 @@ const calculateDistributionMetrics = async () => {
   };
   
   const loadJobCounts = async () => {
-    // Use counts from props
-    setJobCounts({
-      active: activeJobs.length,
-      planned: planningJobs.length,
-      legacy: legacyJobs.length
-    });
+    try {
+      // Fetch actual counts from database
+      const { data: activeData, error: activeError } = await supabase
+        .from('jobs')
+        .select('id')
+        .eq('job_type', 'standard');
+
+      const { data: legacyData, error: legacyError } = await supabase
+        .from('jobs')
+        .select('id')
+        .eq('job_type', 'legacy_billing');
+
+      const { data: plannedData, error: plannedError } = await supabase
+        .from('planning_jobs')
+        .select('id')
+        .eq('is_archived', false);
+
+      if (activeError || legacyError || plannedError) {
+        throw activeError || legacyError || plannedError;
+      }
+
+      setJobCounts({
+        active: activeData?.length || 0,
+        planned: plannedData?.length || 0,
+        legacy: legacyData?.length || 0
+      });
+    } catch (error) {
+      console.error('Error loading job counts:', error);
+    }
   };
 
 const loadJobs = async () => {
