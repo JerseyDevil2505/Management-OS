@@ -1663,7 +1663,8 @@ const loadJobs = async () => {
         alert(`Successfully imported ${expenseData.length} expense entries`);
         setShowExpenseImport(false);
         setExpenseFile(null);
-        if (onRefresh) onRefresh();
+        // Refresh all data immediately after importing expenses
+        await loadAllData();
       } else {
         alert('No expense data found in the file');
       }
