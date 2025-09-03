@@ -2228,7 +2228,51 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       }
     }
     
-    if (withFactor.length === 0 || withoutFactor.length === 0) return null;
+    // Return partial data even if we can't calculate full impact
+    if (withFactor.length === 0 && withoutFactor.length === 0) return null;
+
+    // If we only have one side of the comparison, show what we have
+    if (withFactor.length === 0) {
+      const avgWithoutTime = withoutFactor.reduce((sum, s) => sum + s.normalizedTime, 0) / withoutFactor.length;
+      const avgWithoutSize = withoutFactor.reduce((sum, s) => sum + s.normalizedSize, 0) / withoutFactor.length;
+      const avgWithoutFinal = (avgWithoutTime + avgWithoutSize) / 2;
+      const avgWithoutYear = Math.round(withoutFactor.reduce((sum, s) => sum + (s.year || 0), 0) / withoutFactor.length);
+
+      return {
+        withCount: 0,
+        withYearBuilt: 0,
+        withNormTime: 0,
+        withNormSize: 0,
+        withAvg: 0,
+        withoutCount: withoutFactor.length,
+        withoutYearBuilt: avgWithoutYear,
+        withoutNormTime: avgWithoutTime,
+        withoutNormSize: avgWithoutSize,
+        withoutAvg: avgWithoutFinal,
+        impact: 'N/A'
+      };
+    }
+
+    if (withoutFactor.length === 0) {
+      const avgWithTime = withFactor.reduce((sum, s) => sum + s.normalizedTime, 0) / withFactor.length;
+      const avgWithSize = withFactor.reduce((sum, s) => sum + s.normalizedSize, 0) / withFactor.length;
+      const avgWithFinal = (avgWithTime + avgWithSize) / 2;
+      const avgWithYear = Math.round(withFactor.reduce((sum, s) => sum + (s.year || 0), 0) / withFactor.length);
+
+      return {
+        withCount: withFactor.length,
+        withYearBuilt: avgWithYear,
+        withNormTime: avgWithTime,
+        withNormSize: avgWithSize,
+        withAvg: avgWithFinal,
+        withoutCount: 0,
+        withoutYearBuilt: 0,
+        withoutNormTime: 0,
+        withoutNormSize: 0,
+        withoutAvg: 0,
+        impact: 'No baseline'
+      };
+    }
     
     // Calculate averages
     const avgWithTime = withFactor.reduce((sum, s) => sum + s.normalizedTime, 0) / withFactor.length;
