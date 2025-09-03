@@ -509,10 +509,10 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
           original_sfla: prop.asset_sfla,
           asset_sfla: prop.asset_sfla + additionalSFLA,
           has_additional_cards: additionalCards.length > 0,
-          // Ensure we have all fields needed for table display
-          property_class: prop.property_class || prop.property_m4_class,
-          sales_nu: prop.sales_nu || prop.sales_instrument || prop.nu,
-          values_mod_total: prop.values_mod_total || prop.assessed_value || 0
+          // FIXED: Use correct database field names
+          property_class: prop.property_m4_class,  // Primary field is property_m4_class
+          sales_nu: prop.sales_nu,                 // Direct field
+          values_mod_total: prop.values_mod_total  // Direct field (don't default to 0)
         };
         }
 
