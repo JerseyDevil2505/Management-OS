@@ -1279,8 +1279,9 @@ const loadJobs = async () => {
         .eq('id', planningJobId);
 
       if (error) throw error;
-      
-      if (onRefresh) onRefresh();
+
+      // Refresh all data immediately after updating planned contract
+      await loadAllData();
     } catch (error) {
       console.error('Error updating planned contract:', error);
     }
