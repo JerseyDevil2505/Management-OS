@@ -1164,14 +1164,56 @@ const loadJobs = async () => {
         }
       }
 
+      // Optimistically update local state first
+      console.log('✅ Billing event updated - applying optimistic update');
+
+      // Update the local state immediately for responsive UI
+      if (activeTab === 'legacy') {
+        setLegacyJobs(prevJobs =>
+          prevJobs.map(job => {
+            if (job.id === editingEvent.job_id) {
+              return {
+                ...job,
+                billing_events: job.billing_events?.map(event =>
+                  event.id === editingEvent.id
+                    ? { ...event, status: editingEvent.status, invoice_number: editingEvent.invoice_number, billing_type: editingEvent.billing_type, amount_billed: editingEvent.amount_billed }
+                    : event
+                ) || []
+              };
+            }
+            return job;
+          })
+        );
+      } else if (activeTab === 'active') {
+        setJobs(prevJobs =>
+          prevJobs.map(job => {
+            if (job.id === editingEvent.job_id) {
+              return {
+                ...job,
+                billing_events: job.billing_events?.map(event =>
+                  event.id === editingEvent.id
+                    ? { ...event, status: editingEvent.status, invoice_number: editingEvent.invoice_number, billing_type: editingEvent.billing_type, amount_billed: editingEvent.amount_billed }
+                    : event
+                ) || []
+              };
+            }
+            return job;
+          })
+        );
+      }
+
       setShowEditBilling(false);
       setEditingEvent(null);
 
-      // Force fresh data refresh for real-time updates
-      console.log('✅ Billing event updated - forcing fresh data refresh');
-      await fetchFreshData(true);
+      // Call onDataUpdate for cache synchronization without forcing full refresh
+      if (onDataUpdate) {
+        console.log('🔄 Updating cache without full refresh');
+        onDataUpdate('billing_event', editingEvent.id, updateData);
+      }
 
-      if (onRefresh) {
+      // Only refresh if onDataUpdate isn't available
+      if (!onDataUpdate && onRefresh) {
+        console.log('🔄 Falling back to full refresh');
         await onRefresh();
       }
     } catch (error) {
