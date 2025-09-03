@@ -1591,7 +1591,7 @@ const analyzeImportFile = async (file) => {
         
         // Debug for specific blocks
         if (parseInt(block) >= 7 && parseInt(block) <= 10) {
-          console.log(`�� Import row ${block}-${lot}: compositeKey = ${compositeKey}`);
+          console.log(`���� Import row ${block}-${lot}: compositeKey = ${compositeKey}`);
         }
         
         // Find matching property in worksheet
@@ -2234,7 +2234,7 @@ const analyzeImportFile = async (file) => {
                                   <td className="px-4 py-3 text-sm">{parsed.qualifier || ''}</td>
                                   <td className="px-4 py-3 text-sm">{parsed.card || '1'}</td>
                                   <td className="px-4 py-3 text-sm">{sale.property_location}</td>
-                                  <td className="px-4 py-3 text-sm">{sale.property_class || sale.property_m4_class}</td>
+                                  <td className="px-4 py-3 text-sm">{sale.property_m4_class}</td>
                                   <td className="px-4 py-3 text-sm">
                                     {getTypeUseDisplay(sale)}
                                   </td>
@@ -2242,6 +2242,19 @@ const analyzeImportFile = async (file) => {
                                     {(() => {
                                       const packageData = interpretCodes.getPackageSaleData(properties, sale);
                                       if (!packageData) return '-';
+
+                                      // DEBUG: Log package detection for 3A properties
+                                      if (sale.property_m4_class === '3A') {
+                                        console.log(`🏡 3A Property package detection:`, {
+                                          composite_key: sale.property_composite_key,
+                                          class: sale.property_m4_class,
+                                          sales_date: sale.sales_date,
+                                          sales_book: sale.sales_book,
+                                          sales_page: sale.sales_page,
+                                          is_farm_package: packageData.is_farm_package,
+                                          package_count: packageData.package_count
+                                        });
+                                      }
                                       
                                       // Use the flags from packageData directly
                                       if (packageData.is_farm_package) {
