@@ -496,8 +496,15 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
           values_mod_total: prop.values_mod_total || prop.assessed_value || 0
         };
         }
-        
-        return prop;
+
+        // Return property with all required display fields
+        return {
+          ...prop,
+          // Ensure we have all fields needed for table display
+          property_class: prop.property_class || prop.property_m4_class,
+          sales_nu: prop.sales_nu || prop.sales_instrument || prop.nu,
+          values_mod_total: prop.values_mod_total || prop.assessed_value || 0
+        };
       });      
       
       // Process each valid sale
