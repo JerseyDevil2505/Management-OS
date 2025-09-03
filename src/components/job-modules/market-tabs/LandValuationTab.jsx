@@ -3745,7 +3745,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               </div>
               <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
                 <div style={{ fontSize: '12px', color: '#6B7280' }}>
-                  Building Lot {categoryAnalysis.buildingLot.method === 'paired' && <span style={{ color: '#3B82F6' }}>�� Paired</span>}
+                  Building Lot {categoryAnalysis.buildingLot.method === 'paired' && <span style={{ color: '#3B82F6' }}>✓ Paired</span>}
                 </div>
                 <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#3B82F6' }}>
                   {valuationMode === 'sf' ? `$${categoryAnalysis.buildingLot.avg}` : `$${categoryAnalysis.buildingLot.avg.toLocaleString()}`}
@@ -6661,13 +6661,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         </select>
                       </td>
                       <td style={{ padding: '8px', fontSize: '11px' }}>
-                        {`${impact.withCount}/${impact.withYearBuilt}/$${(impact.withNormTime/1000).toFixed(0)}k/$${(impact.withNormSize/1000).toFixed(0)}k/$${(impact.withAvg/1000).toFixed(0)}k`}
+                        {impact ? `${impact.withCount}/${impact.withYearBuilt}/$${(impact.withNormTime/1000).toFixed(0)}k/$${(impact.withNormSize/1000).toFixed(0)}k/$${(impact.withAvg/1000).toFixed(0)}k` : 'No data'}
                       </td>
                       <td style={{ padding: '8px', fontSize: '11px' }}>
-                        {`${impact.withoutCount}/${impact.withoutYearBuilt}/$${(impact.withoutNormTime/1000).toFixed(0)}k/$${(impact.withoutNormSize/1000).toFixed(0)}k/$${(impact.withoutAvg/1000).toFixed(0)}k`}
+                        {impact ? `${impact.withoutCount}/${impact.withoutYearBuilt}/$${(impact.withoutNormTime/1000).toFixed(0)}k/$${(impact.withoutNormSize/1000).toFixed(0)}k/$${(impact.withoutAvg/1000).toFixed(0)}k` : 'No data'}
                       </td>
-                      <td style={{ padding: '8px', textAlign: 'center', fontWeight: 'bold', color: parseFloat(impact.impact) < 0 ? '#DC2626' : '#10B981' }}>
-                        {impact.impact}%
+                      <td style={{ padding: '8px', textAlign: 'center', fontWeight: 'bold', color: impact ? (parseFloat(impact.impact) < 0 ? '#DC2626' : '#10B981') : '#9CA3AF' }}>
+                        {impact ? `${impact.impact}%` : 'Insufficient data'}
                       </td>
                       <td style={{ padding: '8px' }}>
                         <input
@@ -6829,7 +6829,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           </button>
           <button
             onClick={() => {
-              console.log('������ MANUAL VCS RECALCULATION TRIGGERED');
+              console.log('���� MANUAL VCS RECALCULATION TRIGGERED');
               console.log('Current state:', {
                 targetAllocation,
                 hasCascadeRates: !!cascadeConfig.normal.prime,
