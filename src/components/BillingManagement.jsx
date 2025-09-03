@@ -2669,6 +2669,10 @@ const loadJobs = async () => {
                     <span className="text-gray-600">Cash Reserve:</span>
                     <span className="font-medium text-orange-600">-{formatCurrency(distributionMetrics.cashReserve)}</span>
                   </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">YTD Distributions:</span>
+                    <span className="font-medium text-blue-600">-{formatCurrency(distributionMetrics.ytdDistributions)}</span>
+                  </div>
                   <div className="flex justify-between border-t pt-2">
                     <span className="text-gray-600 font-semibold">Available for Distribution:</span>
                     <span className="font-bold text-blue-600">
