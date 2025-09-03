@@ -2133,19 +2133,21 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         };
       }
       
-      // Add property to appropriate group
-      factors[vcs][codeString].withFactor.push({
-        id: prop.id,
-        price: prop.sales_price,
-        normalizedTime: prop.values_norm_time || prop.sales_price,
-        normalizedSize: prop.values_norm_size || prop.sales_price,
-        acres: parseFloat(calculateAcreage(prop)),
-        address: prop.property_location,
-        year: prop.asset_year_built,
-        yearSold: new Date(prop.sales_date).getFullYear(),
-        typeUse: prop.asset_type_use,
-        design: prop.asset_design_style
-      });
+      // Only add property to sales analysis if it has sales data
+      if (hasSalesData) {
+        factors[vcs][codeString].withFactor.push({
+          id: prop.id,
+          price: prop.sales_price,
+          normalizedTime: prop.values_norm_time || prop.sales_price,
+          normalizedSize: prop.values_norm_size || prop.sales_price,
+          acres: parseFloat(calculateAcreage(prop)),
+          address: prop.property_location,
+          year: prop.asset_year_built,
+          yearSold: new Date(prop.sales_date).getFullYear(),
+          typeUse: prop.asset_type_use,
+          design: prop.asset_design_style
+        });
+      }
     });
 
     // Find comparable sales without factors for each VCS
@@ -5427,7 +5429,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'sfla' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      SFLA {modalSortField === 'sfla' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
+                      SFLA {modalSortField === 'sfla' ? (modalSortDirection === 'asc' ? '↑' : '��') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('yearBuilt')}
