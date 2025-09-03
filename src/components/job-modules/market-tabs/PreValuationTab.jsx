@@ -277,21 +277,40 @@ useEffect(() => {
 
 // ==================== USE SAVED NORMALIZATION DATA FROM PROPS ====================
 useEffect(() => {
-  if (!marketLandData) return;
-  
-  console.log('🔄 Restoring data from marketLandData...');
-  
+  if (!marketLandData) {
+    console.log('❌ No marketLandData available to restore from');
+    return;
+  }
+
+  console.log('🔄 Restoring data from marketLandData...', {
+    hasNormalizationConfig: !!marketLandData.normalization_config,
+    configKeys: marketLandData.normalization_config ? Object.keys(marketLandData.normalization_config) : [],
+    hasTimeNormalizedSales: !!marketLandData.time_normalized_sales,
+    salesCount: marketLandData.time_normalized_sales?.length || 0
+  });
+
   // Always restore everything when we have marketLandData
   if (marketLandData.normalization_config) {
     const config = marketLandData.normalization_config;
-    setEqualizationRatio(config.equalizationRatio || '');
-    setOutlierThreshold(config.outlierThreshold || '');
+    console.log('📋 Found normalization config:', config);
+
+    // Set configuration values with explicit logging
+    const eqRatio = config.equalizationRatio || '';
+    const outThreshold = config.outlierThreshold || '';
+
+    console.log(`🔧 Setting equalizationRatio: "${eqRatio}" (was: "${equalizationRatio}")`);
+    console.log(`🔧 Setting outlierThreshold: "${outThreshold}" (was: "${outlierThreshold}")`);
+
+    setEqualizationRatio(eqRatio);
+    setOutlierThreshold(outThreshold);
     setNormalizeToYear(config.normalizeToYear || 2025);
     setSalesFromYear(config.salesFromYear || 2012);
     setMinSalePrice(config.minSalePrice || 100);
     setSelectedCounty(config.selectedCounty || 'Bergen');
     setLastTimeNormalizationRun(config.lastTimeNormalizationRun || null);
     setLastSizeNormalizationRun(config.lastSizeNormalizationRun || null);
+  } else {
+    console.log('⚠️ No normalization_config found in marketLandData');
   }
   
   if (marketLandData.time_normalized_sales && marketLandData.time_normalized_sales.length > 0) {
@@ -2089,7 +2108,7 @@ const analyzeImportFile = async (file) => {
                               className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-32 cursor-pointer hover:bg-gray-100"
                               onClick={() => handleNormalizationSort('property_location')}
                             >
-                              Location {normSortConfig.field === 'property_location' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
+                              Location {normSortConfig.field === 'property_location' && (normSortConfig.direction === 'asc' ? '���' : '↓')}
                             </th>
                             <th 
                               className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
