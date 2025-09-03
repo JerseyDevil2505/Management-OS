@@ -298,6 +298,14 @@ Thank you for your immediate attention to this matter.`;
     // Just use the distributions from props
     setDistributions(distributions);
   };
+
+  // NEW: Function to fetch fresh data directly from database when needed
+  const fetchFreshData = async (forceRefresh = false) => {
+    if (forceRefresh && onRefresh) {
+      console.log('🔄 Forcing fresh data refresh...');
+      await onRefresh();
+    }
+  };
   
 const calculateDistributionMetrics = async () => {
     try {
