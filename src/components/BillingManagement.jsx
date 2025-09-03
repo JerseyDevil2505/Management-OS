@@ -1461,10 +1461,10 @@ const loadJobs = async () => {
         .update({ percent_billed: newTotalPercentage })
         .eq('id', billingEvent.job_id);
 
-      // Update the job in state without reloading
       setShowEditBilling(false);
       setEditingEvent(null);
-      if (onRefresh) onRefresh();
+      // Refresh all data immediately after deleting billing event
+      await loadAllData();
     } catch (error) {
       console.error('Error deleting billing event:', error);
     }
