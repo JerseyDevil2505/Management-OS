@@ -1552,12 +1552,10 @@ const loadJobs = async () => {
         onDataUpdate('billing_event_delete', editingEvent.id, { deleted: true });
       }
 
-      // Only refresh if onDataUpdate isn't available
-      if (!onDataUpdate && onRefresh) {
-        setTimeout(async () => {
-          await onRefresh();
-        }, 100);
-      }
+      // Always load fresh data after delete operations
+      setTimeout(async () => {
+        await loadFreshDataFromDB();
+      }, 100);
     } catch (error) {
       console.error('Error deleting billing event:', error);
     }
