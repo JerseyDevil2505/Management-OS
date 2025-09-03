@@ -1166,40 +1166,8 @@ const loadJobs = async () => {
           );
         }
         
-        // Update active jobs
-        setJobs(prevJobs => 
-          prevJobs.map(job => {
-            if (job.id === selectedJob.id) {
-              // Add the new event to this job
-              const newEvent = {
-                id: Date.now(), // Temporary ID
-                job_id: selectedJob.id,
-                billing_date: billingForm.billingDate,
-                percentage_billed: percentageDecimal,
-                status: billingForm.status || 'O',
-                invoice_number: billingForm.invoiceNumber,
-                total_amount: totalAmount,
-                retainer_amount: retainerAmount,
-                amount_billed: amountBilled,
-                remaining_due: remainingDue,
-                notes: billingForm.notes,
-                billing_type: billingForm.billingType
-              };
-              
-              const updatedEvents = [...(job.billing_events || []), newEvent];
-              const recalculatedPercent = updatedEvents.reduce((sum, event) =>
-                sum + parseFloat(event.percentage_billed || 0), 0);
-
-              return {
-                ...job,
-                billing_events: updatedEvents,
-                percent_billed: recalculatedPercent
-              };
-            }
-            return job;
-          })
-        );
-        calculateGlobalMetrics();
+        // Refresh all data immediately after adding billing event
+        await loadAllData();
       }
       
       setShowBillingForm(false);
