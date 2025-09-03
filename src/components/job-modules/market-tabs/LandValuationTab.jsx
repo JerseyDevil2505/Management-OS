@@ -2537,7 +2537,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       // If there was an error checking, log it but try to proceed with upsert
       if (checkError && checkError.code !== 'PGRST116') {
-        console.warn('⚠️ Error checking for existing record:', checkError);
+        console.warn('���️ Error checking for existing record:', checkError);
       }
 
       if (existing) {
@@ -5446,7 +5446,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'saleDate' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Sale Date {modalSortField === 'saleDate' ? (modalSortDirection === 'asc' ? '↑' : '���') : ''}
+                      Sale Date {modalSortField === 'saleDate' ? (modalSortDirection === 'asc' ? '���' : '���') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('salePrice')}
@@ -6801,18 +6801,18 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                             }}
                           />
                         </td>
-                        <td style={{ padding: '10px 8px', textAlign: 'center' }}>
+                        <td style={{ padding: '6px 4px', textAlign: 'center' }}>
                           <input
                             type="number"
-                            value={actualAdjustments[key] || ''}
-                            onChange={(e) => updateActualAdjustment(vcs, locationAnalysis, e.target.value)}
+                            value={actualAdjustments[`${key}_negative`] || ''}
+                            onChange={(e) => updateActualAdjustment(vcs, `${locationAnalysis}_negative`, e.target.value)}
                             placeholder="-"
                             style={{
-                              width: '60px',
-                              padding: '4px 6px',
+                              width: '40px',
+                              padding: '2px 4px',
                               border: '1px solid #D1D5DB',
-                              borderRadius: '4px',
-                              fontSize: '12px',
+                              borderRadius: '3px',
+                              fontSize: '10px',
                               textAlign: 'center',
                               backgroundColor: 'white'
                             }}
