@@ -2345,7 +2345,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     }
 
     if (!targetAllocation || targetAllocation === '') {
-      console.log('❌ Save target allocation cancelled: No target allocation value');
+      console.log('��� Save target allocation cancelled: No target allocation value');
       alert('Please enter a target allocation percentage before saving.');
       return;
     }
@@ -6686,8 +6686,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 <tr style={{ backgroundColor: '#F8F9FA', borderBottom: '2px solid #E5E7EB' }}>
                   <th style={{ padding: '12px 8px', textAlign: 'left', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB' }}>VCS</th>
                   <th style={{ padding: '12px 8px', textAlign: 'left', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB' }}>Location Analysis</th>
-                  <th style={{ padding: '12px 8px', textAlign: 'left', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB' }}>Factor Code</th>
-                  <th style={{ padding: '12px 8px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB' }}>Traffic</th>
+                  <th style={{ padding: '12px 8px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB' }}>Property Count</th>
                   <th style={{ padding: '12px 8px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB' }}>With Factor</th>
                   <th style={{ padding: '12px 8px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB' }}>Without Factor</th>
                   <th style={{ padding: '12px 8px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB' }}>Impact %</th>
