@@ -539,8 +539,10 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
           : 0;
         
         // Determine if outlier based on equalization ratio
-        const isOutlier = equalizationRatio && outlierThreshold ? 
-          Math.abs((salesRatio * 100) - equalizationRatio) > outlierThreshold : false;
+        const eqRatio = parseFloat(equalizationRatio);
+        const outThreshold = parseFloat(outlierThreshold);
+        const isOutlier = eqRatio && outThreshold ?
+          Math.abs((salesRatio * 100) - eqRatio) > outThreshold : false;
         
         // Check if we have an existing decision for this property
         const existingDecision = existingDecisions[prop.id];
@@ -1220,7 +1222,7 @@ const handleSalesDecision = async (saleId, decision) => {
         onUpdateJobCache(jobData.id, null);
       }
 
-      console.log(`��� Batch save complete: ${keeps.length} keeps saved, ${rejects.length} rejects cleared`);
+      console.log(`✅ Batch save complete: ${keeps.length} keeps saved, ${rejects.length} rejects cleared`);
       alert(`✅ Successfully saved ${keeps.length} keeps and cleared ${rejects.length} rejects from database`);
 
     } catch (error) {
