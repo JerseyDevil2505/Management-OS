@@ -6136,7 +6136,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           <div style={{ display: 'flex', gap: '10px' }}>
             <button
               onClick={() => {
-                console.log('🔧 FORCE VCS CALC BUTTON CLICKED');
+                console.log('���� FORCE VCS CALC BUTTON CLICKED');
                 console.log('Target allocation before:', targetAllocation);
                 if (!targetAllocation) {
                   console.log('Setting target allocation to 27%');
@@ -6708,38 +6708,15 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       }}>
                         <td style={{ padding: '10px 8px', fontWeight: '600', color: '#1F2937', borderRight: '1px solid #E5E7EB' }}>{vcs}</td>
                         <td style={{ padding: '10px 8px', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '11px' }}>
-                          {/* Show actual location analysis text from properties */}
-                          {(() => {
-                            const prop = properties.find(p => p.new_vcs === vcs &&
-                              (locationCodes[p.id] === codes || (!locationCodes[p.id] && codes === 'None')));
-                            if (codes === 'None') {
-                              return prop?.location_analysis || 'No location analysis';
-                            }
-                            return prop?.location_analysis || 'Various locations';
-                          })()}
+                          {locationAnalysis}
                         </td>
-                        <td style={{ padding: '10px 8px', color: '#6B7280', borderRight: '1px solid #E5E7EB', fontFamily: 'monospace' }}>{codes}</td>
-                        <td style={{ padding: '10px 8px', textAlign: 'center', borderRight: '1px solid #E5E7EB' }}>
-                          {codes.includes('BS') ? (
-                            <select
-                              value={trafficLevels[key] || ''}
-                              onChange={(e) => updateTrafficLevel(key, e.target.value)}
-                              style={{
-                                padding: '4px 6px',
-                                border: '1px solid #D1D5DB',
-                                borderRadius: '4px',
-                                fontSize: '11px',
-                                backgroundColor: 'white'
-                              }}
-                            >
-                              <option value="">-</option>
-                              <option value="LT">LT</option>
-                              <option value="MT">MT</option>
-                              <option value="HT">HT</option>
-                            </select>
-                          ) : (
-                            <span style={{ color: '#9CA3AF' }}>-</span>
-                          )}
+                        <td style={{ padding: '10px 8px', color: '#6B7280', borderRight: '1px solid #E5E7EB', fontSize: '12px', textAlign: 'center', fontWeight: '600' }}>
+                          {(() => {
+                            const propsWithThisLocation = properties.filter(p =>
+                              p.new_vcs === vcs && p.location_analysis === locationAnalysis
+                            );
+                            return propsWithThisLocation.length;
+                          })()}
                         </td>
                         <td style={{ padding: '10px 8px', fontSize: '11px', textAlign: 'center', borderRight: '1px solid #E5E7EB', fontFamily: 'monospace' }}>
                           {impact && impact.withCount > 0 ? (
