@@ -1358,9 +1358,81 @@ const loadJobs = async () => {
     }
   };
 
+  // TEMPORARY ADMIN FIX - Recalculate all remaining_due values
+  const fixAllRemainingDue = async () => {
+    if (!window.confirm('This will recalculate ALL remaining_due values for ALL jobs. Continue?')) {
+      return;
+    }
+
+    try {
+      console.log('Starting remaining_due recalculation...');
+
+      // Get all jobs with contracts and billing events
+      const { data: allJobs } = await supabase
+        .from('jobs')
+        .select(`
+          id,
+          job_name,
+          job_contracts(contract_amount),
+          billing_events(
+            id,
+            amount_billed,
+            billing_date
+          )
+        `)
+        .not('job_contracts', 'is', null);
+
+      if (!allJobs) return;
+
+      let fixedJobsCount = 0;
+      let fixedEventsCount = 0;
+
+      for (const job of allJobs) {
+        if (!job.job_contracts?.[0] || !job.billing_events?.length) continue;
+
+        const contractAmount = job.job_contracts[0].contract_amount;
+
+        // Sort events by billing date
+        const sortedEvents = job.billing_events.sort((a, b) =>
+          new Date(a.billing_date) - new Date(b.billing_date)
+        );
+
+        let runningTotal = 0;
+
+        // Update remaining_due for each event
+        for (const event of sortedEvents) {
+          runningTotal += parseFloat(event.amount_billed || 0);
+          const remainingDue = contractAmount - runningTotal;
+
+          const { error } = await supabase
+            .from('billing_events')
+            .update({ remaining_due: remainingDue })
+            .eq('id', event.id);
+
+          if (error) {
+            console.error('Error updating event:', event.id, error);
+          } else {
+            fixedEventsCount++;
+          }
+        }
+
+        fixedJobsCount++;
+        console.log(`Fixed job: ${job.job_name} (${sortedEvents.length} events)`);
+      }
+
+      console.log(`Recalculation complete! Fixed ${fixedEventsCount} events across ${fixedJobsCount} jobs.`);
+      alert(`Recalculation complete! Fixed ${fixedEventsCount} events across ${fixedJobsCount} jobs.`);
+
+      if (onRefresh) onRefresh();
+    } catch (error) {
+      console.error('Error in remaining_due recalculation:', error);
+      alert('Error during recalculation: ' + error.message);
+    }
+  };
+
   const handleCreateLegacyJob = async () => {
     if (!legacyJobForm.jobName || !legacyJobForm.contractAmount) return;
-    
+
     try {
       // Create the legacy job
       const { data: newJob, error: jobError } = await supabase
