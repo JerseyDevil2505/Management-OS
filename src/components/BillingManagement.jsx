@@ -265,8 +265,19 @@ Thank you for your immediate attention to this matter.`;
   };
 
   const loadExpenses = async () => {
-    // Just use the expenses from props
-    setExpenses(expenses);
+    try {
+      const { data, error } = await supabase
+        .from('expenses')
+        .select('*')
+        .eq('year', new Date().getFullYear())
+        .order('month');
+
+      if (error) throw error;
+      setExpenses(data || []);
+    } catch (error) {
+      console.error('Error loading expenses:', error);
+      setExpenses([]);
+    }
   };
 
   const loadOfficeReceivables = async () => {
