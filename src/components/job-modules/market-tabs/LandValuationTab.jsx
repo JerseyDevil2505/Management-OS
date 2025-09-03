@@ -2290,7 +2290,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         withoutYearBuilt: 0,
         withoutLivingArea: 0,
         withoutSalePrice: 0,
-        adjustedSaleWith: Math.round(avgWithTime),
+        adjustedSaleWith: Math.round(avgWithTime), // No adjustment possible without "without" data
         adjustedSaleWithout: 0,
         dollarImpact: 0,
         percentImpact: 'No baseline',
