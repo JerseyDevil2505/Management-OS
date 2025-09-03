@@ -131,11 +131,6 @@ useEffect(() => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Performance tracking for development
-  const performanceRef = useRef({
-    appStartTime: Date.now(),
-    dbQueries: 0
-  });
 
   // ==========================================
   // PERSISTENT STORAGE HELPERS
