@@ -1178,7 +1178,7 @@ const loadJobs = async () => {
         overrideAmount: '',
         billingType: ''
       });
-      if (onRefresh) onRefresh();
+      // Data refresh already handled by loadAllData() call above
     } catch (error) {
       console.error('Error adding billing event:', error);
     }
