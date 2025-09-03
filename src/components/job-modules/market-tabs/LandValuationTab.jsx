@@ -2125,7 +2125,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           year: prop.asset_year_built,
           yearSold: prop.sales_date ? new Date(prop.sales_date).getFullYear() : null,
           typeUse: prop.asset_type_use,
-          design: prop.asset_design_style
+          design: prop.asset_design_style,
+          sfla: parseFloat(prop.asset_sfla || 0)
         });
       }
     });
@@ -2398,7 +2399,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           })
           .eq('job_id', jobData.id);
       } else {
-        console.log('➕ Creating new record with target allocation...');
+        console.log('��� Creating new record with target allocation...');
         result = await supabase
           .from('market_land_valuation')
           .insert({
@@ -6240,7 +6241,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     onClick={() => toggleFieldCollapse('zoning')}
                     title="Click to expand/collapse"
                   >
-                    Zoning {collapsedFields.zoning ? '▶' : '▼'}
+                    Zoning {collapsedFields.zoning ? '���' : '▼'}
                   </th>
                   {shouldShowKeyColumn && (
                     <th
