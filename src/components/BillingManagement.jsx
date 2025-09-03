@@ -4081,7 +4081,8 @@ const loadJobs = async () => {
                       date: new Date().toISOString().split('T')[0],
                       notes: ''
                     });
-                    if (onRefresh) onRefresh();
+                    // Refresh all data immediately after recording distribution
+                    await loadAllData();
                   } catch (error) {
                     console.error('Error recording distribution:', error);
                     alert('Error recording distribution');
