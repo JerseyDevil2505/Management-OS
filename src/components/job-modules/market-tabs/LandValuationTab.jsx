@@ -2061,13 +2061,35 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   const analyzeEconomicObsolescence = useCallback(() => {
     if (!properties) return;
 
+    console.log('🔍 Economic Obsolescence Analysis Debug:', {
+      totalProperties: properties.length,
+      withNewVCS: properties.filter(p => p.new_vcs).length,
+      withLocationAnalysis: properties.filter(p => p.location_analysis).length,
+      withSalesData: properties.filter(p => p.sales_price > 0).length,
+      withAllThree: properties.filter(p => p.new_vcs && p.location_analysis && p.sales_price > 0).length,
+      sampleProperty: properties[0] ? {
+        hasNewVCS: !!properties[0].new_vcs,
+        hasLocationAnalysis: !!properties[0].location_analysis,
+        hasSalesPrice: !!properties[0].sales_price,
+        actualValues: {
+          new_vcs: properties[0].new_vcs,
+          location_analysis: properties[0].location_analysis,
+          sales_price: properties[0].sales_price
+        }
+      } : 'No properties'
+    });
+
     const factors = {};
     const computed = {};
 
     // Group properties by VCS and location factor
     properties.forEach(prop => {
-      if (!prop.new_vcs || !prop.sales_price || prop.sales_price <= 0) return;
-      if (!prop.location_analysis) return;
+      // More flexible filtering - allow properties without sales data for VCS structure
+      if (!prop.new_vcs) return;
+
+      // For properties with sales data, require location analysis
+      const hasSalesData = prop.sales_price && prop.sales_price > 0;
+      if (hasSalesData && !prop.location_analysis) return;
       
       const vcs = prop.new_vcs;
       const location = prop.location_analysis;
