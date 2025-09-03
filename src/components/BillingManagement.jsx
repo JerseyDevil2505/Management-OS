@@ -227,8 +227,11 @@ Thank you for your immediate attention to this matter.`;
     }
   }, [activeJobs, legacyJobs, planningJobs, billingMetrics]);
 
-  // NEW: Update displayed lists when props change for truly live updates
+  // Update displayed lists when props change, but avoid overwriting during edit operations
   useEffect(() => {
+    // Don't update local state if we're in the middle of editing
+    if (showEditBilling) return;
+
     if (activeTab === 'active') {
       setJobs(activeJobs);
     } else if (activeTab === 'legacy') {
@@ -236,7 +239,7 @@ Thank you for your immediate attention to this matter.`;
     } else if (activeTab === 'planned') {
       setPlanningJobs(planningJobs);
     }
-  }, [activeJobs, legacyJobs, planningJobs, activeTab]);
+  }, [activeJobs, legacyJobs, planningJobs, activeTab, showEditBilling]);
 
   // Update other data when props change
   useEffect(() => {
