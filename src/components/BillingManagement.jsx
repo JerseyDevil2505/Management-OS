@@ -1125,9 +1125,6 @@ const loadJobs = async () => {
             if (onDataUpdate) {
               onDataUpdate();
             }
-            if (onRefresh) {
-              onRefresh();
-            }
           }
         }
        
