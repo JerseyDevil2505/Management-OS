@@ -1526,7 +1526,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       // Log special region usage
       if (region !== 'Normal') {
-        console.log(`���� Using special region "${region}" rates for sale ${sale.property_block}/${sale.property_lot}:`, {
+        console.log(`🌟 Using special region "${region}" rates for sale ${sale.property_block}/${sale.property_lot}:`, {
           primeRate: cascadeRates.prime?.rate,
           secondaryRate: cascadeRates.secondary?.rate,
           excessRate: cascadeRates.excess?.rate
@@ -6736,17 +6736,16 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
                     // Check if row should be grayed out (no "with" sales data)
                     const hasWithData = impact && impact.withCount > 0;
-                    const grayedOutStyle = !hasWithData ? { opacity: 0.5, backgroundColor: '#F9FAFB' } : {};
-                    const normalCellStyle = !hasWithData ? { color: '#9CA3AF' } : {};
+                    const dataCellStyle = !hasWithData ? { color: '#9CA3AF', opacity: 0.6 } : {};
 
                     return (
                       <tr key={key} style={{
                         backgroundColor: rowIndex % 2 === 0 ? 'white' : '#FAFBFC',
-                        borderBottom: '1px solid #E5E7EB',
-                        ...grayedOutStyle
+                        borderBottom: '1px solid #E5E7EB'
                       }}>
-                        <td style={{ padding: '6px 4px', fontWeight: '600', color: '#1F2937', borderRight: '1px solid #E5E7EB', fontSize: '11px', ...normalCellStyle }}>{vcs}</td>
-                        <td style={{ padding: '6px 4px', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '10px', maxWidth: '150px', wordWrap: 'break-word', ...normalCellStyle }}>
+                        {/* Keep VCS, Description, Code normal regardless of data availability */}
+                        <td style={{ padding: '6px 4px', fontWeight: '600', color: '#1F2937', borderRight: '1px solid #E5E7EB', fontSize: '11px' }}>{vcs}</td>
+                        <td style={{ padding: '6px 4px', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '10px', maxWidth: '150px', wordWrap: 'break-word' }}>
                           {locationAnalysis}
                         </td>
                         <td style={{ padding: '6px 4px', color: '#6B7280', borderRight: '1px solid #E5E7EB', fontSize: '10px', textAlign: 'center' }}>
