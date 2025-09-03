@@ -2306,11 +2306,11 @@ const loadJobs = async () => {
                                     .from('jobs')
                                     .delete()
                                     .eq('id', job.id);
-                                  
+
                                   if (error) throw error;
-                                  
+
                                   alert('Legacy job deleted successfully');
-                                  if (onRefresh) onRefresh();   
+                                  if (onRefresh) onRefresh();
                                 } catch (error) {
                                   console.error('Error deleting legacy job:', error);
                                   alert('Error deleting job: ' + error.message);
@@ -2411,13 +2411,14 @@ const loadJobs = async () => {
                                   const contractMinusRetainer = job.job_contracts[0].contract_amount - job.job_contracts[0].retainer_amount;
                                   const amountBilledSoFar = job.job_contracts[0].contract_amount - event.remaining_due;
                                   const remainingNoRetainer = contractMinusRetainer - amountBilledSoFar;
-                                  
+
                                   return (
-                                    <tr 
+                                    <tr
                                       key={event.id}
                                       className="hover:bg-gray-50 cursor-pointer"
                                       onClick={() => {
-                                        setEditingEvent(event);
+                                        // Ensure job_id is included in editingEvent for legacy jobs
+                                        setEditingEvent({ ...event, job_id: job.id });
                                         setShowEditBilling(true);
                                       }}
                                     >
