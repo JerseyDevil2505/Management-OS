@@ -585,7 +585,18 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       });
 
       setTimeNormalizedSales(normalized);
-      
+
+      // DEBUG: Final data check
+      console.log(`✅ Time normalization complete: ${normalized.length} sales processed`);
+      console.log('🔍 Sample normalized sales data:', normalized.slice(0, 2).map(s => ({
+        id: s.id,
+        property_m4_class: s.property_m4_class,
+        sales_nu: s.sales_nu,
+        values_mod_total: s.values_mod_total,
+        sales_ratio: s.sales_ratio,
+        has_package_data: !!interpretCodes.getPackageSaleData(properties, s)
+      })));
+
       // Calculate excluded count (properties that didn't meet criteria)
       const excludedCount = properties.filter(p => {
         if (!p.sales_price || p.sales_price <= minSalePrice) return true;
