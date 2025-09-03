@@ -1220,7 +1220,7 @@ const handleSalesDecision = async (saleId, decision) => {
         onUpdateJobCache(jobData.id, null);
       }
 
-      console.log(`✅ Batch save complete: ${keeps.length} keeps saved, ${rejects.length} rejects cleared`);
+      console.log(`��� Batch save complete: ${keeps.length} keeps saved, ${rejects.length} rejects cleared`);
       alert(`✅ Successfully saved ${keeps.length} keeps and cleared ${rejects.length} rejects from database`);
 
     } catch (error) {
@@ -1896,13 +1896,14 @@ const analyzeImportFile = async (file) => {
                 <input
                   type="number"
                   value={equalizationRatio}
-                  onChange={(e) => setEqualizationRatio(parseFloat(e.target.value))}
+                  onChange={(e) => setEqualizationRatio(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded"
                   step="0.01"
+                  placeholder="e.g., 95.5"
                 />
                 <p className="text-xs text-gray-500 mt-1">Target ratio for the market (typically 85-115%)</p>
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Outlier Threshold (%)
@@ -1910,8 +1911,9 @@ const analyzeImportFile = async (file) => {
                 <input
                   type="number"
                   value={outlierThreshold}
-                  onChange={(e) => setOutlierThreshold(parseInt(e.target.value))}
+                  onChange={(e) => setOutlierThreshold(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded"
+                  placeholder="e.g., 15"
                 />
                 <p className="text-xs text-gray-500 mt-1">Flag sales outside this % of equalization ratio</p>
               </div>
