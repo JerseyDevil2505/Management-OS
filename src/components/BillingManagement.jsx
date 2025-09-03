@@ -1417,7 +1417,8 @@ const loadJobs = async () => {
 
       alert(`Successfully rolled over "${planningJob.job_name || planningJob.municipality}" to active jobs!`);
       setActiveTab('active');
-      if (onRefresh) onRefresh();
+      // Refresh all data immediately after rollover
+      await loadAllData();
     } catch (error) {
       console.error('Error rolling over planning job:', error);
       alert('Error rolling over job: ' + error.message);
