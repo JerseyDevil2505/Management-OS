@@ -1108,74 +1108,89 @@ const handleSalesDecision = async (saleId, decision) => {
       time_normalized_price: k.time_normalized_price,
       has_value: !!k.time_normalized_price
     })));
-    
+    console.log('🔍 Reject count:', rejects.length);
+
     setIsSavingDecisions(true);
     setSaveProgress({ current: 0, total: keeps.length + rejects.length, message: 'Preparing to save...' });
-    
+
     try {
-      
-      console.log(`💾 Saving ${keeps.length} keeps and ${rejects.length} rejects...`);
-      setSaveProgress({ current: 0, total: keeps.length + rejects.length, message: `Saving ${keeps.length} keeps...` });
-      
-      // Batch update keeps in chunks of 500
+      console.log(`💾 Batch saving ${keeps.length} keeps and ${rejects.length} rejects...`);
+
+      // FIRST: Save all decisions to market_land_valuation for persistence
+      await worksheetService.saveTimeNormalizedSales(jobData.id, timeNormalizedSales, normalizationStats);
+      console.log('✅ Saved all decisions to market_land_valuation');
+
+      // SECOND: Batch update keeps in chunks of 500
       if (keeps.length > 0) {
-        console.log(`📝 Preparing to save ${keeps.length} kept sales`);
+        setSaveProgress({ current: 0, total: keeps.length + rejects.length, message: `Saving ${keeps.length} keeps to property_market_analysis...` });
+        console.log(`📝 Preparing to save ${keeps.length} kept sales to property_market_analysis`);
+
         for (let i = 0; i < keeps.length; i += 500) {
           const batch = keeps.slice(i, i + 500);
-          const updates = batch.map(sale => ({
-            id: sale.id,
-            values_norm_time: sale.time_normalized_price
-          }));
-          
-          console.log(`💾 Batch ${Math.floor(i/500) + 1}: Saving IDs`, updates.slice(0, 3).map(u => u.id), '...');
-          
+
+          console.log(`💾 Keep batch ${Math.floor(i/500) + 1}: Saving ${batch.length} properties...`);
+
           // Use Promise.all for parallel updates within batch
-          await Promise.all(updates.map(u => {
-            const sale = batch.find(s => s.id === u.id);
-            return supabase
+          await Promise.all(batch.map(sale =>
+            supabase
               .from('property_market_analysis')
               .upsert({
                 property_composite_key: sale.property_composite_key,
-                values_norm_time: u.values_norm_time
-              }, { onConflict: 'property_composite_key' });
-          }));
-          
-          console.log(`✅ Saved batch ${Math.floor(i/500) + 1} of ${Math.ceil(keeps.length/500)}`);
-          setSaveProgress({ 
-            current: Math.min(i + 500, keeps.length), 
-            total: keeps.length + rejects.length, 
-            message: `Saved ${Math.min(i + 500, keeps.length)} keeps...` 
+                values_norm_time: sale.time_normalized_price
+              }, { onConflict: 'property_composite_key' })
+          ));
+
+          console.log(`✅ Saved keep batch ${Math.floor(i/500) + 1} of ${Math.ceil(keeps.length/500)}`);
+          setSaveProgress({
+            current: Math.min(i + 500, keeps.length),
+            total: keeps.length + rejects.length,
+            message: `Saved ${Math.min(i + 500, keeps.length)} keeps...`
           });
         }
       }
-      
-      // Batch update rejects in chunks of 500
+
+      // THIRD: Batch clear rejects in chunks of 500 - EXPLICITLY clear both norm values
       if (rejects.length > 0) {
+        setSaveProgress({
+          current: keeps.length,
+          total: keeps.length + rejects.length,
+          message: `Clearing ${rejects.length} rejects from property_market_analysis...`
+        });
+        console.log(`📝 Preparing to clear ${rejects.length} rejected sales from property_market_analysis`);
+
         for (let i = 0; i < rejects.length; i += 500) {
           const batch = rejects.slice(i, i + 500);
-          const rejectIds = batch.map(s => s.id);
-          
           const rejectCompositeKeys = batch.map(s => s.property_composite_key);
 
+          console.log(`🗑️ Reject batch ${Math.floor(i/500) + 1}: Clearing ${batch.length} properties...`);
+
+          // CRITICAL: Clear BOTH time and size normalized values for rejected sales
           await supabase
             .from('property_market_analysis')
-            .update({ values_norm_time: null })
+            .update({
+              values_norm_time: null,
+              values_norm_size: null
+            })
             .in('property_composite_key', rejectCompositeKeys);
-          
-          console.log(`✅ Cleared batch ${Math.floor(i/500) + 1} of ${Math.ceil(rejects.length/500)}`);
+
+          console.log(`✅ Cleared reject batch ${Math.floor(i/500) + 1} of ${Math.ceil(rejects.length/500)}`);
+          setSaveProgress({
+            current: keeps.length + Math.min(i + 500, rejects.length),
+            total: keeps.length + rejects.length,
+            message: `Cleared ${Math.min(i + 500, rejects.length)} rejects...`
+          });
         }
       }
-      
-      // Save the entire state to market_land_valuation for persistence
-      await worksheetService.saveTimeNormalizedSales(jobData.id, timeNormalizedSales, normalizationStats);
 
-      //Clear cache after saving decisions
+      // FOURTH: Clear cache to prevent stale data issues
       if (onUpdateJobCache && jobData?.id) {
-        console.log('🗑️ Clearing cache after saving keep/reject decisions');
+        console.log('🗑️ Clearing cache after batch save to prevent stale data');
         onUpdateJobCache(jobData.id, null);
       }
-      
-      alert(`✅ Successfully saved ${keeps.length} keeps and ${rejects.length} rejects`);
+
+      console.log(`✅ Batch save complete: ${keeps.length} keeps saved, ${rejects.length} rejects cleared`);
+      alert(`✅ Successfully saved ${keeps.length} keeps and cleared ${rejects.length} rejects from database`);
+
     } catch (error) {
       console.error('❌ Error saving batch decisions:', error);
       alert('Error saving decisions. Please check the console and try again.');
@@ -2079,7 +2094,7 @@ const analyzeImportFile = async (file) => {
                               className="px-4 py-3 text-center text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
                               onClick={() => handleNormalizationSort('package')}
                             >
-                              Package {normSortConfig.field === 'package' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
+                              Package {normSortConfig.field === 'package' && (normSortConfig.direction === 'asc' ? '��' : '↓')}
                             </th>
                             <th 
                               className="px-4 py-3 text-right text-sm font-medium text-gray-700 w-24 cursor-pointer hover:bg-gray-100"
