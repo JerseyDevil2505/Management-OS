@@ -2129,7 +2129,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         };
       }
       
-      // Only add property to sales analysis if it has sales data
+      // Add all properties to build VCS structure, but only include sales data if available
+      const hasSalesData = prop.sales_price && prop.sales_price > 0;
+
       if (hasSalesData) {
         factors[vcs][codeString].withFactor.push({
           id: prop.id,
@@ -2139,7 +2141,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           acres: parseFloat(calculateAcreage(prop)),
           address: prop.property_location,
           year: prop.asset_year_built,
-          yearSold: new Date(prop.sales_date).getFullYear(),
+          yearSold: prop.sales_date ? new Date(prop.sales_date).getFullYear() : null,
           typeUse: prop.asset_type_use,
           design: prop.asset_design_style
         });
