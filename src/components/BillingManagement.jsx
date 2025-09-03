@@ -219,27 +219,37 @@ Thank you for your immediate attention to this matter.`;
     projectedProfitLossPercent: 0  
   });
 
+  // Master function to load all data fresh from database
+  const loadAllData = async () => {
+    try {
+      await loadJobCounts();
+      await calculateGlobalMetrics();
+      await loadJobs();
+
+      if (activeTab === 'expenses') {
+        await loadExpenses();
+      }
+      if (activeTab === 'receivables') {
+        await loadOfficeReceivables();
+      }
+      if (activeTab === 'distributions') {
+        await loadDistributions();
+        await calculateDistributionMetrics();
+      }
+    } catch (error) {
+      console.error('Error loading all data:', error);
+    }
+  };
+
   useEffect(() => {
-    // Set initial data from props
-    loadJobCounts();
-    if (billingMetrics) {
-      setGlobalMetrics(billingMetrics);
-    }
-  }, [activeJobs, legacyJobs, planningJobs, billingMetrics]);
-  
-  useEffect(() => {
-    // Load specific data when tab changes
-    loadJobs();
-    if (activeTab === 'expenses') {
-      loadExpenses();
-    }
-    if (activeTab === 'receivables') {
-      loadOfficeReceivables();
-    }
-    if (activeTab === 'distributions') {
-      loadDistributions();
-    }
+    // Always fetch fresh data on mount and tab changes
+    loadAllData();
   }, [activeTab]);
+
+  // Refresh data every time the component becomes visible
+  useEffect(() => {
+    loadAllData();
+  }, []);
 
   useEffect(() => {
     if (activeTab === 'distributions' && globalMetrics.totalPaid > 0) {
