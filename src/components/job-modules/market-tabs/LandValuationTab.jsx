@@ -202,16 +202,6 @@ useEffect(() => {
       if (s.manually_added) manuallyAddedIds.add(s.id);
     });
 
-    console.log('🔄 Restored Method 1 states:', {
-      excludedCount: savedExcluded.size,
-      includedCount: savedIncluded.size,
-      manuallyAddedCount: manuallyAddedIds.size,
-      categoriesCount: Object.keys(savedCategories).length,
-      regionsCount: Object.keys(savedRegions).length,
-      excludedIds: Array.from(savedExcluded),
-      manuallyAddedIds: Array.from(manuallyAddedIds),
-      categories: savedCategories
-    });
 
     setSaleCategories(savedCategories);
     setLandNotes(savedNotes);
@@ -1923,7 +1913,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       });
 
       if (relevantSales.length === 0) {
-        console.log(`⚠️ No relevant sales found for VCS ${vcs} in past 3 years`);
+        console.log(`⚠��� No relevant sales found for VCS ${vcs} in past 3 years`);
         return;
       }
 
