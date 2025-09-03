@@ -233,6 +233,12 @@ Thank you for your immediate attention to this matter.`;
     }
   }, [activeJobs, legacyJobs, planningJobs, billingMetrics]);
 
+  // Load fresh data on component mount and tab changes
+  useEffect(() => {
+    console.log('🔄 BillingManagement mounted or tab changed, loading fresh data');
+    loadFreshDataFromDB();
+  }, [activeTab, loadFreshDataFromDB]);
+
   // Update displayed lists when props change, but avoid overwriting during edit operations
   useEffect(() => {
     // Don't update local state if we're in the middle of editing or updating
