@@ -281,8 +281,18 @@ Thank you for your immediate attention to this matter.`;
   };
 
   const loadOfficeReceivables = async () => {
-    // Just use the receivables from props
-    setOfficeReceivables(receivables);
+    try {
+      const { data, error } = await supabase
+        .from('office_receivables')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setOfficeReceivables(data || []);
+    } catch (error) {
+      console.error('Error loading office receivables:', error);
+      setOfficeReceivables([]);
+    }
   }; 
 
   const loadDistributions = async () => {
