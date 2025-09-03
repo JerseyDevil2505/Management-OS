@@ -1085,6 +1085,7 @@ const loadJobs = async () => {
     if (!editingEvent) return;
 
     try {
+      setIsUpdatingBilling(true);
       console.log('🔧 Updating billing event:', editingEvent);
 
       // Check if job_id is available
