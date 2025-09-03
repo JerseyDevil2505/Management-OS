@@ -551,17 +551,33 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
           ? assessedValue / timeNormalizedPrice
           : 0;
 
-        // DEBUG: Log first few sales to check data
+        // DEBUG: Log first few sales to check data and available fields
         if (index < 3) {
-          console.log(`🔍 Sale ${index + 1} data check:`, {
+          console.log(`🔍 Sale ${index + 1} FULL PROPERTY DATA:`, prop);
+          console.log(`🔍 Sale ${index + 1} SPECIFIC FIELDS:`, {
             id: prop.id,
+            // Check all possible class field names
+            property_class: prop.property_class,
             property_m4_class: prop.property_m4_class,
+            asset_building_class: prop.asset_building_class,
+            building_class: prop.building_class,
+            // Check all possible sales NU field names
             sales_nu: prop.sales_nu,
+            sales_instrument: prop.sales_instrument,
+            nu: prop.nu,
+            sale_nu: prop.sale_nu,
+            // Check all possible assessed value field names
             values_mod_total: prop.values_mod_total,
+            assessed_value: prop.assessed_value,
+            total_assessed: prop.total_assessed,
+            mod_total: prop.mod_total,
             sales_price: prop.sales_price,
             assessedValue,
             salesRatio: salesRatio.toFixed(3)
           });
+
+          // Also log all property keys to see what's available
+          console.log(`🔍 Sale ${index + 1} ALL AVAILABLE KEYS:`, Object.keys(prop));
         }
         
         // Determine if outlier based on equalization ratio
