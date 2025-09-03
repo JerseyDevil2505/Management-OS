@@ -6684,13 +6684,21 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             <table style={{ width: '100%', fontSize: '12px', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ backgroundColor: '#F8F9FA', borderBottom: '2px solid #E5E7EB' }}>
-                  <th style={{ padding: '12px 8px', textAlign: 'left', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB' }}>VCS</th>
-                  <th style={{ padding: '12px 8px', textAlign: 'left', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB' }}>Location Analysis</th>
-                  <th style={{ padding: '12px 8px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB' }}>Property Count</th>
-                  <th style={{ padding: '12px 8px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB' }}>With Factor</th>
-                  <th style={{ padding: '12px 8px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB' }}>Without Factor</th>
-                  <th style={{ padding: '12px 8px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB' }}>Impact %</th>
-                  <th style={{ padding: '12px 8px', textAlign: 'center', fontWeight: '600', color: '#374151' }}>Applied %</th>
+                  <th style={{ padding: '8px 4px', textAlign: 'left', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '11px' }}>VCS</th>
+                  <th style={{ padding: '8px 4px', textAlign: 'left', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '11px' }}>Locational Analysis</th>
+                  <th style={{ padding: '8px 4px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '11px' }}>Code</th>
+                  <th style={{ padding: '8px 4px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '10px', backgroundColor: '#EEF2FF' }}>With Year Built</th>
+                  <th style={{ padding: '8px 4px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '10px', backgroundColor: '#EEF2FF' }}>With Living Area</th>
+                  <th style={{ padding: '8px 4px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '10px', backgroundColor: '#EEF2FF' }}>With Sale Price</th>
+                  <th style={{ padding: '8px 4px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '10px', backgroundColor: '#F0FDF4' }}>Without Year Built</th>
+                  <th style={{ padding: '8px 4px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '10px', backgroundColor: '#F0FDF4' }}>Without Living Area</th>
+                  <th style={{ padding: '8px 4px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '10px', backgroundColor: '#F0FDF4' }}>Without Sale Price</th>
+                  <th style={{ padding: '8px 4px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '10px' }}>Adjusted Sale With</th>
+                  <th style={{ padding: '8px 4px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '10px' }}>Adjusted Sale Without</th>
+                  <th style={{ padding: '8px 4px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '10px' }}>Dollar Impact</th>
+                  <th style={{ padding: '8px 4px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '10px' }}>Percent Impact</th>
+                  <th style={{ padding: '8px 4px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '10px' }}>Applied+%</th>
+                  <th style={{ padding: '8px 4px', textAlign: 'center', fontWeight: '600', color: '#374151', fontSize: '10px' }}>Applied-%</th>
                 </tr>
               </thead>
               <tbody>
