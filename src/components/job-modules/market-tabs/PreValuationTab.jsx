@@ -428,22 +428,41 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       // DEBUG: Check initial properties data structure
       console.log(`🚀 Starting time normalization with ${properties.length} total properties`);
       if (properties.length > 0) {
-        console.log('🔍 RAW PROPERTIES SAMPLE (first 2):');
-        properties.slice(0, 2).forEach((prop, i) => {
-          console.log(`Property ${i + 1}:`, {
-            id: prop.id,
-            composite_key: prop.property_composite_key,
-            // Check all possible field names
-            property_class: prop.property_class,
-            property_m4_class: prop.property_m4_class,
-            sales_nu: prop.sales_nu,
-            values_mod_total: prop.values_mod_total,
-            sales_price: prop.sales_price,
-            sales_date: prop.sales_date,
-            // Show all keys for debugging
-            all_keys: Object.keys(prop)
-          });
-        });
+        console.log('🔍 RAW PROPERTIES SAMPLE (first property COMPLETE):');
+        console.log('🔍 FIRST PROPERTY FULL OBJECT:', properties[0]);
+
+        console.log('🔍 AVAILABLE FIELD NAMES IN PROPERTIES:');
+        const allKeys = Object.keys(properties[0]);
+        console.log('📋 ALL KEYS:', allKeys);
+
+        // Look for any field that might contain class, assessed, or sales info
+        const classFields = allKeys.filter(key =>
+          key.toLowerCase().includes('class') ||
+          key.toLowerCase().includes('m4') ||
+          key.toLowerCase().includes('property')
+        );
+        const assessedFields = allKeys.filter(key =>
+          key.toLowerCase().includes('value') ||
+          key.toLowerCase().includes('assess') ||
+          key.toLowerCase().includes('total') ||
+          key.toLowerCase().includes('mod')
+        );
+        const salesFields = allKeys.filter(key =>
+          key.toLowerCase().includes('sales') ||
+          key.toLowerCase().includes('nu') ||
+          key.toLowerCase().includes('instrument')
+        );
+
+        console.log('🏗️ CLASS-RELATED FIELDS:', classFields);
+        console.log('💰 ASSESSED-RELATED FIELDS:', assessedFields);
+        console.log('📋 SALES-RELATED FIELDS:', salesFields);
+
+        // Show values for these fields
+        const firstProp = properties[0];
+        console.log('🔍 VALUES FOR FIRST PROPERTY:');
+        classFields.forEach(field => console.log(`  ${field}:`, firstProp[field]));
+        assessedFields.forEach(field => console.log(`  ${field}:`, firstProp[field]));
+        salesFields.forEach(field => console.log(`  ${field}:`, firstProp[field]));
       }
 
       // Create a map of existing keep/reject decisions
