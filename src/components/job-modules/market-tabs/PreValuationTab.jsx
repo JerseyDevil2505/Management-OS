@@ -527,16 +527,29 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       });      
       
       // Process each valid sale
-      const normalized = enhancedSales.map(prop => {
+      const normalized = enhancedSales.map((prop, index) => {
         const saleYear = new Date(prop.sales_date).getFullYear();
         const hpiMultiplier = getHPIMultiplier(saleYear, normalizeToYear);
         const timeNormalizedPrice = Math.round(prop.sales_price * hpiMultiplier);
-        
+
         // Calculate sales ratio
         const assessedValue = prop.values_mod_total || 0;
-        const salesRatio = assessedValue > 0 && timeNormalizedPrice > 0 
-          ? assessedValue / timeNormalizedPrice 
+        const salesRatio = assessedValue > 0 && timeNormalizedPrice > 0
+          ? assessedValue / timeNormalizedPrice
           : 0;
+
+        // DEBUG: Log first few sales to check data
+        if (index < 3) {
+          console.log(`🔍 Sale ${index + 1} data check:`, {
+            id: prop.id,
+            property_m4_class: prop.property_m4_class,
+            sales_nu: prop.sales_nu,
+            values_mod_total: prop.values_mod_total,
+            sales_price: prop.sales_price,
+            assessedValue,
+            salesRatio: salesRatio.toFixed(3)
+          });
+        }
         
         // Determine if outlier based on equalization ratio
         const eqRatio = parseFloat(equalizationRatio);
