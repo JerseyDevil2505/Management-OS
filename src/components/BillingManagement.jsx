@@ -1854,8 +1854,23 @@ const loadJobs = async () => {
   return (
     <div className="max-w-7xl mx-auto p-6">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Billing Management</h1>
-        <p className="text-gray-600">Track contracts, billing events, and payment status</p>
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Billing Management</h1>
+            <p className="text-gray-600">Track contracts, billing events, and payment status</p>
+          </div>
+          {loadingStatus.isRefreshing && (
+            <div className="flex items-center space-x-2 px-4 py-2 bg-blue-50 border border-blue-200 rounded-md">
+              <div className="animate-spin h-4 w-4 border-2 border-blue-600 border-t-transparent rounded-full"></div>
+              <span className="text-blue-700 font-medium">Loading fresh data...</span>
+            </div>
+          )}
+          {loadingStatus.lastError && (
+            <div className="flex items-center space-x-2 px-4 py-2 bg-red-50 border border-red-200 rounded-md">
+              <span className="text-red-700 font-medium">Error: {loadingStatus.lastError}</span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Global Metrics Dashboard */}
