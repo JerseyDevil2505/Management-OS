@@ -6136,7 +6136,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           <div style={{ display: 'flex', gap: '10px' }}>
             <button
               onClick={() => {
-                console.log('���� FORCE VCS CALC BUTTON CLICKED');
+                console.log('🔧 FORCE VCS CALC BUTTON CLICKED');
                 console.log('Target allocation before:', targetAllocation);
                 if (!targetAllocation) {
                   console.log('Setting target allocation to 27%');
@@ -6758,7 +6758,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                           <input
                             type="number"
                             value={actualAdjustments[key] || ''}
-                            onChange={(e) => updateActualAdjustment(vcs, codes, e.target.value)}
+                            onChange={(e) => updateActualAdjustment(vcs, locationAnalysis, e.target.value)}
                             placeholder="-"
                             style={{
                               width: '60px',
