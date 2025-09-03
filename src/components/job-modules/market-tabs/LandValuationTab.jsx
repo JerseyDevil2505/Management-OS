@@ -2176,6 +2176,19 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       });
     });
 
+    console.log('📊 Economic Obsolescence Analysis Complete:', {
+      totalVCSCodes: Object.keys(factors).length,
+      vcsCodesWithFactors: Object.keys(factors).map(vcs => ({
+        vcs,
+        factorTypes: Object.keys(factors[vcs]),
+        totalFactorTypes: Object.keys(factors[vcs]).length
+      })),
+      sampleFactorData: Object.keys(factors)[0] ? {
+        vcs: Object.keys(factors)[0],
+        factors: factors[Object.keys(factors)[0]]
+      } : 'No VCS codes found'
+    });
+
     setEcoObsFactors(factors);
     setComputedAdjustments(computed);
   }, [properties, calculateAcreage, locationCodes]);
