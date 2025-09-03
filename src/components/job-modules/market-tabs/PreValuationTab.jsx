@@ -1809,8 +1809,10 @@ const analyzeImportFile = async (file) => {
                 )}
                 <button
                   onClick={() => {
-                    if (!equalizationRatio || !outlierThreshold) {
-                      alert('Please enter Equalization Ratio and Outlier Threshold before running normalization');
+                    const eqRatio = parseFloat(equalizationRatio);
+                    const outThreshold = parseFloat(outlierThreshold);
+                    if (!eqRatio || !outThreshold) {
+                      alert('Please enter valid Equalization Ratio and Outlier Threshold before running normalization');
                       return;
                     }
                     runTimeNormalization();
