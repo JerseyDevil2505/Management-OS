@@ -617,19 +617,42 @@ const calculateDistributionMetrics = async () => {
 const loadJobs = async () => {
     try {
       setLoading(true);
-      
+
       if (activeTab === 'active') {
-        // Use cached activeJobs from props
-        setJobs(activeJobs);
-        setJobCounts(prev => ({ ...prev, active: activeJobs.length }));
+        const { data, error } = await supabase
+          .from('jobs')
+          .select(`
+            *,
+            job_contracts(*),
+            billing_events(*)
+          `)
+          .eq('job_type', 'standard')
+          .order('job_name');
+
+        if (error) throw error;
+        setJobs(data || []);
       } else if (activeTab === 'planned') {
-        // Use cached planningJobs from props
-        setPlanningJobs(planningJobs);
-        setJobCounts(prev => ({ ...prev, planned: planningJobs.length }));
+        const { data, error } = await supabase
+          .from('planning_jobs')
+          .select('*')
+          .eq('is_archived', false)
+          .order('municipality');
+
+        if (error) throw error;
+        setPlanningJobs(data || []);
       } else if (activeTab === 'legacy') {
-        // Use cached legacyJobs from props
-        setLegacyJobs(legacyJobs);
-        setJobCounts(prev => ({ ...prev, legacy: legacyJobs.length }));
+        const { data, error } = await supabase
+          .from('jobs')
+          .select(`
+            *,
+            job_contracts(*),
+            billing_events(*)
+          `)
+          .eq('job_type', 'legacy_billing')
+          .order('job_name');
+
+        if (error) throw error;
+        setLegacyJobs(data || []);
       }
     } catch (error) {
       console.error('Error loading jobs:', error);
