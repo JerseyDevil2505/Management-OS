@@ -247,30 +247,34 @@ const JobContainer = ({
             }
 
             if (batchData && batchData.length > 0) {
-              // DEBUG: Check what fields are actually coming from the database
+              // SIMPLIFIED DEBUG: Find actual column names in database
               if (batch === 0) { // Only log first batch
-                console.log(`🔍 DATABASE RESPONSE - FIRST PROPERTY RAW DATA:`, batchData[0]);
-                console.log(`🔍 AVAILABLE KEYS IN DATABASE RESPONSE:`, Object.keys(batchData[0]));
-
-                // Check for the specific fields we need
                 const firstProp = batchData[0];
-                console.log(`🔍 SPECIFIC FIELD CHECK:`, {
-                  // Class fields
-                  property_class: firstProp.property_class,
-                  property_m4_class: firstProp.property_m4_class,
-                  asset_building_class: firstProp.asset_building_class,
-                  building_class: firstProp.building_class,
-                  // Assessed value fields
-                  values_mod_total: firstProp.values_mod_total,
-                  assessed_value: firstProp.assessed_value,
-                  total_assessed: firstProp.total_assessed,
-                  mod_total: firstProp.mod_total,
-                  // Sales NU fields
-                  sales_nu: firstProp.sales_nu,
-                  sales_instrument: firstProp.sales_instrument,
-                  nu: firstProp.nu,
-                  sale_nu: firstProp.sale_nu
-                });
+                console.log(`🔍 ALL DATABASE COLUMNS:`, Object.keys(firstProp).sort());
+
+                // Look for class-related columns
+                const classColumns = Object.keys(firstProp).filter(key =>
+                  key.toLowerCase().includes('class') ||
+                  key.toLowerCase().includes('m4')
+                );
+                console.log(`🏗️ CLASS-RELATED COLUMNS:`, classColumns);
+
+                // Look for assessed value columns
+                const valueColumns = Object.keys(firstProp).filter(key =>
+                  key.toLowerCase().includes('value') ||
+                  key.toLowerCase().includes('assess') ||
+                  key.toLowerCase().includes('mod') ||
+                  key.toLowerCase().includes('total')
+                );
+                console.log(`💰 VALUE-RELATED COLUMNS:`, valueColumns);
+
+                // Look for sales NU columns
+                const salesColumns = Object.keys(firstProp).filter(key =>
+                  key.toLowerCase().includes('sales') ||
+                  key.toLowerCase().includes('nu') ||
+                  key.toLowerCase().includes('instrument')
+                );
+                console.log(`📋 SALES-RELATED COLUMNS:`, salesColumns);
               }
 
               // Flatten market analysis fields into property objects
