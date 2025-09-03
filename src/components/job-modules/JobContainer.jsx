@@ -247,6 +247,32 @@ const JobContainer = ({
             }
 
             if (batchData && batchData.length > 0) {
+              // DEBUG: Check what fields are actually coming from the database
+              if (batch === 0) { // Only log first batch
+                console.log(`🔍 DATABASE RESPONSE - FIRST PROPERTY RAW DATA:`, batchData[0]);
+                console.log(`🔍 AVAILABLE KEYS IN DATABASE RESPONSE:`, Object.keys(batchData[0]));
+
+                // Check for the specific fields we need
+                const firstProp = batchData[0];
+                console.log(`🔍 SPECIFIC FIELD CHECK:`, {
+                  // Class fields
+                  property_class: firstProp.property_class,
+                  property_m4_class: firstProp.property_m4_class,
+                  asset_building_class: firstProp.asset_building_class,
+                  building_class: firstProp.building_class,
+                  // Assessed value fields
+                  values_mod_total: firstProp.values_mod_total,
+                  assessed_value: firstProp.assessed_value,
+                  total_assessed: firstProp.total_assessed,
+                  mod_total: firstProp.mod_total,
+                  // Sales NU fields
+                  sales_nu: firstProp.sales_nu,
+                  sales_instrument: firstProp.sales_instrument,
+                  nu: firstProp.nu,
+                  sale_nu: firstProp.sale_nu
+                });
+              }
+
               // Flatten market analysis fields into property objects
               const processedData = batchData.map(property => {
                 const marketAnalysis = property.property_market_analysis?.[0] || {};
