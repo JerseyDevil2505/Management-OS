@@ -2084,41 +2084,21 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const factors = {};
     const computed = {};
 
-    // Group properties by VCS and location factor
+    // Create pivot table: Group properties by VCS and location_analysis (like Excel pivot table)
     properties.forEach(prop => {
-      // Must have VCS to appear in the table - location_analysis is optional
-      if (!prop.new_vcs) return;
+      // Must have VCS and valid location_analysis to appear in the table (exclude null/none/empty)
+      if (!prop.new_vcs || !prop.location_analysis ||
+          prop.location_analysis.trim() === '' ||
+          prop.location_analysis.toLowerCase().includes('none') ||
+          prop.location_analysis.toLowerCase().includes('no analysis')) {
+        return;
+      }
 
       const vcs = prop.new_vcs;
-      const location = prop.location_analysis || 'No Analysis';
+      const locationAnalysis = prop.location_analysis.trim();
 
-      // Assign location codes based on analysis
-      let codes = [];
-      const locationLower = location.toLowerCase();
-      
-      // Check for negative factors
-      if (locationLower.includes('busy') || locationLower.includes('highway') || 
-          locationLower.includes('route') || locationLower.includes('traffic')) {
-        codes.push('BS');
-      }
-      if (locationLower.includes('commercial')) codes.push('CM');
-      if (locationLower.includes('railroad') || locationLower.includes('rail')) codes.push('RR');
-      if (locationLower.includes('power') || locationLower.includes('electric')) codes.push('PL');
-      if (locationLower.includes('easement')) codes.push('ES');
-      
-      // Check for positive factors
-      if (locationLower.includes('golf')) {
-        if (locationLower.includes('view')) codes.push('GV');
-        else codes.push('GC');
-      }
-      if (locationLower.includes('water') || locationLower.includes('lake') || 
-          locationLower.includes('river') || locationLower.includes('ocean')) {
-        if (locationLower.includes('front')) codes.push('WF');
-        else if (locationLower.includes('view')) codes.push('WV');
-      }
-      
-      const codeString = codes.join('/') || 'None';
-      setLocationCodes(prev => ({...prev, [prop.id]: codeString}));
+      // Use the actual location_analysis as the key (no dynamic code generation)
+      setLocationCodes(prev => ({...prev, [prop.id]: locationAnalysis}));
       
       if (!factors[vcs]) {
         factors[vcs] = {};
