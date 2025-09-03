@@ -1585,15 +1585,15 @@ useEffect(() => {
 
         {activeView === 'billing' && (
           <BillingManagement
-            activeJobs={masterCache.activeJobs}
-            legacyJobs={masterCache.legacyJobs}
-            planningJobs={masterCache.planningJobs}
-            expenses={masterCache.expenses}
-            receivables={masterCache.receivables}
-            distributions={masterCache.distributions}
-            billingMetrics={masterCache.billingMetrics}
-            onDataUpdate={updateCacheItem}
-            onRefresh={() => loadMasterData({ force: true, components: ['billing'] })}
+            activeJobs={appData.activeJobs}
+            legacyJobs={appData.legacyJobs}
+            planningJobs={appData.planningJobs}
+            expenses={appData.expenses}
+            receivables={appData.receivables}
+            distributions={appData.distributions}
+            billingMetrics={appData.billingMetrics}
+            onDataUpdate={updateAppData}
+            onRefresh={() => loadLiveData(['billing'])}
           />
         )}
 
