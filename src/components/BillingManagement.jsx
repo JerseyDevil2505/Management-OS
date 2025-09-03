@@ -1263,7 +1263,8 @@ const loadJobs = async () => {
 
       setShowEditBilling(false);
       setEditingEvent(null);
-      if (onRefresh) onRefresh();
+      // Refresh all data immediately after updating billing event
+      await loadAllData();
     } catch (error) {
       console.error('Error updating billing event:', error);
       alert('Error updating billing event: ' + error.message);
