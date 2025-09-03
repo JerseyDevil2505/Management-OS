@@ -2087,9 +2087,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     // Group properties by VCS and location factor
     properties.forEach(prop => {
-      // Must have VCS and location analysis to appear in the table
-      if (!prop.new_vcs || !prop.location_analysis) return;
-      
+      // Must have VCS to appear in the table - location_analysis is optional
+      if (!prop.new_vcs) return;
+
       const vcs = prop.new_vcs;
       const location = prop.location_analysis || 'No Analysis';
 
@@ -6646,20 +6646,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
   // ========== RENDER ECONOMIC OBSOLESCENCE TAB ==========
   const renderEconomicObsolescenceTab = () => {
-    // Filter out entries with 'None' codes
-    const filteredFactors = Object.keys(ecoObsFactors).reduce((acc, vcs) => {
-      const vcsFactors = Object.keys(ecoObsFactors[vcs]).reduce((vcsAcc, codes) => {
-        if (codes !== 'None') {
-          vcsAcc[codes] = ecoObsFactors[vcs][codes];
-        }
-        return vcsAcc;
-      }, {});
-
-      if (Object.keys(vcsFactors).length > 0) {
-        acc[vcs] = vcsFactors;
-      }
-      return acc;
-    }, {});
+    // Show all factors including 'None' - let user decide what to filter
+    const filteredFactors = ecoObsFactors;
 
     return (
       <div style={{ padding: '20px' }}>
@@ -6723,7 +6711,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               </thead>
               <tbody>
                 {Object.keys(filteredFactors).sort().map(vcs => {
-                  return Object.keys(filteredFactors[vcs]).map((codes, index) => {
+                  return Object.keys(filteredFactors[vcs]).sort().map((codes, index) => {
                     const key = `${vcs}_${codes}`;
                     const impact = calculateEcoObsImpact(vcs, codes, globalEcoObsTypeFilter);
                     const rowIndex = Object.keys(filteredFactors).indexOf(vcs) * Object.keys(filteredFactors[vcs]).length + index;
@@ -6738,8 +6726,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         <td style={{ padding: '10px 8px', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '11px' }}>
                           {/* Show actual location analysis text from properties */}
                           {(() => {
-                            const prop = properties.find(p => p.new_vcs === vcs && p.location_analysis &&
+                            const prop = properties.find(p => p.new_vcs === vcs &&
                               (locationCodes[p.id] === codes || (!locationCodes[p.id] && codes === 'None')));
+                            if (codes === 'None') {
+                              return prop?.location_analysis || 'No location analysis';
+                            }
                             return prop?.location_analysis || 'Various locations';
                           })()}
                         </td>
