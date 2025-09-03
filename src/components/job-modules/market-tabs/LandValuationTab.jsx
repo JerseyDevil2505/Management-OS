@@ -6800,7 +6800,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                           {impact && impact.percentImpact ? `${impact.percentImpact}%` : 'N/A'}
                         </td>
 
-                        {/* Applied adjustment columns */}
+                        {/* Applied adjustment columns - Always editable regardless of row graying */}
                         <td style={{ padding: '6px 4px', textAlign: 'center', borderRight: '1px solid #E5E7EB' }}>
                           <input
                             type="number"
@@ -6814,7 +6814,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                               borderRadius: '3px',
                               fontSize: '10px',
                               textAlign: 'center',
-                              backgroundColor: 'white'
+                              backgroundColor: 'white',
+                              opacity: 1 // Always fully visible and editable
                             }}
                           />
                         </td>
@@ -6831,7 +6832,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                               borderRadius: '3px',
                               fontSize: '10px',
                               textAlign: 'center',
-                              backgroundColor: 'white'
+                              backgroundColor: 'white',
+                              opacity: 1 // Always fully visible and editable
                             }}
                           />
                         </td>
