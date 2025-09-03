@@ -1424,7 +1424,7 @@ const getPricePerUnit = useCallback((price, size) => {
       }
 
       if (autoCategory) {
-        console.log(`🏗️ Auto-categorizing manually added ${p.property_block}/${p.property_lot} as ${autoCategory}`);
+        console.log(`🏗�� Auto-categorizing manually added ${p.property_block}/${p.property_lot} as ${autoCategory}`);
         setSaleCategories(prev => ({...prev, [p.id]: autoCategory}));
       }
     });
@@ -2130,13 +2130,14 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       }
     });
 
-    // Find comparable sales without factors for each VCS
+    // Find comparable sales without location factors for each VCS
     Object.keys(factors).forEach(vcs => {
-      // Get baseline sales (no location factors)
-      const baselineSales = properties.filter(prop => 
-        prop.new_vcs === vcs && 
-        (!prop.location_analysis || prop.location_analysis === '' || 
-         (!locationCodes[prop.id] || locationCodes[prop.id] === 'None')) &&
+      // Get baseline sales (no location factors - properties with same VCS but no location_analysis)
+      const baselineSales = properties.filter(prop =>
+        prop.new_vcs === vcs &&
+        (!prop.location_analysis || prop.location_analysis.trim() === '' ||
+         prop.location_analysis.toLowerCase().includes('none') ||
+         prop.location_analysis.toLowerCase().includes('no analysis')) &&
         prop.sales_price > 0
       ).map(prop => ({
         id: prop.id,
@@ -2149,12 +2150,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         typeUse: prop.asset_type_use,
         design: prop.asset_design_style
       }));
-      
-      // Store baseline for all location factors in this VCS
-      Object.keys(factors[vcs]).forEach(codes => {
-        if (codes !== 'None') {
-          factors[vcs][codes].withoutFactor = baselineSales;
-        }
+
+      // Store baseline for all location analyses in this VCS
+      Object.keys(factors[vcs]).forEach(locationAnalysis => {
+        factors[vcs][locationAnalysis].withoutFactor = baselineSales;
       });
     });
 
@@ -2505,7 +2504,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       };
 
       // Debug: Log the exact data being saved
-      console.log('���� Data structure being saved:', {
+      console.log('��� Data structure being saved:', {
         cascadeConfigLocation1: analysisData.raw_land_config.cascade_config.specialCategories,
         cascadeConfigLocation2: analysisData.cascade_rates.specialCategories,
         salesData: analysisData.vacant_sales_analysis.sales.slice(0, 3), // First 3 for brevity
@@ -3231,7 +3230,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             (rates[rates.length / 2 - 1] + rates[rates.length / 2]) / 2 :
             rates[Math.floor(rates.length / 2)];
 
-          console.log(`����� ${categoryType} paired analysis:`, {
+          console.log(`��� ${categoryType} paired analysis:`, {
             totalProperties: filtered.length,
             possiblePairs: (filtered.length * (filtered.length - 1)) / 2,
             validPairs: pairedRates.length,
@@ -4052,7 +4051,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         >
                           {data.totalSales} sales
                         </span>
-                        {` • Avg $${Math.round(data.avgPrice).toLocaleString()} • ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} • $${data.impliedRate || 0}`}
+                        {` • Avg $${Math.round(data.avgPrice).toLocaleString()} �� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} • $${data.impliedRate || 0}`}
                       </span>
                     </div>
                     <span style={{ fontSize: '16px', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
