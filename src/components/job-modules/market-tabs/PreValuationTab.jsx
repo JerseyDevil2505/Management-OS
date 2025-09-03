@@ -562,10 +562,11 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
           original_sfla: prop.asset_sfla,
           asset_sfla: prop.asset_sfla + additionalSFLA,
           has_additional_cards: additionalCards.length > 0,
-          // FIXED: Use correct database field names
-          property_class: prop.property_m4_class,  // Primary field is property_m4_class
-          sales_nu: prop.sales_nu,                 // Direct field
-          values_mod_total: prop.values_mod_total  // Direct field (don't default to 0)
+          // CONFIRMED: These are the correct database field names from SQL query
+          property_class: prop.property_m4_class,  // ✅ Confirmed exists: "2", "1", "3B"
+          sales_nu: prop.sales_nu,                 // ✅ Confirmed exists: mostly empty, some "1"
+          values_mod_total: prop.values_mod_total, // ✅ Confirmed exists: 64900, 109900, etc.
+          property_m4_class: prop.property_m4_class // ✅ Keep original field too
         };
         }
 
