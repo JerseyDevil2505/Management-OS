@@ -104,8 +104,9 @@ const App = () => {
     isInitialized: false
   });
 
-  // UI State
-  const [loadingStatus, setLoadingStatus] = useState({
+  // UI State - keeping original cache status structure but using it for loading status
+  const [cacheStatus, setCacheStatus] = useState({
+    isStale: false,
     isRefreshing: false,
     lastError: null,
     message: ''
@@ -168,7 +169,7 @@ const App = () => {
     console.log('📡 Loading fresh data from database:', components);
 
     try {
-      setLoadingStatus(prev => ({ ...prev, isRefreshing: true, message: 'Loading fresh data...' }));
+      setCacheStatus(prev => ({ ...prev, isRefreshing: true, message: 'Loading fresh data...' }));
       setAppData(prev => ({ ...prev, isLoading: true }));
 
       const updates = {};
@@ -419,10 +420,11 @@ const App = () => {
 
       setAppData(newData);
 
-      setLoadingStatus({
+      setCacheStatus({
+        isStale: false,
         isRefreshing: false,
         lastError: null,
-        message: 'Data loaded successfully'
+        message: `Data loaded in ${((Date.now() - performanceRef.current.appStartTime) / 1000).toFixed(1)}s`
       });
 
       console.log('✅ Fresh data loaded successfully');
@@ -433,16 +435,22 @@ const App = () => {
     } catch (error) {
       console.error('❌ Error loading live data:', error);
       setAppData(prev => ({ ...prev, isLoading: false }));
-      setLoadingStatus({
+      setCacheStatus({
+        isStale: false,
         isRefreshing: false,
         lastError: error.message,
-        message: 'Error loading data'
+        message: error.message.includes('timeout') ?
+          'Database timeout - system may be busy. Please try again.' :
+          'Failed to load data'
       });
       throw error;
     }
   }, [appData, loadJobFreshness]);
 
-  const updateAppData = useCallback(async (type, id, data) => {
+  // ==========================================
+  // SURGICAL CACHE UPDATES (renamed but keeping same interface)
+  // ==========================================
+  const updateCacheItem = useCallback(async (type, id, data) => {
     console.log('🔧 Updating app data:', type, id);
 
     // For any billing-related updates, just reload fresh data
@@ -814,155 +822,193 @@ const App = () => {
     );
   }
 
-  // Show login if not authenticated
+  // Show landing page if not authenticated
   if (!user) {
     return <LandingPage onLogin={handleLogin} />;
   }
 
   return (
-    <div className="app">
-      {/* Header Navigation */}
-      <div className="bg-white shadow-sm border-b">
-        <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-4">
-            {/* Logo/Title */}
-            <div className="flex items-center">
-              <h1 className="text-2xl font-bold text-gray-900">
-                LOJIK Administrative Management System
-              </h1>
-            </div>
+    <div className="min-h-screen bg-gray-50">
+      {/* Cache Status Bar - Errors Only */}
+      {cacheStatus.lastError && (
+        <div className="fixed top-0 left-0 right-0 z-50 px-4 py-2 text-sm font-medium text-center bg-red-100 text-red-800">
+          {cacheStatus.message}
+        </div>
+      )}
 
-            {/* User Info & Logout */}
-            <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-600">
+      {/* Top Navigation - Updated with Management OS styling */}
+      <div className="app-header">
+        <div className="max-w-7xl mx-auto px-4 py-4">
+          <div className="flex justify-between items-center mb-4">
+            <h1 style={{ 
+              color: '#FFFFFF',
+              fontSize: '2rem',
+              fontWeight: 'bold',
+              fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", 
+              letterSpacing: '-0.02em',
+              display: 'flex',
+              alignItems: 'center'
+            }}>
+              Management OS
+            </h1>
+            <div className="flex items-center gap-4">
+              <span className="text-sm text-white opacity-95">
                 {user.employeeData?.name || user.email} ({user.role})
               </span>
               <button
+                onClick={() => {
+                  setCacheStatus(prev => ({ ...prev, isRefreshing: true, message: 'Refreshing...' }));
+                  loadLiveData(['all']).then(() => {
+                    setCacheStatus(prev => ({ ...prev, isRefreshing: false, message: 'Data refreshed' }));
+                    setTimeout(() => {
+                      setCacheStatus(prev => ({ ...prev, message: '' }));
+                    }, 2000);
+                  });
+                }}
+                disabled={cacheStatus.isRefreshing}
+                className="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 backdrop-blur-sm rounded-lg text-white font-medium transition-all duration-200 disabled:opacity-50"
+              >
+                {cacheStatus.isRefreshing ? (
+                  <span className="flex items-center gap-2">
+                    <span className="animate-spin">⟳</span> Refreshing...
+                  </span>
+                ) : (
+                  '🔄 Refresh'
+                )}
+              </button>
+              <button
                 onClick={handleLogout}
-                className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
+                className="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 backdrop-blur-sm rounded-lg text-white font-medium transition-all duration-200"
               >
                 Logout
               </button>
             </div>
           </div>
-        </div>
-      </div>
-
-      {/* Status Bar */}
-      {(loadingStatus.isRefreshing || loadingStatus.lastError || loadingStatus.message) && (
-        <div className={`px-4 py-2 text-sm ${
-          loadingStatus.lastError ? 'bg-red-50 text-red-700' : 
-          loadingStatus.isRefreshing ? 'bg-blue-50 text-blue-700' : 
-          'bg-green-50 text-green-700'
-        }`}>
-          <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center">
-            <span>
-              {loadingStatus.lastError || loadingStatus.message}
-            </span>
-            {loadingStatus.isRefreshing && (
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-            )}
-            <button
-              onClick={() => {
-                setLoadingStatus(prev => ({ ...prev, isRefreshing: true, message: 'Refreshing...' }));
-                loadLiveData(['all']).then(() => {
-                  setLoadingStatus(prev => ({ ...prev, isRefreshing: false, message: 'Data refreshed' }));
-                  setTimeout(() => {
-                    setLoadingStatus(prev => ({ ...prev, message: '' }));
-                  }, 2000);
-                });
-              }}
-              className="bg-blue-600 text-white px-3 py-1 rounded text-xs hover:bg-blue-700 transition-colors"
-              disabled={loadingStatus.isRefreshing}
-            >
-              {loadingStatus.isRefreshing ? 'Refreshing...' : 'Refresh Data'}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Main Navigation Tabs */}
-      {!selectedJob && (
-        <div className="bg-white border-b">
-          <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8">
-            <nav className="flex space-x-8">
-              {/* Admin Jobs Tab */}
-              <button
-                onClick={() => handleViewChange('admin-jobs')}
-                className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                  activeView === 'admin-jobs'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                📋 Jobs ({appData.jobs.length})
-              </button>
-
-              {/* Employees Tab */}
+          
+          {/* Only show main navigation when NOT in job-specific modules */}
+          {activeView !== 'job-modules' && (
+            <nav className="flex space-x-4">
               <button
                 onClick={() => handleViewChange('employees')}
-                className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                className={`px-4 py-2 rounded-xl font-medium text-sm border ${
                   activeView === 'employees'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    ? 'text-blue-600 shadow-lg border-white'
+                    : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm border-white border-opacity-30 hover:border-opacity-50'
                 }`}
+                style={activeView === 'employees' ? { 
+                  backgroundColor: '#FFFFFF',
+                  opacity: 1,
+                  backdropFilter: 'none'
+                } : {}}
               >
                 👥 Employees ({appData.employees.length})
               </button>
-
-              {/* Billing Tab */}
+              <button
+                onClick={() => handleViewChange('admin-jobs')}
+                className={`px-4 py-2 rounded-xl font-medium text-sm border ${
+                  activeView === 'admin-jobs'
+                    ? 'text-blue-600 shadow-lg border-white'
+                    : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm border-white border-opacity-30 hover:border-opacity-50'
+                }`}
+                style={activeView === 'admin-jobs' ? { 
+                  backgroundColor: '#FFFFFF',
+                  opacity: 1,
+                  backdropFilter: 'none'
+                } : {}}
+              >
+                📋 Jobs ({appData.jobs.length})
+              </button>
               <button
                 onClick={() => handleViewChange('billing')}
-                className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                className={`px-4 py-2 rounded-xl font-medium text-sm border ${
                   activeView === 'billing'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    ? 'text-blue-600 shadow-lg border-white'
+                    : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm border-white border-opacity-30 hover:border-opacity-50'
                 }`}
+                style={activeView === 'billing' ? { 
+                  backgroundColor: '#FFFFFF',
+                  opacity: 1,
+                  backdropFilter: 'none'
+                } : {}}
               >
                 💰 Billing
               </button>
-
-              {/* Payroll Tab */}
               <button
                 onClick={() => handleViewChange('payroll')}
-                className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                className={`px-4 py-2 rounded-xl font-medium text-sm border ${
                   activeView === 'payroll'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    ? 'text-blue-600 shadow-lg border-white'
+                    : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm border-white border-opacity-30 hover:border-opacity-50'
                 }`}
+                style={activeView === 'payroll' ? { 
+                  backgroundColor: '#FFFFFF',
+                  opacity: 1,
+                  backdropFilter: 'none'
+                } : {}}
               >
-                💼 Payroll
+                💸 Payroll
               </button>
-
-              {/* Users Tab */}
               <button
                 onClick={() => handleViewChange('users')}
-                className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                className={`px-4 py-2 rounded-xl font-medium text-sm border ${
                   activeView === 'users'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    ? 'text-blue-600 shadow-lg border-white'
+                    : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm border-white border-opacity-30 hover:border-opacity-50'
                 }`}
+                style={activeView === 'users' ? { 
+                  backgroundColor: '#FFFFFF',
+                  opacity: 1,
+                  backdropFilter: 'none'
+                } : {}}
               >
                 🔐 Users
               </button>
             </nav>
-          </div>
+          )}
+          
+          {/* Show job context when in job-specific modules */}
+          {activeView === 'job-modules' && selectedJob && (
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-6">
+                <div>
+                  <p className="text-sm text-white opacity-75">Working on:</p>
+                  <p className="text-lg font-semibold text-white">{selectedJob.job_name || selectedJob.name}</p>
+                </div>
+                
+                {/* File Upload Controls */}
+                <div className="border-l border-white border-opacity-30 pl-6">
+                  <FileUploadButton
+                    job={selectedJob}
+                    onFileProcessed={handleFileProcessed}
+                    onDataRefresh={handleFileProcessed}
+                  />
+                </div>
+              </div>
+              
+              <button
+                onClick={handleBackToJobs}
+                className="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 backdrop-blur-sm rounded-lg text-white font-medium transition-all duration-200"
+              >
+                ← Back to Jobs
+              </button>
+            </div>
+          )}
         </div>
-      )}
+      </div>
 
-      {/* Main Content Area */}
-      <div className="flex-1">
+      {/* Main Content */}
+      <main className={activeView === 'job-modules' ? 'py-6 px-4' : 'max-w-7xl mx-auto py-6 sm:px-6 lg:px-8'}>
         {/* Show loading overlay for initial load only */}
         {!appData.isInitialized && appData.isLoading && (
           <div className="fixed inset-0 bg-white bg-opacity-75 z-50 flex items-center justify-center">
             <div className="text-center">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-              <p className="mt-4 text-gray-600">Loading data...</p>
+              <p className="mt-4 text-gray-600">Loading application...</p>
             </div>
           </div>
         )}
 
-        {/* Admin Jobs Management */}
+        {/* Component Views */}
         {activeView === 'admin-jobs' && (
           <AdminJobManagement
             jobs={appData.jobs}
@@ -975,23 +1021,11 @@ const App = () => {
             jobFreshness={appData.jobFreshness}
             inspectionData={appData.inspectionData}
             workflowStats={appData.workflowStats}
-            onDataUpdate={updateAppData}
-            userRole={user.role}
-            currentUser={user}
+            onDataUpdate={updateCacheItem}
+            onRefresh={() => loadLiveData(['jobs'])}
           />
         )}
 
-        {/* Employee Management */}
-        {activeView === 'employees' && (
-          <EmployeeManagement
-            employees={appData.employees}
-            globalAnalytics={appData.globalInspectionAnalytics}
-            onDataUpdate={updateAppData}
-            userRole={user.role}
-          />
-        )}
-
-        {/* Billing Management */}
         {activeView === 'billing' && (
           <BillingManagement
             activeJobs={appData.activeJobs}
@@ -1001,47 +1035,48 @@ const App = () => {
             receivables={appData.receivables}
             distributions={appData.distributions}
             billingMetrics={appData.billingMetrics}
-            onDataUpdate={updateAppData}
-            userRole={user.role}
+            onDataUpdate={updateCacheItem}
+            onRefresh={() => loadLiveData(['billing'])}
           />
         )}
 
-        {/* Payroll Management */}
+        {activeView === 'employees' && (
+          <EmployeeManagement
+            employees={appData.employees}
+            globalAnalytics={appData.globalInspectionAnalytics}
+            onDataUpdate={updateCacheItem}
+            onRefresh={() => loadLiveData(['employees'])}
+          />
+        )}
+
         {activeView === 'payroll' && (
           <PayrollManagement
             employees={appData.employees.filter(e => 
               ['active', 'part_time', 'full_time'].includes(e.employment_status) && 
-              e.inspector_type !== 'terminated'
+              ['residential', 'management'].includes(e.inspector_type?.toLowerCase())
             )}      
             jobs={appData.jobs}
             archivedPeriods={appData.archivedPayrollPeriods}
             dataRecency={appData.dataRecency}
-            onDataUpdate={updateAppData}
-            userRole={user.role}
+            onDataUpdate={updateCacheItem}
+            onRefresh={() => loadLiveData(['payroll'])}
           />
         )}
 
-        {/* User Management */}
         {activeView === 'users' && (
-          <UserManagement
-            employees={appData.employees}
-            onDataUpdate={updateAppData}
-            userRole={user.role}
-          />
+          <UserManagement />
         )}
 
-        {/* Job Modules Container */}
         {activeView === 'job-modules' && selectedJob && (
-          <JobContainer
-            job={selectedJob}
-            onBackToJobs={handleBackToJobs}
-            onFileProcessed={handleFileProcessed}
-            onWorkflowUpdate={handleWorkflowStatsUpdate}
-            userRole={user.role}
-            currentUser={user}
-          />
+          <div>
+            <JobContainer
+              selectedJob={selectedJob}
+              onBackToJobs={handleBackToJobs}
+              onWorkflowStatsUpdate={handleWorkflowStatsUpdate}
+            />
+          </div>
         )}
-      </div>
+      </main>
     </div>
   );
 };
