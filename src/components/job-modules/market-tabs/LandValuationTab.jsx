@@ -3631,7 +3631,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                             setIncludedSales(prev => {
                               const newSet = new Set(prev);
                               newSet.delete(sale.id);
-                              console.log('❌ Removed from included sales, new size:', newSet.size);
+                              console.log('��� Removed from included sales, new size:', newSet.size);
                               return newSet;
                             });
                           }
@@ -6725,18 +6725,35 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     const impact = calculateEcoObsImpact(vcs, locationAnalysis, globalEcoObsTypeFilter);
                     const rowIndex = Object.keys(filteredFactors).indexOf(vcs) * Object.keys(filteredFactors[vcs]).length + index;
 
+                    // Check if row should be grayed out (no "with" sales data)
+                    const hasWithData = impact && impact.withCount > 0;
+                    const grayedOutStyle = !hasWithData ? { opacity: 0.5, backgroundColor: '#F9FAFB' } : {};
+                    const normalCellStyle = !hasWithData ? { color: '#9CA3AF' } : {};
+
                     return (
                       <tr key={key} style={{
                         backgroundColor: rowIndex % 2 === 0 ? 'white' : '#FAFBFC',
                         borderBottom: '1px solid #E5E7EB',
-                        '&:hover': { backgroundColor: '#F0F9FF' }
+                        ...grayedOutStyle
                       }}>
-                        <td style={{ padding: '6px 4px', fontWeight: '600', color: '#1F2937', borderRight: '1px solid #E5E7EB', fontSize: '11px' }}>{vcs}</td>
-                        <td style={{ padding: '6px 4px', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '10px', maxWidth: '150px', wordWrap: 'break-word' }}>
+                        <td style={{ padding: '6px 4px', fontWeight: '600', color: '#1F2937', borderRight: '1px solid #E5E7EB', fontSize: '11px', ...normalCellStyle }}>{vcs}</td>
+                        <td style={{ padding: '6px 4px', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '10px', maxWidth: '150px', wordWrap: 'break-word', ...normalCellStyle }}>
                           {locationAnalysis}
                         </td>
                         <td style={{ padding: '6px 4px', color: '#6B7280', borderRight: '1px solid #E5E7EB', fontSize: '10px', textAlign: 'center' }}>
-                          TBD
+                          <input
+                            type="text"
+                            placeholder="TBD"
+                            style={{
+                              width: '40px',
+                              padding: '2px 4px',
+                              border: '1px solid #D1D5DB',
+                              borderRadius: '3px',
+                              fontSize: '10px',
+                              textAlign: 'center',
+                              backgroundColor: 'white'
+                            }}
+                          />
                         </td>
                         {/* With Factor columns */}
                         <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', backgroundColor: '#EEF2FF' }}>
